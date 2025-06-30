@@ -33,6 +33,15 @@ use crate::rand;
 use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 use crate::x509::wrap_in_sequence;
+use alloc::boxed::Box;
+use alloc::collections::BTreeSet;
+#[cfg(feature = "logging")]
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::fmt;
+use core::ops::{Deref, DerefMut};
+use pki_types::{CertificateDer, DnsName};
 
 /// Create a newtype wrapper around a given type.
 ///
@@ -1613,7 +1622,7 @@ impl DerefMut for ServerHelloPayload {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct CertificateChain<'a>(pub(crate) Vec<CertificateDer<'a>>);
 
-impl CertificateChain<'_> {
+impl<'a> CertificateChain<'a> {
     pub(crate) fn into_owned(self) -> CertificateChain<'static> {
         CertificateChain(
             self.0
@@ -1621,6 +1630,10 @@ impl CertificateChain<'_> {
                 .map(|c| c.into_owned())
                 .collect(),
         )
+    }
+
+    pub(crate) fn from_certs(certs: impl Iterator<Item = CertificateDer<'a>>) -> Self {
+        Self(certs.into_iter().collect())
     }
 }
 
@@ -1663,10 +1676,24 @@ extension_struct! {
     }
 }
 
-impl CertificateExtensions<'_> {
-    fn into_owned(self) -> CertificateExtensions<'static> {
-        CertificateExtensions {
-            status: self.status.map(|s| s.into_owned()),
+impl<'a> CertificateExtensions<'a> {
+    pub(crate) fn try_from(input: &'a [u8]) -> Result<Self, InvalidMessage> {
+        Self::read_payload(&mut Reader::init(input))
+    }
+
+    fn read_payload(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let mut out = Self::default();
+
+        while r.any_left() {
+            out.read_one(r, |_unk| Err(InvalidMessage::UnknownCertificateExtension))?;
+        }
+
+        Ok(out)
+    }
+
+    pub(crate) fn encode_payload(&self, out: &mut Vec<u8>) {
+        for ext in Self::ALL_EXTENSIONS {
+            self.encode_one(*ext, out);
         }
     }
 }
@@ -1674,65 +1701,68 @@ impl CertificateExtensions<'_> {
 impl<'a> Codec<'a> for CertificateExtensions<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
-
-        for ext in Self::ALL_EXTENSIONS {
-            self.encode_one(*ext, extensions.buf);
-        }
+        self.encode_payload(extensions.buf)
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let mut out = Self::default();
-
         let len = usize::from(u16::read(r)?);
         let mut sub = r.sub(len)?;
 
-        while sub.any_left() {
-            out.read_one(&mut sub, |_unk| {
-                Err(InvalidMessage::UnknownCertificateExtension)
-            })?;
-        }
-
-        Ok(out)
+        Self::read_payload(&mut sub)
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct CertificateEntry<'a> {
-    pub(crate) cert: CertificateDer<'a>,
-    pub(crate) extensions: CertificateExtensions<'a>,
+#[derive(Debug, Clone)]
+pub struct IdentityEntry<'a> {
+    pub payload: Payload<'a>,
+    pub extensions: Payload<'a>,
 }
 
-impl<'a> Codec<'a> for CertificateEntry<'a> {
+impl<'a> Codec<'a> for IdentityEntry<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.cert.encode(bytes);
+        codec::u24(self.payload.len() as u32).encode(bytes);
+        self.payload.encode(bytes);
+        (self.extensions.len() as u16).encode(bytes);
         self.extensions.encode(bytes);
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let payload = PayloadU24::read(r)?.0;
+
+        let exts_len = u16::read(r)? as usize;
+        let extensions = Payload::read(&mut r.sub(exts_len)?);
+
         Ok(Self {
-            cert: CertificateDer::read(r)?,
-            extensions: CertificateExtensions::read(r)?.into_owned(),
+            payload,
+            extensions,
         })
     }
 }
 
-impl<'a> CertificateEntry<'a> {
-    pub(crate) fn new(cert: CertificateDer<'a>) -> Self {
+impl<'a> IdentityEntry<'a> {
+    pub fn new(payload: impl Into<Payload<'a>>) -> Self {
+        Self::new_with_extensions(payload, Payload::empty())
+    }
+
+    pub fn new_with_extensions(
+        payload: impl Into<Payload<'a>>,
+        extensions: impl Into<Payload<'a>>,
+    ) -> Self {
         Self {
-            cert,
-            extensions: CertificateExtensions::default(),
+            payload: payload.into(),
+            extensions: extensions.into(),
         }
     }
 
-    pub(crate) fn into_owned(self) -> CertificateEntry<'static> {
-        CertificateEntry {
-            cert: self.cert.into_owned(),
+    pub(crate) fn into_owned(self) -> IdentityEntry<'static> {
+        IdentityEntry {
+            payload: self.payload.into_owned(),
             extensions: self.extensions.into_owned(),
         }
     }
 }
 
-impl TlsListElement for CertificateEntry<'_> {
+impl TlsListElement for IdentityEntry<'_> {
     const SIZE_LEN: ListLength = ListLength::U24 {
         max: CERTIFICATE_MAX_SIZE_LIMIT,
         error: InvalidMessage::CertificatePayloadTooLarge,
@@ -1742,7 +1772,7 @@ impl TlsListElement for CertificateEntry<'_> {
 #[derive(Debug)]
 pub(crate) struct CertificatePayloadTls13<'a> {
     pub(crate) context: PayloadU8,
-    pub(crate) entries: Vec<CertificateEntry<'a>>,
+    pub(crate) entries: Vec<IdentityEntry<'a>>,
 }
 
 impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
@@ -1760,68 +1790,15 @@ impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
 }
 
 impl<'a> CertificatePayloadTls13<'a> {
-    pub(crate) fn new(
-        certs: impl Iterator<Item = &'a CertificateDer<'a>>,
-        ocsp_response: Option<&'a [u8]>,
-    ) -> Self {
-        Self {
-            context: PayloadU8::empty(),
-            entries: certs
-                // zip certificate iterator with `ocsp_response` followed by
-                // an infinite-length iterator of `None`.
-                .zip(
-                    ocsp_response
-                        .into_iter()
-                        .map(Some)
-                        .chain(iter::repeat(None)),
-                )
-                .map(|(cert, ocsp)| {
-                    let mut e = CertificateEntry::new(cert.clone());
-                    if let Some(ocsp) = ocsp {
-                        e.extensions.status = Some(CertificateStatus::new(ocsp));
-                    }
-                    e
-                })
-                .collect(),
-        }
-    }
-
     pub(crate) fn into_owned(self) -> CertificatePayloadTls13<'static> {
         CertificatePayloadTls13 {
             context: self.context,
             entries: self
                 .entries
                 .into_iter()
-                .map(CertificateEntry::into_owned)
+                .map(IdentityEntry::into_owned)
                 .collect(),
         }
-    }
-
-    pub(crate) fn end_entity_ocsp(&self) -> Vec<u8> {
-        let Some(entry) = self.entries.first() else {
-            return vec![];
-        };
-        entry
-            .extensions
-            .status
-            .as_ref()
-            .map(|status| {
-                status
-                    .ocsp_response
-                    .0
-                    .clone()
-                    .into_vec()
-            })
-            .unwrap_or_default()
-    }
-
-    pub(crate) fn into_certificate_chain(self) -> CertificateChain<'a> {
-        CertificateChain(
-            self.entries
-                .into_iter()
-                .map(|e| e.cert)
-                .collect(),
-        )
     }
 }
 
@@ -2159,6 +2136,7 @@ wrapped_payload!(
     /// ```
     ///
     /// The TLS encoding is defined in RFC5246: `opaque DistinguishedName<1..2^16-1>;`
+    #[derive(PartialEq, Eq)]
     pub struct DistinguishedName,
     PayloadU16<NonEmpty>,
 );
@@ -2528,7 +2506,7 @@ impl HandshakePayload<'_> {
             ClientHello(x) => x.encode(bytes),
             ServerHello(x) => x.encode(bytes),
             HelloRetryRequest(x) => x.encode(bytes),
-            Certificate(x) => x.encode(bytes),
+            Certificate(x) => Codec::encode(x, bytes),
             CertificateTls13(x) => x.encode(bytes),
             CompressedCertificate(x) => x.encode(bytes),
             ServerKeyExchange(x) => x.encode(bytes),

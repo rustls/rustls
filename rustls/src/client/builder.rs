@@ -1,15 +1,17 @@
 use alloc::vec::Vec;
 use core::marker::PhantomData;
-
 use pki_types::{CertificateDer, PrivateKeyDer};
 
-use super::client_conn::Resumption;
+use super::client_conn::{
+    ResolvesClientCertCompat, ResolvesClientRpk, ResolvesClientRpkWrapper, Resumption,
+};
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::client::{ClientConfig, EchMode, ResolvesClientCert, handy};
+use crate::client::{ClientConfig, EchMode, ResolvesClientCert, ResolvesClientIdentity, handy};
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
+use crate::verify::{ServerCertVerifier, ServerCertVerifierCompat};
 use crate::versions::TLS13;
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{WantsVersions, compress, verify, versions};
@@ -51,7 +53,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     pub fn with_root_certificates(
         self,
         root_store: impl Into<Arc<webpki::RootCertStore>>,
-    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+    ) -> ConfigBuilder<ClientConfig, WantsClientIdentity> {
         let algorithms = self
             .provider
             .signature_verification_algorithms;
@@ -67,11 +69,12 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     pub fn with_webpki_verifier(
         self,
         verifier: Arc<WebPkiServerVerifier>,
-    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+    ) -> ConfigBuilder<ClientConfig, WantsClientIdentity> {
+        let verifier: Arc<dyn ServerCertVerifier> = verifier;
         ConfigBuilder {
-            state: WantsClientCert {
+            state: WantsClientIdentity {
                 versions: self.state.versions,
-                verifier,
+                verifier: Arc::new(ServerCertVerifierCompat::from(verifier)),
                 client_ech_mode: self.state.client_ech_mode,
             },
             provider: self.provider,
@@ -91,8 +94,9 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 pub(super) mod danger {
     use core::marker::PhantomData;
 
-    use crate::client::WantsClientCert;
+    use crate::client::WantsClientIdentity;
     use crate::sync::Arc;
+    use crate::verify::{ServerCertVerifierCompat, ServerRpkVerifierCompat};
     use crate::{ClientConfig, ConfigBuilder, WantsVerifier, verify};
 
     /// Accessor for dangerous configuration options.
@@ -107,9 +111,25 @@ pub(super) mod danger {
         pub fn with_custom_certificate_verifier(
             self,
             verifier: Arc<dyn verify::ServerCertVerifier>,
-        ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+        ) -> ConfigBuilder<ClientConfig, WantsClientIdentity> {
+            self.with_custom_identity_verifier(Arc::new(ServerCertVerifierCompat::from(verifier)))
+        }
+
+        /// Set a custom RPK verifier.
+        pub fn with_custom_rpk_verifier(
+            self,
+            verifier: Arc<dyn verify::ServerRpkVerifier>,
+        ) -> ConfigBuilder<ClientConfig, WantsClientIdentity> {
+            self.with_custom_identity_verifier(Arc::new(ServerRpkVerifierCompat::from(verifier)))
+        }
+
+        /// Set a custom certificate verifier.
+        pub fn with_custom_identity_verifier(
+            self,
+            verifier: Arc<dyn verify::ServerIdVerifier>,
+        ) -> ConfigBuilder<ClientConfig, WantsClientIdentity> {
             ConfigBuilder {
-                state: WantsClientCert {
+                state: WantsClientIdentity {
                     versions: self.cfg.state.versions,
                     verifier,
                     client_ech_mode: self.cfg.state.client_ech_mode,
@@ -123,17 +143,17 @@ pub(super) mod danger {
 }
 
 /// A config builder state where the caller needs to supply whether and how to provide a client
-/// certificate.
+/// identity, such as a certificate.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone)]
-pub struct WantsClientCert {
+pub struct WantsClientIdentity {
     versions: versions::EnabledVersions,
-    verifier: Arc<dyn verify::ServerCertVerifier>,
+    verifier: Arc<dyn verify::ServerIdVerifier>,
     client_ech_mode: Option<EchMode>,
 }
 
-impl ConfigBuilder<ClientConfig, WantsClientCert> {
+impl ConfigBuilder<ClientConfig, WantsClientIdentity> {
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
@@ -162,12 +182,32 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         self,
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
     ) -> ClientConfig {
+        self.with_client_identity_resolver(Arc::new(ResolvesClientCertCompat::from(
+            client_auth_cert_resolver,
+        )))
+    }
+
+    /// Sets a custom [`ResolvesClientRpk`].
+    pub fn with_client_rpk_resolver(
+        self,
+        client_auth_rpk_resolver: Arc<dyn ResolvesClientRpk>,
+    ) -> ClientConfig {
+        self.with_client_identity_resolver(Arc::new(ResolvesClientRpkWrapper::from(
+            client_auth_rpk_resolver,
+        )))
+    }
+
+    /// Sets a custom [`ResolvesClientIdentity`].
+    pub fn with_client_identity_resolver(
+        self,
+        client_auth_id_resolver: Arc<dyn ResolvesClientIdentity>,
+    ) -> ClientConfig {
         ClientConfig {
             provider: self.provider,
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
             max_fragment_size: None,
-            client_auth_cert_resolver,
+            client_auth_id_resolver,
             versions: self.state.versions,
             enable_sni: true,
             verifier: self.state.verifier,

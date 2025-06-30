@@ -18,6 +18,14 @@ macro_rules! enum_builder {
               ),*
               $(,)?
           )?
+          $(
+              !Ranges:
+              $(
+                  $(#[doc = $enum_comment_nd:literal])*
+                  $enum_var_range:ident => $start_val:literal ..= $end_val:literal
+              ),*
+              $(,)?
+          )?
         }
     ) => {
         $(#[doc = $comment])*
@@ -33,6 +41,13 @@ macro_rules! enum_builder {
                 $(
                     $(#[doc = $enum_comment_nd])*
                     $enum_var_nd
+                ),*
+            )?
+            $(
+                ,
+                $(
+                    $(#[doc = $enum_comment_nd])*
+                    $enum_var_range($uint)
                 ),*
             )?
             ,Unknown($uint)
@@ -51,6 +66,7 @@ macro_rules! enum_builder {
                 match self {
                     $( $enum_name::$enum_var => Some(stringify!($enum_var))),*
                     $(, $( $enum_name::$enum_var_nd => Some(stringify!($enum_var_nd))),* )?
+                    $(, $( $enum_name::$enum_var_range(_) => Some(stringify!($enum_var_range))),* )?
                     ,$enum_name::Unknown(_) => None,
                 }
             }
@@ -72,10 +88,12 @@ macro_rules! enum_builder {
         }
 
         impl From<$uint> for $enum_name {
+            #[allow(unused_comparisons)]
             fn from(x: $uint) -> Self {
                 match x {
                     $($enum_val => $enum_name::$enum_var),*
                     $(, $($enum_val_nd => $enum_name::$enum_var_nd),* )?
+                    $(, $(x if x >= $start_val && x <= $end_val => $enum_name::$enum_var_range(x)),* )?
                     , x => $enum_name::Unknown(x),
                 }
             }
@@ -86,6 +104,7 @@ macro_rules! enum_builder {
                 match value {
                     $( $enum_name::$enum_var => $enum_val),*
                     $(, $( $enum_name::$enum_var_nd => $enum_val_nd),* )?
+                    $(, $( $enum_name::$enum_var_range(x) => x),* )?
                     ,$enum_name::Unknown(x) => x
                 }
             }
@@ -95,6 +114,7 @@ macro_rules! enum_builder {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 match self {
                     $( $enum_name::$enum_var => f.write_str(stringify!($enum_var)), )*
+                    $( $($enum_name::$enum_var_range(x) =>  write!(f, "{}(0x{:x?})", stringify!($enum_var_range), x),)* )?
                     _ => write!(f, "{}(0x{:x?})", stringify!($enum_name), <$uint>::from(*self)),
                 }
             }

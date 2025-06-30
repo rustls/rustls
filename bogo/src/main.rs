@@ -29,7 +29,7 @@ use base64::prelude::{BASE64_STANDARD, Engine};
 use nix::sys::signal::{self, Signal};
 #[cfg(unix)]
 use nix::unistd::Pid;
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::danger::{HandshakeSignatureValid, ServerIdVerified, ServerCertVerifier};
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
     Tls12Resumption, WebPkiServerVerifier,
@@ -41,6 +41,8 @@ use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, UnixTime};
+use rustls::server::danger::{ClientIdVerified, ClientCertVerifier};
 use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
     UnixTime,
@@ -429,8 +431,8 @@ impl ClientCertVerifier for DummyClientAuth {
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
-    ) -> Result<ClientCertVerified, Error> {
-        Ok(ClientCertVerified::assertion())
+    ) -> Result<ClientIdVerified, Error> {
+        Ok(ClientIdVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -488,11 +490,11 @@ impl ServerCertVerifier for DummyServerAuth {
         _hostname: &ServerName<'_>,
         _ocsp: &[u8],
         _now: UnixTime,
-    ) -> Result<ServerCertVerified, Error> {
+    ) -> Result<ServerIdVerified, Error> {
         if let OcspValidation::Reject = self.ocsp {
             return Err(CertificateError::InvalidOcspResponse.into());
         }
-        Ok(ServerCertVerified::assertion())
+        Ok(ServerIdVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -808,8 +810,8 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
 
     if let Some(scheme) = cred.use_signing_scheme {
         let scheme = lookup_scheme(scheme);
-        cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
-            resolver: cfg.cert_resolver.clone(),
+        cfg.id_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
+            resolver: cfg.id_resolver.clone(),
             scheme,
         });
     }

@@ -7,6 +7,7 @@ use pki_types::DnsName;
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
+use crate::Error::UnsupportedIdentityType;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
@@ -17,7 +18,7 @@ use crate::enums::{
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
-use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
+use crate::msgs::enums::{Compression, NamedGroup};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
@@ -167,8 +168,21 @@ impl ExtensionProcessing {
             ocsp_response.take();
         }
 
-        self.validate_server_cert_type_extension(hello, config, cx)?;
-        self.validate_client_cert_type_extension(hello, config, cx)?;
+        match cx.common.negotiated_server_cert_type() {
+            Some(cert_type) if cert_type != CertificateType::X509 => {
+                // Omit `server_certificate_type` if it's X.509
+                self.extensions.server_certificate_type = Some(cert_type);
+            }
+            _ => {}
+        }
+
+        match cx.common.negotiated_client_cert_type() {
+            Some(cert_type) if cert_type != CertificateType::X509 => {
+                // Omit `client_certificate_type` if it's X.509
+                self.extensions.client_certificate_type = Some(cert_type);
+            }
+            _ => {}
+        }
 
         Ok(())
     }
@@ -206,92 +220,6 @@ impl ExtensionProcessing {
             self.extensions
                 .extended_master_secret_ack = Some(());
         }
-    }
-
-    fn validate_server_cert_type_extension(
-        &mut self,
-        hello: &ClientHelloPayload,
-        config: &ServerConfig,
-        cx: &mut ServerContext<'_>,
-    ) -> Result<(), Error> {
-        let client_supports = hello
-            .server_certificate_types
-            .as_deref()
-            .unwrap_or_default();
-
-        self.process_cert_type_extension(
-            client_supports,
-            config
-                .cert_resolver
-                .only_raw_public_keys(),
-            ExtensionType::ServerCertificateType,
-            cx,
-        )
-    }
-
-    fn validate_client_cert_type_extension(
-        &mut self,
-        hello: &ClientHelloPayload,
-        config: &ServerConfig,
-        cx: &mut ServerContext<'_>,
-    ) -> Result<(), Error> {
-        let client_supports = hello
-            .client_certificate_types
-            .as_deref()
-            .unwrap_or_default();
-
-        self.process_cert_type_extension(
-            client_supports,
-            config
-                .verifier
-                .requires_raw_public_keys(),
-            ExtensionType::ClientCertificateType,
-            cx,
-        )
-    }
-
-    fn process_cert_type_extension(
-        &mut self,
-        client_supports: &[CertificateType],
-        requires_raw_keys: bool,
-        extension_type: ExtensionType,
-        cx: &mut ServerContext<'_>,
-    ) -> Result<(), Error> {
-        debug_assert!(
-            extension_type == ExtensionType::ClientCertificateType
-                || extension_type == ExtensionType::ServerCertificateType
-        );
-        let raw_key_negotation_result = match (
-            requires_raw_keys,
-            client_supports.contains(&CertificateType::RawPublicKey),
-            client_supports.contains(&CertificateType::X509),
-        ) {
-            (true, true, _) => Ok((extension_type, CertificateType::RawPublicKey)),
-            (false, _, true) => Ok((extension_type, CertificateType::X509)),
-            (false, true, false) => Err(Error::PeerIncompatible(
-                PeerIncompatible::IncorrectCertificateTypeExtension,
-            )),
-            (true, false, _) => Err(Error::PeerIncompatible(
-                PeerIncompatible::IncorrectCertificateTypeExtension,
-            )),
-            (false, false, false) => return Ok(()),
-        };
-
-        match raw_key_negotation_result {
-            Ok((ExtensionType::ClientCertificateType, cert_type)) => {
-                self.extensions.client_certificate_type = Some(cert_type);
-            }
-            Ok((ExtensionType::ServerCertificateType, cert_type)) => {
-                self.extensions.server_certificate_type = Some(cert_type);
-            }
-            Err(err) => {
-                return Err(cx
-                    .common
-                    .send_fatal_alert(AlertDescription::HandshakeFailure, err));
-            }
-            Ok((_, _)) => unreachable!(),
-        }
-        Ok(())
     }
 }
 
@@ -412,8 +340,66 @@ impl ExpectClientHello {
                 .certificate_authority_names
                 .as_deref(),
         };
-        // Choose a certificate.
-        let certkey = {
+
+        // Determine Server Certificate Type
+        // If no `server_certificate_type` was explicitly offered,
+        // then support for X.509 certs is implied.
+        let server_certs_offered = client_hello
+            .server_certificate_types
+            .as_deref()
+            .filter(|c| !c.is_empty())
+            .unwrap_or_else(|| &[CertificateType::X509]);
+
+        let server_cert_type = self
+            .config
+            .id_resolver
+            .negotiate_certificate_type(server_certs_offered)
+            .ok_or_else(|| {
+                cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
+                )
+            })?;
+
+        cx.common.negotiated_server_cert_type = Some(server_cert_type);
+
+        // Determine Client Auth Support
+        if self.config.verifier.offer_client_auth() {
+            // If no `client_certificate_type` was explicitly offered,
+            // then support for X.509 certs is implied.
+            let client_supports = client_hello
+                .client_certificate_types
+                .as_deref()
+                .filter(|c| !c.is_empty())
+                .unwrap_or_else(|| &[CertificateType::X509]);
+
+            let mandatory = self
+                .config
+                .verifier
+                .client_auth_mandatory();
+
+            match self
+                .config
+                .verifier
+                .negotiate_certificate_type(client_supports)
+            {
+                Some(cert_type) => {
+                    cx.common.negotiated_client_cert_type = Some(cert_type);
+                }
+                None if mandatory => {
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        Error::PeerIncompatible(
+                            PeerIncompatible::IncorrectCertificateTypeExtension,
+                        ),
+                    ));
+                }
+                _ => {}
+            }
+        }
+
+        // Choose an identity.
+        let id_key = {
             let client_hello = ClientHello {
                 server_name: &cx.data.sni,
                 signature_schemes: &sig_schemes,
@@ -428,26 +414,25 @@ impl ExpectClientHello {
                 certificate_authorities,
                 named_groups: client_hello.named_groups.as_deref(),
             };
-            trace!("Resolving server certificate: {client_hello:#?}");
+            trace!("Resolving server identity: {client_hello:#?}");
 
-            let certkey = self
+            let id_key = self
                 .config
-                .cert_resolver
-                .resolve(&client_hello);
+                .id_resolver
+                .resolve(&client_hello, server_cert_type);
 
-            certkey.ok_or_else(|| {
+            id_key.ok_or_else(|| {
                 cx.common.send_fatal_alert(
                     AlertDescription::AccessDenied,
-                    Error::General("no server certificate chain resolved".to_owned()),
+                    Error::General("no server certificate chain or id resolved".to_owned()),
                 )
             })?
         };
-        let certkey = ActiveCertifiedKey::from_certified_key(&certkey);
 
         let (suite, skxg) = self
             .choose_suite_and_kx_group(
                 version,
-                certkey.get_key().algorithm(),
+                id_key.signing_key().algorithm(),
                 cx.common.protocol,
                 client_hello
                     .named_groups
@@ -496,27 +481,35 @@ impl ExpectClientHello {
                 send_tickets: self.send_tickets,
                 extra_exts: self.extra_exts,
             }
-            .handle_client_hello(cx, certkey, m, client_hello, skxg, sig_schemes),
+            .handle_client_hello(cx, id_key, m, client_hello, skxg, sig_schemes),
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(suite) => tls12::CompleteClientHelloHandling {
-                config: self.config,
-                transcript,
-                session_id: self.session_id,
-                suite,
-                using_ems: self.using_ems,
-                randoms,
-                send_ticket: self.send_tickets > 0,
-                extra_exts: self.extra_exts,
+            SupportedCipherSuite::Tls12(suite) => {
+                // We only support certificates for TLS 1.2 connections
+                let certkey = ActiveCertifiedKey::from_certified_key(
+                    id_key
+                        .as_certified_key()
+                        .ok_or(UnsupportedIdentityType)?,
+                );
+                tls12::CompleteClientHelloHandling {
+                    config: self.config,
+                    transcript,
+                    session_id: self.session_id,
+                    suite,
+                    using_ems: self.using_ems,
+                    randoms,
+                    send_ticket: self.send_tickets > 0,
+                    extra_exts: self.extra_exts,
+                }
+                .handle_client_hello(
+                    cx,
+                    certkey,
+                    m,
+                    client_hello,
+                    skxg,
+                    sig_schemes,
+                    tls13_enabled,
+                )
             }
-            .handle_client_hello(
-                cx,
-                certkey,
-                m,
-                client_hello,
-                skxg,
-                sig_schemes,
-                tls13_enabled,
-            ),
         }
     }
 

@@ -74,7 +74,7 @@ mod tests {
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{AlwaysResolvesServerRawPublicKeys, ServerConfig, ServerConnection};
-    use crate::sign::CertifiedKey;
+    use crate::sign::KeyPair;
     use crate::sync::Arc;
     use crate::{CipherSuiteCommon, SupportedCipherSuite, Tls12CipherSuite, version};
 
@@ -248,23 +248,23 @@ mod tests {
             .with_protocol_versions(&[&version::TLS13])
             .unwrap()
             .with_no_client_auth()
-            .with_cert_resolver(Arc::new(AlwaysResolvesServerRawPublicKeys::new(Arc::new(
-                server_certified_key(),
+            .with_rpk_resolver(Arc::new(AlwaysResolvesServerRawPublicKeys::new(Arc::new(
+                server_key_pair(),
             ))))
     }
 
-    fn server_certified_key() -> CertifiedKey {
-        let key = super::provider::default_provider()
+    fn server_key_pair() -> KeyPair {
+        let private_key = super::provider::default_provider()
             .key_provider
             .load_private_key(server_key())
             .unwrap();
-        let public_key_as_cert = vec![CertificateDer::from(
-            key.public_key()
-                .unwrap()
-                .as_ref()
-                .to_vec(),
-        )];
-        CertifiedKey::new(public_key_as_cert, key)
+        let public_key = private_key
+            .public_key()
+            .unwrap()
+            .into_owned();
+        KeyPair::new(public_key, private_key)
+            .ok()
+            .unwrap()
     }
 
     fn server_key() -> PrivateKeyDer<'static> {

@@ -112,6 +112,23 @@ pub trait ProducesTickets: Debug + Send + Sync {
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
 }
 
+pub trait ResolvesServerIdentity: Debug + Send + Sync {
+    fn resolve(
+        &self,
+        client_hello: ClientHello<'_>,
+        negotiated_certificate_type: CertificateType,
+    ) -> Option<SigningIdentity>;
+
+    fn supported_certificate_types(&self) -> &[CertificateType];
+
+    fn negotiate_certificate_type(&self, offered: &[CertificateType]) -> Option<CertificateType> {
+        self.supported_certificate_types()
+            .iter()
+            .find(|c| offered.contains(*c))
+            .map(|c| c.clone())
+    }
+}
+
 /// How to choose a certificate chain and signing key for use
 /// in server authentication.
 ///
@@ -127,10 +144,65 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
     ///
     /// Return `None` to abort the handshake.
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>>;
+}
 
-    /// Return true when the server only supports raw public keys.
-    fn only_raw_public_keys(&self) -> bool {
-        false
+#[derive(Debug)]
+pub(crate) struct ResolvesServerCertCompat(Arc<dyn ResolvesServerCert>);
+
+impl From<Arc<dyn ResolvesServerCert>> for ResolvesServerCertCompat {
+    fn from(value: Arc<dyn ResolvesServerCert>) -> Self {
+        Self(value)
+    }
+}
+
+impl ResolvesServerIdentity for ResolvesServerCertCompat {
+    fn resolve(
+        &self,
+        client_hello: ClientHello<'_>,
+        negotiated_certificate_type: CertificateType,
+    ) -> Option<SigningIdentity> {
+        if negotiated_certificate_type != CertificateType::X509 {
+            return None;
+        }
+        self.0
+            .resolve(client_hello)
+            .map(|ck| ck.into())
+    }
+
+    fn supported_certificate_types(&self) -> &[CertificateType] {
+        &[CertificateType::X509]
+    }
+}
+
+pub trait ResolvesServerRpk: Debug + Send + Sync {
+    fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::KeyPair>>;
+}
+
+#[derive(Debug)]
+pub(crate) struct ResolvesServerRpkWrapper(Arc<dyn ResolvesServerRpk>);
+
+impl From<Arc<dyn ResolvesServerRpk>> for ResolvesServerRpkWrapper {
+    fn from(value: Arc<dyn ResolvesServerRpk>) -> Self {
+        Self(value)
+    }
+}
+
+impl ResolvesServerIdentity for ResolvesServerRpkWrapper {
+    fn resolve(
+        &self,
+        client_hello: ClientHello<'_>,
+        negotiated_certificate_type: CertificateType,
+    ) -> Option<SigningIdentity> {
+        if negotiated_certificate_type != CertificateType::RawPublicKey {
+            return None;
+        }
+        self.0
+            .resolve(client_hello)
+            .map(|kp| kp.into())
+    }
+
+    fn supported_certificate_types(&self) -> &[CertificateType] {
+        &[CertificateType::RawPublicKey]
     }
 }
 
@@ -326,10 +398,10 @@ pub struct ServerConfig {
     /// for a warning related to this field.
     pub ticketer: Arc<dyn ProducesTickets>,
 
-    /// How to choose a server cert and key. This is usually set by
+    /// How to choose a server identity and key. This is usually set by
     /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_cert_resolver].
     /// For async applications, see also [Acceptor].
-    pub cert_resolver: Arc<dyn ResolvesServerCert>,
+    pub id_resolver: Arc<dyn ResolvesServerIdentity>,
 
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
@@ -339,8 +411,8 @@ pub struct ServerConfig {
     /// The default is all supported versions.
     pub(super) versions: versions::EnabledVersions,
 
-    /// How to verify client certificates.
-    pub(super) verifier: Arc<dyn verify::ClientCertVerifier>,
+    /// How to verify client identities.
+    pub(super) verifier: Arc<dyn verify::ClientIdVerifier>,
 
     /// How to output key material for debugging.  The default
     /// does nothing.
@@ -576,6 +648,14 @@ impl ServerConfig {
         self.time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
+    }
+
+    pub fn certificate_resolver(&mut self, resolver: Arc<dyn ResolvesServerCert>) {
+        self.id_resolver = Arc::new(ResolvesServerCertCompat::from(resolver));
+    }
+
+    pub fn rpk_resolver(&mut self, resolver: Arc<dyn ResolvesServerRpk>) {
+        self.id_resolver = Arc::new(ResolvesServerRpkWrapper::from(resolver));
     }
 }
 
@@ -926,6 +1006,7 @@ mod connection {
     }
 }
 
+use crate::identity::SigningIdentity;
 #[cfg(feature = "std")]
 pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 

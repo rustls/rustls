@@ -1,7 +1,9 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use super::ResolvesClientCert;
+use crate::client::ResolvesClientIdentity;
+use crate::enums::CertificateType;
+use crate::identity::SigningIdentity;
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtensions};
@@ -80,7 +82,7 @@ pub(super) enum ClientAuthDetails {
     Empty { auth_context_tls13: Option<Vec<u8>> },
     /// Send a non-empty `Certificate` and a `CertificateVerify`.
     Verify {
-        certkey: Arc<sign::CertifiedKey>,
+        signing_id: SigningIdentity,
         signer: Box<dyn sign::Signer>,
         auth_context_tls13: Option<Vec<u8>>,
         compressor: Option<&'static dyn compress::CertCompressor>,
@@ -89,23 +91,23 @@ pub(super) enum ClientAuthDetails {
 
 impl ClientAuthDetails {
     pub(super) fn resolve(
-        resolver: &dyn ResolvesClientCert,
+        resolver: &Arc<dyn ResolvesClientIdentity>,
+        certificate_type: CertificateType,
         canames: Option<&[DistinguishedName]>,
         sigschemes: &[SignatureScheme],
         auth_context_tls13: Option<Vec<u8>>,
         compressor: Option<&'static dyn compress::CertCompressor>,
     ) -> Self {
-        let acceptable_issuers = canames
-            .unwrap_or_default()
-            .iter()
-            .map(|p| p.as_ref())
-            .collect::<Vec<&[u8]>>();
-
-        if let Some(certkey) = resolver.resolve(&acceptable_issuers, sigschemes) {
-            if let Some(signer) = certkey.key.choose_scheme(sigschemes) {
+        if let Some(signing_id) =
+            resolver.resolve(canames.unwrap_or_default(), sigschemes, certificate_type)
+        {
+            if let Some(signer) = signing_id
+                .signing_key()
+                .choose_scheme(sigschemes)
+            {
                 debug!("Attempting client auth");
                 return Self::Verify {
-                    certkey,
+                    signing_id,
                     signer,
                     auth_context_tls13,
                     compressor,
@@ -113,7 +115,7 @@ impl ClientAuthDetails {
             }
         }
 
-        debug!("Client auth requested but no cert/sigscheme available");
+        debug!("Client auth requested but no cert/sigscheme/identity available");
         Self::Empty { auth_context_tls13 }
     }
 }

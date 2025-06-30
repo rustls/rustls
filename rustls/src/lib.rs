@@ -391,10 +391,10 @@ use log;
 
 #[cfg(not(feature = "log"))]
 mod log {
-    macro_rules! trace    ( ($($tt:tt)*) => {{}} );
-    macro_rules! debug    ( ($($tt:tt)*) => {{}} );
-    macro_rules! error    ( ($($tt:tt)*) => {{}} );
-    macro_rules! _warn    ( ($($tt:tt)*) => {{}} );
+    macro_rules! trace ( ($($tt:tt)*) => {{}} );
+    macro_rules! debug ( ($($tt:tt)*) => {{}} );
+    macro_rules! error ( ($($tt:tt)*) => {{}} );
+    macro_rules! _warn ( ($($tt:tt)*) => {{}} );
     pub(crate) use {_warn as warn, debug, error, trace};
 }
 
@@ -575,10 +575,11 @@ pub mod client {
     mod tls12;
     mod tls13;
 
-    pub use builder::WantsClientCert;
+    pub use builder::WantsClientIdentity;
     pub use client_conn::{
         ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, ResolvesClientCert,
-        Resumption, Tls12Resumption, UnbufferedClientConnection,
+        ResolvesClientIdentity, ResolvesClientRpk, Resumption, Tls12Resumption,
+        UnbufferedClientConnection,
     };
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
@@ -591,9 +592,14 @@ pub mod client {
     pub mod danger {
         pub use super::builder::danger::DangerousClientConfigBuilder;
         pub use super::client_conn::danger::DangerousClientConfig;
-        pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+        pub use crate::verify::{
+            HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
+            ServerCertVerifierCompat, ServerIdVerified, ServerIdVerifier, ServerRpkVerifier,
+            ServerRpkVerifierCompat,
+        };
     }
 
+    pub use crate::msgs::handshake::IdentityEntry;
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     pub use crate::webpki::{
         ServerCertVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
@@ -618,15 +624,16 @@ pub mod server {
     mod tls12;
     mod tls13;
 
-    pub use builder::WantsServerCert;
+    pub use builder::WantsServerIdentity;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ResolvesServerCertUsingSni;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ServerSessionMemoryCache;
     pub use handy::{AlwaysResolvesServerRawPublicKeys, NoServerSessionStorage};
     pub use server_conn::{
-        Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig,
-        ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
+        Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ResolvesServerIdentity,
+        ResolvesServerRpk, ServerConfig, ServerConnectionData, StoresServerSessions,
+        UnbufferedServerConnection,
     };
     #[cfg(feature = "std")]
     pub use server_conn::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
@@ -639,7 +646,11 @@ pub mod server {
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
-        pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
+        pub use crate::msgs::handshake::IdentityEntry;
+        pub use crate::verify::{
+            ClientCertVerified, ClientCertVerifier, ClientIdVerified, ClientIdVerifier,
+            ClientRpkVerifier,
+        };
     }
 }
 
@@ -664,7 +675,7 @@ pub mod pki_types {
 
 /// Message signing interfaces.
 pub mod sign {
-    pub use crate::crypto::signer::{CertifiedKey, Signer, SigningKey, SingleCertAndKey};
+    pub use crate::crypto::signer::{CertifiedKey, KeyPair, Signer, SigningKey, SingleCertAndKey};
 }
 
 /// APIs for implementing QUIC TLS
@@ -681,6 +692,8 @@ pub mod time_provider;
 
 /// APIs abstracting over locking primitives.
 pub mod lock;
+
+pub mod identity;
 
 /// Polyfills for features that are not yet stabilized or available with current MSRV.
 pub(crate) mod polyfill;

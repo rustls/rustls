@@ -3,7 +3,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
@@ -17,12 +17,13 @@ use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
+use crate::identity::Identity;
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
-    CERTIFICATE_MAX_SIZE_LIMIT, CertificateChain, CertificatePayloadTls13, HandshakeMessagePayload,
-    HandshakePayload, NewSessionTicketPayloadTls13,
+    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
+    NewSessionTicketPayloadTls13,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -41,7 +42,8 @@ mod client_hello {
     use super::*;
     use crate::compress::CertCompressor;
     use crate::crypto::SupportedKxGroup;
-    use crate::enums::SignatureScheme;
+    use crate::enums::{CertificateType, SignatureScheme};
+    use crate::identity::{Identity, SigningIdentity};
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup};
@@ -50,7 +52,6 @@ mod client_hello {
         ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
         ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
     };
-    use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
@@ -135,7 +136,7 @@ mod client_hello {
         pub(in crate::server) fn handle_client_hello(
             mut self,
             cx: &mut ServerContext<'_>,
-            server_key: ActiveCertifiedKey<'_>,
+            server_id: SigningIdentity,
             chm: &Message<'_>,
             client_hello: &ClientHelloPayload,
             selected_kxg: &'static dyn SupportedKxGroup,
@@ -332,9 +333,15 @@ mod client_hello {
 
             if let Some(resume) = &resumedata {
                 cx.data.received_resumption_data = Some(resume.application_data.0.clone());
-                cx.common
-                    .peer_certificates
-                    .clone_from(&resume.client_cert_chain);
+                cx.common.peer_identity = resume
+                    .client_identity
+                    .clone()
+                    .map(|(cert_type, payload)| {
+                        self.config
+                            .verifier
+                            .parse_tls13_payload(cert_type, payload)
+                    })
+                    .transpose()?;
             }
 
             let full_handshake = resumedata.is_none();
@@ -364,7 +371,11 @@ mod client_hello {
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
             }
 
-            let mut ocsp_response = server_key.get_ocsp();
+            let mut ocsp_response = server_id
+                .as_certified_key()
+                .map(|ck| ck.ocsp.as_deref())
+                .flatten();
+
             let mut flight = HandshakeFlightTls13::new(&mut self.transcript);
             let doing_early_data = emit_encrypted_extensions(
                 &mut flight,
@@ -378,23 +389,26 @@ mod client_hello {
             )?;
 
             let doing_client_auth = if full_handshake {
-                let client_auth = emit_certificate_req_tls13(&mut flight, &self.config)?;
+                let client_auth = emit_certificate_req_tls13(
+                    &mut flight,
+                    &self.config,
+                    cx.common.negotiated_client_cert_type(),
+                )?;
 
                 if let Some(compressor) = cert_compressor {
                     emit_compressed_certificate_tls13(
                         &mut flight,
                         &self.config,
-                        server_key.get_cert(),
-                        ocsp_response,
+                        server_id.id(),
                         compressor,
                     );
                 } else {
-                    emit_certificate_tls13(&mut flight, server_key.get_cert(), ocsp_response);
+                    emit_certificate_tls13(&mut flight, server_id.id());
                 }
                 emit_certificate_verify_tls13(
                     &mut flight,
                     cx.common,
-                    server_key.get_key(),
+                    server_id.signing_key(),
                     &sigschemes_ext,
                 )?;
                 client_auth
@@ -693,10 +707,13 @@ mod client_hello {
     fn emit_certificate_req_tls13(
         flight: &mut HandshakeFlightTls13<'_>,
         config: &ServerConfig,
+        cert_type: Option<CertificateType>,
     ) -> Result<bool, Error> {
-        if !config.verifier.offer_client_auth() {
-            return Ok(false);
-        }
+        let _cert_type = match cert_type {
+            Some(cert_type) => cert_type,
+            None => return Ok(false),
+        };
+        // todo: cert type handling?
 
         let cr = CertificateRequestPayloadTls13 {
             context: PayloadU8::empty(),
@@ -733,13 +750,9 @@ mod client_hello {
         Ok(true)
     }
 
-    fn emit_certificate_tls13(
-        flight: &mut HandshakeFlightTls13<'_>,
-        cert_chain: &[CertificateDer<'static>],
-        ocsp_response: Option<&[u8]>,
-    ) {
+    fn emit_certificate_tls13(flight: &mut HandshakeFlightTls13<'_>, id: &Identity) {
         let cert = HandshakeMessagePayload(HandshakePayload::CertificateTls13(
-            CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response),
+            CertificatePayloadTls13::from(id.to_wire_format()),
         ));
 
         trace!("sending certificate {cert:?}");
@@ -749,17 +762,16 @@ mod client_hello {
     fn emit_compressed_certificate_tls13(
         flight: &mut HandshakeFlightTls13<'_>,
         config: &ServerConfig,
-        cert_chain: &[CertificateDer<'static>],
-        ocsp_response: Option<&[u8]>,
+        id: &Identity,
         cert_compressor: &'static dyn CertCompressor,
     ) {
-        let payload = CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response);
+        let payload = CertificatePayloadTls13::from(id.to_wire_format());
 
         let Ok(entry) = config
             .cert_compression_cache
             .compression_for(cert_compressor, &payload)
         else {
-            return emit_certificate_tls13(flight, cert_chain, ocsp_response);
+            return emit_certificate_tls13(flight, id);
         };
 
         let c = HandshakeMessagePayload(HandshakePayload::CompressedCertificate(
@@ -1049,19 +1061,37 @@ impl State<ServerConnectionData> for ExpectCertificate {
         if certp
             .entries
             .iter()
-            .any(|e| !e.extensions.only_contains(&[]))
+            .any(|e| !e.extensions.is_empty())
         {
             return Err(PeerMisbehaved::UnsolicitedCertExtension.into());
         }
 
-        let client_cert = certp.into_certificate_chain();
+        let client_id = if !certp.entries.is_empty() {
+            let cert_type = cx
+                .common
+                .negotiated_client_cert_type()
+                .ok_or_else(|| {
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::IncorrectCertificateTypeExtension,
+                    )
+                })?;
 
-        let mandatory = self
-            .config
-            .verifier
-            .client_auth_mandatory();
+            Some(
+                self.config
+                    .verifier
+                    .parse_tls13_payload(cert_type, certp.into())?,
+            )
+        } else {
+            None
+        };
 
-        let Some((end_entity, intermediates)) = client_cert.split_first() else {
+        let Some(client_id) = client_id else {
+            let mandatory = self
+                .config
+                .verifier
+                .client_auth_mandatory();
+
             if !mandatory {
                 debug!("client auth requested but no certificate supplied");
                 self.transcript.abandon_client_auth();
@@ -1084,7 +1114,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
         self.config
             .verifier
-            .verify_client_cert(end_entity, intermediates, now)
+            .verify_client_identity(&client_id, now)
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)
@@ -1095,7 +1125,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
-            client_cert: client_cert.into_owned(),
+            client_id,
             send_tickets: self.send_tickets,
         }))
     }
@@ -1110,7 +1140,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    client_cert: CertificateChain<'static>,
+    client_id: Identity,
     send_tickets: usize,
 }
 
@@ -1131,12 +1161,11 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             )?;
             let handshake_hash = self.transcript.current_hash();
             self.transcript.abandon_client_auth();
-            let certs = &self.client_cert;
             let msg = construct_client_verify_message(&handshake_hash);
 
             self.config
                 .verifier
-                .verify_tls13_signature(msg.as_ref(), &certs[0], sig)
+                .verify_tls13_signature(msg.as_ref(), &self.client_id, sig)
         };
 
         if let Err(e) = rc {
@@ -1146,7 +1175,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        cx.common.peer_certificates = Some(self.client_cert);
+        cx.common.peer_identity = Some(self.client_id);
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
@@ -1243,7 +1272,7 @@ fn get_server_session_value(
         version,
         suite.common.suite,
         secret.as_ref(),
-        cx.common.peer_certificates.clone(),
+        cx.common.peer_identity.clone(),
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),
         time_now,

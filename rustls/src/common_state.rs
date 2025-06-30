@@ -1,20 +1,22 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-
 use pki_types::CertificateDer;
 
 use crate::conn::kernel::KernelState;
 use crate::crypto::SupportedKxGroup;
-use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
+use crate::enums::{
+    AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
+};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
+use crate::identity::Identity;
 use crate::log::{debug, error, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
-use crate::msgs::handshake::{CertificateChain, HandshakeMessagePayload, ProtocolName};
+use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
 use crate::msgs::message::{
     Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage,
     PlainMessage,
@@ -47,7 +49,9 @@ pub struct CommonState {
     pub(crate) has_received_close_notify: bool,
     #[cfg(feature = "std")]
     pub(crate) has_seen_eof: bool,
-    pub(crate) peer_certificates: Option<CertificateChain<'static>>,
+    pub(crate) negotiated_client_cert_type: Option<CertificateType>,
+    pub(crate) negotiated_server_cert_type: Option<CertificateType>,
+    pub(crate) peer_identity: Option<Identity>,
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
@@ -82,7 +86,9 @@ impl CommonState {
             has_received_close_notify: false,
             #[cfg(feature = "std")]
             has_seen_eof: false,
-            peer_certificates: None,
+            negotiated_client_cert_type: None,
+            negotiated_server_cert_type: None,
+            peer_identity: None,
             message_fragmenter: MessageFragmenter::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
@@ -115,6 +121,13 @@ impl CommonState {
         !(self.may_send_application_data && self.may_receive_application_data)
     }
 
+    pub fn negotiated_client_cert_type(&self) -> Option<CertificateType> {
+        self.negotiated_client_cert_type
+    }
+
+    pub fn negotiated_server_cert_type(&self) -> Option<CertificateType> {
+        self.negotiated_server_cert_type
+    }
     /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
     ///
     /// The order of the certificate chain is as it appears in the TLS
@@ -137,7 +150,15 @@ impl CommonState {
     /// even though this should technically be a `SubjectPublicKeyInfoDer<'static>`.
     /// This choice simplifies the API and ensures backwards compatibility.
     pub fn peer_certificates(&self) -> Option<&[CertificateDer<'static>]> {
-        self.peer_certificates.as_deref()
+        self.peer_identity
+            .as_ref()
+            .map(|id| id.as_certificates())
+            .flatten()
+            .map(move |cc| cc.as_ref())
+    }
+
+    pub fn peer_identity(&self) -> Option<&Identity> {
+        self.peer_identity.as_ref()
     }
 
     /// Retrieves the protocol agreed with the peer via ALPN.

@@ -9,7 +9,7 @@ use super::enums::{
     ClientCertificateType, Compression, ECCurveType, ExtensionType, KeyUpdateRequest, NamedGroup,
 };
 use super::handshake::{
-    CertificateChain, CertificateEntry, CertificateExtensions, CertificatePayloadTls13,
+    CertificateChain, IdentityEntry, CertificateExtensions, CertificatePayloadTls13,
     CertificateRequestExtensions, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
     ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
@@ -954,13 +954,16 @@ fn all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
 fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
     CertificatePayloadTls13 {
         context: PayloadU8::new(vec![1, 2, 3]),
-        entries: vec![CertificateEntry {
-            cert: CertificateDer::from(vec![3, 4, 5]),
-            extensions: CertificateExtensions {
-                status: Some(CertificateStatus {
-                    ocsp_response: PayloadU24(Payload::new(vec![1, 2, 3])),
-                }),
-            },
+        entries: vec![IdentityEntry {
+            payload: Payload::Owned(vec![3, 4, 5].into()),
+            extensions: Payload::Owned(
+                CertificateExtensions {
+                    status: Some(CertificateStatus {
+                        ocsp_response: PayloadU24(Payload::new(vec![1, 2, 3])),
+                    }),
+                }
+                .get_encoding(),
+            ),
         }],
     }
 }

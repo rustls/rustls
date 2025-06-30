@@ -44,6 +44,385 @@ use common::*;
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
 
+mod test_custom_identity {
+    const CERTIFICATE_TYPE: CertificateType = CertificateType::Custom(226);
+    static AUTH_NAME: LazyLock<DistinguishedName> =
+        LazyLock::new(|| DistinguishedName::from(Vec::from("MY_AUTH_NAME")));
+
+    use super::*;
+    use pki_types::SubjectPublicKeyInfoDer;
+    use rustls::DigitallySignedStruct;
+    use rustls::client::danger::{HandshakeSignatureValid, ServerIdVerified, ServerIdVerifier};
+    use rustls::client::{IdentityEntry, ResolvesClientIdentity};
+    use rustls::crypto::{WebPkiSupportedAlgorithms, verify_tls13_signature_with_raw_key};
+    use rustls::identity::{Identity, SigningIdentity, TlsIdentityEntries, TlsIdentity, IdentitySigner};
+    use rustls::internal::msgs::codec::Reader;
+    use rustls::server::ResolvesServerIdentity;
+    use rustls::server::danger::{ClientIdVerified, ClientIdVerifier};
+    use rustls::sign::{KeyPair, SigningKey};
+    use std::any::Any;
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::slice;
+    use std::sync::LazyLock;
+
+    #[derive(Debug)]
+    struct CustomIdentity {
+        id: u64,
+        pk: SubjectPublicKeyInfoDer<'static>,
+        pk_payload: PayloadU16,
+    }
+
+    impl CustomIdentity {
+        fn new(pk: SubjectPublicKeyInfoDer<'_>) -> Self {
+            let pk = pk.into_owned();
+            let pk_payload = PayloadU16::new(pk.as_ref().to_vec());
+            Self {
+                id: Self::derive_id(&pk),
+                pk,
+                pk_payload,
+            }
+        }
+
+        fn derive_id(pk: &SubjectPublicKeyInfoDer<'_>) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            pk.as_ref().hash(&mut hasher);
+            hasher.finish()
+        }
+
+        fn verify(&self) -> Result<(), ()> {
+            if &Self::derive_id(&self.pk) == &self.id {
+                Ok(())
+            } else {
+                Err(())
+            }
+        }
+    }
+
+    impl TryFrom<&[u8]> for CustomIdentity {
+        type Error = ();
+
+        fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+            let mut r = Reader::init(value);
+            let id = u64::read(&mut r).map_err(|_| ())?;
+
+            let len = u16::read(&mut r).map_err(|_| ())?;
+            let pk_payload = Payload::read(&mut r.sub(len as usize).map_err(|_| ())?).into_vec();
+            let pk = SubjectPublicKeyInfoDer::from(pk_payload.as_slice()).into_owned();
+            Ok(Self {
+                id,
+                pk,
+                pk_payload: PayloadU16::new(pk_payload),
+            })
+        }
+    }
+
+    impl TlsIdentity for CustomIdentity {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn certificate_type(&self) -> CertificateType {
+            CERTIFICATE_TYPE
+        }
+
+        fn to_wire_format(&self) -> TlsIdentityEntries<'_> {
+            let mut payload = Vec::new();
+            payload.append(&mut self.id.get_encoding());
+            payload.append(&mut self.pk_payload.get_encoding());
+            vec![IdentityEntry::new(payload)]
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct CustomIdentityKey(Arc<KeyPair>);
+
+    impl IdentitySigner for CustomIdentityKey {
+        fn id(&self) -> Box<dyn TlsIdentity> {
+            Box::new(CustomIdentity::new(self.0.public_key.clone()))
+        }
+
+        fn signing_key(&self) -> &dyn SigningKey {
+            self.0.signing_key()
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    #[derive(Debug)]
+    struct CustomIdResolver(CustomIdentityKey);
+
+    impl ResolvesClientIdentity for CustomIdResolver {
+        fn resolve(
+            &self,
+            hints: &[DistinguishedName],
+            sigschemes: &[SignatureScheme],
+            negotiated_certificate_type: CertificateType,
+        ) -> Option<SigningIdentity> {
+            assert_eq!(negotiated_certificate_type, CERTIFICATE_TYPE);
+            if !hints.contains(AUTH_NAME.deref()) {
+                return None;
+            }
+
+            if self
+                .0
+                .0
+                .secret_key
+                .choose_scheme(sigschemes)
+                .is_none()
+            {
+                return None;
+            }
+
+            Some(self.0.clone().into())
+        }
+
+        fn enabled(&self) -> bool {
+            true
+        }
+
+        fn supported_certificate_types(&self) -> &[CertificateType] {
+            &[CERTIFICATE_TYPE]
+        }
+    }
+
+    impl ResolvesServerIdentity for CustomIdResolver {
+        fn resolve(
+            &self,
+            client_hello: ClientHello<'_>,
+            negotiated_certificate_type: CertificateType,
+        ) -> Option<SigningIdentity> {
+            assert_eq!(negotiated_certificate_type, CERTIFICATE_TYPE);
+            if !client_hello
+                .certificate_authorities()
+                .unwrap_or_default()
+                .contains(AUTH_NAME.deref())
+            {
+                return None;
+            }
+
+            if self
+                .0
+                .0
+                .secret_key
+                .choose_scheme(client_hello.signature_schemes())
+                .is_none()
+            {
+                return None;
+            }
+
+            Some(self.0.clone().into())
+        }
+
+        fn supported_certificate_types(&self) -> &[CertificateType] {
+            &[CERTIFICATE_TYPE]
+        }
+    }
+
+    #[derive(Debug)]
+    struct CustomIdVerifier(WebPkiSupportedAlgorithms);
+
+    impl CustomIdVerifier {
+        fn parse_tls13_payload(
+            id_type: CertificateType,
+            payload: TlsIdentityEntries<'_>,
+        ) -> Result<Identity, Error> {
+            assert_eq!(id_type, CERTIFICATE_TYPE);
+            if payload.len() != 1 {
+                return Err(Error::General(
+                    "certificate payloads need to have exactly 1 entry".to_string(),
+                ));
+            }
+            let entry = payload.into_iter().next().unwrap();
+            Ok(CustomIdentity::try_from(entry.payload.as_ref())
+                .map_err(|_| Error::UnsupportedIdentityType)?
+                .into())
+        }
+
+        fn verify_id(id: &Identity) -> Result<(), Error> {
+            let id = id
+                .as_any()
+                .downcast_ref::<CustomIdentity>()
+                .ok_or(Error::UnsupportedIdentityType)?;
+            id.verify()
+                .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
+            Ok(())
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            id: &Identity,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            let id = id
+                .as_any()
+                .downcast_ref::<CustomIdentity>()
+                .ok_or(Error::UnsupportedIdentityType)?;
+
+            verify_tls13_signature_with_raw_key(message, &id.pk, dss, &self.0)
+        }
+    }
+
+    impl ClientIdVerifier for CustomIdVerifier {
+        fn supported_certificate_types(&self) -> &[CertificateType] {
+            &[CERTIFICATE_TYPE]
+        }
+
+        fn root_hint_subjects(&self) -> &[DistinguishedName] {
+            slice::from_ref(AUTH_NAME.deref())
+        }
+
+        fn parse_tls13_payload(
+            &self,
+            id_type: CertificateType,
+            payload: TlsIdentityEntries<'_>,
+        ) -> Result<Identity, Error> {
+            Self::parse_tls13_payload(id_type, payload)
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            self.0.supported_schemes()
+        }
+
+        fn verify_client_identity(
+            &self,
+            client_id: &Identity,
+            _now: UnixTime,
+        ) -> Result<ClientIdVerified, Error> {
+            Self::verify_id(client_id)?;
+            Ok(ClientIdVerified::assertion())
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            client_id: &Identity,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            self.verify_tls13_signature(message, client_id, dss)
+        }
+    }
+
+    impl ServerIdVerifier for CustomIdVerifier {
+        fn parse_tls13_payload(
+            &self,
+            id_type: CertificateType,
+            payload: TlsIdentityEntries<'_>,
+        ) -> Result<Identity, Error> {
+            Self::parse_tls13_payload(id_type, payload)
+        }
+
+        fn verify_identity(
+            &self,
+            server_id: &Identity,
+            _server_name: &ServerName<'_>,
+            _now: UnixTime,
+        ) -> Result<ServerIdVerified, Error> {
+            Self::verify_id(server_id)?;
+            Ok(ServerIdVerified::assertion())
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            server_id: &Identity,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            self.verify_tls13_signature(message, server_id, dss)
+        }
+
+        fn supported_certificate_types(&self) -> &[CertificateType] {
+            &[CERTIFICATE_TYPE]
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            self.0.supported_schemes()
+        }
+
+        fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+            Some(slice::from_ref(AUTH_NAME.deref()))
+        }
+    }
+
+    fn make_client_config_with_custom_identity(
+        kt: &KeyType,
+        provider: &CryptoProvider,
+    ) -> ClientConfig {
+        let server_verifier =
+            Arc::new(CustomIdVerifier(provider.signature_verification_algorithms));
+        let client_resolver = Arc::new(CustomIdResolver(CustomIdentityKey(
+            kt.get_client_keypair(provider).unwrap(),
+        )));
+        client_config_builder_with_versions(&[&rustls::version::TLS13], provider)
+            .dangerous()
+            .with_custom_identity_verifier(server_verifier)
+            .with_client_identity_resolver(client_resolver)
+    }
+
+    fn make_server_config_with_custom_identity(
+        kt: &KeyType,
+        provider: &CryptoProvider,
+    ) -> ServerConfig {
+        let client_verifier =
+            Arc::new(CustomIdVerifier(provider.signature_verification_algorithms));
+        let server_resolver = Arc::new(CustomIdResolver(CustomIdentityKey(
+            kt.key_pair_with_raw_pub_key(provider)
+                .unwrap(),
+        )));
+        server_config_builder_with_versions(&[&rustls::version::TLS13], provider)
+            .with_client_id_verifier(client_verifier)
+            .with_identity_resolver(server_resolver)
+    }
+
+    #[test]
+    fn successful_custom_id_connection_and_correct_peer_identity() {
+        let provider = provider::default_provider();
+        for kt in KeyType::all_for_provider(&provider) {
+            let client_config = make_client_config_with_custom_identity(kt, &provider);
+            let server_config = make_server_config_with_custom_identity(kt, &provider);
+
+            let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+            do_handshake(&mut client, &mut server);
+
+            // Test that the client peer id is the server's public key
+            match client
+                .peer_identity()
+                .map(|id| {
+                    id.as_any()
+                        .downcast_ref::<CustomIdentity>()
+                })
+                .flatten()
+            {
+                Some(id) => {
+                    assert_eq!(id.pk.as_ref(), kt.get_spki().as_ref());
+                }
+                None => {
+                    unreachable!("Client should have received a custom identity")
+                }
+            }
+
+            // Test that the server peer id is the client's public key
+            match server
+                .peer_identity()
+                .map(|id| {
+                    id.as_any()
+                        .downcast_ref::<CustomIdentity>()
+                })
+                .flatten()
+            {
+                Some(id) => {
+                    assert_eq!(id.pk.as_ref(), kt.get_client_spki().as_ref());
+                }
+                None => {
+                    unreachable!("Server should have received a custom identity")
+                }
+            }
+        }
+    }
+}
+
 mod test_raw_keys {
     use super::*;
 
@@ -57,27 +436,31 @@ mod test_raw_keys {
             let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
             do_handshake(&mut client, &mut server);
 
-            // Test that the client peer certificate is the server's public key
-            match client.peer_certificates() {
-                Some(certificates) => {
-                    assert_eq!(certificates.len(), 1);
-                    let cert: CertificateDer<'_> = certificates[0].clone();
-                    assert_eq!(cert.as_ref(), kt.get_spki().as_ref());
+            // Test that the client peer id is the server's public key
+            match client
+                .peer_identity()
+                .map(|id| id.as_public_key())
+                .flatten()
+            {
+                Some(public_key) => {
+                    assert_eq!(public_key.as_ref(), kt.get_spki().as_ref());
                 }
                 None => {
-                    unreachable!("Client should have received a certificate")
+                    unreachable!("Client should have received an RPK")
                 }
             }
 
             // Test that the server peer certificate is the client's public key
-            match server.peer_certificates() {
-                Some(certificates) => {
-                    assert_eq!(certificates.len(), 1);
-                    let cert = certificates[0].clone();
-                    assert_eq!(cert.as_ref(), kt.get_client_spki().as_ref());
+            match server
+                .peer_identity()
+                .map(|id| id.as_public_key())
+                .flatten()
+            {
+                Some(rpk) => {
+                    assert_eq!(rpk.as_ref(), kt.get_client_spki().as_ref());
                 }
                 None => {
-                    unreachable!("Server should have received a certificate")
+                    unreachable!("Server should have received an RPK")
                 }
             }
         }
@@ -90,11 +473,12 @@ mod test_raw_keys {
             let client_config = make_client_config_with_raw_key_support(*kt, &provider);
             let mut server_config = make_server_config_with_raw_key_support(*kt, &provider);
 
-            server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+            let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
                 expected_client_cert_types: Some(vec![CertificateType::RawPublicKey]),
                 expected_server_cert_types: Some(vec![CertificateType::RawPublicKey]),
                 ..Default::default()
             });
+            server_config.certificate_resolver(resolver);
 
             let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -636,9 +1020,9 @@ fn client_only_attempts_resumption_with_compatible_security() {
 
         // disallowed case: unmatching `client_auth_cert_resolver`
         let mut client_config = ClientConfig::clone(&base_client_config);
-        client_config.client_auth_cert_resolver =
+        client_config.client_auth_id_resolver =
             make_client_config_with_versions_with_auth(kt, &[version], &provider)
-                .client_auth_cert_resolver;
+                .client_auth_id_resolver;
 
         CountingLogger::reset();
         let (mut client, mut server) =
@@ -656,8 +1040,8 @@ fn client_only_attempts_resumption_with_compatible_security() {
         let mut client_config =
             make_client_config_with_versions_with_auth(kt, &[version], &provider);
         client_config.resumption = base_client_config.resumption.clone();
-        client_config.client_auth_cert_resolver = base_client_config
-            .client_auth_cert_resolver
+        client_config.client_auth_id_resolver = base_client_config
+            .client_auth_id_resolver
             .clone();
 
         CountingLogger::reset();
@@ -1228,6 +1612,7 @@ fn server_cert_resolve_with_sni() {
             expected_sni: Some(DnsName::try_from("the.value.from.sni").unwrap()),
             ..Default::default()
         });
+        server_config.certificate_resolver(resolver);
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("the.value.from.sni"))
@@ -1247,10 +1632,11 @@ fn server_cert_resolve_with_alpn() {
         client_config.alpn_protocols = vec!["foo".into(), "bar".into()];
 
         let mut server_config = make_server_config(*kt, &provider);
-        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+        let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
             expected_alpn: Some(vec![b"foo".to_vec(), b"bar".to_vec()]),
             ..Default::default()
         });
+        server_config.certificate_resolver(resolver);
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("sni-value")).unwrap();
@@ -1268,7 +1654,7 @@ fn server_cert_resolve_with_named_groups() {
         let client_config = make_client_config(*kt, &provider);
 
         let mut server_config = make_server_config(*kt, &provider);
-        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+        let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
             expected_named_groups: Some(
                 provider
                     .kx_groups
@@ -1278,6 +1664,7 @@ fn server_cert_resolve_with_named_groups() {
             ),
             ..Default::default()
         });
+        server_config.certificate_resolver(resolver);
 
         let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
         let err = do_handshake_until_error(&mut client, &mut server);
@@ -1292,10 +1679,11 @@ fn client_trims_terminating_dot() {
         let client_config = make_client_config(*kt, &provider);
         let mut server_config = make_server_config(*kt, &provider);
 
-        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+        let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
             expected_sni: Some(DnsName::try_from("some-host.com").unwrap()),
             ..Default::default()
         });
+        server_config.certificate_resolver(resolver);
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("some-host.com.")).unwrap();
@@ -1327,11 +1715,12 @@ fn check_sigalgs_reduced_by_ciphersuite(
 
     let mut server_config = make_server_config(kt, &provider::default_provider());
 
-    server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+    let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
         expected_sigalgs: Some(expected_sigalgs),
         expected_cipher_suites: Some(vec![suite, CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV]),
         ..Default::default()
     });
+    server_config.certificate_resolver(resolver);
 
     let mut client =
         ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
@@ -1397,7 +1786,8 @@ fn client_with_sni_disabled_does_not_send_sni() {
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider) {
         let mut server_config = make_server_config(*kt, &provider);
-        server_config.cert_resolver = Arc::new(ServerCheckNoSni {});
+        let scni: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckNoSni {});
+        server_config.certificate_resolver(scni);
         let server_config = Arc::new(server_config);
 
         for version in rustls::ALL_VERSIONS {
@@ -1834,11 +2224,11 @@ fn test_client_cert_resolve(
         println!("{:?} {:?}:", version.version, key_type);
 
         let mut client_config = make_client_config_with_versions(key_type, &[version], &provider);
-        client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(
+        client_config.client_auth_certificate_resolver(Arc::new(ClientCheckCertResolve::new(
             1,
             expected_root_hint_subjects.clone(),
             default_signature_schemes(version.version),
-        ));
+        )));
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -3250,9 +3640,8 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     let resolver = rustls::server::ResolvesServerCertUsingSni::new();
-
     let mut server_config = make_server_config(kt, &provider);
-    server_config.cert_resolver = Arc::new(resolver);
+    server_config.certificate_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     for version in rustls::ALL_VERSIONS {
@@ -3267,7 +3656,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
         assert_eq!(
             server.process_new_packets(),
             Err(Error::General(
-                "no server certificate chain resolved".to_string()
+                "no server certificate chain or id resolved".to_string()
             ))
         );
         assert_eq!(
@@ -3290,9 +3679,8 @@ fn sni_resolver_works() {
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
         )
         .unwrap();
-
     let mut server_config = make_server_config(kt, &provider);
-    server_config.cert_resolver = Arc::new(resolver);
+    server_config.certificate_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
@@ -3314,7 +3702,7 @@ fn sni_resolver_works() {
     assert_eq!(
         err,
         Err(ErrorFromPeer::Server(Error::General(
-            "no server certificate chain resolved".into()
+            "no server certificate chain or id resolved".into()
         )))
     );
 }
@@ -3375,9 +3763,8 @@ fn sni_resolver_lower_cases_configured_names() {
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
-
     let mut server_config = make_server_config(kt, &provider);
-    server_config.cert_resolver = Arc::new(resolver);
+    server_config.certificate_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
@@ -3408,7 +3795,7 @@ fn sni_resolver_lower_cases_queried_names() {
     );
 
     let mut server_config = make_server_config(kt, &provider);
-    server_config.cert_resolver = Arc::new(resolver);
+    server_config.certificate_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
@@ -7466,7 +7853,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .load_private_key(KeyType::Rsa2048.get_client_key())
         .unwrap();
     let big_cert_and_key = sign::CertifiedKey::new(vec![big_cert], key);
-    client_config.client_auth_cert_resolver =
+    client_config.client_auth_id_resolver =
         Arc::new(sign::SingleCertAndKey::from(big_cert_and_key));
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);

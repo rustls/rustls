@@ -8,7 +8,7 @@ use pki_types::ServerName;
 
 #[cfg(feature = "tls12")]
 use super::tls12;
-use super::{ResolvesClientCert, Tls12Resumption};
+use super::{ResolvesClientIdentity, Tls12Resumption};
 use crate::SupportedCipherSuite;
 #[cfg(feature = "log")]
 use crate::bs_debug;
@@ -38,7 +38,7 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleEarly;
-use crate::verify::ServerCertVerifier;
+use crate::verify::ServerIdVerifier;
 
 pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
@@ -144,8 +144,8 @@ impl ClientHelloInput {
         let mut transcript_buffer = HandshakeHashBuffer::new();
         if self
             .config
-            .client_auth_cert_resolver
-            .has_certs()
+            .client_auth_id_resolver
+            .enabled()
         {
             transcript_buffer.set_client_auth_enabled();
         }
@@ -331,18 +331,33 @@ fn emit_client_hello_for_retry(
             false
         };
 
-    if config
-        .client_auth_cert_resolver
-        .only_raw_public_keys()
+    let supported_certificate_types = config
+        .client_auth_id_resolver
+        .supported_certificate_types();
+
+    // We omit the client_certificate_types extension if we deal exclusively
+    // with x509 certificates.
+    if supported_certificate_types
+        .iter()
+        .find(|ct| ct != &&CertificateType::X509)
+        .is_some()
     {
-        exts.client_certificate_types = Some(vec![CertificateType::RawPublicKey]);
+        // Contains a non-x509 type.
+        exts.client_certificate_types = Some(supported_certificate_types.to_vec());
     }
 
-    if config
+    // We omit the server_certificate_types extension if we deal exclusively
+    // with x509 certificates.
+    let supported_server_certificate_types = config
         .verifier
-        .requires_raw_public_keys()
+        .supported_certificate_types();
+    if supported_server_certificate_types
+        .iter()
+        .find(|ct| ct != &&CertificateType::X509)
+        .is_some()
     {
-        exts.server_certificate_types = Some(vec![CertificateType::RawPublicKey]);
+        // Contains a non-x509 type.
+        exts.server_certificate_types = Some(supported_server_certificate_types.to_vec());
     }
 
     // If this is a second client hello we're constructing in response to an HRR, and
@@ -634,30 +649,50 @@ pub(super) fn process_server_cert_type_extension(
     common: &mut CommonState,
     config: &ClientConfig,
     server_cert_extension: Option<&CertificateType>,
-) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
-    process_cert_type_extension(
-        common,
-        config
-            .verifier
-            .requires_raw_public_keys(),
-        server_cert_extension.copied(),
-        ExtensionType::ServerCertificateType,
-    )
+) -> Result<(), Error> {
+    // X.509 is implied of no extension present
+    let accepted = server_cert_extension
+        .map(|c| c)
+        .unwrap_or(&CertificateType::X509);
+
+    if !config
+        .verifier
+        .supported_certificate_types()
+        .contains(accepted)
+    {
+        return Err(common.send_fatal_alert(
+            AlertDescription::HandshakeFailure,
+            Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
+        ));
+    }
+
+    common.negotiated_server_cert_type = Some(*accepted);
+    Ok(())
 }
 
 pub(super) fn process_client_cert_type_extension(
     common: &mut CommonState,
     config: &ClientConfig,
     client_cert_extension: Option<&CertificateType>,
-) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
-    process_cert_type_extension(
-        common,
-        config
-            .client_auth_cert_resolver
-            .only_raw_public_keys(),
-        client_cert_extension.copied(),
-        ExtensionType::ClientCertificateType,
-    )
+) -> Result<(), Error> {
+    // X.509 is implied if no extension present
+    let accepted = client_cert_extension
+        .map(|c| c)
+        .unwrap_or(&CertificateType::X509);
+
+    if !config
+        .client_auth_id_resolver
+        .supported_certificate_types()
+        .contains(accepted)
+    {
+        return Err(common.send_fatal_alert(
+            AlertDescription::HandshakeFailure,
+            Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
+        ));
+    }
+
+    common.negotiated_client_cert_type = Some(*accepted);
+    Ok(())
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
@@ -739,8 +774,8 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         cx.common.negotiated_version = Some(version);
 
-        // Extract ALPN protocol
         if !cx.common.is_tls13() {
+            // Extract ALPN protocol
             process_alpn_protocol(
                 cx.common,
                 &self.input.hello.alpn_protocols,
@@ -748,6 +783,22 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     .selected_protocol
                     .as_ref()
                     .map(|s| s.as_ref()),
+            )?;
+
+            // Negotiate certificate types
+            process_client_cert_type_extension(
+                cx.common,
+                &self.input.config,
+                server_hello
+                    .client_certificate_type
+                    .as_ref(),
+            )?;
+            process_server_cert_type_extension(
+                cx.common,
+                &self.input.config,
+                server_hello
+                    .server_certificate_type
+                    .as_ref(),
             )?;
         }
 
@@ -1059,27 +1110,6 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-fn process_cert_type_extension(
-    common: &mut CommonState,
-    client_expects: bool,
-    server_negotiated: Option<CertificateType>,
-    extension_type: ExtensionType,
-) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
-    match (client_expects, server_negotiated) {
-        (true, Some(CertificateType::RawPublicKey)) => {
-            Ok(Some((extension_type, CertificateType::RawPublicKey)))
-        }
-        (true, _) => Err(common.send_fatal_alert(
-            AlertDescription::HandshakeFailure,
-            Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
-        )),
-        (_, Some(CertificateType::RawPublicKey)) => {
-            unreachable!("Caught by `PeerMisbehaved::UnsolicitedEncryptedExtension`")
-        }
-        (_, _) => Ok(None),
-    }
-}
-
 pub(super) enum ClientSessionValue {
     Tls13(persist::Tls13ClientSessionValue),
     #[cfg(feature = "tls12")]
@@ -1111,7 +1141,7 @@ impl ClientSessionValue {
                 None
             })
             .and_then(|resuming| {
-                resuming.compatible_config(&config.verifier, &config.client_auth_cert_resolver)
+                resuming.compatible_config(&config.verifier, &config.client_auth_id_resolver)
             })
             .and_then(|resuming| {
                 let now = config
@@ -1159,16 +1189,16 @@ impl ClientSessionValue {
 
     fn compatible_config(
         self,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        server_id_verifier: &Arc<dyn ServerIdVerifier>,
+        client_creds: &Arc<dyn ResolvesClientIdentity>,
     ) -> Option<Self> {
         match &self {
             Self::Tls13(v) => v
-                .compatible_config(server_cert_verifier, client_creds)
+                .compatible_config(server_id_verifier, client_creds)
                 .then_some(self),
             #[cfg(feature = "tls12")]
             Self::Tls12(v) => v
-                .compatible_config(server_cert_verifier, client_creds)
+                .compatible_config(server_id_verifier, client_creds)
                 .then_some(self),
         }
     }

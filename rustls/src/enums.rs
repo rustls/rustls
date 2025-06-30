@@ -584,6 +584,9 @@ enum_builder! {
     pub enum CertificateType {
         X509 => 0x00,
         RawPublicKey => 0x02,
+        
+        !Ranges:
+          Custom => 224..=255,
     }
 }
 

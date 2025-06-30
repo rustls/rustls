@@ -50,6 +50,9 @@ pub enum Error {
     /// The certificate verifier doesn't support the given type of name.
     UnsupportedNameType,
 
+    /// The specified identity type is not supported.
+    UnsupportedIdentityType,
+
     /// We couldn't decrypt a message.  This is invariably fatal.
     DecryptError,
 
@@ -988,6 +991,7 @@ impl fmt::Display for Error {
             }
             Self::NoCertificatesPresented => write!(f, "peer sent no certificates"),
             Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
+            Self::UnsupportedIdentityType => write!(f, "specified identity type wasn't supported"),
             Self::DecryptError => write!(f, "cannot decrypt peer's message"),
             Self::InvalidEncryptedClientHello(err) => {
                 write!(f, "encrypted client hello failure: {err:?}")

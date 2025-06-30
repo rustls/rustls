@@ -1,22 +1,21 @@
-use alloc::vec::Vec;
-use core::cmp;
-
-use pki_types::{DnsName, UnixTime};
-use zeroize::Zeroizing;
-
-use crate::client::ResolvesClientCert;
-use crate::enums::{CipherSuite, ProtocolVersion};
+use crate::client::ResolvesClientIdentity;
+use crate::enums::{CertificateType, CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
+use crate::identity::{Identity, TlsIdentityEntries, IntoOwned};
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::handshake::ProtocolName;
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
-use crate::msgs::handshake::{CertificateChain, ProtocolName};
 use crate::sync::{Arc, Weak};
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-use crate::verify::ServerCertVerifier;
+use crate::verify::ServerIdVerifier;
+use alloc::vec::Vec;
+use core::cmp;
+use pki_types::{DnsName, UnixTime};
+use zeroize::Zeroizing;
 
 pub(crate) struct Retrieved<T> {
     pub(crate) value: T,
@@ -83,9 +82,9 @@ impl Tls13ClientSessionValue {
         suite: &'static Tls13CipherSuite,
         ticket: Arc<PayloadU16>,
         secret: &[u8],
-        server_cert_chain: CertificateChain<'static>,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        server_identity: impl Into<Identity>,
+        server_id_verifier: &Arc<dyn ServerIdVerifier>,
+        client_creds: &Arc<dyn ResolvesClientIdentity>,
         time_now: UnixTime,
         lifetime_secs: u32,
         age_add: u32,
@@ -100,8 +99,8 @@ impl Tls13ClientSessionValue {
                 secret,
                 time_now,
                 lifetime_secs,
-                server_cert_chain,
-                server_cert_verifier,
+                server_identity,
+                server_id_verifier,
                 client_creds,
             ),
             quic_params: PayloadU16::new(Vec::new()),
@@ -165,9 +164,9 @@ impl Tls12ClientSessionValue {
         session_id: SessionId,
         ticket: Arc<PayloadU16>,
         master_secret: &[u8],
-        server_cert_chain: CertificateChain<'static>,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        server_identity: impl Into<Identity>,
+        server_id_verifier: &Arc<dyn ServerIdVerifier>,
+        client_creds: &Arc<dyn ResolvesClientIdentity>,
         time_now: UnixTime,
         lifetime_secs: u32,
         extended_ms: bool,
@@ -181,8 +180,8 @@ impl Tls12ClientSessionValue {
                 master_secret,
                 time_now,
                 lifetime_secs,
-                server_cert_chain,
-                server_cert_verifier,
+                server_identity,
+                server_id_verifier,
                 client_creds,
             ),
         }
@@ -222,9 +221,9 @@ pub struct ClientSessionCommon {
     secret: Zeroizing<PayloadU8>,
     epoch: u64,
     lifetime_secs: u32,
-    server_cert_chain: Arc<CertificateChain<'static>>,
-    server_cert_verifier: Weak<dyn ServerCertVerifier>,
-    client_creds: Weak<dyn ResolvesClientCert>,
+    server_identity: Identity,
+    server_id_verifier: Weak<dyn ServerIdVerifier>,
+    client_creds: Weak<dyn ResolvesClientIdentity>,
 }
 
 impl ClientSessionCommon {
@@ -233,29 +232,29 @@ impl ClientSessionCommon {
         secret: &[u8],
         time_now: UnixTime,
         lifetime_secs: u32,
-        server_cert_chain: CertificateChain<'static>,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        server_identity: impl Into<Identity>,
+        server_id_verifier: &Arc<dyn ServerIdVerifier>,
+        client_creds: &Arc<dyn ResolvesClientIdentity>,
     ) -> Self {
         Self {
             ticket,
             secret: Zeroizing::new(PayloadU8::new(secret.to_vec())),
             epoch: time_now.as_secs(),
             lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
-            server_cert_chain: Arc::new(server_cert_chain),
-            server_cert_verifier: Arc::downgrade(server_cert_verifier),
+            server_identity: server_identity.into(),
+            server_id_verifier: Arc::downgrade(server_id_verifier),
             client_creds: Arc::downgrade(client_creds),
         }
     }
 
     pub(crate) fn compatible_config(
         &self,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        server_id_verifier: &Arc<dyn ServerIdVerifier>,
+        client_creds: &Arc<dyn ResolvesClientIdentity>,
     ) -> bool {
         let same_verifier = Weak::ptr_eq(
-            &Arc::downgrade(server_cert_verifier),
-            &self.server_cert_verifier,
+            &Arc::downgrade(server_id_verifier),
+            &self.server_id_verifier,
         );
         let same_creds = Weak::ptr_eq(&Arc::downgrade(client_creds), &self.client_creds);
 
@@ -274,8 +273,8 @@ impl ClientSessionCommon {
         }
     }
 
-    pub(crate) fn server_cert_chain(&self) -> &CertificateChain<'static> {
-        &self.server_cert_chain
+    pub(crate) fn server_identity(&self) -> &Identity {
+        &self.server_identity
     }
 
     pub(crate) fn secret(&self) -> &[u8] {
@@ -303,7 +302,7 @@ pub struct ServerSessionValue {
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) master_secret: Zeroizing<PayloadU8>,
     pub(crate) extended_ms: bool,
-    pub(crate) client_cert_chain: Option<CertificateChain<'static>>,
+    pub(crate) client_identity: Option<(CertificateType, TlsIdentityEntries<'static>)>,
     pub(crate) alpn: Option<PayloadU8>,
     pub(crate) application_data: PayloadU16,
     pub creation_time_sec: u64,
@@ -324,9 +323,10 @@ impl Codec<'_> for ServerSessionValue {
         self.cipher_suite.encode(bytes);
         self.master_secret.encode(bytes);
         (u8::from(self.extended_ms)).encode(bytes);
-        if let Some(chain) = &self.client_cert_chain {
+        if let Some((cert_type, payloads)) = &self.client_identity {
             1u8.encode(bytes);
-            chain.encode(bytes);
+            cert_type.encode(bytes);
+            payloads.encode(bytes);
         } else {
             0u8.encode(bytes);
         }
@@ -361,8 +361,9 @@ impl Codec<'_> for ServerSessionValue {
         let ms = Zeroizing::new(PayloadU8::read(r)?);
         let ems = u8::read(r)?;
         let has_ccert = u8::read(r)? == 1;
-        let ccert = if has_ccert {
-            Some(CertificateChain::read(r)?.into_owned())
+        let client_identity = if has_ccert {
+            let cert_type = CertificateType::read(r)?;
+            Some((cert_type, TlsIdentityEntries::read(r)?.into_owned()))
         } else {
             None
         };
@@ -382,7 +383,7 @@ impl Codec<'_> for ServerSessionValue {
             cipher_suite: cs,
             master_secret: ms,
             extended_ms: ems == 1u8,
-            client_cert_chain: ccert,
+            client_identity,
             alpn,
             application_data,
             creation_time_sec,
@@ -398,7 +399,7 @@ impl ServerSessionValue {
         v: ProtocolVersion,
         cs: CipherSuite,
         ms: &[u8],
-        client_cert_chain: Option<CertificateChain<'static>>,
+        client_identity: Option<Identity>,
         alpn: Option<ProtocolName>,
         application_data: Vec<u8>,
         creation_time: UnixTime,
@@ -410,7 +411,8 @@ impl ServerSessionValue {
             cipher_suite: cs,
             master_secret: Zeroizing::new(PayloadU8::new(ms.to_vec())),
             extended_ms: false,
-            client_cert_chain,
+            client_identity: client_identity
+                .map(|id| (id.certificate_type(), id.to_wire_format().into_owned())),
             alpn: alpn.map(|p| PayloadU8::new(p.as_ref().to_vec())),
             application_data: PayloadU16::new(application_data),
             creation_time_sec: creation_time.as_secs(),

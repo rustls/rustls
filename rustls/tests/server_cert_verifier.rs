@@ -13,7 +13,7 @@ use common::{
 };
 use pki_types::{CertificateDer, ServerName};
 use rustls::client::WebPkiServerVerifier;
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::danger::{HandshakeSignatureValid, ServerIdVerified, ServerCertVerifier};
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use rustls::{
@@ -35,7 +35,7 @@ fn client_can_override_certificate_verification() {
             let mut client_config = make_client_config_with_versions(*kt, &[version], &provider);
             client_config
                 .dangerous()
-                .set_certificate_verifier(verifier.clone());
+                .certificate_verifier(verifier.clone());
 
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -58,7 +58,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
             let mut client_config = make_client_config_with_versions(*kt, &[version], &provider);
             client_config
                 .dangerous()
-                .set_certificate_verifier(verifier.clone());
+                .certificate_verifier(verifier.clone());
 
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -89,7 +89,7 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
 
         client_config
             .dangerous()
-            .set_certificate_verifier(verifier);
+            .certificate_verifier(verifier);
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
@@ -123,7 +123,7 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
 
         client_config
             .dangerous()
-            .set_certificate_verifier(verifier);
+            .certificate_verifier(verifier);
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
@@ -154,7 +154,7 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
             let mut client_config = make_client_config_with_versions(*kt, &[version], &provider);
             client_config
                 .dangerous()
-                .set_certificate_verifier(verifier.clone());
+                .certificate_verifier(verifier.clone());
 
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -299,7 +299,7 @@ impl ServerCertVerifier for ServerCertVerifierWithCasExt {
         server_name: &ServerName<'_>,
         ocsp_response: &[u8],
         now: pki_types::UnixTime,
-    ) -> Result<ServerCertVerified, Error> {
+    ) -> Result<ServerIdVerified, Error> {
         self.verifier
             .verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now)
     }
@@ -330,10 +330,6 @@ impl ServerCertVerifier for ServerCertVerifierWithCasExt {
 
     fn request_ocsp_response(&self) -> bool {
         self.verifier.request_ocsp_response()
-    }
-
-    fn requires_raw_public_keys(&self) -> bool {
-        self.verifier.requires_raw_public_keys()
     }
 
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {

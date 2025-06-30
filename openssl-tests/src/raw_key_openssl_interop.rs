@@ -10,19 +10,17 @@ mod client {
     use std::sync::Arc;
 
     use rustls::client::AlwaysResolvesClientRawPublicKeys;
-    use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use rustls::client::danger::{HandshakeSignatureValid, ServerIdVerified, ServerRpkVerifier};
     use rustls::crypto::{
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature_with_raw_key,
     };
     use rustls::pki_types::pem::PemObject;
-    use rustls::pki_types::{
-        CertificateDer, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer, UnixTime,
-    };
-    use rustls::sign::CertifiedKey;
+    use rustls::pki_types::{PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+    use rustls::sign::KeyPair;
     use rustls::version::TLS13;
     use rustls::{
         CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct, Error,
-        InconsistentKeys, PeerIncompatible, SignatureScheme, Stream,
+        InconsistentKeys, SignatureScheme, Stream,
     };
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
@@ -37,25 +35,24 @@ mod client {
         let client_public_key = client_private_key
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))
-            .expect("cannot load public key");
-        let client_public_key_as_cert = CertificateDer::from(client_public_key.to_vec());
+            .expect("cannot load public key")
+            .clone()
+            .into_owned();
 
         let server_raw_key = SubjectPublicKeyInfoDer::from_pem_file(server_pub_key)
             .expect("cannot open pub key file");
 
-        let certified_key = Arc::new(CertifiedKey::new(
-            vec![client_public_key_as_cert],
-            client_private_key,
-        ));
+        let key_pair = Arc::new(
+            KeyPair::new(client_public_key, client_private_key.to_owned())
+                .expect("key pair to be valid"),
+        );
 
         ClientConfig::builder_with_protocol_versions(&[&TLS13])
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(SimpleRpkServerCertVerifier::new(vec![
+            .with_custom_rpk_verifier(Arc::new(SimpleRpkServerCertVerifier::new(vec![
                 server_raw_key,
             ])))
-            .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-                certified_key,
-            )))
+            .with_client_rpk_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(key_pair)))
     }
 
     /// Run the client and connect to the server at the specified port.
@@ -97,43 +94,28 @@ mod client {
         }
     }
 
-    impl ServerCertVerifier for SimpleRpkServerCertVerifier {
-        fn verify_server_cert(
+    impl ServerRpkVerifier for SimpleRpkServerCertVerifier {
+        fn verify_server_rpk(
             &self,
-            end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
+            public_key: &SubjectPublicKeyInfoDer<'_>,
             _server_name: &ServerName<'_>,
-            _ocsp_response: &[u8],
             _now: UnixTime,
-        ) -> Result<ServerCertVerified, Error> {
-            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(end_entity.as_ref());
-            match self
-                .trusted_spki
-                .contains(&end_entity_as_spki)
-            {
+        ) -> Result<ServerIdVerified, Error> {
+            match self.trusted_spki.contains(&public_key) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(ServerCertVerified::assertion()),
+                true => Ok(ServerIdVerified::assertion()),
             }
-        }
-
-        fn verify_tls12_signature(
-            &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, Error> {
-            Err(Error::PeerIncompatible(PeerIncompatible::Tls12NotOffered))
         }
 
         fn verify_tls13_signature(
             &self,
             message: &[u8],
-            cert: &CertificateDer<'_>,
+            public_key: &SubjectPublicKeyInfoDer<'_>,
             dss: &DigitallySignedStruct,
         ) -> Result<HandshakeSignatureValid, Error> {
             verify_tls13_signature_with_raw_key(
                 message,
-                &SubjectPublicKeyInfoDer::from(cert.as_ref()),
+                &SubjectPublicKeyInfoDer::from(public_key.as_ref()),
                 dss,
                 &self.supported_algs,
             )
@@ -145,10 +127,6 @@ mod client {
 
         fn request_ocsp_response(&self) -> bool {
             false
-        }
-
-        fn requires_raw_public_keys(&self) -> bool {
-            true
         }
     }
 }
@@ -163,14 +141,14 @@ mod server {
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature_with_raw_key,
     };
     use rustls::pki_types::pem::PemObject;
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer, UnixTime};
+    use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer, UnixTime};
     use rustls::server::AlwaysResolvesServerRawPublicKeys;
-    use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
-    use rustls::sign::CertifiedKey;
+    use rustls::server::danger::{ClientIdVerified, ClientRpkVerifier};
+    use rustls::sign::KeyPair;
     use rustls::version::TLS13;
     use rustls::{
-        CertificateError, DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys,
-        PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
+        CertificateError, DigitallySignedStruct, Error, InconsistentKeys, ServerConfig,
+        ServerConnection, SignatureScheme,
     };
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
@@ -188,20 +166,21 @@ mod server {
         let server_public_key = server_private_key
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))
-            .expect("cannot load public key");
-        let server_public_key_as_cert = CertificateDer::from(server_public_key.to_vec());
+            .expect("cannot load public key")
+            .clone()
+            .into_owned();
 
-        let certified_key = Arc::new(CertifiedKey::new(
-            vec![server_public_key_as_cert],
-            server_private_key,
-        ));
+        let key_pair = Arc::new(
+            KeyPair::new(server_public_key, server_private_key.to_owned())
+                .expect("key pair to be valid"),
+        );
 
-        let client_cert_verifier = Arc::new(SimpleRpkClientCertVerifier::new(vec![client_raw_key]));
-        let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(certified_key));
+        let client_rpk_verifier = Arc::new(SimpleRpkClientCertVerifier::new(vec![client_raw_key]));
+        let server_rpk_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(key_pair));
 
         ServerConfig::builder_with_protocol_versions(&[&TLS13])
-            .with_client_cert_verifier(client_cert_verifier)
-            .with_cert_resolver(server_cert_resolver)
+            .with_client_rpk_verifier(client_rpk_verifier)
+            .with_rpk_resolver(server_rpk_resolver)
     }
 
     /// Run the server at the specified port and accept a connection from the client.
@@ -260,56 +239,29 @@ mod server {
         }
     }
 
-    impl ClientCertVerifier for SimpleRpkClientCertVerifier {
-        fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
-            Arc::from(Vec::new())
+    impl ClientRpkVerifier for SimpleRpkClientCertVerifier {
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            self.supported_algs.supported_schemes()
         }
 
-        fn verify_client_cert(
+        fn verify_client_rpk(
             &self,
-            end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
+            client_rpk: &SubjectPublicKeyInfoDer<'_>,
             _now: UnixTime,
-        ) -> Result<ClientCertVerified, Error> {
-            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(end_entity.as_ref());
-            match self
-                .trusted_spki
-                .contains(&end_entity_as_spki)
-            {
+        ) -> Result<ClientIdVerified, Error> {
+            match self.trusted_spki.contains(&client_rpk) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(ClientCertVerified::assertion()),
+                true => Ok(ClientIdVerified::assertion()),
             }
-        }
-
-        fn verify_tls12_signature(
-            &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, Error> {
-            Err(Error::PeerIncompatible(PeerIncompatible::Tls12NotOffered))
         }
 
         fn verify_tls13_signature(
             &self,
             message: &[u8],
-            cert: &CertificateDer<'_>,
+            client_rpk: &SubjectPublicKeyInfoDer<'_>,
             dss: &DigitallySignedStruct,
         ) -> Result<HandshakeSignatureValid, Error> {
-            verify_tls13_signature_with_raw_key(
-                message,
-                &SubjectPublicKeyInfoDer::from(cert.as_ref()),
-                dss,
-                &self.supported_algs,
-            )
-        }
-
-        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-            self.supported_algs.supported_schemes()
-        }
-
-        fn requires_raw_public_keys(&self) -> bool {
-            true
+            verify_tls13_signature_with_raw_key(message, client_rpk, dss, &self.supported_algs)
         }
     }
 }

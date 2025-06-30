@@ -37,10 +37,12 @@ mod tests {
     };
     use crate::msgs::message::PlainMessage;
     use crate::pki_types::pem::PemObject;
-    use crate::pki_types::{PrivateKeyDer, UnixTime};
-    use crate::sign::CertifiedKey;
+    use crate::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer, UnixTime};
+    use crate::sign::KeyPair;
     use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
-    use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use crate::verify::{
+        HandshakeSignatureValid, ServerCertVerifier, ServerIdVerified, ServerRpkVerifier,
+    };
     use crate::{DigitallySignedStruct, DistinguishedName, KeyLog, version};
 
     /// Tests that session_ticket(35) extension
@@ -311,8 +313,8 @@ mod tests {
             _server_name: &ServerName<'_>,
             _ocsp_response: &[u8],
             _now: UnixTime,
-        ) -> Result<ServerCertVerified, Error> {
-            Ok(ServerCertVerified::assertion())
+        ) -> Result<ServerIdVerified, Error> {
+            Ok(ServerIdVerified::assertion())
         }
 
         fn verify_tls12_signature(
@@ -456,26 +458,23 @@ mod tests {
             .with_protocol_versions(&[&version::TLS13])
             .unwrap()
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
-            .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(Arc::new(
-                client_certified_key(),
+            .with_custom_rpk_verifier(Arc::new(ServerVerifierRequiringRpk))
+            .with_client_rpk_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(Arc::new(
+                client_keypair(),
             ))));
         config.key_log = key_log;
         config
     }
 
-    fn client_certified_key() -> CertifiedKey {
+    fn client_keypair() -> KeyPair {
         let key = super::provider::default_provider()
             .key_provider
             .load_private_key(client_key())
             .unwrap();
-        let public_key_as_cert = vec![CertificateDer::from(
-            key.public_key()
-                .unwrap()
-                .as_ref()
-                .to_vec(),
-        )];
-        CertifiedKey::new(public_key_as_cert, key)
+        let public_key = key.public_key().unwrap().into_owned();
+        KeyPair::new(public_key, key)
+            .ok()
+            .unwrap()
     }
 
     fn client_key() -> PrivateKeyDer<'static> {
@@ -510,7 +509,7 @@ mod tests {
             _server_name: &ServerName<'_>,
             _ocsp_response: &[u8],
             _now: UnixTime,
-        ) -> Result<ServerCertVerified, Error> {
+        ) -> Result<ServerIdVerified, Error> {
             unreachable!()
         }
 
@@ -546,26 +545,14 @@ mod tests {
     #[derive(Debug)]
     struct ServerVerifierRequiringRpk;
 
-    impl ServerCertVerifier for ServerVerifierRequiringRpk {
+    impl ServerRpkVerifier for ServerVerifierRequiringRpk {
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_server_cert(
+        fn verify_server_rpk(
             &self,
-            _end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
+            _public_key: &SubjectPublicKeyInfoDer<'_>,
             _server_name: &ServerName<'_>,
-            _ocsp_response: &[u8],
             _now: UnixTime,
-        ) -> Result<ServerCertVerified, Error> {
-            todo!()
-        }
-
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_tls12_signature(
-            &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, Error> {
+        ) -> Result<ServerIdVerified, Error> {
             todo!()
         }
 
@@ -573,7 +560,7 @@ mod tests {
         fn verify_tls13_signature(
             &self,
             _message: &[u8],
-            _cert: &CertificateDer<'_>,
+            _public_key: &SubjectPublicKeyInfoDer<'_>,
             _dss: &DigitallySignedStruct,
         ) -> Result<HandshakeSignatureValid, Error> {
             todo!()
@@ -585,10 +572,6 @@ mod tests {
 
         fn request_ocsp_response(&self) -> bool {
             false
-        }
-
-        fn requires_raw_public_keys(&self) -> bool {
-            true
         }
     }
 

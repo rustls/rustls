@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
-
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
+use std::ops::Deref;
 use zeroize::Zeroize;
 
 use crate::error::InvalidMessage;
@@ -50,6 +50,20 @@ impl<'a> Payload<'a> {
     }
 }
 
+impl<'a> AsRef<[u8]> for Payload<'a> {
+    fn as_ref(&self) -> &[u8] {
+        self.bytes()
+    }
+}
+
+impl<'a> Deref for Payload<'a> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.bytes()
+    }
+}
+
 impl Payload<'static> {
     pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
         Self::Owned(bytes.into())
@@ -60,17 +74,62 @@ impl Payload<'static> {
     }
 }
 
+impl<'a> From<&'a [u8]> for Payload<'a> {
+    fn from(value: &'a [u8]) -> Self {
+        Self::Borrowed(value)
+    }
+}
+
+impl<'a> From<&'a Vec<u8>> for Payload<'a> {
+    fn from(value: &'a Vec<u8>) -> Self {
+        Self::Borrowed(value.as_slice())
+    }
+}
+
+impl From<Vec<u8>> for Payload<'_> {
+    fn from(value: Vec<u8>) -> Self {
+        Self::Owned(value)
+    }
+}
+
+impl<'a, T: Into<Payload<'a>>> From<Option<T>> for Payload<'a> {
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(v) => v.into(),
+            None => Payload::empty(),
+        }
+    }
+}
+
 impl<'a> Codec<'a> for CertificateDer<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::u24(self.as_ref().len() as u32).encode(bytes);
-        bytes.extend(self.as_ref());
+        der_encode(self.as_ref(), bytes)
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let len = codec::u24::read(r)?.0 as usize;
-        let mut sub = r.sub(len)?;
-        let body = sub.rest();
-        Ok(Self::from(body))
+        der_read(r)
+    }
+}
+
+fn der_encode(der: &[u8], bytes: &mut Vec<u8>) {
+    codec::u24(der.len() as u32).encode(bytes);
+    bytes.extend(der);
+}
+
+fn der_read<'a, T: From<&'a [u8]>>(r: &mut Reader<'a>) -> Result<T, InvalidMessage> {
+    let len = codec::u24::read(r)?.0 as usize;
+    let mut sub = r.sub(len)?;
+    let body = sub.rest();
+    Ok(T::from(body))
+}
+
+impl<'a> Codec<'a> for SubjectPublicKeyInfoDer<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        der_encode(self.as_ref(), bytes)
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        der_read(r)
     }
 }
 

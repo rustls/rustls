@@ -1,16 +1,17 @@
-use alloc::boxed::Box;
-use alloc::vec::Vec;
-use core::fmt::Debug;
-
-use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
-
 use super::CryptoProvider;
 use crate::client::ResolvesClientCert;
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
+use crate::identity::{IdentitySigner, TlsIdentity, X509Identity};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
 use crate::x509;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::fmt::Debug;
+use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
+use std::any::Any;
+use std::ops::Deref;
 
 /// An abstract signing key.
 ///
@@ -207,6 +208,69 @@ impl CertifiedKey {
     }
 }
 
+impl IdentitySigner for CertifiedKey {
+    fn id(&self) -> Box<dyn TlsIdentity> {
+        Box::new(X509Identity::new(self.cert.clone(), self.ocsp.as_ref()))
+    }
+
+    fn signing_key(&self) -> &dyn SigningKey {
+        self.key.deref()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct KeyPair {
+    pub public_key: SubjectPublicKeyInfoDer<'static>,
+    pub secret_key: Arc<dyn SigningKey>,
+}
+
+impl KeyPair {
+    pub fn new(
+        public_key: SubjectPublicKeyInfoDer<'static>,
+        secret_key: Arc<dyn SigningKey>,
+    ) -> Result<Self, Error> {
+        let this = Self {
+            public_key,
+            secret_key,
+        };
+        match this.keys_match() {
+            // Don't treat unknown consistency as an error
+            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => Ok(this),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn keys_match(&self) -> Result<(), Error> {
+        let Some(key_spki) = self.secret_key.public_key() else {
+            return Err(InconsistentKeys::Unknown.into());
+        };
+
+        match key_spki == self.public_key {
+            true => Ok(()),
+            false => Err(InconsistentKeys::KeyMismatch.into()),
+        }
+    }
+}
+
+impl IdentitySigner for KeyPair {
+    fn id(&self) -> Box<dyn TlsIdentity> {
+        Box::new(self.public_key.clone())
+    }
+
+    fn signing_key(&self) -> &dyn SigningKey {
+        self.secret_key.deref()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[cfg_attr(not(any(feature = "aws_lc_rs", feature = "ring")), allow(dead_code))]
 #[cfg_attr(not(any(feature = "aws-lc-rs", feature = "ring")), allow(dead_code))]
 pub(crate) fn public_key_to_spki(
     alg_id: &AlgorithmIdentifier,

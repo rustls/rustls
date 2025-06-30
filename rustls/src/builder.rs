@@ -156,8 +156,8 @@ use crate::{ClientConfig, ServerConfig};
 /// [`ServerConfig::builder_with_provider()`]: crate::ServerConfig::builder_with_provider()
 /// [`ConfigBuilder<ClientConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-3
 /// [`ConfigBuilder<ServerConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-6
-/// [`WantsClientCert`]: crate::client::WantsClientCert
-/// [`WantsServerCert`]: crate::server::WantsServerCert
+/// [`WantsClientCert`]: crate::client::WantsClientIdentity
+/// [`WantsServerCert`]: crate::server::WantsServerIdentity
 /// [`CryptoProvider::get_default`]: crate::crypto::CryptoProvider::get_default
 /// [`DangerousClientConfigBuilder::with_custom_certificate_verifier`]: crate::client::danger::DangerousClientConfigBuilder::with_custom_certificate_verifier
 #[derive(Clone)]

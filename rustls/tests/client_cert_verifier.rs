@@ -12,23 +12,23 @@ use common::{
     make_client_config_with_versions_with_auth, make_pair_for_arc_configs, server_config_builder,
     server_name,
 };
-use rustls::server::danger::ClientCertVerified;
+use rustls::server::danger::ClientIdVerified;
 use rustls::{
     AlertDescription, ClientConnection, Error, InvalidMessage, ServerConfig, ServerConnection,
 };
 
 // Client is authorized!
-fn ver_ok() -> Result<ClientCertVerified, Error> {
-    Ok(ClientCertVerified::assertion())
+fn ver_ok() -> Result<ClientIdVerified, Error> {
+    Ok(ClientIdVerified::assertion())
 }
 
 // Use when we shouldn't even attempt verification
-fn ver_unreachable() -> Result<ClientCertVerified, Error> {
+fn ver_unreachable() -> Result<ClientIdVerified, Error> {
     unreachable!()
 }
 
 // Verifier that returns an error that we can expect
-fn ver_err() -> Result<ClientCertVerified, Error> {
+fn ver_err() -> Result<ClientIdVerified, Error> {
     Err(Error::General("test err".to_string()))
 }
 

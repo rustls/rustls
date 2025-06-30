@@ -31,7 +31,7 @@ For a complete example of implementing a custom [`sign::SigningKey`][signing_key
 [sign_method]: crate::crypto::signer::Signer::sign
 [certified_key]: crate::crypto::signer::CertifiedKey
 [cert_using_sni]: crate::server::ResolvesServerCertUsingSni
-[cert_resolver]: crate::ServerConfig::cert_resolver
+[cert_resolver]: crate::ServerConfig::certificate_resolver
 [rustls-cng-signer]: https://github.com/rustls/rustls-cng/blob/dev/src/signer.rs
 
 [^1]: For PKCS#8 it does not support password encryption -- there's not a meaningful threat

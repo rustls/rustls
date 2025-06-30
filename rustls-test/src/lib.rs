@@ -17,7 +17,9 @@ use core::ops::DerefMut;
 use std::io;
 use std::sync::{Arc, OnceLock};
 
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::danger::{
+    HandshakeSignatureValid, ServerCertVerifier, ServerIdVerified, ServerRpkVerifier,
+};
 use rustls::client::{
     AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, UnbufferedClientConnection,
     WebPkiServerVerifier,
@@ -33,12 +35,12 @@ use rustls::pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
     SubjectPublicKeyInfoDer, UnixTime,
 };
-use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+use rustls::server::danger::{ClientCertVerifier, ClientIdVerified, ClientRpkVerifier};
 use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, UnbufferedServerConnection,
     WebPkiClientVerifier,
 };
-use rustls::sign::CertifiedKey;
+use rustls::sign::{CertifiedKey, KeyPair};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
@@ -413,38 +415,30 @@ impl KeyType {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("client.spki.pem")).unwrap()
     }
 
-    pub fn get_certified_client_key(
-        &self,
-        provider: &CryptoProvider,
-    ) -> Result<Arc<CertifiedKey>, Error> {
+    pub fn get_client_keypair(&self, provider: &CryptoProvider) -> Result<Arc<KeyPair>, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.get_client_key())?;
         let public_key = private_key
             .public_key()
-            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
-        let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new(
-            vec![public_key_as_cert],
-            private_key,
-        )))
+            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?
+            .into_owned();
+        Ok(Arc::new(KeyPair::new(public_key, private_key)?))
     }
 
-    pub fn certified_key_with_raw_pub_key(
+    pub fn key_pair_with_raw_pub_key(
         &self,
         provider: &CryptoProvider,
-    ) -> Result<Arc<CertifiedKey>, Error> {
+    ) -> Result<Arc<KeyPair>, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.get_key())?;
         let public_key = private_key
             .public_key()
-            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
-        let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new(
-            vec![public_key_as_cert],
-            private_key,
-        )))
+            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?
+            .into_owned();
+        let key_pair = KeyPair::new(public_key, private_key)?;
+        Ok(Arc::new(key_pair))
     }
 
     pub fn certified_key_with_cert_chain(
@@ -616,16 +610,16 @@ pub fn make_server_config_with_raw_key_support(
     provider: &CryptoProvider,
 ) -> ServerConfig {
     let mut client_verifier =
-        MockClientVerifier::new(|| Ok(ClientCertVerified::assertion()), kt, provider);
-    let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(
-        kt.certified_key_with_raw_pub_key(provider)
+        MockClientVerifier::new(|| Ok(ClientIdVerified::assertion()), kt, provider);
+    let server_rpk_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(
+        kt.key_pair_with_raw_pub_key(provider)
             .unwrap(),
     ));
     client_verifier.expect_raw_public_keys = true;
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
     server_config_builder_with_versions(&[&rustls::version::TLS13], provider)
-        .with_client_cert_verifier(Arc::new(client_verifier))
-        .with_cert_resolver(server_cert_resolver)
+        .with_client_rpk_verifier(Arc::new(client_verifier))
+        .with_rpk_resolver(server_rpk_resolver)
 }
 
 pub fn make_client_config_with_raw_key_support(
@@ -633,15 +627,14 @@ pub fn make_client_config_with_raw_key_support(
     provider: &CryptoProvider,
 ) -> ClientConfig {
     let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(provider));
-    let client_cert_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-        kt.get_certified_client_key(provider)
-            .unwrap(),
+    let client_rpk_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
+        kt.get_client_keypair(provider).unwrap(),
     ));
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
     client_config_builder_with_versions(&[&rustls::version::TLS13], provider)
         .dangerous()
-        .with_custom_certificate_verifier(server_verifier)
-        .with_client_cert_resolver(client_cert_resolver)
+        .with_custom_rpk_verifier(server_verifier)
+        .with_client_rpk_resolver(client_rpk_resolver)
 }
 
 pub fn make_client_config_with_cipher_suite_and_raw_key_support(
@@ -650,9 +643,8 @@ pub fn make_client_config_with_cipher_suite_and_raw_key_support(
     provider: &CryptoProvider,
 ) -> ClientConfig {
     let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(provider));
-    let client_cert_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-        kt.get_certified_client_key(provider)
-            .unwrap(),
+    let client_rpk_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
+        kt.get_client_keypair(provider).unwrap(),
     ));
     ClientConfig::builder_with_provider(
         CryptoProvider {
@@ -664,8 +656,8 @@ pub fn make_client_config_with_cipher_suite_and_raw_key_support(
     .with_protocol_versions(&[&rustls::version::TLS13])
     .unwrap()
     .dangerous()
-    .with_custom_certificate_verifier(server_verifier)
-    .with_client_cert_resolver(client_cert_resolver)
+    .with_custom_rpk_verifier(server_verifier)
+    .with_client_rpk_resolver(client_rpk_resolver)
 }
 
 pub fn finish_client_config(
@@ -1118,7 +1110,7 @@ impl ServerCertVerifier for MockServerVerifier {
         server_name: &ServerName<'_>,
         ocsp_response: &[u8],
         now: UnixTime,
-    ) -> Result<ServerCertVerified, Error> {
+    ) -> Result<ServerIdVerified, Error> {
         println!(
             "verify_server_cert({end_entity:?}, {intermediates:?}, {server_name:?}, {ocsp_response:?}, {now:?})"
         );
@@ -1127,7 +1119,7 @@ impl ServerCertVerifier for MockServerVerifier {
         }
         match &self.cert_rejection_error {
             Some(error) => Err(error.clone()),
-            _ => Ok(ServerCertVerified::assertion()),
+            _ => Ok(ServerIdVerified::assertion()),
         }
     }
 
@@ -1172,13 +1164,39 @@ impl ServerCertVerifier for MockServerVerifier {
     fn request_ocsp_response(&self) -> bool {
         self.expected_ocsp_response.is_some()
     }
+}
 
-    fn requires_raw_public_keys(&self) -> bool {
-        self.requires_raw_public_keys
+impl ServerRpkVerifier for MockServerVerifier {
+    fn verify_server_rpk(
+        &self,
+        public_key: &SubjectPublicKeyInfoDer<'_>,
+        server_name: &ServerName<'_>,
+        now: UnixTime,
+    ) -> Result<ServerIdVerified, Error> {
+        let cert = Self::key_to_cert(public_key);
+        <Self as ServerCertVerifier>::verify_server_cert(&self, &cert, &[], server_name, &[], now)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        public_key: &SubjectPublicKeyInfoDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        let cert = Self::key_to_cert(public_key);
+        <Self as ServerCertVerifier>::verify_tls13_signature(&self, message, &cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        <Self as ServerCertVerifier>::supported_verify_schemes(&self)
     }
 }
 
 impl MockServerVerifier {
+    fn key_to_cert<'a>(key: &'a SubjectPublicKeyInfoDer<'a>) -> CertificateDer<'a> {
+        CertificateDer::from_slice(key.as_ref())
+    }
+
     pub fn accepts_anything() -> Self {
         Self {
             cert_rejection_error: None,
@@ -1253,7 +1271,7 @@ impl Default for MockServerVerifier {
 
 #[derive(Debug)]
 pub struct MockClientVerifier {
-    pub verified: fn() -> Result<ClientCertVerified, Error>,
+    pub verified: fn() -> Result<ClientIdVerified, Error>,
     pub subjects: Arc<[DistinguishedName]>,
     pub mandatory: bool,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
@@ -1264,7 +1282,7 @@ pub struct MockClientVerifier {
 
 impl MockClientVerifier {
     pub fn new(
-        verified: fn() -> Result<ClientCertVerified, Error>,
+        verified: fn() -> Result<ClientIdVerified, Error>,
         kt: KeyType,
         provider: &CryptoProvider,
     ) -> Self {
@@ -1279,6 +1297,10 @@ impl MockClientVerifier {
             expect_raw_public_keys: false,
             raw_public_key_algorithms: Some(provider.signature_verification_algorithms),
         }
+    }
+
+    fn key_to_cert<'a>(key: &'a SubjectPublicKeyInfoDer<'a>) -> CertificateDer<'a> {
+        CertificateDer::from_slice(key.as_ref())
     }
 }
 
@@ -1296,7 +1318,7 @@ impl ClientCertVerifier for MockClientVerifier {
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
-    ) -> Result<ClientCertVerified, Error> {
+    ) -> Result<ClientIdVerified, Error> {
         (self.verified)()
     }
 
@@ -1342,9 +1364,30 @@ impl ClientCertVerifier for MockClientVerifier {
             self.parent.supported_verify_schemes()
         }
     }
+}
 
-    fn requires_raw_public_keys(&self) -> bool {
-        self.expect_raw_public_keys
+impl ClientRpkVerifier for MockClientVerifier {
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        <Self as ClientCertVerifier>::supported_verify_schemes(&self)
+    }
+
+    fn verify_client_rpk(
+        &self,
+        client_rpk: &SubjectPublicKeyInfoDer<'_>,
+        now: UnixTime,
+    ) -> Result<ClientIdVerified, Error> {
+        let cert = Self::key_to_cert(client_rpk);
+        <Self as ClientCertVerifier>::verify_client_cert(&self, &cert, &[], now)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        client_rpk: &SubjectPublicKeyInfoDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        let cert = Self::key_to_cert(client_rpk);
+        <Self as ClientCertVerifier>::verify_tls13_signature(&self, message, &cert, dss)
     }
 }
 

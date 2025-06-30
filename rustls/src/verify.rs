@@ -1,14 +1,16 @@
-use alloc::vec::Vec;
-use core::fmt::Debug;
-
-use pki_types::{CertificateDer, ServerName, UnixTime};
-
-use crate::enums::SignatureScheme;
+use crate::PeerIncompatible;
+use crate::enums::{CertificateType, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
+use crate::identity::{Identity, TlsIdentityEntries, X509Identity};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::handshake::DistinguishedName;
-use crate::sync::Arc;
+use crate::msgs::handshake::{CertificateExtensions, DistinguishedName, IdentityEntry};
+use alloc::vec::Vec;
+use core::fmt::Debug;
+use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+use std::prelude::rust_2015::ToString;
+use std::sync::Arc;
+use std::vec;
 
 // Marker types.  These are used to bind the fact some verification
 // (certificate chain or handshake signature) has taken place into
@@ -40,25 +42,33 @@ impl FinishedMessageVerified {
     }
 }
 
-/// Zero-sized marker type representing verification of a server cert chain.
+/// Zero-sized marker type representing verification of a server identity.
 #[allow(unreachable_pub)]
 #[derive(Debug)]
-pub struct ServerCertVerified(());
+pub struct ServerIdVerified(());
+
+/// For backward compatibility
+#[allow(dead_code)]
+pub type ServerCertVerified = ServerIdVerified;
 
 #[allow(unreachable_pub)]
-impl ServerCertVerified {
-    /// Make a `ServerCertVerified`
+impl ServerIdVerified {
+    /// Make a `ServerIdVerified`
     pub fn assertion() -> Self {
         Self(())
     }
 }
 
-/// Zero-sized marker type representing verification of a client cert chain.
+/// Zero-sized marker type representing verification of a client identity.
 #[derive(Debug)]
-pub struct ClientCertVerified(());
+pub struct ClientIdVerified(());
 
-impl ClientCertVerified {
-    /// Make a `ClientCertVerified`
+/// For backward compatibility
+#[allow(dead_code)]
+pub type ClientCertVerified = ClientIdVerified;
+
+impl ClientIdVerified {
+    /// Make a `ClientIdVerified`
     pub fn assertion() -> Self {
         Self(())
     }
@@ -90,7 +100,7 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
         server_name: &ServerName<'_>,
         ocsp_response: &[u8],
         now: UnixTime,
-    ) -> Result<ServerCertVerified, Error>;
+    ) -> Result<ServerIdVerified, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -147,12 +157,6 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     /// There is no guarantee the server will provide one.
     fn request_ocsp_response(&self) -> bool;
 
-    /// Returns whether this verifier requires raw public keys as defined
-    /// in [RFC 7250](https://tools.ietf.org/html/rfc7250).
-    fn requires_raw_public_keys(&self) -> bool {
-        false
-    }
-
     /// Return the [`DistinguishedName`]s of certificate authorities that this verifier trusts.
     ///
     /// If specified, will be sent as the [`certificate_authorities`] extension in ClientHello.
@@ -161,6 +165,437 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         None
+    }
+}
+
+pub trait ServerIdVerifier: Debug + Send + Sync {
+    fn parse_tls13_payload(
+        &self,
+        id_type: CertificateType,
+        payload: TlsIdentityEntries<'_>,
+    ) -> Result<Identity, Error>;
+
+    fn verify_identity(
+        &self,
+        server_id: &Identity,
+        server_name: &ServerName<'_>,
+        now: UnixTime,
+    ) -> Result<ServerIdVerified, Error>;
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _server_id: &Identity,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Err(Error::PeerIncompatible(PeerIncompatible::Tls12NotOffered))
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        server_id: &Identity,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error>;
+
+    fn supported_certificate_types(&self) -> &[CertificateType];
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+
+    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+        None
+    }
+}
+
+#[derive(Debug)]
+pub struct ServerCertVerifierCompat(Arc<dyn ServerCertVerifier>);
+
+fn get_certs(id: &Identity) -> Result<(&CertificateDer<'_>, &[CertificateDer<'_>]), Error> {
+    Ok(id
+        .as_certificates()
+        .ok_or(Error::UnsupportedIdentityType)?
+        .split_first()
+        .ok_or(Error::NoCertificatesPresented)?)
+}
+
+impl From<Arc<dyn ServerCertVerifier>> for ServerCertVerifierCompat {
+    fn from(value: Arc<dyn ServerCertVerifier>) -> Self {
+        Self(value)
+    }
+}
+
+fn parse_tls13_cert<'a>(
+    id_type: CertificateType,
+    payloads: impl Iterator<Item = IdentityEntry<'a>>,
+) -> Result<Identity, Error> {
+    if id_type != CertificateType::X509 {
+        return Err(Error::UnsupportedIdentityType);
+    }
+    let mut ocsp_response = None;
+    let mut certs = vec![];
+
+    for (num, entry) in payloads.into_iter().enumerate() {
+        let cert = CertificateDer::from(entry.payload.into_vec());
+        let extensions = CertificateExtensions::try_from(entry.extensions.bytes())?;
+        if num == 0 {
+            ocsp_response = extensions
+                .status
+                .map(|s| s.ocsp_response.0.into_vec());
+        }
+        certs.push(cert);
+    }
+
+    let identity = X509Identity::new(certs, ocsp_response);
+    Ok(identity.into())
+}
+
+impl ServerIdVerifier for ServerCertVerifierCompat {
+    fn parse_tls13_payload(
+        &self,
+        id_type: CertificateType,
+        payload: TlsIdentityEntries<'_>,
+    ) -> Result<Identity, Error> {
+        parse_tls13_cert(id_type, payload.into_iter())
+    }
+
+    fn verify_identity(
+        &self,
+        server_id: &Identity,
+        server_name: &ServerName<'_>,
+        now: UnixTime,
+    ) -> Result<ServerIdVerified, Error> {
+        let (end_entity, intermediates) = get_certs(server_id)?;
+        let ocsp_response = server_id
+            .as_any()
+            .downcast_ref::<X509Identity>()
+            .map(|cd| cd.ocsp_response.as_slice())
+            .unwrap_or_else(|| &[]);
+
+        self.0
+            .verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now)
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        server_id: &Identity,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        let (end_entity, _) = get_certs(server_id)?;
+        self.0
+            .verify_tls12_signature(message, end_entity, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        server_id: &Identity,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        let (end_entity, _) = get_certs(server_id)?;
+        self.0
+            .verify_tls13_signature(message, end_entity, dss)
+    }
+
+    fn supported_certificate_types(&self) -> &[CertificateType] {
+        &[CertificateType::X509]
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.0.supported_verify_schemes()
+    }
+
+    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+        self.0.root_hint_subjects()
+    }
+}
+
+pub trait ServerRpkVerifier: Debug + Send + Sync {
+    fn verify_server_rpk(
+        &self,
+        public_key: &SubjectPublicKeyInfoDer<'_>,
+        server_name: &ServerName<'_>,
+        now: UnixTime,
+    ) -> Result<ServerIdVerified, Error>;
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        public_key: &SubjectPublicKeyInfoDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error>;
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+}
+
+#[derive(Debug)]
+pub struct ServerRpkVerifierCompat(Arc<dyn ServerRpkVerifier>);
+
+fn get_public_key(id: &Identity) -> Result<&SubjectPublicKeyInfoDer<'_>, Error> {
+    id.as_public_key()
+        .ok_or(Error::UnsupportedIdentityType)
+}
+
+impl From<Arc<dyn ServerRpkVerifier>> for ServerRpkVerifierCompat {
+    fn from(value: Arc<dyn ServerRpkVerifier>) -> Self {
+        Self(value)
+    }
+}
+
+fn parse_tls13_rpk<'a>(
+    id_type: CertificateType,
+    payloads: impl Iterator<Item = IdentityEntry<'a>>,
+) -> Result<Identity, Error> {
+    if id_type != CertificateType::RawPublicKey {
+        return Err(Error::UnsupportedIdentityType);
+    }
+
+    let entries = payloads.into_iter().collect::<Vec<_>>();
+    if entries.len() != 1 {
+        // todo: needs proper error
+        return Err(Error::General(
+            "RPK certificate payloads need to have exactly 1 entry".to_string(),
+        ));
+    }
+    Ok(SubjectPublicKeyInfoDer::from(
+        entries
+            .into_iter()
+            .next()
+            .expect("entry to be there")
+            .payload
+            .into_vec(),
+    )
+    .into())
+}
+
+impl ServerIdVerifier for ServerRpkVerifierCompat {
+    fn parse_tls13_payload(
+        &self,
+        id_type: CertificateType,
+        payload: TlsIdentityEntries<'_>,
+    ) -> Result<Identity, Error> {
+        parse_tls13_rpk(id_type, payload.into_iter())
+    }
+
+    fn verify_identity(
+        &self,
+        server_id: &Identity,
+        server_name: &ServerName<'_>,
+        now: UnixTime,
+    ) -> Result<ServerIdVerified, Error> {
+        self.0
+            .verify_server_rpk(get_public_key(server_id)?, server_name, now)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        server_id: &Identity,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        self.0
+            .verify_tls13_signature(message, get_public_key(server_id)?, dss)
+    }
+
+    fn supported_certificate_types(&self) -> &[CertificateType] {
+        &[CertificateType::RawPublicKey]
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.0.supported_verify_schemes()
+    }
+}
+
+pub trait ClientIdVerifier: Debug + Send + Sync {
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
+    fn client_auth_mandatory(&self) -> bool {
+        self.offer_client_auth()
+    }
+    fn negotiate_certificate_type(&self, offered: &[CertificateType]) -> Option<CertificateType> {
+        self.supported_certificate_types()
+            .iter()
+            .find(|c| offered.contains(*c))
+            .map(|c| *c)
+    }
+
+    fn supported_certificate_types(&self) -> &[CertificateType];
+    fn root_hint_subjects(&self) -> &[DistinguishedName];
+
+    fn parse_tls13_payload(
+        &self,
+        id_type: CertificateType,
+        payload: TlsIdentityEntries<'_>,
+    ) -> Result<Identity, Error>;
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+
+    fn verify_client_identity(
+        &self,
+        client_id: &Identity,
+        now: UnixTime,
+    ) -> Result<ClientIdVerified, Error>;
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _client_id: &Identity,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Err(Error::PeerIncompatible(PeerIncompatible::Tls12NotOffered))
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        client_id: &Identity,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error>;
+}
+
+#[derive(Debug)]
+pub(crate) struct ClientCertVerifierCompat(Arc<dyn ClientCertVerifier>);
+
+impl From<Arc<dyn ClientCertVerifier>> for ClientCertVerifierCompat {
+    fn from(value: Arc<dyn ClientCertVerifier>) -> Self {
+        Self(value)
+    }
+}
+
+impl ClientIdVerifier for ClientCertVerifierCompat {
+    fn offer_client_auth(&self) -> bool {
+        self.0.offer_client_auth()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        self.0.client_auth_mandatory()
+    }
+
+    fn supported_certificate_types(&self) -> &[CertificateType] {
+        &[CertificateType::X509]
+    }
+
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        self.0.root_hint_subjects()
+    }
+
+    fn parse_tls13_payload(
+        &self,
+        id_type: CertificateType,
+        payload: TlsIdentityEntries<'_>,
+    ) -> Result<Identity, Error> {
+        parse_tls13_cert(id_type, payload.into_iter())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.0.supported_verify_schemes()
+    }
+
+    fn verify_client_identity(
+        &self,
+        client_id: &Identity,
+        now: UnixTime,
+    ) -> Result<ClientIdVerified, Error> {
+        let (end_entity, intermediates) = get_certs(client_id)?;
+        self.0
+            .verify_client_cert(end_entity, intermediates, now)
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        client_id: &Identity,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        let (end_entity, _) = get_certs(client_id)?;
+        self.0
+            .verify_tls12_signature(message, end_entity, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        client_id: &Identity,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        let (end_entity, _) = get_certs(client_id)?;
+        self.0
+            .verify_tls13_signature(message, end_entity, dss)
+    }
+}
+
+pub trait ClientRpkVerifier: Debug + Send + Sync {
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
+    fn client_auth_mandatory(&self) -> bool {
+        self.offer_client_auth()
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+
+    fn verify_client_rpk(
+        &self,
+        client_rpk: &SubjectPublicKeyInfoDer<'_>,
+        now: UnixTime,
+    ) -> Result<ClientIdVerified, Error>;
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        client_rpk: &SubjectPublicKeyInfoDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error>;
+}
+
+#[derive(Debug)]
+pub(crate) struct ClientRpkVerifierWrapper(Arc<dyn ClientRpkVerifier>);
+
+impl From<Arc<dyn ClientRpkVerifier>> for ClientRpkVerifierWrapper {
+    fn from(value: Arc<dyn ClientRpkVerifier>) -> Self {
+        Self(value)
+    }
+}
+
+impl ClientIdVerifier for ClientRpkVerifierWrapper {
+    fn supported_certificate_types(&self) -> &[CertificateType] {
+        &[CertificateType::RawPublicKey]
+    }
+
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        &[]
+    }
+
+    fn parse_tls13_payload(
+        &self,
+        id_type: CertificateType,
+        payload: TlsIdentityEntries<'_>,
+    ) -> Result<Identity, Error> {
+        parse_tls13_rpk(id_type, payload.into_iter())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.0.supported_verify_schemes()
+    }
+
+    fn verify_client_identity(
+        &self,
+        client_id: &Identity,
+        now: UnixTime,
+    ) -> Result<ClientIdVerified, Error> {
+        let rpk = get_public_key(client_id)?;
+        self.0.verify_client_rpk(rpk, now)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        client_id: &Identity,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        let rpk = get_public_key(client_id)?;
+        self.0
+            .verify_tls13_signature(message, rpk, dss)
     }
 }
 
@@ -230,7 +665,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
         end_entity: &CertificateDer<'_>,
         intermediates: &[CertificateDer<'_>],
         now: UnixTime,
-    ) -> Result<ClientCertVerified, Error>;
+    ) -> Result<ClientIdVerified, Error>;
 
     /// Verify a signature allegedly by the given client certificate.
     ///
@@ -275,12 +710,6 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     ///
     /// This should be in priority order, with the most preferred first.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
-
-    /// Returns whether this verifier requires raw public keys as defined
-    /// in [RFC 7250](https://tools.ietf.org/html/rfc7250).
-    fn requires_raw_public_keys(&self) -> bool {
-        false
-    }
 }
 
 /// Turns off client authentication.
@@ -306,7 +735,7 @@ impl ClientCertVerifier for NoClientAuth {
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
-    ) -> Result<ClientCertVerified, Error> {
+    ) -> Result<ClientIdVerified, Error> {
         unimplemented!();
     }
 
@@ -374,8 +803,8 @@ fn assertions_are_debug() {
     use std::format;
 
     assert_eq!(
-        format!("{:?}", ClientCertVerified::assertion()),
-        "ClientCertVerified(())"
+        format!("{:?}", ClientIdVerified::assertion()),
+        "ClientIdVerified(())"
     );
     assert_eq!(
         format!("{:?}", HandshakeSignatureValid::assertion()),
@@ -386,7 +815,7 @@ fn assertions_are_debug() {
         "FinishedMessageVerified(())"
     );
     assert_eq!(
-        format!("{:?}", ServerCertVerified::assertion()),
-        "ServerCertVerified(())"
+        format!("{:?}", ServerIdVerified::assertion()),
+        "ServerIdVerified(())"
     );
 }
