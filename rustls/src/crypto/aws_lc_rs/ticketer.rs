@@ -24,8 +24,13 @@ use crate::sync::Arc;
 pub struct Ticketer {}
 
 impl Ticketer {
-    /// Make the recommended `Ticketer`.  This produces tickets
-    /// with a 12 hour life and randomly generated keys.
+    /// Make the recommended `Ticketer`.
+    ///
+    /// This produces tickets:
+    ///
+    /// - where each lasts for at least 6 hours,
+    /// - with randomly generated keys, and
+    /// - where keys are rotated every 6 hours.
     ///
     /// The `Ticketer` uses the [RFC 5077 §4] "Recommended Ticket Construction",
     /// using AES 256 for encryption and HMAC-SHA256 for ciphertext authentication.
@@ -50,7 +55,6 @@ struct Rfc5077Ticketer {
     aes_decrypt_key: PaddedBlockDecryptingKey,
     hmac_key: hmac::Key,
     key_name: [u8; 16],
-    lifetime: u32,
     maximum_ciphertext_len: AtomicUsize,
 }
 
@@ -91,7 +95,6 @@ impl Rfc5077Ticketer {
             aes_decrypt_key,
             hmac_key,
             key_name,
-            lifetime: 60 * 60 * 12,
             maximum_ciphertext_len: AtomicUsize::new(0),
         })
     }
@@ -103,7 +106,9 @@ impl ProducesTickets for Rfc5077Ticketer {
     }
 
     fn lifetime(&self) -> u32 {
-        self.lifetime
+        // this is not used, as this ticketer is only used via a `TicketRotator`
+        // that is responsible for defining and managing the lifetime of tickets.
+        0
     }
 
     /// Encrypt `message` and return the ciphertext.
@@ -212,8 +217,7 @@ impl Debug for Rfc5077Ticketer {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // Note: we deliberately omit keys from the debug output.
         f.debug_struct("Rfc5077Ticketer")
-            .field("lifetime", &self.lifetime)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -321,9 +325,9 @@ mod tests {
 
         let t = make_ticket_generator().unwrap();
 
-        assert_eq!(format!("{t:?}"), "Rfc5077Ticketer { lifetime: 43200 }");
+        assert_eq!(format!("{t:?}"), "Rfc5077Ticketer { .. }");
         assert!(t.enabled());
-        assert_eq!(t.lifetime(), 43200);
+        assert_eq!(t.lifetime(), 0);
     }
 
     fn fail_generator() -> Result<Box<dyn ProducesTickets>, Error> {
