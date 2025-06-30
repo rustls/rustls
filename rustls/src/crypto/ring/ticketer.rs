@@ -19,8 +19,13 @@ use crate::sync::Arc;
 pub struct Ticketer {}
 
 impl Ticketer {
-    /// Make the recommended `Ticketer`.  This produces tickets
-    /// with a 12 hour life and randomly generated keys.
+    /// Make the recommended `Ticketer`.
+    ///
+    /// This produces tickets:
+    ///
+    /// - where each lasts for at least 6 hours,
+    /// - with randomly generated keys, and
+    /// - where keys are rotated every 6 hours.
     ///
     /// The encryption mechanism used is Chacha20Poly1305.
     #[cfg(feature = "std")]
@@ -44,7 +49,6 @@ struct AeadTicketer {
     alg: &'static aead::Algorithm,
     key: aead::LessSafeKey,
     key_name: [u8; 16],
-    lifetime: u32,
 
     /// Tracks the largest ciphertext produced by `encrypt`, and
     /// uses it to early-reject `decrypt` queries that are too long.
@@ -75,7 +79,6 @@ impl AeadTicketer {
             alg: TICKETER_AEAD,
             key: aead::LessSafeKey::new(key),
             key_name,
-            lifetime: 60 * 60 * 12,
             maximum_ciphertext_len: AtomicUsize::new(0),
         })
     }
@@ -87,7 +90,9 @@ impl ProducesTickets for AeadTicketer {
     }
 
     fn lifetime(&self) -> u32 {
-        self.lifetime
+        // this is not used, as this ticketer is only used via a `TicketRotator`
+        // that is responsible for defining and managing the lifetime of tickets.
+        0
     }
 
     /// Encrypt `message` and return the ciphertext.
@@ -184,7 +189,6 @@ impl Debug for AeadTicketer {
         // Note: we deliberately omit the key from the debug output.
         f.debug_struct("AeadTicketer")
             .field("alg", &self.alg)
-            .field("lifetime", &self.lifetime)
             .finish()
     }
 }
@@ -295,10 +299,10 @@ mod tests {
 
         let t = make_ticket_generator().unwrap();
 
-        let expect = format!("AeadTicketer {{ alg: {TICKETER_AEAD:?}, lifetime: 43200 }}");
+        let expect = format!("AeadTicketer {{ alg: {TICKETER_AEAD:?} }}");
         assert_eq!(format!("{t:?}"), expect);
         assert!(t.enabled());
-        assert_eq!(t.lifetime(), 43200);
+        assert_eq!(t.lifetime(), 0);
     }
 
     fn fail_generator() -> Result<Box<dyn ProducesTickets>, Error> {
