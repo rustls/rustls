@@ -106,6 +106,8 @@ impl TicketRotator {
 
         self.state.read().ok()
     }
+
+    pub(crate) const SIX_HOURS: u32 = 6 * 60 * 60;
 }
 
 #[cfg(feature = "std")]
