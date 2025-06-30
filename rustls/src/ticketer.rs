@@ -36,8 +36,11 @@ impl TicketRotator {
     ///
     /// `lifetime` is in seconds, and is how long the current ticketer
     /// is used to generate new tickets.  Tickets are accepted for no
-    /// longer than twice this duration.  `generator` produces a new
-    /// `ProducesTickets` implementation.
+    /// longer than twice this duration.  This means a given ticket will
+    /// be usable for at least one `lifetime`, and at most two `lifetime`s
+    /// (depending on when its creation falls in the replacement cycle.)
+    ///
+    /// `generator` produces a new `ProducesTickets` implementation.
     pub fn new(
         lifetime: u32,
         generator: fn() -> Result<Box<dyn ProducesTickets>, Error>,
@@ -108,7 +111,7 @@ impl TicketRotator {
 #[cfg(feature = "std")]
 impl ProducesTickets for TicketRotator {
     fn lifetime(&self) -> u32 {
-        self.lifetime * 2
+        self.lifetime
     }
 
     fn enabled(&self) -> bool {
