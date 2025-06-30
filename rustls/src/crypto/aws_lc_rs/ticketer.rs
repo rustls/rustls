@@ -39,7 +39,7 @@ impl Ticketer {
     #[cfg(feature = "std")]
     pub fn new() -> Result<Arc<dyn ProducesTickets>, Error> {
         Ok(Arc::new(crate::ticketer::TicketRotator::new(
-            6 * 60 * 60,
+            crate::ticketer::TicketRotator::SIX_HOURS,
             make_ticket_generator,
         )?))
     }
