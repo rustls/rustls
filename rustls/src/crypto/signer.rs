@@ -101,6 +101,12 @@ impl From<CertifiedKey> for SingleCertAndKey {
     }
 }
 
+impl From<Arc<CertifiedKey>> for SingleCertAndKey {
+    fn from(certified_key: Arc<CertifiedKey>) -> Self {
+        Self(certified_key)
+    }
+}
+
 impl ResolvesClientCert for SingleCertAndKey {
     fn resolve(
         &self,
