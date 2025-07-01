@@ -171,13 +171,11 @@ impl Hpke for HpkeRs {
             }
         };
 
-        let secret_key = HpkeRustCrypto::kem_key_gen(kem_algorithm, &mut HpkeRustCrypto::prng())
-            .map_err(other_err)?;
-        let public_key = HpkePublicKey(
-            HpkeRustCrypto::kem_derive_base(kem_algorithm, &secret_key).map_err(other_err)?,
-        );
+        let (public_key, secret_key) =
+            HpkeRustCrypto::kem_key_gen(kem_algorithm, &mut HpkeRustCrypto::prng())
+                .map_err(other_err)?;
 
-        Ok((public_key, HpkePrivateKey::from(secret_key)))
+        Ok((HpkePublicKey(public_key), HpkePrivateKey::from(secret_key)))
     }
 
     fn suite(&self) -> HpkeSuite {
