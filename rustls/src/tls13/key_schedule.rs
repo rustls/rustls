@@ -12,58 +12,6 @@ use crate::msgs::message::Message;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite, quic};
 
-/// The kinds of secret we can extract from `KeySchedule`.
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum SecretKind {
-    ResumptionPskBinderKey,
-    ClientEarlyTrafficSecret,
-    ClientHandshakeTrafficSecret,
-    ServerHandshakeTrafficSecret,
-    ClientApplicationTrafficSecret,
-    ServerApplicationTrafficSecret,
-    ExporterMasterSecret,
-    ResumptionMasterSecret,
-    DerivedSecret,
-    ServerEchConfirmationSecret,
-    ServerEchHrrConfirmationSecret,
-}
-
-impl SecretKind {
-    fn to_bytes(self) -> &'static [u8] {
-        use self::SecretKind::*;
-        match self {
-            ResumptionPskBinderKey => b"res binder",
-            ClientEarlyTrafficSecret => b"c e traffic",
-            ClientHandshakeTrafficSecret => b"c hs traffic",
-            ServerHandshakeTrafficSecret => b"s hs traffic",
-            ClientApplicationTrafficSecret => b"c ap traffic",
-            ServerApplicationTrafficSecret => b"s ap traffic",
-            ExporterMasterSecret => b"exp master",
-            ResumptionMasterSecret => b"res master",
-            DerivedSecret => b"derived",
-            // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-7.2
-            ServerEchConfirmationSecret => b"ech accept confirmation",
-            // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-7.2.1
-            ServerEchHrrConfirmationSecret => b"hrr ech accept confirmation",
-        }
-    }
-
-    fn log_label(self) -> Option<&'static str> {
-        use self::SecretKind::*;
-        Some(match self {
-            ClientEarlyTrafficSecret => "CLIENT_EARLY_TRAFFIC_SECRET",
-            ClientHandshakeTrafficSecret => "CLIENT_HANDSHAKE_TRAFFIC_SECRET",
-            ServerHandshakeTrafficSecret => "SERVER_HANDSHAKE_TRAFFIC_SECRET",
-            ClientApplicationTrafficSecret => "CLIENT_TRAFFIC_SECRET_0",
-            ServerApplicationTrafficSecret => "SERVER_TRAFFIC_SECRET_0",
-            ExporterMasterSecret => "EXPORTER_SECRET",
-            _ => {
-                return None;
-            }
-        })
-    }
-}
-
 /// This is the TLS1.3 key schedule.  It stores the current secret and
 /// the type of hash.  This isn't used directly; but only through the
 /// typestates.
@@ -976,6 +924,58 @@ where
     ];
 
     f(expander, info)
+}
+
+/// The kinds of secret we can extract from `KeySchedule`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum SecretKind {
+    ResumptionPskBinderKey,
+    ClientEarlyTrafficSecret,
+    ClientHandshakeTrafficSecret,
+    ServerHandshakeTrafficSecret,
+    ClientApplicationTrafficSecret,
+    ServerApplicationTrafficSecret,
+    ExporterMasterSecret,
+    ResumptionMasterSecret,
+    DerivedSecret,
+    ServerEchConfirmationSecret,
+    ServerEchHrrConfirmationSecret,
+}
+
+impl SecretKind {
+    fn to_bytes(self) -> &'static [u8] {
+        use self::SecretKind::*;
+        match self {
+            ResumptionPskBinderKey => b"res binder",
+            ClientEarlyTrafficSecret => b"c e traffic",
+            ClientHandshakeTrafficSecret => b"c hs traffic",
+            ServerHandshakeTrafficSecret => b"s hs traffic",
+            ClientApplicationTrafficSecret => b"c ap traffic",
+            ServerApplicationTrafficSecret => b"s ap traffic",
+            ExporterMasterSecret => b"exp master",
+            ResumptionMasterSecret => b"res master",
+            DerivedSecret => b"derived",
+            // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-7.2
+            ServerEchConfirmationSecret => b"ech accept confirmation",
+            // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-7.2.1
+            ServerEchHrrConfirmationSecret => b"hrr ech accept confirmation",
+        }
+    }
+
+    fn log_label(self) -> Option<&'static str> {
+        use self::SecretKind::*;
+        Some(match self {
+            ClientEarlyTrafficSecret => "CLIENT_EARLY_TRAFFIC_SECRET",
+            ClientHandshakeTrafficSecret => "CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+            ServerHandshakeTrafficSecret => "SERVER_HANDSHAKE_TRAFFIC_SECRET",
+            ClientApplicationTrafficSecret => "CLIENT_TRAFFIC_SECRET_0",
+            ServerApplicationTrafficSecret => "SERVER_TRAFFIC_SECRET_0",
+            ExporterMasterSecret => "EXPORTER_SECRET",
+            _ => {
+                return None;
+            }
+        })
+    }
 }
 
 #[cfg(test)]
