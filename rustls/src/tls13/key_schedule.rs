@@ -12,14 +12,6 @@ use crate::msgs::message::Message;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite, quic};
 
-/// This is the TLS1.3 key schedule.  It stores the current secret and
-/// the type of hash.  This isn't used directly; but only through the
-/// typestates.
-struct KeySchedule {
-    current: Box<dyn HkdfExpander>,
-    suite: &'static Tls13CipherSuite,
-}
-
 // We express the state of a contained KeySchedule using these
 // typestates.  This means we can write code that cannot accidentally
 // (e.g.) encrypt application data using a KeySchedule solely constructed
@@ -602,6 +594,14 @@ impl<'a> ResumptionSecret<'a> {
             .ks
             .derive_ticket_psk(&self.resumption_master_secret, nonce)
     }
+}
+
+/// This is the TLS1.3 key schedule.  It stores the current secret and
+/// the type of hash.  This isn't used directly; but only through the
+/// typestates.
+struct KeySchedule {
+    current: Box<dyn HkdfExpander>,
+    suite: &'static Tls13CipherSuite,
 }
 
 impl KeySchedule {
