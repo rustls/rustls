@@ -773,12 +773,11 @@ impl KeySchedule {
     /// - `SecretKind::ResumptionPSKBinderKey`
     /// - `SecretKind::DerivedSecret`
     fn derive_for_empty_hash(&self, kind: SecretKind) -> OkmBlock {
-        let empty_hash = self
-            .suite
-            .common
-            .hash_provider
-            .start()
-            .finish();
+        let hp = self.suite.common.hash_provider;
+        let empty_hash = hp
+            .algorithm()
+            .hash_for_empty_input()
+            .unwrap_or_else(|| hp.start().finish());
         self.derive(kind, empty_hash.as_ref())
     }
 
@@ -992,6 +991,43 @@ mod tests {
     };
     use super::{KeySchedule, SecretKind, derive_traffic_iv, derive_traffic_key};
     use crate::KeyLog;
+    use crate::msgs::enums::HashAlgorithm;
+
+    #[test]
+    fn empty_hash() {
+        let sha256 = super::provider::tls13::TLS13_AES_128_GCM_SHA256
+            .tls13()
+            .unwrap()
+            .common
+            .hash_provider;
+        let sha384 = super::provider::tls13::TLS13_AES_256_GCM_SHA384
+            .tls13()
+            .unwrap()
+            .common
+            .hash_provider;
+
+        assert!(
+            sha256.start().finish().as_ref()
+                == HashAlgorithm::SHA256
+                    .hash_for_empty_input()
+                    .unwrap()
+                    .as_ref()
+        );
+        assert!(
+            sha384.start().finish().as_ref()
+                == HashAlgorithm::SHA384
+                    .hash_for_empty_input()
+                    .unwrap()
+                    .as_ref()
+        );
+
+        // a theoretical example of unsupported hash
+        assert!(
+            HashAlgorithm::SHA1
+                .hash_for_empty_input()
+                .is_none()
+        );
+    }
 
     #[test]
     fn test_vectors() {
