@@ -63,7 +63,7 @@ hex = "0.4"
 hickory-resolver = { version = "0.25", features = ["https-aws-lc-rs", "webpki-roots"] }
 hmac = "0.12"
 hpke-rs = "0.2"
-hpke-rs-crypto = "0.2"
+hpke-rs-crypto = "0.3"
 hpke-rs-rust-crypto = "0.2"
 itertools = "0.14"
 log = { version = "0.4.8" }
