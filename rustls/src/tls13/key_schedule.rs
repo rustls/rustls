@@ -2,6 +2,7 @@
 
 use alloc::boxed::Box;
 use alloc::string::ToString;
+use core::ops::Deref;
 
 use crate::common_state::{CommonState, Side};
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
@@ -164,7 +165,7 @@ impl KeyScheduleHandshakeStart {
     ) -> KeyScheduleHandshake {
         debug_assert_eq!(common.side, Side::Client);
         // Suite might have changed due to resumption
-        self.ks.suite = suite;
+        self.ks.inner = suite.into();
         let new = self.into_handshake(hs_hash, key_log, client_random, common);
 
         // Decrypt with the peer's key, encrypt with our own key
@@ -620,7 +621,7 @@ fn expand_secret(secret: &OkmBlock, hkdf: &'static dyn Hkdf, aead_key_len: usize
 /// typestates.
 struct KeySchedule {
     current: Box<dyn HkdfExpander>,
-    suite: &'static Tls13CipherSuite,
+    inner: KeyScheduleSuite,
 }
 
 impl KeySchedule {
@@ -629,40 +630,8 @@ impl KeySchedule {
             current: suite
                 .hkdf_provider
                 .extract_from_secret(None, secret),
-            suite,
+            inner: suite.into(),
         }
-    }
-
-    fn set_encrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
-        let expander = self
-            .suite
-            .hkdf_provider
-            .expander_for_okm(secret);
-        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
-        let iv = derive_traffic_iv(expander.as_ref());
-
-        common
-            .record_layer
-            .set_message_encrypter(
-                self.suite.aead_alg.encrypter(key, iv),
-                self.suite.common.confidentiality_limit,
-            );
-    }
-
-    fn set_decrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
-        common
-            .record_layer
-            .set_message_decrypter(self.derive_decrypter(secret));
-    }
-
-    fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn MessageDecrypter> {
-        let expander = self
-            .suite
-            .hkdf_provider
-            .expander_for_okm(secret);
-        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
-        let iv = derive_traffic_iv(expander.as_ref());
-        self.suite.aead_alg.decrypter(key, iv)
     }
 
     /// Creates a key schedule without a PSK.
@@ -671,7 +640,7 @@ impl KeySchedule {
             current: suite
                 .hkdf_provider
                 .extract_from_zero_ikm(None),
-            suite,
+            inner: suite.into(),
         }
     }
 
@@ -746,6 +715,55 @@ impl KeySchedule {
             .hash_for_empty_input()
             .unwrap_or_else(|| hp.start().finish());
         self.derive(kind, empty_hash.as_ref())
+    }
+}
+
+impl Deref for KeySchedule {
+    type Target = KeyScheduleSuite;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+/// This is a component part of `KeySchedule`, and groups operations
+/// that do not depend on the root key schedule secret.
+#[derive(Clone, Copy)]
+struct KeyScheduleSuite {
+    suite: &'static Tls13CipherSuite,
+}
+
+impl KeyScheduleSuite {
+    fn set_encrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
+        let expander = self
+            .suite
+            .hkdf_provider
+            .expander_for_okm(secret);
+        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
+        let iv = derive_traffic_iv(expander.as_ref());
+
+        common
+            .record_layer
+            .set_message_encrypter(
+                self.suite.aead_alg.encrypter(key, iv),
+                self.suite.common.confidentiality_limit,
+            );
+    }
+
+    fn set_decrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
+        common
+            .record_layer
+            .set_message_decrypter(self.derive_decrypter(secret));
+    }
+
+    fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn MessageDecrypter> {
+        let expander = self
+            .suite
+            .hkdf_provider
+            .expander_for_okm(secret);
+        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
+        let iv = derive_traffic_iv(expander.as_ref());
+        self.suite.aead_alg.decrypter(key, iv)
     }
 
     /// Sign the finished message consisting of `hs_hash` using a current
@@ -824,6 +842,12 @@ impl KeySchedule {
             .expander_for_okm(&secret);
         hkdf_expand_label_slice(expander.as_ref(), b"exporter", h_context.as_ref(), out)
             .map_err(|_| Error::General("exporting too much".to_string()))
+    }
+}
+
+impl From<&'static Tls13CipherSuite> for KeyScheduleSuite {
+    fn from(suite: &'static Tls13CipherSuite) -> Self {
+        Self { suite }
     }
 }
 
