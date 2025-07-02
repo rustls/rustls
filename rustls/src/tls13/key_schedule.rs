@@ -412,7 +412,7 @@ impl KeyScheduleBeforeFinished {
             ks.derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref());
 
         KeyScheduleTraffic {
-            ks,
+            ks: ks.inner,
             current_client_traffic_secret,
             current_server_traffic_secret,
             current_exporter_secret,
@@ -504,7 +504,7 @@ impl KeyScheduleTrafficWithClientFinishedPending {
 /// KeySchedule during traffic stage.  All traffic & exporter keys are guaranteed
 /// to be available.
 pub(crate) struct KeyScheduleTraffic {
-    ks: KeySchedule,
+    ks: KeyScheduleSuite,
     current_client_traffic_secret: OkmBlock,
     current_server_traffic_secret: OkmBlock,
     current_exporter_secret: OkmBlock,
