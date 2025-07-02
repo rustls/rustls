@@ -2692,9 +2692,9 @@ dependencies = [
 
 [[package]]
 name = "rcgen"
-version = "0.13.2"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75e669e5202259b5314d1ea5397316ad400819437857b90861765f24c4cf80a2"
+checksum = "2f445eeec11f11c605386c9d319412b301de74cb0fa5b6b87e3004f5f0816938"
 dependencies = [
  "aws-lc-rs",
  "pem",
