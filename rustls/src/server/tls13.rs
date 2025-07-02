@@ -29,9 +29,7 @@ use crate::msgs::persist;
 use crate::server::ServerConfig;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
-use crate::tls13::key_schedule::{
-    KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending, ResumptionSecret,
-};
+use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
@@ -1224,7 +1222,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
 // --- Process client's Finished ---
 fn get_server_session_value(
     suite: &'static Tls13CipherSuite,
-    secret: &ResumptionSecret<'_>,
+    key_schedule: &KeyScheduleTraffic,
     cx: &ServerContext<'_>,
     nonce: &[u8],
     time_now: UnixTime,
@@ -1232,7 +1230,7 @@ fn get_server_session_value(
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_3;
 
-    let secret = secret.derive_ticket_psk(nonce);
+    let secret = key_schedule.derive_ticket_psk(nonce);
 
     persist::ServerSessionValue::new(
         cx.data.sni.as_ref(),
@@ -1260,7 +1258,7 @@ impl ExpectFinished {
         flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
         cx: &ServerContext<'_>,
-        secret: &ResumptionSecret<'_>,
+        key_schedule: &KeyScheduleTraffic,
         config: &ServerConfig,
     ) -> Result<(), Error> {
         let secure_random = config.provider.secure_random;
@@ -1270,7 +1268,7 @@ impl ExpectFinished {
         let now = config.current_time()?;
 
         let plain =
-            get_server_session_value(suite, secret, cx, &nonce, now, age_add).get_encoding();
+            get_server_session_value(suite, key_schedule, cx, &nonce, now, age_add).get_encoding();
 
         let stateless = config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {
@@ -1324,7 +1322,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
         let handshake_hash = self.transcript.current_hash();
-        let (key_schedule_traffic, expect_verify_data) = self
+        let (key_schedule_before_finished, expect_verify_data) = self
             .key_schedule
             .sign_client_finish(&handshake_hash, cx.common);
 
@@ -1344,12 +1342,18 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         cx.common.check_aligned_handshake()?;
 
-        let handshake_hash = self.transcript.current_hash();
-        let resumption = ResumptionSecret::new(&key_schedule_traffic, &handshake_hash);
+        let key_schedule_traffic =
+            key_schedule_before_finished.into_traffic(self.transcript.current_hash());
 
         let mut flight = HandshakeFlightTls13::new(&mut self.transcript);
         for _ in 0..self.send_tickets {
-            Self::emit_ticket(&mut flight, self.suite, cx, &resumption, &self.config)?;
+            Self::emit_ticket(
+                &mut flight,
+                self.suite,
+                cx,
+                &key_schedule_traffic,
+                &self.config,
+            )?;
         }
         flight.finish(cx.common);
 
