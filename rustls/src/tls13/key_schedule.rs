@@ -309,13 +309,14 @@ impl KeyScheduleHandshake {
     ) -> KeyScheduleTrafficWithClientFinishedPending {
         debug_assert_eq!(common.side, Side::Server);
 
-        let traffic = KeyScheduleTraffic::new(self.ks, hs_hash, key_log, client_random);
+        let before_finished =
+            KeyScheduleBeforeFinished::new(self.ks, hs_hash, key_log, client_random);
         let (_client_secret, server_secret) = (
-            &traffic.current_client_traffic_secret,
-            &traffic.current_server_traffic_secret,
+            &before_finished.current_client_traffic_secret,
+            &before_finished.current_server_traffic_secret,
         );
 
-        traffic
+        before_finished
             .ks
             .set_encrypter(server_secret, common);
 
@@ -323,8 +324,8 @@ impl KeyScheduleHandshake {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
                 _client_secret.clone(),
                 server_secret.clone(),
-                traffic.ks.suite,
-                traffic.ks.suite.quic.unwrap(),
+                before_finished.ks.suite,
+                before_finished.ks.suite.quic.unwrap(),
                 common.side,
                 common.quic.version,
             ));
@@ -332,7 +333,7 @@ impl KeyScheduleHandshake {
 
         KeyScheduleTrafficWithClientFinishedPending {
             handshake_client_traffic_secret: self.client_handshake_traffic_secret,
-            traffic,
+            before_finished,
         }
     }
 
@@ -343,101 +344,24 @@ impl KeyScheduleHandshake {
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
     ) -> (KeyScheduleClientBeforeFinished, hmac::Tag) {
-        let traffic = KeyScheduleTraffic::new(self.ks, pre_finished_hash, key_log, client_random);
-        let tag = traffic
+        let before_finished =
+            KeyScheduleBeforeFinished::new(self.ks, pre_finished_hash, key_log, client_random);
+        let tag = before_finished
             .ks
             .sign_finish(&self.client_handshake_traffic_secret, &handshake_hash);
-        (KeyScheduleClientBeforeFinished { traffic }, tag)
+        (KeyScheduleClientBeforeFinished(before_finished), tag)
     }
 }
 
-pub(crate) struct KeyScheduleClientBeforeFinished {
-    traffic: KeyScheduleTraffic,
-}
-
-impl KeyScheduleClientBeforeFinished {
-    pub(crate) fn into_traffic(self, common: &mut CommonState) -> KeyScheduleTraffic {
-        debug_assert_eq!(common.side, Side::Client);
-        let (client_secret, server_secret) = (
-            &self
-                .traffic
-                .current_client_traffic_secret,
-            &self
-                .traffic
-                .current_server_traffic_secret,
-        );
-
-        self.traffic
-            .ks
-            .set_decrypter(server_secret, common);
-        self.traffic
-            .ks
-            .set_encrypter(client_secret, common);
-
-        if common.is_quic() {
-            common.quic.traffic_secrets = Some(quic::Secrets::new(
-                client_secret.clone(),
-                server_secret.clone(),
-                self.traffic.ks.suite,
-                self.traffic.ks.suite.quic.unwrap(),
-                common.side,
-                common.quic.version,
-            ));
-        }
-
-        self.traffic
-    }
-}
-
-/// KeySchedule during traffic stage, retaining the ability to calculate the client's
-/// finished verify_data. The traffic stage key schedule can be extracted from it
-/// through signing the client finished hash.
-pub(crate) struct KeyScheduleTrafficWithClientFinishedPending {
-    handshake_client_traffic_secret: OkmBlock,
-    traffic: KeyScheduleTraffic,
-}
-
-impl KeyScheduleTrafficWithClientFinishedPending {
-    pub(crate) fn update_decrypter(&self, common: &mut CommonState) {
-        debug_assert_eq!(common.side, Side::Server);
-        self.traffic
-            .ks
-            .set_decrypter(&self.handshake_client_traffic_secret, common);
-    }
-
-    pub(crate) fn sign_client_finish(
-        self,
-        hs_hash: &hash::Output,
-        common: &mut CommonState,
-    ) -> (KeyScheduleTraffic, hmac::Tag) {
-        debug_assert_eq!(common.side, Side::Server);
-        let tag = self
-            .traffic
-            .ks
-            .sign_finish(&self.handshake_client_traffic_secret, hs_hash);
-
-        // Install keying to read future messages.
-        self.traffic.ks.set_decrypter(
-            &self
-                .traffic
-                .current_client_traffic_secret,
-            common,
-        );
-
-        (self.traffic, tag)
-    }
-}
-
-/// KeySchedule during traffic stage.  All traffic & exporter keys are guaranteed
-/// to be available.
-pub(crate) struct KeyScheduleTraffic {
+/// Keys derived (but not installed) before client's Finished message.
+pub(crate) struct KeyScheduleBeforeFinished {
     ks: KeySchedule,
     current_client_traffic_secret: OkmBlock,
     current_server_traffic_secret: OkmBlock,
     current_exporter_secret: OkmBlock,
 }
 
-impl KeyScheduleTraffic {
+impl KeyScheduleBeforeFinished {
     fn new(
         mut ks: KeySchedule,
         hs_hash: hash::Output,
@@ -475,6 +399,118 @@ impl KeyScheduleTraffic {
         }
     }
 
+    pub(crate) fn into_traffic(self, hs_hash: hash::Output) -> KeyScheduleTraffic {
+        let Self {
+            ks,
+            current_client_traffic_secret,
+            current_server_traffic_secret,
+            current_exporter_secret,
+        } = self;
+
+        let resumption_master_secret =
+            ks.derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref());
+
+        KeyScheduleTraffic {
+            ks,
+            current_client_traffic_secret,
+            current_server_traffic_secret,
+            current_exporter_secret,
+            resumption_master_secret,
+        }
+    }
+}
+
+/// Client-side key schedule before the finished message is sent.
+///
+/// This differs from `KeyScheduleTrafficWithClientFinishedPending` because
+/// none of the final traffic secrets are installed yet.  After the finished
+/// message is sent, `into_traffic()` does that.
+pub(crate) struct KeyScheduleClientBeforeFinished(KeyScheduleBeforeFinished);
+
+impl KeyScheduleClientBeforeFinished {
+    pub(crate) fn into_traffic(
+        self,
+        common: &mut CommonState,
+        hs_hash: hash::Output,
+    ) -> KeyScheduleTraffic {
+        let next = self.0;
+
+        debug_assert_eq!(common.side, Side::Client);
+        let (client_secret, server_secret) = (
+            &next.current_client_traffic_secret,
+            &next.current_server_traffic_secret,
+        );
+
+        next.ks
+            .set_decrypter(server_secret, common);
+        next.ks
+            .set_encrypter(client_secret, common);
+
+        if common.is_quic() {
+            common.quic.traffic_secrets = Some(quic::Secrets::new(
+                client_secret.clone(),
+                server_secret.clone(),
+                next.ks.suite,
+                next.ks.suite.quic.unwrap(),
+                common.side,
+                common.quic.version,
+            ));
+        }
+
+        next.into_traffic(hs_hash)
+    }
+}
+
+/// KeySchedule during traffic stage, retaining the ability to calculate the client's
+/// finished verify_data. The traffic stage key schedule can be extracted from it
+/// through signing the client finished hash.
+pub(crate) struct KeyScheduleTrafficWithClientFinishedPending {
+    handshake_client_traffic_secret: OkmBlock,
+    before_finished: KeyScheduleBeforeFinished,
+}
+
+impl KeyScheduleTrafficWithClientFinishedPending {
+    pub(crate) fn update_decrypter(&self, common: &mut CommonState) {
+        debug_assert_eq!(common.side, Side::Server);
+        self.before_finished
+            .ks
+            .set_decrypter(&self.handshake_client_traffic_secret, common);
+    }
+
+    pub(crate) fn sign_client_finish(
+        self,
+        hs_hash: &hash::Output,
+        common: &mut CommonState,
+    ) -> (KeyScheduleBeforeFinished, hmac::Tag) {
+        debug_assert_eq!(common.side, Side::Server);
+        let tag = self
+            .before_finished
+            .ks
+            .sign_finish(&self.handshake_client_traffic_secret, hs_hash);
+
+        // Install keying to read future messages.
+        self.before_finished.ks.set_decrypter(
+            &self
+                .before_finished
+                .current_client_traffic_secret,
+            common,
+        );
+
+        (self.before_finished, tag)
+    }
+}
+
+/// KeySchedule during traffic stage.  All traffic & exporter keys are guaranteed
+/// to be available.
+pub(crate) struct KeyScheduleTraffic {
+    ks: KeySchedule,
+    current_client_traffic_secret: OkmBlock,
+    current_server_traffic_secret: OkmBlock,
+    current_exporter_secret: OkmBlock,
+    resumption_master_secret: OkmBlock,
+}
+
+impl KeyScheduleTraffic {
     pub(crate) fn update_encrypter_and_notify(&mut self, common: &mut CommonState) {
         let secret = self.next_application_traffic_secret(common.side);
         common.enqueue_key_update_notification();
@@ -506,6 +542,11 @@ impl KeyScheduleTraffic {
         let secret = self.ks.derive_next(current);
         *current = secret.clone();
         secret
+    }
+
+    pub(crate) fn derive_ticket_psk(&self, nonce: &[u8]) -> OkmBlock {
+        self.ks
+            .derive_ticket_psk(&self.resumption_master_secret, nonce)
     }
 
     pub(crate) fn export_keying_material(
@@ -572,28 +613,6 @@ fn expand_secret(secret: &OkmBlock, hkdf: &'static dyn Hkdf, aead_key_len: usize
         hkdf_expand_label_aead_key(expander.as_ref(), aead_key_len, b"key", &[]),
         hkdf_expand_label(expander.as_ref(), b"iv", &[]),
     )
-}
-
-pub(crate) struct ResumptionSecret<'a> {
-    kst: &'a KeyScheduleTraffic,
-    resumption_master_secret: OkmBlock,
-}
-
-impl<'a> ResumptionSecret<'a> {
-    pub(crate) fn new(kst: &'a KeyScheduleTraffic, hs_hash: &hash::Output) -> Self {
-        ResumptionSecret {
-            kst,
-            resumption_master_secret: kst
-                .ks
-                .derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref()),
-        }
-    }
-
-    pub(crate) fn derive_ticket_psk(&self, nonce: &[u8]) -> OkmBlock {
-        self.kst
-            .ks
-            .derive_ticket_psk(&self.resumption_master_secret, nonce)
-    }
 }
 
 /// This is the TLS1.3 key schedule.  It stores the current secret and
