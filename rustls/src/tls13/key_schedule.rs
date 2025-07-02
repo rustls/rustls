@@ -400,7 +400,10 @@ impl KeyScheduleBeforeFinished {
         }
     }
 
-    pub(crate) fn into_traffic(self, hs_hash: hash::Output) -> KeyScheduleTraffic {
+    pub(crate) fn into_traffic(
+        self,
+        hs_hash: hash::Output,
+    ) -> (KeyScheduleTraffic, KeyScheduleResumption) {
         let Self {
             ks,
             current_client_traffic_secret,
@@ -411,13 +414,18 @@ impl KeyScheduleBeforeFinished {
         let resumption_master_secret =
             ks.derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref());
 
-        KeyScheduleTraffic {
-            ks: ks.inner,
-            current_client_traffic_secret,
-            current_server_traffic_secret,
-            current_exporter_secret,
-            resumption_master_secret,
-        }
+        (
+            KeyScheduleTraffic {
+                ks: ks.inner,
+                current_client_traffic_secret,
+                current_server_traffic_secret,
+                current_exporter_secret,
+            },
+            KeyScheduleResumption {
+                ks: ks.inner,
+                resumption_master_secret,
+            },
+        )
     }
 }
 
@@ -433,7 +441,7 @@ impl KeyScheduleClientBeforeFinished {
         self,
         common: &mut CommonState,
         hs_hash: hash::Output,
-    ) -> KeyScheduleTraffic {
+    ) -> (KeyScheduleTraffic, KeyScheduleResumption) {
         let next = self.0;
 
         debug_assert_eq!(common.side, Side::Client);
@@ -508,7 +516,6 @@ pub(crate) struct KeyScheduleTraffic {
     current_client_traffic_secret: OkmBlock,
     current_server_traffic_secret: OkmBlock,
     current_exporter_secret: OkmBlock,
-    resumption_master_secret: OkmBlock,
 }
 
 impl KeyScheduleTraffic {
@@ -543,11 +550,6 @@ impl KeyScheduleTraffic {
         let secret = self.ks.derive_next(current);
         *current = secret.clone();
         secret
-    }
-
-    pub(crate) fn derive_ticket_psk(&self, nonce: &[u8]) -> OkmBlock {
-        self.ks
-            .derive_ticket_psk(&self.resumption_master_secret, nonce)
     }
 
     pub(crate) fn export_keying_material(
@@ -604,6 +606,18 @@ impl KeyScheduleTraffic {
             Side::Server => (server_secrets, client_secrets),
         };
         Ok(PartiallyExtractedSecrets { tx, rx })
+    }
+}
+
+pub(crate) struct KeyScheduleResumption {
+    ks: KeyScheduleSuite,
+    resumption_master_secret: OkmBlock,
+}
+
+impl KeyScheduleResumption {
+    pub(crate) fn derive_ticket_psk(&self, nonce: &[u8]) -> OkmBlock {
+        self.ks
+            .derive_ticket_psk(&self.resumption_master_secret, nonce)
     }
 }
 
