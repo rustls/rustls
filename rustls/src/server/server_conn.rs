@@ -620,11 +620,6 @@ mod connection {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.early_data.read(buf)
         }
-
-        #[cfg(read_buf)]
-        fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
-            self.early_data.read_buf(cursor)
-        }
     }
 
     /// This represents a single TLS server connection.
@@ -1168,14 +1163,6 @@ impl EarlyDataState {
         }
     }
 
-    #[cfg(read_buf)]
-    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
-        match self {
-            Self::Accepted { received, .. } => received.read_buf(cursor),
-            _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
-        }
-    }
-
     pub(super) fn take_received_plaintext(&mut self, bytes: Payload<'_>) -> bool {
         let available = bytes.bytes().len();
         let Self::Accepted { received, left } = self else {
@@ -1256,19 +1243,6 @@ mod tests {
     fn test_read_in_new_state() {
         assert_eq!(
             format!("{:?}", EarlyDataState::default().read(&mut [0u8; 5])),
-            "Err(Kind(BrokenPipe))"
-        );
-    }
-
-    #[cfg(read_buf)]
-    #[test]
-    fn test_read_buf_in_new_state() {
-        use core::io::BorrowedBuf;
-
-        let mut buf = [0u8; 5];
-        let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
-        assert_eq!(
-            format!("{:?}", EarlyDataState::default().read_buf(buf.unfilled())),
             "Err(Kind(BrokenPipe))"
         );
     }
