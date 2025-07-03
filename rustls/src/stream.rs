@@ -78,12 +78,6 @@ where
         self.prepare_read()?;
         self.conn.reader().read(buf)
     }
-
-    #[cfg(read_buf)]
-    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> Result<()> {
-        self.prepare_read()?;
-        self.conn.reader().read_buf(cursor)
-    }
 }
 
 impl<'a, C, T, S> BufRead for Stream<'a, C, T>
@@ -219,11 +213,6 @@ where
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.as_stream().read(buf)
-    }
-
-    #[cfg(read_buf)]
-    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> Result<()> {
-        self.as_stream().read_buf(cursor)
     }
 }
 
