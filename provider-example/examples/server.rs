@@ -71,7 +71,7 @@ impl TestPki {
             rcgen::KeyUsagePurpose::DigitalSignature,
         ];
         let ca_key = rcgen::KeyPair::generate_for(alg).unwrap();
-        let ca_cert = ca_params.self_signed(&ca_key).unwrap();
+        let ca = rcgen::Issuer::new(ca_params, ca_key);
 
         // Create a server end entity cert issued by the CA.
         let mut server_ee_params =
@@ -79,8 +79,9 @@ impl TestPki {
         server_ee_params.is_ca = rcgen::IsCa::NoCa;
         server_ee_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
         let server_key = rcgen::KeyPair::generate_for(alg).unwrap();
+
         let server_cert = server_ee_params
-            .signed_by(&server_key, &ca_cert, &ca_key)
+            .signed_by(&server_key, &ca)
             .unwrap();
         Self {
             server_cert_der: server_cert.into(),
