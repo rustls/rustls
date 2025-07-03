@@ -13,7 +13,7 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use clap::Parser;
-use rcgen::KeyPair;
+use rcgen::{Issuer, KeyPair, SerialNumber};
 use rustls::RootCertStore;
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
@@ -41,13 +41,14 @@ fn main() {
     // Write out the parts of the test PKI a client will need to connect:
     // * The CA certificate for validating the server certificate.
     // * The client certificate and key for its presented mTLS identity.
-    write_pem(&args.ca_path, &test_pki.ca_cert.cert.pem());
-    write_pem(&args.client_cert_path, &test_pki.client_cert.cert.pem());
+    write_pem(&args.ca_path, &test_pki.ca_cert.1.pem());
+    write_pem(&args.client_cert_path, &test_pki.client_cert.0.cert.pem());
     write_pem(
         &args.client_key_path,
         &test_pki
             .client_cert
-            .key_pair
+            .0
+            .signing_key
             .serialize_pem(),
     );
 
@@ -110,9 +111,9 @@ fn main() {
 /// A test PKI with a CA certificate, server certificate, and client certificate.
 struct TestPki {
     roots: Arc<RootCertStore>,
-    ca_cert: rcgen::CertifiedKey,
-    client_cert: rcgen::CertifiedKey,
-    server_cert: rcgen::CertifiedKey,
+    ca_cert: (Issuer<'static, rcgen::KeyPair>, rcgen::Certificate),
+    client_cert: (rcgen::CertifiedKey<KeyPair>, SerialNumber),
+    server_cert: rcgen::CertifiedKey<KeyPair>,
 }
 
 impl TestPki {
@@ -135,6 +136,7 @@ impl TestPki {
         ];
         let ca_key = KeyPair::generate_for(alg).unwrap();
         let ca_cert = ca_params.self_signed(&ca_key).unwrap();
+        let ca = Issuer::new(ca_params, ca_key);
 
         // Create a server end entity cert issued by the CA.
         let mut server_ee_params =
@@ -143,7 +145,7 @@ impl TestPki {
         server_ee_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
         let ee_key = KeyPair::generate_for(alg).unwrap();
         let server_cert = server_ee_params
-            .signed_by(&ee_key, &ca_cert, &ca_key)
+            .signed_by(&ee_key, &ca)
             .unwrap();
 
         // Create a client end entity cert issued by the CA.
@@ -153,10 +155,11 @@ impl TestPki {
             .push(rcgen::DnType::CommonName, "Example Client");
         client_ee_params.is_ca = rcgen::IsCa::NoCa;
         client_ee_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
-        client_ee_params.serial_number = Some(rcgen::SerialNumber::from(vec![0xC0, 0xFF, 0xEE]));
+        let client_serial = rcgen::SerialNumber::from(vec![0xC0, 0xFF, 0xEE]);
+        client_ee_params.serial_number = Some(client_serial.clone());
         let client_key = KeyPair::generate_for(alg).unwrap();
         let client_cert = client_ee_params
-            .signed_by(&client_key, &ca_cert, &ca_key)
+            .signed_by(&client_key, &ca)
             .unwrap();
 
         // Create a root cert store that includes the CA certificate.
@@ -166,17 +169,17 @@ impl TestPki {
             .unwrap();
         Self {
             roots: roots.into(),
-            ca_cert: rcgen::CertifiedKey {
-                cert: ca_cert,
-                key_pair: ca_key,
-            },
-            client_cert: rcgen::CertifiedKey {
-                cert: client_cert,
-                key_pair: client_key,
-            },
+            ca_cert: (ca, ca_cert),
+            client_cert: (
+                rcgen::CertifiedKey {
+                    cert: client_cert,
+                    signing_key: client_key,
+                },
+                client_ee_params.serial_number.unwrap(),
+            ),
             server_cert: rcgen::CertifiedKey {
                 cert: server_cert,
-                key_pair: ee_key,
+                signing_key: ee_key,
             },
         }
     }
@@ -210,7 +213,7 @@ impl TestPki {
                 vec![self.server_cert.cert.der().clone()],
                 PrivatePkcs8KeyDer::from(
                     self.server_cert
-                        .key_pair
+                        .signing_key
                         .serialize_der(),
                 )
                 .into(),
@@ -254,7 +257,7 @@ impl TestPki {
             key_identifier_method: rcgen::KeyIdMethod::Sha256,
         };
         crl_params
-            .signed_by(&self.ca_cert.cert, &self.ca_cert.key_pair)
+            .signed_by(&self.ca_cert.0)
             .unwrap()
             .into()
     }
@@ -280,15 +283,7 @@ impl CrlUpdater {
             thread::sleep(self.sleep_duration);
 
             let revoked_certs = if revoked {
-                vec![
-                    self.pki
-                        .client_cert
-                        .cert
-                        .params()
-                        .serial_number
-                        .clone()
-                        .unwrap(),
-                ]
+                vec![self.pki.client_cert.1.clone()]
             } else {
                 Vec::default()
             };

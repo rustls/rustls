@@ -77,7 +77,7 @@ pkcs8 = "0.10.2"
 pki-types = { package = "rustls-pki-types", version = "1.11", features = ["alloc"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rayon = "1.7"
-rcgen = { version = "0.13", features = ["pem", "aws_lc_rs"], default-features = false }
+rcgen = { version = "0.14", features = ["pem", "aws_lc_rs"], default-features = false }
 regex = "1"
 ring = "0.17"
 rsa = { version = "0.9", features = ["sha2"], default-features = false }
