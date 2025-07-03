@@ -101,19 +101,6 @@ impl ChunkVecBuffer {
         first
     }
 
-    #[cfg(read_buf)]
-    /// Read data out of this object, writing it into `cursor`.
-    pub(crate) fn read_buf(&mut self, mut cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
-        while !self.is_empty() && cursor.capacity() > 0 {
-            let chunk = &self.chunks[0][self.prefix_used..];
-            let used = cmp::min(chunk.len(), cursor.capacity());
-            cursor.append(&chunk[..used]);
-            self.consume(used);
-        }
-
-        Ok(())
-    }
-
     /// Inspect the first chunk from this object.
     pub(crate) fn peek(&self) -> Option<&[u8]> {
         self.chunks
@@ -285,41 +272,6 @@ mod tests {
 
                 assert_eq!(cvb.read(&mut [0]).unwrap(), 0);
             }
-        }
-    }
-
-    #[cfg(read_buf)]
-    #[test]
-    fn read_buf() {
-        use core::io::BorrowedBuf;
-        use core::mem::MaybeUninit;
-
-        {
-            let mut cvb = ChunkVecBuffer::new(None);
-            cvb.append(b"test ".to_vec());
-            cvb.append(b"fixture ".to_vec());
-            cvb.append(b"data".to_vec());
-
-            let mut buf = [MaybeUninit::<u8>::uninit(); 8];
-            let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
-            cvb.read_buf(buf.unfilled()).unwrap();
-            assert_eq!(buf.filled(), b"test fix");
-            buf.clear();
-            cvb.read_buf(buf.unfilled()).unwrap();
-            assert_eq!(buf.filled(), b"ture dat");
-            buf.clear();
-            cvb.read_buf(buf.unfilled()).unwrap();
-            assert_eq!(buf.filled(), b"a");
-        }
-
-        {
-            let mut cvb = ChunkVecBuffer::new(None);
-            cvb.append(b"short message".to_vec());
-
-            let mut buf = [MaybeUninit::<u8>::uninit(); 1024];
-            let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
-            cvb.read_buf(buf.unfilled()).unwrap();
-            assert_eq!(buf.filled(), b"short message");
         }
     }
 }

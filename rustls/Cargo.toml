@@ -12,7 +12,6 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 autotests = false
 exclude = ["src/testdata", "tests/**"]
-build = "build.rs"
 
 [features]
 default = ["aws-lc-rs", "log", "prefer-post-quantum", "std", "tls12"]
@@ -23,14 +22,10 @@ custom-provider = []
 fips = ["aws-lc-rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
 log = ["dep:log"]
 prefer-post-quantum = ["aws-lc-rs"]
-read_buf = ["rustversion", "std"]
 ring = ["dep:ring", "webpki/ring"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 tls12 = []
 zlib = ["dep:zlib-rs"]
-
-[build-dependencies]
-rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
 aws-lc-rs = { workspace = true, optional = true }
@@ -112,7 +107,7 @@ path = "tests/runners/unbuffered.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["read_buf", "ring"]
+features = ["ring"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo_check_external_types]
@@ -126,4 +121,4 @@ allowed_external_types = [
 enum_no_repr_variant_discriminant_changed = "warn"
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(bench)", "cfg(coverage_nightly)", "cfg(read_buf)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(bench)", "cfg(coverage_nightly)"] }

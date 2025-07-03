@@ -318,10 +318,6 @@
 //!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
 //!   contain secret key data, and so are safe to archive without affecting session security.
 //!
-//! - `read_buf`: when building with Rust Nightly, adds support for the unstable
-//!   `std::io::ReadBuf` and related APIs. This reduces costs from initializing
-//!   buffers. Will do nothing on non-Nightly releases.
-//!
 //! - `brotli`: uses the `brotli` crate for RFC8879 certificate compression support.
 //!
 //! - `zlib`: uses the `zlib-rs` crate for RFC8879 certificate compression support.
@@ -330,7 +326,7 @@
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
-#![cfg_attr(not(any(read_buf, bench, coverage_nightly)), forbid(unstable_features))]
+#![cfg_attr(not(any(bench, coverage_nightly)), forbid(unstable_features))]
 #![warn(
     clippy::alloc_instead_of_core,
     clippy::manual_let_else,
@@ -369,16 +365,6 @@
 // <https://github.com/rust-lang/rust/issues/84605>
 // (`coverage_nightly` is a cfg set by `cargo-llvm-cov`)
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
-// XXX: Because of https://github.com/rust-lang/rust/issues/54726, we cannot
-// write `#![rustversion::attr(nightly, feature(read_buf))]` here. Instead,
-// build.rs set `read_buf` for (only) Rust Nightly to get the same effect.
-//
-// All the other conditional logic in the crate could use
-// `#[rustversion::nightly]` instead of `#[cfg(read_buf)]`; `#[cfg(read_buf)]`
-// is used to avoid needing `rustversion` to be compiled twice during
-// cross-compiling.
-#![cfg_attr(read_buf, feature(read_buf))]
-#![cfg_attr(read_buf, feature(core_io_borrowed_buf))]
 #![cfg_attr(bench, feature(test))]
 #![no_std]
 
