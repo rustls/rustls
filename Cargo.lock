@@ -2910,7 +2910,6 @@ dependencies = [
  "rustls-pki-types",
  "rustls-test",
  "rustls-webpki",
- "rustversion",
  "serde",
  "serde_json",
  "subtle",
