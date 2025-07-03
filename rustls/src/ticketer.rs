@@ -107,6 +107,7 @@ impl TicketRotator {
         self.state.read().ok()
     }
 
+    #[cfg(any(feature = "aws-lc-rs", feature = "ring"))]
     pub(crate) const SIX_HOURS: u32 = 6 * 60 * 60;
 }
 
