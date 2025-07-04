@@ -449,6 +449,7 @@ impl EchState {
         self,
         ks: &mut KeyScheduleHandshakeStart,
         server_hello: &ServerHelloPayload,
+        server_hello_encoded: &Payload<'_>,
         hash: &'static dyn Hash,
     ) -> Result<Option<EchAccepted>, Error> {
         // Start the inner transcript hash now that we know the hash algorithm to use.
@@ -460,8 +461,10 @@ impl EchState {
         // We need to preserve the original inner_transcript to use if this confirmation succeeds.
         let mut confirmation_transcript = inner_transcript.clone();
 
-        // Add the server hello confirmation - this differs from the standard server hello encoding.
-        confirmation_transcript.add_message(&Self::server_hello_conf(server_hello));
+        // Add the server hello confirmation - this is computed by altering the received
+        // encoding rather than reencoding it.
+        confirmation_transcript
+            .add_message(&Self::server_hello_conf(server_hello, server_hello_encoded));
 
         // Derive a confirmation secret from the inner hello random and the confirmation transcript.
         let derived = ks.server_ech_confirmation_secret(
@@ -760,10 +763,29 @@ impl EchState {
         Ok(())
     }
 
-    fn server_hello_conf(server_hello: &ServerHelloPayload) -> Message<'_> {
-        Self::ech_conf_message(HandshakeMessagePayload(HandshakePayload::ServerHello(
-            server_hello.clone(),
-        )))
+    fn server_hello_conf(
+        server_hello: &ServerHelloPayload,
+        server_hello_encoded: &Payload<'_>,
+    ) -> Message<'static> {
+        // The confirmation is computed over the server hello, which has had
+        // its `random` field altered to zero the final 8 bytes.
+        //
+        // nb. we don't require that we can round-trip a `ServerHelloPayload`, to
+        // allow for efficiency in its in-memory representation.  That means
+        // we operate here on the received encoding, as the confirmation needs
+        // to be computed on that.
+        let mut encoded = server_hello_encoded.clone().into_vec();
+        encoded[SERVER_HELLO_ECH_CONFIRMATION_SPAN].fill(0x00);
+
+        Message {
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::Handshake {
+                encoded: Payload::Owned(encoded),
+                parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(
+                    server_hello.clone(),
+                )),
+            },
+        }
     }
 
     fn hello_retry_request_conf(retry_req: &HelloRetryRequest) -> Message<'_> {
@@ -784,6 +806,16 @@ impl EchState {
         }
     }
 }
+
+/// The last eight bytes of the ServerHello's random, taken from a Handshake message containing it.
+///
+/// This has:
+/// - a HandshakeType (1 byte),
+/// - an exterior length (3 bytes),
+/// - the legacy_version (2 bytes), and
+/// - the balance of the random field (24 bytes).
+const SERVER_HELLO_ECH_CONFIRMATION_SPAN: core::ops::Range<usize> =
+    (1 + 3 + 2 + 24)..(1 + 3 + 2 + 32);
 
 /// Returned from EchState::check_acceptance when the server has accepted the ECH offer.
 ///

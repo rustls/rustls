@@ -1599,20 +1599,13 @@ impl Codec<'_> for ServerHelloPayload {
 
 impl ServerHelloPayload {
     fn payload_encode(&self, bytes: &mut Vec<u8>, encoding: Encoding) {
+        debug_assert!(
+            !matches!(encoding, Encoding::EchConfirmation),
+            "we cannot compute an ECH confirmation on a received ServerHello"
+        );
+
         self.legacy_version.encode(bytes);
-
-        match encoding {
-            // When encoding a ServerHello for ECH confirmation, the random value
-            // has the last 8 bytes zeroed out.
-            Encoding::EchConfirmation => {
-                // Indexing safety: self.random is 32 bytes long by definition.
-                let rand_vec = self.random.get_encoding();
-                bytes.extend_from_slice(&rand_vec.as_slice()[..24]);
-                bytes.extend_from_slice(&[0u8; 8]);
-            }
-            _ => self.random.encode(bytes),
-        }
-
+        self.random.encode(bytes);
         self.session_id.encode(bytes);
         self.cipher_suite.encode(bytes);
         self.compression_method.encode(bytes);
@@ -3109,12 +3102,11 @@ impl Codec<'_> for ServerEncryptedClientHello {
 /// The method of encoding to use for a handshake message.
 ///
 /// In some cases a handshake message may be encoded differently depending on the purpose
-/// the encoded message is being used for. For example, a [ServerHelloPayload] may be encoded
-/// with the last 8 bytes of the random zeroed out when being encoded for ECH confirmation.
+/// the encoded message is being used for.
 pub(crate) enum Encoding {
     /// Standard RFC 8446 encoding.
     Standard,
-    /// Encoding for ECH confirmation.
+    /// Encoding for ECH confirmation for HRR.
     EchConfirmation,
     /// Encoding for ECH inner client hello.
     EchInnerHello { to_compress: Vec<ExtensionType> },

@@ -180,9 +180,21 @@ pub(super) fn handle_server_hello(
 
     // If we have ECH state, check that the server accepted our offer.
     if let Some(ech_state) = ech_state {
+        let Message {
+            payload:
+                MessagePayload::Handshake {
+                    encoded: server_hello_encoded,
+                    ..
+                },
+            ..
+        } = &server_hello_msg
+        else {
+            unreachable!("ServerHello is a handshake message");
+        };
         cx.data.ech_status = match ech_state.confirm_acceptance(
             &mut key_schedule,
             server_hello,
+            server_hello_encoded,
             suite.common.hash_provider,
         )? {
             // The server accepted our ECH offer, so complete the inner transcript with the
