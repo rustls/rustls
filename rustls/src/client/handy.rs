@@ -1,5 +1,7 @@
 use pki_types::ServerName;
 
+use super::PresharedKeyStore;
+use crate::crypto::PresharedKey;
 use crate::enums::SignatureScheme;
 use crate::msgs::persist;
 use crate::sync::Arc;
@@ -191,6 +193,52 @@ mod cache {
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use cache::ClientSessionMemoryCache;
+
+#[cfg(any(feature = "std", feature = "hashbrown"))]
+mod preshared_keys {
+    use pki_types::ServerName;
+
+    use crate::client::PresharedKeyStore;
+    use crate::crypto::PresharedKey;
+    use crate::hash_map::HashMap;
+    use crate::sync::Arc;
+
+    /// A set of preshared keys configured per server name.
+    #[derive(Debug, Default)]
+    pub struct PresharedKeySet {
+        keys: HashMap<ServerName<'static>, Arc<[PresharedKey]>>,
+    }
+
+    impl PresharedKeySet {
+        /// Update the preshared keys for a given server name.
+        ///
+        /// Replaces any existing keys for that server name.
+        pub fn update(&mut self, server_name: ServerName<'static>, keys: Arc<[PresharedKey]>) {
+            self.keys
+                .entry(server_name)
+                .and_modify(|value| *value = keys);
+        }
+    }
+
+    impl PresharedKeyStore for PresharedKeySet {
+        fn keys(&self, server_name: &ServerName<'_>) -> Option<Arc<[PresharedKey]>> {
+            self.keys.get(server_name).cloned()
+        }
+    }
+}
+
+#[cfg(any(feature = "std", feature = "hashbrown"))]
+pub use preshared_keys::PresharedKeySet;
+
+/// An implementation of `PresharedKeyStore` that does nothing.
+#[derive(Debug, Default)]
+pub(super) struct NoPresharedKeys(());
+
+impl PresharedKeyStore for NoPresharedKeys {
+    fn keys(&self, _server_name: &ServerName<'_>) -> Option<Arc<[PresharedKey]>> {
+        None
+    }
+}
 
 #[derive(Debug)]
 pub(super) struct FailResolveClientCert {}

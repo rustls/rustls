@@ -31,11 +31,11 @@ impl<T> Retrieved<T> {
         }
     }
 
-    pub(crate) fn map<M>(&self, f: impl FnOnce(&T) -> Option<&M>) -> Option<Retrieved<&M>> {
-        Some(Retrieved {
-            value: f(&self.value)?,
+    pub(crate) fn map<'a, M>(&'a self, value: &'a M) -> Retrieved<&'a M> {
+        Retrieved {
+            value,
             retrieved_at: self.retrieved_at,
-        })
+        }
     }
 }
 
@@ -188,7 +188,7 @@ impl Tls12ClientSessionValue {
         }
     }
 
-    pub(crate) fn ticket(&mut self) -> Arc<PayloadU16> {
+    pub(crate) fn ticket(&self) -> Arc<PayloadU16> {
         self.common.ticket.clone()
     }
 
