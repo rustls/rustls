@@ -2865,7 +2865,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.28"
+version = "0.23.29"
 dependencies = [
  "aws-lc-rs",
  "base64",
@@ -3046,9 +3046,8 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4a72fe2bcf7a6ac6fd7d0b9e5cb68aeb7d4c0a0271730218b3e92d43b4eb435"
+version = "0.103.4"
+source = "git+https://github.com/rustls/webpki?branch=prepare-0.103.4#650dd07250dcd0b9b2f89a8c1ccd6d4c020e2c96"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -3760,7 +3759,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
