@@ -121,7 +121,7 @@ macro_rules! extension_struct {
     ) => {
         $(#[doc = $comment])*
         #[non_exhaustive]
-        #[derive(Clone, Debug, Default)]
+        #[derive(Clone, Default)]
         $struct_vis struct $struct_name$(<$struct_lt>)* {
             $(
               $(#[$item_attr])*
@@ -293,6 +293,21 @@ macro_rules! extension_struct {
             const ALL_EXTENSIONS: &'static [ExtensionType] = &[
                 $($item_id,)*
             ];
+        }
+
+        impl<'a> core::fmt::Debug for $struct_name$(<$struct_lt>)*  {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let mut ds = f.debug_struct(stringify!($struct_name));
+                $(
+                    if let Some(ext) = &self.$item_slot {
+                        ds.field(stringify!($item_slot), ext);
+                    }
+                )*
+                $($(
+                    ds.field(stringify!($meta_slot), &self.$meta_slot);
+                )+)*
+                ds.finish_non_exhaustive()
+            }
         }
     }
 }
