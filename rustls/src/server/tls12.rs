@@ -280,11 +280,8 @@ mod client_hello {
             )?;
             flight.finish(cx.common);
 
-            let secrets = ConnectionSecrets::new_resume(
-                self.randoms,
-                self.suite,
-                &resumedata.master_secret.0,
-            );
+            let secrets =
+                ConnectionSecrets::new_resume(self.randoms, self.suite, &resumedata.master_secret);
             self.config.key_log.log(
                 "CLIENT_RANDOM",
                 &secrets.randoms.client,
