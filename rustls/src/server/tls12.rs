@@ -282,7 +282,7 @@ mod client_hello {
             self.config.key_log.log(
                 "CLIENT_RANDOM",
                 &secrets.randoms.client,
-                &secrets.master_secret,
+                secrets.master_secret(),
             );
             cx.common
                 .start_encryption_tls12(&secrets, Side::Server);
@@ -571,7 +571,7 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
         self.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
-            &secrets.master_secret,
+            secrets.master_secret(),
         );
         cx.common
             .start_encryption_tls12(&secrets, Side::Server);
