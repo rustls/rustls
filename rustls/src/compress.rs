@@ -446,9 +446,9 @@ impl CompressionCacheEntry {
 
 #[cfg(all(test, any(feature = "brotli", feature = "zlib")))]
 mod tests {
-    use std::{println, vec};
-
     use super::*;
+    use crate::identity::{IntoOwned, TlsIdentity};
+    use std::{println, vec};
 
     #[test]
     #[cfg(feature = "zlib")]
@@ -528,6 +528,7 @@ mod tests {
     #[test]
     #[cfg(all(feature = "brotli", feature = "zlib"))]
     fn test_cache_evicts_lru() {
+        use crate::identity::X509Identity;
         use core::sync::atomic::{AtomicBool, Ordering};
 
         use pki_types::CertificateDer;
@@ -536,10 +537,26 @@ mod tests {
 
         let cert = CertificateDer::from(vec![1]);
 
-        let cert1 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"1"));
-        let cert2 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"2"));
-        let cert3 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"3"));
-        let cert4 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"4"));
+        let cert1 = CertificatePayloadTls13::from(
+            X509Identity::new([cert.clone()].into_iter(), b"1".as_slice())
+                .to_wire_format()
+                .into_owned(),
+        );
+        let cert2 = CertificatePayloadTls13::from(
+            X509Identity::new([cert.clone()].into_iter(), b"2".as_slice())
+                .to_wire_format()
+                .into_owned(),
+        );
+        let cert3 = CertificatePayloadTls13::from(
+            X509Identity::new([cert.clone()].into_iter(), b"3".as_slice())
+                .to_wire_format()
+                .into_owned(),
+        );
+        let cert4 = CertificatePayloadTls13::from(
+            X509Identity::new([cert.clone()].into_iter(), b"4".as_slice())
+                .to_wire_format()
+                .into_owned(),
+        );
 
         // insert zlib (1), (2), (3), (4)
 

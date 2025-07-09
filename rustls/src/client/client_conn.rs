@@ -6,6 +6,8 @@ use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
+#[cfg(doc)]
+use crate::crypto;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -21,8 +23,6 @@ use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
 use crate::{DistinguishedName, KeyLog, WantsVersions, compress, sign, verify, versions};
-#[cfg(doc)]
-use crate::{DistinguishedName, crypto};
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};

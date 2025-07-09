@@ -7855,8 +7855,8 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .load_private_key(KeyType::Rsa2048.get_client_key())
         .unwrap();
     let big_cert_and_key = sign::CertifiedKey::new(vec![big_cert], key);
-    client_config.client_auth_id_resolver =
-        Arc::new(sign::SingleCertAndKey::from(big_cert_and_key));
+    client_config
+        .client_auth_certificate_resolver(Arc::new(sign::SingleCertAndKey::from(big_cert_and_key)));
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert_eq!(
