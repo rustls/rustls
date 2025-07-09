@@ -95,7 +95,7 @@ impl fmt::Debug for Tls12CipherSuite {
 pub(crate) struct ConnectionSecrets {
     pub(crate) randoms: ConnectionRandoms,
     suite: &'static Tls12CipherSuite,
-    pub(crate) master_secret: [u8; 48],
+    master_secret: [u8; 48],
 }
 
 impl ConnectionSecrets {
