@@ -292,7 +292,7 @@ mod tests {
                     tls12_suite,
                     SessionId::empty(),
                     Arc::new(PayloadU16::empty()),
-                    &[],
+                    &[0u8; 48],
                     CertificateChain::default(),
                     &server_cert_verifier,
                     &resolves_client_cert,

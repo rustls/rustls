@@ -140,16 +140,13 @@ impl ConnectionSecrets {
     pub(crate) fn new_resume(
         randoms: ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
-        master_secret: &[u8],
+        master_secret: &[u8; 48],
     ) -> Self {
-        let mut ret = Self {
+        Self {
             randoms,
             suite,
-            master_secret: [0u8; 48],
-        };
-        ret.master_secret
-            .copy_from_slice(master_secret);
-        ret
+            master_secret: *master_secret,
+        }
     }
 
     /// Make a `MessageCipherPair` based on the given supported ciphersuite `self.suite`,
@@ -214,8 +211,8 @@ impl ConnectionSecrets {
         self.suite
     }
 
-    pub(crate) fn master_secret(&self) -> &[u8] {
-        &self.master_secret[..]
+    pub(crate) fn master_secret(&self) -> &[u8; 48] {
+        &self.master_secret
     }
 
     fn make_verify_data(&self, handshake_hash: &hash::Output, label: &[u8]) -> Vec<u8> {
