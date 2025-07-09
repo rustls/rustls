@@ -744,7 +744,11 @@ fn align_time() {
 impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
         let mut ssv = ServerSessionValue::read_bytes(&value).unwrap();
-        ssv.creation_time_sec -= self.delay as u64;
+        match &mut ssv {
+            ServerSessionValue::Tls12(tls12) => &mut tls12.common,
+            ServerSessionValue::Tls13(tls13) => &mut tls13.common,
+        }
+        .creation_time_sec -= self.delay as u64;
 
         self.storage
             .put(key, ssv.get_encoding())
