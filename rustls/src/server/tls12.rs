@@ -152,8 +152,14 @@ mod client_hello {
                         .get(client_hello.session_id.as_ref())
                 })
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x).ok())
+                .and_then(|resumedata| match resumedata {
+                    persist::ServerSessionValue::Tls12(tls12) => Some(tls12),
+                    _ => None,
+                })
                 .filter(|resumedata| {
-                    hs::can_resume(self.suite.into(), &cx.data.sni, self.using_ems, resumedata)
+                    hs::can_resume(self.suite.into(), &cx.data.sni, &resumedata.common)
+                        && (resumedata.extended_ms == self.using_ems
+                            || (resumedata.extended_ms && !self.using_ems))
                 });
 
             if let Some(data) = resume_data {
@@ -246,7 +252,7 @@ mod client_hello {
             cx: &mut ServerContext<'_>,
             client_hello: &ClientHelloPayload,
             id: &SessionId,
-            resumedata: persist::ServerSessionValue,
+            resumedata: persist::Tls12ServerSessionValue,
         ) -> hs::NextStateOrError<'static> {
             debug!("Resuming connection");
 
@@ -286,7 +292,7 @@ mod client_hello {
             );
             cx.common
                 .start_encryption_tls12(&secrets, Side::Server);
-            cx.common.peer_certificates = resumedata.client_cert_chain;
+            cx.common.peer_certificates = resumedata.common.client_cert_chain;
             cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
             if self.send_ticket {
@@ -328,12 +334,18 @@ mod client_hello {
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&persist::ServerSessionValue>,
+        resumedata: Option<&persist::Tls12ServerSessionValue>,
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput<'static>,
     ) -> Result<bool, Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts);
-        ep.process_common(config, cx, ocsp_response, hello, resumedata)?;
+        ep.process_common(
+            config,
+            cx,
+            ocsp_response,
+            hello,
+            resumedata.map(|r| &r.common),
+        )?;
         ep.process_tls12(config, hello, using_ems);
 
         let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
@@ -757,25 +769,19 @@ fn get_server_connection_value_tls12(
     cx: &ServerContext<'_>,
     time_now: UnixTime,
 ) -> persist::ServerSessionValue {
-    let version = ProtocolVersion::TLSv1_2;
-
-    let mut v = persist::ServerSessionValue::new(
-        cx.data.sni.as_ref(),
-        version,
-        secrets.suite().common.suite,
+    persist::Tls12ServerSessionValue::new(
+        persist::CommonServerSessionValue::new(
+            cx.data.sni.as_ref(),
+            secrets.suite().common.suite,
+            cx.common.peer_certificates.clone(),
+            cx.common.alpn_protocol.clone(),
+            cx.data.resumption_data.clone(),
+            time_now,
+        ),
         secrets.master_secret(),
-        cx.common.peer_certificates.clone(),
-        cx.common.alpn_protocol.clone(),
-        cx.data.resumption_data.clone(),
-        time_now,
-        0,
-    );
-
-    if using_ems {
-        v.set_extended_ms_used();
-    }
-
-    v
+        using_ems,
+    )
+    .into()
 }
 
 fn emit_ticket(

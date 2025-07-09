@@ -118,8 +118,8 @@ mod client_hello {
         fn attempt_tls13_ticket_decryption(
             &mut self,
             ticket: &[u8],
-        ) -> Option<persist::ServerSessionValue> {
-            if self.config.ticketer.enabled() {
+        ) -> Option<persist::Tls13ServerSessionValue> {
+            let sess = if self.config.ticketer.enabled() {
                 self.config
                     .ticketer
                     .decrypt(ticket)
@@ -129,6 +129,11 @@ mod client_hello {
                     .session_storage
                     .take(ticket)
                     .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
+            };
+
+            match sess {
+                Some(persist::ServerSessionValue::Tls13(tls13)) => Some(tls13),
+                _ => None,
             }
         }
 
@@ -291,7 +296,7 @@ mod client_hello {
                             resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
                         })
                         .filter(|resumedata| {
-                            hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
+                            hs::can_resume(self.suite.into(), &cx.data.sni, &resumedata.common)
                         });
 
                     let Some(resume) = maybe_resume_data else {
@@ -301,7 +306,7 @@ mod client_hello {
                     if !self.check_binder(
                         self.suite,
                         chm,
-                        &resume.master_secret.0,
+                        &resume.secret.0,
                         psk_offer.binders[i].as_ref(),
                     ) {
                         return Err(cx.common.send_fatal_alert(
@@ -331,10 +336,10 @@ mod client_hello {
             }
 
             if let Some(resume) = &resumedata {
-                cx.data.received_resumption_data = Some(resume.application_data.0.clone());
+                cx.data.received_resumption_data = Some(resume.common.application_data.0.clone());
                 cx.common
                     .peer_certificates
-                    .clone_from(&resume.client_cert_chain);
+                    .clone_from(&resume.common.client_cert_chain);
             }
 
             let full_handshake = resumedata.is_none();
@@ -349,7 +354,7 @@ mod client_hello {
                 chosen_psk_index,
                 resumedata
                     .as_ref()
-                    .map(|x| &x.master_secret.0[..]),
+                    .map(|x| &x.secret.0[..]),
                 &self.config,
             )?;
             if !self.done_retry {
@@ -610,7 +615,7 @@ mod client_hello {
     fn decide_if_early_data_allowed(
         cx: &mut ServerContext<'_>,
         client_hello: &ClientHelloPayload,
-        resumedata: Option<&persist::ServerSessionValue>,
+        resumedata: Option<&persist::Tls13ServerSessionValue>,
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
@@ -649,9 +654,9 @@ mod client_hello {
          * (RFC8446, 4.2.10) */
         let early_data_possible = early_data_requested
             && resume.is_fresh()
-            && Some(resume.version) == cx.common.negotiated_version
-            && resume.cipher_suite == suite.common.suite
-            && resume.alpn == cx.common.alpn_protocol;
+            && Some(ProtocolVersion::TLSv1_3) == cx.common.negotiated_version
+            && resume.common.cipher_suite == suite.common.suite
+            && resume.common.alpn == cx.common.alpn_protocol;
 
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
@@ -671,12 +676,18 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&persist::ServerSessionValue>,
+        resumedata: Option<&persist::Tls13ServerSessionValue>,
         extra_exts: ServerExtensionsInput<'static>,
         config: &ServerConfig,
     ) -> Result<EarlyDataDecision, Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts);
-        ep.process_common(config, cx, ocsp_response, hello, resumedata)?;
+        ep.process_common(
+            config,
+            cx,
+            ocsp_response,
+            hello,
+            resumedata.map(|r| &r.common),
+        )?;
 
         let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
         if early_data == EarlyDataDecision::Accepted {
@@ -1234,21 +1245,21 @@ fn get_server_session_value(
     time_now: UnixTime,
     age_obfuscation_offset: u32,
 ) -> persist::ServerSessionValue {
-    let version = ProtocolVersion::TLSv1_3;
-
     let secret = resumption.derive_ticket_psk(nonce);
 
-    persist::ServerSessionValue::new(
-        cx.data.sni.as_ref(),
-        version,
-        suite.common.suite,
+    persist::Tls13ServerSessionValue::new(
+        persist::CommonServerSessionValue::new(
+            cx.data.sni.as_ref(),
+            suite.common.suite,
+            cx.common.peer_certificates.clone(),
+            cx.common.alpn_protocol.clone(),
+            cx.data.resumption_data.clone(),
+            time_now,
+        ),
         secret.as_ref(),
-        cx.common.peer_certificates.clone(),
-        cx.common.alpn_protocol.clone(),
-        cx.data.resumption_data.clone(),
-        time_now,
         age_obfuscation_offset,
     )
+    .into()
 }
 
 struct ExpectFinished {

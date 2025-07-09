@@ -39,8 +39,7 @@ pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConne
 pub(super) fn can_resume(
     suite: SupportedCipherSuite,
     sni: &Option<DnsName<'_>>,
-    using_ems: bool,
-    resumedata: &persist::ServerSessionValue,
+    resume: &persist::CommonServerSessionValue,
 ) -> bool {
     // The RFCs underspecify what happens if we try to resume to
     // an unoffered/varying suite.  We merely don't resume in weird cases.
@@ -52,9 +51,7 @@ pub(super) fn can_resume(
     //
     // RFC 8446: "The server MUST ensure that it selects
     // a compatible PSK (if any) and cipher suite."
-    resumedata.cipher_suite == suite.suite()
-        && (resumedata.extended_ms == using_ems || (resumedata.extended_ms && !using_ems))
-        && &resumedata.sni == sni
+    resume.cipher_suite == suite.suite() && &resume.sni == sni
 }
 
 #[derive(Default)]
@@ -89,7 +86,7 @@ impl ExtensionProcessing {
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&persist::ServerSessionValue>,
+        resumedata: Option<&persist::CommonServerSessionValue>,
     ) -> Result<(), Error> {
         // ALPN
         let our_protocols = &config.alpn_protocols;
