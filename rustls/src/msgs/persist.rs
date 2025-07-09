@@ -343,34 +343,30 @@ impl Codec<'_> for ServerSessionValue {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let has_sni = u8::read(r)?;
-        let sni = if has_sni == 1 {
-            let dns_name = PayloadU8::<MaybeEmpty>::read(r)?;
-            let dns_name = match DnsName::try_from(dns_name.0.as_slice()) {
-                Ok(dns_name) => dns_name.to_owned(),
-                Err(_) => return Err(InvalidMessage::InvalidServerName),
-            };
+        let sni = match u8::read(r)? {
+            1 => {
+                let dns_name = PayloadU8::<MaybeEmpty>::read(r)?;
+                let dns_name = match DnsName::try_from(dns_name.0.as_slice()) {
+                    Ok(dns_name) => dns_name.to_owned(),
+                    Err(_) => return Err(InvalidMessage::InvalidServerName),
+                };
 
-            Some(dns_name)
-        } else {
-            None
+                Some(dns_name)
+            }
+            _ => None,
         };
 
-        let v = ProtocolVersion::read(r)?;
-        let cs = CipherSuite::read(r)?;
-        let ms = Zeroizing::new(PayloadU8::read(r)?);
-        let ems = u8::read(r)?;
-        let has_ccert = u8::read(r)? == 1;
-        let ccert = if has_ccert {
-            Some(CertificateChain::read(r)?.into_owned())
-        } else {
-            None
+        let version = ProtocolVersion::read(r)?;
+        let cipher_suite = CipherSuite::read(r)?;
+        let master_secret = Zeroizing::new(PayloadU8::read(r)?);
+        let extended_ms = matches!(u8::read(r)?, 1);
+        let client_cert_chain = match u8::read(r)? {
+            1 => Some(CertificateChain::read(r)?.into_owned()),
+            _ => None,
         };
-        let has_alpn = u8::read(r)? == 1;
-        let alpn = if has_alpn {
-            Some(PayloadU8::read(r)?)
-        } else {
-            None
+        let alpn = match u8::read(r)? {
+            1 => Some(PayloadU8::read(r)?),
+            _ => None,
         };
         let application_data = PayloadU16::read(r)?;
         let creation_time_sec = u64::read(r)?;
@@ -378,11 +374,11 @@ impl Codec<'_> for ServerSessionValue {
 
         Ok(Self {
             sni,
-            version: v,
-            cipher_suite: cs,
-            master_secret: ms,
-            extended_ms: ems == 1u8,
-            client_cert_chain: ccert,
+            version,
+            cipher_suite,
+            master_secret,
+            extended_ms,
+            client_cert_chain,
             alpn,
             application_data,
             creation_time_sec,
