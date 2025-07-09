@@ -641,7 +641,7 @@ pub(super) mod danger {
     use crate::sync::Arc;
     use crate::verify::{
         ServerCertVerifier, ServerCertVerifierCompat, ServerIdVerifier, ServerRpkVerifier,
-        ServerRpkVerifierCompat,
+        ServerRpkVerifierWrapper,
     };
 
     /// Accessor for dangerous configuration options.
@@ -653,17 +653,17 @@ pub(super) mod danger {
 
     impl DangerousClientConfig<'_> {
         /// Overrides the default `ServerIdVerifier` with something else.
-        pub fn certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
-            self.identity_verifier(Arc::new(ServerCertVerifierCompat::from(verifier)))
+        pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
+            self.set_identity_verifier(Arc::new(ServerCertVerifierCompat::from(verifier)))
         }
 
         /// Overrides the default `ServerIdVerifier` with something else.
-        pub fn rpk_verifier(&mut self, verifier: Arc<dyn ServerRpkVerifier>) {
-            self.identity_verifier(Arc::new(ServerRpkVerifierCompat::from(verifier)))
+        pub fn set_rpk_verifier(&mut self, verifier: Arc<dyn ServerRpkVerifier>) {
+            self.set_identity_verifier(Arc::new(ServerRpkVerifierWrapper::from(verifier)))
         }
 
         /// Overrides the default `ServerIdVerifier` with something else.
-        pub fn identity_verifier(&mut self, verifier: Arc<dyn ServerIdVerifier>) {
+        pub fn set_identity_verifier(&mut self, verifier: Arc<dyn ServerIdVerifier>) {
             self.cfg.verifier = verifier;
         }
     }

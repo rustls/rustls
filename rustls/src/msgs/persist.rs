@@ -1,7 +1,7 @@
 use crate::client::ResolvesClientIdentity;
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
-use crate::identity::{Identity, TlsIdentityEntries, IntoOwned};
+use crate::identity::{Identity, IntoOwned, TlsIdentityEntries};
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::ProtocolName;

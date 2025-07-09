@@ -207,7 +207,7 @@ pub trait ServerIdVerifier: Debug + Send + Sync {
 }
 
 #[derive(Debug)]
-pub struct ServerCertVerifierCompat(Arc<dyn ServerCertVerifier>);
+pub(crate) struct ServerCertVerifierCompat(Arc<dyn ServerCertVerifier>);
 
 fn get_certs(id: &Identity) -> Result<(&CertificateDer<'_>, &[CertificateDer<'_>]), Error> {
     Ok(id
@@ -325,17 +325,21 @@ pub trait ServerRpkVerifier: Debug + Send + Sync {
     ) -> Result<HandshakeSignatureValid, Error>;
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+
+    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+        None
+    }
 }
 
 #[derive(Debug)]
-pub struct ServerRpkVerifierCompat(Arc<dyn ServerRpkVerifier>);
+pub(crate) struct ServerRpkVerifierWrapper(Arc<dyn ServerRpkVerifier>);
 
 fn get_public_key(id: &Identity) -> Result<&SubjectPublicKeyInfoDer<'_>, Error> {
     id.as_public_key()
         .ok_or(Error::UnsupportedIdentityType)
 }
 
-impl From<Arc<dyn ServerRpkVerifier>> for ServerRpkVerifierCompat {
+impl From<Arc<dyn ServerRpkVerifier>> for ServerRpkVerifierWrapper {
     fn from(value: Arc<dyn ServerRpkVerifier>) -> Self {
         Self(value)
     }
@@ -367,7 +371,7 @@ fn parse_tls13_rpk<'a>(
     .into())
 }
 
-impl ServerIdVerifier for ServerRpkVerifierCompat {
+impl ServerIdVerifier for ServerRpkVerifierWrapper {
     fn parse_tls13_payload(
         &self,
         id_type: CertificateType,
@@ -403,6 +407,10 @@ impl ServerIdVerifier for ServerRpkVerifierCompat {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.0.supported_verify_schemes()
     }
+
+    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+        self.0.root_hint_subjects()
+    }
 }
 
 pub trait ClientIdVerifier: Debug + Send + Sync {
@@ -420,7 +428,7 @@ pub trait ClientIdVerifier: Debug + Send + Sync {
     }
 
     fn supported_certificate_types(&self) -> &[CertificateType];
-    fn root_hint_subjects(&self) -> &[DistinguishedName];
+    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]>;
 
     fn parse_tls13_payload(
         &self,
@@ -475,8 +483,9 @@ impl ClientIdVerifier for ClientCertVerifierCompat {
         &[CertificateType::X509]
     }
 
-    fn root_hint_subjects(&self) -> &[DistinguishedName] {
-        self.0.root_hint_subjects()
+    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+        let hints = self.0.root_hint_subjects();
+        if hints.is_empty() { None } else { Some(hints) }
     }
 
     fn parse_tls13_payload(
@@ -532,6 +541,10 @@ pub trait ClientRpkVerifier: Debug + Send + Sync {
         self.offer_client_auth()
     }
 
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        &[]
+    }
+
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
 
     fn verify_client_rpk(
@@ -558,12 +571,21 @@ impl From<Arc<dyn ClientRpkVerifier>> for ClientRpkVerifierWrapper {
 }
 
 impl ClientIdVerifier for ClientRpkVerifierWrapper {
+    fn offer_client_auth(&self) -> bool {
+        self.0.offer_client_auth()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        self.0.client_auth_mandatory()
+    }
+
     fn supported_certificate_types(&self) -> &[CertificateType] {
         &[CertificateType::RawPublicKey]
     }
 
-    fn root_hint_subjects(&self) -> &[DistinguishedName] {
-        &[]
+    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+        let hints = self.0.root_hint_subjects();
+        if hints.is_empty() { None } else { Some(hints) }
     }
 
     fn parse_tls13_payload(

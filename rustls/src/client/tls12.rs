@@ -920,7 +920,9 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         if let Some(client_auth) = &st.client_auth {
             let id = match client_auth {
                 ClientAuthDetails::Empty { .. } => CertificateChain::default().into(),
-                ClientAuthDetails::Verify { signing_id: id_key, .. } => id_key.id().clone(),
+                ClientAuthDetails::Verify {
+                    signing_id: id_key, ..
+                } => id_key.id().clone(),
             };
             // We only support certificates in TLS 1.2
             if let Some(certs) = id.as_certificates() {

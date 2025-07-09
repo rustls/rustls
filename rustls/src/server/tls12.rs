@@ -436,6 +436,7 @@ mod client_hello {
         let names = config
             .verifier
             .root_hint_subjects()
+            .unwrap_or_default()
             .to_vec();
 
         let cr = CertificateRequestPayload {
@@ -508,8 +509,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                 None
             }
             false => {
-                let client_id =
-                    Identity::from(X509Identity::new(cert_chain.0, None::<&[u8]>));
+                let client_id = Identity::from(X509Identity::new(cert_chain.0, None::<&[u8]>));
 
                 let now = self.config.current_time()?;
 

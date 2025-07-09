@@ -495,7 +495,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     if args.insecure {
         config
             .dangerous()
-            .certificate_verifier(Arc::new(danger::NoCertificateVerification::new(
+            .set_certificate_verifier(Arc::new(danger::NoCertificateVerification::new(
                 provider::default_provider(),
             )));
     }

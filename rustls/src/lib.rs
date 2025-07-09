@@ -593,9 +593,8 @@ pub mod client {
         pub use super::builder::danger::DangerousClientConfigBuilder;
         pub use super::client_conn::danger::DangerousClientConfig;
         pub use crate::verify::{
-            HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
-            ServerCertVerifierCompat, ServerIdVerified, ServerIdVerifier, ServerRpkVerifier,
-            ServerRpkVerifierCompat,
+            HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdVerified,
+            ServerIdVerifier, ServerRpkVerifier,
         };
     }
 

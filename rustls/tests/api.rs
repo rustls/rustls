@@ -55,7 +55,9 @@ mod test_custom_identity {
     use rustls::client::danger::{HandshakeSignatureValid, ServerIdVerified, ServerIdVerifier};
     use rustls::client::{IdentityEntry, ResolvesClientIdentity};
     use rustls::crypto::{WebPkiSupportedAlgorithms, verify_tls13_signature_with_raw_key};
-    use rustls::identity::{Identity, SigningIdentity, TlsIdentityEntries, TlsIdentity, IdentitySigner};
+    use rustls::identity::{
+        Identity, IdentitySigner, SigningIdentity, TlsIdentity, TlsIdentityEntries,
+    };
     use rustls::internal::msgs::codec::Reader;
     use rustls::server::ResolvesServerIdentity;
     use rustls::server::danger::{ClientIdVerified, ClientIdVerifier};
@@ -270,8 +272,8 @@ mod test_custom_identity {
             &[CERTIFICATE_TYPE]
         }
 
-        fn root_hint_subjects(&self) -> &[DistinguishedName] {
-            slice::from_ref(AUTH_NAME.deref())
+        fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+            Some(slice::from_ref(AUTH_NAME.deref()))
         }
 
         fn parse_tls13_payload(
@@ -478,7 +480,7 @@ mod test_raw_keys {
                 expected_server_cert_types: Some(vec![CertificateType::RawPublicKey]),
                 ..Default::default()
             });
-            server_config.certificate_resolver(resolver);
+            server_config.set_certificate_resolver(resolver);
 
             let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -1612,7 +1614,7 @@ fn server_cert_resolve_with_sni() {
             expected_sni: Some(DnsName::try_from("the.value.from.sni").unwrap()),
             ..Default::default()
         });
-        server_config.certificate_resolver(resolver);
+        server_config.set_certificate_resolver(resolver);
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("the.value.from.sni"))
@@ -1636,7 +1638,7 @@ fn server_cert_resolve_with_alpn() {
             expected_alpn: Some(vec![b"foo".to_vec(), b"bar".to_vec()]),
             ..Default::default()
         });
-        server_config.certificate_resolver(resolver);
+        server_config.set_certificate_resolver(resolver);
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("sni-value")).unwrap();
@@ -1664,7 +1666,7 @@ fn server_cert_resolve_with_named_groups() {
             ),
             ..Default::default()
         });
-        server_config.certificate_resolver(resolver);
+        server_config.set_certificate_resolver(resolver);
 
         let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
         let err = do_handshake_until_error(&mut client, &mut server);
@@ -1683,7 +1685,7 @@ fn client_trims_terminating_dot() {
             expected_sni: Some(DnsName::try_from("some-host.com").unwrap()),
             ..Default::default()
         });
-        server_config.certificate_resolver(resolver);
+        server_config.set_certificate_resolver(resolver);
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("some-host.com.")).unwrap();
@@ -1720,7 +1722,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
         expected_cipher_suites: Some(vec![suite, CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV]),
         ..Default::default()
     });
-    server_config.certificate_resolver(resolver);
+    server_config.set_certificate_resolver(resolver);
 
     let mut client =
         ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
@@ -1787,7 +1789,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
     for kt in KeyType::all_for_provider(&provider) {
         let mut server_config = make_server_config(*kt, &provider);
         let scni: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckNoSni {});
-        server_config.certificate_resolver(scni);
+        server_config.set_certificate_resolver(scni);
         let server_config = Arc::new(server_config);
 
         for version in rustls::ALL_VERSIONS {
@@ -3641,7 +3643,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
     let provider = provider::default_provider();
     let resolver = rustls::server::ResolvesServerCertUsingSni::new();
     let mut server_config = make_server_config(kt, &provider);
-    server_config.certificate_resolver(Arc::new(resolver));
+    server_config.set_certificate_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     for version in rustls::ALL_VERSIONS {
@@ -3680,7 +3682,7 @@ fn sni_resolver_works() {
         )
         .unwrap();
     let mut server_config = make_server_config(kt, &provider);
-    server_config.certificate_resolver(Arc::new(resolver));
+    server_config.set_certificate_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
@@ -3764,7 +3766,7 @@ fn sni_resolver_lower_cases_configured_names() {
         )
     );
     let mut server_config = make_server_config(kt, &provider);
-    server_config.certificate_resolver(Arc::new(resolver));
+    server_config.set_certificate_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
@@ -3795,7 +3797,7 @@ fn sni_resolver_lower_cases_queried_names() {
     );
 
     let mut server_config = make_server_config(kt, &provider);
-    server_config.certificate_resolver(Arc::new(resolver));
+    server_config.set_certificate_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();

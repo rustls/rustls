@@ -650,11 +650,11 @@ impl ServerConfig {
             .ok_or(Error::FailedToGetCurrentTime)
     }
 
-    pub fn certificate_resolver(&mut self, resolver: Arc<dyn ResolvesServerCert>) {
+    pub fn set_certificate_resolver(&mut self, resolver: Arc<dyn ResolvesServerCert>) {
         self.id_resolver = Arc::new(ResolvesServerCertCompat::from(resolver));
     }
 
-    pub fn rpk_resolver(&mut self, resolver: Arc<dyn ResolvesServerRpk>) {
+    pub fn set_rpk_resolver(&mut self, resolver: Arc<dyn ResolvesServerRpk>) {
         self.id_resolver = Arc::new(ResolvesServerRpkWrapper::from(resolver));
     }
 }

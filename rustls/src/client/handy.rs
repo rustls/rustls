@@ -248,8 +248,7 @@ mod tests {
     use super::NoClientSessionStorage;
     use super::provider::cipher_suite;
     use crate::client::danger::{
-        HandshakeSignatureValid, ServerCertVerifier, ServerCertVerifierCompat, ServerIdVerified,
-        ServerIdVerifier,
+        HandshakeSignatureValid, ServerCertVerifier, ServerIdVerified, ServerIdVerifier,
     };
     use crate::client::{ClientSessionStore, ResolvesClientCert};
     use crate::msgs::base::PayloadU16;
@@ -269,8 +268,9 @@ mod tests {
         let name = ServerName::try_from("example.com").unwrap();
         let now = UnixTime::now();
         let server_cert_verifier: Arc<dyn ServerCertVerifier> = Arc::new(DummyServerCertVerifier);
-        let server_id_verifier: Arc<dyn ServerIdVerifier> =
-            Arc::new(ServerCertVerifierCompat::from(server_cert_verifier));
+        let server_id_verifier: Arc<dyn ServerIdVerifier> = Arc::new(
+            crate::verify::ServerCertVerifierCompat::from(server_cert_verifier),
+        );
         let drcc: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolvesClientCert);
         let resolves_client_cert: Arc<dyn crate::client::ResolvesClientIdentity> = Arc::new(
             crate::client::client_conn::ResolvesClientCertCompat::from(drcc),

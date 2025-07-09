@@ -96,7 +96,7 @@ pub(super) mod danger {
 
     use crate::client::WantsClientIdentity;
     use crate::sync::Arc;
-    use crate::verify::{ServerCertVerifierCompat, ServerRpkVerifierCompat};
+    use crate::verify::{ServerCertVerifierCompat, ServerRpkVerifierWrapper};
     use crate::{ClientConfig, ConfigBuilder, WantsVerifier, verify};
 
     /// Accessor for dangerous configuration options.
@@ -120,7 +120,7 @@ pub(super) mod danger {
             self,
             verifier: Arc<dyn verify::ServerRpkVerifier>,
         ) -> ConfigBuilder<ClientConfig, WantsClientIdentity> {
-            self.with_custom_identity_verifier(Arc::new(ServerRpkVerifierCompat::from(verifier)))
+            self.with_custom_identity_verifier(Arc::new(ServerRpkVerifierWrapper::from(verifier)))
         }
 
         /// Set a custom certificate verifier.
