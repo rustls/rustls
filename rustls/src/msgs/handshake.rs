@@ -1720,9 +1720,9 @@ pub struct IdentityEntry<'a> {
 
 impl<'a> Codec<'a> for IdentityEntry<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::u24(self.payload.len() as u32).encode(bytes);
+        codec::u24(self.payload.bytes().len() as u32).encode(bytes);
         self.payload.encode(bytes);
-        (self.extensions.len() as u16).encode(bytes);
+        (self.extensions.bytes().len() as u16).encode(bytes);
         self.extensions.encode(bytes);
     }
 

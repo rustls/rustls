@@ -1061,7 +1061,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         if certp
             .entries
             .iter()
-            .any(|e| !e.extensions.is_empty())
+            .any(|e| !e.extensions.bytes().is_empty())
         {
             return Err(PeerMisbehaved::UnsolicitedCertExtension.into());
         }

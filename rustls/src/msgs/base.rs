@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
 use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
-use std::ops::Deref;
 use zeroize::Zeroize;
 
 use crate::error::InvalidMessage;
@@ -47,20 +46,6 @@ impl<'a> Payload<'a> {
 
     pub fn read(r: &mut Reader<'a>) -> Self {
         Self::Borrowed(r.rest())
-    }
-}
-
-impl<'a> AsRef<[u8]> for Payload<'a> {
-    fn as_ref(&self) -> &[u8] {
-        self.bytes()
-    }
-}
-
-impl<'a> Deref for Payload<'a> {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.bytes()
     }
 }
 

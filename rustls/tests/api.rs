@@ -237,7 +237,7 @@ mod test_custom_identity {
                 ));
             }
             let entry = payload.into_iter().next().unwrap();
-            Ok(CustomIdentity::try_from(entry.payload.as_ref())
+            Ok(CustomIdentity::try_from(entry.payload.bytes())
                 .map_err(|_| Error::UnsupportedIdentityType)?
                 .into())
         }
