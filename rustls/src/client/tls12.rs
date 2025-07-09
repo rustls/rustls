@@ -151,8 +151,11 @@ mod server_hello {
                         return Err(PeerMisbehaved::ResumptionOfferedWithVariedEms.into());
                     }
 
-                    let secrets =
-                        ConnectionSecrets::new_resume(self.randoms, suite, resuming.secret());
+                    let secrets = ConnectionSecrets::new_resume(
+                        self.randoms,
+                        suite,
+                        resuming.master_secret(),
+                    );
                     config.key_log.log(
                         "CLIENT_RANDOM",
                         &secrets.randoms.client,

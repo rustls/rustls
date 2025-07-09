@@ -72,6 +72,7 @@ impl<T> core::ops::Deref for Retrieved<T> {
 #[derive(Debug)]
 pub struct Tls13ClientSessionValue {
     suite: &'static Tls13CipherSuite,
+    secret: Zeroizing<PayloadU8>,
     age_add: u32,
     max_early_data_size: u32,
     pub(crate) common: ClientSessionCommon,
@@ -93,11 +94,11 @@ impl Tls13ClientSessionValue {
     ) -> Self {
         Self {
             suite,
+            secret: Zeroizing::new(PayloadU8::new(secret.to_vec())),
             age_add,
             max_early_data_size,
             common: ClientSessionCommon::new(
                 ticket,
-                secret,
                 time_now,
                 lifetime_secs,
                 server_cert_chain,
@@ -106,6 +107,10 @@ impl Tls13ClientSessionValue {
             ),
             quic_params: PayloadU16::new(Vec::new()),
         }
+    }
+
+    pub(crate) fn secret(&self) -> &[u8] {
+        self.secret.0.as_ref()
     }
 
     pub fn max_early_data_size(&self) -> u32 {
@@ -151,6 +156,7 @@ pub struct Tls12ClientSessionValue {
     suite: &'static Tls12CipherSuite,
     #[cfg(feature = "tls12")]
     pub(crate) session_id: SessionId,
+    master_secret: Zeroizing<[u8; 48]>,
     #[cfg(feature = "tls12")]
     extended_ms: bool,
     #[doc(hidden)]
@@ -164,7 +170,7 @@ impl Tls12ClientSessionValue {
         suite: &'static Tls12CipherSuite,
         session_id: SessionId,
         ticket: Arc<PayloadU16>,
-        master_secret: &[u8],
+        master_secret: &[u8; 48],
         server_cert_chain: CertificateChain<'static>,
         server_cert_verifier: &Arc<dyn ServerCertVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
@@ -175,10 +181,10 @@ impl Tls12ClientSessionValue {
         Self {
             suite,
             session_id,
+            master_secret: Zeroizing::new(*master_secret),
             extended_ms,
             common: ClientSessionCommon::new(
                 ticket,
-                master_secret,
                 time_now,
                 lifetime_secs,
                 server_cert_chain,
@@ -186,6 +192,10 @@ impl Tls12ClientSessionValue {
                 client_creds,
             ),
         }
+    }
+
+    pub(crate) fn master_secret(&self) -> &[u8; 48] {
+        &self.master_secret
     }
 
     pub(crate) fn ticket(&mut self) -> Arc<PayloadU16> {
@@ -219,7 +229,6 @@ impl core::ops::Deref for Tls12ClientSessionValue {
 #[derive(Debug, Clone)]
 pub struct ClientSessionCommon {
     ticket: Arc<PayloadU16>,
-    secret: Zeroizing<PayloadU8>,
     epoch: u64,
     lifetime_secs: u32,
     server_cert_chain: Arc<CertificateChain<'static>>,
@@ -230,7 +239,6 @@ pub struct ClientSessionCommon {
 impl ClientSessionCommon {
     fn new(
         ticket: Arc<PayloadU16>,
-        secret: &[u8],
         time_now: UnixTime,
         lifetime_secs: u32,
         server_cert_chain: CertificateChain<'static>,
@@ -239,7 +247,6 @@ impl ClientSessionCommon {
     ) -> Self {
         Self {
             ticket,
-            secret: Zeroizing::new(PayloadU8::new(secret.to_vec())),
             epoch: time_now.as_secs(),
             lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
             server_cert_chain: Arc::new(server_cert_chain),
@@ -276,10 +283,6 @@ impl ClientSessionCommon {
 
     pub(crate) fn server_cert_chain(&self) -> &CertificateChain<'static> {
         &self.server_cert_chain
-    }
-
-    pub(crate) fn secret(&self) -> &[u8] {
-        self.secret.0.as_ref()
     }
 
     pub(crate) fn ticket(&self) -> &[u8] {
@@ -329,19 +332,19 @@ impl Codec<'_> for ServerSessionValue {
 pub struct Tls12ServerSessionValue {
     #[doc(hidden)]
     pub common: CommonServerSessionValue,
-    pub(crate) master_secret: Zeroizing<PayloadU8>,
+    pub(crate) master_secret: Zeroizing<[u8; 48]>,
     pub(crate) extended_ms: bool,
 }
 
 impl Tls12ServerSessionValue {
     pub(crate) fn new(
         common: CommonServerSessionValue,
-        master_secret: &[u8],
+        master_secret: &[u8; 48],
         extended_ms: bool,
     ) -> Self {
         Self {
             common,
-            master_secret: Zeroizing::new(PayloadU8::new(master_secret.to_vec())),
+            master_secret: Zeroizing::new(*master_secret),
             extended_ms,
         }
     }
@@ -350,14 +353,22 @@ impl Tls12ServerSessionValue {
 impl Codec<'_> for Tls12ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.common.encode(bytes);
-        self.master_secret.encode(bytes);
+        bytes.extend_from_slice(self.master_secret.as_ref());
         (self.extended_ms as u8).encode(bytes);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             common: CommonServerSessionValue::read(r)?,
-            master_secret: Zeroizing::new(PayloadU8::read(r)?),
+            master_secret: Zeroizing::new(
+                match r
+                    .take(48)
+                    .and_then(|slice| slice.try_into().ok())
+                {
+                    Some(array) => array,
+                    None => return Err(InvalidMessage::MessageTooShort),
+                },
+            ),
             extended_ms: matches!(u8::read(r)?, 1),
         })
     }
