@@ -651,7 +651,7 @@ mod client_hello {
             && resume.is_fresh()
             && Some(resume.version) == cx.common.negotiated_version
             && resume.cipher_suite == suite.common.suite
-            && resume.alpn.as_ref().map(|p| &p.0[..]) == cx.common.alpn_protocol.as_deref();
+            && resume.alpn == cx.common.alpn_protocol;
 
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
