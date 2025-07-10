@@ -254,15 +254,12 @@ mod tests {
     }
 
     fn server_key_pair() -> KeyPair {
-        let private_key = super::provider::default_provider()
+        let key = super::provider::default_provider()
             .key_provider
             .load_private_key(server_key())
             .unwrap();
-        let public_key = private_key
-            .public_key()
-            .unwrap()
-            .into_owned();
-        KeyPair::new(public_key, private_key)
+        let public_key = key.public_key().unwrap().into_owned();
+        KeyPair::new(public_key, key)
             .ok()
             .unwrap()
     }

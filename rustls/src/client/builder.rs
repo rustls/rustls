@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::marker::PhantomData;
+
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use super::client_conn::{
@@ -11,7 +12,7 @@ use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
-use crate::verify::{ServerCertVerifier, ServerCertVerifierCompat};
+use crate::verify::ServerCertVerifierCompat;
 use crate::versions::TLS13;
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{WantsVersions, compress, verify, versions};
@@ -70,7 +71,6 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
         self,
         verifier: Arc<WebPkiServerVerifier>,
     ) -> ConfigBuilder<ClientConfig, WantsClientIdentity> {
-        let verifier: Arc<dyn ServerCertVerifier> = verifier;
         ConfigBuilder {
             state: WantsClientIdentity {
                 versions: self.state.versions,

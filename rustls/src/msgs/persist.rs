@@ -1,3 +1,9 @@
+use alloc::vec::Vec;
+use core::cmp;
+
+use pki_types::{DnsName, UnixTime};
+use zeroize::Zeroizing;
+
 use crate::client::ResolvesClientIdentity;
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
@@ -12,10 +18,6 @@ use crate::sync::{Arc, Weak};
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::verify::ServerIdVerifier;
-use alloc::vec::Vec;
-use core::cmp;
-use pki_types::{DnsName, UnixTime};
-use zeroize::Zeroizing;
 
 pub(crate) struct Retrieved<T> {
     pub(crate) value: T,

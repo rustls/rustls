@@ -7,7 +7,6 @@ use pki_types::DnsName;
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
-use crate::Error::UnsupportedIdentityType;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
@@ -399,7 +398,7 @@ impl ExpectClientHello {
         }
 
         // Choose an identity.
-        let id_key = {
+        let signing_id = {
             let client_hello = ClientHello {
                 server_name: &cx.data.sni,
                 signature_schemes: &sig_schemes,
@@ -416,12 +415,12 @@ impl ExpectClientHello {
             };
             trace!("Resolving server identity: {client_hello:#?}");
 
-            let id_key = self
+            let signing_id = self
                 .config
                 .id_resolver
                 .resolve(&client_hello, server_cert_type);
 
-            id_key.ok_or_else(|| {
+            signing_id.ok_or_else(|| {
                 cx.common.send_fatal_alert(
                     AlertDescription::AccessDenied,
                     Error::General("no server certificate chain or id resolved".to_owned()),
@@ -432,7 +431,7 @@ impl ExpectClientHello {
         let (suite, skxg) = self
             .choose_suite_and_kx_group(
                 version,
-                id_key.signing_key().algorithm(),
+                signing_id.signing_key().algorithm(),
                 cx.common.protocol,
                 client_hello
                     .named_groups
@@ -481,14 +480,14 @@ impl ExpectClientHello {
                 send_tickets: self.send_tickets,
                 extra_exts: self.extra_exts,
             }
-            .handle_client_hello(cx, id_key, m, client_hello, skxg, sig_schemes),
+            .handle_client_hello(cx, signing_id, m, client_hello, skxg, sig_schemes),
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => {
                 // We only support certificates for TLS 1.2 connections
                 let certkey = ActiveCertifiedKey::from_certified_key(
-                    id_key
+                    signing_id
                         .as_certified_key()
-                        .ok_or(UnsupportedIdentityType)?,
+                        .ok_or(Error::UnsupportedIdentityType)?,
                 );
                 tls12::CompleteClientHelloHandling {
                     config: self.config,

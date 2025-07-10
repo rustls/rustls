@@ -1,11 +1,11 @@
 use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
-#[cfg(feature = "log")]
+#[cfg(feature = "logging")]
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::{Deref, DerefMut};
-use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
 
@@ -33,15 +33,6 @@ use crate::rand;
 use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 use crate::x509::wrap_in_sequence;
-use alloc::boxed::Box;
-use alloc::collections::BTreeSet;
-#[cfg(feature = "logging")]
-use alloc::string::String;
-use alloc::vec;
-use alloc::vec::Vec;
-use core::fmt;
-use core::ops::{Deref, DerefMut};
-use pki_types::{CertificateDer, DnsName};
 
 /// Create a newtype wrapper around a given type.
 ///
@@ -1683,11 +1674,9 @@ impl<'a> CertificateExtensions<'a> {
 
     fn read_payload(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let mut out = Self::default();
-
         while r.any_left() {
             out.read_one(r, |_unk| Err(InvalidMessage::UnknownCertificateExtension))?;
         }
-
         Ok(out)
     }
 
@@ -1707,7 +1696,6 @@ impl<'a> Codec<'a> for CertificateExtensions<'a> {
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let len = usize::from(u16::read(r)?);
         let mut sub = r.sub(len)?;
-
         Self::read_payload(&mut sub)
     }
 }
@@ -1728,10 +1716,8 @@ impl<'a> Codec<'a> for IdentityEntry<'a> {
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let payload = PayloadU24::read(r)?.0;
-
         let exts_len = u16::read(r)? as usize;
         let extensions = Payload::read(&mut r.sub(exts_len)?);
-
         Ok(Self {
             payload,
             extensions,
@@ -1770,12 +1756,12 @@ impl TlsListElement for IdentityEntry<'_> {
 }
 
 #[derive(Debug)]
-pub(crate) struct CertificatePayloadTls13<'a> {
+pub(crate) struct IdentityPayloadTls13<'a> {
     pub(crate) context: PayloadU8,
     pub(crate) entries: Vec<IdentityEntry<'a>>,
 }
 
-impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
+impl<'a> Codec<'a> for IdentityPayloadTls13<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
         self.entries.encode(bytes);
@@ -1789,9 +1775,9 @@ impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
     }
 }
 
-impl<'a> CertificatePayloadTls13<'a> {
-    pub(crate) fn into_owned(self) -> CertificatePayloadTls13<'static> {
-        CertificatePayloadTls13 {
+impl<'a> IdentityPayloadTls13<'a> {
+    pub(crate) fn into_owned(self) -> IdentityPayloadTls13<'static> {
+        IdentityPayloadTls13 {
             context: self.context,
             entries: self
                 .entries
@@ -2241,12 +2227,12 @@ impl Codec<'_> for CertificateRequestExtensions {
 }
 
 #[derive(Debug)]
-pub(crate) struct CertificateRequestPayloadTls13 {
+pub(crate) struct IdentityRequestPayloadTls13 {
     pub(crate) context: PayloadU8,
     pub(crate) extensions: CertificateRequestExtensions,
 }
 
-impl Codec<'_> for CertificateRequestPayloadTls13 {
+impl Codec<'_> for IdentityRequestPayloadTls13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
         self.extensions.encode(bytes);
@@ -2479,11 +2465,11 @@ pub(crate) enum HandshakePayload<'a> {
     ServerHello(ServerHelloPayload),
     HelloRetryRequest(HelloRetryRequest),
     Certificate(CertificateChain<'a>),
-    CertificateTls13(CertificatePayloadTls13<'a>),
+    CertificateTls13(IdentityPayloadTls13<'a>),
     CompressedCertificate(CompressedCertificatePayload<'a>),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
-    CertificateRequestTls13(CertificateRequestPayloadTls13),
+    CertificateRequestTls13(IdentityRequestPayloadTls13),
     CertificateVerify(DigitallySignedStruct),
     ServerHelloDone,
     EndOfEarlyData,
@@ -2506,7 +2492,7 @@ impl HandshakePayload<'_> {
             ClientHello(x) => x.encode(bytes),
             ServerHello(x) => x.encode(bytes),
             HelloRetryRequest(x) => x.encode(bytes),
-            Certificate(x) => Codec::encode(x, bytes),
+            Certificate(x) => x.encode(bytes),
             CertificateTls13(x) => x.encode(bytes),
             CompressedCertificate(x) => x.encode(bytes),
             ServerKeyExchange(x) => x.encode(bytes),
@@ -2631,7 +2617,7 @@ impl<'a> HandshakeMessagePayload<'a> {
                 }
             }
             HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
-                let p = CertificatePayloadTls13::read(&mut sub)?;
+                let p = IdentityPayloadTls13::read(&mut sub)?;
                 HandshakePayload::CertificateTls13(p)
             }
             HandshakeType::Certificate => {
@@ -2649,7 +2635,7 @@ impl<'a> HandshakeMessagePayload<'a> {
                 HandshakePayload::ClientKeyExchange(Payload::read(&mut sub))
             }
             HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
-                let p = CertificateRequestPayloadTls13::read(&mut sub)?;
+                let p = IdentityRequestPayloadTls13::read(&mut sub)?;
                 HandshakePayload::CertificateRequestTls13(p)
             }
             HandshakeType::CertificateRequest => {

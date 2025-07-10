@@ -452,7 +452,7 @@ mod test_raw_keys {
                 }
             }
 
-            // Test that the server peer certificate is the client's public key
+            // Test that the server peer id is the client's public key
             match server
                 .peer_identity()
                 .map(|id| id.as_public_key())
@@ -475,12 +475,11 @@ mod test_raw_keys {
             let client_config = make_client_config_with_raw_key_support(*kt, &provider);
             let mut server_config = make_server_config_with_raw_key_support(*kt, &provider);
 
-            let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
+            server_config.cert_resolver(Arc::new(ServerCheckCertResolve {
                 expected_client_cert_types: Some(vec![CertificateType::RawPublicKey]),
                 expected_server_cert_types: Some(vec![CertificateType::RawPublicKey]),
                 ..Default::default()
-            });
-            server_config.set_certificate_resolver(resolver);
+            }));
 
             let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -1610,11 +1609,10 @@ fn server_cert_resolve_with_sni() {
         let client_config = make_client_config(*kt, &provider);
         let mut server_config = make_server_config(*kt, &provider);
 
-        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+        server_config.cert_resolver(Arc::new(ServerCheckCertResolve {
             expected_sni: Some(DnsName::try_from("the.value.from.sni").unwrap()),
             ..Default::default()
-        });
-        server_config.set_certificate_resolver(resolver);
+        }));
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("the.value.from.sni"))
@@ -1634,11 +1632,10 @@ fn server_cert_resolve_with_alpn() {
         client_config.alpn_protocols = vec!["foo".into(), "bar".into()];
 
         let mut server_config = make_server_config(*kt, &provider);
-        let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
+        server_config.cert_resolver(Arc::new(ServerCheckCertResolve {
             expected_alpn: Some(vec![b"foo".to_vec(), b"bar".to_vec()]),
             ..Default::default()
-        });
-        server_config.set_certificate_resolver(resolver);
+        }));
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("sni-value")).unwrap();
@@ -1656,7 +1653,7 @@ fn server_cert_resolve_with_named_groups() {
         let client_config = make_client_config(*kt, &provider);
 
         let mut server_config = make_server_config(*kt, &provider);
-        let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
+        server_config.cert_resolver(Arc::new(ServerCheckCertResolve {
             expected_named_groups: Some(
                 provider
                     .kx_groups
@@ -1665,8 +1662,7 @@ fn server_cert_resolve_with_named_groups() {
                     .collect(),
             ),
             ..Default::default()
-        });
-        server_config.set_certificate_resolver(resolver);
+        }));
 
         let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
         let err = do_handshake_until_error(&mut client, &mut server);
@@ -1681,11 +1677,10 @@ fn client_trims_terminating_dot() {
         let client_config = make_client_config(*kt, &provider);
         let mut server_config = make_server_config(*kt, &provider);
 
-        let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
+        server_config.cert_resolver(Arc::new(ServerCheckCertResolve {
             expected_sni: Some(DnsName::try_from("some-host.com").unwrap()),
             ..Default::default()
-        });
-        server_config.set_certificate_resolver(resolver);
+        }));
 
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("some-host.com.")).unwrap();
@@ -1717,12 +1712,11 @@ fn check_sigalgs_reduced_by_ciphersuite(
 
     let mut server_config = make_server_config(kt, &provider::default_provider());
 
-    let resolver: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckCertResolve {
+    server_config.cert_resolver(Arc::new(ServerCheckCertResolve {
         expected_sigalgs: Some(expected_sigalgs),
         expected_cipher_suites: Some(vec![suite, CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV]),
         ..Default::default()
-    });
-    server_config.set_certificate_resolver(resolver);
+    }));
 
     let mut client =
         ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
@@ -1788,8 +1782,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider) {
         let mut server_config = make_server_config(*kt, &provider);
-        let scni: Arc<dyn ResolvesServerCert> = Arc::new(ServerCheckNoSni {});
-        server_config.set_certificate_resolver(scni);
+        server_config.cert_resolver(Arc::new(ServerCheckNoSni {}));
         let server_config = Arc::new(server_config);
 
         for version in rustls::ALL_VERSIONS {
@@ -2226,7 +2219,7 @@ fn test_client_cert_resolve(
         println!("{:?} {:?}:", version.version, key_type);
 
         let mut client_config = make_client_config_with_versions(key_type, &[version], &provider);
-        client_config.client_auth_certificate_resolver(Arc::new(ClientCheckCertResolve::new(
+        client_config.client_auth_cert_resolver(Arc::new(ClientCheckCertResolve::new(
             1,
             expected_root_hint_subjects.clone(),
             default_signature_schemes(version.version),
@@ -3642,8 +3635,9 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     let resolver = rustls::server::ResolvesServerCertUsingSni::new();
+
     let mut server_config = make_server_config(kt, &provider);
-    server_config.set_certificate_resolver(Arc::new(resolver));
+    server_config.cert_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     for version in rustls::ALL_VERSIONS {
@@ -3681,8 +3675,9 @@ fn sni_resolver_works() {
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
         )
         .unwrap();
+
     let mut server_config = make_server_config(kt, &provider);
-    server_config.set_certificate_resolver(Arc::new(resolver));
+    server_config.cert_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
@@ -3765,8 +3760,9 @@ fn sni_resolver_lower_cases_configured_names() {
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
+
     let mut server_config = make_server_config(kt, &provider);
-    server_config.set_certificate_resolver(Arc::new(resolver));
+    server_config.cert_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
@@ -3797,7 +3793,7 @@ fn sni_resolver_lower_cases_queried_names() {
     );
 
     let mut server_config = make_server_config(kt, &provider);
-    server_config.set_certificate_resolver(Arc::new(resolver));
+    server_config.cert_resolver(Arc::new(resolver));
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
@@ -7856,7 +7852,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .unwrap();
     let big_cert_and_key = sign::CertifiedKey::new(vec![big_cert], key);
     client_config
-        .client_auth_certificate_resolver(Arc::new(sign::SingleCertAndKey::from(big_cert_and_key)));
+        .client_auth_cert_resolver(Arc::new(sign::SingleCertAndKey::from(big_cert_and_key)));
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert_eq!(

@@ -1,7 +1,9 @@
 use pki_types::ServerName;
 
+use crate::client::ResolvesClientRpk;
 use crate::enums::SignatureScheme;
 use crate::msgs::persist;
+use crate::sign::KeyPair;
 use crate::sync::Arc;
 use crate::{NamedGroup, client, sign};
 
@@ -189,8 +191,6 @@ mod cache {
     }
 }
 
-use crate::client::ResolvesClientRpk;
-use crate::sign::KeyPair;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use cache::ClientSessionMemoryCache;
 
@@ -211,7 +211,7 @@ impl client::ResolvesClientCert for FailResolveClientCert {
     }
 }
 
-/// An exemplar `ResolvesClientCert` implementation that always resolves to a single
+/// An exemplar `ResolvesClientRpk` implementation that always resolves to a single
 /// [RFC 7250] raw public key.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
@@ -247,6 +247,8 @@ mod tests {
 
     use super::NoClientSessionStorage;
     use super::provider::cipher_suite;
+    use crate::client::ResolvesClientIdentity;
+    use crate::client::client_conn::ResolvesClientCertCompat;
     use crate::client::danger::{
         HandshakeSignatureValid, ServerCertVerifier, ServerIdVerified, ServerIdVerifier,
     };
@@ -260,6 +262,7 @@ mod tests {
     use crate::pki_types::CertificateDer;
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
+    use crate::verify::ServerCertVerifierCompat;
     use crate::{DigitallySignedStruct, Error, SignatureScheme, sign};
 
     #[test]
@@ -267,14 +270,10 @@ mod tests {
         let c = NoClientSessionStorage {};
         let name = ServerName::try_from("example.com").unwrap();
         let now = UnixTime::now();
-        let server_cert_verifier: Arc<dyn ServerCertVerifier> = Arc::new(DummyServerCertVerifier);
-        let server_id_verifier: Arc<dyn ServerIdVerifier> = Arc::new(
-            crate::verify::ServerCertVerifierCompat::from(server_cert_verifier),
-        );
-        let drcc: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolvesClientCert);
-        let resolves_client_cert: Arc<dyn crate::client::ResolvesClientIdentity> = Arc::new(
-            crate::client::client_conn::ResolvesClientCertCompat::from(drcc),
-        );
+        let server_id_verifier: Arc<dyn ServerIdVerifier> =
+            Arc::new(ServerCertVerifierCompat::from(DummyServerCertVerifier));
+        let resolves_client_cert: Arc<dyn ResolvesClientIdentity> =
+            Arc::new(ResolvesClientCertCompat::from(DummyResolvesClientCert));
 
         c.set_kx_hint(name.clone(), NamedGroup::X25519);
         assert_eq!(None, c.kx_hint(&name));

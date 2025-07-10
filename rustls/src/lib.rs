@@ -645,7 +645,6 @@ pub mod server {
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
-        pub use crate::msgs::handshake::IdentityEntry;
         pub use crate::verify::{
             ClientCertVerified, ClientCertVerifier, ClientIdVerified, ClientIdVerifier,
             ClientRpkVerifier,

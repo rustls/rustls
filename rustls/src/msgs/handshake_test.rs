@@ -9,8 +9,8 @@ use super::enums::{
     ClientCertificateType, Compression, ECCurveType, ExtensionType, KeyUpdateRequest, NamedGroup,
 };
 use super::handshake::{
-    CertificateChain, IdentityEntry, CertificateExtensions, CertificatePayloadTls13,
-    CertificateRequestExtensions, CertificateRequestPayload, CertificateRequestPayloadTls13,
+    CertificateChain, IdentityEntry, CertificateExtensions, IdentityPayloadTls13,
+    CertificateRequestExtensions, CertificateRequestPayload, IdentityRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
     ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
     EncryptedClientHello, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
@@ -951,8 +951,8 @@ fn all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
     ]
 }
 
-fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
-    CertificatePayloadTls13 {
+fn sample_certificate_payload_tls13() -> IdentityPayloadTls13<'static> {
+    IdentityPayloadTls13 {
         context: PayloadU8::new(vec![1, 2, 3]),
         entries: vec![IdentityEntry {
             payload: Payload::Owned(vec![3, 4, 5].into()),
@@ -1012,8 +1012,8 @@ fn sample_certificate_request_payload() -> CertificateRequestPayload {
     }
 }
 
-fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 {
-    CertificateRequestPayloadTls13 {
+fn sample_certificate_request_payload_tls13() -> IdentityRequestPayloadTls13 {
+    IdentityRequestPayloadTls13 {
         context: PayloadU8::new(vec![1, 2, 3]),
         extensions: CertificateRequestExtensions {
             signature_algorithms: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),

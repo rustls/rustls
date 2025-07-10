@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
+
 use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
 use zeroize::Zeroize;
 

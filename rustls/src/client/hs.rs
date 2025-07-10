@@ -650,7 +650,7 @@ pub(super) fn process_server_cert_type_extension(
     config: &ClientConfig,
     server_cert_extension: Option<&CertificateType>,
 ) -> Result<(), Error> {
-    // X.509 is implied of no extension present
+    // X.509 is implied if no extension present
     let accepted = server_cert_extension
         .map(|c| c)
         .unwrap_or(&CertificateType::X509);

@@ -42,7 +42,7 @@ use std::sync::Mutex;
 use crate::enums::CertificateCompressionAlgorithm;
 use crate::msgs::base::{Payload, PayloadU24};
 use crate::msgs::codec::Codec;
-use crate::msgs::handshake::{CertificatePayloadTls13, CompressedCertificatePayload};
+use crate::msgs::handshake::{IdentityPayloadTls13, CompressedCertificatePayload};
 use crate::sync::Arc;
 
 /// Returns the supported `CertDecompressor` implementations enabled
@@ -320,7 +320,7 @@ impl CompressionCache {
     pub(crate) fn compression_for(
         &self,
         compressor: &dyn CertCompressor,
-        original: &CertificatePayloadTls13<'_>,
+        original: &IdentityPayloadTls13<'_>,
     ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
         match self {
             Self::Disabled => Self::uncached_compression(compressor, original),
@@ -334,7 +334,7 @@ impl CompressionCache {
     fn compression_for_impl(
         &self,
         compressor: &dyn CertCompressor,
-        original: &CertificatePayloadTls13<'_>,
+        original: &IdentityPayloadTls13<'_>,
     ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
         let (max_size, entries) = match self {
             Self::Enabled(CompressionCacheInner { size, entries }) => (*size, entries),
@@ -391,7 +391,7 @@ impl CompressionCache {
     /// Compress `original` using `compressor` at `Interactive` level.
     fn uncached_compression(
         compressor: &dyn CertCompressor,
-        original: &CertificatePayloadTls13<'_>,
+        original: &IdentityPayloadTls13<'_>,
     ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
         let algorithm = compressor.algorithm();
         let encoding = original.get_encoding();
@@ -446,9 +446,11 @@ impl CompressionCacheEntry {
 
 #[cfg(all(test, any(feature = "brotli", feature = "zlib")))]
 mod tests {
-    use super::*;
-    use crate::identity::{IntoOwned, TlsIdentity};
     use std::{println, vec};
+
+    use super::*;
+
+    use crate::identity::{IntoOwned, TlsIdentity};
 
     #[test]
     #[cfg(feature = "zlib")]
@@ -537,22 +539,22 @@ mod tests {
 
         let cert = CertificateDer::from(vec![1]);
 
-        let cert1 = CertificatePayloadTls13::from(
+        let cert1 = IdentityPayloadTls13::from(
             X509Identity::new([cert.clone()].into_iter(), b"1".as_slice())
                 .to_wire_format()
                 .into_owned(),
         );
-        let cert2 = CertificatePayloadTls13::from(
+        let cert2 = IdentityPayloadTls13::from(
             X509Identity::new([cert.clone()].into_iter(), b"2".as_slice())
                 .to_wire_format()
                 .into_owned(),
         );
-        let cert3 = CertificatePayloadTls13::from(
+        let cert3 = IdentityPayloadTls13::from(
             X509Identity::new([cert.clone()].into_iter(), b"3".as_slice())
                 .to_wire_format()
                 .into_owned(),
         );
-        let cert4 = CertificatePayloadTls13::from(
+        let cert4 = IdentityPayloadTls13::from(
             X509Identity::new([cert.clone()].into_iter(), b"4".as_slice())
                 .to_wire_format()
                 .into_owned(),

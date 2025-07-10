@@ -1,16 +1,19 @@
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::any::Any;
+use core::fmt::Debug;
+use core::iter;
+
+use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
+
 use crate::enums::CertificateType;
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::handshake;
 use crate::msgs::handshake::{
-    CertificateChain, CertificatePayloadTls13, CertificateStatus, IdentityEntry,
+    CertificateChain, IdentityPayloadTls13, CertificateStatus, IdentityEntry,
 };
-use crate::sign::{CertifiedKey, SigningKey};
+use crate::sign::{CertifiedKey, KeyPair, SigningKey};
 use crate::sync::Arc;
-use core::fmt::Debug;
-use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
-use std::any::Any;
-use std::prelude::rust_2015::{Box, Vec};
-use std::{iter, vec};
 
 #[derive(Debug, Clone)]
 pub struct Identity(Arc<dyn TlsIdentity>);
@@ -48,7 +51,7 @@ impl Identity {
 
 pub type TlsIdentityEntries<'a> = Vec<IdentityEntry<'a>>;
 
-impl<'a> From<TlsIdentityEntries<'a>> for CertificatePayloadTls13<'a> {
+impl<'a> From<TlsIdentityEntries<'a>> for IdentityPayloadTls13<'a> {
     fn from(value: TlsIdentityEntries<'a>) -> Self {
         Self {
             context: PayloadU8::empty(),
@@ -57,8 +60,8 @@ impl<'a> From<TlsIdentityEntries<'a>> for CertificatePayloadTls13<'a> {
     }
 }
 
-impl<'a> From<CertificatePayloadTls13<'a>> for TlsIdentityEntries<'a> {
-    fn from(value: CertificatePayloadTls13<'a>) -> Self {
+impl<'a> From<IdentityPayloadTls13<'a>> for TlsIdentityEntries<'a> {
+    fn from(value: IdentityPayloadTls13<'a>) -> Self {
         value.entries
     }
 }
@@ -165,7 +168,7 @@ impl TlsIdentity for SubjectPublicKeyInfoDer<'static> {
     }
 
     fn to_wire_format(&self) -> TlsIdentityEntries<'_> {
-        vec![IdentityEntry::new(self.as_ref())]
+        [IdentityEntry::new(self.as_ref())].into()
     }
 }
 
@@ -181,9 +184,13 @@ impl SigningIdentity {
         self.0.signing_key()
     }
 
-    pub(crate) fn as_certified_key(&self) -> Option<&CertifiedKey> {
+    pub fn as_certified_key(&self) -> Option<&CertifiedKey> {
         self.as_any()
             .downcast_ref::<CertifiedKey>()
+    }
+
+    pub fn as_key_pair(&self) -> Option<&KeyPair> {
+        self.as_any().downcast_ref::<KeyPair>()
     }
 
     pub fn as_any(&self) -> &dyn Any {

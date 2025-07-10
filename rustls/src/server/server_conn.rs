@@ -155,6 +155,18 @@ impl From<Arc<dyn ResolvesServerCert>> for ResolvesServerCertCompat {
     }
 }
 
+impl<T: ResolvesServerCert + 'static> From<Arc<T>> for ResolvesServerCertCompat {
+    fn from(value: Arc<T>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ResolvesServerCert + 'static> From<T> for ResolvesServerCertCompat {
+    fn from(value: T) -> Self {
+        Self(Arc::new(value))
+    }
+}
+
 impl ResolvesServerIdentity for ResolvesServerCertCompat {
     fn resolve(
         &self,
@@ -184,6 +196,18 @@ pub(crate) struct ResolvesServerRpkWrapper(Arc<dyn ResolvesServerRpk>);
 impl From<Arc<dyn ResolvesServerRpk>> for ResolvesServerRpkWrapper {
     fn from(value: Arc<dyn ResolvesServerRpk>) -> Self {
         Self(value)
+    }
+}
+
+impl<T: ResolvesServerRpk + 'static> From<Arc<T>> for ResolvesServerRpkWrapper {
+    fn from(value: Arc<T>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ResolvesServerRpk + 'static> From<T> for ResolvesServerRpkWrapper {
+    fn from(value: T) -> Self {
+        Self(Arc::new(value))
     }
 }
 
@@ -486,11 +510,11 @@ pub struct ServerConfig {
     /// Provides the current system time
     pub time_provider: Arc<dyn TimeProvider>,
 
-    /// How to compress the server's certificate chain.
+    /// How to compress the server's identity.
     ///
     /// If a client supports this extension, and advertises support
     /// for one of the compression algorithms included here, the
-    /// server certificate will be compressed according to [RFC8779].
+    /// server identity will be compressed according to [RFC8779].
     ///
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
@@ -498,17 +522,17 @@ pub struct ServerConfig {
     /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_compressors: Vec<&'static dyn compress::CertCompressor>,
 
-    /// Caching for compressed certificates.
+    /// Caching for compressed identities.
     ///
     /// This is optional: [`compress::CompressionCache::Disabled`] gives
     /// a cache that does no caching.
     pub cert_compression_cache: Arc<compress::CompressionCache>,
 
-    /// How to decompress the clients's certificate chain.
+    /// How to decompress the clients's identity.
     ///
     /// If this is non-empty, the [RFC8779] certificate compression
     /// extension is offered when requesting client authentication,
-    /// and any compressed certificates are transparently decompressed
+    /// and any compressed identities are transparently decompressed
     /// during the handshake.
     ///
     /// This only applies to TLS1.3 connections.  It is ignored for
@@ -650,11 +674,11 @@ impl ServerConfig {
             .ok_or(Error::FailedToGetCurrentTime)
     }
 
-    pub fn set_certificate_resolver(&mut self, resolver: Arc<dyn ResolvesServerCert>) {
+    pub fn cert_resolver(&mut self, resolver: Arc<dyn ResolvesServerCert>) {
         self.id_resolver = Arc::new(ResolvesServerCertCompat::from(resolver));
     }
 
-    pub fn set_rpk_resolver(&mut self, resolver: Arc<dyn ResolvesServerRpk>) {
+    pub fn rpk_resolver(&mut self, resolver: Arc<dyn ResolvesServerRpk>) {
         self.id_resolver = Arc::new(ResolvesServerRpkWrapper::from(resolver));
     }
 }

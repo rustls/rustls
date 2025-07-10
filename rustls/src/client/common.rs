@@ -1,13 +1,12 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::client::ResolvesClientIdentity;
+use super::ResolvesClientIdentity;
 use crate::enums::CertificateType;
 use crate::identity::SigningIdentity;
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtensions};
-use crate::sync::Arc;
 use crate::{SignatureScheme, compress, sign};
 
 #[derive(Debug)]
@@ -91,7 +90,7 @@ pub(super) enum ClientAuthDetails {
 
 impl ClientAuthDetails {
     pub(super) fn resolve(
-        resolver: &Arc<dyn ResolvesClientIdentity>,
+        resolver: &dyn ResolvesClientIdentity,
         certificate_type: CertificateType,
         canames: Option<&[DistinguishedName]>,
         sigschemes: &[SignatureScheme],

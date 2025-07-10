@@ -1,3 +1,8 @@
+use alloc::vec::Vec;
+use core::fmt::Debug;
+
+use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+
 use crate::PeerIncompatible;
 use crate::enums::{CertificateType, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
@@ -5,12 +10,7 @@ use crate::identity::{Identity, TlsIdentityEntries, X509Identity};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{CertificateExtensions, DistinguishedName, IdentityEntry};
-use alloc::vec::Vec;
-use core::fmt::Debug;
-use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
-use std::prelude::rust_2015::ToString;
-use std::sync::Arc;
-use std::vec;
+use crate::sync::Arc;
 
 // Marker types.  These are used to bind the fact some verification
 // (certificate chain or handshake signature) has taken place into
@@ -47,7 +47,7 @@ impl FinishedMessageVerified {
 #[derive(Debug)]
 pub struct ServerIdVerified(());
 
-/// For backward compatibility
+/// Please use [`ServerIdVerified`] instead.
 #[allow(dead_code)]
 pub type ServerCertVerified = ServerIdVerified;
 
@@ -63,7 +63,7 @@ impl ServerIdVerified {
 #[derive(Debug)]
 pub struct ClientIdVerified(());
 
-/// For backward compatibility
+/// Please use [`ClientIdVerified`] instead.
 #[allow(dead_code)]
 pub type ClientCertVerified = ClientIdVerified;
 
@@ -223,6 +223,18 @@ impl From<Arc<dyn ServerCertVerifier>> for ServerCertVerifierCompat {
     }
 }
 
+impl<T: ServerCertVerifier + 'static> From<Arc<T>> for ServerCertVerifierCompat {
+    fn from(value: Arc<T>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ServerCertVerifier + 'static> From<T> for ServerCertVerifierCompat {
+    fn from(value: T) -> Self {
+        Self(Arc::new(value))
+    }
+}
+
 fn parse_tls13_cert<'a>(
     id_type: CertificateType,
     payloads: impl Iterator<Item = IdentityEntry<'a>>,
@@ -231,7 +243,7 @@ fn parse_tls13_cert<'a>(
         return Err(Error::UnsupportedIdentityType);
     }
     let mut ocsp_response = None;
-    let mut certs = vec![];
+    let mut certs = Vec::default();
 
     for (num, entry) in payloads.into_iter().enumerate() {
         let cert = CertificateDer::from(entry.payload.into_vec());
@@ -345,6 +357,18 @@ impl From<Arc<dyn ServerRpkVerifier>> for ServerRpkVerifierWrapper {
     }
 }
 
+impl<T: ServerRpkVerifier + 'static> From<Arc<T>> for ServerRpkVerifierWrapper {
+    fn from(value: Arc<T>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ServerRpkVerifier + 'static> From<T> for ServerRpkVerifierWrapper {
+    fn from(value: T) -> Self {
+        Self(Arc::new(value))
+    }
+}
+
 fn parse_tls13_rpk<'a>(
     id_type: CertificateType,
     payloads: impl Iterator<Item = IdentityEntry<'a>>,
@@ -357,7 +381,7 @@ fn parse_tls13_rpk<'a>(
     if entries.len() != 1 {
         // todo: needs proper error
         return Err(Error::General(
-            "RPK certificate payloads need to have exactly 1 entry".to_string(),
+            "RPK certificate payloads need to have exactly 1 entry".into(),
         ));
     }
     Ok(SubjectPublicKeyInfoDer::from(
@@ -470,6 +494,18 @@ impl From<Arc<dyn ClientCertVerifier>> for ClientCertVerifierCompat {
     }
 }
 
+impl<T: ClientCertVerifier + 'static> From<Arc<T>> for ClientCertVerifierCompat {
+    fn from(value: Arc<T>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ClientCertVerifier + 'static> From<T> for ClientCertVerifierCompat {
+    fn from(value: T) -> Self {
+        Self(Arc::new(value))
+    }
+}
+
 impl ClientIdVerifier for ClientCertVerifierCompat {
     fn offer_client_auth(&self) -> bool {
         self.0.offer_client_auth()
@@ -567,6 +603,18 @@ pub(crate) struct ClientRpkVerifierWrapper(Arc<dyn ClientRpkVerifier>);
 impl From<Arc<dyn ClientRpkVerifier>> for ClientRpkVerifierWrapper {
     fn from(value: Arc<dyn ClientRpkVerifier>) -> Self {
         Self(value)
+    }
+}
+
+impl<T: ClientRpkVerifier + 'static> From<Arc<T>> for ClientRpkVerifierWrapper {
+    fn from(value: Arc<T>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ClientRpkVerifier + 'static> From<T> for ClientRpkVerifierWrapper {
+    fn from(value: T) -> Self {
+        Self(Arc::new(value))
     }
 }
 
