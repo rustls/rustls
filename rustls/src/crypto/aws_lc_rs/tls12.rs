@@ -1,12 +1,13 @@
 use alloc::boxed::Box;
 
 use aws_lc_rs::{aead, tls_prf};
+use zeroize::Zeroizing;
 
 use crate::crypto::cipher::{
     AeadKey, InboundOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
     NONCE_LEN, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
 };
-use crate::crypto::tls12::Prf;
+use crate::crypto::tls12::{Prf, PrfSecret};
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::error::Error;
@@ -428,19 +429,6 @@ fn gcm_iv(write_iv: &[u8], explicit: &[u8]) -> Iv {
 struct Tls12Prf(&'static tls_prf::Algorithm);
 
 impl Prf for Tls12Prf {
-    fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]) {
-        // safety:
-        // - [1] is safe because our caller guarantees `secret` is non-empty; this is
-        //   the only documented error case.
-        // - [2] is safe in practice because the only failure from `derive()` is due
-        //   to zero `output.len()`; this is outlawed at higher levels
-        let derived = tls_prf::Secret::new(self.0, secret)
-            .unwrap() // [1]
-            .derive(label, seed, output.len())
-            .unwrap(); // [2]
-        output.copy_from_slice(derived.as_ref());
-    }
-
     fn for_key_exchange(
         &self,
         output: &mut [u8; 48],
@@ -449,17 +437,47 @@ impl Prf for Tls12Prf {
         label: &[u8],
         seed: &[u8],
     ) -> Result<(), Error> {
-        self.for_secret(
-            output,
+        Tls12PrfSecretBorrow(
+            self.0,
             kx.complete_for_tls_version(peer_pub_key, &TLS12)?
                 .secret_bytes(),
-            label,
-            seed,
-        );
+        )
+        .prf(output, label, seed);
         Ok(())
+    }
+
+    fn new_secret(&self, secret: &[u8; 48]) -> Box<dyn PrfSecret> {
+        Box::new(Tls12PrfSecret(self.0, Zeroizing::new(*secret)))
     }
 
     fn fips(&self) -> bool {
         super::fips()
+    }
+}
+
+// nb: we can't put a `tls_prf::Secret` in here because it is
+// consumed by `tls_prf::Secret::derive()`
+struct Tls12PrfSecret(&'static tls_prf::Algorithm, Zeroizing<[u8; 48]>);
+
+impl PrfSecret for Tls12PrfSecret {
+    fn prf(&self, output: &mut [u8], label: &[u8], seed: &[u8]) {
+        Tls12PrfSecretBorrow(self.0, self.1.as_ref()).prf(output, label, seed)
+    }
+}
+
+struct Tls12PrfSecretBorrow<'a>(&'static tls_prf::Algorithm, &'a [u8]);
+
+impl PrfSecret for Tls12PrfSecretBorrow<'_> {
+    fn prf(&self, output: &mut [u8], label: &[u8], seed: &[u8]) {
+        // safety:
+        // - [1] is safe because our caller guarantees `secret` is non-empty; this is
+        //   the only documented error case.
+        // - [2] is safe in practice because the only failure from `derive()` is due
+        //   to zero `output.len()`; this is outlawed at higher levels
+        let derived = tls_prf::Secret::new(self.0, self.1)
+            .unwrap() // [1]
+            .derive(label, seed, output.len())
+            .unwrap(); // [2]
+        output.copy_from_slice(derived.as_ref());
     }
 }

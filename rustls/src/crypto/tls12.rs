@@ -30,8 +30,16 @@ impl Prf for PrfUsingHmac<'_> {
         Ok(())
     }
 
-    fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]) {
-        prf(output, self.0.with_key(secret).as_ref(), label, seed);
+    fn new_secret(&self, secret: &[u8; 48]) -> Box<dyn PrfSecret> {
+        Box::new(PrfSecretUsingHmac(self.0.with_key(secret)))
+    }
+}
+
+struct PrfSecretUsingHmac(Box<dyn hmac::Key>);
+
+impl PrfSecret for PrfSecretUsingHmac {
+    fn prf(&self, output: &mut [u8], label: &[u8], seed: &[u8]) {
+        prf(output, &*self.0, label, seed)
     }
 }
 
@@ -59,15 +67,27 @@ pub trait Prf: Send + Sync {
         seed: &[u8],
     ) -> Result<(), Error>;
 
-    /// Computes `PRF(secret, label, seed)`, writing the result into `output`.
+    /// Returns an object that can compute `PRF(secret, label, seed)` with
+    /// the same `master_secret`.
     ///
-    /// The caller guarantees that `secret`, `label`, and `seed` are non-empty.
-    fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]);
+    /// This object can amortize any preprocessing needed on `master_secret` over
+    /// several `PRF(...)` calls.
+    fn new_secret(&self, master_secret: &[u8; 48]) -> Box<dyn PrfSecret>;
 
     /// Return `true` if this is backed by a FIPS-approved implementation.
     fn fips(&self) -> bool {
         false
     }
+}
+
+/// An instantiation of the TLS1.2 PRF with a fixed hash function and master secret.
+pub trait PrfSecret: Send + Sync {
+    /// Computes `PRF(secret, label, seed)`, writing the result into `output`.
+    ///
+    /// `secret` is implicit in this object; see [`Prf::new_secret`].
+    ///
+    /// The caller guarantees that `label` and `seed` are non-empty.
+    fn prf(&self, output: &mut [u8], label: &[u8], seed: &[u8]);
 }
 
 pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: &[u8]) {
