@@ -3022,6 +3022,7 @@ dependencies = [
  "criterion",
  "env_logger",
  "rustls 0.23.29",
+ "rustls-webpki",
  "webpki-roots 1.0.0",
 ]
 
