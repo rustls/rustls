@@ -115,7 +115,7 @@ pub trait ProducesTickets: Debug + Send + Sync {
 pub trait ResolvesServerIdentity: Debug + Send + Sync {
     fn resolve(
         &self,
-        client_hello: ClientHello<'_>,
+        client_hello: &ClientHello<'_>,
         negotiated_certificate_type: CertificateType,
     ) -> Option<SigningIdentity>;
 
@@ -170,7 +170,7 @@ impl<T: ResolvesServerCert + 'static> From<T> for ResolvesServerCertCompat {
 impl ResolvesServerIdentity for ResolvesServerCertCompat {
     fn resolve(
         &self,
-        client_hello: ClientHello<'_>,
+        client_hello: &ClientHello<'_>,
         negotiated_certificate_type: CertificateType,
     ) -> Option<SigningIdentity> {
         if negotiated_certificate_type != CertificateType::X509 {
@@ -187,7 +187,7 @@ impl ResolvesServerIdentity for ResolvesServerCertCompat {
 }
 
 pub trait ResolvesServerRpk: Debug + Send + Sync {
-    fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::KeyPair>>;
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<sign::KeyPair>>;
 }
 
 #[derive(Debug)]
@@ -214,7 +214,7 @@ impl<T: ResolvesServerRpk + 'static> From<T> for ResolvesServerRpkWrapper {
 impl ResolvesServerIdentity for ResolvesServerRpkWrapper {
     fn resolve(
         &self,
-        client_hello: ClientHello<'_>,
+        client_hello: &ClientHello<'_>,
         negotiated_certificate_type: CertificateType,
     ) -> Option<SigningIdentity> {
         if negotiated_certificate_type != CertificateType::RawPublicKey {

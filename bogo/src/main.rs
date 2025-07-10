@@ -41,13 +41,10 @@ use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, UnixTime};
-use rustls::server::danger::{ClientIdVerified, ClientCertVerifier};
 use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
     UnixTime,
 };
-use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::danger::{ClientCertVerifier, ClientIdVerified};
 use rustls::server::{
     CertificateType, ClientHello, ProducesTickets, ServerConfig, ServerConnection,
@@ -1203,9 +1200,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":CANNOT_PARSE_LEAF_CERT:")
         }
         Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
-        Error::InvalidCertificate(CertificateError::UnsupportedSignatureAlgorithm) => {
-            quit(":WRONG_SIGNATURE_TYPE:")
-        }
+        Error::InvalidCertificate(CertificateError::UnsupportedSignatureAlgorithmContext {
+            ..
+        }) => quit(":WRONG_SIGNATURE_TYPE:"),
         Error::InvalidCertificate(CertificateError::InvalidOcspResponse) => {
             // note: only use is in this file.
             quit(":OCSP_CB_ERROR:")

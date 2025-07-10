@@ -730,14 +730,10 @@ mod client_hello {
                             .collect(),
                     ),
                 },
-                authority_names: match config
+                authority_names: config
                     .verifier
                     .root_hint_subjects()
-                    .as_ref()
-                {
-                    [] => None,
-                    authorities => Some(authorities.to_vec()),
-                },
+                    .map(|dn| dn.to_vec()),
             },
         };
 

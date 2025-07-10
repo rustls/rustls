@@ -201,8 +201,12 @@ pub trait ServerIdVerifier: Debug + Send + Sync {
     fn supported_certificate_types(&self) -> &[CertificateType];
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
 
-    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+    fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         None
+    }
+
+    fn request_ocsp_response(&self) -> bool {
+        false
     }
 }
 
@@ -316,8 +320,12 @@ impl ServerIdVerifier for ServerCertVerifierCompat {
         self.0.supported_verify_schemes()
     }
 
-    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+    fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         self.0.root_hint_subjects()
+    }
+
+    fn request_ocsp_response(&self) -> bool {
+        self.0.request_ocsp_response()
     }
 }
 
@@ -338,7 +346,7 @@ pub trait ServerRpkVerifier: Debug + Send + Sync {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
 
-    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+    fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         None
     }
 }
@@ -432,7 +440,7 @@ impl ServerIdVerifier for ServerRpkVerifierWrapper {
         self.0.supported_verify_schemes()
     }
 
-    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+    fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         self.0.root_hint_subjects()
     }
 }
@@ -452,7 +460,7 @@ pub trait ClientIdVerifier: Debug + Send + Sync {
     }
 
     fn supported_certificate_types(&self) -> &[CertificateType];
-    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]>;
+    fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>>;
 
     fn parse_tls13_payload(
         &self,
@@ -519,7 +527,7 @@ impl ClientIdVerifier for ClientCertVerifierCompat {
         &[CertificateType::X509]
     }
 
-    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+    fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         let hints = self.0.root_hint_subjects();
         if hints.is_empty() { None } else { Some(hints) }
     }
@@ -577,8 +585,8 @@ pub trait ClientRpkVerifier: Debug + Send + Sync {
         self.offer_client_auth()
     }
 
-    fn root_hint_subjects(&self) -> &[DistinguishedName] {
-        &[]
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
+        Arc::default()
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
@@ -631,7 +639,7 @@ impl ClientIdVerifier for ClientRpkVerifierWrapper {
         &[CertificateType::RawPublicKey]
     }
 
-    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+    fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         let hints = self.0.root_hint_subjects();
         if hints.is_empty() { None } else { Some(hints) }
     }

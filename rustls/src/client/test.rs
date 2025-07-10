@@ -569,10 +569,6 @@ mod tests {
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             vec![SignatureScheme::RSA_PKCS1_SHA1]
         }
-
-        fn request_ocsp_response(&self) -> bool {
-            false
-        }
     }
 
     #[derive(Debug)]

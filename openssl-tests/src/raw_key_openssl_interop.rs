@@ -124,10 +124,6 @@ mod client {
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             self.supported_algs.supported_schemes()
         }
-
-        fn request_ocsp_response(&self) -> bool {
-            false
-        }
     }
 }
 

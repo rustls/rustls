@@ -46,8 +46,8 @@ use provider::sign::RsaSigningKey;
 
 mod test_custom_identity {
     const CERTIFICATE_TYPE: CertificateType = CertificateType::Custom(226);
-    static AUTH_NAME: LazyLock<DistinguishedName> =
-        LazyLock::new(|| DistinguishedName::from(Vec::from("MY_AUTH_NAME")));
+    static AUTH_NAME: LazyLock<Arc<[DistinguishedName]>> =
+        LazyLock::new(|| Arc::new([DistinguishedName::from(Vec::from("MY_AUTH_NAME"))]));
 
     use super::*;
     use pki_types::SubjectPublicKeyInfoDer;
@@ -64,7 +64,6 @@ mod test_custom_identity {
     use rustls::sign::{KeyPair, SigningKey};
     use std::any::Any;
     use std::hash::{DefaultHasher, Hash, Hasher};
-    use std::slice;
     use std::sync::LazyLock;
 
     #[derive(Debug)]
@@ -163,7 +162,7 @@ mod test_custom_identity {
             negotiated_certificate_type: CertificateType,
         ) -> Option<SigningIdentity> {
             assert_eq!(negotiated_certificate_type, CERTIFICATE_TYPE);
-            if !hints.contains(AUTH_NAME.deref()) {
+            if !hints.contains(AUTH_NAME.get(0).unwrap()) {
                 return None;
             }
 
@@ -192,14 +191,14 @@ mod test_custom_identity {
     impl ResolvesServerIdentity for CustomIdResolver {
         fn resolve(
             &self,
-            client_hello: ClientHello<'_>,
+            client_hello: &ClientHello<'_>,
             negotiated_certificate_type: CertificateType,
         ) -> Option<SigningIdentity> {
             assert_eq!(negotiated_certificate_type, CERTIFICATE_TYPE);
             if !client_hello
                 .certificate_authorities()
                 .unwrap_or_default()
-                .contains(AUTH_NAME.deref())
+                .contains(AUTH_NAME.get(0).unwrap())
             {
                 return None;
             }
@@ -272,8 +271,8 @@ mod test_custom_identity {
             &[CERTIFICATE_TYPE]
         }
 
-        fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
-            Some(slice::from_ref(AUTH_NAME.deref()))
+        fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
+            Some(AUTH_NAME.clone())
         }
 
         fn parse_tls13_payload(
@@ -343,8 +342,8 @@ mod test_custom_identity {
             self.0.supported_schemes()
         }
 
-        fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
-            Some(slice::from_ref(AUTH_NAME.deref()))
+        fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
+            Some(AUTH_NAME.clone())
         }
     }
 

@@ -272,7 +272,6 @@ impl IdentitySigner for KeyPair {
     }
 }
 
-#[cfg_attr(not(any(feature = "aws_lc_rs", feature = "ring")), allow(dead_code))]
 #[cfg_attr(not(any(feature = "aws-lc-rs", feature = "ring")), allow(dead_code))]
 pub(crate) fn public_key_to_spki(
     alg_id: &AlgorithmIdentifier,

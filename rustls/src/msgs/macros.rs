@@ -21,7 +21,7 @@ macro_rules! enum_builder {
           $(
               !Ranges:
               $(
-                  $(#[doc = $enum_comment_nd:literal])*
+                  $(#[doc = $enum_comment_range:literal])*
                   $enum_var_range:ident => $start_val:literal ..= $end_val:literal
               ),*
               $(,)?
@@ -46,7 +46,7 @@ macro_rules! enum_builder {
             $(
                 ,
                 $(
-                    $(#[doc = $enum_comment_nd])*
+                    $(#[doc = $enum_comment_range])*
                     $enum_var_range($uint)
                 ),*
             )?
