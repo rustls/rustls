@@ -3017,7 +3017,7 @@ dependencies = [
 
 [[package]]
 name = "rustls-post-quantum"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "criterion",
  "env_logger",
