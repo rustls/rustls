@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
@@ -192,6 +193,27 @@ impl CertifiedKey {
         match key_spki == cert.subject_public_key_info() {
             true => Ok(()),
             false => Err(Error::InconsistentKeys),
+        }
+    }
+
+    /// Make a new `CertifiedKey` from a DER-encoded raw private key.
+    pub fn for_raw_der_key(
+        key: PrivateKeyDer<'static>,
+        provider: &CryptoProvider,
+    ) -> Result<Self, Error> {
+        Ok(Self::for_raw_key(
+            provider
+                .key_provider
+                .load_private_key(key)?,
+        ))
+    }
+
+    /// Make a new `CertifiedKey` from a raw private key.
+    pub fn for_raw_key(key: Arc<dyn SigningKey>) -> Self {
+        Self {
+            cert_chain: vec![CertificateDer::from(key.public_key().as_ref().to_vec())],
+            key,
+            ocsp: None,
         }
     }
 

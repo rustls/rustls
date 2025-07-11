@@ -254,12 +254,8 @@ mod tests {
     }
 
     fn server_certified_key() -> CertifiedKey {
-        let key = super::provider::default_provider()
-            .key_provider
-            .load_private_key(server_key())
-            .unwrap();
-        let public_key_as_cert = vec![CertificateDer::from(key.public_key().as_ref().to_vec())];
-        CertifiedKey::new(public_key_as_cert, key)
+        let provider = super::provider::default_provider();
+        CertifiedKey::for_raw_der_key(server_key(), &provider).expect("valid server key")
     }
 
     fn server_key() -> PrivateKeyDer<'static> {
