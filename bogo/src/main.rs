@@ -549,7 +549,7 @@ impl sign::SigningKey for FixedSignatureSchemeSigningKey {
         }
     }
 
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+    fn public_key(&self) -> SubjectPublicKeyInfoDer<'_> {
         self.key.public_key()
     }
 

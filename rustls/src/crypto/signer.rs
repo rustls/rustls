@@ -7,7 +7,7 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPubli
 use super::CryptoProvider;
 use crate::client::ResolvesClientCert;
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
-use crate::error::{Error, InconsistentKeys};
+use crate::error::Error;
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
 use crate::x509;
@@ -64,10 +64,7 @@ pub trait SigningKey: Debug + Send + Sync {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
 
     /// Get the RFC 5280-compliant SubjectPublicKeyInfo (SPKI) of this [`SigningKey`].
-    ///
-    /// If an implementation does not have the ability to derive this,
-    /// it can return `None`.
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>>;
+    fn public_key(&self) -> SubjectPublicKeyInfoDer<'_>;
 
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
@@ -166,11 +163,9 @@ impl CertifiedKey {
             .load_private_key(key)?;
 
         let certified_key = Self::new(cert_chain, private_key);
-        match certified_key.keys_match() {
-            // Don't treat unknown consistency as an error
-            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => Ok(certified_key),
-            Err(err) => Err(err),
-        }
+        certified_key
+            .keys_match()
+            .map(|_| certified_key)
     }
 
     /// Make a new CertifiedKey, with the given chain and key.
@@ -188,14 +183,11 @@ impl CertifiedKey {
     /// Verify the consistency of this [`CertifiedKey`]'s public and private keys.
     /// This is done by performing a comparison of SubjectPublicKeyInfo bytes.
     pub fn keys_match(&self) -> Result<(), Error> {
-        let Some(key_spki) = self.key.public_key() else {
-            return Err(InconsistentKeys::Unknown.into());
-        };
-
+        let key_spki = self.key.public_key();
         let cert = ParsedCertificate::try_from(self.end_entity_cert()?)?;
         match key_spki == cert.subject_public_key_info() {
             true => Ok(()),
-            false => Err(InconsistentKeys::KeyMismatch.into()),
+            false => Err(Error::InconsistentKeys),
         }
     }
 

@@ -103,7 +103,7 @@ pub enum Error {
     /// Specific failure cases from [`keys_match`] or a [`crate::crypto::signer::SigningKey`] that cannot produce a corresponding public key.
     ///
     /// [`keys_match`]: crate::crypto::signer::CertifiedKey::keys_match
-    InconsistentKeys(InconsistentKeys),
+    InconsistentKeys,
 
     /// Any other error.
     ///
@@ -113,30 +113,6 @@ pub enum Error {
     ///
     /// Enums holding this variant will never compare equal to each other.
     Other(OtherError),
-}
-
-/// Specific failure cases from [`keys_match`] or a [`crate::crypto::signer::SigningKey`] that cannot produce a corresponding public key.
-///
-/// [`keys_match`]: crate::crypto::signer::CertifiedKey::keys_match
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum InconsistentKeys {
-    /// The public key returned by the [`SigningKey`] does not match the public key information in the certificate.
-    ///
-    /// [`SigningKey`]: crate::crypto::signer::SigningKey
-    KeyMismatch,
-
-    /// The [`SigningKey`] cannot produce its corresponding public key.
-    ///
-    /// [`SigningKey`]: crate::crypto::signer::SigningKey
-    Unknown,
-}
-
-impl From<InconsistentKeys> for Error {
-    #[inline]
-    fn from(e: InconsistentKeys) -> Self {
-        Self::InconsistentKeys(e)
-    }
 }
 
 /// A corrupt TLS message payload that resulted in an error.
@@ -1001,8 +977,8 @@ impl fmt::Display for Error {
             Self::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
-            Self::InconsistentKeys(why) => {
-                write!(f, "keys may not be consistent: {why:?}")
+            Self::InconsistentKeys => {
+                write!(f, "public key does not match private key")
             }
             Self::General(err) => write!(f, "unexpected error: {err}"),
             Self::Other(err) => write!(f, "other error: {err}"),
@@ -1088,9 +1064,7 @@ mod tests {
 
     use pki_types::ServerName;
 
-    use super::{
-        CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError, UnixTime,
-    };
+    use super::{CertRevocationListError, Error, InvalidMessage, OtherError, UnixTime};
     #[cfg(feature = "std")]
     use crate::sync::Arc;
 
@@ -1351,8 +1325,7 @@ mod tests {
             Error::PeerSentOversizedRecord,
             Error::NoApplicationProtocol,
             Error::BadMaxFragmentSize,
-            Error::InconsistentKeys(InconsistentKeys::KeyMismatch),
-            Error::InconsistentKeys(InconsistentKeys::Unknown),
+            Error::InconsistentKeys,
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
             Error::Other(OtherError(
                 #[cfg(feature = "std")]

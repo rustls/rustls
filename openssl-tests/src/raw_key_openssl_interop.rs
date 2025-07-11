@@ -22,7 +22,7 @@ mod client {
     use rustls::version::TLS13;
     use rustls::{
         CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct, Error,
-        InconsistentKeys, PeerIncompatible, SignatureScheme, Stream,
+        PeerIncompatible, SignatureScheme, Stream,
     };
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
@@ -34,10 +34,7 @@ mod client {
                     .expect("cannot open private key file"),
             )
             .expect("cannot load signing key");
-        let client_public_key = client_private_key
-            .public_key()
-            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))
-            .expect("cannot load public key");
+        let client_public_key = client_private_key.public_key();
         let client_public_key_as_cert = CertificateDer::from(client_public_key.to_vec());
 
         let server_raw_key = SubjectPublicKeyInfoDer::from_pem_file(server_pub_key)
@@ -169,8 +166,8 @@ mod server {
     use rustls::sign::CertifiedKey;
     use rustls::version::TLS13;
     use rustls::{
-        CertificateError, DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys,
-        PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
+        CertificateError, DigitallySignedStruct, DistinguishedName, Error, PeerIncompatible,
+        ServerConfig, ServerConnection, SignatureScheme,
     };
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
@@ -185,10 +182,7 @@ mod server {
                     .expect("cannot open private key file"),
             )
             .expect("cannot load signing key");
-        let server_public_key = server_private_key
-            .public_key()
-            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))
-            .expect("cannot load public key");
+        let server_public_key = server_private_key.public_key();
         let server_public_key_as_cert = CertificateDer::from(server_public_key.to_vec());
 
         let certified_key = Arc::new(CertifiedKey::new(
