@@ -955,8 +955,6 @@ enum Provider {
     AwsLcRsFips,
     #[cfg(feature = "graviola")]
     Graviola,
-    #[cfg(feature = "post-quantum")]
-    PostQuantum,
     #[cfg(feature = "ring")]
     Ring,
     #[value(skip)]
@@ -972,8 +970,6 @@ impl Provider {
             Self::AwsLcRsFips => rustls::crypto::default_fips_provider(),
             #[cfg(feature = "graviola")]
             Self::Graviola => rustls_graviola::default_provider(),
-            #[cfg(feature = "post-quantum")]
-            Self::PostQuantum => rustls_post_quantum::provider(),
             #[cfg(feature = "ring")]
             Self::Ring => rustls::crypto::ring::default_provider(),
             Self::_None => unreachable!(),
@@ -988,8 +984,6 @@ impl Provider {
             Self::AwsLcRsFips => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(feature = "graviola")]
             Self::Graviola => rustls_graviola::Ticketer::new(),
-            #[cfg(feature = "post-quantum")]
-            Self::PostQuantum => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(feature = "ring")]
             Self::Ring => rustls::crypto::ring::Ticketer::new(),
             Self::_None => unreachable!(),
@@ -1032,9 +1026,6 @@ impl Provider {
 
         #[cfg(feature = "graviola")]
         available.push(Self::Graviola);
-
-        #[cfg(feature = "post-quantum")]
-        available.push(Self::PostQuantum);
 
         #[cfg(feature = "ring")]
         available.push(Self::Ring);
