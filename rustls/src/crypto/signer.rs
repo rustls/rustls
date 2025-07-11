@@ -139,7 +139,7 @@ impl ResolvesServerCert for SingleCertAndKey {
 #[derive(Clone, Debug)]
 pub struct CertifiedKey {
     /// The certificate chain or raw public key.
-    pub cert: Vec<CertificateDer<'static>>,
+    pub cert_chain: Vec<CertificateDer<'static>>,
 
     /// The certified key.
     pub key: Arc<dyn SigningKey>,
@@ -178,9 +178,9 @@ impl CertifiedKey {
     ///
     /// The cert chain must not be empty. The first certificate in the chain
     /// must be the end-entity certificate.
-    pub fn new(cert: Vec<CertificateDer<'static>>, key: Arc<dyn SigningKey>) -> Self {
+    pub fn new(cert_chain: Vec<CertificateDer<'static>>, key: Arc<dyn SigningKey>) -> Self {
         Self {
-            cert,
+            cert_chain,
             key,
             ocsp: None,
         }
@@ -202,7 +202,7 @@ impl CertifiedKey {
 
     /// The end-entity certificate.
     pub fn end_entity_cert(&self) -> Result<&CertificateDer<'_>, Error> {
-        self.cert
+        self.cert_chain
             .first()
             .ok_or(Error::NoCertificatesPresented)
     }
