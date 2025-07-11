@@ -659,7 +659,8 @@ struct ClientCert {
 
 impl ClientCert {
     fn new(mut certkey: sign::CertifiedKey, meta: &Credential) -> Self {
-        let parsed_cert = webpki::EndEntityCert::try_from(certkey.cert.last().unwrap()).unwrap();
+        let parsed_cert =
+            webpki::EndEntityCert::try_from(certkey.cert_chain.last().unwrap()).unwrap();
         let issuer_dn = DistinguishedName::in_sequence(parsed_cert.issuer());
 
         if let Some(scheme) = meta.use_signing_scheme {
