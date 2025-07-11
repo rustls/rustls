@@ -19,7 +19,7 @@ impl ActiveCertifiedKey<'_> {
     /// Get the certificate chain
     #[inline]
     pub(super) fn get_cert(&self) -> &[CertificateDer<'static>] {
-        &self.key.cert
+        &self.key.cert_chain
     }
 
     /// Get the signing key
