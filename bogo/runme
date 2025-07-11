@@ -18,10 +18,6 @@ case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
       cpp -P -DAWS_LC_RS -DFIPS config.json.in > config.json
       cargo run --features fips -- -print-rustls-provider
       ;;
-  post-quantum)
-      cpp -P -DAWS_LC_RS -DPOST_QUANTUM config.json.in > config.json
-      cargo run --features post-quantum -- -print-rustls-provider
-      ;;
   existing)
       ;;
   *)

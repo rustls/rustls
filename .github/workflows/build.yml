@@ -224,12 +224,6 @@ jobs:
         env:
           BOGO_SHIM_PROVIDER: aws-lc-rs-fips
 
-      - name: Run test suite (post-quantum)
-        working-directory: bogo
-        run: ./runme
-        env:
-          BOGO_SHIM_PROVIDER: post-quantum
-
   fuzz:
     name: Smoke-test fuzzing targets
     runs-on: ubuntu-latest

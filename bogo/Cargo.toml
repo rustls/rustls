@@ -9,10 +9,8 @@ base64 = { workspace = true }
 env_logger = { workspace = true }
 nix = { version = "0.30", default-features = false, features = ["signal"] }
 rustls = { path = "../rustls", features = ["aws-lc-rs", "ring", "tls12"] }
-rustls-post-quantum = { path = "../rustls-post-quantum", optional = true }
 webpki = { workspace = true }
 
 [features]
 default = []
-post-quantum = ["dep:rustls-post-quantum"]
 fips = ["rustls/fips"]
