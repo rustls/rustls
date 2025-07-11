@@ -61,12 +61,11 @@ pub use crate::suites::CipherSuiteCommon;
 /// This crate comes with two built-in options, provided as
 /// `CryptoProvider` structures:
 ///
-/// - [`crypto::aws_lc_rs::default_provider`]: (behind the `aws_lc_rs` crate feature,
-///   which is enabled by default).  This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
+/// - [`crypto::aws_lc_rs::default_provider`]: (behind the `aws_lc_rs` crate feature).
+///   This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
 ///   crate.  The `fips` crate feature makes this option use FIPS140-3-approved cryptography.
-/// - [`crypto::ring::default_provider`]: (behind the `ring` crate feature, which
-///   is optional).  This provider uses the [*ring*](https://github.com/briansmith/ring)
-///   crate.
+/// - [`crypto::ring::default_provider`]: (behind the `ring` crate feature).
+///   This provider uses the [*ring*](https://github.com/briansmith/ring) crate.
 ///
 /// This structure provides defaults. Everything in it can be overridden at
 /// runtime by replacing field values as needed.

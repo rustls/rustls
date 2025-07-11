@@ -11,5 +11,5 @@ asn1 = { workspace = true }
 base64 = { workspace = true }
 num-bigint = { workspace = true }
 once_cell = { workspace = true }
-rustls = { path = "../rustls" }
+rustls = { path = "../rustls", features = ["aws-lc-rs"] }
 openssl = { workspace = true }
