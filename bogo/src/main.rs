@@ -283,8 +283,6 @@ enum SelectedProvider {
     AwsLcRs,
     #[cfg_attr(not(feature = "fips"), allow(dead_code))]
     AwsLcRsFips,
-    #[cfg_attr(not(feature = "post-quantum"), allow(dead_code))]
-    PostQuantum,
     Ring,
 }
 
@@ -297,8 +295,6 @@ impl SelectedProvider {
             None | Some("aws-lc-rs") => Self::AwsLcRs,
             #[cfg(feature = "fips")]
             Some("aws-lc-rs-fips") => Self::AwsLcRsFips,
-            #[cfg(feature = "post-quantum")]
-            Some("post-quantum") => Self::PostQuantum,
             Some("ring") => Self::Ring,
             Some(other) => panic!("unrecognised value for BOGO_SHIM_PROVIDER: {other:?}"),
         }
@@ -306,7 +302,7 @@ impl SelectedProvider {
 
     fn provider(&self) -> CryptoProvider {
         match self {
-            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => {
+            Self::AwsLcRs | Self::AwsLcRsFips => {
                 // ensure all suites and kx groups are included (even in fips builds)
                 // as non-fips test cases require them.  runner activates fips mode via -fips-202205 option
                 // this includes rustls-post-quantum, which just returns an altered
@@ -324,16 +320,14 @@ impl SelectedProvider {
 
     fn ticketer(&self) -> Arc<dyn ProducesTickets> {
         match self {
-            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => {
-                aws_lc_rs::Ticketer::new().unwrap()
-            }
+            Self::AwsLcRs | Self::AwsLcRsFips => aws_lc_rs::Ticketer::new().unwrap(),
             Self::Ring => ring::Ticketer::new().unwrap(),
         }
     }
 
     fn supports_ech(&self) -> bool {
         match *self {
-            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => true,
+            Self::AwsLcRs | Self::AwsLcRsFips => true,
             Self::Ring => false,
         }
     }
@@ -1819,12 +1813,6 @@ pub fn main() {
             "-curves" => {
                 let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
                 opts.groups.get_or_insert(Vec::new()).push(group);
-
-                // if X25519MLKEM768 is requested, insert it from rustls_post_quantum
-                #[cfg(feature = "post-quantum")]
-                if group == rustls_post_quantum::X25519MLKEM768.name() && opts.selected_provider == SelectedProvider::PostQuantum {
-                    opts.provider.kx_groups.insert(0, rustls_post_quantum::X25519MLKEM768);
-                }
             }
             "-resumption-delay" => {
                 opts.resumption_delay = args.remove(0).parse::<u32>().unwrap();
