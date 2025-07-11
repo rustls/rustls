@@ -424,7 +424,7 @@ impl KeyType {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
         let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new(
+        Ok(Arc::new(CertifiedKey::new_unchecked(
             vec![public_key_as_cert],
             private_key,
         )))
@@ -441,7 +441,7 @@ impl KeyType {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
         let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new(
+        Ok(Arc::new(CertifiedKey::new_unchecked(
             vec![public_key_as_cert],
             private_key,
         )))

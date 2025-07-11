@@ -475,7 +475,7 @@ mod tests {
                 .as_ref()
                 .to_vec(),
         )];
-        CertifiedKey::new(public_key_as_cert, key)
+        CertifiedKey::new_unchecked(public_key_as_cert, key)
     }
 
     fn client_key() -> PrivateKeyDer<'static> {

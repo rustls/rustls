@@ -186,6 +186,24 @@ impl CertifiedKey {
         }
     }
 
+    /// Make a new `CertifiedKey` from a raw private key.
+    ///
+    /// Unlike [`CertifiedKey::new()`], this does not check that the end-entity certificate's
+    /// subject key matches `key`'s public key.
+    ///
+    /// This avoids parsing the end-entity certificate, which is useful when using client
+    /// certificates that are not fully standards compliant, but known to usable by the peer.
+    pub fn new_unchecked(
+        cert_chain: Vec<CertificateDer<'static>>,
+        key: Arc<dyn SigningKey>,
+    ) -> Self {
+        Self {
+            cert_chain,
+            key,
+            ocsp: None,
+        }
+    }
+
     /// Verify the consistency of this [`CertifiedKey`]'s public and private keys.
     /// This is done by performing a comparison of SubjectPublicKeyInfo bytes.
     pub fn keys_match(&self) -> Result<(), Error> {
