@@ -8,7 +8,6 @@ publish = false
 clap = { workspace = true }
 rustls = { path = "../rustls" }
 rustls-graviola = { workspace = true, optional = true }
-rustls-post-quantum = { path = "../rustls-post-quantum", optional = true }
 rustls-test = { workspace = true }
 
 [features]
@@ -16,7 +15,6 @@ default = []
 aws-lc-rs = ["rustls/aws-lc-rs"]
 fips = ["rustls/fips", "aws-lc-rs"]
 graviola = ["dep:rustls-graviola"]
-post-quantum = ["dep:rustls-post-quantum"]
 ring = ["rustls/ring"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
