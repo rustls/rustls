@@ -641,11 +641,7 @@ mod tests {
 }
 
 // invalid with fips, as we can't offer X25519 separately
-#[cfg(all(
-    feature = "aws-lc-rs",
-    feature = "prefer-post-quantum",
-    not(feature = "fips")
-))]
+#[cfg(all(feature = "aws-lc-rs", not(feature = "fips")))]
 #[test]
 fn hybrid_kx_component_share_offered_if_supported_separately() {
     let ch = client_hello_sent_for_config(
