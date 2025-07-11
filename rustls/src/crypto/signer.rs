@@ -64,10 +64,7 @@ pub trait SigningKey: Debug + Send + Sync {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
 
     /// Get the RFC 5280-compliant SubjectPublicKeyInfo (SPKI) of this [`SigningKey`].
-    ///
-    /// If an implementation does not have the ability to derive this,
-    /// it can return `None`.
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>>;
+    fn public_key(&self) -> SubjectPublicKeyInfoDer<'_>;
 
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
@@ -188,10 +185,7 @@ impl CertifiedKey {
     /// Verify the consistency of this [`CertifiedKey`]'s public and private keys.
     /// This is done by performing a comparison of SubjectPublicKeyInfo bytes.
     pub fn keys_match(&self) -> Result<(), Error> {
-        let Some(key_spki) = self.key.public_key() else {
-            return Err(InconsistentKeys::Unknown.into());
-        };
-
+        let key_spki = self.key.public_key();
         let cert = ParsedCertificate::try_from(self.end_entity_cert()?)?;
         match key_spki == cert.subject_public_key_info() {
             true => Ok(()),

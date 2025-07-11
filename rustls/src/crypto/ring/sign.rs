@@ -127,11 +127,8 @@ impl SigningKey for RsaSigningKey {
             .map(|scheme| RsaSigner::new(self.key.clone(), *scheme))
     }
 
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
-        Some(public_key_to_spki(
-            &alg_id::RSA_ENCRYPTION,
-            self.key.public_key(),
-        ))
+    fn public_key(&self) -> SubjectPublicKeyInfoDer<'_> {
+        public_key_to_spki(&alg_id::RSA_ENCRYPTION, self.key.public_key())
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
@@ -293,14 +290,14 @@ impl SigningKey for EcdsaSigningKey {
         }
     }
 
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+    fn public_key(&self) -> SubjectPublicKeyInfoDer<'_> {
         let id = match self.scheme {
             SignatureScheme::ECDSA_NISTP256_SHA256 => alg_id::ECDSA_P256,
             SignatureScheme::ECDSA_NISTP384_SHA384 => alg_id::ECDSA_P384,
             _ => unreachable!(),
         };
 
-        Some(public_key_to_spki(&id, self.key.public_key()))
+        public_key_to_spki(&id, self.key.public_key())
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
@@ -387,8 +384,8 @@ impl SigningKey for Ed25519SigningKey {
         }
     }
 
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
-        Some(public_key_to_spki(&alg_id::ED25519, self.key.public_key()))
+    fn public_key(&self) -> SubjectPublicKeyInfoDer<'_> {
+        public_key_to_spki(&alg_id::ED25519, self.key.public_key())
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {

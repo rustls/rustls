@@ -11,6 +11,7 @@ use signature::{RandomizedSigner, SignatureEncoding};
 #[derive(Clone, Debug)]
 pub(crate) struct EcdsaSigningKeyP256 {
     key: Arc<p256::ecdsa::SigningKey>,
+    key_spki: SubjectPublicKeyInfoDer<'static>,
     scheme: SignatureScheme,
 }
 
@@ -20,9 +21,16 @@ impl TryFrom<PrivateKeyDer<'_>> for EcdsaSigningKeyP256 {
     fn try_from(value: PrivateKeyDer<'_>) -> Result<Self, Self::Error> {
         match value {
             PrivateKeyDer::Pkcs8(der) => {
-                p256::ecdsa::SigningKey::from_pkcs8_der(der.secret_pkcs8_der()).map(|kp| Self {
-                    key: Arc::new(kp),
-                    scheme: SignatureScheme::ECDSA_NISTP256_SHA256,
+                p256::ecdsa::SigningKey::from_pkcs8_der(der.secret_pkcs8_der()).and_then(|kp| {
+                    Ok(Self {
+                        key_spki: kp
+                            .verifying_key()
+                            .to_public_key_der()?
+                            .into_vec()
+                            .into(),
+                        key: Arc::new(kp),
+                        scheme: SignatureScheme::ECDSA_NISTP256_SHA256,
+                    })
                 })
             }
             _ => panic!("unsupported private key format"),
@@ -39,14 +47,8 @@ impl SigningKey for EcdsaSigningKeyP256 {
         }
     }
 
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
-        Some(SubjectPublicKeyInfoDer::from(
-            self.key
-                .verifying_key()
-                .to_public_key_der()
-                .ok()?
-                .into_vec(),
-        ))
+    fn public_key(&self) -> SubjectPublicKeyInfoDer<'_> {
+        SubjectPublicKeyInfoDer::from(self.key_spki.as_ref())
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {

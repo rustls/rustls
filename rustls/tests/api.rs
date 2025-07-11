@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{fmt, mem};
 
-use pki_types::{CertificateDer, DnsName, IpAddr, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+use pki_types::{CertificateDer, DnsName, IpAddr, ServerName, UnixTime};
 use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
@@ -3460,32 +3460,6 @@ fn test_keys_match() {
         expect_inconsistent.keys_match(),
         Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
     ));
-
-    // Unknown: This signing key returns None for its SPKI, so we can't tell if the certified key is consistent
-    let expect_unknown =
-        sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeyNoneSpki));
-    assert!(matches!(
-        expect_unknown.keys_match(),
-        Err(Error::InconsistentKeys(InconsistentKeys::Unknown))
-    ));
-}
-
-/// Represents a SigningKey that returns None for its SPKI via the default impl.
-#[derive(Debug)]
-struct SigningKeyNoneSpki;
-
-impl sign::SigningKey for SigningKeyNoneSpki {
-    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
-        unimplemented!("Not meant to be called during tests")
-    }
-
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
-        None
-    }
-
-    fn algorithm(&self) -> rustls::SignatureAlgorithm {
-        unimplemented!("Not meant to be called during tests")
-    }
 }
 
 /// Represents a SigningKey that returns Some for its SPKI.
@@ -3493,13 +3467,11 @@ impl sign::SigningKey for SigningKeyNoneSpki {
 struct SigningKeySomeSpki;
 
 impl sign::SigningKey for SigningKeySomeSpki {
-    fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer> {
+    fn public_key(&self) -> pki_types::SubjectPublicKeyInfoDer {
         let chain = KeyType::Rsa2048.get_chain();
         let cert = ParsedCertificate::try_from(chain.first().unwrap()).unwrap();
-        Some(
-            cert.subject_public_key_info()
-                .into_owned(),
-        )
+        cert.subject_public_key_info()
+            .into_owned()
     }
 
     fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
