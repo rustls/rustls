@@ -7,7 +7,7 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPubli
 use super::CryptoProvider;
 use crate::client::ResolvesClientCert;
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
-use crate::error::{Error, InconsistentKeys};
+use crate::error::Error;
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
 use crate::x509;
@@ -163,11 +163,9 @@ impl CertifiedKey {
             .load_private_key(key)?;
 
         let certified_key = Self::new(cert_chain, private_key);
-        match certified_key.keys_match() {
-            // Don't treat unknown consistency as an error
-            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => Ok(certified_key),
-            Err(err) => Err(err),
-        }
+        certified_key
+            .keys_match()
+            .map(|_| certified_key)
     }
 
     /// Make a new CertifiedKey, with the given chain and key.
@@ -189,7 +187,7 @@ impl CertifiedKey {
         let cert = ParsedCertificate::try_from(self.end_entity_cert()?)?;
         match key_spki == cert.subject_public_key_info() {
             true => Ok(()),
-            false => Err(InconsistentKeys::KeyMismatch.into()),
+            false => Err(Error::InconsistentKeys),
         }
     }
 

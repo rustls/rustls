@@ -20,8 +20,8 @@ use rustls::server::{CertificateType, ClientHello, ParsedCertificate, ResolvesSe
 use rustls::{
     AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
-    ExtendedKeyPurpose, HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog,
-    NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, ServerConfig,
+    ExtendedKeyPurpose, HandshakeKind, HandshakeType, InvalidMessage, KeyLog, NamedGroup,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, ServerConfig,
     ServerConnection, SideData, SignatureScheme, Stream, StreamOwned, SupportedCipherSuite,
     SupportedProtocolVersion, sign,
 };
@@ -3458,7 +3458,7 @@ fn test_keys_match() {
         sign::CertifiedKey::new(KeyType::EcdsaP256.get_chain(), Arc::new(SigningKeySomeSpki));
     assert!(matches!(
         expect_inconsistent.keys_match(),
-        Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
+        Err(Error::InconsistentKeys)
     ));
 }
 
