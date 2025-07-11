@@ -478,8 +478,8 @@ impl sign::SigningKey for SigningKey {
         }
     }
 
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
-        None
+    fn public_key(&self) -> SubjectPublicKeyInfoDer<'_> {
+        SubjectPublicKeyInfoDer::from(&[][..])
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
