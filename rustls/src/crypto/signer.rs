@@ -163,37 +163,37 @@ impl CertifiedKey {
         key: PrivateKeyDer<'static>,
         provider: &CryptoProvider,
     ) -> Result<Self, Error> {
-        let private_key = provider
-            .key_provider
-            .load_private_key(key)?;
-
-        let certified_key = Self::new(cert_chain, private_key);
-        certified_key
-            .keys_match()
-            .map(|_| certified_key)
+        Self::new(
+            cert_chain,
+            provider
+                .key_provider
+                .load_private_key(key)?,
+        )
     }
 
     /// Make a new CertifiedKey, with the given chain and key.
     ///
     /// The cert chain must not be empty. The first certificate in the chain
     /// must be the end-entity certificate.
-    pub fn new(cert_chain: Vec<CertificateDer<'static>>, key: Arc<dyn SigningKey>) -> Self {
-        Self {
+    pub fn new(
+        cert_chain: Vec<CertificateDer<'static>>,
+        key: Arc<dyn SigningKey>,
+    ) -> Result<Self, Error> {
+        let key_spki = key.public_key();
+        let ee_cert = cert_chain
+            .first()
+            .ok_or(Error::NoCertificatesPresented)?;
+
+        let parsed = ParsedCertificate::try_from(ee_cert)?;
+        if key_spki != parsed.subject_public_key_info() {
+            return Err(Error::InconsistentKeys);
+        }
+
+        Ok(Self {
             cert_chain,
             key,
             ocsp: None,
-        }
-    }
-
-    /// Verify the consistency of this [`CertifiedKey`]'s public and private keys.
-    /// This is done by performing a comparison of SubjectPublicKeyInfo bytes.
-    pub fn keys_match(&self) -> Result<(), Error> {
-        let key_spki = self.key.public_key();
-        let cert = ParsedCertificate::try_from(self.end_entity_cert()?)?;
-        match key_spki == cert.subject_public_key_info() {
-            true => Ok(()),
-            false => Err(Error::InconsistentKeys),
-        }
+        })
     }
 
     /// Make a new `CertifiedKey` from a DER-encoded raw private key.
