@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{fmt, mem};
 
-use pki_types::{CertificateDer, DnsName, IpAddr, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+use pki_types::{CertificateDer, DnsName, IpAddr, ServerName, UnixTime};
 use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
@@ -20,8 +20,8 @@ use rustls::server::{CertificateType, ClientHello, ParsedCertificate, ResolvesSe
 use rustls::{
     AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
-    ExtendedKeyPurpose, HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog,
-    NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, ServerConfig,
+    ExtendedKeyPurpose, HandshakeKind, HandshakeType, InvalidMessage, KeyLog, NamedGroup,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, ServerConfig,
     ServerConnection, SideData, SignatureScheme, Stream, StreamOwned, SupportedCipherSuite,
     SupportedProtocolVersion, sign,
 };
@@ -3287,7 +3287,7 @@ fn sni_resolver_works() {
     resolver
         .add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match"),
         )
         .unwrap();
 
@@ -3330,7 +3330,7 @@ fn sni_resolver_rejects_wrong_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
         )
     );
     assert_eq!(
@@ -3339,7 +3339,7 @@ fn sni_resolver_rejects_wrong_names() {
         ))),
         resolver.add(
             DnsName::try_from("not-localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
         )
     );
 }
@@ -3372,7 +3372,7 @@ fn sni_resolver_lower_cases_configured_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("LOCALHOST").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
         )
     );
 
@@ -3403,7 +3403,7 @@ fn sni_resolver_lower_cases_queried_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
         )
     );
 
@@ -3424,25 +3424,11 @@ fn sni_resolver_lower_cases_queried_names() {
 #[test]
 fn sni_resolver_rejects_bad_certs() {
     let kt = KeyType::Rsa2048;
-    let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
-    let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
-
-    assert_eq!(
-        Err(Error::NoCertificatesPresented),
-        resolver.add(
-            DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(vec![], signing_key.clone())
-        )
-    );
-
+    let signing_key = Arc::new(RsaSigningKey::new(&kt.get_key()).unwrap());
     let bad_chain = vec![CertificateDer::from(vec![0xa0])];
     assert_eq!(
-        Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
-        resolver.add(
-            DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(bad_chain, signing_key.clone())
-        )
+        sign::CertifiedKey::new(bad_chain, signing_key.clone()).unwrap_err(),
+        Error::InvalidCertificate(CertificateError::BadEncoding),
     );
 }
 
@@ -3451,41 +3437,12 @@ fn test_keys_match() {
     // Consistent: Both of these should have the same SPKI values
     let expect_consistent =
         sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeySomeSpki));
-    assert!(matches!(expect_consistent.keys_match(), Ok(())));
+    assert!(expect_consistent.is_ok());
 
     // Inconsistent: These should not have the same SPKI values
     let expect_inconsistent =
         sign::CertifiedKey::new(KeyType::EcdsaP256.get_chain(), Arc::new(SigningKeySomeSpki));
-    assert!(matches!(
-        expect_inconsistent.keys_match(),
-        Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
-    ));
-
-    // Unknown: This signing key returns None for its SPKI, so we can't tell if the certified key is consistent
-    let expect_unknown =
-        sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeyNoneSpki));
-    assert!(matches!(
-        expect_unknown.keys_match(),
-        Err(Error::InconsistentKeys(InconsistentKeys::Unknown))
-    ));
-}
-
-/// Represents a SigningKey that returns None for its SPKI via the default impl.
-#[derive(Debug)]
-struct SigningKeyNoneSpki;
-
-impl sign::SigningKey for SigningKeyNoneSpki {
-    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
-        unimplemented!("Not meant to be called during tests")
-    }
-
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
-        None
-    }
-
-    fn algorithm(&self) -> rustls::SignatureAlgorithm {
-        unimplemented!("Not meant to be called during tests")
-    }
+    assert!(matches!(expect_inconsistent, Err(Error::InconsistentKeys)));
 }
 
 /// Represents a SigningKey that returns Some for its SPKI.
@@ -3493,13 +3450,11 @@ impl sign::SigningKey for SigningKeyNoneSpki {
 struct SigningKeySomeSpki;
 
 impl sign::SigningKey for SigningKeySomeSpki {
-    fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer> {
+    fn public_key(&self) -> pki_types::SubjectPublicKeyInfoDer {
         let chain = KeyType::Rsa2048.get_chain();
         let cert = ParsedCertificate::try_from(chain.first().unwrap()).unwrap();
-        Some(
-            cert.subject_public_key_info()
-                .into_owned(),
-        )
+        cert.subject_public_key_info()
+            .into_owned()
     }
 
     fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
@@ -7465,7 +7420,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .key_provider
         .load_private_key(KeyType::Rsa2048.get_client_key())
         .unwrap();
-    let big_cert_and_key = sign::CertifiedKey::new(vec![big_cert], key);
+    let big_cert_and_key = sign::CertifiedKey::new(vec![big_cert], key).expect("keys match");
     client_config.client_auth_cert_resolver =
         Arc::new(sign::SingleCertAndKey::from(big_cert_and_key));
 
@@ -7868,8 +7823,7 @@ fn test_keys_match_for_all_signing_key_types() {
             .key_provider
             .load_private_key(kt.get_client_key())
             .unwrap();
-        let ck = sign::CertifiedKey::new(kt.get_client_chain(), key);
-        ck.keys_match().unwrap();
+        let _ = sign::CertifiedKey::new(kt.get_client_chain(), key).expect("keys match");
         println!("{kt:?} ok");
     }
 }

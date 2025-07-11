@@ -549,7 +549,7 @@ impl sign::SigningKey for FixedSignatureSchemeSigningKey {
         }
     }
 
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+    fn public_key(&self) -> SubjectPublicKeyInfoDer<'_> {
         self.key.public_key()
     }
 
@@ -665,7 +665,8 @@ struct ClientCert {
 
 impl ClientCert {
     fn new(mut certkey: sign::CertifiedKey, meta: &Credential) -> Self {
-        let parsed_cert = webpki::EndEntityCert::try_from(certkey.cert.last().unwrap()).unwrap();
+        let parsed_cert =
+            webpki::EndEntityCert::try_from(certkey.cert_chain.last().unwrap()).unwrap();
         let issuer_dn = DistinguishedName::in_sequence(parsed_cert.issuer());
 
         if let Some(scheme) = meta.use_signing_scheme {
@@ -984,7 +985,10 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .load_private_key(key)
                     .expect("cannot load private key");
 
-                resolver.set_default(sign::CertifiedKey::new(certs, key), cred)
+                resolver.set_default(
+                    sign::CertifiedKey::new(certs, key).expect("keys match"),
+                    cred,
+                )
             }
 
             for cred in opts.credentials.additional.iter() {
@@ -994,7 +998,10 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .load_private_key(key)
                     .expect("cannot load private key");
 
-                resolver.add(sign::CertifiedKey::new(certs, key), cred);
+                resolver.add(
+                    sign::CertifiedKey::new(certs, key).expect("keys match"),
+                    cred,
+                );
             }
 
             cfg.with_client_cert_resolver(Arc::new(resolver))

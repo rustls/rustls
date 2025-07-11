@@ -44,8 +44,8 @@ use rustls::unbuffered::{
 };
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
-    DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
-    RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
+    DigitallySignedStruct, DistinguishedName, Error, NamedGroup, ProtocolVersion, RootCertStore,
+    ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
 };
 
 macro_rules! embed_files {
@@ -417,34 +417,20 @@ impl KeyType {
         &self,
         provider: &CryptoProvider,
     ) -> Result<Arc<CertifiedKey>, Error> {
-        let private_key = provider
-            .key_provider
-            .load_private_key(self.get_client_key())?;
-        let public_key = private_key
-            .public_key()
-            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
-        let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new(
-            vec![public_key_as_cert],
-            private_key,
-        )))
+        Ok(Arc::new(CertifiedKey::for_raw_der_key(
+            self.get_client_key(),
+            provider,
+        )?))
     }
 
     pub fn certified_key_with_raw_pub_key(
         &self,
         provider: &CryptoProvider,
     ) -> Result<Arc<CertifiedKey>, Error> {
-        let private_key = provider
-            .key_provider
-            .load_private_key(self.get_key())?;
-        let public_key = private_key
-            .public_key()
-            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
-        let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new(
-            vec![public_key_as_cert],
-            private_key,
-        )))
+        Ok(Arc::new(CertifiedKey::for_raw_der_key(
+            self.get_key(),
+            provider,
+        )?))
     }
 
     pub fn certified_key_with_cert_chain(
@@ -454,7 +440,7 @@ impl KeyType {
         let private_key = provider
             .key_provider
             .load_private_key(self.get_key())?;
-        Ok(Arc::new(CertifiedKey::new(self.get_chain(), private_key)))
+        Ok(Arc::new(CertifiedKey::new(self.get_chain(), private_key)?))
     }
 
     fn get_crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
