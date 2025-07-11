@@ -29,11 +29,8 @@ it's _much_ more likely that both peers will have good quality implementations.
 ### About the post-quantum-secure key exchange `X25519MLKEM768`
 
 [`X25519MLKEM768`] -- a hybrid[^1], post-quantum-secure[^2] key exchange
-algorithm -- is available when using the aws-lc-rs provider.
-
-The `prefer-post-quantum` crate feature makes `X25519MLKEM768` the
-highest-priority key exchange algorithm.  Otherwise, it is available but
-not highest-priority.
+algorithm -- is available when using the aws-lc-rs provider, set as the highest-priority key
+exchange algorithm by default.
 
 [X25519MLKEM768] is pre-standardization, but is now widely deployed,
 for example, by [Chrome] and [Cloudflare].

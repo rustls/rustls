@@ -299,11 +299,6 @@
 //!
 //!   See [manual::_06_fips] for more details.
 //!
-//! - `prefer-post-quantum` (enabled by default): for the [`aws-lc-rs`]-backed provider,
-//!   prioritizes post-quantum secure key exchange by default (using X25519MLKEM768).
-//!   This feature merely alters the order of `rustls::crypto::aws_lc_rs::DEFAULT_KX_GROUPS`.
-//!   See [the manual][x25519mlkem768-manual] for more details.
-//!
 //! - `custom-provider`: disables implicit use of built-in providers (`aws-lc-rs` or `ring`). This forces
 //!   applications to manually install one, for instance, when using a custom `CryptoProvider`.
 //!
