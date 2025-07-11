@@ -154,8 +154,6 @@ impl Options {
             None | Some("aws-lc-rs") => SelectedProvider::AwsLcRs,
             #[cfg(feature = "fips")]
             Some("aws-lc-rs-fips") => SelectedProvider::AwsLcRsFips,
-            #[cfg(feature = "post-quantum")]
-            Some("post-quantum") => SelectedProvider::PostQuantum,
             Some("ring") => SelectedProvider::Ring,
             Some(other) => panic!("unrecognised value for BOGO_SHIM_PROVIDER: {other:?}"),
         };
@@ -370,21 +368,19 @@ enum SelectedProvider {
     AwsLcRs,
     #[cfg_attr(not(feature = "fips"), allow(dead_code))]
     AwsLcRsFips,
-    #[cfg_attr(not(feature = "post-quantum"), allow(dead_code))]
-    PostQuantum,
     Ring,
 }
 
 impl SelectedProvider {
     fn provider(&self) -> CryptoProvider {
         match self {
-            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => {
+            Self::AwsLcRs | Self::AwsLcRsFips => {
                 // ensure all suites and kx groups are included (even in fips builds)
                 // as non-fips test cases require them.  runner activates fips mode via -fips-202205 option
                 // this includes rustls-post-quantum, which just returns an altered
                 // version of `aws_lc_rs::default_provider()`
                 CryptoProvider {
-                    kx_groups: aws_lc_rs::DEFAULT_KX_GROUPS.to_vec(),
+                    kx_groups: aws_lc_rs::ALL_KX_GROUPS.to_vec(),
                     cipher_suites: aws_lc_rs::ALL_CIPHER_SUITES.to_vec(),
                     signature_verification_algorithms: SUPPORTED_SIG_ALGS,
                     ..aws_lc_rs::default_provider()
@@ -397,16 +393,14 @@ impl SelectedProvider {
 
     fn ticketer(&self) -> Arc<dyn ProducesTickets> {
         match self {
-            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => {
-                aws_lc_rs::Ticketer::new().unwrap()
-            }
+            Self::AwsLcRs | Self::AwsLcRsFips => aws_lc_rs::Ticketer::new().unwrap(),
             Self::Ring => ring::Ticketer::new().unwrap(),
         }
     }
 
     fn supports_ech(&self) -> bool {
         match *self {
-            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => true,
+            Self::AwsLcRs | Self::AwsLcRsFips => true,
             Self::Ring => false,
         }
     }
@@ -1974,16 +1968,6 @@ pub fn main() {
                 opts.groups
                     .get_or_insert(Vec::new())
                     .push(group);
-
-                // if X25519MLKEM768 is requested, insert it from rustls_post_quantum
-                #[cfg(feature = "post-quantum")]
-                if group == rustls_post_quantum::X25519MLKEM768.name()
-                    && opts.selected_provider == SelectedProvider::PostQuantum
-                {
-                    opts.provider
-                        .kx_groups
-                        .insert(0, rustls_post_quantum::X25519MLKEM768);
-                }
             }
             "-server-supported-groups-hint" => {
                 let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());

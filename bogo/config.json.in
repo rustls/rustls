@@ -64,12 +64,14 @@
     "CheckClientCertificateTypes": "we don't check TLS1.2 CertificateRequest.certificate_types",
     "*-RSA_PKCS1_SHA256_LEGACY-*": "NYI on our side https://datatracker.ietf.org/doc/draft-ietf-tls-tls13-pkcs1/01/",
     "NoCommonSignatureAlgorithms-TLS12-Fallback": "requires TLS_RSA_WITH_AES_128_GCM_SHA256",
-#if defined(POST_QUANTUM)
-    "MLKEMKeyShareIncludedSecond": "we only include a share for the first configured group",
+#if defined(AWS_LC_RS)
     "MLKEMKeyShareIncludedSecond-MLKEM1024": "we only include a share for the first configured group",
-    "MLKEMKeyShareIncludedThird": "we only include a share for the first configured group",
+    "MLKEMKeyShareIncludedSecond-X25519MLKEM768": "we only include a share for the first configured group",
     "MLKEMKeyShareIncludedThird-MLKEM1024": "we only include a share for the first configured group",
+    "MLKEMKeyShareIncludedThird-X25519MLKEM768": "we only include a share for the first configured group",
     "MultiplePQGroups-MLKEM1024": "we only include a share for the first configured group",
+    "NotJustMLKEMKeyShare-MLKEM1024": "we only include a share for the first configured group",
+    "TwoMLKEMs": "we only include a share for the first configured group",
 #else
     "*MLKEM*": "not implemented",
 #endif
@@ -160,8 +162,10 @@
     "*-HintMismatch-*": "hints are a boringssl-specific feature",
 #if defined(AWS_LC_RS) && defined(FIPS)
     "Compliance-fips-202205-TLS-Client-ECDSA_P521_SHA512": "fips approved in aws-lc-rs",
+    "Compliance-fips-202205-TLS-Client-MLKEM": "fips pending in aws-lc-rs",
     "Compliance-fips-202205-TLS-Client-X25519MLKEM768": "ml-kem fips pending in aws-lc-rs",
     "Compliance-fips-202205-TLS-Server-ECDSA_P521_SHA512": "fips approved in aws-lc-rs",
+    "Compliance-fips-202205-TLS-Server-MLKEM": "fips pending in aws-lc-rs",
     "Compliance-fips-202205-TLS-Client-Ed25519": "fips approved in aws-lc-rs",
     "Compliance-fips-202205-TLS-Server-Ed25519": "fips approved in aws-lc-rs",
     "Compliance-fips-202205-TLS-Server-X25519MLKEM768": "ml-kem fips pending in aws-lc-rs",

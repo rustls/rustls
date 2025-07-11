@@ -334,7 +334,6 @@ dependencies = [
  "env_logger",
  "nix",
  "rustls",
- "rustls-post-quantum",
  "rustls-webpki",
 ]
 
