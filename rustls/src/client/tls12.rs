@@ -38,7 +38,7 @@ use crate::verify::{self, DigitallySignedStruct};
 
 mod server_hello {
     use super::*;
-    use crate::client::hs::{ClientHelloInput, ClientSessionValue};
+    use crate::client::hs::{ClientHelloInput, ClientSessionValue, Preshared};
     use crate::msgs::handshake::ServerHelloPayload;
 
     pub(in crate::client) struct CompleteServerHelloHandling {
@@ -77,7 +77,7 @@ mod server_hello {
             // In this instance since we're now continuing a TLS 1.2 handshake the server
             // should not have echoed it back: it's a randomly generated session ID it couldn't
             // have known.
-            if self.input.resuming.is_none()
+            if self.input.preshared.is_none()
                 && !self.input.session_id.is_empty()
                 && self.input.session_id == server_hello.session_id
             {
@@ -92,16 +92,17 @@ mod server_hello {
             let ClientHelloInput {
                 config,
                 server_name,
+                preshared,
                 ..
             } = self.input;
 
-            let resuming_session = self
-                .input
-                .resuming
-                .and_then(|resuming| match resuming.value {
-                    ClientSessionValue::Tls12(inner) => Some(inner),
-                    ClientSessionValue::Tls13(_) => None,
-                });
+            let resuming_session = match preshared {
+                Some(Preshared::Resumption(persist::Retrieved {
+                    value: ClientSessionValue::Tls12(inner),
+                    ..
+                })) => Some(inner),
+                _ => None,
+            };
 
             // Doing EMS?
             let using_ems = server_hello
