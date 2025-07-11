@@ -984,7 +984,10 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .load_private_key(key)
                     .expect("cannot load private key");
 
-                resolver.set_default(sign::CertifiedKey::new(certs, key), cred)
+                resolver.set_default(
+                    sign::CertifiedKey::new(certs, key).expect("keys match"),
+                    cred,
+                )
             }
 
             for cred in opts.credentials.additional.iter() {
@@ -994,7 +997,10 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .load_private_key(key)
                     .expect("cannot load private key");
 
-                resolver.add(sign::CertifiedKey::new(certs, key), cred);
+                resolver.add(
+                    sign::CertifiedKey::new(certs, key).expect("keys match"),
+                    cred,
+                );
             }
 
             cfg.with_client_cert_resolver(Arc::new(resolver))

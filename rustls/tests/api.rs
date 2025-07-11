@@ -3287,7 +3287,7 @@ fn sni_resolver_works() {
     resolver
         .add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match"),
         )
         .unwrap();
 
@@ -3330,7 +3330,7 @@ fn sni_resolver_rejects_wrong_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
         )
     );
     assert_eq!(
@@ -3339,7 +3339,7 @@ fn sni_resolver_rejects_wrong_names() {
         ))),
         resolver.add(
             DnsName::try_from("not-localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
         )
     );
 }
@@ -3372,7 +3372,7 @@ fn sni_resolver_lower_cases_configured_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("LOCALHOST").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
         )
     );
 
@@ -3403,7 +3403,7 @@ fn sni_resolver_lower_cases_queried_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
         )
     );
 
@@ -3432,7 +3432,7 @@ fn sni_resolver_rejects_bad_certs() {
         Err(Error::NoCertificatesPresented),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(vec![], signing_key.clone())
+            sign::CertifiedKey::new_unchecked(vec![], signing_key.clone())
         )
     );
 
@@ -3441,7 +3441,7 @@ fn sni_resolver_rejects_bad_certs() {
         Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(bad_chain, signing_key.clone())
+            sign::CertifiedKey::new_unchecked(bad_chain, signing_key.clone())
         )
     );
 }
@@ -3451,21 +3451,19 @@ fn test_keys_match() {
     // Consistent: Both of these should have the same SPKI values
     let expect_consistent =
         sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeySomeSpki));
-    assert!(matches!(expect_consistent.keys_match(), Ok(())));
+    assert!(expect_consistent.is_ok());
 
     // Inconsistent: These should not have the same SPKI values
     let expect_inconsistent =
         sign::CertifiedKey::new(KeyType::EcdsaP256.get_chain(), Arc::new(SigningKeySomeSpki));
     assert!(matches!(
-        expect_inconsistent.keys_match(),
+        expect_inconsistent,
         Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
     ));
 
     // Unknown: This signing key returns None for its SPKI, so we can't tell if the certified key is consistent
-    let expect_unknown =
-        sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeyNoneSpki));
     assert!(matches!(
-        expect_unknown.keys_match(),
+        sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeyNoneSpki)),
         Err(Error::InconsistentKeys(InconsistentKeys::Unknown))
     ));
 }
@@ -7868,8 +7866,7 @@ fn test_keys_match_for_all_signing_key_types() {
             .key_provider
             .load_private_key(kt.get_client_key())
             .unwrap();
-        let ck = sign::CertifiedKey::new(kt.get_client_chain(), key);
-        ck.keys_match().unwrap();
+        let _ = sign::CertifiedKey::new(kt.get_client_chain(), key).expect("keys match");
         println!("{kt:?} ok");
     }
 }
