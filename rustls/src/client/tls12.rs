@@ -151,12 +151,15 @@ mod server_hello {
                         return Err(PeerMisbehaved::ResumptionOfferedWithVariedEms.into());
                     }
 
-                    let secrets =
-                        ConnectionSecrets::new_resume(self.randoms, suite, resuming.secret());
+                    let secrets = ConnectionSecrets::new_resume(
+                        self.randoms,
+                        suite,
+                        resuming.master_secret(),
+                    );
                     config.key_log.log(
                         "CLIENT_RANDOM",
                         &secrets.randoms.client,
-                        &secrets.master_secret,
+                        secrets.master_secret(),
                     );
                     cx.common
                         .start_encryption_tls12(&secrets, Side::Client);
@@ -992,7 +995,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         st.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
-            &secrets.master_secret,
+            secrets.master_secret(),
         );
         cx.common
             .start_encryption_tls12(&secrets, Side::Client);
