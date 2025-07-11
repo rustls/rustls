@@ -135,6 +135,7 @@ impl ResolvesServerCert for SingleCertAndKey {
 /// certificates.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct CertifiedKey {
     /// The certificate chain or raw public key.
