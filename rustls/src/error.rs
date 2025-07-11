@@ -100,9 +100,15 @@ pub enum Error {
     /// or too large.
     BadMaxFragmentSize,
 
-    /// Specific failure cases from [`keys_match`] or a [`crate::crypto::signer::SigningKey`] that cannot produce a corresponding public key.
+    /// Specific failure cases from [`CertifiedKey::new()`] or a
+    /// [`crate::crypto::signer::SigningKey`] that cannot produce a corresponding public key.
     ///
-    /// [`keys_match`]: crate::crypto::signer::CertifiedKey::keys_match
+    /// If encountered while building a [`CertifiedKey`], consider if
+    /// [`CertifiedKey::new_unchecked()`] might be appropriate for your use case.
+    ///
+    /// [`CertifiedKey::new()`]: crate::crypto::signer::CertifiedKey::new()
+    /// [`CertifiedKey`]: crate::crypto::signer::CertifiedKey
+    /// [`CertifiedKey::new_unchecked()`]: crate::crypto::signer::CertifiedKey::new_unchecked()
     InconsistentKeys(InconsistentKeys),
 
     /// Any other error.

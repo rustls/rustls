@@ -162,27 +162,44 @@ impl CertifiedKey {
         key: PrivateKeyDer<'static>,
         provider: &CryptoProvider,
     ) -> Result<Self, Error> {
-        let private_key = provider
-            .key_provider
-            .load_private_key(key)?;
-
-        let certified_key = Self::new(cert_chain, private_key);
-        match certified_key.keys_match() {
-            // Don't treat unknown consistency as an error
-            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => Ok(certified_key),
-            Err(err) => Err(err),
-        }
+        Self::new(
+            cert_chain,
+            provider
+                .key_provider
+                .load_private_key(key)?,
+        )
     }
 
     /// Make a new CertifiedKey, with the given chain and key.
     ///
     /// The cert chain must not be empty. The first certificate in the chain
-    /// must be the end-entity certificate.
-    pub fn new(cert_chain: Vec<CertificateDer<'static>>, key: Arc<dyn SigningKey>) -> Self {
-        Self {
-            cert_chain,
-            key,
-            ocsp: None,
+    /// must be the end-entity certificate. The end-entity certificate's
+    /// subject public key info must match that of the `key`'s public key.
+    /// If the `key` does not have a public key, this will return an
+    /// `InconsistentKeys::Unknown` error.
+    ///
+    /// This constructor should be used with all [`SigningKey`] implementations
+    /// that can provide a public key, including those provided by rustls itself.
+    pub fn new(
+        cert_chain: Vec<CertificateDer<'static>>,
+        key: Arc<dyn SigningKey>,
+    ) -> Result<Self, Error> {
+        let parsed = ParsedCertificate::try_from(
+            cert_chain
+                .first()
+                .ok_or(Error::NoCertificatesPresented)?,
+        )?;
+
+        match (key.public_key(), parsed.subject_public_key_info()) {
+            (None, _) => Err(Error::InconsistentKeys(InconsistentKeys::Unknown)),
+            (Some(key_spki), cert_spki) if key_spki != cert_spki => {
+                Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
+            }
+            _ => Ok(Self {
+                cert_chain,
+                key,
+                ocsp: None,
+            }),
         }
     }
 

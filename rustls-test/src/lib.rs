@@ -454,7 +454,7 @@ impl KeyType {
         let private_key = provider
             .key_provider
             .load_private_key(self.get_key())?;
-        Ok(Arc::new(CertifiedKey::new(self.get_chain(), private_key)))
+        Ok(Arc::new(CertifiedKey::new(self.get_chain(), private_key)?))
     }
 
     fn get_crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
