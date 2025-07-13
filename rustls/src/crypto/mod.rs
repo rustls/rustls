@@ -246,7 +246,11 @@ impl CryptoProvider {
         }
 
         let provider = Self::from_crate_features()
-            .expect("no process-level CryptoProvider available -- call CryptoProvider::install_default() before this point");
+            .expect(r###"
+Could not automatically determine the process-level CryptoProvider from Rustls crate features.
+Call CryptoProvider::install_default() before this point to select a provider manually, or make sure exactly one of the 'aws-lc-rs' and 'ring' features is enabled.
+See the documentation of the CryptoProvider type for more information.
+            "###);
         // Ignore the error resulting from us losing a race, and accept the outcome.
         let _ = provider.install_default();
         Self::get_default().unwrap()
