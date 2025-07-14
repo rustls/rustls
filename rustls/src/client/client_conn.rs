@@ -792,7 +792,11 @@ mod connection {
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
 
-    /// Stub that implements io::Write and dispatches to `write_early_data`.
+    /// Allows writing of early data in resumed TLS 1.3 connections.
+    ///
+    /// "Early data" is also known as "0-RTT data".
+    ///
+    /// This type implements [`io::Write`].
     pub struct WriteEarlyData<'a> {
         sess: &'a mut ClientConnection,
     }

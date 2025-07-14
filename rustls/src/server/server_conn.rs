@@ -709,7 +709,7 @@ mod connection {
     ///
     /// "Early data" is also known as "0-RTT data".
     ///
-    /// This structure implements [`std::io::Read`].
+    /// This type implements [`io::Read`].
     pub struct ReadEarlyData<'a> {
         early_data: &'a mut EarlyDataState,
     }
