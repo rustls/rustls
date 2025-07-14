@@ -6,6 +6,8 @@ use crate::conn::{ConnectionCommon, SideData};
 /// This type implements `io::Read` and `io::Write`, encapsulating
 /// a Connection `C` and an underlying transport `T`, such as a socket.
 ///
+/// Relies on [`ConnectionCommon::complete_io()`] to perform the necessary I/O.
+///
 /// This allows you to use a rustls Connection like a normal stream.
 #[derive(Debug)]
 pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
@@ -153,8 +155,9 @@ where
 }
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
-/// and owning a Connection `C` and an underlying blocking transport
-/// `T`, such as a socket.
+/// and owning a Connection `C` and an underlying transport `T`, such as a socket.
+///
+/// Relies on [`ConnectionCommon::complete_io()`] to perform the necessary I/O.
 ///
 /// This allows you to use a rustls Connection like a normal stream.
 #[derive(Debug)]
