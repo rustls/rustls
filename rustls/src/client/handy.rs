@@ -1,7 +1,9 @@
 use pki_types::ServerName;
 
+use crate::client::ResolvesClientRpk;
 use crate::enums::SignatureScheme;
 use crate::msgs::persist;
+use crate::sign::KeyPair;
 use crate::sync::Arc;
 use crate::{NamedGroup, client, sign};
 
@@ -209,37 +211,29 @@ impl client::ResolvesClientCert for FailResolveClientCert {
     }
 }
 
-/// An exemplar `ResolvesClientCert` implementation that always resolves to a single
+/// An exemplar `ResolvesClientRpk` implementation that always resolves to a single
 /// [RFC 7250] raw public key.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Clone, Debug)]
-pub struct AlwaysResolvesClientRawPublicKeys(Arc<sign::CertifiedKey>);
+pub struct AlwaysResolvesClientRawPublicKeys(Arc<KeyPair>);
 impl AlwaysResolvesClientRawPublicKeys {
     /// Create a new `AlwaysResolvesClientRawPublicKeys` instance.
-    pub fn new(certified_key: Arc<sign::CertifiedKey>) -> Self {
-        Self(certified_key)
+    pub fn new(key_pair: Arc<KeyPair>) -> Self {
+        Self(key_pair)
     }
 }
 
-impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
+impl ResolvesClientRpk for AlwaysResolvesClientRawPublicKeys {
     fn resolve(
         &self,
         _root_hint_subjects: &[&[u8]],
         _sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>> {
+    ) -> Option<Arc<KeyPair>> {
         Some(self.0.clone())
     }
 
-    fn only_raw_public_keys(&self) -> bool {
-        true
-    }
-
-    /// Returns true if the resolver is ready to present an identity.
-    ///
-    /// Even though the function is called `has_certs`, it returns true
-    /// although only an RPK (Raw Public Key) is available, not an actual certificate.
-    fn has_certs(&self) -> bool {
+    fn enabled(&self) -> bool {
         true
     }
 }
@@ -253,7 +247,11 @@ mod tests {
 
     use super::NoClientSessionStorage;
     use super::provider::cipher_suite;
-    use crate::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use crate::client::ResolvesClientIdentity;
+    use crate::client::client_conn::ResolvesClientCertCompat;
+    use crate::client::danger::{
+        HandshakeSignatureValid, ServerCertVerifier, ServerIdVerified, ServerIdVerifier,
+    };
     use crate::client::{ClientSessionStore, ResolvesClientCert};
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
@@ -264,6 +262,7 @@ mod tests {
     use crate::pki_types::CertificateDer;
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
+    use crate::verify::ServerCertVerifierCompat;
     use crate::{DigitallySignedStruct, Error, SignatureScheme, sign};
 
     #[test]
@@ -271,8 +270,10 @@ mod tests {
         let c = NoClientSessionStorage {};
         let name = ServerName::try_from("example.com").unwrap();
         let now = UnixTime::now();
-        let server_cert_verifier: Arc<dyn ServerCertVerifier> = Arc::new(DummyServerCertVerifier);
-        let resolves_client_cert: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolvesClientCert);
+        let server_id_verifier: Arc<dyn ServerIdVerifier> =
+            Arc::new(ServerCertVerifierCompat::from(DummyServerCertVerifier));
+        let resolves_client_cert: Arc<dyn ResolvesClientIdentity> =
+            Arc::new(ResolvesClientCertCompat::from(DummyResolvesClientCert));
 
         c.set_kx_hint(name.clone(), NamedGroup::X25519);
         assert_eq!(None, c.kx_hint(&name));
@@ -294,7 +295,7 @@ mod tests {
                     Arc::new(PayloadU16::empty()),
                     &[],
                     CertificateChain::default(),
-                    &server_cert_verifier,
+                    &server_id_verifier,
                     &resolves_client_cert,
                     now,
                     0,
@@ -316,7 +317,7 @@ mod tests {
                 Arc::new(PayloadU16::empty()),
                 &[],
                 CertificateChain::default(),
-                &server_cert_verifier,
+                &server_id_verifier,
                 &resolves_client_cert,
                 now,
                 0,
@@ -339,7 +340,7 @@ mod tests {
             _server_name: &ServerName<'_>,
             _ocsp_response: &[u8],
             _now: UnixTime,
-        ) -> Result<ServerCertVerified, Error> {
+        ) -> Result<ServerIdVerified, Error> {
             unreachable!()
         }
 

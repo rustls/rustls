@@ -20,6 +20,7 @@ use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
+use crate::identity::{Identity, X509Identity};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8, PayloadU16};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -163,14 +164,9 @@ mod server_hello {
 
                     // Since we're resuming, we verified the certificate and
                     // proof of possession in the prior session.
-                    cx.common.peer_certificates = Some(
-                        resuming
-                            .server_cert_chain()
-                            .clone()
-                            .into_owned(),
-                    );
+                    cx.common.peer_identity = Some(resuming.server_identity().clone());
                     cx.common.handshake_kind = Some(HandshakeKind::Resumed);
-                    let cert_verified = verify::ServerCertVerified::assertion();
+                    let cert_verified = verify::ServerIdVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
                     return if must_issue_new_ticket {
@@ -736,7 +732,7 @@ struct ExpectCertificateRequest<'a> {
 impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
     fn handle<'m>(
         mut self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
+        cx: &mut ClientContext<'_>,
         m: Message<'m>,
     ) -> hs::NextStateOrError<'m>
     where
@@ -756,12 +752,23 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
         // We ignore certreq.certtypes as a result, since the information it contains
         // is entirely duplicated in certreq.sigschemes.
 
+        let cert_type = cx
+            .common
+            .negotiated_client_cert_type()
+            .ok_or_else(|| {
+                cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerIncompatible::IncorrectCertificateTypeExtension,
+                )
+            })?;
+
         const NO_CONTEXT: Option<Vec<u8>> = None; // TLS 1.2 doesn't use a context.
         let no_compression = None; // or compression
         let client_auth = ClientAuthDetails::resolve(
             self.config
-                .client_auth_cert_resolver
+                .client_auth_id_resolver
                 .as_ref(),
+            cert_type,
             Some(&certreq.canames),
             &certreq.sigschemes,
             NO_CONTEXT,
@@ -862,24 +869,16 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         // 5. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
-        let (end_entity, intermediates) = st
-            .server_cert
-            .cert_chain
-            .split_first()
-            .ok_or(Error::NoCertificatesPresented)?;
-
+        let server_id = Identity::from(X509Identity::new(
+            st.server_cert.cert_chain.0.clone(),
+            &st.server_cert.ocsp_response,
+        ));
         let now = st.config.current_time()?;
 
         let cert_verified = st
             .config
             .verifier
-            .verify_server_cert(
-                end_entity,
-                intermediates,
-                &st.server_name,
-                &st.server_cert.ocsp_response,
-                now,
-            )
+            .verify_identity(&server_id, &st.server_name, now)
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)
@@ -909,21 +908,35 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
             st.config
                 .verifier
-                .verify_tls12_signature(&message, end_entity, sig)
+                .verify_tls12_signature(&message, &server_id, sig)
                 .map_err(|err| {
                     cx.common
                         .send_cert_verify_error_alert(err)
                 })?
         };
-        cx.common.peer_certificates = Some(st.server_cert.cert_chain.into_owned());
+        cx.common.peer_identity = Some(
+            st.server_cert
+                .cert_chain
+                .into_owned()
+                .into(),
+        );
 
         // 3.
         if let Some(client_auth) = &st.client_auth {
-            let certs = match client_auth {
-                ClientAuthDetails::Empty { .. } => CertificateChain::default(),
-                ClientAuthDetails::Verify { certkey, .. } => CertificateChain(certkey.cert.clone()),
+            let id = match client_auth {
+                ClientAuthDetails::Empty { .. } => CertificateChain::default().into(),
+                ClientAuthDetails::Verify { signing_id, .. } => signing_id.id().clone(),
             };
-            emit_certificate(&mut st.transcript, certs, cx.common);
+            // We only support certificates in TLS 1.2
+            if let Some(certs) = id.as_certificates() {
+                let cert_chain = CertificateChain::from_certs(certs.into_iter().map(|c| c.clone()));
+                emit_certificate(&mut st.transcript, cert_chain, cx.common);
+            } else {
+                warn!(
+                    "client identity schemes other than certificates are not supported for TLS 1.2 connections",
+                );
+                return Err(Error::UnsupportedIdentityType);
+            }
         }
 
         // 4a.
@@ -1060,7 +1073,7 @@ struct ExpectNewTicket {
     using_ems: bool,
     transcript: HandshakeHash,
     resuming: bool,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::ServerIdVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
 
@@ -1112,7 +1125,7 @@ struct ExpectCcs {
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
     resuming: bool,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::ServerIdVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
 
@@ -1173,7 +1186,7 @@ struct ExpectFinished {
     ticket: Option<NewSessionTicketPayload>,
     secrets: ConnectionSecrets,
     resuming: bool,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::ServerIdVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
 
@@ -1209,11 +1222,11 @@ impl ExpectFinished {
             ticket,
             self.secrets.master_secret(),
             cx.common
-                .peer_certificates
+                .peer_identity
                 .clone()
                 .unwrap_or_default(),
             &self.config.verifier,
-            &self.config.client_auth_cert_resolver,
+            &self.config.client_auth_id_resolver,
             now,
             lifetime,
             self.using_ems,
@@ -1300,7 +1313,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 // -- Traffic transit state --
 struct ExpectTraffic {
     secrets: ConnectionSecrets,
-    _cert_verified: verify::ServerCertVerified,
+    _cert_verified: verify::ServerIdVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
 }

@@ -6,7 +6,7 @@ use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, Unknown
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::sync::Arc;
 use crate::verify::{
-    DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
+    DigitallySignedStruct, HandshakeSignatureValid, ServerIdVerified, ServerCertVerifier,
 };
 use crate::webpki::verify::{
     ParsedCertificate, verify_server_cert_signed_by_trust_anchor_impl, verify_tls12_signature,
@@ -235,7 +235,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         server_name: &ServerName<'_>,
         _ocsp_response: &[u8],
         now: UnixTime,
-    ) -> Result<ServerCertVerified, Error> {
+    ) -> Result<ServerIdVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
 
         let crl_refs = self.crls.iter().collect::<Vec<_>>();
@@ -269,7 +269,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         )?;
 
         verify_server_name(&cert, server_name)?;
-        Ok(ServerCertVerified::assertion())
+        Ok(ServerIdVerified::assertion())
     }
 
     fn verify_tls12_signature(

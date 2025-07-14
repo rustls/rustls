@@ -13,7 +13,7 @@ use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::server::ServerConfig;
 use crate::sync::Arc;
 use crate::verify::{
-    ClientCertVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
+    ClientIdVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
     NoClientAuth,
 };
 use crate::webpki::parse_crls;
@@ -362,7 +362,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         end_entity: &CertificateDer<'_>,
         intermediates: &[CertificateDer<'_>],
         now: UnixTime,
-    ) -> Result<ClientCertVerified, Error> {
+    ) -> Result<ClientIdVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
 
         let crl_refs = self.crls.iter().collect::<Vec<_>>();
@@ -393,7 +393,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
                 None,
             )
             .map_err(pki_error)
-            .map(|_| ClientCertVerified::assertion())
+            .map(|_| ClientIdVerified::assertion())
     }
 
     fn verify_tls12_signature(

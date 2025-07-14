@@ -166,27 +166,23 @@ impl server::ProducesTickets for NeverProducesTickets {
     }
 }
 
-/// An exemplar `ResolvesServerCert` implementation that always resolves to a single
+/// An exemplar `ResolvesServerRpk` implementation that always resolves to a single
 /// [RFC 7250] raw public key.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Clone, Debug)]
-pub struct AlwaysResolvesServerRawPublicKeys(Arc<sign::CertifiedKey>);
+pub struct AlwaysResolvesServerRawPublicKeys(Arc<sign::KeyPair>);
 
 impl AlwaysResolvesServerRawPublicKeys {
     /// Create a new `AlwaysResolvesServerRawPublicKeys` instance.
-    pub fn new(certified_key: Arc<sign::CertifiedKey>) -> Self {
+    pub fn new(certified_key: Arc<sign::KeyPair>) -> Self {
         Self(certified_key)
     }
 }
 
-impl server::ResolvesServerCert for AlwaysResolvesServerRawPublicKeys {
-    fn resolve(&self, _client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
+impl server::ResolvesServerRpk for AlwaysResolvesServerRawPublicKeys {
+    fn resolve(&self, _client_hello: &ClientHello<'_>) -> Option<Arc<sign::KeyPair>> {
         Some(self.0.clone())
-    }
-
-    fn only_raw_public_keys(&self) -> bool {
-        true
     }
 }
 

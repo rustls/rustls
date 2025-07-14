@@ -1,6 +1,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::any::Any;
 use core::fmt::Debug;
+use core::ops::Deref;
 
 use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
@@ -8,6 +10,7 @@ use super::CryptoProvider;
 use crate::client::ResolvesClientCert;
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
+use crate::identity::{IdentitySigner, TlsIdentity, X509Identity};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
 use crate::x509;
@@ -204,6 +207,68 @@ impl CertifiedKey {
         self.cert
             .first()
             .ok_or(Error::NoCertificatesPresented)
+    }
+}
+
+impl IdentitySigner for CertifiedKey {
+    fn id(&self) -> Box<dyn TlsIdentity> {
+        Box::new(X509Identity::new(self.cert.clone(), self.ocsp.as_ref()))
+    }
+
+    fn signing_key(&self) -> &dyn SigningKey {
+        self.key.deref()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct KeyPair {
+    pub public_key: SubjectPublicKeyInfoDer<'static>,
+    pub secret_key: Arc<dyn SigningKey>,
+}
+
+impl KeyPair {
+    pub fn new(
+        public_key: SubjectPublicKeyInfoDer<'static>,
+        secret_key: Arc<dyn SigningKey>,
+    ) -> Result<Self, Error> {
+        let this = Self {
+            public_key,
+            secret_key,
+        };
+        match this.keys_match() {
+            // Don't treat unknown consistency as an error
+            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => Ok(this),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn keys_match(&self) -> Result<(), Error> {
+        let Some(key_spki) = self.secret_key.public_key() else {
+            return Err(InconsistentKeys::Unknown.into());
+        };
+
+        match key_spki == self.public_key {
+            true => Ok(()),
+            false => Err(InconsistentKeys::KeyMismatch.into()),
+        }
+    }
+}
+
+impl IdentitySigner for KeyPair {
+    fn id(&self) -> Box<dyn TlsIdentity> {
+        Box::new(self.public_key.clone())
+    }
+
+    fn signing_key(&self) -> &dyn SigningKey {
+        self.secret_key.deref()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

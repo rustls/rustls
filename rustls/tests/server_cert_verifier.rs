@@ -13,7 +13,7 @@ use common::{
 };
 use pki_types::{CertificateDer, ServerName};
 use rustls::client::WebPkiServerVerifier;
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::danger::{HandshakeSignatureValid, ServerIdVerified, ServerCertVerifier};
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use rustls::{
@@ -299,7 +299,7 @@ impl ServerCertVerifier for ServerCertVerifierWithCasExt {
         server_name: &ServerName<'_>,
         ocsp_response: &[u8],
         now: pki_types::UnixTime,
-    ) -> Result<ServerCertVerified, Error> {
+    ) -> Result<ServerIdVerified, Error> {
         self.verifier
             .verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now)
     }
@@ -330,10 +330,6 @@ impl ServerCertVerifier for ServerCertVerifierWithCasExt {
 
     fn request_ocsp_response(&self) -> bool {
         self.verifier.request_ocsp_response()
-    }
-
-    fn requires_raw_public_keys(&self) -> bool {
-        self.verifier.requires_raw_public_keys()
     }
 
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {

@@ -13,9 +13,12 @@ use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
+#[cfg(doc)]
+use crate::crypto;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
+use crate::identity::SigningIdentity;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
@@ -27,9 +30,7 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
-#[cfg(doc)]
-use crate::{DistinguishedName, crypto};
-use crate::{KeyLog, WantsVersions, compress, sign, verify, versions};
+use crate::{DistinguishedName, KeyLog, WantsVersions, compress, sign, verify, versions};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -93,6 +94,20 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     ) -> Option<persist::Tls13ClientSessionValue>;
 }
 
+pub trait ResolvesClientIdentity: fmt::Debug + Send + Sync {
+    fn resolve(
+        &self,
+        hints: &[DistinguishedName],
+        sigschemes: &[SignatureScheme],
+        negotiated_certificate_type: CertificateType,
+    ) -> Option<SigningIdentity>;
+
+    /// Return true to enable client auth.
+    fn enabled(&self) -> bool;
+
+    fn supported_certificate_types(&self) -> &[CertificateType];
+}
+
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
 pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
@@ -121,15 +136,120 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
         sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>>;
 
-    /// Return true if the client only supports raw public keys.
-    ///
-    /// See [RFC 7250](https://www.rfc-editor.org/rfc/rfc7250).
-    fn only_raw_public_keys(&self) -> bool {
-        false
-    }
-
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
+}
+
+#[derive(Debug)]
+pub(crate) struct ResolvesClientCertCompat(Arc<dyn ResolvesClientCert>);
+
+impl From<Arc<dyn ResolvesClientCert>> for ResolvesClientCertCompat {
+    fn from(value: Arc<dyn ResolvesClientCert>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ResolvesClientCert + 'static> From<Arc<T>> for ResolvesClientCertCompat {
+    fn from(value: Arc<T>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ResolvesClientCert + 'static> From<T> for ResolvesClientCertCompat {
+    fn from(value: T) -> Self {
+        Self(Arc::new(value))
+    }
+}
+
+impl ResolvesClientIdentity for ResolvesClientCertCompat {
+    fn resolve(
+        &self,
+        hints: &[DistinguishedName],
+        sigschemes: &[SignatureScheme],
+        negotiated_certificate_type: CertificateType,
+    ) -> Option<SigningIdentity> {
+        if negotiated_certificate_type != CertificateType::X509 {
+            return None;
+        }
+
+        let acceptable_issuers = hints
+            .iter()
+            .map(|p| p.as_ref())
+            .collect::<Vec<&[u8]>>();
+
+        self.0
+            .resolve(&acceptable_issuers, sigschemes)
+            .map(|ck| ck.into())
+    }
+
+    fn enabled(&self) -> bool {
+        self.0.has_certs()
+    }
+
+    fn supported_certificate_types(&self) -> &[CertificateType] {
+        &[CertificateType::X509]
+    }
+}
+
+pub trait ResolvesClientRpk: fmt::Debug + Send + Sync {
+    fn resolve(
+        &self,
+        root_hint_subjects: &[&[u8]],
+        sigschemes: &[SignatureScheme],
+    ) -> Option<Arc<sign::KeyPair>>;
+
+    fn enabled(&self) -> bool;
+}
+
+#[derive(Debug)]
+pub(crate) struct ResolvesClientRpkWrapper(Arc<dyn ResolvesClientRpk>);
+
+impl From<Arc<dyn ResolvesClientRpk>> for ResolvesClientRpkWrapper {
+    fn from(value: Arc<dyn ResolvesClientRpk>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ResolvesClientRpk + 'static> From<Arc<T>> for ResolvesClientRpkWrapper {
+    fn from(value: Arc<T>) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ResolvesClientRpk + 'static> From<T> for ResolvesClientRpkWrapper {
+    fn from(value: T) -> Self {
+        Self(Arc::new(value))
+    }
+}
+
+impl ResolvesClientIdentity for ResolvesClientRpkWrapper {
+    fn resolve(
+        &self,
+        hints: &[DistinguishedName],
+        sigschemes: &[SignatureScheme],
+        negotiated_certificate_type: CertificateType,
+    ) -> Option<SigningIdentity> {
+        if negotiated_certificate_type != CertificateType::RawPublicKey {
+            return None;
+        }
+
+        let acceptable_issuers = hints
+            .iter()
+            .map(|p| p.as_ref())
+            .collect::<Vec<&[u8]>>();
+
+        self.0
+            .resolve(&acceptable_issuers, sigschemes)
+            .map(|kp| kp.into())
+    }
+
+    fn enabled(&self) -> bool {
+        self.0.enabled()
+    }
+
+    fn supported_certificate_types(&self) -> &[CertificateType] {
+        &[CertificateType::RawPublicKey]
+    }
 }
 
 /// Common configuration for (typically) all connections made by a program.
@@ -199,7 +319,7 @@ pub struct ClientConfig {
     pub max_fragment_size: Option<usize>,
 
     /// How to decide what client auth certificate/keys to use.
-    pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
+    pub client_auth_id_resolver: Arc<dyn ResolvesClientIdentity>,
 
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.
@@ -247,12 +367,12 @@ pub struct ClientConfig {
     pub(super) versions: versions::EnabledVersions,
 
     /// How to verify the server certificate chain.
-    pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
+    pub(super) verifier: Arc<dyn verify::ServerIdVerifier>,
 
-    /// How to decompress the server's certificate chain.
+    /// How to decompress the server's identity.
     ///
     /// If this is non-empty, the [RFC8779] certificate compression
-    /// extension is offered, and any compressed certificates are
+    /// extension is offered, and any compressed identities are
     /// transparently decompressed during the handshake.
     ///
     /// This only applies to TLS1.3 connections.  It is ignored for
@@ -261,11 +381,11 @@ pub struct ClientConfig {
     /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
 
-    /// How to compress the client's certificate chain.
+    /// How to compress the client's identity.
     ///
     /// If a server supports this extension, and advertises support
     /// for one of the compression algorithms included here, the
-    /// client certificate will be compressed according to [RFC8779].
+    /// client identity will be compressed according to [RFC8779].
     ///
     /// This only applies to TLS1.3 connections.  It is ignored for
     /// TLS1.2 connections.
@@ -273,7 +393,7 @@ pub struct ClientConfig {
     /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_compressors: Vec<&'static dyn compress::CertCompressor>,
 
-    /// Caching for compressed certificates.
+    /// Caching for compressed identities.
     ///
     /// This is optional: [`compress::CompressionCache::Disabled`] gives
     /// a cache that does no caching.
@@ -450,6 +570,14 @@ impl ClientConfig {
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
     }
+
+    pub fn client_auth_cert_resolver(&mut self, resolver: Arc<dyn ResolvesClientCert>) {
+        self.client_auth_id_resolver = Arc::new(ResolvesClientCertCompat::from(resolver));
+    }
+
+    pub fn client_auth_rpk_resolver(&mut self, resolver: Arc<dyn ResolvesClientRpk>) {
+        self.client_auth_id_resolver = Arc::new(ResolvesClientRpkWrapper::from(resolver));
+    }
 }
 
 /// Configuration for how/when a client is allowed to resume a previous session.
@@ -537,7 +665,10 @@ pub enum Tls12Resumption {
 /// Container for unsafe APIs
 pub(super) mod danger {
     use super::ClientConfig;
-    use super::verify::ServerCertVerifier;
+    use super::verify::{
+        ServerCertVerifier, ServerCertVerifierCompat, ServerIdVerifier, ServerRpkVerifier,
+        ServerRpkVerifierWrapper,
+    };
     use crate::sync::Arc;
 
     /// Accessor for dangerous configuration options.
@@ -548,8 +679,18 @@ pub(super) mod danger {
     }
 
     impl DangerousClientConfig<'_> {
-        /// Overrides the default `ServerCertVerifier` with something else.
+        /// Overrides the default `ServerIdVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
+            self.set_identity_verifier(Arc::new(ServerCertVerifierCompat::from(verifier)))
+        }
+
+        /// Overrides the default `ServerIdVerifier` with something else.
+        pub fn set_rpk_verifier(&mut self, verifier: Arc<dyn ServerRpkVerifier>) {
+            self.set_identity_verifier(Arc::new(ServerRpkVerifierWrapper::from(verifier)))
+        }
+
+        /// Overrides the default `ServerIdVerifier` with something else.
+        pub fn set_identity_verifier(&mut self, verifier: Arc<dyn ServerIdVerifier>) {
             self.cfg.verifier = verifier;
         }
     }

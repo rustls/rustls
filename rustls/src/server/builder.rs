@@ -3,12 +3,16 @@ use core::marker::PhantomData;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
 
-use super::{ResolvesServerCert, ServerConfig, handy};
+use super::{ResolvesServerCert, ResolvesServerIdentity, ResolvesServerRpk, ServerConfig, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::error::Error;
+use crate::server::server_conn::{ResolvesServerCertCompat, ResolvesServerRpkWrapper};
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
-use crate::verify::{ClientCertVerifier, NoClientAuth};
+use crate::verify::{
+    ClientCertVerifier, ClientCertVerifierCompat, ClientIdVerifier, ClientRpkVerifier,
+    ClientRpkVerifierWrapper, NoClientAuth,
+};
 use crate::{NoKeyLog, compress, versions};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {
@@ -16,21 +20,39 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
     pub fn with_client_cert_verifier(
         self,
         client_cert_verifier: Arc<dyn ClientCertVerifier>,
-    ) -> ConfigBuilder<ServerConfig, WantsServerCert> {
+    ) -> ConfigBuilder<ServerConfig, WantsServerIdentity> {
+        self.with_client_id_verifier(Arc::new(ClientCertVerifierCompat::from(
+            client_cert_verifier,
+        )))
+    }
+
+    /// Choose how to verify client certificates.
+    pub fn with_client_rpk_verifier(
+        self,
+        client_rpk_verifier: Arc<dyn ClientRpkVerifier>,
+    ) -> ConfigBuilder<ServerConfig, WantsServerIdentity> {
+        self.with_client_id_verifier(Arc::new(ClientRpkVerifierWrapper::from(client_rpk_verifier)))
+    }
+
+    /// Disable client authentication.
+    pub fn with_no_client_auth(self) -> ConfigBuilder<ServerConfig, WantsServerIdentity> {
+        self.with_client_cert_verifier(Arc::new(NoClientAuth))
+    }
+
+    /// Choose how to verify client identities.
+    pub fn with_client_id_verifier(
+        self,
+        client_id_verifier: Arc<dyn ClientIdVerifier>,
+    ) -> ConfigBuilder<ServerConfig, WantsServerIdentity> {
         ConfigBuilder {
-            state: WantsServerCert {
+            state: WantsServerIdentity {
                 versions: self.state.versions,
-                verifier: client_cert_verifier,
+                verifier: client_id_verifier,
             },
             provider: self.provider,
             time_provider: self.time_provider,
             side: PhantomData,
         }
-    }
-
-    /// Disable client authentication.
-    pub fn with_no_client_auth(self) -> ConfigBuilder<ServerConfig, WantsServerCert> {
-        self.with_client_cert_verifier(Arc::new(NoClientAuth))
     }
 }
 
@@ -39,12 +61,12 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
-pub struct WantsServerCert {
+pub struct WantsServerIdentity {
     versions: versions::EnabledVersions,
-    verifier: Arc<dyn ClientCertVerifier>,
+    verifier: Arc<dyn ClientIdVerifier>,
 }
 
-impl ConfigBuilder<ServerConfig, WantsServerCert> {
+impl ConfigBuilder<ServerConfig, WantsServerIdentity> {
     /// Sets a single certificate chain and matching private key.  This
     /// certificate and key is used for all subsequent connections,
     /// irrespective of things like SNI hostname.
@@ -98,10 +120,23 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
 
     /// Sets a custom [`ResolvesServerCert`].
     pub fn with_cert_resolver(self, cert_resolver: Arc<dyn ResolvesServerCert>) -> ServerConfig {
+        self.with_identity_resolver(Arc::new(ResolvesServerCertCompat::from(cert_resolver)))
+    }
+
+    /// Sets a custom [`ResolvesServerRpk`].
+    pub fn with_rpk_resolver(self, rpk_resolver: Arc<dyn ResolvesServerRpk>) -> ServerConfig {
+        self.with_identity_resolver(Arc::new(ResolvesServerRpkWrapper::from(rpk_resolver)))
+    }
+
+    /// Sets a custom [`ResolvesServerIdentity`].
+    pub fn with_identity_resolver(
+        self,
+        id_resolver: Arc<dyn ResolvesServerIdentity>,
+    ) -> ServerConfig {
         ServerConfig {
             provider: self.provider,
             verifier: self.state.verifier,
-            cert_resolver,
+            id_resolver,
             ignore_client_order: false,
             max_fragment_size: None,
             #[cfg(feature = "std")]

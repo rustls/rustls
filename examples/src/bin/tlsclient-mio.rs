@@ -365,8 +365,8 @@ mod danger {
             _server_name: &ServerName<'_>,
             _ocsp: &[u8],
             _now: UnixTime,
-        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-            Ok(rustls::client::danger::ServerCertVerified::assertion())
+        ) -> Result<rustls::client::danger::ServerIdVerified, rustls::Error> {
+            Ok(rustls::client::danger::ServerIdVerified::assertion())
         }
 
         fn verify_tls12_signature(

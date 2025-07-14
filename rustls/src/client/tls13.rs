@@ -8,7 +8,7 @@ use subtle::ConstantTimeEq;
 use super::client_conn::ClientConnectionData;
 use super::hs::{ClientContext, ClientHelloInput, ClientSessionValue};
 use crate::check::inappropriate_handshake_message;
-use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
+use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::ech::{self, EchState, EchStatus};
 use crate::client::{ClientConfig, ClientSessionStore, hs};
 use crate::common_state::{
@@ -23,20 +23,21 @@ use crate::enums::{
 };
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
+use crate::identity::{Identity, TlsIdentityEntries};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
-    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtensions, EchConfigPayload,
-    HandshakeMessagePayload, HandshakePayload, KeyShareEntry, NewSessionTicketPayloadTls13,
+    CERTIFICATE_MAX_SIZE_LIMIT, ClientExtensions, EchConfigPayload, HandshakeMessagePayload,
+    HandshakePayload, IdentityPayloadTls13, KeyShareEntry, NewSessionTicketPayloadTls13,
     PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ServerExtensions,
     ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::{self, Retrieved};
-use crate::sign::{CertifiedKey, Signer};
+use crate::sign::Signer;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
@@ -567,16 +568,16 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         .set_handshake_encrypter(cx.common);
                 }
 
-                cx.common.peer_certificates = Some(
+                cx.common.peer_identity = Some(
                     resuming_session
-                        .server_cert_chain()
+                        .server_identity()
                         .clone(),
                 );
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
                 // We *don't* reverify the certificate chain here: resumption is a
                 // continuation of the previous session in terms of security policy.
-                let cert_verified = verify::ServerCertVerified::assertion();
+                let id_verified = verify::ServerIdVerified::assertion();
                 let sig_verified = verify::HandshakeSignatureValid::assertion();
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
@@ -586,7 +587,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     transcript: self.transcript,
                     key_schedule: self.key_schedule,
                     client_auth: None,
-                    cert_verified,
+                    id_verified,
                     sig_verified,
                     ech_retry_configs,
                 }))
@@ -600,7 +601,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     .get_or_insert(HandshakeKind::Full);
 
                 Ok(if self.hello.offered_cert_compression {
-                    Box::new(ExpectCertificateOrCompressedCertificateOrCertReq {
+                    Box::new(ExpectIdentityOrCompressedIdentityOrIdReq {
                         config: self.config,
                         server_name: self.server_name,
                         randoms: self.randoms,
@@ -610,7 +611,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         ech_retry_configs,
                     })
                 } else {
-                    Box::new(ExpectCertificateOrCertReq {
+                    Box::new(ExpectIdentityOrIdReq {
                         config: self.config,
                         server_name: self.server_name,
                         randoms: self.randoms,
@@ -629,7 +630,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
     }
 }
 
-struct ExpectCertificateOrCompressedCertificateOrCertReq {
+struct ExpectIdentityOrCompressedIdentityOrIdReq {
     config: Arc<ClientConfig>,
     server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
@@ -639,7 +640,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
+impl State<ClientConnectionData> for ExpectIdentityOrCompressedIdentityOrIdReq {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -652,7 +653,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
-            } => Box::new(ExpectCertificate {
+            } => Box::new(ExpectIdentity {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -667,7 +668,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
                 ..
-            } => Box::new(ExpectCompressedCertificate {
+            } => Box::new(ExpectCompressedIdentity {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -681,14 +682,14 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
                 ..
-            } => Box::new(ExpectCertificateRequest {
+            } => Box::new(ExpectIdentityRequest {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
-                offered_cert_compression: true,
+                offered_id_compression: true,
                 ech_retry_configs: self.ech_retry_configs,
             })
             .handle(cx, m),
@@ -709,7 +710,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
     }
 }
 
-struct ExpectCertificateOrCompressedCertificate {
+struct ExpectIdentityOrCompressedIdentity {
     config: Arc<ClientConfig>,
     server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
@@ -720,7 +721,7 @@ struct ExpectCertificateOrCompressedCertificate {
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
+impl State<ClientConnectionData> for ExpectIdentityOrCompressedIdentity {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -733,7 +734,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
-            } => Box::new(ExpectCertificate {
+            } => Box::new(ExpectIdentity {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -748,7 +749,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
                 ..
-            } => Box::new(ExpectCompressedCertificate {
+            } => Box::new(ExpectCompressedIdentity {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -775,7 +776,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
     }
 }
 
-struct ExpectCertificateOrCertReq {
+struct ExpectIdentityOrIdReq {
     config: Arc<ClientConfig>,
     server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
@@ -785,7 +786,7 @@ struct ExpectCertificateOrCertReq {
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
+impl State<ClientConnectionData> for ExpectIdentityOrIdReq {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -798,7 +799,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
-            } => Box::new(ExpectCertificate {
+            } => Box::new(ExpectIdentity {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -813,14 +814,14 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
                 ..
-            } => Box::new(ExpectCertificateRequest {
+            } => Box::new(ExpectIdentityRequest {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
-                offered_cert_compression: false,
+                offered_id_compression: false,
                 ech_retry_configs: self.ech_retry_configs,
             })
             .handle(cx, m),
@@ -843,18 +844,18 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
 // TLS1.3 version of CertificateRequest handling.  We then move to expecting the server
 // Certificate. Unfortunately the CertificateRequest type changed in an annoying way
 // in TLS1.3.
-struct ExpectCertificateRequest {
+struct ExpectIdentityRequest {
     config: Arc<ClientConfig>,
     server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
-    offered_cert_compression: bool,
+    offered_id_compression: bool,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateRequest {
+impl State<ClientConnectionData> for ExpectIdentityRequest {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -912,10 +913,21 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             })
             .cloned();
 
+        let cert_type = cx
+            .common
+            .negotiated_client_cert_type()
+            .ok_or_else(|| {
+                cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerIncompatible::IncorrectCertificateTypeExtension,
+                )
+            })?;
+
         let client_auth = ClientAuthDetails::resolve(
             self.config
-                .client_auth_cert_resolver
+                .client_auth_id_resolver
                 .as_ref(),
+            cert_type,
             certreq
                 .extensions
                 .authority_names
@@ -925,8 +937,8 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             compat_compressor,
         );
 
-        Ok(if self.offered_cert_compression {
-            Box::new(ExpectCertificateOrCompressedCertificate {
+        Ok(if self.offered_id_compression {
+            Box::new(ExpectIdentityOrCompressedIdentity {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -937,7 +949,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 ech_retry_configs: self.ech_retry_configs,
             })
         } else {
-            Box::new(ExpectCertificate {
+            Box::new(ExpectIdentity {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -956,7 +968,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
     }
 }
 
-struct ExpectCompressedCertificate {
+struct ExpectCompressedIdentity {
     config: Arc<ClientConfig>,
     server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
@@ -967,7 +979,7 @@ struct ExpectCompressedCertificate {
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
-impl State<ClientConnectionData> for ExpectCompressedCertificate {
+impl State<ClientConnectionData> for ExpectCompressedIdentity {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1013,15 +1025,14 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             ));
         }
 
-        let cert_payload =
-            match CertificatePayloadTls13::read(&mut Reader::init(&decompress_buffer)) {
-                Ok(cm) => cm,
-                Err(err) => {
-                    return Err(cx
-                        .common
-                        .send_fatal_alert(AlertDescription::BadCertificate, err));
-                }
-            };
+        let id_payload = match IdentityPayloadTls13::read(&mut Reader::init(&decompress_buffer)) {
+            Ok(cm) => cm,
+            Err(err) => {
+                return Err(cx
+                    .common
+                    .send_fatal_alert(AlertDescription::BadCertificate, err));
+            }
+        };
         trace!(
             "Server certificate decompressed using {:?} ({} bytes -> {})",
             compressed_cert.alg,
@@ -1036,11 +1047,11 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
         let m = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::CertificateTls13(cert_payload.into_owned()),
+                HandshakePayload::CertificateTls13(id_payload.into_owned()),
             )),
         };
 
-        Box::new(ExpectCertificate {
+        Box::new(ExpectIdentity {
             config: self.config,
             server_name: self.server_name,
             randoms: self.randoms,
@@ -1059,7 +1070,7 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
     }
 }
 
-struct ExpectCertificate {
+struct ExpectIdentity {
     config: Arc<ClientConfig>,
     server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
@@ -1071,7 +1082,7 @@ struct ExpectCertificate {
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificate {
+impl State<ClientConnectionData> for ExpectIdentity {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1083,36 +1094,40 @@ impl State<ClientConnectionData> for ExpectCertificate {
         if !self.message_already_in_transcript {
             self.transcript.add_message(&m);
         }
-        let cert_chain = require_handshake_msg_move!(
+        let id_payload = require_handshake_msg_move!(
             m,
             HandshakeType::Certificate,
             HandshakePayload::CertificateTls13
         )?;
 
         // This is only non-empty for client auth.
-        if !cert_chain.context.0.is_empty() {
+        if !id_payload.context.0.is_empty() {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::DecodeError,
                 InvalidMessage::InvalidCertRequest,
             ));
         }
 
-        let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
-        let server_cert = ServerCertDetails::new(
-            cert_chain
-                .into_certificate_chain()
-                .into_owned(),
-            end_entity_ocsp,
-        );
+        // todo: at this point the cert is already supposed to be negotiated
+        // so this needs a better error
+        let server_cert_type = cx
+            .common
+            .negotiated_server_cert_type()
+            .ok_or(Error::UnsupportedIdentityType)?;
 
-        Ok(Box::new(ExpectCertificateVerify {
+        let server_id = self
+            .config
+            .verifier
+            .parse_tls13_payload(server_cert_type, id_payload.into())?;
+
+        Ok(Box::new(ExpectIdentityVerify {
             config: self.config,
             server_name: self.server_name,
             randoms: self.randoms,
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
-            server_cert,
+            server_id,
             client_auth: self.client_auth,
             ech_retry_configs: self.ech_retry_configs,
         }))
@@ -1124,19 +1139,19 @@ impl State<ClientConnectionData> for ExpectCertificate {
 }
 
 // --- TLS1.3 CertificateVerify ---
-struct ExpectCertificateVerify<'a> {
+struct ExpectIdentityVerify {
     config: Arc<ClientConfig>,
     server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
-    server_cert: ServerCertDetails<'a>,
+    server_id: Identity,
     client_auth: Option<ClientAuthDetails>,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
+impl State<ClientConnectionData> for ExpectIdentityVerify {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1145,33 +1160,21 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
     where
         Self: 'm,
     {
-        let cert_verify = require_handshake_msg!(
+        let dss = require_handshake_msg!(
             m,
             HandshakeType::CertificateVerify,
             HandshakePayload::CertificateVerify
         )?;
 
-        trace!("Server cert is {:?}", self.server_cert.cert_chain);
+        trace!("Server id is {:?}", self.server_id);
 
         // 1. Verify the certificate chain.
-        let (end_entity, intermediates) = self
-            .server_cert
-            .cert_chain
-            .split_first()
-            .ok_or(Error::NoCertificatesPresented)?;
-
         let now = self.config.current_time()?;
 
-        let cert_verified = self
+        let id_verified = self
             .config
             .verifier
-            .verify_server_cert(
-                end_entity,
-                intermediates,
-                &self.server_name,
-                &self.server_cert.ocsp_response,
-                now,
-            )
+            .verify_identity(&self.server_id, &self.server_name, now)
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)
@@ -1184,15 +1187,15 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             .verifier
             .verify_tls13_signature(
                 construct_server_verify_message(&handshake_hash).as_ref(),
-                end_entity,
-                cert_verify,
+                &self.server_id,
+                dss,
             )
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)
             })?;
 
-        cx.common.peer_certificates = Some(self.server_cert.cert_chain.into_owned());
+        cx.common.peer_identity = Some(self.server_id);
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
@@ -1203,42 +1206,42 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
-            cert_verified,
+            id_verified,
             sig_verified,
             ech_retry_configs: self.ech_retry_configs,
         }))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
-        Box::new(ExpectCertificateVerify {
+        Box::new(ExpectIdentityVerify {
             config: self.config,
             server_name: self.server_name,
             randoms: self.randoms,
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
-            server_cert: self.server_cert.into_owned(),
+            server_id: self.server_id,
             client_auth: self.client_auth,
             ech_retry_configs: self.ech_retry_configs,
         })
     }
 }
 
-fn emit_compressed_certificate_tls13(
+fn emit_compressed_identity_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
-    certkey: &CertifiedKey,
+    id: &Identity,
     auth_context: Option<Vec<u8>>,
     compressor: &dyn compress::CertCompressor,
     config: &ClientConfig,
 ) {
-    let mut cert_payload = CertificatePayloadTls13::new(certkey.cert.iter(), None);
-    cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
+    let mut id_payload: IdentityPayloadTls13<'_> = id.to_wire_format().into();
+    id_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
 
     let Ok(compressed) = config
         .cert_compression_cache
-        .compression_for(compressor, &cert_payload)
+        .compression_for(compressor, &id_payload)
     else {
-        return emit_certificate_tls13(flight, Some(certkey), auth_context);
+        return emit_identity_tls13(flight, Some(id), auth_context);
     };
 
     flight.add(HandshakeMessagePayload(
@@ -1246,23 +1249,23 @@ fn emit_compressed_certificate_tls13(
     ));
 }
 
-fn emit_certificate_tls13(
+fn emit_identity_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
-    certkey: Option<&CertifiedKey>,
+    id: Option<&Identity>,
     auth_context: Option<Vec<u8>>,
 ) {
-    let certs = certkey
-        .map(|ck| ck.cert.as_ref())
-        .unwrap_or(&[][..]);
-    let mut cert_payload = CertificatePayloadTls13::new(certs.iter(), None);
-    cert_payload.context = PayloadU8::new(auth_context.unwrap_or_default());
+    let mut id_payload: IdentityPayloadTls13<'_> = id
+        .map(|id| id.to_wire_format())
+        .unwrap_or_else(|| TlsIdentityEntries::default())
+        .into();
+    id_payload.context = PayloadU8::new(auth_context.unwrap_or_default());
 
     flight.add(HandshakeMessagePayload(HandshakePayload::CertificateTls13(
-        cert_payload,
+        id_payload,
     )));
 }
 
-fn emit_certverify_tls13(
+fn emit_identity_verify_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
     signer: &dyn Signer,
 ) -> Result<(), Error> {
@@ -1310,7 +1313,7 @@ struct ExpectFinished {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
-    cert_verified: verify::ServerCertVerified,
+    id_verified: verify::ServerIdVerified,
     sig_verified: verify::HandshakeSignatureValid,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
@@ -1365,7 +1368,7 @@ impl State<ClientConnectionData> for ExpectFinished {
                 ClientAuthDetails::Empty {
                     auth_context_tls13: auth_context,
                 } => {
-                    emit_certificate_tls13(&mut flight, None, auth_context);
+                    emit_identity_tls13(&mut flight, None, auth_context);
                 }
                 ClientAuthDetails::Verify {
                     auth_context_tls13: auth_context,
@@ -1373,26 +1376,26 @@ impl State<ClientConnectionData> for ExpectFinished {
                 } if cx.data.ech_status == EchStatus::Rejected => {
                     // If ECH was offered, and rejected, we MUST respond with
                     // an empty certificate message.
-                    emit_certificate_tls13(&mut flight, None, auth_context);
+                    emit_identity_tls13(&mut flight, None, auth_context);
                 }
                 ClientAuthDetails::Verify {
-                    certkey,
+                    signing_id,
                     signer,
                     auth_context_tls13: auth_context,
                     compressor,
                 } => {
                     if let Some(compressor) = compressor {
-                        emit_compressed_certificate_tls13(
+                        emit_compressed_identity_tls13(
                             &mut flight,
-                            &certkey,
+                            signing_id.id(),
                             auth_context,
                             compressor,
                             &st.config,
                         );
                     } else {
-                        emit_certificate_tls13(&mut flight, Some(&certkey), auth_context);
+                        emit_identity_tls13(&mut flight, Some(signing_id.id()), auth_context);
                     }
-                    emit_certverify_tls13(&mut flight, signer.as_ref())?;
+                    emit_identity_verify_tls13(&mut flight, signer.as_ref())?;
                 }
             }
         }
@@ -1437,7 +1440,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             suite: st.suite,
             key_schedule,
             resumption,
-            _cert_verified: st.cert_verified,
+            _id_verified: st.id_verified,
             _sig_verified: st.sig_verified,
             _fin_verified: fin,
         };
@@ -1463,7 +1466,7 @@ struct ExpectTraffic {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTraffic,
     resumption: KeyScheduleResumption,
-    _cert_verified: verify::ServerCertVerified,
+    _id_verified: verify::ServerIdVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
 }
@@ -1485,11 +1488,11 @@ impl ExpectTraffic {
             self.suite,
             nst.ticket.clone(),
             secret.as_ref(),
-            cx.peer_certificates
+            cx.peer_identity
                 .cloned()
                 .unwrap_or_default(),
             &self.config.verifier,
-            &self.config.client_auth_cert_resolver,
+            &self.config.client_auth_id_resolver,
             now,
             nst.lifetime,
             nst.age_add,
@@ -1521,7 +1524,7 @@ impl ExpectTraffic {
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         let mut kcx = KernelContext {
-            peer_certificates: cx.common.peer_certificates.as_ref(),
+            peer_identity: cx.common.peer_identity.as_ref(),
             protocol: cx.common.protocol,
             quic: &cx.common.quic,
         };

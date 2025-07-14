@@ -29,7 +29,7 @@ use base64::prelude::{BASE64_STANDARD, Engine};
 use nix::sys::signal::{self, Signal};
 #[cfg(unix)]
 use nix::unistd::Pid;
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerifier, ServerIdVerified};
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
     Tls12Resumption, WebPkiServerVerifier,
@@ -45,9 +45,10 @@ use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
     UnixTime,
 };
-use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+use rustls::server::danger::{ClientCertVerifier, ClientIdVerified};
 use rustls::server::{
-    ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
+    CertificateType, ClientHello, ProducesTickets, ServerConfig, ServerConnection,
+    WebPkiClientVerifier,
 };
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
@@ -429,8 +430,8 @@ impl ClientCertVerifier for DummyClientAuth {
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
-    ) -> Result<ClientCertVerified, Error> {
-        Ok(ClientCertVerified::assertion())
+    ) -> Result<ClientIdVerified, Error> {
+        Ok(ClientIdVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -488,11 +489,11 @@ impl ServerCertVerifier for DummyServerAuth {
         _hostname: &ServerName<'_>,
         _ocsp: &[u8],
         _now: UnixTime,
-    ) -> Result<ServerCertVerified, Error> {
+    ) -> Result<ServerIdVerified, Error> {
         if let OcspValidation::Reject = self.ocsp {
             return Err(CertificateError::InvalidOcspResponse.into());
         }
-        Ok(ServerCertVerified::assertion())
+        Ok(ServerIdVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -560,13 +561,18 @@ impl sign::SigningKey for FixedSignatureSchemeSigningKey {
 
 #[derive(Debug)]
 struct FixedSignatureSchemeServerCertResolver {
-    resolver: Arc<dyn server::ResolvesServerCert>,
+    resolver: Arc<dyn server::ResolvesServerIdentity>,
     scheme: SignatureScheme,
 }
 
 impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-        let mut certkey = self.resolver.resolve(client_hello)?;
+        let mut certkey = Arc::new(
+            self.resolver
+                .resolve(client_hello, CertificateType::X509)?
+                .as_certified_key()?
+                .clone(),
+        );
         Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
             scheme: self.scheme,
@@ -808,10 +814,10 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
 
     if let Some(scheme) = cred.use_signing_scheme {
         let scheme = lookup_scheme(scheme);
-        cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
-            resolver: cfg.cert_resolver.clone(),
+        cfg.cert_resolver(Arc::new(FixedSignatureSchemeServerCertResolver {
+            resolver: cfg.id_resolver.clone(),
             scheme,
-        });
+        }));
     }
 
     if opts.tickets {
@@ -1194,12 +1200,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":CANNOT_PARSE_LEAF_CERT:")
         }
         Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
-        #[allow(deprecated)]
-        Error::InvalidCertificate(
-            CertificateError::UnsupportedSignatureAlgorithm
-            | CertificateError::UnsupportedSignatureAlgorithmContext { .. }
-            | CertificateError::UnsupportedSignatureAlgorithmForPublicKeyContext { .. },
-        ) => quit(":WRONG_SIGNATURE_TYPE:"),
+        Error::InvalidCertificate(CertificateError::UnsupportedSignatureAlgorithmContext {
+            ..
+        }) => quit(":WRONG_SIGNATURE_TYPE:"),
         Error::InvalidCertificate(CertificateError::InvalidOcspResponse) => {
             // note: only use is in this file.
             quit(":OCSP_CB_ERROR:")

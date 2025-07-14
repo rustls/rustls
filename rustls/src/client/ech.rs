@@ -165,9 +165,7 @@ impl EchConfig {
         EchState::new(
             self,
             server_name.clone(),
-            config
-                .client_auth_cert_resolver
-                .has_certs(),
+            config.client_auth_id_resolver.enabled(),
             config.provider.secure_random,
             config.enable_sni,
         )
