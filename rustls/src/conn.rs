@@ -552,9 +552,8 @@ impl<Data> ConnectionCommon<Data> {
     ///   once.
     ///
     /// The return value is the number of bytes read from and written
-    /// to `io`, respectively.
-    ///
-    /// This function will block if `io` blocks.
+    /// to `io`, respectively. Once both `read()` and `write()` yield `WouldBlock`,
+    /// this function will propagate the error.
     ///
     /// Errors from TLS record handling (i.e., from [`process_new_packets`])
     /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
@@ -572,8 +571,8 @@ impl<Data> ConnectionCommon<Data> {
         let mut eof = false;
         let mut wrlen = 0;
         let mut rdlen = 0;
-
         loop {
+            let (mut blocked_write, mut blocked_read) = (None, None);
             let until_handshaked = self.is_handshaking();
 
             if !self.wants_write() && !self.wants_read() {
@@ -582,15 +581,22 @@ impl<Data> ConnectionCommon<Data> {
             }
 
             while self.wants_write() {
-                match self.write_tls(io)? {
-                    0 => {
+                match self.write_tls(io) {
+                    Ok(0) => {
                         io.flush()?;
                         return Ok((rdlen, wrlen)); // EOF.
                     }
-                    n => wrlen += n,
+                    Ok(n) => wrlen += n,
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                        blocked_write = Some(err);
+                        break;
+                    }
+                    Err(err) => return Err(err),
                 }
             }
-            io.flush()?;
+            if wrlen > 0 {
+                io.flush()?;
+            }
 
             if !until_handshaked && wrlen > 0 {
                 return Ok((rdlen, wrlen));
@@ -605,6 +611,10 @@ impl<Data> ConnectionCommon<Data> {
                     Ok(n) => {
                         rdlen += n;
                         Some(n)
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                        blocked_read = Some(err);
+                        break;
                     }
                     Err(err) if err.kind() == io::ErrorKind::Interrupted => None, // nothing to do
                     Err(err) => return Err(err),
@@ -629,11 +639,13 @@ impl<Data> ConnectionCommon<Data> {
                 continue;
             }
 
-            match (eof, until_handshaked, self.is_handshaking()) {
-                (_, true, false) => return Ok((rdlen, wrlen)),
-                (_, false, _) => return Ok((rdlen, wrlen)),
-                (true, true, true) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
-                (..) => {}
+            let blocked = blocked_write.zip(blocked_read);
+            match (eof, until_handshaked, self.is_handshaking(), blocked) {
+                (_, true, false, _) => return Ok((rdlen, wrlen)),
+                (_, false, _, _) => return Ok((rdlen, wrlen)),
+                (true, true, true, _) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
+                (_, _, _, Some((e, _))) => return Err(e),
+                _ => {}
             }
         }
     }
