@@ -614,17 +614,12 @@ impl<Data> ConnectionCommon<Data> {
                 }
             }
 
-            match self.process_new_packets() {
-                Ok(_) => {}
-                Err(e) => {
-                    // In case we have an alert to send describing this error,
-                    // try a last-gasp write -- but don't predate the primary
-                    // error.
-                    let _ignored = self.write_tls(io);
-                    let _ignored = io.flush();
-
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, e));
-                }
+            if let Err(e) = self.process_new_packets() {
+                // In case we have an alert to send describing this error, try a last-gasp
+                // write -- but don't predate the primary error.
+                let _ignored = self.write_tls(io);
+                let _ignored = io.flush();
+                return Err(io::Error::new(io::ErrorKind::InvalidData, e));
             };
 
             // if we're doing IO until handshaked, and we believe we've finished handshaking,
