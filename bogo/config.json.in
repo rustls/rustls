@@ -50,7 +50,7 @@
     "CheckClientCertificateTypes": "we don't check TLS1.2 CertificateRequest.certificate_types",
     "*-RSA_PKCS1_SHA256_LEGACY-*": "NYI on our side https://datatracker.ietf.org/doc/draft-ietf-tls-tls13-pkcs1/01/",
     "NoCommonSignatureAlgorithms-TLS12-Fallback": "requires TLS_RSA_WITH_AES_128_GCM_SHA256",
-#if defined(POST_QUANTUM)
+#if defined(POST_QUANTUM) || defined(AWS_LC_RS)
     "MLKEMKeyShareIncludedSecond": "we only include a share for the first configured group",
     "MLKEMKeyShareIncludedThird": "we only include a share for the first configured group",
 #else
@@ -141,6 +141,8 @@
     "Compliance-fips-202205-TLS-Server-ECDSA_P521_SHA512": "fips approved in aws-lc-rs",
     "Compliance-fips-202205-TLS-Client-Ed25519": "fips approved in aws-lc-rs",
     "Compliance-fips-202205-TLS-Server-Ed25519": "fips approved in aws-lc-rs",
+    "Compliance-fips-202205-TLS-Client-MLKEM": "fips pending in aws-lc-rs",
+    "Compliance-fips-202205-TLS-Server-MLKEM": "fips pending in aws-lc-rs",
 #endif
     "*-QUIC-*" :"quic mode does not work over TLS1.3 framing -- do this in the shim?",
     "QUIC-*": "quic mode does not work over TLS1.3 framing -- do this in the shim?",
