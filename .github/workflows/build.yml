@@ -446,13 +446,12 @@ jobs:
           components: rustfmt
       - name: Check formatting (unstable)
         run: cargo fmt --all -- --check --config-path .rustfmt.unstable.toml
-        continue-on-error: true
       - name: Check formatting (unstable, connect-tests workspace)
         run: cargo fmt --all --manifest-path=connect-tests/Cargo.toml -- --check --config-path .rustfmt.unstable.toml
-        continue-on-error: true
       - name: Check formatting (unstable, fuzz workspace)
         run: cargo fmt --all --manifest-path=fuzz/Cargo.toml -- --check --config-path .rustfmt.unstable.toml
-        continue-on-error: true
+      - if: ${{ failure() }}
+        run: echo "Nightly formatting check failed. Please run \`cargo +nightly fmt-unstable\`"
 
   clippy:
     name: Clippy
