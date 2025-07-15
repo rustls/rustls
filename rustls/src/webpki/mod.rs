@@ -192,8 +192,9 @@ fn parse_crls(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloc::vec;
+
+    use super::*;
 
     #[test]
     fn pki_crl_errors() {
