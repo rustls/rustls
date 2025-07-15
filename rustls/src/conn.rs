@@ -109,11 +109,10 @@ mod connection {
         /// This function uses `io` to complete any outstanding IO for this connection.
         ///
         /// See [`ConnectionCommon::complete_io()`] for more information.
-        pub fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
-        where
-            Self: Sized,
-            T: Read + io::Write,
-        {
+        pub fn complete_io(
+            &mut self,
+            io: &mut (impl Read + io::Write),
+        ) -> Result<(usize, usize), io::Error> {
             match self {
                 Self::Client(conn) => conn.complete_io(io),
                 Self::Server(conn) => conn.complete_io(io),
@@ -566,11 +565,10 @@ impl<Data> ConnectionCommon<Data> {
     /// [`write_tls`]: ConnectionCommon::write_tls
     /// [`read_tls`]: ConnectionCommon::read_tls
     /// [`process_new_packets`]: ConnectionCommon::process_new_packets
-    pub fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
-    where
-        Self: Sized,
-        T: io::Read + io::Write,
-    {
+    pub fn complete_io(
+        &mut self,
+        io: &mut (impl io::Read + io::Write),
+    ) -> Result<(usize, usize), io::Error> {
         let mut eof = false;
         let mut wrlen = 0;
         let mut rdlen = 0;
