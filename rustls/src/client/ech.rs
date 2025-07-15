@@ -838,10 +838,9 @@ pub(crate) fn fatal_alert_required(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::enums::CipherSuite;
     use crate::msgs::handshake::{Random, ServerExtensions, SessionId};
-
-    use super::*;
 
     #[test]
     fn server_hello_conf_alters_server_hello_random() {
