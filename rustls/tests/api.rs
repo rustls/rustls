@@ -5672,7 +5672,7 @@ fn test_client_sends_helloretryrequest() {
         storage.ops()[4],
         ClientStorageOp::RemoveTls12Session(_)
     ));
-    // server sends 4 tickets by default
+    // server sends 2 tickets by default
     assert!(matches!(
         storage.ops()[5],
         ClientStorageOp::InsertTls13Ticket(_)
