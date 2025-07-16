@@ -16,6 +16,7 @@ use crate::server::ProducesTickets;
 use crate::sync::Arc;
 
 /// A concrete, safe ticket creation mechanism.
+#[non_exhaustive]
 pub struct Ticketer {}
 
 impl Ticketer {

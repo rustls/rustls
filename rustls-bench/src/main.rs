@@ -1157,7 +1157,9 @@ impl Unbuffered {
             .write(data, &mut self.output[self.output_used..])
         {
             Ok(output_added) => output_added,
-            Err(EncryptError::InsufficientSize(InsufficientSizeError { required_size })) => {
+            Err(EncryptError::InsufficientSize(InsufficientSizeError {
+                required_size, ..
+            })) => {
                 self.output
                     .resize(self.output_used + required_size, 0);
                 self.conn
@@ -1198,6 +1200,7 @@ impl UnbufferedConnection {
                         UnbufferedStatus {
                             state: Ok(ConnectionState::EncodeTlsData(mut etd)),
                             discard,
+                            ..
                         } => {
                             input_used += discard;
                             output_added += etd
@@ -1207,6 +1210,7 @@ impl UnbufferedConnection {
                         UnbufferedStatus {
                             state: Ok(ConnectionState::TransmitTlsData(ttd)),
                             discard,
+                            ..
                         } => {
                             input_used += discard;
                             ttd.done();
@@ -1215,6 +1219,7 @@ impl UnbufferedConnection {
                         UnbufferedStatus {
                             state: Ok(ConnectionState::WriteTraffic(_)),
                             discard,
+                            ..
                         } => {
                             input_used += discard;
                             return (input_used, output_added);
@@ -1230,6 +1235,7 @@ impl UnbufferedConnection {
                         UnbufferedStatus {
                             state: Ok(ConnectionState::EncodeTlsData(mut etd)),
                             discard,
+                            ..
                         } => {
                             input_used += discard;
                             output_added += etd
@@ -1239,6 +1245,7 @@ impl UnbufferedConnection {
                         UnbufferedStatus {
                             state: Ok(ConnectionState::TransmitTlsData(ttd)),
                             discard,
+                            ..
                         } => {
                             input_used += discard;
                             ttd.done();
@@ -1247,6 +1254,7 @@ impl UnbufferedConnection {
                         UnbufferedStatus {
                             state: Ok(ConnectionState::WriteTraffic(_)),
                             discard,
+                            ..
                         } => {
                             input_used += discard;
                             return (input_used, output_added);
@@ -1293,6 +1301,7 @@ impl UnbufferedConnection {
                 UnbufferedStatus {
                     state: Ok(ConnectionState::ReadTraffic(mut rt)),
                     discard,
+                    ..
                 } => {
                     input_used += discard;
                     let record = rt.next_record().unwrap().unwrap();

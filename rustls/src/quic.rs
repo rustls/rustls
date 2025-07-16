@@ -839,6 +839,7 @@ impl<'a> KeyBuilder<'a> {
 }
 
 /// Produces QUIC initial keys from a TLS 1.3 ciphersuite and a QUIC key generation algorithm.
+#[non_exhaustive]
 #[derive(Clone, Copy)]
 pub struct Suite {
     /// The TLS 1.3 ciphersuite used to derive keys.

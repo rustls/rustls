@@ -170,6 +170,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
 }
 
 /// The current status of the `UnbufferedConnection*`
+#[non_exhaustive]
 #[must_use]
 #[derive(Debug)]
 pub struct UnbufferedStatus<'c, 'i, Data> {
@@ -414,6 +415,7 @@ impl<'c, 'i> ReadEarlyData<'c, 'i, ServerConnectionData> {
 }
 
 /// A decrypted application-data record
+#[non_exhaustive]
 pub struct AppDataRecord<'i> {
     /// Number of additional bytes to discard
     ///
@@ -608,6 +610,7 @@ impl fmt::Display for EncryptError {
 impl StdError for EncryptError {}
 
 /// Provided buffer was too small
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug)]
 pub struct InsufficientSizeError {
     /// buffer must be at least this size

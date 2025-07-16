@@ -60,8 +60,9 @@ async fn converse(
 
     let mut iter_count = 0;
     while !fully_closed {
-        let UnbufferedStatus { mut discard, state } =
-            conn.process_tls_records(&mut incoming_tls[..incoming_used]);
+        let UnbufferedStatus {
+            mut discard, state, ..
+        } = conn.process_tls_records(&mut incoming_tls[..incoming_used]);
 
         match dbg!(state.unwrap()) {
             ConnectionState::ReadTraffic(mut state) => {
@@ -69,6 +70,7 @@ async fn converse(
                     let AppDataRecord {
                         discard: new_discard,
                         payload,
+                        ..
                     } = res?;
                     discard += new_discard;
 
@@ -202,7 +204,7 @@ where
         Ok(written) => written,
 
         Err(e) => {
-            let InsufficientSizeError { required_size } = map_err(e)?;
+            let InsufficientSizeError { required_size, .. } = map_err(e)?;
             let new_len = *outgoing_used + required_size;
             outgoing_tls.resize(new_len, 0);
             eprintln!("resized `outgoing_tls` buffer to {new_len}B");
