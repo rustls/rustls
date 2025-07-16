@@ -592,6 +592,8 @@ pub mod client {
         pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     }
 
+    pub(crate) use tls12::{TLS12_HANDLER, Tls12Handler};
+
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     pub use crate::webpki::{
         ServerCertVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
