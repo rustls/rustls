@@ -55,6 +55,7 @@ pub fn verify_server_name(
 
 /// Describes which `webpki` signature verification algorithms are supported and
 /// how they map to TLS [`SignatureScheme`]s.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Clone, Copy)]
 pub struct WebPkiSupportedAlgorithms {
     /// A list of all supported signature verification algorithms.

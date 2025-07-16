@@ -2780,6 +2780,7 @@ impl<'a> HandshakeMessagePayload<'a> {
     }
 }
 
+#[allow(clippy::exhaustive_structs)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct HpkeSymmetricCipherSuite {
     pub kdf_id: HpkeKdf,
@@ -2807,6 +2808,7 @@ impl TlsListElement for HpkeSymmetricCipherSuite {
     };
 }
 
+#[allow(clippy::exhaustive_structs)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct HpkeKeyConfig {
     pub config_id: u8,
@@ -2835,6 +2837,7 @@ impl Codec<'_> for HpkeKeyConfig {
     }
 }
 
+#[allow(clippy::exhaustive_structs)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct EchConfigContents {
     pub key_config: HpkeKeyConfig,

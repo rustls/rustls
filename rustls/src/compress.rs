@@ -117,10 +117,12 @@ pub enum CompressionLevel {
 }
 
 /// A content-less error for when `CertDecompressor::decompress` fails.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct DecompressionFailed;
 
 /// A content-less error for when `CertCompressor::compress` fails.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct CompressionFailed;
 

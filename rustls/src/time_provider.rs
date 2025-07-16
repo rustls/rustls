@@ -19,6 +19,7 @@ pub trait TimeProvider: Debug + Send + Sync {
 
 /// Default `TimeProvider` implementation that uses `std`
 #[cfg(feature = "std")]
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct DefaultTimeProvider;
 
