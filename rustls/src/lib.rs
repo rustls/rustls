@@ -329,6 +329,7 @@
 #![cfg_attr(not(any(bench, coverage_nightly)), forbid(unstable_features))]
 #![warn(
     clippy::alloc_instead_of_core,
+    clippy::exhaustive_enums,
     clippy::manual_let_else,
     clippy::std_instead_of_core,
     clippy::use_self,

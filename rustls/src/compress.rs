@@ -272,6 +272,7 @@ pub use feat_brotli::{BROTLI_COMPRESSOR, BROTLI_DECOMPRESSOR};
 /// The prospect of being able to reuse a given compression for many connections
 /// means we can afford to spend more time on that compression (by passing
 /// `CompressionLevel::Amortized` to the compressor).
+#[allow(clippy::exhaustive_enums)]
 #[derive(Debug)]
 pub enum CompressionCache {
     /// No caching happens, and compression happens each time using
