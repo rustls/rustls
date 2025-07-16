@@ -377,6 +377,15 @@ don't provide additional type safety. Using the
 [newtype idiom](https://doc.rust-lang.org/rust-by-example/generics/new_types.html)
 is one alternative when an abstraction boundary is worth the added complexity.
 
+#### Type exhaustiveness
+
+Public enums should be marked as _either_ `#[non_exhaustive]` or `#[allow(clippy::exhaustive_enums)]`.
+The latter is suitable for enums that are already complete by definition.  For example:
+`enum CoinFlip { Heads, Tails }` is complete.  Err on the side of marking something `#[non_exhaustive]`.
+
+The same applies to structs, with the detail that no manual marking is needed for
+structures with at least one private field.
+
 ## Design and Architecture
 
 Some general concepts about how the library should fit together:
