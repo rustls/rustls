@@ -94,6 +94,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherS
             hash_provider: &hash::Sha256,
             confidentiality_limit: u64::MAX,
         },
+        protocol_version: rustls::version::TLS12_VERSION,
         kx: rustls::crypto::KeyExchangeAlgorithm::ECDHE,
         sign: &[
             rustls::SignatureScheme::RSA_PSS_SHA256,
