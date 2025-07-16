@@ -62,7 +62,7 @@ fn fuzz_unbuffered(mut data: &mut [u8], mut conn: ClientServer) {
 }
 
 fn process<S: SideData>(status: UnbufferedStatus<'_, '_, S>) -> Option<usize> {
-    let UnbufferedStatus { discard, state } = status;
+    let UnbufferedStatus { discard, state, .. } = status;
 
     match state {
         Ok(ConnectionState::EncodeTlsData(mut enc)) => {

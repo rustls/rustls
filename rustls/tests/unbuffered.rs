@@ -567,6 +567,7 @@ fn junk_after_close_notify_received() {
         UnbufferedStatus {
             discard,
             state: Ok(ConnectionState::PeerClosed),
+            ..
         } => {
             assert_eq!(discard, 24);
             discard
@@ -611,6 +612,7 @@ fn refresh_traffic_keys_on_tls12_connection() {
         UnbufferedStatus {
             discard: 0,
             state: Ok(ConnectionState::WriteTraffic(wt)),
+            ..
         } => {
             assert_eq!(
                 wt.refresh_traffic_keys().unwrap_err(),
@@ -633,6 +635,7 @@ fn refresh_traffic_keys_manually() {
         UnbufferedStatus {
             discard: 0,
             state: Ok(ConnectionState::WriteTraffic(wt)),
+            ..
         } => {
             wt.refresh_traffic_keys().unwrap();
         }
@@ -646,6 +649,7 @@ fn refresh_traffic_keys_manually() {
         UnbufferedStatus {
             discard: 0,
             state: Ok(ConnectionState::EncodeTlsData(mut etd)),
+            ..
         } => {
             println!("EncodeTlsData");
             etd.encode(&mut buffer).unwrap()
@@ -659,6 +663,7 @@ fn refresh_traffic_keys_manually() {
         UnbufferedStatus {
             discard: 0,
             state: Ok(ConnectionState::TransmitTlsData(ttd)),
+            ..
         } => {
             ttd.done();
         }
@@ -672,6 +677,7 @@ fn refresh_traffic_keys_manually() {
         UnbufferedStatus {
             discard: actual_used,
             state: Ok(ConnectionState::WriteTraffic(mut wt)),
+            ..
         } => {
             assert_eq!(used, actual_used);
             wt.encrypt(b"hello", &mut buffer)
@@ -687,6 +693,7 @@ fn refresh_traffic_keys_manually() {
         UnbufferedStatus {
             discard: actual_used,
             state: Ok(ConnectionState::ReadTraffic(mut rt)),
+            ..
         } => {
             assert_eq!(used, actual_used);
             let app_data = rt.next_record().unwrap().unwrap();
@@ -702,6 +709,7 @@ fn refresh_traffic_keys_manually() {
         UnbufferedStatus {
             discard: 0,
             state: Ok(ConnectionState::WriteTraffic(mut wt)),
+            ..
         } => wt
             .encrypt(b"world", &mut buffer)
             .unwrap(),
@@ -714,6 +722,7 @@ fn refresh_traffic_keys_manually() {
         UnbufferedStatus {
             discard: actual_used,
             state: Ok(ConnectionState::ReadTraffic(mut rt)),
+            ..
         } => {
             assert_eq!(used, actual_used);
             let app_data = rt.next_record().unwrap().unwrap();
@@ -761,6 +770,7 @@ fn refresh_traffic_keys_automatically() {
         UnbufferedStatus {
             discard: 0,
             state: Ok(ConnectionState::WriteTraffic(mut wt)),
+            ..
         } => {
             // Must happen on a single `WriteTraffic` instance, to
             // validate that handshake messages are included
@@ -787,6 +797,7 @@ fn refresh_traffic_keys_automatically() {
                     UnbufferedStatus {
                         discard: actual_used,
                         state: Ok(ConnectionState::ReadTraffic(mut rt)),
+                        ..
                     } => {
                         assert_eq!(used, actual_used);
                         let record = rt.next_record().unwrap().unwrap();
@@ -832,6 +843,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         UnbufferedStatus {
             discard: 0,
             state: Ok(ConnectionState::WriteTraffic(mut wt)),
+            ..
         } => {
             for i in 0..CONFIDENTIALITY_LIMIT {
                 let message = format!("{i:08}");
@@ -849,6 +861,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
                     UnbufferedStatus {
                         discard: actual_used,
                         state: Ok(ConnectionState::ReadTraffic(mut rt)),
+                        ..
                     } => {
                         assert_eq!(used, actual_used);
                         let record = rt.next_record().unwrap().unwrap();
@@ -873,6 +886,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         UnbufferedStatus {
             discard,
             state: Ok(ConnectionState::PeerClosed),
+            ..
         } if discard == data_len => {}
         st => panic!("unexpected server state {st:?}"),
     }
@@ -924,7 +938,7 @@ fn rejects_junk() {
     .unwrap();
 
     let mut buf = [0xff; 5];
-    let UnbufferedStatus { discard, state } = server.process_tls_records(&mut buf);
+    let UnbufferedStatus { discard, state, .. } = server.process_tls_records(&mut buf);
     assert_eq!(discard, 0);
     assert_eq!(
         state.unwrap_err(),
@@ -999,7 +1013,7 @@ fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(
     status: UnbufferedStatus<'_, '_, T>,
     mut f: F,
 ) -> R {
-    let UnbufferedStatus { discard, state } = status;
+    let UnbufferedStatus { discard, state, .. } = status;
     assert_eq!(discard, 0);
     match state.unwrap() {
         ConnectionState::WriteTraffic(state) => f(state),
@@ -1011,7 +1025,7 @@ fn read_traffic<T: SideData, R, F: FnMut(ReadTraffic<T>) -> R>(
     status: UnbufferedStatus<'_, '_, T>,
     mut f: F,
 ) -> (R, usize) {
-    let UnbufferedStatus { discard, state } = status;
+    let UnbufferedStatus { discard, state, .. } = status;
     match state.unwrap() {
         ConnectionState::ReadTraffic(state) => (f(state), discard),
         other => panic!("unexpected state {other:?} (wanted ReadTraffic)"),
@@ -1019,7 +1033,7 @@ fn read_traffic<T: SideData, R, F: FnMut(ReadTraffic<T>) -> R>(
 }
 
 fn peer_closed<T: SideData>(status: UnbufferedStatus<'_, '_, T>) -> usize {
-    let UnbufferedStatus { discard, state } = status;
+    let UnbufferedStatus { discard, state, .. } = status;
     match state.unwrap() {
         ConnectionState::PeerClosed => discard,
         other => panic!("unexpected state {other:?} (wanted PeerClosed)"),
@@ -1027,7 +1041,7 @@ fn peer_closed<T: SideData>(status: UnbufferedStatus<'_, '_, T>) -> usize {
 }
 
 fn closed<T: SideData>(status: UnbufferedStatus<'_, '_, T>) -> usize {
-    let UnbufferedStatus { discard, state } = status;
+    let UnbufferedStatus { discard, state, .. } = status;
     match state.unwrap() {
         ConnectionState::Closed => discard,
         other => panic!("unexpected state {other:?} (wanted Closed)"),
@@ -1039,11 +1053,12 @@ fn encode_tls_data<T: SideData>(status: UnbufferedStatus<'_, '_, T>) -> (Vec<u8>
         UnbufferedStatus {
             discard,
             state: Ok(ConnectionState::EncodeTlsData(mut etd)),
+            ..
         } => {
             let len = match etd.encode(&mut []) {
-                Err(EncodeError::InsufficientSize(InsufficientSizeError { required_size })) => {
-                    required_size
-                }
+                Err(EncodeError::InsufficientSize(InsufficientSizeError {
+                    required_size, ..
+                })) => required_size,
                 e => panic!("unexpected encode {e:?}"),
             };
             let mut buf = vec![0u8; len];
@@ -1061,6 +1076,7 @@ fn confirm_transmit_tls_data<T: SideData>(status: UnbufferedStatus<'_, '_, T>) {
         UnbufferedStatus {
             discard: 0,
             state: Ok(ConnectionState::TransmitTlsData(ttd)),
+            ..
         } => {
             ttd.done();
         }
@@ -1133,7 +1149,8 @@ fn advance_client(
     actions: Actions,
     transcript: &mut Vec<String>,
 ) -> State {
-    let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
+    let UnbufferedStatus { discard, state, .. } =
+        conn.process_tls_records(buffers.incoming.filled());
     let state = state.unwrap();
 
     transcript.push(format!("{state:?}"));
@@ -1178,7 +1195,8 @@ fn advance_server(
     actions: Actions,
     transcript: &mut Vec<String>,
 ) -> State {
-    let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
+    let UnbufferedStatus { discard, state, .. } =
+        conn.process_tls_records(buffers.incoming.filled());
     let state = state.unwrap();
 
     transcript.push(format!("{state:?}"));
@@ -1441,7 +1459,7 @@ fn server_receives_handshake_byte_by_byte() {
     let (mut client, mut server) = make_connection_pair(&TLS13);
 
     let mut client_hello_buffer = vec![0u8; 2048];
-    let UnbufferedStatus { discard, state } = client.process_tls_records(&mut []);
+    let UnbufferedStatus { discard, state, .. } = client.process_tls_records(&mut []);
 
     assert_eq!(discard, 0);
     match state.unwrap() {
@@ -1457,13 +1475,13 @@ fn server_receives_handshake_byte_by_byte() {
     println!("client hello: {client_hello_buffer:?}");
 
     for prefix in 0..client_hello_buffer.len() - 1 {
-        let UnbufferedStatus { discard, state } =
+        let UnbufferedStatus { discard, state, .. } =
             server.process_tls_records(&mut client_hello_buffer[..prefix]);
         println!("prefix {prefix:?}: ({discard:?}, {state:?}");
         assert!(matches!(state.unwrap(), ConnectionState::BlockedHandshake));
     }
 
-    let UnbufferedStatus { discard, state } =
+    let UnbufferedStatus { discard, state, .. } =
         server.process_tls_records(&mut client_hello_buffer[..]);
 
     assert!(matches!(state.unwrap(), ConnectionState::EncodeTlsData(_)));
@@ -1477,7 +1495,7 @@ fn server_receives_incorrect_first_handshake_message() {
     let mut junk_buffer = [0x16, 0x3, 0x1, 0x0, 0x4, 0xff, 0x0, 0x0, 0x0];
     let junk_buffer_len = junk_buffer.len();
 
-    let UnbufferedStatus { discard, state } = server.process_tls_records(&mut junk_buffer[..]);
+    let UnbufferedStatus { discard, state, .. } = server.process_tls_records(&mut junk_buffer[..]);
 
     assert_eq!(discard, junk_buffer_len);
     assert_eq!(
@@ -1485,7 +1503,7 @@ fn server_receives_incorrect_first_handshake_message() {
         "Err(InappropriateHandshakeMessage { expect_types: [ClientHello], got_type: HandshakeType(0xff) })"
     );
 
-    let UnbufferedStatus { discard, state } = server.process_tls_records(&mut []);
+    let UnbufferedStatus { discard, state, .. } = server.process_tls_records(&mut []);
     assert_eq!(discard, 0);
 
     match state.unwrap() {
