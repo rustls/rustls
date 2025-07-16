@@ -40,6 +40,7 @@ mod connection {
     use crate::vecbuf::ChunkVecBuffer;
 
     /// A QUIC client or server connection.
+    #[allow(clippy::exhaustive_enums)]
     #[derive(Debug)]
     pub enum Connection {
         /// A client connection
@@ -916,6 +917,7 @@ impl Keys {
 /// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
 /// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that
 /// only packet keys are updated by key updates; header protection keys remain the same.
+#[allow(clippy::exhaustive_enums)]
 pub enum KeyChange {
     /// Keys for the handshake space
     Handshake {

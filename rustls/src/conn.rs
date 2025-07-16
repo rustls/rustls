@@ -39,6 +39,7 @@ mod connection {
     use crate::vecbuf::ChunkVecBuffer;
 
     /// A client or server connection.
+    #[allow(clippy::exhaustive_enums)]
     #[derive(Debug)]
     pub enum Connection {
         /// A client connection
