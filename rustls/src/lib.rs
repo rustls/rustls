@@ -651,7 +651,7 @@ pub use server::ServerConnection;
 pub mod version {
     #[cfg(feature = "tls12")]
     pub use crate::versions::TLS12;
-    pub use crate::versions::TLS13;
+    pub use crate::versions::{TLS12_VERSION, TLS13, TLS13_VERSION, Tls12Version, Tls13Version};
 }
 
 /// Re-exports the contents of the [rustls-pki-types](https://docs.rs/rustls-pki-types) crate for easy access

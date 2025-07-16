@@ -561,7 +561,7 @@ impl ServerConfig {
                 .provider
                 .cipher_suites
                 .iter()
-                .any(|cs| cs.version().version == v)
+                .any(|cs| cs.version().version() == v)
     }
 
     #[cfg(feature = "std")]

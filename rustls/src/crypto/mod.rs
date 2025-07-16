@@ -466,7 +466,7 @@ pub trait ActiveKeyExchange: Send + Sync {
         peer_pub_key: &[u8],
         tls_version: &SupportedProtocolVersion,
     ) -> Result<SharedSecret, Error> {
-        if tls_version.version != ProtocolVersion::TLSv1_2 {
+        if tls_version.version() != ProtocolVersion::TLSv1_2 {
             return self.complete(peer_pub_key);
         }
 

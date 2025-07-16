@@ -17,6 +17,7 @@ use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{CertificateType, ClientHello, ParsedCertificate, ResolvesServerCert};
+use rustls::version::TLS12;
 use rustls::{
     AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
@@ -758,7 +759,7 @@ fn resumption_combinations() {
 
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
             assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
-            if version.version == ProtocolVersion::TLSv1_2 {
+            if *version == &TLS12 {
                 assert!(
                     client
                         .negotiated_key_exchange_group()
@@ -1831,13 +1832,13 @@ fn test_client_cert_resolve(
 ) {
     let provider = provider::default_provider();
     for version in rustls::ALL_VERSIONS {
-        println!("{:?} {:?}:", version.version, key_type);
+        println!("{:?} {:?}:", version.version(), key_type);
 
         let mut client_config = make_client_config_with_versions(key_type, &[version], &provider);
         client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(
             1,
             expected_root_hint_subjects.clone(),
-            default_signature_schemes(version.version),
+            default_signature_schemes(version.version()),
         ));
 
         let (mut client, mut server) =
@@ -3767,7 +3768,7 @@ fn negotiated_ciphersuite_client() {
             make_server_config(kt, &provider::default_provider()),
             scs,
             expected_kx_for_version(version),
-            version.version,
+            version.version(),
         );
     }
 }
@@ -3794,7 +3795,7 @@ fn negotiated_ciphersuite_server() {
             server_config,
             scs,
             expected_kx_for_version(version),
-            version.version,
+            version.version(),
         );
     }
 }
@@ -3840,13 +3841,17 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
             server_config,
             scs,
             expected_kx_for_version(version),
-            version.version,
+            version.version(),
         );
     }
 }
 
 fn expected_kx_for_version(version: &SupportedProtocolVersion) -> NamedGroup {
-    match (version.version, provider_is_aws_lc_rs(), provider_is_fips()) {
+    match (
+        version.version(),
+        provider_is_aws_lc_rs(),
+        provider_is_fips(),
+    ) {
         (ProtocolVersion::TLSv1_3, true, _) => NamedGroup::X25519MLKEM768,
         (_, _, true) => NamedGroup::secp256r1,
         (_, _, _) => NamedGroup::X25519,
@@ -5537,7 +5542,7 @@ fn exercise_all_key_exchange_methods() {
         for kx_group in provider::ALL_KX_GROUPS {
             if !kx_group
                 .name()
-                .usable_for_version(version.version)
+                .usable_for_version(version.version())
             {
                 continue;
             }

@@ -4,32 +4,45 @@ use crate::enums::ProtocolVersion;
 
 /// A TLS protocol version supported by rustls.
 ///
-/// All possible instances of this class are provided by the library in
+/// All possible values of this enum are provided by the library in
 /// the [`ALL_VERSIONS`] array, as well as individually as [`TLS12`]
 /// and [`TLS13`].
 #[non_exhaustive]
-#[derive(Eq, PartialEq)]
-pub struct SupportedProtocolVersion {
-    /// The TLS enumeration naming this version.
-    pub version: ProtocolVersion,
+#[derive(Debug)]
+pub enum SupportedProtocolVersion {
+    /// The TLS1.2 protocol version.
+    TLS12(&'static Tls12Version),
+    /// The TLS1.3 protocol version.
+    TLS13(&'static Tls13Version),
 }
 
-impl fmt::Debug for SupportedProtocolVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.version.fmt(f)
+impl SupportedProtocolVersion {
+    /// The TLS enumeration naming this version.
+    pub const fn version(&self) -> ProtocolVersion {
+        match self {
+            Self::TLS12(_) => ProtocolVersion::TLSv1_2,
+            Self::TLS13(_) => ProtocolVersion::TLSv1_3,
+        }
     }
 }
 
+impl PartialEq for SupportedProtocolVersion {
+    fn eq(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::TLS12(_), Self::TLS12(_)) | (Self::TLS13(_), Self::TLS13(_))
+        )
+    }
+}
+
+impl Eq for SupportedProtocolVersion {}
+
 /// TLS1.2
 #[cfg(feature = "tls12")]
-pub static TLS12: SupportedProtocolVersion = SupportedProtocolVersion {
-    version: ProtocolVersion::TLSv1_2,
-};
+pub static TLS12: SupportedProtocolVersion = SupportedProtocolVersion::TLS12(TLS12_VERSION);
 
 /// TLS1.3
-pub static TLS13: SupportedProtocolVersion = SupportedProtocolVersion {
-    version: ProtocolVersion::TLSv1_3,
-};
+pub static TLS13: SupportedProtocolVersion = SupportedProtocolVersion::TLS13(TLS13_VERSION);
 
 /// A list of all the protocol versions supported by rustls.
 pub static ALL_VERSIONS: &[&SupportedProtocolVersion] = &[
@@ -44,6 +57,34 @@ pub static ALL_VERSIONS: &[&SupportedProtocolVersion] = &[
 /// to remove a version from here and require users to opt-in to older
 /// versions.
 pub static DEFAULT_VERSIONS: &[&SupportedProtocolVersion] = ALL_VERSIONS;
+
+/// Internal data for handling the TLS1.2 protocol.
+///
+/// This value refers to TLS1.2 protocol handling code.  This means
+/// that if your program does not refer to this value, all that code
+/// can be removed by the linker.
+pub static TLS12_VERSION: &Tls12Version = &Tls12Version {};
+
+/// Internal data for handling the TLS1.3 protocol.
+///
+/// This value refers to TLS1.3 protocol handling code.  This means
+/// that if your program does not refer to this value, all that code
+/// can be removed by the linker.
+pub static TLS13_VERSION: &Tls13Version = &Tls13Version {};
+
+/// Internal data for handling the TLS1.2 protocol.
+///
+/// There is one value of this type.  It is `TLS12_VERSION`.
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct Tls12Version {}
+
+/// Internal data for handling the TLS1.3 protocol.
+///
+/// There is one value of this type.  It is `TLS13_VERSION`.
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct Tls13Version {}
 
 #[derive(Clone, Copy)]
 pub(crate) struct EnabledVersions {
@@ -75,7 +116,7 @@ impl EnabledVersions {
         };
 
         for v in versions {
-            match v.version {
+            match v.version() {
                 #[cfg(feature = "tls12")]
                 ProtocolVersion::TLSv1_2 => ev.tls12 = Some(v),
                 ProtocolVersion::TLSv1_3 => ev.tls13 = Some(v),
