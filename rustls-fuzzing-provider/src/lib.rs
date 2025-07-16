@@ -120,6 +120,7 @@ pub static TLS_FUZZING_SUITE: SupportedCipherSuite =
             hash_provider: &Hash,
             confidentiality_limit: u64::MAX,
         },
+        protocol_version: rustls::version::TLS12_VERSION,
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: &[SIGNATURE_SCHEME],
         prf_provider: &tls12::PrfUsingHmac(&Hmac),
