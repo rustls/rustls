@@ -102,6 +102,7 @@ pub trait CertCompressor: Debug + Send + Sync {
 }
 
 /// A hint for how many resources to dedicate to a compression.
+#[non_exhaustive]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CompressionLevel {
     /// This compression is happening interactively during a handshake.

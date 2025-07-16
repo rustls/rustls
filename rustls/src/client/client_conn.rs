@@ -519,6 +519,7 @@ impl Default for Resumption {
 }
 
 /// What mechanisms to support for resuming a TLS 1.2 session.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Tls12Resumption {
     /// Disable 1.2 resumption.
@@ -1025,6 +1026,7 @@ impl MayEncryptEarlyData<'_> {
 }
 
 /// Errors that may arise when encrypting early (RTT-0) data
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum EarlyDataError {
     /// Cannot encrypt more early data due to imposed limits

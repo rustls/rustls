@@ -299,6 +299,7 @@ static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
 
 // --- Server types ---
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum ServerSessionValue {
     Tls12(Tls12ServerSessionValue),

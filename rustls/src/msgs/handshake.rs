@@ -2894,6 +2894,7 @@ impl Codec<'_> for EchConfigContents {
 }
 
 /// An encrypted client hello (ECH) config.
+#[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]
 pub enum EchConfigPayload {
     /// A recognized V18 ECH configuration.
