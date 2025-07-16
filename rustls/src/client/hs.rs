@@ -6,8 +6,6 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-#[cfg(feature = "tls12")]
-use super::tls12;
 use super::{ResolvesClientCert, Tls12Resumption};
 use crate::SupportedCipherSuite;
 #[cfg(feature = "log")]
@@ -65,7 +63,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
     extra_exts: ClientExtensionsInput<'static>,
 }
 
-pub(super) struct ClientHelloInput {
+pub(crate) struct ClientHelloInput {
     pub(super) config: Arc<ClientConfig>,
     pub(super) resuming: Option<persist::Retrieved<ClientSessionValue>>,
     pub(super) random: Random,
@@ -822,15 +820,18 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 )
             }
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(suite) => tls12::handle_server_hello(
-                cx,
-                server_hello,
-                randoms,
-                suite,
-                transcript,
-                tls13_supported,
-                self.input,
-            ),
+            SupportedCipherSuite::Tls12(suite) => suite
+                .protocol_version
+                .client
+                .handle_server_hello(
+                    cx,
+                    server_hello,
+                    randoms,
+                    suite,
+                    transcript,
+                    tls13_supported,
+                    self.input,
+                ),
         }
     }
 

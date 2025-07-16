@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use pki_types::ServerName;
-pub(super) use server_hello::handle_server_hello;
+pub(crate) use server_hello::{TLS12_HANDLER, Tls12Handler};
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
@@ -37,180 +37,206 @@ use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::verify::{self, DigitallySignedStruct};
 
 mod server_hello {
+    use core::fmt;
+
     use super::*;
     use crate::client::hs::{ClientHelloInput, ClientSessionValue};
     use crate::msgs::handshake::ServerHelloPayload;
+    use crate::sealed::Sealed;
 
-    pub(in crate::client) fn handle_server_hello(
-        cx: &mut ClientContext<'_>,
-        server_hello: &ServerHelloPayload,
-        mut randoms: ConnectionRandoms,
-        suite: &'static Tls12CipherSuite,
-        transcript: HandshakeHash,
-        tls13_supported: bool,
-        input: ClientHelloInput,
-    ) -> hs::NextStateOrError<'static> {
-        randoms
-            .server
-            .clone_from_slice(&server_hello.random.0[..]);
+    pub(crate) static TLS12_HANDLER: &dyn Tls12Handler = &Handler;
 
-        // Look for TLS1.3 downgrade signal in server random
-        // both the server random and TLS12_DOWNGRADE_SENTINEL are
-        // public values and don't require constant time comparison
-        let has_downgrade_marker = randoms.server[24..] == tls12::DOWNGRADE_SENTINEL;
-        if tls13_supported && has_downgrade_marker {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported,
-                )
-            });
-        }
+    #[derive(Debug)]
+    struct Handler;
 
-        // If we didn't have an input session to resume, and we sent a session ID,
-        // that implies we sent a TLS 1.3 legacy_session_id for compatibility purposes.
-        // In this instance since we're now continuing a TLS 1.2 handshake the server
-        // should not have echoed it back: it's a randomly generated session ID it couldn't
-        // have known.
-        if input.resuming.is_none()
-            && !input.session_id.is_empty()
-            && input.session_id == server_hello.session_id
-        {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::ServerEchoedCompatibilitySessionId,
-                )
-            });
-        }
+    impl Tls12Handler for Handler {
+        fn handle_server_hello(
+            &self,
+            cx: &mut ClientContext<'_>,
+            server_hello: &ServerHelloPayload,
+            mut randoms: ConnectionRandoms,
+            suite: &'static Tls12CipherSuite,
+            transcript: HandshakeHash,
+            tls13_supported: bool,
+            input: ClientHelloInput,
+        ) -> hs::NextStateOrError<'static> {
+            randoms
+                .server
+                .clone_from_slice(&server_hello.random.0[..]);
 
-        let ClientHelloInput {
-            config,
-            server_name,
-            ..
-        } = input;
-
-        let resuming_session = input
-            .resuming
-            .and_then(|resuming| match resuming.value {
-                ClientSessionValue::Tls12(inner) => Some(inner),
-                ClientSessionValue::Tls13(_) => None,
-            });
-
-        // Doing EMS?
-        let using_ems = server_hello
-            .extended_master_secret_ack
-            .is_some();
-        if config.require_ems && !using_ems {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerIncompatible::ExtendedMasterSecretExtensionRequired,
-                )
-            });
-        }
-
-        // Might the server send a ticket?
-        let must_issue_new_ticket = if server_hello
-            .session_ticket_ack
-            .is_some()
-        {
-            debug!("Server supports tickets");
-            true
-        } else {
-            false
-        };
-
-        // Might the server send a CertificateStatus between Certificate and
-        // ServerKeyExchange?
-        let may_send_cert_status = server_hello
-            .certificate_status_request_ack
-            .is_some();
-        if may_send_cert_status {
-            debug!("Server may staple OCSP response");
-        }
-
-        // See if we're successfully resuming.
-        if let Some(resuming) = resuming_session {
-            if resuming.session_id == server_hello.session_id {
-                debug!("Server agreed to resume");
-
-                // Is the server telling lies about the ciphersuite?
-                if resuming.suite() != suite {
-                    return Err(PeerMisbehaved::ResumptionOfferedWithVariedCipherSuite.into());
-                }
-
-                // And about EMS support?
-                if resuming.extended_ms() != using_ems {
-                    return Err(PeerMisbehaved::ResumptionOfferedWithVariedEms.into());
-                }
-
-                let secrets =
-                    ConnectionSecrets::new_resume(randoms, suite, resuming.master_secret());
-                config.key_log.log(
-                    "CLIENT_RANDOM",
-                    &secrets.randoms.client,
-                    secrets.master_secret(),
-                );
-                cx.common
-                    .start_encryption_tls12(&secrets, Side::Client);
-
-                // Since we're resuming, we verified the certificate and
-                // proof of possession in the prior session.
-                cx.common.peer_certificates = Some(
-                    resuming
-                        .server_cert_chain()
-                        .clone()
-                        .into_owned(),
-                );
-                cx.common.handshake_kind = Some(HandshakeKind::Resumed);
-                let cert_verified = verify::ServerCertVerified::assertion();
-                let sig_verified = verify::HandshakeSignatureValid::assertion();
-
-                return if must_issue_new_ticket {
-                    Ok(Box::new(ExpectNewTicket {
-                        config,
-                        secrets,
-                        resuming_session: Some(resuming),
-                        session_id: server_hello.session_id,
-                        server_name,
-                        using_ems,
-                        transcript,
-                        resuming: true,
-                        cert_verified,
-                        sig_verified,
-                    }))
-                } else {
-                    Ok(Box::new(ExpectCcs {
-                        config,
-                        secrets,
-                        resuming_session: Some(resuming),
-                        session_id: server_hello.session_id,
-                        server_name,
-                        using_ems,
-                        transcript,
-                        ticket: None,
-                        resuming: true,
-                        cert_verified,
-                        sig_verified,
-                    }))
-                };
+            // Look for TLS1.3 downgrade signal in server random
+            // both the server random and TLS12_DOWNGRADE_SENTINEL are
+            // public values and don't require constant time comparison
+            let has_downgrade_marker = randoms.server[24..] == tls12::DOWNGRADE_SENTINEL;
+            if tls13_supported && has_downgrade_marker {
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported,
+                    )
+                });
             }
-        }
 
-        cx.common.handshake_kind = Some(HandshakeKind::Full);
-        Ok(Box::new(ExpectCertificate {
-            config,
-            resuming_session: None,
-            session_id: server_hello.session_id,
-            server_name,
-            randoms,
-            using_ems,
-            transcript,
-            suite,
-            may_send_cert_status,
-            must_issue_new_ticket,
-        }))
+            // If we didn't have an input session to resume, and we sent a session ID,
+            // that implies we sent a TLS 1.3 legacy_session_id for compatibility purposes.
+            // In this instance since we're now continuing a TLS 1.2 handshake the server
+            // should not have echoed it back: it's a randomly generated session ID it couldn't
+            // have known.
+            if input.resuming.is_none()
+                && !input.session_id.is_empty()
+                && input.session_id == server_hello.session_id
+            {
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::ServerEchoedCompatibilitySessionId,
+                    )
+                });
+            }
+
+            let ClientHelloInput {
+                config,
+                server_name,
+                ..
+            } = input;
+
+            let resuming_session = input
+                .resuming
+                .and_then(|resuming| match resuming.value {
+                    ClientSessionValue::Tls12(inner) => Some(inner),
+                    ClientSessionValue::Tls13(_) => None,
+                });
+
+            // Doing EMS?
+            let using_ems = server_hello
+                .extended_master_secret_ack
+                .is_some();
+            if config.require_ems && !using_ems {
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::ExtendedMasterSecretExtensionRequired,
+                    )
+                });
+            }
+
+            // Might the server send a ticket?
+            let must_issue_new_ticket = if server_hello
+                .session_ticket_ack
+                .is_some()
+            {
+                debug!("Server supports tickets");
+                true
+            } else {
+                false
+            };
+
+            // Might the server send a CertificateStatus between Certificate and
+            // ServerKeyExchange?
+            let may_send_cert_status = server_hello
+                .certificate_status_request_ack
+                .is_some();
+            if may_send_cert_status {
+                debug!("Server may staple OCSP response");
+            }
+
+            // See if we're successfully resuming.
+            if let Some(resuming) = resuming_session {
+                if resuming.session_id == server_hello.session_id {
+                    debug!("Server agreed to resume");
+
+                    // Is the server telling lies about the ciphersuite?
+                    if resuming.suite() != suite {
+                        return Err(PeerMisbehaved::ResumptionOfferedWithVariedCipherSuite.into());
+                    }
+
+                    // And about EMS support?
+                    if resuming.extended_ms() != using_ems {
+                        return Err(PeerMisbehaved::ResumptionOfferedWithVariedEms.into());
+                    }
+
+                    let secrets =
+                        ConnectionSecrets::new_resume(randoms, suite, resuming.master_secret());
+                    config.key_log.log(
+                        "CLIENT_RANDOM",
+                        &secrets.randoms.client,
+                        secrets.master_secret(),
+                    );
+                    cx.common
+                        .start_encryption_tls12(&secrets, Side::Client);
+
+                    // Since we're resuming, we verified the certificate and
+                    // proof of possession in the prior session.
+                    cx.common.peer_certificates = Some(
+                        resuming
+                            .server_cert_chain()
+                            .clone()
+                            .into_owned(),
+                    );
+                    cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+                    let cert_verified = verify::ServerCertVerified::assertion();
+                    let sig_verified = verify::HandshakeSignatureValid::assertion();
+
+                    return if must_issue_new_ticket {
+                        Ok(Box::new(ExpectNewTicket {
+                            config,
+                            secrets,
+                            resuming_session: Some(resuming),
+                            session_id: server_hello.session_id,
+                            server_name,
+                            using_ems,
+                            transcript,
+                            resuming: true,
+                            cert_verified,
+                            sig_verified,
+                        }))
+                    } else {
+                        Ok(Box::new(ExpectCcs {
+                            config,
+                            secrets,
+                            resuming_session: Some(resuming),
+                            session_id: server_hello.session_id,
+                            server_name,
+                            using_ems,
+                            transcript,
+                            ticket: None,
+                            resuming: true,
+                            cert_verified,
+                            sig_verified,
+                        }))
+                    };
+                }
+            }
+
+            cx.common.handshake_kind = Some(HandshakeKind::Full);
+            Ok(Box::new(ExpectCertificate {
+                config,
+                resuming_session: None,
+                session_id: server_hello.session_id,
+                server_name,
+                randoms,
+                using_ems,
+                transcript,
+                suite,
+                may_send_cert_status,
+                must_issue_new_ticket,
+            }))
+        }
+    }
+
+    impl Sealed for Handler {}
+
+    pub(crate) trait Tls12Handler: fmt::Debug + Sealed + Send + Sync {
+        fn handle_server_hello(
+            &self,
+            cx: &mut ClientContext<'_>,
+            server_hello: &ServerHelloPayload,
+            randoms: ConnectionRandoms,
+            suite: &'static Tls12CipherSuite,
+            transcript: HandshakeHash,
+            tls13_supported: bool,
+            input: ClientHelloInput,
+        ) -> hs::NextStateOrError<'static>;
     }
 }
 
