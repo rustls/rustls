@@ -33,6 +33,7 @@ use crate::{
 };
 
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub enum EchMode {
     /// ECH is enabled and the ClientHello will be encrypted based on the provided
@@ -277,6 +278,7 @@ impl EchGreaseConfig {
 }
 
 /// An enum representing ECH offer status.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum EchStatus {
     /// ECH was not offered - it is a normal TLS handshake.

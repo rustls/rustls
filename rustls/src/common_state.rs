@@ -781,6 +781,7 @@ impl CommonState {
 
 /// Describes which sort of handshake happened.
 #[derive(Debug, PartialEq, Clone, Copy)]
+#[non_exhaustive]
 pub enum HandshakeKind {
     /// A full handshake.
     ///

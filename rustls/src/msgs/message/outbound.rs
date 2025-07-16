@@ -37,6 +37,7 @@ impl OutboundPlainMessage<'_> {
 ///
 /// Warning: OutboundChunks does not guarantee that the simplest variant is used.
 /// Multiple can hold non fragmented or empty payloads.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum OutboundChunks<'a> {
     /// A single byte slice. Contrary to `Multiple`, this uses a single pointer indirection

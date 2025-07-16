@@ -741,6 +741,7 @@ impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
         match &mut ssv {
             ServerSessionValue::Tls12(tls12) => &mut tls12.common,
             ServerSessionValue::Tls13(tls13) => &mut tls13.common,
+            _ => todo!(),
         }
         .creation_time_sec -= self.delay as u64;
 

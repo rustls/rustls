@@ -544,6 +544,7 @@ impl<Data> TransmitTlsData<'_, Data> {
 }
 
 /// Errors that may arise when encoding a handshake record
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum EncodeError {
     /// Provided buffer was too small
@@ -575,6 +576,7 @@ impl fmt::Display for EncodeError {
 impl StdError for EncodeError {}
 
 /// Errors that may arise when encrypting application data
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum EncryptError {
     /// Provided buffer was too small

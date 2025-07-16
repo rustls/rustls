@@ -62,6 +62,7 @@ impl CipherSuiteCommon {
 ///
 /// This type carries both configuration and implementation. Compare with
 /// [`CipherSuite`], which carries solely a cipher suite identifier.
+#[non_exhaustive]
 #[derive(Clone, Copy, PartialEq)]
 pub enum SupportedCipherSuite {
     /// A TLS 1.2 cipher suite

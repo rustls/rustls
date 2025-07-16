@@ -763,6 +763,7 @@ impl From<CertificateError> for Error {
 ///
 /// These are usually represented as OID values in the certificate's extension (if present), but
 /// we represent the values that are most relevant to rustls as named enum variants.
+#[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExtendedKeyPurpose {
     /// Client authentication

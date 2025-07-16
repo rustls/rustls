@@ -10,6 +10,7 @@ use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
 
 /// An externally length'd payload
+#[non_exhaustive]
 #[derive(Clone, Eq, PartialEq)]
 pub enum Payload<'a> {
     Borrowed(&'a [u8]),
