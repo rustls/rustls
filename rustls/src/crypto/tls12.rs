@@ -5,6 +5,7 @@ use crate::error::Error;
 use crate::version::TLS12;
 
 /// Implements [`Prf`] using a [`hmac::Hmac`].
+#[allow(clippy::exhaustive_structs)]
 pub struct PrfUsingHmac<'a>(pub &'a dyn hmac::Hmac);
 
 impl Prf for PrfUsingHmac<'_> {

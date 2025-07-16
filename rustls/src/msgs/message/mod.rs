@@ -119,6 +119,7 @@ impl From<Message<'_>> for PlainMessage {
 ///
 /// This type owns all memory for its interior parts. It can be decrypted from an OpaqueMessage
 /// or encrypted into an OpaqueMessage, and it is also used for joining and fragmenting.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Clone, Debug)]
 pub struct PlainMessage {
     pub typ: ContentType,
@@ -153,6 +154,7 @@ impl PlainMessage {
 }
 
 /// A message with decoded payload
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct Message<'a> {
     pub version: ProtocolVersion,

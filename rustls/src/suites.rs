@@ -13,6 +13,7 @@ use crate::versions::TLS12;
 use crate::versions::{SupportedProtocolVersion, TLS13};
 
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
+#[allow(clippy::exhaustive_structs)]
 pub struct CipherSuiteCommon {
     /// The TLS enumeration naming this cipher suite.
     pub suite: CipherSuite,
@@ -192,6 +193,7 @@ pub(crate) fn compatible_sigscheme_for_suites(
 /// After performing a handshake with rustls, these secrets can be extracted
 /// to configure kTLS for a socket, and have the kernel take over encryption
 /// and/or decryption.
+#[allow(clippy::exhaustive_structs)]
 pub struct ExtractedSecrets {
     /// sequence number and secrets for the "tx" (transmit) direction
     pub tx: (u64, ConnectionTrafficSecrets),

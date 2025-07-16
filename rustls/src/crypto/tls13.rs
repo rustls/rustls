@@ -49,6 +49,7 @@ impl HkdfExpander for HkdfExpanderUsingHmac {
 }
 
 /// Implementation of `Hkdf` (and thence `HkdfExpander`) via `hmac::Hmac`.
+#[allow(clippy::exhaustive_structs)]
 pub struct HkdfUsingHmac<'a>(pub &'a dyn hmac::Hmac);
 
 impl Hkdf for HkdfUsingHmac<'_> {
@@ -259,6 +260,7 @@ impl AsRef<[u8]> for OkmBlock {
 
 /// An error type used for `HkdfExpander::expand_slice` when
 /// the slice exceeds the maximum HKDF output length.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct OutputLengthError;
 

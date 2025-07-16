@@ -1049,6 +1049,7 @@ mod other_error {
     /// exposing a provider specific error.
     ///
     /// Enums holding this type will never compare equal to each other.
+    #[allow(clippy::exhaustive_structs)]
     #[derive(Debug, Clone)]
     pub struct OtherError(#[cfg(feature = "std")] pub Arc<dyn StdError + Send + Sync>);
 
