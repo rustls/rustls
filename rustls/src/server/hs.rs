@@ -592,7 +592,7 @@ impl ExpectClientHello {
                 // Reduce our supported ciphersuites by the certified key's algorithm.
                 suite.usable_for_signature_algorithm(sig_key_algorithm)
                 // And version
-                && suite.version().version == selected_version
+                && suite.version().version() == selected_version
                 // And protocol
                 && suite.usable_for_protocol(protocol)
                 // And support one of key exchange groups

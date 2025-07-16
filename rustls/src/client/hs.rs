@@ -771,7 +771,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 )
             })?;
 
-        if version != suite.version().version {
+        if version != suite.version().version() {
             return Err({
                 cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
