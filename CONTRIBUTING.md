@@ -144,6 +144,22 @@ Note that we usually also practice top-down ordering here; where these are in
 conflict, make a choice that you think makes sense. For getters and setters, the
 order should typically mirror the order of the fields in the type definition.
 
+#### Attribute ordering
+
+Order attributes so that documentation appears first, and the attributes with the
+most effect on the meaning and function of the type appear last.  For example:
+
+```rust
+/// Doc comment always first
+#[cfg(feature-gates)]
+#[allow(lint-configuration)]
+#[non_exhaustive]
+#[derive(Clone, Debug)]
+pub struct Foo;
+```
+
+Prefer to write `derive`d traits in alphabetical order.
+
 ### Functions
 
 #### Consider avoiding short single-use functions
