@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use pki_types::ServerName;
-pub(super) use server_hello::CompleteServerHelloHandling;
+pub(crate) use server_hello::{TLS12_HANDLER, Tls12Handler};
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
@@ -40,29 +40,45 @@ mod server_hello {
     use super::*;
     use crate::client::hs::{ClientHelloInput, ClientSessionValue};
     use crate::msgs::handshake::ServerHelloPayload;
+    use crate::sealed::Sealed;
 
-    pub(in crate::client) struct CompleteServerHelloHandling {
-        pub(in crate::client) randoms: ConnectionRandoms,
-        pub(in crate::client) transcript: HandshakeHash,
-        pub(in crate::client) input: ClientHelloInput,
+    pub(crate) static TLS12_HANDLER: &dyn Tls12Handler = &Handler;
+
+    pub(crate) trait Tls12Handler: Sealed + Send + Sync + core::fmt::Debug {
+        fn handle_server_hello(
+            &self,
+            cx: &mut ClientContext<'_>,
+            server_hello: &ServerHelloPayload,
+            randoms: ConnectionRandoms,
+            suite: &'static Tls12CipherSuite,
+            transcript: HandshakeHash,
+            tls13_supported: bool,
+            input: ClientHelloInput,
+        ) -> hs::NextStateOrError<'static>;
     }
 
-    impl CompleteServerHelloHandling {
-        pub(in crate::client) fn handle_server_hello(
-            mut self,
+    #[derive(Debug)]
+    struct Handler;
+
+    impl Tls12Handler for Handler {
+        fn handle_server_hello(
+            &self,
             cx: &mut ClientContext<'_>,
-            suite: &'static Tls12CipherSuite,
             server_hello: &ServerHelloPayload,
+            mut randoms: ConnectionRandoms,
+            suite: &'static Tls12CipherSuite,
+            transcript: HandshakeHash,
             tls13_supported: bool,
+            input: ClientHelloInput,
         ) -> hs::NextStateOrError<'static> {
-            self.randoms
+            randoms
                 .server
                 .clone_from_slice(&server_hello.random.0[..]);
 
             // Look for TLS1.3 downgrade signal in server random
             // both the server random and TLS12_DOWNGRADE_SENTINEL are
             // public values and don't require constant time comparison
-            let has_downgrade_marker = self.randoms.server[24..] == tls12::DOWNGRADE_SENTINEL;
+            let has_downgrade_marker = randoms.server[24..] == tls12::DOWNGRADE_SENTINEL;
             if tls13_supported && has_downgrade_marker {
                 return Err({
                     cx.common.send_fatal_alert(
@@ -77,9 +93,9 @@ mod server_hello {
             // In this instance since we're now continuing a TLS 1.2 handshake the server
             // should not have echoed it back: it's a randomly generated session ID it couldn't
             // have known.
-            if self.input.resuming.is_none()
-                && !self.input.session_id.is_empty()
-                && self.input.session_id == server_hello.session_id
+            if input.resuming.is_none()
+                && !input.session_id.is_empty()
+                && input.session_id == server_hello.session_id
             {
                 return Err({
                     cx.common.send_fatal_alert(
@@ -93,10 +109,9 @@ mod server_hello {
                 config,
                 server_name,
                 ..
-            } = self.input;
+            } = input;
 
-            let resuming_session = self
-                .input
+            let resuming_session = input
                 .resuming
                 .and_then(|resuming| match resuming.value {
                     ClientSessionValue::Tls12(inner) => Some(inner),
@@ -151,11 +166,8 @@ mod server_hello {
                         return Err(PeerMisbehaved::ResumptionOfferedWithVariedEms.into());
                     }
 
-                    let secrets = ConnectionSecrets::new_resume(
-                        self.randoms,
-                        suite,
-                        resuming.master_secret(),
-                    );
+                    let secrets =
+                        ConnectionSecrets::new_resume(randoms, suite, resuming.master_secret());
                     config.key_log.log(
                         "CLIENT_RANDOM",
                         &secrets.randoms.client,
@@ -184,7 +196,7 @@ mod server_hello {
                             session_id: server_hello.session_id,
                             server_name,
                             using_ems,
-                            transcript: self.transcript,
+                            transcript,
                             resuming: true,
                             cert_verified,
                             sig_verified,
@@ -197,7 +209,7 @@ mod server_hello {
                             session_id: server_hello.session_id,
                             server_name,
                             using_ems,
-                            transcript: self.transcript,
+                            transcript,
                             ticket: None,
                             resuming: true,
                             cert_verified,
@@ -213,15 +225,17 @@ mod server_hello {
                 resuming_session: None,
                 session_id: server_hello.session_id,
                 server_name,
-                randoms: self.randoms,
+                randoms,
                 using_ems,
-                transcript: self.transcript,
+                transcript,
                 suite,
                 may_send_cert_status,
                 must_issue_new_ticket,
             }))
         }
     }
+
+    impl Sealed for Handler {}
 }
 
 struct ExpectCertificate {

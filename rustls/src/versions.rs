@@ -52,7 +52,9 @@ pub static DEFAULT_VERSIONS: &[&SupportedProtocolVersion] = ALL_VERSIONS;
 /// This value refers to TLS1.2 protocol handling code.  This means
 /// that if your program does not refer to this value, all that code
 /// can be removed by the linker.
-pub static TLS12_VERSION: &Tls12Version = &Tls12Version {};
+pub static TLS12_VERSION: &Tls12Version = &Tls12Version {
+    client: crate::client::TLS12_HANDLER,
+};
 
 /// Internal data for handling the TLS1.3 protocol.
 ///
@@ -65,8 +67,18 @@ pub static TLS13_VERSION: &Tls13Version = &Tls13Version {};
 ///
 /// There is one value of this type.  It is `TLS12_VERSION`.
 #[non_exhaustive]
-#[derive(Debug, Eq, PartialEq)]
-pub struct Tls12Version {}
+#[derive(Debug)]
+pub struct Tls12Version {
+    pub(crate) client: &'static dyn crate::client::Tls12Handler,
+}
+
+// TODO
+impl PartialEq for Tls12Version {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+impl Eq for Tls12Version {}
 
 /// Internal data for handling the TLS1.3 protocol.
 ///
