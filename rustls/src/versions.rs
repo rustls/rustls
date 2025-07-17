@@ -75,6 +75,7 @@ pub static TLS12_VERSION: &Tls12Version = &Tls12Version {
 /// can be removed by the linker.
 pub static TLS13_VERSION: &Tls13Version = &Tls13Version {
     client: crate::client::TLS13_HANDLER,
+    server: crate::server::TLS13_HANDLER,
 };
 
 /// Internal data for handling the TLS1.2 protocol.
@@ -94,6 +95,7 @@ pub struct Tls12Version {
 #[derive(Debug)]
 pub struct Tls13Version {
     pub(crate) client: &'static dyn crate::client::Tls13Handler,
+    pub(crate) server: &'static dyn crate::server::Tls13Handler,
 }
 
 #[derive(Clone, Copy)]
