@@ -21,7 +21,6 @@ use crate::msgs::message::{
 };
 use crate::record_layer::PreEncryptAction;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
-#[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
@@ -485,7 +484,6 @@ impl CommonState {
             .append(bytes.into_vec());
     }
 
-    #[cfg(feature = "tls12")]
     pub(crate) fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets, side: Side) {
         let (dec, enc) = secrets.make_cipher_pair(side);
         self.record_layer
@@ -1043,7 +1041,6 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
     }
 }
 
-#[cfg(feature = "tls12")]
 pub(crate) type HandshakeFlightTls12<'a> = HandshakeFlight<'a, false>;
 pub(crate) type HandshakeFlightTls13<'a> = HandshakeFlight<'a, true>;
 

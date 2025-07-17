@@ -76,7 +76,6 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
     }
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
     let provider = provider::default_provider();

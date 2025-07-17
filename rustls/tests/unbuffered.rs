@@ -1733,7 +1733,6 @@ fn kernel_key_updates_tls13() {
 }
 
 #[test]
-#[cfg(feature = "tls12")]
 fn kernel_key_updates_tls12() {
     use rustls::version::TLS12;
 

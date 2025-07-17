@@ -408,7 +408,6 @@ pub struct ServerConfig {
     ///
     /// [RFC 7627]: https://datatracker.ietf.org/doc/html/rfc7627
     /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
-    #[cfg(feature = "tls12")]
     pub require_ems: bool,
 
     /// Provides the current system time
@@ -536,15 +535,7 @@ impl ServerConfig {
     /// is concerned only with cryptography, whereas this _also_ covers TLS-level
     /// configuration that NIST recommends.
     pub fn fips(&self) -> bool {
-        #[cfg(feature = "tls12")]
-        {
-            self.provider.fips() && self.require_ems
-        }
-
-        #[cfg(not(feature = "tls12"))]
-        {
-            self.provider.fips()
-        }
+        self.provider.fips() && self.require_ems
     }
 
     /// Return the crypto provider used to construct this client configuration.

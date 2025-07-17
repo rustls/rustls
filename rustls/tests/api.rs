@@ -303,7 +303,6 @@ fn versions() {
     version_test(&[], &[], Some(ProtocolVersion::TLSv1_3));
 
     // client default, server 1.2 -> 1.2
-    #[cfg(feature = "tls12")]
     version_test(
         &[],
         &[&rustls::version::TLS12],
@@ -311,7 +310,6 @@ fn versions() {
     );
 
     // client 1.2, server default -> 1.2
-    #[cfg(feature = "tls12")]
     version_test(
         &[&rustls::version::TLS12],
         &[],
@@ -319,15 +317,12 @@ fn versions() {
     );
 
     // client 1.2, server 1.3 -> fail
-    #[cfg(feature = "tls12")]
     version_test(&[&rustls::version::TLS12], &[&rustls::version::TLS13], None);
 
     // client 1.3, server 1.2 -> fail
-    #[cfg(feature = "tls12")]
     version_test(&[&rustls::version::TLS13], &[&rustls::version::TLS12], None);
 
     // client 1.3, server 1.2+1.3 -> 1.3
-    #[cfg(feature = "tls12")]
     version_test(
         &[&rustls::version::TLS13],
         &[&rustls::version::TLS12, &rustls::version::TLS13],
@@ -335,7 +330,6 @@ fn versions() {
     );
 
     // client 1.2+1.3, server 1.2 -> 1.2
-    #[cfg(feature = "tls12")]
     version_test(
         &[&rustls::version::TLS13, &rustls::version::TLS12],
         &[&rustls::version::TLS12],
@@ -399,7 +393,6 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
     );
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn config_builder_for_client_rejects_incompatible_cipher_suites() {
     assert_eq!(
@@ -448,7 +441,6 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
     );
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn config_builder_for_server_rejects_incompatible_cipher_suites() {
     assert_eq!(
@@ -1307,7 +1299,6 @@ fn client_trims_terminating_dot() {
     }
 }
 
-#[cfg(feature = "tls12")]
 fn check_sigalgs_reduced_by_ciphersuite(
     kt: KeyType,
     suite: CipherSuite,
@@ -1342,7 +1333,6 @@ fn check_sigalgs_reduced_by_ciphersuite(
     assert!(err.is_err());
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn server_cert_resolve_reduces_sigalgs_for_rsa_ciphersuite() {
     check_sigalgs_reduced_by_ciphersuite(
@@ -1359,7 +1349,6 @@ fn server_cert_resolve_reduces_sigalgs_for_rsa_ciphersuite() {
     );
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
     check_sigalgs_reduced_by_ciphersuite(
@@ -3570,7 +3559,6 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn test_tls12_exporter() {
     let provider = provider::default_provider();
@@ -3673,25 +3661,21 @@ fn test_ciphersuites() -> Vec<(
             KeyType::Rsa2048,
             CipherSuite::TLS13_AES_128_GCM_SHA256,
         ),
-        #[cfg(feature = "tls12")]
         (
             &rustls::version::TLS12,
             KeyType::EcdsaP384,
             CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         ),
-        #[cfg(feature = "tls12")]
         (
             &rustls::version::TLS12,
             KeyType::EcdsaP384,
             CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
         ),
-        #[cfg(feature = "tls12")]
         (
             &rustls::version::TLS12,
             KeyType::Rsa2048,
             CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
         ),
-        #[cfg(feature = "tls12")]
         (
             &rustls::version::TLS12,
             KeyType::Rsa2048,
@@ -3706,13 +3690,11 @@ fn test_ciphersuites() -> Vec<(
                 KeyType::Rsa2048,
                 CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
             ),
-            #[cfg(feature = "tls12")]
             (
                 &rustls::version::TLS12,
                 KeyType::EcdsaP256,
                 CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
             ),
-            #[cfg(feature = "tls12")]
             (
                 &rustls::version::TLS12,
                 KeyType::Rsa2048,
@@ -3898,7 +3880,6 @@ impl KeyLog for KeyLogToVec {
     }
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn key_log_for_tls12() {
     let client_key_log = Arc::new(KeyLogToVec::new("client"));
@@ -4333,12 +4314,10 @@ impl ClientStorage {
         self.alter_max_early_data_size = Some((expected, altered));
     }
 
-    #[cfg(feature = "tls12")]
     fn ops(&self) -> Vec<ClientStorageOp> {
         self.ops.lock().unwrap().clone()
     }
 
-    #[cfg(feature = "tls12")]
     fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
         std::mem::take(&mut self.ops.lock().unwrap())
     }
@@ -5131,7 +5110,6 @@ mod test_quic {
         }
     }
 
-    #[cfg(feature = "tls12")]
     #[test]
     fn test_quic_no_tls13_error() {
         let provider = provider::default_provider();
@@ -5559,7 +5537,6 @@ fn exercise_all_key_exchange_methods() {
     }
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn test_client_sends_helloretryrequest() {
     let provider = provider::default_provider();
@@ -5681,7 +5658,6 @@ fn test_client_sends_helloretryrequest() {
     ));
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn test_client_attempts_to_use_unsupported_kx_group() {
     // common to both client configs
@@ -5738,7 +5714,6 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     ));
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn test_client_sends_share_for_less_preferred_group() {
     // this is a test for the case described in:
@@ -5806,7 +5781,6 @@ fn test_client_sends_share_for_less_preferred_group() {
     );
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn test_tls13_client_resumption_does_not_reuse_tickets() {
     let shared_storage = Arc::new(ClientStorage::new());
@@ -6140,7 +6114,6 @@ fn test_client_rejects_illegal_tls13_ccs() {
 }
 
 /// https://github.com/rustls/rustls/issues/797
-#[cfg(feature = "tls12")]
 #[test]
 fn test_client_tls12_no_resume_after_server_downgrade() {
     let provider = provider::default_provider();
@@ -6391,7 +6364,6 @@ fn test_no_warning_logging_during_successful_sessions() {
 }
 
 /// Test that secrets can be extracted and used for encryption/decryption.
-#[cfg(feature = "tls12")]
 #[test]
 fn test_secret_extraction_enabled() {
     // Normally, secret extraction would be used to configure kTLS (TLS offload
@@ -6547,7 +6519,6 @@ fn test_secret_extract_produces_correct_variant() {
 
 /// Test that secrets cannot be extracted unless explicitly enabled, and until
 /// the handshake is done.
-#[cfg(feature = "tls12")]
 #[test]
 fn test_secret_extraction_disabled_or_too_early() {
     let kt = KeyType::Rsa2048;
@@ -6839,7 +6810,6 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
         .expect("check how much random material ClientConnection::new consumes");
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message() {
     fn inject_corrupt_finished_message(msg: &mut Message) -> Altered {
@@ -7588,7 +7558,6 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
     );
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     let provider = provider::default_provider();
@@ -7657,7 +7626,6 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
     );
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn test_illegal_client_renegotiation_attempt_during_tls12_handshake() {
     let provider = provider::default_provider();
@@ -7812,7 +7780,6 @@ fn test_automatic_refresh_traffic_keys() {
     assert_eq!(transferred, KEY_UPDATE_SIZE + encrypted_size(message.len()));
 }
 
-#[cfg(feature = "tls12")]
 #[test]
 fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
     let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider());

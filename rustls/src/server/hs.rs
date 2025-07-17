@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 use pki_types::DnsName;
 
 use super::server_conn::ServerConnectionData;
-#[cfg(feature = "tls12")]
 use super::tls12;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
@@ -18,11 +17,9 @@ use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
-#[cfg(feature = "tls12")]
-use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
     ClientHelloPayload, HandshakePayload, KeyExchangeAlgorithm, ProtocolName, Random,
-    ServerExtensions, ServerExtensionsInput, ServerNamePayload, SingleProtocolName,
+    ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId, SingleProtocolName,
     TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
@@ -58,7 +55,6 @@ pub(super) fn can_resume(
 pub(super) struct ExtensionProcessing {
     // extensions to reply with
     pub(super) extensions: Box<ServerExtensions<'static>>,
-    #[cfg(feature = "tls12")]
     pub(super) send_ticket: bool,
 }
 
@@ -75,7 +71,6 @@ impl ExtensionProcessing {
 
         Self {
             extensions,
-            #[cfg(feature = "tls12")]
             send_ticket: false,
         }
     }
@@ -170,7 +165,6 @@ impl ExtensionProcessing {
         Ok(())
     }
 
-    #[cfg(feature = "tls12")]
     pub(super) fn process_tls12(
         &mut self,
         config: &ServerConfig,
@@ -296,9 +290,7 @@ pub(super) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) extra_exts: ServerExtensionsInput<'static>,
     pub(super) transcript: HandshakeHashOrBuffer,
-    #[cfg(feature = "tls12")]
     pub(super) session_id: SessionId,
-    #[cfg(feature = "tls12")]
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
     pub(super) send_tickets: usize,
@@ -319,9 +311,7 @@ impl ExpectClientHello {
             config,
             extra_exts,
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
-            #[cfg(feature = "tls12")]
             session_id: SessionId::empty(),
-            #[cfg(feature = "tls12")]
             using_ems: false,
             done_retry: false,
             send_tickets: 0,
@@ -504,7 +494,6 @@ impl ExpectClientHello {
                     skxg,
                     sig_schemes,
                 ),
-            #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => suite
                 .protocol_version
                 .server

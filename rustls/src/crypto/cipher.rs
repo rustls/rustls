@@ -179,13 +179,11 @@ pub struct Iv([u8; NONCE_LEN]);
 
 impl Iv {
     /// Create a new `Iv` from a byte array, of precisely `NONCE_LEN` bytes.
-    #[cfg(feature = "tls12")]
     pub fn new(value: [u8; NONCE_LEN]) -> Self {
         Self(value)
     }
 
     /// Create a new `Iv` from a byte slice, of precisely `NONCE_LEN` bytes.
-    #[cfg(feature = "tls12")]
     pub fn copy(value: &[u8]) -> Self {
         debug_assert_eq!(value.len(), NONCE_LEN);
         let mut iv = Self::new(Default::default());
@@ -280,7 +278,6 @@ pub struct AeadKey {
 }
 
 impl AeadKey {
-    #[cfg(feature = "tls12")]
     pub(crate) fn new(buf: &[u8]) -> Self {
         debug_assert!(buf.len() <= Self::MAX_LEN);
         let mut key = Self::from([0u8; Self::MAX_LEN]);
