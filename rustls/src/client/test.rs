@@ -134,7 +134,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "tls12")]
     #[test]
     fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
         let mut config =
@@ -208,7 +207,6 @@ mod tests {
     }
 
     /// Regression test for <https://github.com/seanmonstar/reqwest/issues/2191>
-    #[cfg(feature = "tls12")]
     #[test]
     fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         let verifier = Arc::new(ExpectSha1EcdsaVerifier::default());

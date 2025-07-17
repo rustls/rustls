@@ -78,7 +78,6 @@ mod tests {
     use crate::sync::Arc;
     use crate::{CipherSuiteCommon, SupportedCipherSuite, Tls12CipherSuite, version};
 
-    #[cfg(feature = "tls12")]
     #[test]
     fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
         let provider = super::provider::default_provider();
@@ -117,7 +116,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "tls12")]
     #[test]
     fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
         let config = ServerConfig::builder_with_provider(ffdhe_provider().into())
@@ -137,7 +135,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "tls12")]
     #[test]
     fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
         let config = ServerConfig::builder_with_provider(ffdhe_provider().into())
@@ -158,7 +155,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "tls12")]
     #[test]
     fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites() {
         let config = ServerConfig::builder_with_provider(ffdhe_provider().into())

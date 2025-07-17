@@ -116,7 +116,6 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             max_early_data_size: 0,
             send_half_rtt_data: false,
             send_tls13_tickets: 2,
-            #[cfg(feature = "tls12")]
             require_ems: cfg!(feature = "fips"),
             time_provider: self.time_provider,
             cert_compressors: compress::default_cert_compressors().to_vec(),

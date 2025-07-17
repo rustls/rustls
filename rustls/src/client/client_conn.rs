@@ -233,7 +233,6 @@ pub struct ClientConfig {
     ///
     /// [RFC 7627]: https://datatracker.ietf.org/doc/html/rfc7627
     /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
-    #[cfg(feature = "tls12")]
     pub require_ems: bool,
 
     /// Provides the current system time
@@ -372,12 +371,7 @@ impl ClientConfig {
     /// is concerned only with cryptography, whereas this _also_ covers TLS-level
     /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
     pub fn fips(&self) -> bool {
-        let mut is_fips = self.provider.fips();
-
-        #[cfg(feature = "tls12")]
-        {
-            is_fips = is_fips && self.require_ems
-        }
+        let mut is_fips = self.provider.fips() && self.require_ems;
 
         if let Some(ech_mode) = &self.ech_mode {
             is_fips = is_fips && ech_mode.fips();
