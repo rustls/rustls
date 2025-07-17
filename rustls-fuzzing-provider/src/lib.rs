@@ -108,6 +108,7 @@ pub static TLS13_FUZZING_SUITE: SupportedCipherSuite =
             hash_provider: &Hash,
             confidentiality_limit: u64::MAX,
         },
+        protocol_version: rustls::version::TLS13_VERSION,
         hkdf_provider: &tls13::HkdfUsingHmac(&Hmac),
         aead_alg: &Aead,
         quic: None,
