@@ -17,9 +17,9 @@ pub trait TimeProvider: Debug + Send + Sync {
     fn current_time(&self) -> Option<UnixTime>;
 }
 
-#[derive(Debug)]
-#[cfg(feature = "std")]
 /// Default `TimeProvider` implementation that uses `std`
+#[cfg(feature = "std")]
+#[derive(Debug)]
 pub struct DefaultTimeProvider;
 
 #[cfg(feature = "std")]

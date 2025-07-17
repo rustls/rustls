@@ -671,8 +671,8 @@ pub mod sign {
 /// APIs for implementing QUIC TLS
 pub mod quic;
 
-#[cfg(any(feature = "std", feature = "hashbrown"))] // < XXX: incorrect feature gate
 /// APIs for implementing TLS tickets
+#[cfg(any(feature = "std", feature = "hashbrown"))] // < XXX: incorrect feature gate
 pub mod ticketer;
 
 /// This is the rustls manual.
