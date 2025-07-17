@@ -227,9 +227,6 @@ impl From<InvalidMessage> for AlertDescription {
     }
 }
 
-#[non_exhaustive]
-#[allow(missing_docs)]
-#[derive(Debug, PartialEq, Clone)]
 /// The set of cases where we failed to make a connection because we thought
 /// the peer was misbehaving.
 ///
@@ -240,6 +237,9 @@ impl From<InvalidMessage> for AlertDescription {
 ///
 /// Please file a bug against rustls if you see `Error::PeerMisbehaved` in
 /// the wild.
+#[allow(missing_docs)]
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Clone)]
 pub enum PeerMisbehaved {
     AttemptedDowngradeToTls12WhenTls13IsSupported,
     BadCertChainExtensions,
@@ -325,14 +325,14 @@ impl From<PeerMisbehaved> for Error {
     }
 }
 
-#[non_exhaustive]
-#[allow(missing_docs)]
-#[derive(Debug, PartialEq, Clone)]
 /// The set of cases where we failed to make a connection because a peer
 /// doesn't support a TLS version/feature we require.
 ///
 /// This is `non_exhaustive`: we might add or stop using items here in minor
 /// versions.
+#[allow(missing_docs)]
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Clone)]
 pub enum PeerIncompatible {
     EcPointsExtensionRequired,
     ExtendedMasterSecretExtensionRequired,
@@ -365,8 +365,6 @@ impl From<PeerIncompatible> for Error {
     }
 }
 
-#[non_exhaustive]
-#[derive(Debug, Clone)]
 /// The ways in which certificate validators can express errors.
 ///
 /// Note that the rustls TLS protocol code interprets specifically these
@@ -374,6 +372,8 @@ impl From<PeerIncompatible> for Error {
 /// custom certificate validator uses incorrect errors the library as
 /// a whole will send alerts that do not match the standard (this is usually
 /// a minor issue, but could be misleading).
+#[non_exhaustive]
+#[derive(Debug, Clone)]
 pub enum CertificateError {
     /// The certificate is not correctly encoded.
     BadEncoding,
@@ -811,9 +811,9 @@ impl fmt::Display for ExtendedKeyPurpose {
     }
 }
 
+/// The ways in which a certificate revocation list (CRL) can be invalid.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
-/// The ways in which a certificate revocation list (CRL) can be invalid.
 pub enum CertRevocationListError {
     /// The CRL had a bad signature from its issuer.
     BadSignature,
@@ -933,9 +933,9 @@ impl From<CertRevocationListError> for Error {
     }
 }
 
+/// An error that occurred while handling Encrypted Client Hello (ECH).
 #[non_exhaustive]
 #[derive(Debug, Clone, Eq, PartialEq)]
-/// An error that occurred while handling Encrypted Client Hello (ECH).
 pub enum EncryptedClientHelloError {
     /// The provided ECH configuration list was invalid.
     InvalidConfigList,

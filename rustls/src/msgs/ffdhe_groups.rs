@@ -1,8 +1,8 @@
 //! This module contains parameters for FFDHE named groups as defined
 //! in [RFC 7919 Appendix A](https://datatracker.ietf.org/doc/html/rfc7919#appendix-A).
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Parameters of an FFDHE group, with Big-endian byte order
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FfdheGroup<'a> {
     pub p: &'a [u8],
     pub g: &'a [u8],

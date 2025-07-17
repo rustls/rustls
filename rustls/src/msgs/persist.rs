@@ -121,14 +121,14 @@ impl Tls13ClientSessionValue {
         self.suite
     }
 
-    #[doc(hidden)]
     /// Test only: rewind epoch by `delta` seconds.
+    #[doc(hidden)]
     pub fn rewind_epoch(&mut self, delta: u32) {
         self.common.epoch -= delta as u64;
     }
 
-    #[doc(hidden)]
     /// Test only: replace `max_early_data_size` with `new`
+    #[doc(hidden)]
     pub fn _private_set_max_early_data_size(&mut self, new: u32) {
         self.max_early_data_size = new;
     }
@@ -211,8 +211,8 @@ impl Tls12ClientSessionValue {
         self.suite
     }
 
-    #[doc(hidden)]
     /// Test only: rewind epoch by `delta` seconds.
+    #[doc(hidden)]
     pub fn rewind_epoch(&mut self, delta: u32) {
         self.common.epoch -= delta as u64;
     }

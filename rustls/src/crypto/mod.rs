@@ -38,8 +38,8 @@ pub mod hash;
 /// HMAC interfaces.
 pub mod hmac;
 
-#[cfg(feature = "tls12")]
 /// Cryptography specific to TLS1.2.
+#[cfg(feature = "tls12")]
 pub mod tls12;
 
 /// Cryptography specific to TLS1.3.
