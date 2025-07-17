@@ -1540,7 +1540,6 @@ fn test_secret_extraction_enabled() {
         #[cfg(not(feature = "fips"))]
         cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     ] {
-        let version = suite.version();
         println!("Testing suite {:?}", suite.suite().as_str());
 
         // Only offer the cipher suite (and protocol version) that we're testing
@@ -1551,7 +1550,7 @@ fn test_secret_extraction_enabled() {
             }
             .into(),
         )
-        .with_protocol_versions(&[version])
+        .with_safe_default_protocol_versions()
         .unwrap()
         .with_no_client_auth()
         .with_single_cert(kt.get_chain(), kt.get_key())
