@@ -56,7 +56,6 @@ pub fn verify_server_name(
 /// Describes which `webpki` signature verification algorithms are supported and
 /// how they map to TLS [`SignatureScheme`]s.
 #[derive(Clone, Copy)]
-#[allow(unreachable_pub)]
 pub struct WebPkiSupportedAlgorithms {
     /// A list of all supported signature verification algorithms.
     ///
