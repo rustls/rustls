@@ -484,16 +484,26 @@ impl ExpectClientHello {
             Random::new(self.config.provider.secure_random)?,
         );
         match suite {
-            SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {
-                config: self.config,
-                transcript,
-                suite,
-                randoms,
-                done_retry: self.done_retry,
-                send_tickets: self.send_tickets,
-                extra_exts: self.extra_exts,
-            }
-            .handle_client_hello(cx, certkey, m, client_hello, skxg, sig_schemes),
+            SupportedCipherSuite::Tls13(suite) => suite
+                .protocol_version
+                .server
+                .handle_client_hello(
+                    cx,
+                    certkey,
+                    m,
+                    client_hello,
+                    skxg,
+                    sig_schemes,
+                    tls13::CompleteClientHelloHandling {
+                        config: self.config,
+                        transcript,
+                        suite,
+                        randoms,
+                        done_retry: self.done_retry,
+                        send_tickets: self.send_tickets,
+                        extra_exts: self.extra_exts,
+                    },
+                ),
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => suite
                 .protocol_version
