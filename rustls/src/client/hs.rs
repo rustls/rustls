@@ -804,8 +804,10 @@ impl State<ClientConnectionData> for ExpectServerHello {
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         match suite {
-            SupportedCipherSuite::Tls13(suite) => {
-                tls13::handle_server_hello(
+            SupportedCipherSuite::Tls13(suite) => suite
+                .protocol_version
+                .client
+                .handle_server_hello(
                     cx,
                     server_hello,
                     randoms,
@@ -817,8 +819,8 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     &m,
                     self.ech_state,
                     self.input,
-                )
-            }
+                ),
+
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => suite
                 .protocol_version
