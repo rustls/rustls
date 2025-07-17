@@ -307,12 +307,6 @@
 //! - `custom-provider`: disables implicit use of built-in providers (`aws-lc-rs` or `ring`). This forces
 //!   applications to manually install one, for instance, when using a custom `CryptoProvider`.
 //!
-//! - `tls12` (enabled by default): enable support for TLS version 1.2. Note that, due to the
-//!   additive nature of Cargo features and because it is enabled by default, other crates
-//!   in your dependency graph could re-enable it for your application. If you want to disable
-//!   TLS 1.2 for security reasons, consider explicitly enabling TLS 1.3 only in the config
-//!   builder API.
-//!
 //! - `log` (enabled by default): make the rustls crate depend on the `log` crate.
 //!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
 //!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
@@ -428,7 +422,6 @@ mod rand;
 mod record_layer;
 #[cfg(feature = "std")]
 mod stream;
-#[cfg(feature = "tls12")]
 mod tls12;
 mod tls13;
 mod vecbuf;
@@ -555,7 +548,6 @@ pub use crate::suites::{
 };
 #[cfg(feature = "std")]
 pub use crate::ticketer::TicketRotator;
-#[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::verify::DigitallySignedStruct;
@@ -572,7 +564,6 @@ pub mod client {
     mod hs;
     #[cfg(test)]
     mod test;
-    #[cfg(feature = "tls12")]
     mod tls12;
     mod tls13;
 
@@ -595,6 +586,9 @@ pub mod client {
         pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     }
 
+    pub(crate) use tls12::{TLS12_HANDLER, Tls12Handler};
+    pub(crate) use tls13::{TLS13_HANDLER, Tls13Handler};
+
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     pub use crate::webpki::{
         ServerCertVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
@@ -615,7 +609,6 @@ pub mod server {
     mod server_conn;
     #[cfg(test)]
     mod test;
-    #[cfg(feature = "tls12")]
     mod tls12;
     mod tls13;
 
@@ -642,6 +635,9 @@ pub mod server {
     pub mod danger {
         pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
     }
+
+    pub(crate) use tls12::{TLS12_HANDLER, Tls12Handler};
+    pub(crate) use tls13::{TLS13_HANDLER, Tls13Handler};
 }
 
 pub use server::ServerConfig;
@@ -652,9 +648,9 @@ pub use server::ServerConnection;
 ///
 /// ALL_VERSIONS is a provided as an array of all of these values.
 pub mod version {
-    #[cfg(feature = "tls12")]
-    pub use crate::versions::TLS12;
-    pub use crate::versions::TLS13;
+    pub use crate::versions::{
+        TLS12, TLS12_VERSION, TLS13, TLS13_VERSION, Tls12Version, Tls13Version,
+    };
 }
 
 /// Re-exports the contents of the [rustls-pki-types](https://docs.rs/rustls-pki-types) crate for easy access
@@ -697,4 +693,8 @@ mod hash_map {
     pub(crate) use hashbrown::HashMap;
     #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
     pub(crate) use hashbrown::hash_map::Entry;
+}
+
+mod sealed {
+    pub trait Sealed {}
 }

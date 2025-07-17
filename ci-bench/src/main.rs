@@ -539,7 +539,7 @@ struct ClientSideStepper<'a> {
 
 impl ClientSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
-        assert_eq!(params.ciphersuite.version(), params.version);
+        assert_eq!(params.ciphersuite.version(), *params.version);
 
         let cfg = ClientConfig::builder_with_provider(
             CryptoProvider {
@@ -634,7 +634,7 @@ struct ServerSideStepper<'a> {
 
 impl ServerSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
-        assert_eq!(params.ciphersuite.version(), params.version);
+        assert_eq!(params.ciphersuite.version(), *params.version);
 
         let cfg = ServerConfig::builder_with_provider(params.provider.clone().into())
             .with_protocol_versions(&[params.version])

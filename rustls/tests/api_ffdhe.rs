@@ -62,7 +62,7 @@ fn ffdhe_ciphersuite() {
             server_config,
             expected_cipher_suite,
             NamedGroup::FFDHE2048,
-            expected_protocol.version,
+            expected_protocol.version(),
         );
     }
 }
@@ -238,7 +238,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
                 .suite(),
             expected_cipher_suite
         );
-        assert_eq!(server.protocol_version(), Some(protocol_version.version));
+        assert_eq!(server.protocol_version(), Some(protocol_version.version()));
         assert_eq!(
             server
                 .negotiated_key_exchange_group()
