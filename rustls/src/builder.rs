@@ -211,7 +211,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
     ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
         let mut any_usable_suite = false;
         for suite in &self.provider.cipher_suites {
-            if versions.contains(&suite.version()) {
+            if versions.contains(&&suite.version()) {
                 any_usable_suite = true;
                 break;
             }

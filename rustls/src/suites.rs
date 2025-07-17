@@ -8,9 +8,7 @@ use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-#[cfg(feature = "tls12")]
-use crate::versions::TLS12;
-use crate::versions::{SupportedProtocolVersion, TLS13};
+use crate::versions::SupportedProtocolVersion;
 
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
 #[allow(clippy::exhaustive_structs)]
@@ -102,11 +100,11 @@ impl SupportedCipherSuite {
     }
 
     /// Return supported protocol version for the cipher suite.
-    pub fn version(&self) -> &'static SupportedProtocolVersion {
+    pub fn version(&self) -> SupportedProtocolVersion {
         match self {
             #[cfg(feature = "tls12")]
-            Self::Tls12(_) => &TLS12,
-            Self::Tls13(_) => &TLS13,
+            Self::Tls12(suite) => SupportedProtocolVersion::TLS12(suite.protocol_version),
+            Self::Tls13(suite) => SupportedProtocolVersion::TLS13(suite.protocol_version),
         }
     }
 
