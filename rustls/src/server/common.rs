@@ -3,7 +3,7 @@ use pki_types::CertificateDer;
 use crate::sign;
 
 /// ActiveCertifiedKey wraps [`sign::CertifiedKey`] and tracks OSCP state in a single handshake.
-pub(super) struct ActiveCertifiedKey<'a> {
+pub(crate) struct ActiveCertifiedKey<'a> {
     key: &'a sign::CertifiedKey,
     ocsp: Option<&'a [u8]>,
 }
