@@ -279,13 +279,10 @@ pub struct WantsVerifier {
 ///
 /// [`ClientConfig`]: crate::ClientConfig
 /// [`ServerConfig`]: crate::ServerConfig
-pub trait ConfigSide: sealed::Sealed {}
+pub trait ConfigSide: crate::sealed::Sealed {}
 
 impl ConfigSide for crate::ClientConfig {}
 impl ConfigSide for crate::ServerConfig {}
 
-mod sealed {
-    pub trait Sealed {}
-    impl Sealed for crate::ClientConfig {}
-    impl Sealed for crate::ServerConfig {}
-}
+impl crate::sealed::Sealed for crate::ClientConfig {}
+impl crate::sealed::Sealed for crate::ServerConfig {}
