@@ -644,6 +644,7 @@ pub mod server {
     }
 
     pub(crate) use tls12::{TLS12_HANDLER, Tls12Handler};
+    pub(crate) use tls13::{TLS13_HANDLER, Tls13Handler};
 }
 
 pub use server::ServerConfig;
