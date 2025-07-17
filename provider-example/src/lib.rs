@@ -82,6 +82,7 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherSuite =
             hash_provider: &hash::Sha256,
             confidentiality_limit: u64::MAX,
         },
+        protocol_version: rustls::version::TLS13_VERSION,
         hkdf_provider: &rustls::crypto::tls13::HkdfUsingHmac(&hmac::Sha256Hmac),
         aead_alg: &aead::Chacha20Poly1305,
         quic: None,
