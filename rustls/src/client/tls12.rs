@@ -232,7 +232,7 @@ struct ExpectCertificate {
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
-    pub(super) suite: &'static Tls12CipherSuite,
+    suite: &'static Tls12CipherSuite,
     may_send_cert_status: bool,
     must_issue_new_ticket: bool,
 }
