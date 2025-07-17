@@ -89,12 +89,12 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: cargo test (debug; aws-lc-rs)
-        run: cargo test --no-default-features --features aws-lc-rs,tls12,log,std --all-targets
+        run: cargo test --no-default-features --features aws-lc-rs,log,std --all-targets
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (release; fips)
-        run: cargo test --release --no-default-features --features fips,tls12,log,std --all-targets
+        run: cargo test --release --no-default-features --features fips,log,std --all-targets
         env:
           RUST_BACKTRACE: 1
 
@@ -172,16 +172,16 @@ jobs:
         run: cargo test --locked --no-default-features
         working-directory: rustls
 
-      - name: cargo test (debug; no default features; tls12)
-        run: cargo test --locked --no-default-features --features tls12,std
+      - name: cargo test (debug; no default features; std)
+        run: cargo test --locked --no-default-features --features std
         working-directory: rustls
 
-      - name: cargo test (debug; no default features; aws-lc-rs,tls12)
-        run: cargo test --no-default-features --features aws-lc-rs,tls12,std
+      - name: cargo test (debug; no default features; std+aws-lc-rs)
+        run: cargo test --no-default-features --features aws-lc-rs,std
         working-directory: rustls
 
-      - name: cargo test (debug; no default features; fips,tls12)
-        run: cargo test --no-default-features --features fips,tls12,std
+      - name: cargo test (debug; no default features; std+fips)
+        run: cargo test --no-default-features --features fips,std
         working-directory: rustls
 
       - name: cargo test (release; no run)

@@ -86,7 +86,6 @@ impl ClientHelloInput {
             Some(_resuming) => {
                 debug!("Resuming session");
                 match &mut _resuming.value {
-                    #[cfg(feature = "tls12")]
                     ClientSessionValue::Tls12(inner) => {
                         // If we have a ticket, we use the sessionid as a signal that
                         // we're  doing an abbreviated handshake.  See section 3.4 in
@@ -575,7 +574,6 @@ fn prepare_resumption<'a>(
     // If the server selected TLS 1.2, we can't resume.
     let suite = match suite {
         Some(SupportedCipherSuite::Tls13(suite)) => Some(suite),
-        #[cfg(feature = "tls12")]
         Some(SupportedCipherSuite::Tls12(_)) => return None,
         None => None,
     };
@@ -821,7 +819,6 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     self.input,
                 ),
 
-            #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => suite
                 .protocol_version
                 .client
@@ -1088,7 +1085,6 @@ fn process_cert_type_extension(
 
 pub(super) enum ClientSessionValue {
     Tls13(persist::Tls13ClientSessionValue),
-    #[cfg(feature = "tls12")]
     Tls12(persist::Tls12ClientSessionValue),
 }
 
@@ -1104,17 +1100,11 @@ impl ClientSessionValue {
             .take_tls13_ticket(server_name)
             .map(ClientSessionValue::Tls13)
             .or_else(|| {
-                #[cfg(feature = "tls12")]
-                {
-                    config
-                        .resumption
-                        .store
-                        .tls12_session(server_name)
-                        .map(ClientSessionValue::Tls12)
-                }
-
-                #[cfg(not(feature = "tls12"))]
-                None
+                config
+                    .resumption
+                    .store
+                    .tls12_session(server_name)
+                    .map(ClientSessionValue::Tls12)
             })
             .and_then(|resuming| {
                 resuming.compatible_config(&config.verifier, &config.client_auth_cert_resolver)
@@ -1150,7 +1140,6 @@ impl ClientSessionValue {
     fn common(&self) -> &persist::ClientSessionCommon {
         match self {
             Self::Tls13(inner) => &inner.common,
-            #[cfg(feature = "tls12")]
             Self::Tls12(inner) => &inner.common,
         }
     }
@@ -1158,7 +1147,6 @@ impl ClientSessionValue {
     fn tls13(&self) -> Option<&persist::Tls13ClientSessionValue> {
         match self {
             Self::Tls13(v) => Some(v),
-            #[cfg(feature = "tls12")]
             Self::Tls12(_) => None,
         }
     }
@@ -1172,7 +1160,6 @@ impl ClientSessionValue {
             Self::Tls13(v) => v
                 .compatible_config(server_cert_verifier, client_creds)
                 .then_some(self),
-            #[cfg(feature = "tls12")]
             Self::Tls12(v) => v
                 .compatible_config(server_cert_verifier, client_creds)
                 .then_some(self),

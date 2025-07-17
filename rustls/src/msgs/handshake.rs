@@ -9,15 +9,12 @@ use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
 
-#[cfg(feature = "tls12")]
-use crate::crypto::ActiveKeyExchange;
-use crate::crypto::SecureRandom;
+use crate::crypto::{ActiveKeyExchange, SecureRandom};
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, CipherSuite, EchClientHelloType,
     HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use crate::error::InvalidMessage;
-#[cfg(feature = "tls12")]
 use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
 use crate::msgs::base::{MaybeEmpty, NonEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
@@ -180,7 +177,6 @@ impl SessionId {
         }
     }
 
-    #[cfg(feature = "tls12")]
     pub(crate) fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -1870,20 +1866,17 @@ impl Codec<'_> for EcParameters {
     }
 }
 
-#[cfg(feature = "tls12")]
 pub(crate) trait KxDecode<'a>: fmt::Debug + Sized {
     /// Decode a key exchange message given the key_exchange `algo`
     fn decode(r: &mut Reader<'a>, algo: KeyExchangeAlgorithm) -> Result<Self, InvalidMessage>;
 }
 
-#[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) enum ClientKeyExchangeParams {
     Ecdh(ClientEcdhParams),
     Dh(ClientDhParams),
 }
 
-#[cfg(feature = "tls12")]
 impl ClientKeyExchangeParams {
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
@@ -1900,7 +1893,6 @@ impl ClientKeyExchangeParams {
     }
 }
 
-#[cfg(feature = "tls12")]
 impl KxDecode<'_> for ClientKeyExchangeParams {
     fn decode(r: &mut Reader<'_>, algo: KeyExchangeAlgorithm) -> Result<Self, InvalidMessage> {
         use KeyExchangeAlgorithm::*;
@@ -1911,14 +1903,12 @@ impl KxDecode<'_> for ClientKeyExchangeParams {
     }
 }
 
-#[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) struct ClientEcdhParams {
     /// RFC4492: `opaque point <1..2^8-1>;`
     pub(crate) public: PayloadU8<NonEmpty>,
 }
 
-#[cfg(feature = "tls12")]
 impl Codec<'_> for ClientEcdhParams {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.public.encode(bytes);
@@ -1930,14 +1920,12 @@ impl Codec<'_> for ClientEcdhParams {
     }
 }
 
-#[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) struct ClientDhParams {
     /// RFC5246: `opaque dh_Yc<1..2^16-1>;`
     pub(crate) public: PayloadU16<NonEmpty>,
 }
 
-#[cfg(feature = "tls12")]
 impl Codec<'_> for ClientDhParams {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.public.encode(bytes);
@@ -1958,7 +1946,6 @@ pub(crate) struct ServerEcdhParams {
 }
 
 impl ServerEcdhParams {
-    #[cfg(feature = "tls12")]
     pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
         Self {
             curve_params: EcParameters {
@@ -1999,7 +1986,6 @@ pub(crate) struct ServerDhParams {
 }
 
 impl ServerDhParams {
-    #[cfg(feature = "tls12")]
     pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
         let Some(params) = kx.ffdhe_group() else {
             panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group());
@@ -2012,7 +1998,6 @@ impl ServerDhParams {
         }
     }
 
-    #[cfg(feature = "tls12")]
     pub(crate) fn as_ffdhe_group(&self) -> FfdheGroup<'_> {
         FfdheGroup::from_params_trimming_leading_zeros(&self.dh_p.0, &self.dh_g.0)
     }
@@ -2042,7 +2027,6 @@ pub(crate) enum ServerKeyExchangeParams {
 }
 
 impl ServerKeyExchangeParams {
-    #[cfg(feature = "tls12")]
     pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
         match kx.group().key_exchange_algorithm() {
             KeyExchangeAlgorithm::DHE => Self::Dh(ServerDhParams::new(kx)),
@@ -2050,7 +2034,6 @@ impl ServerKeyExchangeParams {
         }
     }
 
-    #[cfg(feature = "tls12")]
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
             Self::Ecdh(ecdh) => &ecdh.public.0,
@@ -2066,7 +2049,6 @@ impl ServerKeyExchangeParams {
     }
 }
 
-#[cfg(feature = "tls12")]
 impl KxDecode<'_> for ServerKeyExchangeParams {
     fn decode(r: &mut Reader<'_>, algo: KeyExchangeAlgorithm) -> Result<Self, InvalidMessage> {
         use KeyExchangeAlgorithm::*;
@@ -2118,7 +2100,6 @@ impl Codec<'_> for ServerKeyExchangePayload {
 }
 
 impl ServerKeyExchangePayload {
-    #[cfg(feature = "tls12")]
     pub(crate) fn unwrap_given_kxa(&self, kxa: KeyExchangeAlgorithm) -> Option<ServerKeyExchange> {
         if let Self::Unknown(unk) = self {
             let mut rd = Reader::init(unk.bytes());
@@ -2296,7 +2277,6 @@ pub(crate) struct NewSessionTicketPayload {
 }
 
 impl NewSessionTicketPayload {
-    #[cfg(feature = "tls12")]
     pub(crate) fn new(lifetime_hint: u32, ticket: Vec<u8>) -> Self {
         Self {
             lifetime_hint,
@@ -2440,7 +2420,6 @@ impl<'a> CertificateStatus<'a> {
         }
     }
 
-    #[cfg(feature = "tls12")]
     pub(crate) fn into_inner(self) -> Vec<u8> {
         self.ocsp_response.0.into_vec()
     }

@@ -167,9 +167,7 @@ mod client_hello {
                 let next = Box::new(hs::ExpectClientHello {
                     config: cch.config,
                     transcript: HandshakeHashOrBuffer::Hash(cch.transcript),
-                    #[cfg(feature = "tls12")]
                     session_id: SessionId::empty(),
-                    #[cfg(feature = "tls12")]
                     using_ems: false,
                     done_retry: true,
                     send_tickets: cch.send_tickets,

@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
-#[cfg(all(doc, feature = "tls12"))]
+#[cfg(doc)]
 use crate::Tls12CipherSuite;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
@@ -39,7 +39,6 @@ pub mod hash;
 pub mod hmac;
 
 /// Cryptography specific to TLS1.2.
-#[cfg(feature = "tls12")]
 pub mod tls12;
 
 /// Cryptography specific to TLS1.3.

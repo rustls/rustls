@@ -83,7 +83,6 @@ fn accepts_short_session_id() {
     let sess = SessionId::read(&mut rd).unwrap();
     println!("{sess:?}");
 
-    #[cfg(feature = "tls12")]
     assert!(!sess.is_empty());
     assert_ne!(sess, SessionId::empty());
     assert!(!rd.any_left());
@@ -96,7 +95,6 @@ fn accepts_empty_session_id() {
     let sess = SessionId::read(&mut rd).unwrap();
     println!("{sess:?}");
 
-    #[cfg(feature = "tls12")]
     assert!(sess.is_empty());
     assert_eq!(sess, SessionId::empty());
     assert!(!rd.any_left());
