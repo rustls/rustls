@@ -545,7 +545,7 @@ pub(super) mod danger {
     #[derive(Debug)]
     pub struct DangerousClientConfig<'a> {
         /// The underlying ClientConfig
-        pub cfg: &'a mut ClientConfig,
+        pub(super) cfg: &'a mut ClientConfig,
     }
 
     impl DangerousClientConfig<'_> {
