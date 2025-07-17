@@ -642,6 +642,8 @@ pub mod server {
     pub mod danger {
         pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
     }
+
+    pub(crate) use tls12::{TLS12_HANDLER, Tls12Handler};
 }
 
 pub use server::ServerConfig;
