@@ -5,6 +5,7 @@ permissions:
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches:
       - main
@@ -82,7 +83,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    if: github.repository == 'rustls/rustls'
+    if: github.repository == 'rustls/rustls' && github.ref == 'refs/heads/main'
     needs: generate
     permissions:
       pages: write
