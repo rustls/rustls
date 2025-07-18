@@ -156,6 +156,7 @@ pub struct Tls12ClientSessionValue {
     suite: &'static Tls12CipherSuite,
     #[cfg(feature = "tls12")]
     pub(crate) session_id: SessionId,
+    #[cfg(feature = "tls12")]
     master_secret: Zeroizing<[u8; 48]>,
     #[cfg(feature = "tls12")]
     extended_ms: bool,
@@ -338,6 +339,7 @@ pub struct Tls12ServerSessionValue {
 }
 
 impl Tls12ServerSessionValue {
+    #[cfg(feature = "tls12")]
     pub(crate) fn new(
         common: CommonServerSessionValue,
         master_secret: &[u8; 48],
