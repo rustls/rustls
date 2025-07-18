@@ -106,7 +106,7 @@ path = "tests/runners/unbuffered.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["ring"]
+features = ["aws-lc-rs", "brotli", "custom-provider", "hashbrown", "log", "ring", "std", "tls12", "zlib"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo_check_external_types]
