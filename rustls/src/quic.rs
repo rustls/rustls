@@ -587,6 +587,7 @@ impl Secrets {
 }
 
 /// Keys used to communicate in a single direction
+#[allow(clippy::exhaustive_structs)]
 pub struct DirectionalKeys {
     /// Encrypts or decrypts a packet's headers
     pub header: Box<dyn HeaderProtectionKey>,
@@ -771,6 +772,7 @@ pub trait PacketKey: Send + Sync {
 }
 
 /// Packet protection keys for bidirectional 1-RTT communication
+#[allow(clippy::exhaustive_structs)]
 pub struct PacketKeySet {
     /// Encrypts outgoing packets
     pub local: Box<dyn PacketKey>,
@@ -839,6 +841,7 @@ impl<'a> KeyBuilder<'a> {
 }
 
 /// Produces QUIC initial keys from a TLS 1.3 ciphersuite and a QUIC key generation algorithm.
+#[non_exhaustive]
 #[derive(Clone, Copy)]
 pub struct Suite {
     /// The TLS 1.3 ciphersuite used to derive keys.
@@ -861,6 +864,7 @@ impl Suite {
 }
 
 /// Complete set of keys used to communicate with the peer
+#[allow(clippy::exhaustive_structs)]
 pub struct Keys {
     /// Encrypts outgoing packets
     pub local: DirectionalKeys,

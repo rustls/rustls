@@ -326,6 +326,7 @@
 #![warn(
     clippy::alloc_instead_of_core,
     clippy::exhaustive_enums,
+    clippy::exhaustive_structs,
     clippy::manual_let_else,
     clippy::std_instead_of_core,
     clippy::use_self,
@@ -667,8 +668,8 @@ pub mod sign {
 /// APIs for implementing QUIC TLS
 pub mod quic;
 
-#[cfg(any(feature = "std", feature = "hashbrown"))] // < XXX: incorrect feature gate
 /// APIs for implementing TLS tickets
+#[cfg(any(feature = "std", feature = "hashbrown"))] // < XXX: incorrect feature gate
 pub mod ticketer;
 
 /// This is the rustls manual.

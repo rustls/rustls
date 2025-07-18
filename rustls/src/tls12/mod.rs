@@ -17,6 +17,7 @@ use crate::msgs::handshake::{KeyExchangeAlgorithm, KxDecode};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, SupportedCipherSuite};
 
 /// A TLS 1.2 cipher suite supported by rustls.
+#[allow(clippy::exhaustive_structs)]
 pub struct Tls12CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,

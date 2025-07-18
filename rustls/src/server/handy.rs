@@ -6,6 +6,7 @@ use crate::sync::Arc;
 use crate::{server, sign};
 
 /// Something which never stores sessions.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct NoServerSessionStorage {}
 

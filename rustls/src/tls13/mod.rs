@@ -7,6 +7,7 @@ use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 pub(crate) mod key_schedule;
 
 /// A TLS 1.3 cipher suite supported by rustls.
+#[allow(clippy::exhaustive_structs)]
 pub struct Tls13CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,

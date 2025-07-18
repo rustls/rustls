@@ -8,6 +8,7 @@ use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 ///
 /// This inbound type borrows its encrypted payload from a buffer elsewhere.
 /// It is used for joining and is consumed by decryption.
+#[allow(clippy::exhaustive_structs)]
 pub struct InboundOpaqueMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,
@@ -125,6 +126,7 @@ impl<'a> BorrowedPayload<'a> {
 ///
 /// This inbound type borrows its decrypted payload from the original buffer.
 /// It results from decryption.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct InboundPlainMessage<'a> {
     pub typ: ContentType,

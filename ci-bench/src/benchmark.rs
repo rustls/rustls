@@ -56,8 +56,8 @@ impl BenchmarkKind {
     }
 }
 
-#[derive(PartialEq, Clone, Copy)]
 /// The kind of resumption used during the handshake
+#[derive(PartialEq, Clone, Copy)]
 pub enum ResumptionKind {
     /// No resumption
     No,

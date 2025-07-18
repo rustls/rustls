@@ -820,7 +820,8 @@ pub fn do_unbuffered_handshake(
 
     while !is_idle(client, &client_data) || !is_idle(server, &server_data) {
         loop {
-            let UnbufferedStatus { discard, state } = client.process_tls_records(&mut client_data);
+            let UnbufferedStatus { discard, state, .. } =
+                client.process_tls_records(&mut client_data);
             let state = state.unwrap();
 
             match state {
@@ -849,7 +850,8 @@ pub fn do_unbuffered_handshake(
         }
 
         loop {
-            let UnbufferedStatus { discard, state } = server.process_tls_records(&mut server_data);
+            let UnbufferedStatus { discard, state, .. } =
+                server.process_tls_records(&mut server_data);
             let state = state.unwrap();
 
             match state {

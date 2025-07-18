@@ -87,6 +87,7 @@ pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
 }
 
 /// An error indicating that the AEAD algorithm does not support the requested operation.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct UnsupportedOperationError;
 
@@ -108,6 +109,7 @@ impl std::error::Error for UnsupportedOperationError {}
 /// How a TLS1.2 `key_block` is partitioned.
 ///
 /// Note: ciphersuites with non-zero `mac_key_length` are  not currently supported.
+#[allow(clippy::exhaustive_structs)]
 pub struct KeyBlockShape {
     /// How long keys are.
     ///
@@ -205,6 +207,7 @@ impl AsRef<[u8]> for Iv {
 }
 
 /// A nonce.  This is unique for all messages on a connection.
+#[allow(clippy::exhaustive_structs)]
 pub struct Nonce(pub [u8; NONCE_LEN]);
 
 impl Nonce {

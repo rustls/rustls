@@ -192,6 +192,7 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
 /// Config builder state where the caller must supply TLS protocol versions.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct WantsVersions {}
 

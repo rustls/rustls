@@ -99,7 +99,7 @@ pub(super) mod danger {
     #[derive(Debug)]
     pub struct DangerousClientConfigBuilder {
         /// The underlying ClientConfigBuilder
-        pub cfg: ConfigBuilder<ClientConfig, WantsVerifier>,
+        pub(super) cfg: ConfigBuilder<ClientConfig, WantsVerifier>,
     }
 
     impl DangerousClientConfigBuilder {

@@ -49,6 +49,7 @@ pub trait KeyLog: Debug + Send + Sync {
 }
 
 /// KeyLog that does exactly nothing.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct NoKeyLog;
 
