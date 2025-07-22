@@ -485,29 +485,11 @@ pub fn server_config_builder(
         .unwrap()
 }
 
-pub fn server_config_builder_with_versions(
-    versions: &[&'static rustls::SupportedProtocolVersion],
-    provider: &CryptoProvider,
-) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
-    ServerConfig::builder_with_provider(provider.clone().into())
-        .with_protocol_versions(versions)
-        .unwrap()
-}
-
 pub fn client_config_builder(
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     ClientConfig::builder_with_provider(provider.clone().into())
         .with_safe_default_protocol_versions()
-        .unwrap()
-}
-
-pub fn client_config_builder_with_versions(
-    versions: &[&'static rustls::SupportedProtocolVersion],
-    provider: &CryptoProvider,
-) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
-    ClientConfig::builder_with_provider(provider.clone().into())
-        .with_protocol_versions(versions)
         .unwrap()
 }
 
@@ -522,14 +504,6 @@ pub fn finish_server_config(
 
 pub fn make_server_config(kt: KeyType, provider: &CryptoProvider) -> ServerConfig {
     finish_server_config(kt, server_config_builder(provider))
-}
-
-pub fn make_server_config_with_versions(
-    kt: KeyType,
-    versions: &[&'static rustls::SupportedProtocolVersion],
-    provider: &CryptoProvider,
-) -> ServerConfig {
-    finish_server_config(kt, server_config_builder_with_versions(versions, provider))
 }
 
 pub fn make_server_config_with_kx_groups(
@@ -623,7 +597,7 @@ pub fn make_server_config_with_raw_key_support(
     ));
     client_verifier.expect_raw_public_keys = true;
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    server_config_builder_with_versions(&[&rustls::version::TLS13], provider)
+    server_config_builder(provider)
         .with_client_cert_verifier(Arc::new(client_verifier))
         .with_cert_resolver(server_cert_resolver)
 }
@@ -638,7 +612,7 @@ pub fn make_client_config_with_raw_key_support(
             .unwrap(),
     ));
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    client_config_builder_with_versions(&[&rustls::version::TLS13], provider)
+    client_config_builder(provider)
         .dangerous()
         .with_custom_certificate_verifier(server_verifier)
         .with_client_cert_resolver(client_cert_resolver)
@@ -654,6 +628,7 @@ pub fn make_client_config_with_cipher_suite_and_raw_key_support(
         kt.get_certified_client_key(provider)
             .unwrap(),
     ));
+    #[allow(deprecated)]
     ClientConfig::builder_with_provider(
         CryptoProvider {
             cipher_suites: vec![cipher_suite],
@@ -718,32 +693,15 @@ pub fn make_client_config_with_kx_groups(
     finish_client_config(kt, builder)
 }
 
-pub fn make_client_config_with_versions(
-    kt: KeyType,
-    versions: &[&'static rustls::SupportedProtocolVersion],
-    provider: &CryptoProvider,
-) -> ClientConfig {
-    finish_client_config(kt, client_config_builder_with_versions(versions, provider))
-}
-
 pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
     finish_client_config_with_creds(kt, client_config_builder(provider))
 }
 
-pub fn make_client_config_with_versions_with_auth(
-    kt: KeyType,
-    versions: &[&'static rustls::SupportedProtocolVersion],
-    provider: &CryptoProvider,
-) -> ClientConfig {
-    finish_client_config_with_creds(kt, client_config_builder_with_versions(versions, provider))
-}
-
 pub fn make_client_config_with_verifier(
-    versions: &[&'static rustls::SupportedProtocolVersion],
     verifier_builder: ServerCertVerifierBuilder,
     provider: &CryptoProvider,
 ) -> ClientConfig {
-    client_config_builder_with_versions(versions, provider)
+    client_config_builder(provider)
         .dangerous()
         .with_custom_certificate_verifier(verifier_builder.build().unwrap())
         .with_no_client_auth()
