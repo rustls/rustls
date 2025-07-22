@@ -319,6 +319,32 @@ See the documentation of the CryptoProvider type for more information.
             && secure_random.fips()
             && key_provider.fips()
     }
+
+    /// Return a new `CryptoProvider` that only supports TLS1.3.
+    pub fn with_only_tls13(self) -> Self {
+        let cipher_suites = self
+            .cipher_suites
+            .into_iter()
+            .filter(|cs| cs.version() == crate::version::TLS13)
+            .collect();
+        Self {
+            cipher_suites,
+            ..self
+        }
+    }
+
+    /// Return a new `CryptoProvider` that only supports TLS1.2.
+    pub fn with_only_tls12(self) -> Self {
+        let cipher_suites = self
+            .cipher_suites
+            .into_iter()
+            .filter(|cs| cs.version() == crate::version::TLS12)
+            .collect();
+        Self {
+            cipher_suites,
+            ..self
+        }
+    }
 }
 
 /// A source of cryptographically secure randomness.
