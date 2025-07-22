@@ -9,7 +9,6 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, ReadTraffic,
     UnbufferedConnectionCommon, UnbufferedStatus, WriteTraffic,
 };
-use rustls::version::TLS13;
 use rustls::{
     AlertDescription, CertificateError, ClientConfig, ConnectionTrafficSecrets, Error,
     InvalidMessage, ServerConfig, SideData,
@@ -25,7 +24,7 @@ const MAX_ITERATIONS: usize = 100;
 
 #[test]
 fn tls12_handshake() {
-    let outcome = handshake(&rustls::version::TLS12);
+    let outcome = handshake(provider::default_provider().with_only_tls12());
 
     assert_eq!(
         outcome.client_transcript, TLS12_CLIENT_TRANSCRIPT,
@@ -39,19 +38,17 @@ fn tls12_handshake() {
 
 #[test]
 fn tls12_handshake_fragmented() {
-    let outcome = handshake_config(&rustls::version::TLS12, |client, server| {
-        client.max_fragment_size = Some(512);
-        client.cert_decompressors = vec![];
-        server.max_fragment_size = Some(512);
-    });
+    let outcome = handshake_config(
+        provider::default_provider().with_only_tls12(),
+        |client, server| {
+            client.max_fragment_size = Some(512);
+            client.cert_decompressors = vec![];
+            server.max_fragment_size = Some(512);
+        },
+    );
 
-    let mut expected_client = TLS12_CLIENT_TRANSCRIPT_FRAGMENTED.to_vec();
-    let mut expected_server = TLS12_SERVER_TRANSCRIPT_FRAGMENTED.to_vec();
-    if provider_is_aws_lc_rs() {
-        // client hello is larger for X25519MLKEM768
-        expected_client.splice(0..0, ["EncodeTlsData", "EncodeTlsData"]);
-        expected_server.splice(0..0, ["BlockedHandshake", "BlockedHandshake"]);
-    }
+    let expected_client = TLS12_CLIENT_TRANSCRIPT_FRAGMENTED.to_vec();
+    let expected_server = TLS12_SERVER_TRANSCRIPT_FRAGMENTED.to_vec();
     assert_eq!(
         outcome.client_transcript, expected_client,
         "client transcript mismatch"
@@ -64,7 +61,7 @@ fn tls12_handshake_fragmented() {
 
 #[test]
 fn tls13_handshake() {
-    let outcome = handshake(&rustls::version::TLS13);
+    let outcome = handshake(provider::default_provider().with_only_tls13());
 
     assert_eq!(
         outcome.client_transcript, TLS13_CLIENT_TRANSCRIPT,
@@ -78,11 +75,14 @@ fn tls13_handshake() {
 
 #[test]
 fn tls13_handshake_fragmented() {
-    let outcome = handshake_config(&rustls::version::TLS13, |client, server| {
-        client.max_fragment_size = Some(512);
-        client.cert_decompressors = vec![];
-        server.max_fragment_size = Some(512);
-    });
+    let outcome = handshake_config(
+        provider::default_provider().with_only_tls13(),
+        |client, server| {
+            client.max_fragment_size = Some(512);
+            client.cert_decompressors = vec![];
+            server.max_fragment_size = Some(512);
+        },
+    );
 
     let mut expected_client = TLS13_CLIENT_TRANSCRIPT_FRAGMENTED.to_vec();
     let mut expected_server = TLS13_SERVER_TRANSCRIPT_FRAGMENTED.to_vec();
@@ -107,17 +107,15 @@ fn tls13_handshake_fragmented() {
     );
 }
 
-fn handshake(version: &'static rustls::SupportedProtocolVersion) -> Outcome {
-    handshake_config(version, |_, _| ())
+fn handshake(provider: CryptoProvider) -> Outcome {
+    handshake_config(provider, |_, _| ())
 }
 
 fn handshake_config(
-    version: &'static rustls::SupportedProtocolVersion,
+    provider: CryptoProvider,
     editor: impl Fn(&mut ClientConfig, &mut ServerConfig),
 ) -> Outcome {
-    let provider = provider::default_provider();
-    let mut server_config =
-        make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     editor(&mut client_config, &mut server_config);
 
@@ -133,11 +131,10 @@ fn handshake_config(
 fn app_data_client_to_server() {
     let provider = provider::default_provider();
     let expected: &[_] = b"hello";
-    for version in rustls::ALL_VERSIONS {
-        eprintln!("{version:?}");
-        let server_config =
-            make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
-        let client_config = make_client_config(KeyType::Rsa2048, &provider);
+    for version_provider in all_versions(&provider) {
+        eprintln!("{version_provider:?}");
+        let server_config = make_server_config(KeyType::Rsa2048, &version_provider);
+        let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
 
         let mut client_actions = Actions {
             app_data_to_send: Some(expected),
@@ -169,11 +166,10 @@ fn app_data_client_to_server() {
 fn app_data_server_to_client() {
     let provider = provider::default_provider();
     let expected: &[_] = b"hello";
-    for version in rustls::ALL_VERSIONS {
-        eprintln!("{version:?}");
-        let server_config =
-            make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
-        let client_config = make_client_config(KeyType::Rsa2048, &provider);
+    for version_provider in all_versions(&provider) {
+        eprintln!("{version_provider:?}");
+        let server_config = make_server_config(KeyType::Rsa2048, &version_provider);
+        let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
 
         let mut server_actions = Actions {
             app_data_to_send: Some(expected),
@@ -203,15 +199,14 @@ fn app_data_server_to_client() {
 
 #[test]
 fn early_data() {
-    let provider = provider::default_provider();
+    let provider = provider::default_provider().with_only_tls13();
     let expected: &[_] = b"hello";
 
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.max_early_data_size = 128;
     let server_config = Arc::new(server_config);
 
-    let mut client_config =
-        make_client_config_with_versions(KeyType::Rsa2048, &[&TLS13], &provider);
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     client_config.enable_early_data = true;
     let client_config = Arc::new(client_config);
 
@@ -442,12 +437,10 @@ fn run(
 
 #[test]
 fn close_notify_client_to_server() {
-    let provider = provider::default_provider();
-    for version in rustls::ALL_VERSIONS {
-        eprintln!("{version:?}");
-        let server_config =
-            make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
-        let client_config = make_client_config(KeyType::Rsa2048, &provider);
+    for version_provider in all_versions(&provider::default_provider()) {
+        eprintln!("{version_provider:?}");
+        let server_config = make_server_config(KeyType::Rsa2048, &version_provider);
+        let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
 
         let mut client_actions = Actions {
             send_close_notify: true,
@@ -468,12 +461,10 @@ fn close_notify_client_to_server() {
 
 #[test]
 fn close_notify_server_to_client() {
-    let provider = provider::default_provider();
-    for version in rustls::ALL_VERSIONS {
-        eprintln!("{version:?}");
-        let server_config =
-            make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
-        let client_config = make_client_config(KeyType::Rsa2048, &provider);
+    for version_provider in all_versions(&provider::default_provider()) {
+        eprintln!("{version_provider:?}");
+        let server_config = make_server_config(KeyType::Rsa2048, &version_provider);
+        let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
 
         let mut server_actions = Actions {
             send_close_notify: true,
@@ -494,9 +485,9 @@ fn close_notify_server_to_client() {
 
 #[test]
 fn full_closure_server_to_client() {
-    for version in rustls::ALL_VERSIONS {
-        eprintln!("{version:?}");
-        let mut outcome = handshake(version);
+    for version_provider in all_versions(&provider::default_provider()) {
+        eprintln!("{version_provider:?}");
+        let mut outcome = handshake(version_provider);
         let mut client = outcome.client.take().unwrap();
         let mut server = outcome.server.take().unwrap();
 
@@ -555,7 +546,7 @@ fn junk_after_close_notify_received() {
     ];
 
     for junk in JUNK_DATA {
-        let mut outcome = handshake(&rustls::version::TLS13);
+        let mut outcome = handshake(provider::default_provider().with_only_tls13());
         let mut client = outcome.client.take().unwrap();
         let mut server = outcome.server.take().unwrap();
 
@@ -594,7 +585,7 @@ fn junk_after_close_notify_received() {
 
 #[test]
 fn queue_close_notify_is_idempotent() {
-    let mut outcome = handshake(&rustls::version::TLS13);
+    let mut outcome = handshake(provider::default_provider().with_only_tls13());
     let mut client = outcome.client.take().unwrap();
 
     let mut client_send_buf = [0u8; 128];
@@ -614,7 +605,7 @@ fn queue_close_notify_is_idempotent() {
 
 #[test]
 fn refresh_traffic_keys_on_tls12_connection() {
-    let mut outcome = handshake(&rustls::version::TLS12);
+    let mut outcome = handshake(provider::default_provider().with_only_tls12());
     let mut client = outcome.client.take().unwrap();
 
     match client.process_tls_records(&mut []) {
@@ -636,7 +627,7 @@ fn refresh_traffic_keys_on_tls12_connection() {
 
 #[test]
 fn refresh_traffic_keys_manually() {
-    let mut outcome = handshake(&rustls::version::TLS13);
+    let mut outcome = handshake(provider::default_provider().with_only_tls13());
     let mut client = outcome.client.take().unwrap();
     let mut server = outcome.server.take().unwrap();
 
@@ -828,14 +819,18 @@ fn refresh_traffic_keys_automatically() {
 #[test]
 fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
     const CONFIDENTIALITY_LIMIT: usize = 1024;
+    let provider = Arc::new(
+        Arc::unwrap_or_clone(aes_128_gcm_with_1024_confidentiality_limit(dbg!(
+            provider::default_provider()
+        )))
+        .with_only_tls12(),
+    );
 
     let client_config = finish_client_config(
         KeyType::Ed25519,
-        ClientConfig::builder_with_provider(aes_128_gcm_with_1024_confidentiality_limit(
-            provider::default_provider(),
-        ))
-        .with_protocol_versions(&[&rustls::version::TLS12])
-        .unwrap(),
+        ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap(),
     );
 
     let server_config = make_server_config(KeyType::Ed25519, &provider::default_provider());
@@ -973,7 +968,7 @@ fn rejects_junk() {
 
 #[test]
 fn read_traffic_not_consumed_too_early() {
-    let mut outcome = handshake(&rustls::version::TLS13);
+    let mut outcome = handshake(provider::default_provider().with_only_tls13());
     let mut client = outcome.client.take().unwrap();
     let mut server = outcome.server.take().unwrap();
 
@@ -1451,11 +1446,10 @@ impl Buffer {
 }
 
 fn make_connection_pair(
-    version: &'static rustls::SupportedProtocolVersion,
+    provider: CryptoProvider,
 ) -> (UnbufferedClientConnection, UnbufferedServerConnection) {
-    let provider = provider::default_provider();
     let server_config = make_server_config(KeyType::Rsa2048, &provider);
-    let client_config = make_client_config_with_versions(KeyType::Rsa2048, &[version], &provider);
+    let client_config = make_client_config(KeyType::Rsa2048, &provider);
 
     let client =
         UnbufferedClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
@@ -1465,7 +1459,8 @@ fn make_connection_pair(
 
 #[test]
 fn server_receives_handshake_byte_by_byte() {
-    let (mut client, mut server) = make_connection_pair(&TLS13);
+    let (mut client, mut server) =
+        make_connection_pair(provider::default_provider().with_only_tls13());
 
     let mut client_hello_buffer = vec![0u8; 2048];
     let UnbufferedStatus { discard, state, .. } = client.process_tls_records(&mut []);
@@ -1499,7 +1494,7 @@ fn server_receives_handshake_byte_by_byte() {
 
 #[test]
 fn server_receives_incorrect_first_handshake_message() {
-    let (_, mut server) = make_connection_pair(&TLS13);
+    let (_, mut server) = make_connection_pair(provider::default_provider().with_only_tls13());
 
     let mut junk_buffer = [0x16, 0x3, 0x1, 0x0, 0x4, 0xff, 0x0, 0x0, 0x0];
     let junk_buffer_len = junk_buffer.len();
@@ -1707,14 +1702,12 @@ fn kernel_initial_traffic_secrets_match() {
 
 #[test]
 fn kernel_key_updates_tls13() {
-    let provider = provider::default_provider();
-    let mut server_config =
-        make_server_config_with_versions(KeyType::Rsa2048, &[&TLS13], &provider);
+    let provider = provider::default_provider().with_only_tls13();
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.enable_secret_extraction = true;
     let server_config = Arc::new(server_config);
 
-    let mut client_config =
-        make_client_config_with_versions(KeyType::Rsa2048, &[&TLS13], &provider);
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     client_config.enable_secret_extraction = true;
     let client_config = Arc::new(client_config);
 
@@ -1743,18 +1736,14 @@ fn kernel_key_updates_tls13() {
 
 #[test]
 fn kernel_key_updates_tls12() {
-    use rustls::version::TLS12;
-
     let _ = env_logger::try_init();
 
-    let provider = provider::default_provider();
-    let mut server_config =
-        make_server_config_with_versions(KeyType::Rsa2048, &[&TLS12], &provider);
+    let provider = provider::default_provider().with_only_tls12();
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.enable_secret_extraction = true;
     let server_config = Arc::new(server_config);
 
-    let mut client_config =
-        make_client_config_with_versions(KeyType::Rsa2048, &[&TLS12], &provider);
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     client_config.enable_secret_extraction = true;
     let client_config = Arc::new(client_config);
 

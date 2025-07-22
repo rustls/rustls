@@ -12,55 +12,17 @@ pub use rustls_test::*;
 pub fn server_config_builder(
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
-    // ensure `ServerConfig::builder()` is covered, even though it is
-    // equivalent to `builder_with_provider(provider::provider().into())`.
-    if exactly_one_provider() {
-        rustls::ServerConfig::builder()
-    } else {
-        rustls::ServerConfig::builder_with_provider(provider.clone().into())
-            .with_safe_default_protocol_versions()
-            .unwrap()
-    }
-}
-
-pub fn server_config_builder_with_versions(
-    versions: &[&'static rustls::SupportedProtocolVersion],
-    provider: &CryptoProvider,
-) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
-    if exactly_one_provider() {
-        rustls::ServerConfig::builder_with_protocol_versions(versions)
-    } else {
-        rustls::ServerConfig::builder_with_provider(provider.clone().into())
-            .with_protocol_versions(versions)
-            .unwrap()
-    }
+    rustls::ServerConfig::builder_with_provider(provider.clone().into())
+        .with_safe_default_protocol_versions()
+        .unwrap()
 }
 
 pub fn client_config_builder(
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
-    // ensure `ClientConfig::builder()` is covered, even though it is
-    // equivalent to `builder_with_provider(provider::provider().into())`.
-    if exactly_one_provider() {
-        rustls::ClientConfig::builder()
-    } else {
-        rustls::ClientConfig::builder_with_provider(provider.clone().into())
-            .with_safe_default_protocol_versions()
-            .unwrap()
-    }
-}
-
-pub fn client_config_builder_with_versions(
-    versions: &[&'static rustls::SupportedProtocolVersion],
-    provider: &CryptoProvider,
-) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
-    if exactly_one_provider() {
-        rustls::ClientConfig::builder_with_protocol_versions(versions)
-    } else {
-        rustls::ClientConfig::builder_with_provider(provider.clone().into())
-            .with_protocol_versions(versions)
-            .unwrap()
-    }
+    rustls::ClientConfig::builder_with_provider(provider.clone().into())
+        .with_safe_default_protocol_versions()
+        .unwrap()
 }
 
 pub fn webpki_client_verifier_builder(
@@ -90,4 +52,12 @@ fn exactly_one_provider() -> bool {
         all(feature = "ring", not(feature = "aws-lc-rs")),
         all(feature = "aws-lc-rs", not(feature = "ring"))
     ))
+}
+
+pub fn all_versions(provider: &CryptoProvider) -> impl Iterator<Item = CryptoProvider> {
+    vec![
+        provider.clone().with_only_tls12(),
+        provider.clone().with_only_tls13(),
+    ]
+    .into_iter()
 }

@@ -76,13 +76,13 @@ mod tests {
     use crate::server::{AlwaysResolvesServerRawPublicKeys, ServerConfig, ServerConnection};
     use crate::sign::CertifiedKey;
     use crate::sync::Arc;
-    use crate::{CipherSuiteCommon, SupportedCipherSuite, Tls12CipherSuite, version};
+    use crate::{CipherSuiteCommon, SupportedCipherSuite, Tls12CipherSuite};
 
     #[test]
     fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
-        let provider = super::provider::default_provider();
+        let provider = super::provider::default_provider().with_only_tls12();
         let mut config = ServerConfig::builder_with_provider(provider.into())
-            .with_protocol_versions(&[&version::TLS12])
+            .with_safe_default_protocol_versions()
             .unwrap()
             .with_no_client_auth()
             .with_single_cert(server_cert(), server_key())
@@ -118,12 +118,16 @@ mod tests {
 
     #[test]
     fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
-        let config = ServerConfig::builder_with_provider(ffdhe_provider().into())
-            .with_protocol_versions(&[&version::TLS12])
-            .unwrap()
-            .with_no_client_auth()
-            .with_single_cert(server_cert(), server_key())
-            .unwrap();
+        let config = ServerConfig::builder_with_provider(
+            ffdhe_provider()
+                .with_only_tls12()
+                .into(),
+        )
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(server_cert(), server_key())
+        .unwrap();
 
         let mut ch = minimal_client_hello();
         ch.cipher_suites
@@ -137,12 +141,16 @@ mod tests {
 
     #[test]
     fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
-        let config = ServerConfig::builder_with_provider(ffdhe_provider().into())
-            .with_protocol_versions(&[&version::TLS12])
-            .unwrap()
-            .with_no_client_auth()
-            .with_single_cert(server_cert(), server_key())
-            .unwrap();
+        let config = ServerConfig::builder_with_provider(
+            ffdhe_provider()
+                .with_only_tls12()
+                .into(),
+        )
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(server_cert(), server_key())
+        .unwrap();
 
         let mut ch = minimal_client_hello();
         ch.cipher_suites
@@ -157,12 +165,16 @@ mod tests {
 
     #[test]
     fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites() {
-        let config = ServerConfig::builder_with_provider(ffdhe_provider().into())
-            .with_protocol_versions(&[&version::TLS12])
-            .unwrap()
-            .with_no_client_auth()
-            .with_single_cert(server_cert(), server_key())
-            .unwrap();
+        let config = ServerConfig::builder_with_provider(
+            ffdhe_provider()
+                .with_only_tls12()
+                .into(),
+        )
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(server_cert(), server_key())
+        .unwrap();
 
         let mut ch = minimal_client_hello();
         ch.cipher_suites
@@ -240,8 +252,8 @@ mod tests {
             kx_groups: vec![super::provider::kx_group::X25519],
             ..super::provider::default_provider()
         };
-        ServerConfig::builder_with_provider(x25519_provider.into())
-            .with_protocol_versions(&[&version::TLS13])
+        ServerConfig::builder_with_provider(x25519_provider.with_only_tls12().into())
+            .with_safe_default_protocol_versions()
             .unwrap()
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(AlwaysResolvesServerRawPublicKeys::new(Arc::new(
