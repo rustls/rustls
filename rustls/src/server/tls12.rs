@@ -3,7 +3,7 @@ use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 
-pub(super) use client_hello::CompleteClientHelloHandling;
+pub(super) use client_hello::{CompleteClientHelloHandling, handle_client_hello};
 use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
@@ -49,6 +49,192 @@ mod client_hello {
     use crate::sign;
     use crate::verify::DigitallySignedStruct;
 
+    pub(in crate::server) fn handle_client_hello(
+        mut cch: CompleteClientHelloHandling,
+        cx: &mut ServerContext<'_>,
+        server_key: ActiveCertifiedKey<'_>,
+        chm: &Message<'_>,
+        client_hello: &ClientHelloPayload,
+        selected_kxg: &'static dyn SupportedKxGroup,
+        sigschemes_ext: Vec<SignatureScheme>,
+        tls13_enabled: bool,
+    ) -> hs::NextStateOrError<'static> {
+        // -- TLS1.2 only from hereon in --
+        cch.transcript.add_message(chm);
+
+        if client_hello
+            .extended_master_secret_request
+            .is_some()
+        {
+            cch.using_ems = true;
+        } else if cch.config.require_ems {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::HandshakeFailure,
+                PeerIncompatible::ExtendedMasterSecretExtensionRequired,
+            ));
+        }
+
+        // "RFC 4492 specified that if this extension is missing,
+        // it means that only the uncompressed point format is
+        // supported"
+        // - <https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.2>
+        let supported_ec_point_formats = client_hello
+            .ec_point_formats
+            .unwrap_or_default();
+
+        trace!("ecpoints {supported_ec_point_formats:?}");
+
+        if !supported_ec_point_formats.uncompressed {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerIncompatible::UncompressedEcPointsRequired,
+            ));
+        }
+
+        // -- If TLS1.3 is enabled, signal the downgrade in the server random
+        if tls13_enabled {
+            cch.randoms.server[24..].copy_from_slice(&tls12::DOWNGRADE_SENTINEL);
+        }
+
+        // -- Check for resumption --
+        // We can do this either by (in order of preference):
+        // 1. receiving a ticket that decrypts
+        // 2. receiving a sessionid that is in our cache
+        //
+        // If we receive a ticket, the sessionid won't be in our
+        // cache, so don't check.
+        //
+        // If either works, we end up with a ServerConnectionValue
+        // which is passed to start_resumption and concludes
+        // our handling of the ClientHello.
+        //
+        let mut ticket_received = false;
+        let resume_data = client_hello
+            .session_ticket
+            .as_ref()
+            .and_then(|ticket_ext| match ticket_ext {
+                ClientSessionTicket::Offer(ticket) => Some(ticket),
+                _ => None,
+            })
+            .and_then(|ticket| {
+                ticket_received = true;
+                debug!("Ticket received");
+                let data = cch
+                    .config
+                    .ticketer
+                    .decrypt(ticket.bytes());
+                if data.is_none() {
+                    debug!("Ticket didn't decrypt");
+                }
+                data
+            })
+            .or_else(|| {
+                // Perhaps resume?  If we received a ticket, the sessionid
+                // does not correspond to a real session.
+                if client_hello.session_id.is_empty() || ticket_received {
+                    return None;
+                }
+
+                cch.config
+                    .session_storage
+                    .get(client_hello.session_id.as_ref())
+            })
+            .and_then(|x| persist::ServerSessionValue::read_bytes(&x).ok())
+            .and_then(|resumedata| match resumedata {
+                persist::ServerSessionValue::Tls12(tls12) => Some(tls12),
+                _ => None,
+            })
+            .filter(|resumedata| {
+                hs::can_resume(cch.suite.into(), &cx.data.sni, &resumedata.common)
+                    && (resumedata.extended_ms == cch.using_ems
+                        || (resumedata.extended_ms && !cch.using_ems))
+            });
+
+        if let Some(data) = resume_data {
+            return cch.start_resumption(cx, client_hello, &client_hello.session_id, data);
+        }
+
+        // Now we have chosen a ciphersuite, we can make kx decisions.
+        let sigschemes = cch
+            .suite
+            .resolve_sig_schemes(&sigschemes_ext);
+
+        if sigschemes.is_empty() {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::HandshakeFailure,
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ));
+        }
+
+        let mut ocsp_response = server_key.get_ocsp();
+
+        // If we're not offered a ticket or a potential session ID, allocate a session ID.
+        if !cch.config.session_storage.can_cache() {
+            cch.session_id = SessionId::empty();
+        } else if cch.session_id.is_empty() && !ticket_received {
+            cch.session_id = SessionId::random(cch.config.provider.secure_random)?;
+        }
+
+        cx.common.kx_state = KxState::Start(selected_kxg);
+        cx.common.handshake_kind = Some(HandshakeKind::Full);
+
+        let mut flight = HandshakeFlightTls12::new(&mut cch.transcript);
+
+        cch.send_ticket = emit_server_hello(
+            &mut flight,
+            &cch.config,
+            cx,
+            cch.session_id,
+            cch.suite,
+            cch.using_ems,
+            &mut ocsp_response,
+            client_hello,
+            None,
+            &cch.randoms,
+            cch.extra_exts,
+        )?;
+        emit_certificate(&mut flight, server_key.get_cert());
+        if let Some(ocsp_response) = ocsp_response {
+            emit_cert_status(&mut flight, ocsp_response);
+        }
+        let server_kx = emit_server_kx(
+            &mut flight,
+            sigschemes,
+            selected_kxg,
+            server_key.get_key(),
+            &cch.randoms,
+        )?;
+        let doing_client_auth = emit_certificate_req(&mut flight, &cch.config)?;
+        emit_server_hello_done(&mut flight);
+
+        flight.finish(cx.common);
+
+        if doing_client_auth {
+            Ok(Box::new(ExpectCertificate {
+                config: cch.config,
+                transcript: cch.transcript,
+                randoms: cch.randoms,
+                session_id: cch.session_id,
+                suite: cch.suite,
+                using_ems: cch.using_ems,
+                server_kx,
+                send_ticket: cch.send_ticket,
+            }))
+        } else {
+            Ok(Box::new(ExpectClientKx {
+                config: cch.config,
+                transcript: cch.transcript,
+                randoms: cch.randoms,
+                session_id: cch.session_id,
+                suite: cch.suite,
+                using_ems: cch.using_ems,
+                server_kx,
+                client_cert: None,
+                send_ticket: cch.send_ticket,
+            }))
+        }
+    }
+
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) config: Arc<ServerConfig>,
         pub(in crate::server) transcript: HandshakeHash,
@@ -61,192 +247,6 @@ mod client_hello {
     }
 
     impl CompleteClientHelloHandling {
-        pub(in crate::server) fn handle_client_hello(
-            mut self,
-            cx: &mut ServerContext<'_>,
-            server_key: ActiveCertifiedKey<'_>,
-            chm: &Message<'_>,
-            client_hello: &ClientHelloPayload,
-            selected_kxg: &'static dyn SupportedKxGroup,
-            sigschemes_ext: Vec<SignatureScheme>,
-            tls13_enabled: bool,
-        ) -> hs::NextStateOrError<'static> {
-            // -- TLS1.2 only from hereon in --
-            self.transcript.add_message(chm);
-
-            if client_hello
-                .extended_master_secret_request
-                .is_some()
-            {
-                self.using_ems = true;
-            } else if self.config.require_ems {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerIncompatible::ExtendedMasterSecretExtensionRequired,
-                ));
-            }
-
-            // "RFC 4492 specified that if this extension is missing,
-            // it means that only the uncompressed point format is
-            // supported"
-            // - <https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.2>
-            let supported_ec_point_formats = client_hello
-                .ec_point_formats
-                .unwrap_or_default();
-
-            trace!("ecpoints {supported_ec_point_formats:?}");
-
-            if !supported_ec_point_formats.uncompressed {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerIncompatible::UncompressedEcPointsRequired,
-                ));
-            }
-
-            // -- If TLS1.3 is enabled, signal the downgrade in the server random
-            if tls13_enabled {
-                self.randoms.server[24..].copy_from_slice(&tls12::DOWNGRADE_SENTINEL);
-            }
-
-            // -- Check for resumption --
-            // We can do this either by (in order of preference):
-            // 1. receiving a ticket that decrypts
-            // 2. receiving a sessionid that is in our cache
-            //
-            // If we receive a ticket, the sessionid won't be in our
-            // cache, so don't check.
-            //
-            // If either works, we end up with a ServerConnectionValue
-            // which is passed to start_resumption and concludes
-            // our handling of the ClientHello.
-            //
-            let mut ticket_received = false;
-            let resume_data = client_hello
-                .session_ticket
-                .as_ref()
-                .and_then(|ticket_ext| match ticket_ext {
-                    ClientSessionTicket::Offer(ticket) => Some(ticket),
-                    _ => None,
-                })
-                .and_then(|ticket| {
-                    ticket_received = true;
-                    debug!("Ticket received");
-                    let data = self
-                        .config
-                        .ticketer
-                        .decrypt(ticket.bytes());
-                    if data.is_none() {
-                        debug!("Ticket didn't decrypt");
-                    }
-                    data
-                })
-                .or_else(|| {
-                    // Perhaps resume?  If we received a ticket, the sessionid
-                    // does not correspond to a real session.
-                    if client_hello.session_id.is_empty() || ticket_received {
-                        return None;
-                    }
-
-                    self.config
-                        .session_storage
-                        .get(client_hello.session_id.as_ref())
-                })
-                .and_then(|x| persist::ServerSessionValue::read_bytes(&x).ok())
-                .and_then(|resumedata| match resumedata {
-                    persist::ServerSessionValue::Tls12(tls12) => Some(tls12),
-                    _ => None,
-                })
-                .filter(|resumedata| {
-                    hs::can_resume(self.suite.into(), &cx.data.sni, &resumedata.common)
-                        && (resumedata.extended_ms == self.using_ems
-                            || (resumedata.extended_ms && !self.using_ems))
-                });
-
-            if let Some(data) = resume_data {
-                return self.start_resumption(cx, client_hello, &client_hello.session_id, data);
-            }
-
-            // Now we have chosen a ciphersuite, we can make kx decisions.
-            let sigschemes = self
-                .suite
-                .resolve_sig_schemes(&sigschemes_ext);
-
-            if sigschemes.is_empty() {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerIncompatible::NoSignatureSchemesInCommon,
-                ));
-            }
-
-            let mut ocsp_response = server_key.get_ocsp();
-
-            // If we're not offered a ticket or a potential session ID, allocate a session ID.
-            if !self.config.session_storage.can_cache() {
-                self.session_id = SessionId::empty();
-            } else if self.session_id.is_empty() && !ticket_received {
-                self.session_id = SessionId::random(self.config.provider.secure_random)?;
-            }
-
-            cx.common.kx_state = KxState::Start(selected_kxg);
-            cx.common.handshake_kind = Some(HandshakeKind::Full);
-
-            let mut flight = HandshakeFlightTls12::new(&mut self.transcript);
-
-            self.send_ticket = emit_server_hello(
-                &mut flight,
-                &self.config,
-                cx,
-                self.session_id,
-                self.suite,
-                self.using_ems,
-                &mut ocsp_response,
-                client_hello,
-                None,
-                &self.randoms,
-                self.extra_exts,
-            )?;
-            emit_certificate(&mut flight, server_key.get_cert());
-            if let Some(ocsp_response) = ocsp_response {
-                emit_cert_status(&mut flight, ocsp_response);
-            }
-            let server_kx = emit_server_kx(
-                &mut flight,
-                sigschemes,
-                selected_kxg,
-                server_key.get_key(),
-                &self.randoms,
-            )?;
-            let doing_client_auth = emit_certificate_req(&mut flight, &self.config)?;
-            emit_server_hello_done(&mut flight);
-
-            flight.finish(cx.common);
-
-            if doing_client_auth {
-                Ok(Box::new(ExpectCertificate {
-                    config: self.config,
-                    transcript: self.transcript,
-                    randoms: self.randoms,
-                    session_id: self.session_id,
-                    suite: self.suite,
-                    using_ems: self.using_ems,
-                    server_kx,
-                    send_ticket: self.send_ticket,
-                }))
-            } else {
-                Ok(Box::new(ExpectClientKx {
-                    config: self.config,
-                    transcript: self.transcript,
-                    randoms: self.randoms,
-                    session_id: self.session_id,
-                    suite: self.suite,
-                    using_ems: self.using_ems,
-                    server_kx,
-                    client_cert: None,
-                    send_ticket: self.send_ticket,
-                }))
-            }
-        }
-
         fn start_resumption(
             mut self,
             cx: &mut ServerContext<'_>,
