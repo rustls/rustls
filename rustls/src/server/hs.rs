@@ -495,17 +495,17 @@ impl ExpectClientHello {
             }
             .handle_client_hello(cx, certkey, m, client_hello, skxg, sig_schemes),
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(suite) => tls12::CompleteClientHelloHandling {
-                config: self.config,
-                transcript,
-                session_id: self.session_id,
-                suite,
-                using_ems: self.using_ems,
-                randoms,
-                send_ticket: self.send_tickets > 0,
-                extra_exts: self.extra_exts,
-            }
-            .handle_client_hello(
+            SupportedCipherSuite::Tls12(suite) => tls12::handle_client_hello(
+                tls12::CompleteClientHelloHandling {
+                    config: self.config,
+                    transcript,
+                    session_id: self.session_id,
+                    suite,
+                    using_ems: self.using_ems,
+                    randoms,
+                    send_ticket: self.send_tickets > 0,
+                    extra_exts: self.extra_exts,
+                },
                 cx,
                 certkey,
                 m,
