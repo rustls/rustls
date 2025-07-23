@@ -822,12 +822,15 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 )
             }
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(suite) => tls12::CompleteServerHelloHandling {
+            SupportedCipherSuite::Tls12(suite) => tls12::handle_server_hello(
+                cx,
+                server_hello,
                 randoms,
+                suite,
                 transcript,
-                input: self.input,
-            }
-            .handle_server_hello(cx, suite, server_hello, tls13_supported),
+                tls13_supported,
+                self.input,
+            ),
         }
     }
 
