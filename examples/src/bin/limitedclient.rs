@@ -19,7 +19,9 @@ fn main() {
         CryptoProvider {
             cipher_suites: vec![provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
             kx_groups: vec![provider::kx_group::X25519],
-            ..provider::default_provider()
+            signature_verification_algorithms: provider::SUPPORTED_SIG_ALGS,
+            secure_random: provider::DEFAULT_SECURE_RANDOM,
+            key_provider: provider::DEFAULT_KEY_PROVIDER,
         }
         .into(),
     )

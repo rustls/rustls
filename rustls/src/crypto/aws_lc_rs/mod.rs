@@ -64,6 +64,12 @@ fn default_kx_groups() -> Vec<&'static dyn SupportedKxGroup> {
     }
 }
 
+/// `KeyProvider` impl for aws-lc-rs
+pub static DEFAULT_KEY_PROVIDER: &dyn KeyProvider = &AwsLcRs;
+
+/// `SecureRandom` impl for aws-lc-rs
+pub static DEFAULT_SECURE_RANDOM: &dyn SecureRandom = &AwsLcRs;
+
 #[derive(Debug)]
 struct AwsLcRs;
 
@@ -155,7 +161,7 @@ pub mod cipher_suite {
 
 /// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
 /// compiled against aws-lc-rs.
-static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
+pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[
         webpki_algs::ECDSA_P256_SHA256,
         webpki_algs::ECDSA_P256_SHA384,
