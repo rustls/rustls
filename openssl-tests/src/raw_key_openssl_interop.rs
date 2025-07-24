@@ -19,7 +19,6 @@ mod client {
         CertificateDer, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer, UnixTime,
     };
     use rustls::sign::CertifiedKey;
-    use rustls::version::TLS13;
     use rustls::{
         CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct, Error,
         InconsistentKeys, PeerIncompatible, SignatureScheme, Stream,
@@ -48,7 +47,7 @@ mod client {
             client_private_key,
         ));
 
-        ClientConfig::builder_with_protocol_versions(&[&TLS13])
+        ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(SimpleRpkServerCertVerifier::new(vec![
                 server_raw_key,
@@ -167,7 +166,6 @@ mod server {
     use rustls::server::AlwaysResolvesServerRawPublicKeys;
     use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
     use rustls::sign::CertifiedKey;
-    use rustls::version::TLS13;
     use rustls::{
         CertificateError, DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys,
         PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
@@ -199,7 +197,7 @@ mod server {
         let client_cert_verifier = Arc::new(SimpleRpkClientCertVerifier::new(vec![client_raw_key]));
         let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(certified_key));
 
-        ServerConfig::builder_with_protocol_versions(&[&TLS13])
+        ServerConfig::builder()
             .with_client_cert_verifier(client_cert_verifier)
             .with_cert_resolver(server_cert_resolver)
     }
