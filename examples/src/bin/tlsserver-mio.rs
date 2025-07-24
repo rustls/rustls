@@ -471,6 +471,21 @@ struct Args {
     max_early_data: u32,
 }
 
+impl Args {
+    fn provider(&self) -> CryptoProvider {
+        let cipher_suites = if !args.suite.is_empty() {
+            lookup_suites(&args.suite)
+        } else {
+            provider::ALL_CIPHER_SUITES.to_vec()
+        };
+
+        CryptoProvider {
+            cipher_suites,
+            ..provider::default_provider()
+        }
+    }
+}
+
 fn find_suite(name: &str) -> Option<rustls::SupportedCipherSuite> {
     for suite in provider::ALL_CIPHER_SUITES {
         let sname = format!("{:?}", suite.suite()).to_lowercase();
@@ -571,12 +586,6 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         WebPkiClientVerifier::no_client_auth()
     };
 
-    let suites = if !args.suite.is_empty() {
-        lookup_suites(&args.suite)
-    } else {
-        provider::ALL_CIPHER_SUITES.to_vec()
-    };
-
     let versions = if !args.protover.is_empty() {
         lookup_versions(&args.protover)
     } else {
@@ -587,18 +596,12 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let privkey = load_private_key(&args.key);
     let ocsp = load_ocsp(args.ocsp.as_deref());
 
-    let mut config = rustls::ServerConfig::builder_with_provider(
-        CryptoProvider {
-            cipher_suites: suites,
-            ..provider::default_provider()
-        }
-        .into(),
-    )
-    .with_protocol_versions(&versions)
-    .expect("inconsistent cipher-suites/versions specified")
-    .with_client_cert_verifier(client_auth)
-    .with_single_cert_with_ocsp(certs, privkey, ocsp)
-    .expect("bad certificates/private key");
+    let mut config = rustls::ServerConfig::builder_with_provider(args.provider().into())
+        .with_protocol_versions(&versions)
+        .expect("inconsistent cipher-suites/versions specified")
+        .with_client_cert_verifier(client_auth)
+        .with_single_cert_with_ocsp(certs, privkey, ocsp)
+        .expect("bad certificates/private key");
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
