@@ -53,7 +53,7 @@ use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
     DigitallySignedStruct, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
-    SignatureScheme, SupportedProtocolVersion, client, compress, server, sign, version,
+    SignatureScheme, client, compress, server, sign,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -217,19 +217,6 @@ impl Options {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
     }
 
-    fn supported_versions(&self) -> Vec<&'static SupportedProtocolVersion> {
-        let mut versions = vec![];
-
-        if self.tls12_supported() {
-            versions.push(&version::TLS12);
-        }
-
-        if self.tls13_supported() {
-            versions.push(&version::TLS13);
-        }
-        versions
-    }
-
     fn provider(&self) -> CryptoProvider {
         let mut provider = self.provider.clone();
 
@@ -239,7 +226,12 @@ impl Options {
                 .retain(|kxg| groups.contains(&kxg.name()));
         }
 
-        provider
+        match (self.tls12_supported(), self.tls13_supported()) {
+            (true, true) => provider,
+            (true, false) => provider.with_only_tls12(),
+            (false, true) => provider.with_only_tls13(),
+            _ => panic!("nonsense version constraint"),
+        }
     }
 }
 
@@ -795,7 +787,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     let (certs, key) = cred.load_from_file();
 
     let mut cfg = ServerConfig::builder_with_provider(opts.provider().into())
-        .with_protocol_versions(&opts.supported_versions())
+        .with_safe_default_protocol_versions()
         .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp(certs, key, opts.server_ocsp_response.clone())
@@ -950,11 +942,11 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
             cfg.with_ech(ech_mode)
                 .expect("invalid GREASE ECH config")
         } else {
-            cfg.with_protocol_versions(&opts.supported_versions())
+            cfg.with_safe_default_protocol_versions()
                 .expect("inconsistent settings")
         }
     } else {
-        cfg.with_protocol_versions(&opts.supported_versions())
+        cfg.with_safe_default_protocol_versions()
             .expect("inconsistent settings")
     };
 
