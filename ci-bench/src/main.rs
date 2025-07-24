@@ -330,43 +330,43 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
             (
                 KeyType::Rsa2048,
                 CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-                &rustls::version::TLS12,
+                ProtocolVersion::TLSv1_2,
                 "1.2_rsa_aes",
             ),
             (
                 KeyType::Rsa2048,
                 CipherSuite::TLS13_AES_128_GCM_SHA256,
-                &rustls::version::TLS13,
+                ProtocolVersion::TLSv1_3,
                 "1.3_rsa_aes",
             ),
             (
                 KeyType::EcdsaP256,
                 CipherSuite::TLS13_AES_128_GCM_SHA256,
-                &rustls::version::TLS13,
+                ProtocolVersion::TLSv1_3,
                 "1.3_ecdsap256_aes",
             ),
             (
                 KeyType::EcdsaP384,
                 CipherSuite::TLS13_AES_128_GCM_SHA256,
-                &rustls::version::TLS13,
+                ProtocolVersion::TLSv1_3,
                 "1.3_ecdsap384_aes",
             ),
             (
                 KeyType::Rsa2048,
                 CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-                &rustls::version::TLS13,
+                ProtocolVersion::TLSv1_3,
                 "1.3_rsa_chacha",
             ),
             (
                 KeyType::EcdsaP256,
                 CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-                &rustls::version::TLS13,
+                ProtocolVersion::TLSv1_3,
                 "1.3_ecdsap256_chacha",
             ),
             (
                 KeyType::EcdsaP384,
                 CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-                &rustls::version::TLS13,
+                ProtocolVersion::TLSv1_3,
                 "1.3_ecdsap384_chacha",
             ),
         ] {
@@ -390,7 +390,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         make_ticketer,
         AuthKeySource::FuzzingProvider,
         rustls_fuzzing_provider::TLS13_FUZZING_SUITE,
-        &rustls::version::TLS13,
+        ProtocolVersion::TLSv1_3,
         "1.3_no_crypto".to_string(),
     ));
 
@@ -399,7 +399,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         make_ticketer,
         AuthKeySource::FuzzingProvider,
         rustls_fuzzing_provider::TLS_FUZZING_SUITE,
-        &rustls::version::TLS12,
+        ProtocolVersion::TLSv1_2,
         "1.2_no_crypto".to_string(),
     ));
 
@@ -539,7 +539,7 @@ struct ClientSideStepper<'a> {
 
 impl ClientSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
-        assert_eq!(params.ciphersuite.version(), *params.version);
+        assert_eq!(params.ciphersuite.version().version(), params.version);
 
         let cfg = ClientConfig::builder_with_provider(
             CryptoProvider {
@@ -548,7 +548,7 @@ impl ClientSideStepper<'_> {
             }
             .into(),
         )
-        .with_protocol_versions(&[params.version])
+        .with_safe_default_protocol_versions()
         .unwrap();
 
         let mut cfg = match params.auth_key {
@@ -634,10 +634,10 @@ struct ServerSideStepper<'a> {
 
 impl ServerSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
-        assert_eq!(params.ciphersuite.version(), *params.version);
+        assert_eq!(params.ciphersuite.version().version(), params.version);
 
         let cfg = ServerConfig::builder_with_provider(params.provider.clone().into())
-            .with_protocol_versions(&[params.version])
+            .with_safe_default_protocol_versions()
             .unwrap();
 
         let mut cfg = match params.auth_key {
