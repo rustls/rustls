@@ -37,7 +37,7 @@ use rustls::server::{
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind,
-    RootCertStore, ServerConfig, ServerConnection, SideData,
+    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData,
 };
 use rustls_test::KeyType;
 
@@ -813,7 +813,7 @@ impl Parameters {
         };
 
         let mut cfg = ServerConfig::builder_with_provider(provider)
-            .with_protocol_versions(&[self.proto.version])
+            .with_safe_default_protocol_versions()
             .unwrap()
             .with_client_cert_verifier(client_auth)
             .with_single_cert(
@@ -853,7 +853,7 @@ impl Parameters {
             }
             .into(),
         )
-        .with_protocol_versions(&[self.proto.version])
+        .with_safe_default_protocol_versions()
         .unwrap()
         .with_root_certificates(root_store);
 
@@ -1052,15 +1052,11 @@ impl Provider {
 struct BenchmarkParam {
     key_type: KeyType,
     ciphersuite: CipherSuite,
-    version: &'static rustls::SupportedProtocolVersion,
+    version: ProtocolVersion,
 }
 
 impl BenchmarkParam {
-    const fn new(
-        key_type: KeyType,
-        ciphersuite: CipherSuite,
-        version: &'static rustls::SupportedProtocolVersion,
-    ) -> Self {
+    const fn new(key_type: KeyType, ciphersuite: CipherSuite, version: ProtocolVersion) -> Self {
         Self {
             key_type,
             ciphersuite,
@@ -1462,72 +1458,72 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     BenchmarkParam::new(
         KeyType::Rsa2048,
         CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS12,
+        ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::EcdsaP256,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS12,
+        ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::Rsa2048,
         CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        &rustls::version::TLS12,
+        ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::Rsa2048,
         CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
+        ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::EcdsaP256,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
+        ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::EcdsaP384,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
+        ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::Ed25519,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
+        ProtocolVersion::TLSv1_2,
     ),
     BenchmarkParam::new(
         KeyType::Rsa2048,
         CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS13,
+        ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::Rsa2048,
         CipherSuite::TLS13_AES_256_GCM_SHA384,
-        &rustls::version::TLS13,
+        ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::EcdsaP256,
         CipherSuite::TLS13_AES_256_GCM_SHA384,
-        &rustls::version::TLS13,
+        ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::Ed25519,
         CipherSuite::TLS13_AES_256_GCM_SHA384,
-        &rustls::version::TLS13,
+        ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::Rsa2048,
         CipherSuite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
+        ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::EcdsaP256,
         CipherSuite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
+        ProtocolVersion::TLSv1_3,
     ),
     BenchmarkParam::new(
         KeyType::Ed25519,
         CipherSuite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
+        ProtocolVersion::TLSv1_3,
     ),
 ];
 
