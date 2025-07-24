@@ -11,7 +11,6 @@ use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus, WriteTraffic,
 };
-use rustls::version::TLS13;
 use rustls::{ClientConfig, RootCertStore};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -19,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let mut config = ClientConfig::builder_with_protocol_versions(&[&TLS13])
+    let mut config = ClientConfig::builder()
         .with_root_certificates(root_store)
         .with_no_client_auth();
     config.enable_early_data = SEND_EARLY_DATA;
