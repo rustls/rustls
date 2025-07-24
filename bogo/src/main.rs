@@ -229,6 +229,18 @@ impl Options {
         }
         versions
     }
+
+    fn provider(&self) -> CryptoProvider {
+        let mut provider = self.provider.clone();
+
+        if let Some(groups) = &self.groups {
+            provider
+                .kx_groups
+                .retain(|kxg| groups.contains(&kxg.name()));
+        }
+
+        provider
+    }
 }
 
 #[derive(Debug, Default)]
@@ -782,15 +794,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     let cred = &opts.credentials.default;
     let (certs, key) = cred.load_from_file();
 
-    let mut provider = opts.provider.clone();
-
-    if let Some(groups) = &opts.groups {
-        provider
-            .kx_groups
-            .retain(|kxg| groups.contains(&kxg.name()));
-    }
-
-    let mut cfg = ServerConfig::builder_with_provider(provider.into())
+    let mut cfg = ServerConfig::builder_with_provider(opts.provider().into())
         .with_protocol_versions(&opts.supported_versions())
         .unwrap()
         .with_client_cert_verifier(client_auth)
@@ -926,15 +930,7 @@ impl Debug for ClientCacheWithoutKxHints {
 }
 
 fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfig> {
-    let mut provider = opts.provider.clone();
-
-    if let Some(groups) = &opts.groups {
-        provider
-            .kx_groups
-            .retain(|kxg| groups.contains(&kxg.name()));
-    }
-
-    let provider = Arc::new(provider);
+    let provider = Arc::new(opts.provider());
     let cfg = ClientConfig::builder_with_provider(provider.clone());
 
     let cfg = if opts.selected_provider.supports_ech() {
