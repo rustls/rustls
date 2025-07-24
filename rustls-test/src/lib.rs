@@ -618,31 +618,6 @@ pub fn make_client_config_with_raw_key_support(
         .with_client_cert_resolver(client_cert_resolver)
 }
 
-pub fn make_client_config_with_cipher_suite_and_raw_key_support(
-    kt: KeyType,
-    cipher_suite: SupportedCipherSuite,
-    provider: &CryptoProvider,
-) -> ClientConfig {
-    let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(provider));
-    let client_cert_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-        kt.get_certified_client_key(provider)
-            .unwrap(),
-    ));
-    #[allow(deprecated)]
-    ClientConfig::builder_with_provider(
-        CryptoProvider {
-            cipher_suites: vec![cipher_suite],
-            ..provider.clone()
-        }
-        .into(),
-    )
-    .with_protocol_versions(&[&rustls::version::TLS13])
-    .unwrap()
-    .dangerous()
-    .with_custom_certificate_verifier(server_verifier)
-    .with_client_cert_resolver(client_cert_resolver)
-}
-
 pub fn finish_client_config(
     kt: KeyType,
     config: rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>,
