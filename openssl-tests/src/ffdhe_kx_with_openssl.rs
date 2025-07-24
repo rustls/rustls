@@ -7,26 +7,22 @@ use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::version::{TLS12, TLS13};
-use rustls::{ClientConfig, RootCertStore, ServerConfig, SupportedProtocolVersion};
+use rustls::{ClientConfig, RootCertStore, ServerConfig};
 
 use crate::ffdhe::{self, FfdheKxGroup};
 use crate::utils::verify_openssl3_available;
 
 #[test]
 fn rustls_server_with_ffdhe_kx_tls13() {
-    test_rustls_server_with_ffdhe_kx(&TLS13, 1)
+    test_rustls_server_with_ffdhe_kx(ffdhe_provider().with_only_tls13(), 1)
 }
 
 #[test]
 fn rustls_server_with_ffdhe_kx_tls12() {
-    test_rustls_server_with_ffdhe_kx(&TLS12, 1)
+    test_rustls_server_with_ffdhe_kx(ffdhe_provider().with_only_tls12(), 1)
 }
 
-fn test_rustls_server_with_ffdhe_kx(
-    protocol_version: &'static SupportedProtocolVersion,
-    iters: usize,
-) {
+fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
     verify_openssl3_available();
 
     let message = "Hello from rustls!\n";
@@ -35,7 +31,7 @@ fn test_rustls_server_with_ffdhe_kx(
     let port = listener.local_addr().unwrap().port();
 
     let server_thread = thread::spawn(move || {
-        let config = Arc::new(server_config_with_ffdhe_kx(protocol_version));
+        let config = Arc::new(server_config_with_ffdhe_kx(provider));
         for _ in 0..iters {
             let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
@@ -147,12 +143,16 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
 }
 
 fn client_config_with_ffdhe_kx() -> ClientConfig {
-    ClientConfig::builder_with_provider(ffdhe_provider().into())
+    ClientConfig::builder_with_provider(
         // OpenSSL 3 does not support RFC 7919 with TLS 1.2: https://github.com/openssl/openssl/issues/10971
-        .with_protocol_versions(&[&TLS13])
-        .unwrap()
-        .with_root_certificates(root_ca())
-        .with_no_client_auth()
+        ffdhe_provider()
+            .with_only_tls13()
+            .into(),
+    )
+    .with_safe_default_protocol_versions()
+    .unwrap()
+    .with_root_certificates(root_ca())
+    .with_no_client_auth()
 }
 
 // TLS 1.2 requires stripping leading zeros of the shared secret,
@@ -168,13 +168,13 @@ fn rustls_client_with_ffdhe_kx_repeated() {
 #[test]
 #[ignore]
 fn rustls_server_with_ffdhe_tls13_repeated() {
-    test_rustls_server_with_ffdhe_kx(&TLS13, 512)
+    test_rustls_server_with_ffdhe_kx(ffdhe_provider().with_only_tls13(), 512)
 }
 
 #[test]
 #[ignore]
 fn rustls_server_with_ffdhe_tls12_repeated() {
-    test_rustls_server_with_ffdhe_kx(&TLS12, 512);
+    test_rustls_server_with_ffdhe_kx(ffdhe_provider().with_only_tls12(), 512);
 }
 
 fn root_ca() -> RootCertStore {
@@ -208,9 +208,9 @@ fn ffdhe_provider() -> CryptoProvider {
     }
 }
 
-fn server_config_with_ffdhe_kx(protocol: &'static SupportedProtocolVersion) -> ServerConfig {
-    ServerConfig::builder_with_provider(ffdhe_provider().into())
-        .with_protocol_versions(&[protocol])
+fn server_config_with_ffdhe_kx(provider: CryptoProvider) -> ServerConfig {
+    ServerConfig::builder_with_provider(provider.into())
+        .with_safe_default_protocol_versions()
         .unwrap()
         .with_no_client_auth()
         .with_single_cert(load_certs(), load_private_key())

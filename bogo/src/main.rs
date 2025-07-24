@@ -53,7 +53,7 @@ use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
     DigitallySignedStruct, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
-    SignatureScheme, SupportedProtocolVersion, client, compress, server, sign, version,
+    SignatureScheme, client, compress, server, sign,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -217,17 +217,21 @@ impl Options {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
     }
 
-    fn supported_versions(&self) -> Vec<&'static SupportedProtocolVersion> {
-        let mut versions = vec![];
+    fn provider(&self) -> CryptoProvider {
+        let mut provider = self.provider.clone();
 
-        if self.tls12_supported() {
-            versions.push(&version::TLS12);
+        if let Some(groups) = &self.groups {
+            provider
+                .kx_groups
+                .retain(|kxg| groups.contains(&kxg.name()));
         }
 
-        if self.tls13_supported() {
-            versions.push(&version::TLS13);
+        match (self.tls12_supported(), self.tls13_supported()) {
+            (true, true) => provider,
+            (true, false) => provider.with_only_tls12(),
+            (false, true) => provider.with_only_tls13(),
+            _ => panic!("nonsense version constraint"),
         }
-        versions
     }
 }
 
@@ -782,16 +786,8 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     let cred = &opts.credentials.default;
     let (certs, key) = cred.load_from_file();
 
-    let mut provider = opts.provider.clone();
-
-    if let Some(groups) = &opts.groups {
-        provider
-            .kx_groups
-            .retain(|kxg| groups.contains(&kxg.name()));
-    }
-
-    let mut cfg = ServerConfig::builder_with_provider(provider.into())
-        .with_protocol_versions(&opts.supported_versions())
+    let mut cfg = ServerConfig::builder_with_provider(opts.provider().into())
+        .with_safe_default_protocol_versions()
         .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp(certs, key, opts.server_ocsp_response.clone())
@@ -926,15 +922,7 @@ impl Debug for ClientCacheWithoutKxHints {
 }
 
 fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfig> {
-    let mut provider = opts.provider.clone();
-
-    if let Some(groups) = &opts.groups {
-        provider
-            .kx_groups
-            .retain(|kxg| groups.contains(&kxg.name()));
-    }
-
-    let provider = Arc::new(provider);
+    let provider = Arc::new(opts.provider());
     let cfg = ClientConfig::builder_with_provider(provider.clone());
 
     let cfg = if opts.selected_provider.supports_ech() {
@@ -954,11 +942,11 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
             cfg.with_ech(ech_mode)
                 .expect("invalid GREASE ECH config")
         } else {
-            cfg.with_protocol_versions(&opts.supported_versions())
+            cfg.with_safe_default_protocol_versions()
                 .expect("inconsistent settings")
         }
     } else {
-        cfg.with_protocol_versions(&opts.supported_versions())
+        cfg.with_safe_default_protocol_versions()
             .expect("inconsistent settings")
     };
 
