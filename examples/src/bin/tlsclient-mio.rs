@@ -274,6 +274,30 @@ struct Args {
     hostname: String,
 }
 
+impl Args {
+    fn provider(&self) -> CryptoProvider {
+        let cipher_suites = if !self.suite.is_empty() {
+            lookup_suites(&self.suite)
+        } else {
+            provider::DEFAULT_CIPHER_SUITES.to_vec()
+        };
+
+        let kx_groups = match self.key_exchange.as_slice() {
+            [] => provider::DEFAULT_KX_GROUPS.to_vec(),
+            items => items
+                .iter()
+                .map(|kx| find_key_exchange(kx))
+                .collect::<Vec<&'static dyn SupportedKxGroup>>(),
+        };
+
+        CryptoProvider {
+            cipher_suites,
+            kx_groups,
+            ..provider::default_provider()
+        }
+    }
+}
+
 /// Find a ciphersuite with the given name
 fn find_suite(name: &str) -> Option<rustls::SupportedCipherSuite> {
     for suite in provider::ALL_CIPHER_SUITES {
@@ -427,37 +451,16 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         );
     }
 
-    let suites = if !args.suite.is_empty() {
-        lookup_suites(&args.suite)
-    } else {
-        provider::DEFAULT_CIPHER_SUITES.to_vec()
-    };
-
-    let kx_groups = match args.key_exchange.as_slice() {
-        [] => provider::DEFAULT_KX_GROUPS.to_vec(),
-        items => items
-            .iter()
-            .map(|kx| find_key_exchange(kx))
-            .collect::<Vec<&'static dyn SupportedKxGroup>>(),
-    };
-
     let versions = if !args.protover.is_empty() {
         lookup_versions(&args.protover)
     } else {
         rustls::DEFAULT_VERSIONS.to_vec()
     };
 
-    let config = rustls::ClientConfig::builder_with_provider(
-        CryptoProvider {
-            cipher_suites: suites,
-            kx_groups,
-            ..provider::default_provider()
-        }
-        .into(),
-    )
-    .with_protocol_versions(&versions)
-    .expect("inconsistent cipher-suite/versions selected")
-    .with_root_certificates(root_store);
+    let config = rustls::ClientConfig::builder_with_provider(args.provider().into())
+        .with_protocol_versions(&versions)
+        .expect("inconsistent cipher-suite/versions selected")
+        .with_root_certificates(root_store);
 
     let mut config = match (&args.auth_key, &args.auth_certs) {
         (Some(key_file), Some(certs_file)) => {
