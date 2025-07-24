@@ -92,7 +92,7 @@ pub struct BenchmarkParams {
     /// Cipher suite
     pub ciphersuite: rustls::SupportedCipherSuite,
     /// TLS version
-    pub version: &'static rustls::SupportedProtocolVersion,
+    pub version: rustls::ProtocolVersion,
     /// A user-facing label that identifies these params
     pub label: String,
 }
@@ -104,7 +104,7 @@ impl BenchmarkParams {
         ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
         auth_key: AuthKeySource,
         ciphersuite: rustls::SupportedCipherSuite,
-        version: &'static rustls::SupportedProtocolVersion,
+        version: rustls::ProtocolVersion,
         label: String,
     ) -> Self {
         Self {
