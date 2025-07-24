@@ -26,10 +26,10 @@ use std::{process, str};
 
 use clap::Parser;
 use mio::net::TcpStream;
-use rustls::RootCertStore;
 use rustls::crypto::{CryptoProvider, SupportedKxGroup, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use rustls::{ProtocolVersion, RootCertStore};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -290,10 +290,16 @@ impl Args {
                 .collect::<Vec<&'static dyn SupportedKxGroup>>(),
         };
 
-        CryptoProvider {
+        let provider = CryptoProvider {
             cipher_suites,
             kx_groups,
             ..provider::default_provider()
+        };
+
+        match lookup_versions(&self.protover).as_slice() {
+            [ProtocolVersion::TLSv1_2] => provider.with_only_tls12(),
+            [ProtocolVersion::TLSv1_3] => provider.with_only_tls13(),
+            _ => provider,
         }
     }
 }
@@ -340,16 +346,18 @@ fn lookup_suites(suites: &[String]) -> Vec<rustls::SupportedCipherSuite> {
 }
 
 /// Make a vector of protocol versions named in `versions`
-fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtocolVersion> {
+fn lookup_versions(versions: &[String]) -> Vec<ProtocolVersion> {
     let mut out = Vec::new();
 
     for vname in versions {
         let version = match vname.as_ref() {
-            "1.2" => &rustls::version::TLS12,
-            "1.3" => &rustls::version::TLS13,
+            "1.2" => ProtocolVersion::TLSv1_2,
+            "1.3" => ProtocolVersion::TLSv1_3,
             _ => panic!("cannot look up version '{vname}', valid are '1.2' and '1.3'"),
         };
-        out.push(version);
+        if !out.contains(&version) {
+            out.push(version);
+        }
     }
 
     out
@@ -451,14 +459,8 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         );
     }
 
-    let versions = if !args.protover.is_empty() {
-        lookup_versions(&args.protover)
-    } else {
-        rustls::DEFAULT_VERSIONS.to_vec()
-    };
-
     let config = rustls::ClientConfig::builder_with_provider(args.provider().into())
-        .with_protocol_versions(&versions)
+        .with_safe_default_protocol_versions()
         .expect("inconsistent cipher-suite/versions selected")
         .with_root_certificates(root_store);
 
