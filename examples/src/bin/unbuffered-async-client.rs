@@ -14,7 +14,6 @@ use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus, WriteTraffic,
 };
-use rustls::version::TLS13;
 use rustls::{ClientConfig, RootCertStore};
 #[cfg(not(feature = "async-std"))]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -28,7 +27,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let config = ClientConfig::builder_with_protocol_versions(&[&TLS13])
+    let config = ClientConfig::builder()
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
