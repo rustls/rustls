@@ -547,39 +547,49 @@ fn full_closure_server_to_client() {
 #[test]
 fn junk_after_close_notify_received() {
     // cf. test_junk_after_close_notify_received in api.rs
-    let mut outcome = handshake(&rustls::version::TLS13);
-    let mut client = outcome.client.take().unwrap();
-    let mut server = outcome.server.take().unwrap();
 
-    let mut client_send_buf = [0u8; 128];
-    let mut len = dbg!(
-        write_traffic(
-            client.process_tls_records(&mut []),
-            |mut wt: WriteTraffic<_>| wt.queue_close_notify(&mut client_send_buf),
-        )
-        .unwrap()
-    );
+    // various junk data to test with
+    const JUNK_DATA: &[&[u8]] = &[
+        &[0x17, 0x03, 0x03, 0x01],
+        &[11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25],
+    ];
 
-    client_send_buf[len..len + 4].copy_from_slice(&[0x17, 0x03, 0x03, 0x01]);
-    len += 4;
+    for junk in JUNK_DATA {
+        let mut outcome = handshake(&rustls::version::TLS13);
+        let mut client = outcome.client.take().unwrap();
+        let mut server = outcome.server.take().unwrap();
 
-    let discard = match dbg!(server.process_tls_records(dbg!(&mut client_send_buf[..len]))) {
-        UnbufferedStatus {
-            discard,
-            state: Ok(ConnectionState::PeerClosed),
-        } => {
-            assert_eq!(discard, 24);
-            discard
-        }
-        st => {
-            panic!("unexpected server state {st:?} (wanted PeerClosed)");
-        }
-    };
+        let mut client_send_buf = [0u8; 128];
+        let mut len = dbg!(
+            write_traffic(
+                client.process_tls_records(&mut []),
+                |mut wt: WriteTraffic<_>| wt.queue_close_notify(&mut client_send_buf),
+            )
+            .unwrap()
+        );
 
-    // further data in client_send_buf is ignored
-    let UnbufferedStatus { discard, .. } =
-        server.process_tls_records(dbg!(&mut client_send_buf[discard..len]));
-    assert_eq!(discard, 0);
+        client_send_buf[len..len + junk.len()].copy_from_slice(junk);
+        len += junk.len();
+
+        let discard = match dbg!(server.process_tls_records(dbg!(&mut client_send_buf[..len]))) {
+            UnbufferedStatus {
+                discard,
+                state: Ok(ConnectionState::PeerClosed),
+                ..
+            } => {
+                assert_eq!(discard, 24);
+                discard
+            }
+            st => {
+                panic!("unexpected server state {st:?} (wanted PeerClosed)");
+            }
+        };
+
+        // further data in client_send_buf is ignored
+        let UnbufferedStatus { discard, .. } =
+            server.process_tls_records(dbg!(&mut client_send_buf[discard..len]));
+        assert_eq!(discard, 0);
+    }
 }
 
 #[test]
