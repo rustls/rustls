@@ -15,12 +15,25 @@ use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{KeyExchangeAlgorithm, KxDecode};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, SupportedCipherSuite};
+use crate::version::Tls12Version;
 
 /// A TLS 1.2 cipher suite supported by rustls.
 #[allow(clippy::exhaustive_structs)]
 pub struct Tls12CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
+
+    /// The associated protocol version.
+    ///
+    /// This field should have the value [`rustls::version::TLS12_VERSION`].
+    ///
+    /// This value contains references to the TLS1.2 protocol handling code.
+    /// This means that a program that does not contain any `Tls12CipherSuite`
+    /// values also does not contain any reference to the TLS1.2 protocol handling
+    /// code, and the linker can remove it.
+    ///
+    /// [`rustls::version::TLS12_VERSION`]: crate::version::TLS12_VERSION
+    pub protocol_version: &'static Tls12Version,
 
     /// How to compute the TLS1.2 PRF for the suite's hash function.
     ///

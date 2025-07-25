@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 use pki_types::DnsName;
 
 use super::server_conn::ServerConnectionData;
-#[cfg(feature = "tls12")]
 use super::tls12;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
@@ -18,11 +17,9 @@ use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
-#[cfg(feature = "tls12")]
-use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
     ClientHelloPayload, HandshakePayload, KeyExchangeAlgorithm, ProtocolName, Random,
-    ServerExtensions, ServerExtensionsInput, ServerNamePayload, SingleProtocolName,
+    ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId, SingleProtocolName,
     TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
@@ -58,7 +55,6 @@ pub(super) fn can_resume(
 pub(super) struct ExtensionProcessing {
     // extensions to reply with
     pub(super) extensions: Box<ServerExtensions<'static>>,
-    #[cfg(feature = "tls12")]
     pub(super) send_ticket: bool,
 }
 
@@ -75,7 +71,6 @@ impl ExtensionProcessing {
 
         Self {
             extensions,
-            #[cfg(feature = "tls12")]
             send_ticket: false,
         }
     }
@@ -170,7 +165,6 @@ impl ExtensionProcessing {
         Ok(())
     }
 
-    #[cfg(feature = "tls12")]
     pub(super) fn process_tls12(
         &mut self,
         config: &ServerConfig,
@@ -296,9 +290,7 @@ pub(super) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) extra_exts: ServerExtensionsInput<'static>,
     pub(super) transcript: HandshakeHashOrBuffer,
-    #[cfg(feature = "tls12")]
     pub(super) session_id: SessionId,
-    #[cfg(feature = "tls12")]
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
     pub(super) send_tickets: usize,
@@ -319,9 +311,7 @@ impl ExpectClientHello {
             config,
             extra_exts,
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
-            #[cfg(feature = "tls12")]
             session_id: SessionId::empty(),
-            #[cfg(feature = "tls12")]
             using_ems: false,
             done_retry: false,
             send_tickets: 0,
@@ -484,36 +474,48 @@ impl ExpectClientHello {
             Random::new(self.config.provider.secure_random)?,
         );
         match suite {
-            SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {
-                config: self.config,
-                transcript,
-                suite,
-                randoms,
-                done_retry: self.done_retry,
-                send_tickets: self.send_tickets,
-                extra_exts: self.extra_exts,
-            }
-            .handle_client_hello(cx, certkey, m, client_hello, skxg, sig_schemes),
-            #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(suite) => tls12::CompleteClientHelloHandling {
-                config: self.config,
-                transcript,
-                session_id: self.session_id,
-                suite,
-                using_ems: self.using_ems,
-                randoms,
-                send_ticket: self.send_tickets > 0,
-                extra_exts: self.extra_exts,
-            }
-            .handle_client_hello(
-                cx,
-                certkey,
-                m,
-                client_hello,
-                skxg,
-                sig_schemes,
-                tls13_enabled,
-            ),
+            SupportedCipherSuite::Tls13(suite) => suite
+                .protocol_version
+                .server
+                .handle_client_hello(
+                    tls13::CompleteClientHelloHandling {
+                        config: self.config,
+                        transcript,
+                        suite,
+                        randoms,
+                        done_retry: self.done_retry,
+                        send_tickets: self.send_tickets,
+                        extra_exts: self.extra_exts,
+                    },
+                    cx,
+                    certkey,
+                    m,
+                    client_hello,
+                    skxg,
+                    sig_schemes,
+                ),
+            SupportedCipherSuite::Tls12(suite) => suite
+                .protocol_version
+                .server
+                .handle_client_hello(
+                    tls12::CompleteClientHelloHandling {
+                        config: self.config,
+                        transcript,
+                        session_id: self.session_id,
+                        suite,
+                        using_ems: self.using_ems,
+                        randoms,
+                        send_ticket: self.send_tickets > 0,
+                        extra_exts: self.extra_exts,
+                    },
+                    cx,
+                    certkey,
+                    m,
+                    client_hello,
+                    skxg,
+                    sig_schemes,
+                    tls13_enabled,
+                ),
         }
     }
 
@@ -585,7 +587,7 @@ impl ExpectClientHello {
                 // Reduce our supported ciphersuites by the certified key's algorithm.
                 suite.usable_for_signature_algorithm(sig_key_algorithm)
                 // And version
-                && suite.version().version == selected_version
+                && suite.version().version() == selected_version
                 // And protocol
                 && suite.usable_for_protocol(protocol)
                 // And support one of key exchange groups

@@ -48,7 +48,6 @@ mod cache {
         kx_hint: Option<NamedGroup>,
 
         // Zero or one TLS1.2 sessions.
-        #[cfg(feature = "tls12")]
         tls12: Option<persist::Tls12ClientSessionValue>,
 
         // Up to MAX_TLS13_TICKETS_PER_SERVER TLS1.3 tickets, oldest first.
@@ -59,7 +58,6 @@ mod cache {
         fn default() -> Self {
             Self {
                 kx_hint: None,
-                #[cfg(feature = "tls12")]
                 tls12: None,
                 tls13: VecDeque::with_capacity(MAX_TLS13_TICKETS_PER_SERVER),
             }
@@ -119,7 +117,6 @@ mod cache {
             _server_name: ServerName<'static>,
             _value: persist::Tls12ClientSessionValue,
         ) {
-            #[cfg(feature = "tls12")]
             self.servers
                 .lock()
                 .unwrap()
@@ -132,10 +129,6 @@ mod cache {
             &self,
             _server_name: &ServerName<'_>,
         ) -> Option<persist::Tls12ClientSessionValue> {
-            #[cfg(not(feature = "tls12"))]
-            return None;
-
-            #[cfg(feature = "tls12")]
             self.servers
                 .lock()
                 .unwrap()
@@ -144,7 +137,6 @@ mod cache {
         }
 
         fn remove_tls12_session(&self, _server_name: &ServerName<'static>) {
-            #[cfg(feature = "tls12")]
             self.servers
                 .lock()
                 .unwrap()
@@ -257,9 +249,7 @@ mod tests {
     use crate::client::{ClientSessionStore, ResolvesClientCert};
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
-    use crate::msgs::handshake::CertificateChain;
-    #[cfg(feature = "tls12")]
-    use crate::msgs::handshake::SessionId;
+    use crate::msgs::handshake::{CertificateChain, SessionId};
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::pki_types::CertificateDer;
     use crate::suites::SupportedCipherSuite;
@@ -277,7 +267,6 @@ mod tests {
         c.set_kx_hint(name.clone(), NamedGroup::X25519);
         assert_eq!(None, c.kx_hint(&name));
 
-        #[cfg(feature = "tls12")]
         {
             use crate::msgs::persist::Tls12ClientSessionValue;
             let SupportedCipherSuite::Tls12(tls12_suite) =

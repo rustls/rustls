@@ -16,6 +16,11 @@ fn simpleclient_contains_aes_symbols() {
 }
 
 #[test]
+fn simpleclient_contains_tls12_code() {
+    assert!(count_tls12_client_symbols_in_executable(env!("CARGO_BIN_EXE_simpleclient")) > 0);
+}
+
+#[test]
 fn limitedclient_does_not_contain_aes_symbols() {
     let limitedclient = env!("CARGO_BIN_EXE_limitedclient");
     if fips_mode(limitedclient) {
@@ -23,6 +28,14 @@ fn limitedclient_does_not_contain_aes_symbols() {
         return;
     }
     assert_eq!(count_aes_symbols_in_executable(limitedclient), 0);
+}
+
+#[test]
+fn limitedclient_does_not_contain_tls12_code() {
+    assert_eq!(
+        count_tls12_client_symbols_in_executable(env!("CARGO_BIN_EXE_limitedclient")),
+        0
+    );
 }
 
 fn fips_mode(exe: &str) -> bool {
@@ -39,6 +52,21 @@ fn count_aes_symbols_in_executable(exe: &str) -> usize {
 
         if sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13") {
             println!("found aes symbol {sym:?}");
+            count += 1;
+        }
+    }
+
+    count
+}
+
+fn count_tls12_client_symbols_in_executable(exe: &str) -> usize {
+    let mut count = 0;
+
+    for sym in symbols_in_executable(exe).lines() {
+        println!("candidate symbol {sym:?}");
+
+        if sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug") {
+            println!("found tls12 symbol {sym:?}");
             count += 1;
         }
     }

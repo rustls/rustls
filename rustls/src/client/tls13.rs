@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::fmt;
 
 use pki_types::ServerName;
 use subtle::ConstantTimeEq;
@@ -36,6 +37,7 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::{self, Retrieved};
+use crate::sealed::Sealed;
 use crate::sign::{CertifiedKey, Signer};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
@@ -65,187 +67,214 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ExtendedMasterSecret,
 ];
 
-/// `early_data_key_schedule` is `Some` if we sent the
-/// "early_data" extension to the server.
-pub(super) fn handle_server_hello(
-    cx: &mut ClientContext<'_>,
-    server_hello: &ServerHelloPayload,
-    mut randoms: ConnectionRandoms,
-    suite: &'static Tls13CipherSuite,
-    mut transcript: HandshakeHash,
-    early_data_key_schedule: Option<KeyScheduleEarly>,
-    our_key_share: Box<dyn ActiveKeyExchange>,
-    server_hello_msg: &Message<'_>,
-    ech_state: Option<EchState>,
-    input: ClientHelloInput,
-) -> hs::NextStateOrError<'static> {
-    validate_server_hello(cx.common, server_hello)?;
+pub(crate) static TLS13_HANDLER: &dyn Tls13Handler = &Handler;
 
-    let their_key_share = server_hello
-        .key_share
-        .as_ref()
-        .ok_or_else(|| {
-            cx.common.send_fatal_alert(
-                AlertDescription::MissingExtension,
-                PeerMisbehaved::MissingKeyShare,
-            )
-        })?;
+#[derive(Debug)]
+struct Handler;
 
-    let ClientHelloInput {
-        config,
-        resuming,
-        mut sent_tls13_fake_ccs,
-        mut hello,
-        server_name,
-        ..
-    } = input;
+impl Tls13Handler for Handler {
+    /// `early_data_key_schedule` is `Some` if we sent the
+    /// "early_data" extension to the server.
+    fn handle_server_hello(
+        &self,
+        cx: &mut ClientContext<'_>,
+        server_hello: &ServerHelloPayload,
+        mut randoms: ConnectionRandoms,
+        suite: &'static Tls13CipherSuite,
+        mut transcript: HandshakeHash,
+        early_data_key_schedule: Option<KeyScheduleEarly>,
+        our_key_share: Box<dyn ActiveKeyExchange>,
+        server_hello_msg: &Message<'_>,
+        ech_state: Option<EchState>,
+        input: ClientHelloInput,
+    ) -> hs::NextStateOrError<'static> {
+        validate_server_hello(cx.common, server_hello)?;
 
-    let mut resuming_session = match resuming {
-        Some(Retrieved {
-            value: ClientSessionValue::Tls13(value),
+        let their_key_share = server_hello
+            .key_share
+            .as_ref()
+            .ok_or_else(|| {
+                cx.common.send_fatal_alert(
+                    AlertDescription::MissingExtension,
+                    PeerMisbehaved::MissingKeyShare,
+                )
+            })?;
+
+        let ClientHelloInput {
+            config,
+            resuming,
+            mut sent_tls13_fake_ccs,
+            mut hello,
+            server_name,
             ..
-        }) => Some(value),
-        _ => None,
-    };
+        } = input;
 
-    let our_key_share = KeyExchangeChoice::new(&config, cx, our_key_share, their_key_share)
-        .map_err(|_| {
-            cx.common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerMisbehaved::WrongGroupForKeyShare,
-            )
-        })?;
-
-    let key_schedule_pre_handshake = match (server_hello.preshared_key, early_data_key_schedule) {
-        (Some(selected_psk), Some(early_key_schedule)) => {
-            match &resuming_session {
-                Some(resuming) => {
-                    let Some(resuming_suite) = suite.can_resume_from(resuming.suite()) else {
-                        return Err({
-                            cx.common.send_fatal_alert(
-                                AlertDescription::IllegalParameter,
-                                PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
-                            )
-                        });
-                    };
-
-                    // If the server varies the suite here, we will have encrypted early data with
-                    // the wrong suite.
-                    if cx.data.early_data.is_enabled() && resuming_suite != suite {
-                        return Err({
-                            cx.common.send_fatal_alert(
-                                AlertDescription::IllegalParameter,
-                                PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite,
-                            )
-                        });
-                    }
-
-                    if selected_psk != 0 {
-                        return Err({
-                            cx.common.send_fatal_alert(
-                                AlertDescription::IllegalParameter,
-                                PeerMisbehaved::SelectedInvalidPsk,
-                            )
-                        });
-                    }
-
-                    debug!("Resuming using PSK");
-                    // The key schedule has been initialized and set in fill_in_psk_binder()
-                }
-                _ => {
-                    return Err(PeerMisbehaved::SelectedUnofferedPsk.into());
-                }
-            }
-            KeySchedulePreHandshake::from(early_key_schedule)
-        }
-        _ => {
-            debug!("Not resuming");
-            // Discard the early data key schedule.
-            cx.data.early_data.rejected();
-            cx.common.early_traffic = false;
-            resuming_session.take();
-            KeySchedulePreHandshake::new(suite)
-        }
-    };
-
-    cx.common.kx_state.complete();
-    let shared_secret = our_key_share
-        .complete(&their_key_share.payload.0)
-        .map_err(|err| {
-            cx.common
-                .send_fatal_alert(AlertDescription::IllegalParameter, err)
-        })?;
-
-    let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
-
-    // If we have ECH state, check that the server accepted our offer.
-    if let Some(ech_state) = ech_state {
-        let Message {
-            payload:
-                MessagePayload::Handshake {
-                    encoded: server_hello_encoded,
-                    ..
-                },
-            ..
-        } = &server_hello_msg
-        else {
-            unreachable!("ServerHello is a handshake message");
+        let mut resuming_session = match resuming {
+            Some(Retrieved {
+                value: ClientSessionValue::Tls13(value),
+                ..
+            }) => Some(value),
+            _ => None,
         };
-        cx.data.ech_status = match ech_state.confirm_acceptance(
-            &mut key_schedule,
-            server_hello,
-            server_hello_encoded,
-            suite.common.hash_provider,
-        )? {
-            // The server accepted our ECH offer, so complete the inner transcript with the
-            // server hello message, and switch the relevant state to the copies for the
-            // inner client hello.
-            Some(mut accepted) => {
-                accepted
-                    .transcript
-                    .add_message(server_hello_msg);
-                transcript = accepted.transcript;
-                randoms.client = accepted.random.0;
-                hello.sent_extensions = accepted.sent_extensions;
-                EchStatus::Accepted
+
+        let our_key_share = KeyExchangeChoice::new(&config, cx, our_key_share, their_key_share)
+            .map_err(|_| {
+                cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::WrongGroupForKeyShare,
+                )
+            })?;
+
+        let key_schedule_pre_handshake = match (server_hello.preshared_key, early_data_key_schedule)
+        {
+            (Some(selected_psk), Some(early_key_schedule)) => {
+                match &resuming_session {
+                    Some(resuming) => {
+                        let Some(resuming_suite) = suite.can_resume_from(resuming.suite()) else {
+                            return Err({
+                                cx.common.send_fatal_alert(
+                                    AlertDescription::IllegalParameter,
+                                    PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
+                                )
+                            });
+                        };
+
+                        // If the server varies the suite here, we will have encrypted early data with
+                        // the wrong suite.
+                        if cx.data.early_data.is_enabled() && resuming_suite != suite {
+                            return Err({
+                                cx.common.send_fatal_alert(
+                                    AlertDescription::IllegalParameter,
+                                    PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite,
+                                )
+                            });
+                        }
+
+                        if selected_psk != 0 {
+                            return Err({
+                                cx.common.send_fatal_alert(
+                                    AlertDescription::IllegalParameter,
+                                    PeerMisbehaved::SelectedInvalidPsk,
+                                )
+                            });
+                        }
+
+                        debug!("Resuming using PSK");
+                        // The key schedule has been initialized and set in fill_in_psk_binder()
+                    }
+                    _ => {
+                        return Err(PeerMisbehaved::SelectedUnofferedPsk.into());
+                    }
+                }
+                KeySchedulePreHandshake::from(early_key_schedule)
             }
-            // The server rejected our ECH offer.
-            None => EchStatus::Rejected,
+            _ => {
+                debug!("Not resuming");
+                // Discard the early data key schedule.
+                cx.data.early_data.rejected();
+                cx.common.early_traffic = false;
+                resuming_session.take();
+                KeySchedulePreHandshake::new(suite)
+            }
         };
+
+        cx.common.kx_state.complete();
+        let shared_secret = our_key_share
+            .complete(&their_key_share.payload.0)
+            .map_err(|err| {
+                cx.common
+                    .send_fatal_alert(AlertDescription::IllegalParameter, err)
+            })?;
+
+        let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
+
+        // If we have ECH state, check that the server accepted our offer.
+        if let Some(ech_state) = ech_state {
+            let Message {
+                payload:
+                    MessagePayload::Handshake {
+                        encoded: server_hello_encoded,
+                        ..
+                    },
+                ..
+            } = &server_hello_msg
+            else {
+                unreachable!("ServerHello is a handshake message");
+            };
+            cx.data.ech_status = match ech_state.confirm_acceptance(
+                &mut key_schedule,
+                server_hello,
+                server_hello_encoded,
+                suite.common.hash_provider,
+            )? {
+                // The server accepted our ECH offer, so complete the inner transcript with the
+                // server hello message, and switch the relevant state to the copies for the
+                // inner client hello.
+                Some(mut accepted) => {
+                    accepted
+                        .transcript
+                        .add_message(server_hello_msg);
+                    transcript = accepted.transcript;
+                    randoms.client = accepted.random.0;
+                    hello.sent_extensions = accepted.sent_extensions;
+                    EchStatus::Accepted
+                }
+                // The server rejected our ECH offer.
+                None => EchStatus::Rejected,
+            };
+        }
+
+        // Remember what KX group the server liked for next time.
+        config
+            .resumption
+            .store
+            .set_kx_hint(server_name.clone(), their_key_share.group);
+
+        // If we change keying when a subsequent handshake message is being joined,
+        // the two halves will have different record layer protections.  Disallow this.
+        cx.common.check_aligned_handshake()?;
+
+        let hash_at_client_recvd_server_hello = transcript.current_hash();
+        let key_schedule = key_schedule.derive_client_handshake_secrets(
+            cx.data.early_data.is_enabled(),
+            hash_at_client_recvd_server_hello,
+            suite,
+            &*config.key_log,
+            &randoms.client,
+            cx.common,
+        );
+
+        emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
+
+        Ok(Box::new(ExpectEncryptedExtensions {
+            config,
+            resuming_session,
+            server_name,
+            randoms,
+            suite,
+            transcript,
+            key_schedule,
+            hello,
+        }))
     }
+}
 
-    // Remember what KX group the server liked for next time.
-    config
-        .resumption
-        .store
-        .set_kx_hint(server_name.clone(), their_key_share.group);
+impl Sealed for Handler {}
 
-    // If we change keying when a subsequent handshake message is being joined,
-    // the two halves will have different record layer protections.  Disallow this.
-    cx.common.check_aligned_handshake()?;
-
-    let hash_at_client_recvd_server_hello = transcript.current_hash();
-    let key_schedule = key_schedule.derive_client_handshake_secrets(
-        cx.data.early_data.is_enabled(),
-        hash_at_client_recvd_server_hello,
-        suite,
-        &*config.key_log,
-        &randoms.client,
-        cx.common,
-    );
-
-    emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
-
-    Ok(Box::new(ExpectEncryptedExtensions {
-        config,
-        resuming_session,
-        server_name,
-        randoms,
-        suite,
-        transcript,
-        key_schedule,
-        hello,
-    }))
+pub(crate) trait Tls13Handler: fmt::Debug + Sealed + Send + Sync {
+    fn handle_server_hello(
+        &self,
+        cx: &mut ClientContext<'_>,
+        server_hello: &ServerHelloPayload,
+        randoms: ConnectionRandoms,
+        suite: &'static Tls13CipherSuite,
+        transcript: HandshakeHash,
+        early_data_key_schedule: Option<KeyScheduleEarly>,
+        our_key_share: Box<dyn ActiveKeyExchange>,
+        server_hello_msg: &Message<'_>,
+        ech_state: Option<EchState>,
+        input: ClientHelloInput,
+    ) -> hs::NextStateOrError<'static>;
 }
 
 enum KeyExchangeChoice {

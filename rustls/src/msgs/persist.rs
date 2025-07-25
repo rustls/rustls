@@ -9,11 +9,8 @@ use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
-#[cfg(feature = "tls12")]
-use crate::msgs::handshake::SessionId;
-use crate::msgs::handshake::{CertificateChain, ProtocolName};
+use crate::msgs::handshake::{CertificateChain, ProtocolName, SessionId};
 use crate::sync::{Arc, Weak};
-#[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::verify::ServerCertVerifier;
@@ -152,20 +149,14 @@ impl core::ops::Deref for Tls13ClientSessionValue {
 
 #[derive(Debug, Clone)]
 pub struct Tls12ClientSessionValue {
-    #[cfg(feature = "tls12")]
     suite: &'static Tls12CipherSuite,
-    #[cfg(feature = "tls12")]
     pub(crate) session_id: SessionId,
-    #[cfg(feature = "tls12")]
     master_secret: Zeroizing<[u8; 48]>,
-    #[cfg(feature = "tls12")]
     extended_ms: bool,
     #[doc(hidden)]
-    #[cfg(feature = "tls12")]
     pub(crate) common: ClientSessionCommon,
 }
 
-#[cfg(feature = "tls12")]
 impl Tls12ClientSessionValue {
     pub(crate) fn new(
         suite: &'static Tls12CipherSuite,
@@ -218,7 +209,6 @@ impl Tls12ClientSessionValue {
     }
 }
 
-#[cfg(feature = "tls12")]
 impl core::ops::Deref for Tls12ClientSessionValue {
     type Target = ClientSessionCommon;
 
@@ -339,7 +329,6 @@ pub struct Tls12ServerSessionValue {
 }
 
 impl Tls12ServerSessionValue {
-    #[cfg(feature = "tls12")]
     pub(crate) fn new(
         common: CommonServerSessionValue,
         master_secret: &[u8; 48],

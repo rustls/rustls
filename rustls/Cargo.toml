@@ -14,7 +14,7 @@ autotests = false
 exclude = ["src/testdata", "tests/**"]
 
 [features]
-default = ["log", "std", "tls12"]
+default = ["log", "std"]
 
 aws-lc-rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
@@ -23,7 +23,6 @@ fips = ["aws-lc-rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
 log = ["dep:log"]
 ring = ["dep:ring", "webpki/ring"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
-tls12 = []
 zlib = ["dep:zlib-rs"]
 
 [dependencies]
@@ -74,7 +73,6 @@ path = "tests/runners/api.rs"
 [[test]]
 name = "api_ffdhe"
 path = "tests/runners/api_ffdhe.rs"
-required-features = ["tls12"]
 
 [[test]]
 name = "bogo"
@@ -106,7 +104,7 @@ path = "tests/runners/unbuffered.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["aws-lc-rs", "brotli", "custom-provider", "hashbrown", "log", "ring", "std", "tls12", "zlib"]
+features = ["aws-lc-rs", "brotli", "custom-provider", "hashbrown", "log", "ring", "std", "zlib"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo_check_external_types]
