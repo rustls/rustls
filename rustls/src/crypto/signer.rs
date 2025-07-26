@@ -207,8 +207,8 @@ impl CertifiedKey {
     }
 }
 
-#[cfg_attr(not(any(feature = "aws_lc_rs", feature = "ring")), allow(dead_code))]
-pub(crate) fn public_key_to_spki(
+/// Convert a public key and algorithm identifier into [`SubjectPublicKeyInfoDer`].
+pub fn public_key_to_spki(
     alg_id: &AlgorithmIdentifier,
     public_key: impl AsRef<[u8]>,
 ) -> SubjectPublicKeyInfoDer<'static> {
