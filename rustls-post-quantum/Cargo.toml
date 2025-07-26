@@ -12,10 +12,11 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [features]
-aws-lc-rs-unstable = ["webpki/aws-lc-rs-unstable"]
+aws-lc-rs-unstable = ["webpki/aws-lc-rs-unstable", "aws-lc-rs/unstable"]
 
 [dependencies]
-rustls = { version = "0.23.29", features = ["aws-lc-rs"] }
+aws-lc-rs = { workspace = true }
+rustls = { version = "0.23.30", features = ["aws-lc-rs"] }
 webpki = { workspace = true }
 
 [dev-dependencies]
