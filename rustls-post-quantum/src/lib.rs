@@ -25,8 +25,172 @@ pub fn provider() -> CryptoProvider {
     #[cfg(feature = "aws-lc-rs-unstable")]
     {
         provider.signature_verification_algorithms = SUPPORTED_SIG_ALGS;
+        provider.key_provider = &key_provider::PqAwsLcRs;
     }
     provider
+}
+
+#[cfg(feature = "aws-lc-rs-unstable")]
+mod key_provider {
+    use std::fmt::{self, Debug, Formatter};
+    use std::sync::Arc;
+
+    use aws_lc_rs::signature::KeyPair;
+    use aws_lc_rs::unstable::signature::{
+        ML_DSA_44_SIGNING, ML_DSA_65_SIGNING, ML_DSA_87_SIGNING, PqdsaKeyPair,
+        PqdsaSigningAlgorithm,
+    };
+    use rustls::crypto::KeyProvider;
+    use rustls::crypto::aws_lc_rs::sign;
+    use rustls::pki_types::{AlgorithmIdentifier, PrivateKeyDer, SubjectPublicKeyInfoDer, alg_id};
+    use rustls::sign::{Signer, SigningKey, public_key_to_spki};
+    use rustls::{Error, SignatureAlgorithm, SignatureScheme};
+
+    #[derive(Debug)]
+    pub(super) struct PqAwsLcRs;
+
+    impl KeyProvider for PqAwsLcRs {
+        fn load_private_key(
+            &self,
+            key_der: PrivateKeyDer<'static>,
+        ) -> Result<Arc<dyn SigningKey>, Error> {
+            // TODO: support `PqdsaKeyPair::from_raw_private_key()`?
+            if let PrivateKeyDer::Pkcs8(pkcs8) = &key_der {
+                for kind in PqdsaKeyKind::iter() {
+                    match PqdsaKeyPair::from_pkcs8(kind.to_alg(), pkcs8.secret_pkcs8_der()) {
+                        Ok(key_pair) => {
+                            return Ok(Arc::new(PqdsaSigningKey {
+                                kind,
+                                inner: Arc::new(key_pair),
+                            }));
+                        }
+                        Err(_) => continue,
+                    }
+                }
+            }
+
+            match sign::any_supported_type(&key_der) {
+                Ok(key) => Ok(key),
+                Err(_) => Err(Error::General(
+                    "failed to parse private key as ML-DSA, RSA, ECDSA, or EdDSA".into(),
+                )),
+            }
+        }
+
+        fn fips(&self) -> bool {
+            false
+        }
+    }
+
+    struct PqdsaSigningKey {
+        kind: PqdsaKeyKind,
+        inner: Arc<PqdsaKeyPair>,
+    }
+
+    impl SigningKey for PqdsaSigningKey {
+        fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+            if !offered.contains(&self.kind.scheme()) {
+                return None;
+            }
+
+            Some(Box::new(PqdsaSigner {
+                key: self.inner.clone(),
+                kind: self.kind,
+            }))
+        }
+
+        fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+            Some(public_key_to_spki(
+                &self.kind.alg_id(),
+                self.inner.public_key(),
+            ))
+        }
+
+        // [`SignatureAlgorithm`] is for TLS 1.2, for which ML-DSA is not specified.
+        // Pick a "Reserved for Private Use" value.
+        fn algorithm(&self) -> SignatureAlgorithm {
+            SignatureAlgorithm::Unknown(255)
+        }
+    }
+
+    impl Debug for PqdsaSigningKey {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            f.debug_struct("PqdsaSigningKey")
+                .field("scheme", &self.kind.scheme())
+                .finish_non_exhaustive()
+        }
+    }
+
+    struct PqdsaSigner {
+        key: Arc<PqdsaKeyPair>,
+        kind: PqdsaKeyKind,
+    }
+
+    impl Signer for PqdsaSigner {
+        fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
+            let expected_sig_len = self.key.algorithm().signature_len();
+            let mut sig = vec![0; expected_sig_len];
+            let actual_sig_len = self
+                .key
+                .sign(message, &mut sig)
+                .map_err(|_| Error::General("signing failed".into()))?;
+
+            if actual_sig_len != expected_sig_len {
+                return Err(Error::General("unexpected signature length".into()));
+            }
+
+            Ok(sig)
+        }
+
+        fn scheme(&self) -> SignatureScheme {
+            self.kind.scheme()
+        }
+    }
+
+    impl Debug for PqdsaSigner {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            f.debug_struct("PqdsaSigner")
+                .field("scheme", &self.kind.scheme())
+                .finish_non_exhaustive()
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum PqdsaKeyKind {
+        MlDsa44,
+        MlDsa65,
+        MlDsa87,
+    }
+
+    impl PqdsaKeyKind {
+        fn iter() -> impl Iterator<Item = Self> {
+            [Self::MlDsa44, Self::MlDsa65, Self::MlDsa87].into_iter()
+        }
+
+        fn to_alg(self) -> &'static PqdsaSigningAlgorithm {
+            match self {
+                Self::MlDsa44 => &ML_DSA_44_SIGNING,
+                Self::MlDsa65 => &ML_DSA_65_SIGNING,
+                Self::MlDsa87 => &ML_DSA_87_SIGNING,
+            }
+        }
+
+        fn scheme(&self) -> SignatureScheme {
+            match self {
+                Self::MlDsa44 => SignatureScheme::ML_DSA_44,
+                Self::MlDsa65 => SignatureScheme::ML_DSA_65,
+                Self::MlDsa87 => SignatureScheme::ML_DSA_87,
+            }
+        }
+
+        fn alg_id(&self) -> AlgorithmIdentifier {
+            match self {
+                Self::MlDsa44 => alg_id::ML_DSA_44,
+                Self::MlDsa65 => alg_id::ML_DSA_65,
+                Self::MlDsa87 => alg_id::ML_DSA_87,
+            }
+        }
+    }
 }
 
 /// Keep in sync with the `SUPPORTED_SIG_ALGS` in `rustls::crypto::aws_lc_rs`.
@@ -77,7 +241,11 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
         ),
         (
             SignatureScheme::ECDSA_NISTP521_SHA512,
-            &[webpki_algs::ECDSA_P521_SHA512],
+            &[
+                webpki_algs::ECDSA_P521_SHA512,
+                webpki_algs::ECDSA_P384_SHA512,
+                webpki_algs::ECDSA_P256_SHA512,
+            ],
         ),
         (SignatureScheme::ED25519, &[webpki_algs::ED25519]),
         (
