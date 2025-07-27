@@ -132,7 +132,7 @@ The solution was to:
    that complete after a single `poll`. This way we avoid using an async runtime, which could
    introduce non-determinism.
 3. Use non-blocking operations under the hood in wall-time mode, which simulate IO through shared
-   in-memory buffers. The server and client `Future`s are polled in turns, so again we we avoid
+   in-memory buffers. The server and client `Future`s are polled in turns, so again we avoid
    pulling in an async runtime and keep things as deterministic as possible.
 
 ### Why measure CPU instructions
