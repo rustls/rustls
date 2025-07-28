@@ -5,8 +5,8 @@ use core::fmt::Debug;
 use zeroize::Zeroize;
 
 use crate::Error;
-use crate::msgs::enums::HpkeKem;
-use crate::msgs::handshake::HpkeSymmetricCipherSuite;
+pub use crate::msgs::enums::{HpkeAead, HpkeKdf, HpkeKem};
+pub use crate::msgs::handshake::HpkeSymmetricCipherSuite;
 
 /// An HPKE suite, specifying a key encapsulation mechanism and a symmetric cipher suite.
 #[allow(clippy::exhaustive_structs)]
