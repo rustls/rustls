@@ -37,8 +37,7 @@ use rustls::client::{
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::{CryptoProvider, aws_lc_rs, ring};
-use rustls::internal::msgs::codec::{Codec, Reader};
-use rustls::internal::msgs::handshake::EchConfigPayload;
+use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
@@ -1124,13 +1123,12 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerIncompatible(
             PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension,
         ) => quit(":UNEXPECTED_EXTENSION:"),
-        Error::PeerIncompatible(PeerIncompatible::ServerRejectedEncryptedClientHello(
-            _retry_configs,
-        )) => {
+        Error::RejectedEch(rejected_err) => {
             if let Some(expected_configs) = &opts.expect_ech_retry_configs {
-                let expected_configs =
-                    Vec::<EchConfigPayload>::read(&mut Reader::init(expected_configs)).unwrap();
-                assert_eq!(_retry_configs, Some(expected_configs));
+                assert_eq!(
+                    rejected_err.retry_configs().as_ref(),
+                    Some(expected_configs)
+                );
             }
             quit(":ECH_REJECTED:")
         }

@@ -221,7 +221,7 @@ impl Cardinality for MaybeEmpty {
 }
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct NonEmpty;
+pub(crate) struct NonEmpty;
 
 impl Cardinality for NonEmpty {
     const MIN: usize = 1;

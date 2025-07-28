@@ -28,8 +28,8 @@ use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
 use crate::{
-    AlertDescription, ClientConfig, CommonState, EncryptedClientHelloError, Error,
-    PeerIncompatible, PeerMisbehaved, ProtocolVersion, Tls13CipherSuite,
+    AlertDescription, ClientConfig, CommonState, EncryptedClientHelloError, Error, PeerMisbehaved,
+    ProtocolVersion, RejectedEch, Tls13CipherSuite,
 };
 
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
@@ -834,7 +834,7 @@ pub(crate) fn fatal_alert_required(
 ) -> Error {
     common.send_fatal_alert(
         AlertDescription::EncryptedClientHelloRequired,
-        PeerIncompatible::ServerRejectedEncryptedClientHello(retry_configs),
+        RejectedEch { retry_configs },
     )
 }
 

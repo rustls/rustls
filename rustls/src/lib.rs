@@ -530,7 +530,7 @@ pub use crate::enums::{
 pub use crate::error::{
     CertRevocationListError, CertificateError, EncryptedClientHelloError, Error,
     ExtendedKeyPurpose, InconsistentKeys, InvalidMessage, OtherError, PeerIncompatible,
-    PeerMisbehaved,
+    PeerMisbehaved, RejectedEch,
 };
 pub use crate::key_log::{KeyLog, NoKeyLog};
 #[cfg(feature = "std")]
