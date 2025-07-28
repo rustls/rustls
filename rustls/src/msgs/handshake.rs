@@ -189,7 +189,7 @@ impl AsRef<[u8]> for SessionId {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct UnknownExtension {
+pub(crate) struct UnknownExtension {
     pub(crate) typ: ExtensionType,
     pub(crate) payload: Payload<'static>,
 }
@@ -2789,7 +2789,7 @@ impl TlsListElement for HpkeSymmetricCipherSuite {
 
 #[allow(clippy::exhaustive_structs)]
 #[derive(Clone, Debug, PartialEq)]
-pub struct HpkeKeyConfig {
+pub(crate) struct HpkeKeyConfig {
     pub config_id: u8,
     pub kem_id: HpkeKem,
     /// draft-ietf-tls-esni-24: `opaque HpkePublicKey<1..2^16-1>;`
@@ -2818,7 +2818,7 @@ impl Codec<'_> for HpkeKeyConfig {
 
 #[allow(clippy::exhaustive_structs)]
 #[derive(Clone, Debug, PartialEq)]
-pub struct EchConfigContents {
+pub(crate) struct EchConfigContents {
     pub key_config: HpkeKeyConfig,
     pub maximum_name_length: u8,
     pub public_name: DnsName<'static>,
@@ -2878,7 +2878,7 @@ impl Codec<'_> for EchConfigContents {
 /// An encrypted client hello (ECH) config.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]
-pub enum EchConfigPayload {
+pub(crate) enum EchConfigPayload {
     /// A recognized V18 ECH configuration.
     V18(EchConfigContents),
     /// An unknown version ECH configuration.
@@ -2929,7 +2929,7 @@ impl Codec<'_> for EchConfigPayload {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum EchConfigExtension {
+pub(crate) enum EchConfigExtension {
     Unknown(UnknownExtension),
 }
 

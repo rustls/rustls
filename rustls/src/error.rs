@@ -5,7 +5,7 @@ use core::fmt;
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
 
-use pki_types::{AlgorithmIdentifier, ServerName, UnixTime};
+use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 use webpki::KeyUsage;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
@@ -110,6 +110,12 @@ pub enum Error {
     /// [`CertifiedKey`]: crate::crypto::signer::CertifiedKey
     /// [`CertifiedKey::new_unchecked()`]: crate::crypto::signer::CertifiedKey::new_unchecked()
     InconsistentKeys(InconsistentKeys),
+
+    /// The server rejected encrypted client hello (ECH) negotiation
+    ///
+    /// It may have returned new ECH configurations that could be used to retry negotiation
+    /// with a fresh connection. See [`RejectedEch.can_retry()`].
+    RejectedEch(RejectedEch),
 
     /// Any other error.
     ///
@@ -355,7 +361,6 @@ pub enum PeerIncompatible {
     Tls13RequiredForQuic,
     UncompressedEcPointsRequired,
     UnsolicitedCertificateTypeExtension,
-    ServerRejectedEncryptedClientHello(Option<Vec<EchConfigPayload>>),
 }
 
 impl From<PeerIncompatible> for Error {
@@ -952,6 +957,38 @@ impl From<EncryptedClientHelloError> for Error {
     }
 }
 
+/// The server rejected the request to enable Encrypted Client Hello (ECH)
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq)]
+pub struct RejectedEch {
+    pub(crate) retry_configs: Option<Vec<EchConfigPayload>>,
+}
+
+impl RejectedEch {
+    /// Returns true if the server provided new ECH configurations to use for a fresh retry connection
+    pub fn can_retry(&self) -> bool {
+        self.retry_configs.is_some()
+    }
+
+    /// Returns an `EchConfigListBytes` with the server's provided retry configurations (if any)
+    pub fn retry_configs(&self) -> Option<EchConfigListBytes<'static>> {
+        let Some(retry_configs) = &self.retry_configs else {
+            return None;
+        };
+
+        let mut tls_encoded_list = Vec::new();
+        retry_configs.encode(&mut tls_encoded_list);
+
+        Some(EchConfigListBytes::from(tls_encoded_list))
+    }
+}
+
+impl From<RejectedEch> for Error {
+    fn from(rejected_error: RejectedEch) -> Self {
+        Self::RejectedEch(rejected_error)
+    }
+}
+
 fn join<T: fmt::Debug>(items: &[T]) -> String {
     items
         .iter()
@@ -1010,6 +1047,13 @@ impl fmt::Display for Error {
             }
             Self::InconsistentKeys(why) => {
                 write!(f, "keys may not be consistent: {why:?}")
+            }
+            Self::RejectedEch(why) => {
+                write!(
+                    f,
+                    "server rejected encrypted client hello (ECH) {} retry configs",
+                    if why.can_retry() { "with" } else { "without" }
+                )
             }
             Self::General(err) => write!(f, "unexpected error: {err}"),
             Self::Other(err) => write!(f, "other error: {err}"),
@@ -1087,6 +1131,8 @@ mod other_error {
 }
 
 pub use other_error::OtherError;
+
+use crate::msgs::codec::Codec;
 
 #[cfg(test)]
 mod tests {
