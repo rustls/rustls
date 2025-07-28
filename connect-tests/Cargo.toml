@@ -10,7 +10,6 @@ publish = false
 rustls = { path = "../rustls", features = ["log"] }
 
 [dev-dependencies]
-hickory-resolver = { workspace = true }
 regex = { workspace = true }
 ring = { workspace = true }
 tokio = { workspace = true }
