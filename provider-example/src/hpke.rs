@@ -6,12 +6,9 @@ use hpke_rs_crypto::HpkeCrypto;
 use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_rust_crypto::HpkeRustCrypto;
 use rustls::crypto::hpke::{
-    EncapsulatedSecret, Hpke, HpkeOpener, HpkePrivateKey, HpkePublicKey, HpkeSealer, HpkeSuite,
+    EncapsulatedSecret, Hpke, HpkeAead as HpkeAeadId, HpkeKdf as HpkeKdfId, HpkeKem as HpkeKemId,
+    HpkeOpener, HpkePrivateKey, HpkePublicKey, HpkeSealer, HpkeSuite, HpkeSymmetricCipherSuite,
 };
-use rustls::internal::msgs::enums::{
-    HpkeAead as HpkeAeadId, HpkeKdf as HpkeKdfId, HpkeKem as HpkeKemId, HpkeKem,
-};
-use rustls::internal::msgs::handshake::HpkeSymmetricCipherSuite;
 use rustls::{Error, OtherError};
 
 /// All supported HPKE suites.
@@ -163,8 +160,8 @@ impl Hpke for HpkeRs {
 
     fn generate_key_pair(&self) -> Result<(HpkePublicKey, HpkePrivateKey), Error> {
         let kem_algorithm = match self.0.kem {
-            HpkeKem::DHKEM_P256_HKDF_SHA256 => KemAlgorithm::DhKemP256,
-            HpkeKem::DHKEM_X25519_HKDF_SHA256 => KemAlgorithm::DhKem25519,
+            HpkeKemId::DHKEM_P256_HKDF_SHA256 => KemAlgorithm::DhKemP256,
+            HpkeKemId::DHKEM_X25519_HKDF_SHA256 => KemAlgorithm::DhKem25519,
             _ => {
                 // Safety: we don't expose HpkeRs static instances for unsupported algorithms.
                 unimplemented!()
