@@ -106,6 +106,55 @@ impl EchConfig {
                 Error::InvalidEncryptedClientHello(EncryptedClientHelloError::InvalidConfigList)
             })?;
 
+        Self::new_for_configs(ech_configs, hpke_suites)
+    }
+
+    /// Build an EchConfig for retrying ECH using a retry config from a server's previous rejection
+    ///
+    /// Returns an error if the server provided no retry configurations in `RejectedEch`, or if
+    /// none of the retry configurations are compatible with the supported `hpke_suites`.
+    pub fn for_retry(
+        rejection: RejectedEch,
+        hpke_suites: &[&'static dyn Hpke],
+    ) -> Result<Self, Error> {
+        let Some(configs) = rejection.retry_configs else {
+            return Err(EncryptedClientHelloError::NoCompatibleConfig.into());
+        };
+
+        Self::new_for_configs(configs, hpke_suites)
+    }
+
+    pub(super) fn state(
+        &self,
+        server_name: ServerName<'static>,
+        config: &ClientConfig,
+    ) -> Result<EchState, Error> {
+        EchState::new(
+            self,
+            server_name.clone(),
+            config
+                .client_auth_cert_resolver
+                .has_certs(),
+            config.provider.secure_random,
+            config.enable_sni,
+        )
+    }
+
+    /// Compute the HPKE `SetupBaseS` `info` parameter for this ECH configuration.
+    ///
+    /// See <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-6.1>.
+    pub(crate) fn hpke_info(&self) -> Vec<u8> {
+        let mut info = Vec::with_capacity(128);
+        // "tls ech" || 0x00 || ECHConfig
+        info.extend_from_slice(b"tls ech\0");
+        self.config.encode(&mut info);
+        info
+    }
+
+    fn new_for_configs(
+        ech_configs: Vec<EchConfigPayload>,
+        hpke_suites: &[&'static dyn Hpke],
+    ) -> Result<Self, Error> {
         // Note: we name the index var _i because if the log feature is disabled
         //       it is unused.
         #[cfg_attr(not(feature = "log"), allow(clippy::unused_enumerate_index))]
@@ -156,33 +205,6 @@ impl EchConfig {
         }
 
         Err(EncryptedClientHelloError::NoCompatibleConfig.into())
-    }
-
-    pub(super) fn state(
-        &self,
-        server_name: ServerName<'static>,
-        config: &ClientConfig,
-    ) -> Result<EchState, Error> {
-        EchState::new(
-            self,
-            server_name.clone(),
-            config
-                .client_auth_cert_resolver
-                .has_certs(),
-            config.provider.secure_random,
-            config.enable_sni,
-        )
-    }
-
-    /// Compute the HPKE `SetupBaseS` `info` parameter for this ECH configuration.
-    ///
-    /// See <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-6.1>.
-    pub(crate) fn hpke_info(&self) -> Vec<u8> {
-        let mut info = Vec::with_capacity(128);
-        // "tls ech" || 0x00 || ECHConfig
-        info.extend_from_slice(b"tls ech\0");
-        self.config.encode(&mut info);
-        info
     }
 }
 

@@ -114,7 +114,9 @@ pub enum Error {
     /// The server rejected encrypted client hello (ECH) negotiation
     ///
     /// It may have returned new ECH configurations that could be used to retry negotiation
-    /// with a fresh connection. See [`RejectedEch.can_retry()`].
+    /// with a fresh connection.
+    ///
+    /// See [`RejectedEch::can_retry()`] and [`crate::client::EchConfig::for_retry()`].
     RejectedEch(RejectedEch),
 
     /// Any other error.
@@ -958,6 +960,10 @@ impl From<EncryptedClientHelloError> for Error {
 }
 
 /// The server rejected the request to enable Encrypted Client Hello (ECH)
+///
+/// If [`RejectedEch.can_retry()`] is true, then you may use this with
+/// [`crate::client::EchConfig::for_retry()`] to build a new `EchConfig` for a fresh client
+/// connection that will use a compatible ECH configuration provided by the server for a retry.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub struct RejectedEch {
@@ -966,6 +972,10 @@ pub struct RejectedEch {
 
 impl RejectedEch {
     /// Returns true if the server provided new ECH configurations to use for a fresh retry connection
+    ///
+    /// The `RejectedEch` error can be provided to [`crate::client::EchConfig::for_retry()`]
+    /// to build a new `EchConfig` for a fresh client connection that will use a compatible ECH
+    /// configuration provided by the server for a retry.
     pub fn can_retry(&self) -> bool {
         self.retry_configs.is_some()
     }
