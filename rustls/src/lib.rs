@@ -453,17 +453,10 @@ pub mod internal {
             pub use crate::msgs::codec::{Codec, Reader};
         }
         pub mod enums {
-            pub use crate::msgs::enums::{
-                AlertLevel, EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem,
-            };
+            pub use crate::msgs::enums::{AlertLevel, ExtensionType};
         }
         pub mod fragmenter {
             pub use crate::msgs::fragmenter::MessageFragmenter;
-        }
-        pub mod handshake {
-            pub use crate::msgs::handshake::{
-                EchConfigContents, EchConfigPayload, HpkeKeyConfig, HpkeSymmetricCipherSuite,
-            };
         }
         pub mod message {
             pub use crate::msgs::message::{
