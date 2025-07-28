@@ -82,10 +82,6 @@ name = "client_cert_verifier"
 path = "tests/runners/client_cert_verifier.rs"
 
 [[test]]
-name = "ech"
-path = "tests/ech.rs"
-
-[[test]]
 name = "key_log_file_env"
 path = "tests/runners/key_log_file_env.rs"
 
