@@ -30,10 +30,6 @@ use rustls::{
 use rustls::{
     client::{EchConfig, EchGreaseConfig, EchMode},
     crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES,
-    internal::msgs::base::PayloadU16,
-    internal::msgs::handshake::{
-        EchConfigContents, EchConfigPayload, HpkeKeyConfig, HpkeSymmetricCipherSuite,
-    },
     pki_types::EchConfigListBytes,
 };
 use webpki::anchor_from_trusted_cert;
@@ -7028,27 +7024,17 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
     }
 
     for suite in ALL_SUPPORTED_SUITES {
-        let (public_key, _) = suite.generate_key_pair().unwrap();
-
         let suite_id = suite.suite();
-        let bogus_config = EchConfigPayload::V18(EchConfigContents {
-            key_config: HpkeKeyConfig {
-                config_id: 10,
-                kem_id: suite_id.kem,
-                public_key: PayloadU16::new(public_key.0.clone()),
-                symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite {
-                    kdf_id: suite_id.sym.kdf_id,
-                    aead_id: suite_id.sym.aead_id,
-                }],
-            },
-            maximum_name_length: 0,
-            public_name: DnsName::try_from("example.com").unwrap(),
-            extensions: vec![],
-        });
-        let mut bogus_config_bytes = Vec::new();
-        vec![bogus_config].encode(&mut bogus_config_bytes);
-        let ech_config =
-            EchConfig::new(EchConfigListBytes::from(bogus_config_bytes), &[*suite]).unwrap();
+        let config_path = format!(
+            "tests/data/{:?}-{:?}-{:?}-echconfigs.bin",
+            suite_id.kem, suite_id.sym.kdf_id, suite_id.sym.aead_id
+        );
+
+        let ech_config = EchConfig::new(
+            EchConfigListBytes::from(std::fs::read(&config_path).unwrap()),
+            &[*suite],
+        )
+        .unwrap();
 
         // A ECH client configuration should only be considered FIPS approved if the
         // ECH HPKE suite is itself FIPS approved.
@@ -7059,6 +7045,7 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
         assert_eq!(config.fips(), suite.fips());
 
         // The same applies if an ECH GREASE client configuration is used.
+        let (public_key, _) = suite.generate_key_pair().unwrap();
         let config = ClientConfig::builder_with_provider(provider::default_provider().into())
             .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)))
             .unwrap();
