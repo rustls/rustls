@@ -448,6 +448,13 @@ fn multithreaded(
     server_config: &Arc<ServerConfig>,
     f: impl Fn(Arc<ClientConfig>, Arc<ServerConfig>) -> Timings + Send + Sync,
 ) -> Vec<Timings> {
+    if count.get() == 1 {
+        // Use the current thread if possible; for mysterious reasons this is much
+        // faster for bulk tests on Intel, but makes little difference on AMD and
+        // elsewhere.
+        return vec![f(client_config.clone(), server_config.clone())];
+    }
+
     thread::scope(|s| {
         let threads = (0..count.into())
             .map(|_| {
