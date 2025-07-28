@@ -2576,7 +2576,6 @@ dependencies = [
 name = "rustls-connect-tests"
 version = "0.0.1"
 dependencies = [
- "hickory-resolver",
  "regex",
  "ring",
  "rustls",
