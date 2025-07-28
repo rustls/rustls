@@ -1,4 +1,3 @@
-use base64::prelude::{BASE64_STANDARD, Engine};
 use pki_types::DnsName;
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::enums::{EchVersion, HpkeAead, HpkeKdf, HpkeKem};
@@ -28,7 +27,7 @@ fn test_decode_config_list() {
         assert_eq!(config.symmetric_cipher_suites, cipher_suites);
     }
 
-    let config_list = get_ech_config(BASE64_ECHCONFIG_LIST_LOCALHOST);
+    let config_list = get_ech_config(ECHCONFIG_LIST_LOCALHOST);
     assert_eq!(config_list.len(), 1);
     let EchConfigPayload::V18(contents) = &config_list[0] else {
         panic!("unexpected ECH config version: {:?}", config_list[0]);
@@ -50,7 +49,7 @@ fn test_decode_config_list() {
         ],
     );
 
-    let config_list = get_ech_config(BASE64_ECHCONFIG_LIST_CF);
+    let config_list = get_ech_config(ECHCONFIG_LIST_CF);
     assert_eq!(config_list.len(), 2);
     let EchConfigPayload::V18(contents_a) = &config_list[0] else {
         panic!("unexpected ECH config version: {:?}", config_list[0]);
@@ -79,7 +78,7 @@ fn test_decode_config_list() {
         }],
     );
 
-    let config_list = get_ech_config(BASE64_ECHCONFIG_LIST_WITH_UNSUPPORTED);
+    let config_list = get_ech_config(ECHCONFIG_LIST_WITH_UNSUPPORTED);
     assert_eq!(config_list.len(), 4);
     // The first config should be unsupported.
     assert!(matches!(
@@ -97,29 +96,27 @@ fn test_decode_config_list() {
 
 #[test]
 fn test_echconfig_serialization() {
-    fn assert_round_trip_eq(data: &str) {
-        let configs = get_ech_config(data);
+    fn assert_round_trip_eq(original: &[u8]) {
+        let configs = get_ech_config(original);
         let mut output = Vec::new();
         configs.encode(&mut output);
-        assert_eq!(data, BASE64_STANDARD.encode(&output));
+        assert_eq!(original, output);
     }
 
-    assert_round_trip_eq(BASE64_ECHCONFIG_LIST_LOCALHOST);
-    assert_round_trip_eq(BASE64_ECHCONFIG_LIST_CF);
-    assert_round_trip_eq(BASE64_ECHCONFIG_LIST_WITH_UNSUPPORTED);
+    assert_round_trip_eq(ECHCONFIG_LIST_LOCALHOST);
+    assert_round_trip_eq(ECHCONFIG_LIST_CF);
+    assert_round_trip_eq(ECHCONFIG_LIST_WITH_UNSUPPORTED);
 }
 
-fn get_ech_config(s: &str) -> Vec<EchConfigPayload> {
-    let bytes = BASE64_STANDARD.decode(s).unwrap();
-    Vec::<_>::read(&mut Reader::init(&bytes)).unwrap()
+fn get_ech_config(encoded: &[u8]) -> Vec<EchConfigPayload> {
+    Vec::<_>::read(&mut Reader::init(encoded)).unwrap()
 }
 
 // One EchConfig, with server-name "localhost".
-const BASE64_ECHCONFIG_LIST_LOCALHOST: &str =
-    "AED+DQA8AAAgACAxoIJyV36iDlfFRmqE+ho2PxXE0EISPfUUJYKCy6T8VwAIAAEAAQABAAOACWxvY2FsaG9zdAAA";
+static ECHCONFIG_LIST_LOCALHOST: &[u8] = include_bytes!("data/localhost-echconfigs.bin");
 
 // Two EchConfigs, both with server-name "cloudflare-esni.com".
-const BASE64_ECHCONFIG_LIST_CF: &str = "AK3+DQBCwwAgACAJ9T5U4FeM6631r2bvAuGtmEd8zQaoTkFAtArTcMl/XQAEAAEAASUTY2xvdWRmbGFyZS1lc25pLmNvbQAA/g0AYwMAEABBBGGbUlGLuGRorUeFwmrgHImkrh9uxoPrnFKpS5bQvnc5grfMS3PvymQ2FYL02WQi1ZzZJg5OsYYdzlaGYnEoJNsABAABAAEqE2Nsb3VkZmxhcmUtZXNuaS5jb20AAA==";
+static ECHCONFIG_LIST_CF: &[u8] =  include_bytes!("data/cloudflare-esni-echconfigs.bin");
 
 // Three EchConfigs, the first one with an unsupported version.
-const BASE64_ECHCONFIG_LIST_WITH_UNSUPPORTED: &str = "AQW63QAFBQQDAgH+DQBmAAAQAEEE5itp4r9ln5e+Lx4NlIpM1Zdrt6keDUb73ampHp3culoB59aXqAoY+cPEox5W4nyDSNsWGhz1HX7xlC1Lz3IiwQAMAAEAAQABAAIAAQADQA5wdWJsaWMuZXhhbXBsZQAA/g0APQAAIAAgfWYWFXMCFK7ucFMzZvNqYJ6tZcDCCOYjIjRqtbzY3hwABBERIiJADnB1YmxpYy5leGFtcGxlAAD+DQBNAAAgACCFvWoDJ3wlQntS4mngx3qOtSS6HrPS8TJmLUsKxstzVwAMAAEAAQABAAIAAQADQA5wdWJsaWMuZXhhbXBsZQAIqqoABHRlc3Q=";
+static ECHCONFIG_LIST_WITH_UNSUPPORTED: &[u8] = include_bytes!("data/unsupported-then-valid-echconfigs.bin");
