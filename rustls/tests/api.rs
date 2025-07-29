@@ -2656,6 +2656,99 @@ fn client_complete_io_for_write() {
 }
 
 #[test]
+fn client_complete_io_with_nonblocking_io() {
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+
+    // absolutely no progress writing ClientHello
+    assert_eq!(
+        client
+            .complete_io(&mut TestNonBlockIo::default())
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::WouldBlock
+    );
+
+    // a little progress writing ClientHello
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    assert_eq!(
+        client
+            .complete_io(&mut TestNonBlockIo {
+                writes: vec![1],
+                reads: vec![],
+            })
+            .unwrap(),
+        (0, 1)
+    );
+
+    // complete writing ClientHello
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    assert_eq!(
+        client
+            .complete_io(&mut TestNonBlockIo {
+                writes: vec![4096],
+                reads: vec![],
+            })
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::WouldBlock
+    );
+
+    // complete writing ClientHello, partial read of ServerHello
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (rd, wr) = dbg!(client.complete_io(&mut TestNonBlockIo {
+        writes: vec![4096],
+        reads: vec![vec![ContentType::Handshake.into()]],
+    }))
+    .unwrap();
+    assert_eq!(rd, 1);
+    assert!(wr > 1);
+
+    // data phase:
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    do_handshake(&mut client, &mut server);
+
+    // read
+    assert_eq!(
+        client
+            .complete_io(&mut TestNonBlockIo {
+                reads: vec![vec![ContentType::ApplicationData.into()]],
+                writes: vec![],
+            })
+            .unwrap(),
+        (1, 0)
+    );
+
+    // write
+    client
+        .writer()
+        .write_all(b"hello")
+        .unwrap();
+
+    // no progress
+    assert_eq!(
+        client
+            .complete_io(&mut TestNonBlockIo {
+                reads: vec![],
+                writes: vec![],
+            })
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::WouldBlock
+    );
+
+    // some write progress
+    assert_eq!(
+        client
+            .complete_io(&mut TestNonBlockIo {
+                reads: vec![],
+                writes: vec![1],
+            })
+            .unwrap(),
+        (0, 1)
+    );
+}
+
+#[test]
 fn buffered_client_complete_io_for_write() {
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider) {
