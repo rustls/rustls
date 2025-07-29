@@ -603,6 +603,15 @@ impl<Data> ConnectionCommon<Data> {
                 return Ok((rdlen, wrlen));
             }
 
+            // If we want to write, but are WouldBlocked by the underlying IO, *and*
+            // have no desire to read; that is everything.
+            if let (Some(_), false) = (&blocked_write, self.wants_read()) {
+                return match wrlen {
+                    0 => Err(blocked_write.unwrap()),
+                    _ => Ok((rdlen, wrlen)),
+                };
+            }
+
             while !eof && self.wants_read() {
                 let read_size = match self.read_tls(io) {
                     Ok(0) => {
@@ -632,6 +641,15 @@ impl<Data> ConnectionCommon<Data> {
                 let _ignored = io.flush();
                 return Err(io::Error::new(io::ErrorKind::InvalidData, e));
             };
+
+            // If we want to read, but are WouldBlocked by the underlying IO, *and*
+            // have no desire to write; that is everything.
+            if let (Some(_), false) = (&blocked_read, self.wants_write()) {
+                return match rdlen {
+                    0 => Err(blocked_read.unwrap()),
+                    _ => Ok((rdlen, wrlen)),
+                };
+            }
 
             // if we're doing IO until handshaked, and we believe we've finished handshaking,
             // but process_new_packets() has queued TLS data to send, loop around again to write
