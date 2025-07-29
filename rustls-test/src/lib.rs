@@ -985,6 +985,70 @@ impl io::Read for FailsReads {
     }
 }
 
+/// An object that impls `io::Read` and `io::Write` for testing.
+///
+/// The `reads` and `writes` fields set the behaviour of these trait
+/// implementations.  They return the `WouldBlock` error if not otherwise
+/// configured -- `TestNonBlockIo::default()` does this permanently.
+///
+/// This object panics on drop if the configured expected reads/writes
+/// didn't take place.
+#[derive(Debug, Default)]
+pub struct TestNonBlockIo {
+    /// Each `write()` call is satisfied by inspecting this field.
+    ///
+    /// If it is empty, `WouldBlock` is returned.  Otherwise the write is
+    /// satisfied by popping a value and returning it (reduced by the size
+    /// of the write buffer, if needed).
+    pub writes: Vec<usize>,
+
+    /// Each `read()` call is satisfied by inspecting this field.
+    ///
+    /// If it is empty, `WouldBlock` is returned.  Otherwise the read is
+    /// satisfied by popping a value and copying it into the output
+    /// buffer.  Each value must be no longer than the buffer for that
+    /// call.
+    pub reads: Vec<Vec<u8>>,
+}
+
+impl io::Read for TestNonBlockIo {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        println!("read {:?}", buf.len());
+        match self.reads.pop() {
+            None => Err(io::ErrorKind::WouldBlock.into()),
+            Some(data) => {
+                assert!(data.len() <= buf.len());
+                let take = core::cmp::min(data.len(), buf.len());
+                buf[..take].clone_from_slice(&data[..take]);
+                Ok(take)
+            }
+        }
+    }
+}
+
+impl io::Write for TestNonBlockIo {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        println!("write {:?}", buf.len());
+        match self.writes.pop() {
+            None => Err(io::ErrorKind::WouldBlock.into()),
+            Some(n) => Ok(core::cmp::min(n, buf.len())),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        println!("flush");
+        Ok(())
+    }
+}
+
+impl Drop for TestNonBlockIo {
+    fn drop(&mut self) {
+        // ensure the object was exhausted as expected
+        assert!(self.reads.is_empty());
+        assert!(self.writes.is_empty());
+    }
+}
+
 pub fn do_suite_and_kx_test(
     client_config: ClientConfig,
     server_config: ServerConfig,
