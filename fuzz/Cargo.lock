@@ -275,7 +275,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.30"
+version = "0.23.31"
 dependencies = [
  "log",
  "once_cell",
