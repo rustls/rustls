@@ -661,9 +661,9 @@ impl<Data> ConnectionCommon<Data> {
             let blocked = blocked_write.zip(blocked_read);
             match (eof, until_handshaked, self.is_handshaking(), blocked) {
                 (_, true, false, _) => return Ok((rdlen, wrlen)),
+                (_, _, _, Some((e, _))) if rdlen == 0 && wrlen == 0 => return Err(e),
                 (_, false, _, _) => return Ok((rdlen, wrlen)),
                 (true, true, true, _) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
-                (_, _, _, Some((e, _))) => return Err(e),
                 _ => {}
             }
         }
