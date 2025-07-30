@@ -164,7 +164,8 @@
 //! # let root_store: rustls::RootCertStore = panic!();
 //! let config = rustls::ClientConfig::builder()
 //!     .with_root_certificates(root_store)
-//!     .with_no_client_auth();
+//!     .with_no_client_auth()
+//!     .unwrap();
 //! # }
 //! ```
 //!
@@ -184,7 +185,8 @@
 //! # );
 //! # let config = rustls::ClientConfig::builder()
 //! #     .with_root_certificates(root_store)
-//! #     .with_no_client_auth();
+//! #     .with_no_client_auth()
+//! #     .unwrap();
 //! let rc_config = Arc::new(config);
 //! let example_com = "example.com".try_into().unwrap();
 //! let mut client = rustls::ClientConnection::new(rc_config, example_com);
@@ -511,7 +513,7 @@ pub mod unbuffered {
 }
 
 // The public interface is:
-pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier, WantsVersions};
+pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
 #[cfg(feature = "std")]
 pub use crate::conn::{Connection, Reader, Writer};

@@ -114,11 +114,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Construct a rustls client config with a custom provider, and ECH enabled.
-    let mut config =
-        rustls::ClientConfig::builder_with_provider(aws_lc_rs::default_provider().into())
-            .with_ech(ech_mode)?
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
+    let mut config = rustls::ClientConfig::builder_with_provider(
+        aws_lc_rs::default_provider()
+            .with_only_tls13()
+            .into(),
+    )
+    .with_ech(ech_mode)
+    .with_root_certificates(root_store)
+    .with_no_client_auth()?;
 
     // Allow using SSLKEYLOGFILE.
     config.key_log = Arc::new(rustls::KeyLogFile::new());

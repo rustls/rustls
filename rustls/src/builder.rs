@@ -4,10 +4,8 @@ use core::marker::PhantomData;
 
 use crate::client::EchMode;
 use crate::crypto::CryptoProvider;
-use crate::error::Error;
 use crate::sync::Arc;
 use crate::time_provider::TimeProvider;
-use crate::versions;
 #[cfg(doc)]
 use crate::{ClientConfig, ServerConfig};
 
@@ -25,7 +23,7 @@ use crate::{ClientConfig, ServerConfig};
 /// The usual choice for protocol primitives is to call
 /// [`ClientConfig::builder`]/[`ServerConfig::builder`]
 /// which will use rustls' default cryptographic provider and safe defaults for ciphersuites and
-/// supported protocol versions.
+/// protocol versions.
 ///
 /// ```
 /// # #[cfg(feature = "aws-lc-rs")] {
@@ -41,29 +39,13 @@ use crate::{ClientConfig, ServerConfig};
 /// # }
 /// ```
 ///
-/// You may also override the choice of protocol versions:
-///
-/// ```no_run
-/// # #[cfg(feature = "aws-lc-rs")] {
-/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
-/// # use rustls::ServerConfig;
-/// ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
-/// //  ...
-/// # ;
-/// # }
-/// ```
-///
-/// Overriding the default cryptographic provider introduces a `Result` that must be unwrapped,
-/// because the config builder checks for consistency of the choices made. For instance, it's an error to
-/// configure only TLS 1.2 cipher suites while specifying that TLS 1.3 should be the only supported protocol
-/// version.
-///
-/// If you configure a smaller set of protocol primitives than the default, you may get a smaller binary,
-/// since the code for the unused ones can be optimized away at link time.
-///
-/// After choosing protocol primitives, you must choose (a) how to verify certificates and (b) what certificates
+/// After choosing the `CryptoProvider`, you must choose (a) how to verify certificates and (b) what certificates
 /// (if any) to send to the peer. The methods to do this are specific to whether you're building a ClientConfig
 /// or a ServerConfig, as tracked by the [`ConfigSide`] type parameter on the various impls of ConfigBuilder.
+///
+/// A `Result<ClientConfig, Error>` or `Result<ServerConfig, Error>`is the outcome of the builder process.
+/// The error is used to report consistency problems with the configuration. For example, it's an error
+/// to have a `CryptoProvider` that has no cipher suites.
 ///
 /// # ClientConfig certificate configuration
 ///
@@ -86,7 +68,8 @@ use crate::{ClientConfig, ServerConfig};
 /// # let root_certs = rustls::RootCertStore::empty();
 /// ClientConfig::builder()
 ///     .with_root_certificates(root_certs)
-///     .with_no_client_auth();
+///     .with_no_client_auth()
+///     .unwrap();
 /// # }
 /// ```
 ///
@@ -114,7 +97,7 @@ use crate::{ClientConfig, ServerConfig};
 /// ServerConfig::builder()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
-///     .expect("bad certificate/key");
+///     .expect("bad certificate/key/provider");
 /// # }
 /// ```
 ///
@@ -124,7 +107,6 @@ use crate::{ClientConfig, ServerConfig};
 /// configuration item is provided exactly once. This is tracked in the `State` type parameter,
 /// which can have these values:
 ///
-/// - [`WantsVersions`]
 /// - [`WantsVerifier`]
 /// - [`WantsClientCert`]
 /// - [`WantsServerCert`]
@@ -187,58 +169,11 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
     }
 }
 
-/// Config builder state where the caller must supply TLS protocol versions.
-///
-/// For more information, see the [`ConfigBuilder`] documentation.
-#[non_exhaustive]
-#[derive(Clone, Debug)]
-pub struct WantsVersions {}
-
-impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
-    /// Accept the default protocol versions: both TLS1.2 and TLS1.3 are enabled.
-    pub fn with_safe_default_protocol_versions(
-        self,
-    ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
-        self.with_protocol_versions(versions::DEFAULT_VERSIONS)
-    }
-
-    /// Use a specific set of protocol versions.
-    pub fn with_protocol_versions(
-        self,
-        versions: &[&'static versions::SupportedProtocolVersion],
-    ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
-        let mut any_usable_suite = false;
-        for suite in &self.provider.cipher_suites {
-            if versions.contains(&&suite.version()) {
-                any_usable_suite = true;
-                break;
-            }
-        }
-
-        if !any_usable_suite {
-            return Err(Error::General("no usable cipher suites configured".into()));
-        }
-
-        self.provider.consistency_check()?;
-
-        Ok(ConfigBuilder {
-            state: WantsVerifier {
-                versions: versions::EnabledVersions::new(versions),
-                client_ech_mode: None,
-            },
-            provider: self.provider,
-            time_provider: self.time_provider,
-            side: self.side,
-        })
-    }
-}
-
 /// Config builder state where the caller must supply a verifier.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
 pub struct WantsVerifier {
-    pub(crate) versions: versions::EnabledVersions,
     pub(crate) client_ech_mode: Option<EchMode>,
 }
 

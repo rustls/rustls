@@ -55,6 +55,7 @@ mod client {
             .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
                 certified_key,
             )))
+            .unwrap()
     }
 
     /// Run the client and connect to the server at the specified port.
@@ -200,6 +201,7 @@ mod server {
         ServerConfig::builder()
             .with_client_cert_verifier(client_cert_verifier)
             .with_cert_resolver(server_cert_resolver)
+            .unwrap()
     }
 
     /// Run the server at the specified port and accept a connection from the client.

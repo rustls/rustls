@@ -9,7 +9,7 @@ use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
-use crate::{NoKeyLog, compress, versions};
+use crate::{NoKeyLog, compress};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {
     /// Choose how to verify client certificates.
@@ -19,7 +19,6 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
     ) -> ConfigBuilder<ServerConfig, WantsServerCert> {
         ConfigBuilder {
             state: WantsServerCert {
-                versions: self.state.versions,
                 verifier: client_cert_verifier,
             },
             provider: self.provider,
@@ -40,7 +39,6 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
 pub struct WantsServerCert {
-    versions: versions::EnabledVersions,
     verifier: Arc<dyn ClientCertVerifier>,
 }
 
@@ -68,7 +66,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
         let certified_key = CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
-        Ok(self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key))))
+        self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 
     /// Sets a single certificate chain, matching private key and optional OCSP
@@ -93,12 +91,16 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         let mut certified_key =
             CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
         certified_key.ocsp = Some(ocsp);
-        Ok(self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key))))
+        self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 
     /// Sets a custom [`ResolvesServerCert`].
-    pub fn with_cert_resolver(self, cert_resolver: Arc<dyn ResolvesServerCert>) -> ServerConfig {
-        ServerConfig {
+    pub fn with_cert_resolver(
+        self,
+        cert_resolver: Arc<dyn ResolvesServerCert>,
+    ) -> Result<ServerConfig, Error> {
+        self.provider.consistency_check()?;
+        Ok(ServerConfig {
             provider: self.provider,
             verifier: self.state.verifier,
             cert_resolver,
@@ -110,7 +112,6 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             session_storage: Arc::new(handy::NoServerSessionStorage {}),
             ticketer: Arc::new(handy::NeverProducesTickets {}),
             alpn_protocols: Vec::new(),
-            versions: self.state.versions,
             key_log: Arc::new(NoKeyLog {}),
             enable_secret_extraction: false,
             max_early_data_size: 0,
@@ -121,6 +122,6 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
-        }
+        })
     }
 }

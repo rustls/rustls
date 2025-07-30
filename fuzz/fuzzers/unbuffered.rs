@@ -20,11 +20,10 @@ fuzz_target!(|data: &[u8]| {
 
 fn client(data: &mut [u8]) {
     let config = ClientConfig::builder_with_provider(rustls_fuzzing_provider::provider().into())
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .dangerous()
         .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
-        .with_no_client_auth();
+        .with_no_client_auth()
+        .unwrap();
     let conn =
         UnbufferedClientConnection::new(config.into(), "localhost".try_into().unwrap()).unwrap();
     fuzz_unbuffered(data, ClientServer::Client(conn));
@@ -32,10 +31,9 @@ fn client(data: &mut [u8]) {
 
 fn server(data: &mut [u8]) {
     let config = ServerConfig::builder_with_provider(rustls_fuzzing_provider::provider().into())
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .with_no_client_auth()
-        .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver());
+        .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver())
+        .unwrap();
     let conn = UnbufferedServerConnection::new(config.into()).unwrap();
     fuzz_unbuffered(data, ClientServer::Server(conn));
 }
