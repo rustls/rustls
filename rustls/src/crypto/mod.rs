@@ -8,6 +8,7 @@ use zeroize::Zeroize;
 #[cfg(doc)]
 use crate::Tls12CipherSuite;
 use crate::msgs::ffdhe_groups::FfdheGroup;
+use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;
 use crate::sign::SigningKey;
 use crate::sync::Arc;
 pub use crate::webpki::{
@@ -344,6 +345,47 @@ See the documentation of the CryptoProvider type for more information.
             cipher_suites,
             ..self
         }
+    }
+
+    pub(crate) fn consistency_check(&self) -> Result<(), Error> {
+        if self.cipher_suites.is_empty() {
+            return Err(Error::General("no cipher suites configured".into()));
+        }
+
+        if self.kx_groups.is_empty() {
+            return Err(Error::General("no kx groups configured".into()));
+        }
+
+        // verifying cipher suites have matching kx groups
+        let mut supported_kx_algos = Vec::with_capacity(ALL_KEY_EXCHANGE_ALGORITHMS.len());
+        for group in self.kx_groups.iter() {
+            let kx = group.name().key_exchange_algorithm();
+            if !supported_kx_algos.contains(&kx) {
+                supported_kx_algos.push(kx);
+            }
+            // Small optimization. We don't need to go over other key exchange groups
+            // if we already cover all supported key exchange algorithms
+            if supported_kx_algos.len() == ALL_KEY_EXCHANGE_ALGORITHMS.len() {
+                break;
+            }
+        }
+
+        for cs in self.cipher_suites.iter() {
+            let cs_kx = cs.key_exchange_algorithms();
+            if cs_kx
+                .iter()
+                .any(|kx| supported_kx_algos.contains(kx))
+            {
+                continue;
+            }
+            let suite_name = cs.common().suite;
+            return Err(Error::General(alloc::format!(
+                "Ciphersuite {suite_name:?} requires {cs_kx:?} key exchange, but no {cs_kx:?}-compatible \
+                key exchange groups were present in `CryptoProvider`'s `kx_groups` field",
+            )));
+        }
+
+        Ok(())
     }
 }
 
