@@ -52,10 +52,9 @@ mod tests {
                 .with_only_tls13()
                 .into(),
         )
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .with_root_certificates(roots())
-        .with_no_client_auth();
+        .with_no_client_auth()
+        .unwrap();
         config.resumption = Resumption::in_memory_sessions(128)
             .tls12_resumption(Tls12Resumption::SessionIdOrTickets);
         let ch = client_hello_sent_for_config(config).unwrap();
@@ -70,10 +69,9 @@ mod tests {
                     .with_only_tls13()
                     .into(),
             )
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_root_certificates(roots())
-            .with_no_client_auth(),
+            .with_no_client_auth()
+            .unwrap(),
         )
         .unwrap();
         assert!(
@@ -89,10 +87,9 @@ mod tests {
             super::provider::default_provider().with_only_tls13(),
         ] {
             let config = ClientConfig::builder_with_provider(provider.into())
-                .with_safe_default_protocol_versions()
-                .unwrap()
                 .with_root_certificates(roots())
-                .with_no_client_auth();
+                .with_no_client_auth()
+                .unwrap();
             let ch = client_hello_sent_for_config(config).unwrap();
             assert!(
                 !ch.extensions
@@ -109,10 +106,9 @@ mod tests {
     fn test_client_rejects_hrr_with_varied_session_id() {
         let config =
             ClientConfig::builder_with_provider(super::provider::default_provider().into())
-                .with_safe_default_protocol_versions()
-                .unwrap()
                 .with_root_certificates(roots())
-                .with_no_client_auth();
+                .with_no_client_auth()
+                .unwrap();
         let mut conn =
             ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())
                 .unwrap();
@@ -147,10 +143,9 @@ mod tests {
     fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
         let mut config =
             ClientConfig::builder_with_provider(super::provider::default_provider().into())
-                .with_safe_default_protocol_versions()
-                .unwrap()
                 .with_root_certificates(roots())
-                .with_no_client_auth();
+                .with_no_client_auth()
+                .unwrap();
         if config.provider.fips() {
             assert!(config.require_ems);
         } else {
@@ -199,11 +194,10 @@ mod tests {
         ] {
             let client_hello = client_hello_sent_for_config(
                 ClientConfig::builder_with_provider(provider.into())
-                    .with_safe_default_protocol_versions()
-                    .unwrap()
                     .dangerous()
                     .with_custom_certificate_verifier(Arc::new(cas_sending_server_verifier.clone()))
-                    .with_no_client_auth(),
+                    .with_no_client_auth()
+                    .unwrap(),
             )
             .unwrap();
             assert_eq!(
@@ -221,11 +215,10 @@ mod tests {
     fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         let verifier = Arc::new(ExpectSha1EcdsaVerifier::default());
         let config = ClientConfig::builder_with_provider(x25519_provider().into())
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .dangerous()
             .with_custom_certificate_verifier(verifier.clone())
-            .with_no_client_auth();
+            .with_no_client_auth()
+            .unwrap();
 
         let mut conn =
             ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())
@@ -465,13 +458,12 @@ mod tests {
                 .with_only_tls13()
                 .into(),
         )
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
         .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(Arc::new(
             client_certified_key(),
-        ))));
+        ))))
+        .unwrap();
         config.key_log = key_log;
         config
     }
@@ -658,10 +650,9 @@ mod tests {
 fn hybrid_kx_component_share_offered_if_supported_separately() {
     let ch = client_hello_sent_for_config(
         ClientConfig::builder_with_provider(crate::crypto::aws_lc_rs::default_provider().into())
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_root_certificates(roots())
-            .with_no_client_auth(),
+            .with_no_client_auth()
+            .unwrap(),
     )
     .unwrap();
 
@@ -685,10 +676,9 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
     };
     let ch = client_hello_sent_for_config(
         ClientConfig::builder_with_provider(provider.into())
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_root_certificates(roots())
-            .with_no_client_auth(),
+            .with_no_client_auth()
+            .unwrap(),
     )
     .unwrap();
 

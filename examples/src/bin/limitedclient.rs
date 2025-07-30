@@ -25,10 +25,9 @@ fn main() {
         }
         .into(),
     )
-    .with_protocol_versions(&[&rustls::version::TLS13])
-    .unwrap()
     .with_root_certificates(root_store)
-    .with_no_client_auth();
+    .with_no_client_auth()
+    .unwrap();
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();

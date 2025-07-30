@@ -6,31 +6,28 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{ClientConfig, EchMode, ResolvesClientCert, handy};
+use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
-use crate::versions::TLS13;
 use crate::webpki::{self, WebPkiServerVerifier};
-use crate::{WantsVersions, compress, verify, versions};
+use crate::{compress, verify};
 
-impl ConfigBuilder<ClientConfig, WantsVersions> {
+impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Enable Encrypted Client Hello (ECH) in the given mode.
     ///
-    /// This implicitly selects TLS 1.3 as the only supported protocol version to meet the
-    /// requirement to support ECH.
+    /// This requires TLS 1.3 as the only supported protocol version to meet the requirement
+    /// to support ECH.  At the end, the config building process will return an error if either
+    /// TLS1.3 _is not_ supported by the provider, or TLS1.2 _is_ supported.
     ///
     /// The `ClientConfig` that will be produced by this builder will be specific to the provided
     /// [`crate::client::EchConfig`] and may not be appropriate for all connections made by the program.
     /// In this case the configuration should only be shared by connections intended for domains
     /// that offer the provided [`crate::client::EchConfig`] in their DNS zone.
-    pub fn with_ech(
-        self,
-        mode: EchMode,
-    ) -> Result<ConfigBuilder<ClientConfig, WantsVerifier>, Error> {
-        let mut res = self.with_protocol_versions(&[&TLS13][..])?;
-        res.state.client_ech_mode = Some(mode);
-        Ok(res)
+    pub fn with_ech(mut self, mode: EchMode) -> Self {
+        self.state.client_ech_mode = Some(mode);
+        self
     }
 }
 
@@ -70,7 +67,6 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         ConfigBuilder {
             state: WantsClientCert {
-                versions: self.state.versions,
                 verifier,
                 client_ech_mode: self.state.client_ech_mode,
             },
@@ -110,7 +106,6 @@ pub(super) mod danger {
         ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
             ConfigBuilder {
                 state: WantsClientCert {
-                    versions: self.cfg.state.versions,
                     verifier,
                     client_ech_mode: self.cfg.state.client_ech_mode,
                 },
@@ -128,7 +123,6 @@ pub(super) mod danger {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone)]
 pub struct WantsClientCert {
-    versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
     client_ech_mode: Option<EchMode>,
 }
@@ -149,11 +143,11 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
         let certified_key = CertifiedKey::from_der(cert_chain, key_der, &self.provider)?;
-        Ok(self.with_client_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key))))
+        self.with_client_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 
     /// Do not support client auth.
-    pub fn with_no_client_auth(self) -> ClientConfig {
+    pub fn with_no_client_auth(self) -> Result<ClientConfig, Error> {
         self.with_client_cert_resolver(Arc::new(handy::FailResolveClientCert {}))
     }
 
@@ -161,14 +155,35 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     pub fn with_client_cert_resolver(
         self,
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
-    ) -> ClientConfig {
-        ClientConfig {
+    ) -> Result<ClientConfig, Error> {
+        self.provider.consistency_check()?;
+
+        if self.state.client_ech_mode.is_some() {
+            if !self
+                .provider
+                .cipher_suites
+                .iter()
+                .any(|cs| cs.version().version() == ProtocolVersion::TLSv1_3)
+            {
+                return Err(Error::General("ECH requires TLS1.3 support".into()));
+            }
+
+            if self
+                .provider
+                .cipher_suites
+                .iter()
+                .any(|cs| cs.version().version() == ProtocolVersion::TLSv1_2)
+            {
+                return Err(Error::General("ECH forbids TLS1.2 support".into()));
+            }
+        }
+
+        Ok(ClientConfig {
             provider: self.provider,
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
             max_fragment_size: None,
             client_auth_cert_resolver,
-            versions: self.state.versions,
             enable_sni: true,
             verifier: self.state.verifier,
             key_log: Arc::new(NoKeyLog {}),
@@ -180,6 +195,6 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
             ech_mode: self.state.client_ech_mode,
-        }
+        })
     }
 }

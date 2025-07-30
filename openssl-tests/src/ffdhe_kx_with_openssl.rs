@@ -149,10 +149,9 @@ fn client_config_with_ffdhe_kx() -> ClientConfig {
             .with_only_tls13()
             .into(),
     )
-    .with_safe_default_protocol_versions()
-    .unwrap()
     .with_root_certificates(root_ca())
     .with_no_client_auth()
+    .unwrap()
 }
 
 // TLS 1.2 requires stripping leading zeros of the shared secret,
@@ -210,8 +209,6 @@ fn ffdhe_provider() -> CryptoProvider {
 
 fn server_config_with_ffdhe_kx(provider: CryptoProvider) -> ServerConfig {
     ServerConfig::builder_with_provider(provider.into())
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .with_no_client_auth()
         .with_single_cert(load_certs(), load_private_key())
         .unwrap()

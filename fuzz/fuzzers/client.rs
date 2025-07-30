@@ -12,11 +12,10 @@ fuzz_target!(|data: &[u8]| {
     let _ = env_logger::try_init();
     let config = Arc::new(
         ClientConfig::builder_with_provider(rustls_fuzzing_provider::provider().into())
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .dangerous()
             .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
-            .with_no_client_auth(),
+            .with_no_client_auth()
+            .unwrap(),
     );
     let hostname = "localhost".try_into().unwrap();
     let mut client = ClientConnection::new(config, hostname).unwrap();
