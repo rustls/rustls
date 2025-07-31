@@ -778,6 +778,24 @@ impl<Data> ConnectionCommon<Data> {
         res
     }
 
+    /// XXX: Use of this function means the `has_seen_eof` parameter is wrong
+    pub fn put_tls(&mut self, data: Box<[u8]>) -> Result<usize, io::Error> {
+        if self.received_plaintext.is_full() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "received plaintext buffer full",
+            ));
+        }
+
+        if self.has_received_close_notify {
+            return Ok(0);
+        }
+
+        let len = data.len();
+        self.deframer_buffer.append(data);
+        Ok(len)
+    }
+
     /// Writes TLS messages to `wr`.
     ///
     /// On success, this function returns `Ok(n)` where `n` is a number of bytes written to `wr`

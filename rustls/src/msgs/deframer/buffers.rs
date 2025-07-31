@@ -265,6 +265,15 @@ impl DeframerVecBuffer {
         self.used += len;
         Range { start, end }
     }
+
+    pub(crate) fn append(&mut self, data: alloc::boxed::Box<[u8]>) {
+        if self.used == 0 {
+            self.buf = data.into_vec();
+            self.used = self.buf.len();
+        } else {
+            self.extend(&data);
+        }
+    }
 }
 
 /// A borrowed version of [`DeframerVecBuffer`] that tracks discard operations
