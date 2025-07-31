@@ -1363,45 +1363,38 @@ where
     let mut data_left = expect_data;
 
     loop {
-        let mut buf = match left.take_tls() {
+        let buf = match left.take_tls() {
             None => return read_time,
             Some(buf) => buf,
         };
 
-        let mut offs = 0;
-        loop {
-            let start = Instant::now();
-            match right.read_tls(&mut buf[offs..].as_ref()) {
-                Ok(read) => {
-                    right.process_new_packets().unwrap();
-                    offs += read;
-                }
-                Err(err) => {
-                    panic!("error on transfer {offs}..{}: {err}", buf.len());
-                }
+        let start = Instant::now();
+        match right.put_tls(buf) {
+            Ok(_) => {
+                right.process_new_packets().unwrap();
             }
-
-            if let Some(left) = &mut data_left {
-                loop {
-                    let sz = match right.reader().read(&mut buf[..offs]) {
-                        Ok(sz) => sz,
-                        Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
-                        Err(err) => panic!("failed to read data: {err}"),
-                    };
-
-                    *left -= sz;
-                    if *left == 0 {
-                        break;
-                    }
-                }
-            }
-
-            let end = Instant::now();
-            read_time += duration_nanos(end.duration_since(start));
-            if buf.len() == offs {
-                break;
+            Err(err) => {
+                panic!("error on transfer: {err}");
             }
         }
+
+        if let Some(left) = &mut data_left {
+            loop {
+                let sz = match right.reader().read(&mut [0; 16_384]) {
+                    Ok(sz) => sz,
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
+                    Err(err) => panic!("failed to read data: {err}"),
+                };
+
+                *left -= sz;
+                if *left == 0 {
+                    break;
+                }
+            }
+        }
+
+        let end = Instant::now();
+        read_time += duration_nanos(end.duration_since(start));
     }
 }
 
