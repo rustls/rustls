@@ -788,6 +788,33 @@ impl<Data> ConnectionCommon<Data> {
     pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
         self.sendable_tls.write_to(wr)
     }
+
+    /// Takes an unspecified amount of TLS data in one chunk.
+    ///
+    /// This function is similar to [`ConnectionCommon::write_tls()`] except
+    /// the data is moved to the caller, rather than copied across the `std::io::Write`
+    /// interface.  This is more efficient as it avoids a copy.  However, beware
+    /// that if you are eventually writing this to (for example) a socket using the
+    ///  `send(2)` system call you are just moving the copy around by using this.
+    ///
+    /// The caller must not expect or require that the returned data is one TLS
+    /// message, or have any expectation that the message is any particular size.
+    /// However, it will be non-empty.
+    ///
+    /// If `Some(_)` is returned, the caller is responsible for writing the entirety
+    /// of that message to the underlying transport ordered before the next one.
+    /// The caller can call this function as many times as it likes to collect
+    /// all pending data, so long as this ordering constraint is maintained.
+    ///
+    /// `None` is returned if there is no pending data.
+    ///
+    /// Mixing use of this function with [`ConnectionCommon::write_tls()`] is safe
+    /// and produces correct results, but may not be as efficient as desired.
+    pub fn take_tls(&mut self) -> Option<Box<[u8]>> {
+        self.sendable_tls
+            .take_one()
+            .map(alloc::vec::Vec::into_boxed_slice)
+    }
 }
 
 impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {

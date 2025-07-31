@@ -219,6 +219,21 @@ impl ChunkVecBuffer {
         Ok(used)
     }
 
+    pub(crate) fn take_one(&mut self) -> Option<Vec<u8>> {
+        self.chunks
+            .pop_front()
+            .map(|mut chunk| {
+                match mem::take(&mut self.prefix_used) {
+                    0 => {}
+                    // this is the costly case alluded to by `Connection::take_tls()`
+                    prefix => {
+                        chunk.drain(0..prefix);
+                    }
+                };
+                chunk
+            })
+    }
+
     /// Returns the first contiguous chunk of data, or None if empty.
     pub(crate) fn chunk(&self) -> Option<&[u8]> {
         self.chunks
