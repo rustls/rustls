@@ -26,10 +26,10 @@ use std::{process, str};
 
 use clap::Parser;
 use mio::net::TcpStream;
-use rustls::RootCertStore;
 use rustls::crypto::{CryptoProvider, SupportedKxGroup, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use rustls::{ProtocolVersion, RootCertStore};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -274,6 +274,36 @@ struct Args {
     hostname: String,
 }
 
+impl Args {
+    fn provider(&self) -> CryptoProvider {
+        let cipher_suites = if !self.suite.is_empty() {
+            lookup_suites(&self.suite)
+        } else {
+            provider::DEFAULT_CIPHER_SUITES.to_vec()
+        };
+
+        let kx_groups = match self.key_exchange.as_slice() {
+            [] => provider::DEFAULT_KX_GROUPS.to_vec(),
+            items => items
+                .iter()
+                .map(|kx| find_key_exchange(kx))
+                .collect::<Vec<&'static dyn SupportedKxGroup>>(),
+        };
+
+        let provider = CryptoProvider {
+            cipher_suites,
+            kx_groups,
+            ..provider::default_provider()
+        };
+
+        match lookup_versions(&self.protover).as_slice() {
+            [ProtocolVersion::TLSv1_2] => provider.with_only_tls12(),
+            [ProtocolVersion::TLSv1_3] => provider.with_only_tls13(),
+            _ => provider,
+        }
+    }
+}
+
 /// Find a ciphersuite with the given name
 fn find_suite(name: &str) -> Option<rustls::SupportedCipherSuite> {
     for suite in provider::ALL_CIPHER_SUITES {
@@ -316,16 +346,18 @@ fn lookup_suites(suites: &[String]) -> Vec<rustls::SupportedCipherSuite> {
 }
 
 /// Make a vector of protocol versions named in `versions`
-fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtocolVersion> {
+fn lookup_versions(versions: &[String]) -> Vec<ProtocolVersion> {
     let mut out = Vec::new();
 
     for vname in versions {
         let version = match vname.as_ref() {
-            "1.2" => &rustls::version::TLS12,
-            "1.3" => &rustls::version::TLS13,
+            "1.2" => ProtocolVersion::TLSv1_2,
+            "1.3" => ProtocolVersion::TLSv1_3,
             _ => panic!("cannot look up version '{vname}', valid are '1.2' and '1.3'"),
         };
-        out.push(version);
+        if !out.contains(&version) {
+            out.push(version);
+        }
     }
 
     out
@@ -427,37 +459,10 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         );
     }
 
-    let suites = if !args.suite.is_empty() {
-        lookup_suites(&args.suite)
-    } else {
-        provider::DEFAULT_CIPHER_SUITES.to_vec()
-    };
-
-    let kx_groups = match args.key_exchange.as_slice() {
-        [] => provider::DEFAULT_KX_GROUPS.to_vec(),
-        items => items
-            .iter()
-            .map(|kx| find_key_exchange(kx))
-            .collect::<Vec<&'static dyn SupportedKxGroup>>(),
-    };
-
-    let versions = if !args.protover.is_empty() {
-        lookup_versions(&args.protover)
-    } else {
-        rustls::DEFAULT_VERSIONS.to_vec()
-    };
-
-    let config = rustls::ClientConfig::builder_with_provider(
-        CryptoProvider {
-            cipher_suites: suites,
-            kx_groups,
-            ..provider::default_provider()
-        }
-        .into(),
-    )
-    .with_protocol_versions(&versions)
-    .expect("inconsistent cipher-suite/versions selected")
-    .with_root_certificates(root_store);
+    let config = rustls::ClientConfig::builder_with_provider(args.provider().into())
+        .with_safe_default_protocol_versions()
+        .expect("inconsistent cipher-suite/versions selected")
+        .with_root_certificates(root_store);
 
     let mut config = match (&args.auth_key, &args.auth_certs) {
         (Some(key_file), Some(certs_file)) => {

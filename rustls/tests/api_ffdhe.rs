@@ -1,12 +1,11 @@
 //! This file contains tests that use the test-only FFDHE KX group (defined in submodule `ffdhe`)
 
-#![allow(clippy::duplicate_mod)]
+#![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 mod common;
 use common::*;
 use rustls::crypto::CryptoProvider;
-use rustls::version::{TLS12, TLS13};
-use rustls::{CipherSuite, ClientConfig, NamedGroup};
+use rustls::{CipherSuite, ClientConfig, NamedGroup, ProtocolVersion};
 
 use super::*;
 
@@ -37,23 +36,32 @@ fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups(
 #[test]
 fn ffdhe_ciphersuite() {
     use provider::cipher_suite;
-    use rustls::version::{TLS12, TLS13};
 
     let test_cases = [
-        (&TLS12, ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256),
-        (&TLS13, cipher_suite::TLS13_CHACHA20_POLY1305_SHA256),
+        (
+            ProtocolVersion::TLSv1_2,
+            ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+        ),
+        (
+            ProtocolVersion::TLSv1_3,
+            cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        ),
     ];
 
     for (expected_protocol, expected_cipher_suite) in test_cases {
+        let provider = Arc::new(CryptoProvider {
+            cipher_suites: vec![expected_cipher_suite],
+            ..ffdhe::ffdhe_provider()
+        });
         let client_config = finish_client_config(
             KeyType::Rsa2048,
-            rustls::ClientConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
-                .with_protocol_versions(&[expected_protocol])
+            rustls::ClientConfig::builder_with_provider(provider.clone())
+                .with_safe_default_protocol_versions()
                 .unwrap(),
         );
         let server_config = finish_server_config(
             KeyType::Rsa2048,
-            rustls::ServerConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
+            rustls::ServerConfig::builder_with_provider(provider)
                 .with_safe_default_protocol_versions()
                 .unwrap(),
         );
@@ -62,7 +70,7 @@ fn ffdhe_ciphersuite() {
             server_config,
             expected_cipher_suite,
             NamedGroup::FFDHE2048,
-            expected_protocol.version(),
+            expected_protocol,
         );
     }
 }
@@ -152,7 +160,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
                 provider::kx_group::SECP256R1,
                 &ffdhe::FFDHE2048_KX_GROUP,
             ],
-            &TLS12,
+            ProtocolVersion::TLSv1_2,
             CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             Some(NamedGroup::secp256r1),
         ),
@@ -162,7 +170,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
                 provider::kx_group::SECP256R1,
                 &ffdhe::FFDHE3072_KX_GROUP,
             ],
-            &TLS12,
+            ProtocolVersion::TLSv1_2,
             CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             Some(NamedGroup::secp256r1),
         ),
@@ -172,7 +180,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
                 // this matches:
                 &ffdhe::FFDHE2048_KX_GROUP,
             ],
-            &TLS12,
+            ProtocolVersion::TLSv1_2,
             CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
             Some(NamedGroup::FFDHE2048),
         ),
@@ -183,7 +191,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
                 provider::kx_group::SECP256R1,
                 &ffdhe::FFDHE2048_KX_GROUP,
             ],
-            &TLS13,
+            ProtocolVersion::TLSv1_3,
             CipherSuite::TLS13_AES_128_GCM_SHA256,
             Some(NamedGroup::secp256r1),
         ),
@@ -193,7 +201,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
                 provider::kx_group::SECP256R1,
                 &ffdhe::FFDHE3072_KX_GROUP,
             ],
-            &TLS13,
+            ProtocolVersion::TLSv1_3,
             CipherSuite::TLS13_AES_128_GCM_SHA256,
             Some(NamedGroup::secp256r1),
         ),
@@ -203,29 +211,32 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
                 // this matches:
                 &ffdhe::FFDHE2048_KX_GROUP,
             ],
-            &TLS13,
+            ProtocolVersion::TLSv1_3,
             CipherSuite::TLS13_AES_128_GCM_SHA256,
             Some(NamedGroup::FFDHE2048),
         ),
     ];
 
     for (client_kx_groups, protocol_version, expected_cipher_suite, expected_group) in test_cases {
+        let provider = CryptoProvider {
+            cipher_suites: vec![
+                provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+                provider::cipher_suite::TLS13_AES_128_GCM_SHA256,
+            ],
+            kx_groups: client_kx_groups,
+            ..provider::default_provider()
+        };
+        let provider = match protocol_version {
+            ProtocolVersion::TLSv1_2 => provider.with_only_tls12(),
+            ProtocolVersion::TLSv1_3 => provider.with_only_tls13(),
+            _ => unreachable!(),
+        };
         let client_config = finish_client_config(
             KeyType::Rsa2048,
-            rustls::ClientConfig::builder_with_provider(
-                CryptoProvider {
-                    cipher_suites: vec![
-                        provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-                        ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-                        provider::cipher_suite::TLS13_AES_128_GCM_SHA256,
-                    ],
-                    kx_groups: client_kx_groups,
-                    ..provider::default_provider()
-                }
-                .into(),
-            )
-            .with_protocol_versions(&[protocol_version])
-            .unwrap(),
+            rustls::ClientConfig::builder_with_provider(provider.into())
+                .with_safe_default_protocol_versions()
+                .unwrap(),
         )
         .into();
 
@@ -238,7 +249,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
                 .suite(),
             expected_cipher_suite
         );
-        assert_eq!(server.protocol_version(), Some(protocol_version.version()));
+        assert_eq!(server.protocol_version(), Some(protocol_version));
         assert_eq!(
             server
                 .negotiated_key_exchange_group()
