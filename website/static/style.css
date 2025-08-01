@@ -100,6 +100,7 @@ section.perf h1 footer {
 section.perf h2 footer {
   font-size: 0.45em;
   font-weight: normal;
+  padding-top: 0.2em;
 }
 footer em {
   display: block;
