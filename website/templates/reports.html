@@ -8,7 +8,7 @@
     <section class="perf">
       <div class="box">
         <div class="headline"
-          title="TLS1.3 server with RSA2048 key"
+          title="TLS1.3 server with RSA2048 key and X25519MLKEM768 key exchange"
         >
           {{ macros::speedo(id="full_handshake", rustls=page.extra.handshake.full.rustls, openssl=page.extra.handshake.full.openssl, boringssl=page.extra.handshake.full.boringssl, unit="handshakes/s") }}
 
@@ -33,7 +33,7 @@
 
         </div>
         <div class="headline"
-          title="TLS1.3 server with RSA2048 key"
+          title="TLS1.3 server with RSA2048 key and X25519MLKEM768 key exchange"
         >
           {{ macros::speedo(id="resume_handshake", rustls=page.extra.handshake.resume.rustls, openssl=page.extra.handshake.resume.openssl, boringssl=page.extra.handshake.resume.boringssl, unit="handshakes/s") }}
 
