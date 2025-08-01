@@ -18,15 +18,17 @@
 
           <div class="split">
             <div class="comp">
-              <h2>{{ page.extra.handshake.full.openssl | round }}
-                {{ macros::compare(target=page.extra.handshake.full.openssl, base=page.extra.handshake.full.rustls) }}
+              <h2>
                 <footer>OpenSSL</footer>
+                {{ page.extra.handshake.full.openssl | round }}
+                {{ macros::compare(target=page.extra.handshake.full.openssl, base=page.extra.handshake.full.rustls) }}
               </h2>
             </div>
             <div class="comp">
-              <h2>{{ page.extra.handshake.full.boringssl | round }}
-                {{ macros::compare(target=page.extra.handshake.full.boringssl, base=page.extra.handshake.full.rustls) }}
+              <h2>
                 <footer>BoringSSL</footer>
+                {{ page.extra.handshake.full.boringssl | round }}
+                {{ macros::compare(target=page.extra.handshake.full.boringssl, base=page.extra.handshake.full.rustls) }}
               </h2>
             </div>
           </div>
@@ -42,15 +44,17 @@
           </h1>
           <div class="split">
             <div class="comp">
-              <h2>{{ page.extra.handshake.resume.openssl | round }}
-                {{ macros::compare(target=page.extra.handshake.resume.openssl, base=page.extra.handshake.resume.rustls) }}
+              <h2>
                 <footer>OpenSSL</footer>
+                {{ page.extra.handshake.resume.openssl | round }}
+                {{ macros::compare(target=page.extra.handshake.resume.openssl, base=page.extra.handshake.resume.rustls) }}
               </h2>
             </div>
             <div class="comp">
-              <h2>{{ page.extra.handshake.resume.boringssl | round }}
-                {{ macros::compare(target=page.extra.handshake.resume.boringssl, base=page.extra.handshake.resume.rustls) }}
+              <h2>
                 <footer>BoringSSL</footer>
+                {{ page.extra.handshake.resume.boringssl | round }}
+                {{ macros::compare(target=page.extra.handshake.resume.boringssl, base=page.extra.handshake.resume.rustls) }}
               </h2>
             </div>
           </div>
@@ -65,16 +69,17 @@
           </h1>
           <div class="split">
             <div class="comp">
-              <h2>{{ page.extra.transfer.send.openssl | round }}
-                {{ macros::compare(target=page.extra.transfer.send.openssl, base=page.extra.transfer.send.rustls) }}
+              <h2>
                 <footer>OpenSSL</footer>
-
+                {{ page.extra.transfer.send.openssl | round }}
+                {{ macros::compare(target=page.extra.transfer.send.openssl, base=page.extra.transfer.send.rustls) }}
               </h2>
             </div>
             <div class="comp">
-              <h2>{{ page.extra.transfer.send.boringssl | round }}
-                {{ macros::compare(target=page.extra.transfer.send.boringssl, base=page.extra.transfer.send.rustls) }}
+              <h2>
                 <footer>BoringSSL</footer>
+                {{ page.extra.transfer.send.boringssl | round }}
+                {{ macros::compare(target=page.extra.transfer.send.boringssl, base=page.extra.transfer.send.rustls) }}
               </h2>
             </div>
           </div>
@@ -89,15 +94,17 @@
           </h1>
           <div class="split">
             <div class="comp">
-              <h2>{{ page.extra.transfer.recv.openssl | round }}
-                {{ macros::compare(target=page.extra.transfer.recv.openssl, base=page.extra.transfer.recv.rustls) }}
+              <h2>
                 <footer>OpenSSL</footer>
+                {{ page.extra.transfer.recv.openssl | round }}
+                {{ macros::compare(target=page.extra.transfer.recv.openssl, base=page.extra.transfer.recv.rustls) }}
               </h2>
             </div>
             <div class="comp">
-              <h2>{{ page.extra.transfer.recv.boringssl | round }}
-                {{ macros::compare(target=page.extra.transfer.recv.boringssl, base=page.extra.transfer.recv.rustls) }}
+              <h2>
                 <footer>BoringSSL</footer>
+                {{ page.extra.transfer.recv.boringssl | round }}
+                {{ macros::compare(target=page.extra.transfer.recv.boringssl, base=page.extra.transfer.recv.rustls) }}
               </h2>
             </div>
           </div>
