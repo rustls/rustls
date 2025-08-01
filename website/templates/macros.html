@@ -1,6 +1,6 @@
 {% macro compare(target, base) %}
   {% if target > base %}
-    <div class="better"><span class="measure">{{ (base / target) | round(method="ceil",precision=2) }}x</span><br>faster</div>
+    <div class="better"><span class="measure">{{ (target / base) | round(method="ceil",precision=2) }}x</span><br>faster</div>
   {% else %}
     <div class="worse"><span class="measure">{{ (base / target) | round(method="ceil",precision=2) }}x</span><br>slower</div>
   {% endif %}
