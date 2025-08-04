@@ -857,7 +857,7 @@ fn emit_finished(
 ) {
     let vh = transcript.current_hash();
     let verify_data = secrets.server_verify_data(&vh);
-    let verify_data_payload = Payload::new(verify_data);
+    let verify_data_payload = Payload::Borrowed(&verify_data);
 
     let f = Message {
         version: ProtocolVersion::TLSv1_2,
