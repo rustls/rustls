@@ -3,7 +3,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::common_state::{CommonState, Side};
 use crate::conn::ConnectionRandoms;
@@ -207,7 +207,7 @@ impl ConnectionSecrets {
         )
     }
 
-    fn make_key_block(&self) -> Vec<u8> {
+    fn make_key_block(&self) -> Zeroizing<Vec<u8>> {
         let shape = self.suite.aead_alg.key_block_shape();
 
         let len = (shape.enc_key_len + shape.fixed_iv_len) * 2 + shape.explicit_nonce_len;
@@ -220,7 +220,7 @@ impl ConnectionSecrets {
         self.master_secret_prf
             .prf(&mut out, b"key expansion", &randoms);
 
-        out
+        Zeroizing::new(out)
     }
 
     pub(crate) fn suite(&self) -> &'static Tls12CipherSuite {
