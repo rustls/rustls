@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use core::mem;
 
 use zeroize::Zeroize;
 
@@ -19,24 +20,31 @@ pub trait Hmac: Send + Sync {
     }
 }
 
-/// A HMAC tag, stored as a value.
+/// A secret HMAC tag, stored as a value.
+///
+/// The value is considered secret and sensitive, and is zeroized
+/// on drop.
+///
+/// This is suitable if the value is (for example) used as key
+/// material.
 #[derive(Clone)]
-pub struct Tag {
-    buf: [u8; Self::MAX_LEN],
-    used: usize,
-}
+pub struct Tag(PublicTag);
 
 impl Tag {
     /// Build a tag by copying a byte slice.
     ///
     /// The slice can be up to [`Tag::MAX_LEN`] bytes in length.
     pub fn new(bytes: &[u8]) -> Self {
-        let mut tag = Self {
-            buf: [0u8; Self::MAX_LEN],
-            used: bytes.len(),
-        };
-        tag.buf[..bytes.len()].copy_from_slice(bytes);
-        tag
+        Self(PublicTag::new(bytes))
+    }
+
+    /// Declare this tag is public.
+    ///
+    /// Uses of this function should explain why this tag is public.
+    pub(crate) fn into_public(self) -> PublicTag {
+        let public = self.0.clone();
+        mem::forget(self);
+        public
     }
 
     /// Maximum supported HMAC tag size: supports up to SHA512.
@@ -45,11 +53,46 @@ impl Tag {
 
 impl Drop for Tag {
     fn drop(&mut self) {
-        self.buf.zeroize();
+        self.0.buf.zeroize();
     }
 }
 
 impl AsRef<[u8]> for Tag {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+/// A non-secret HMAC tag, stored as a value.
+///
+/// A value of this type is **not** zeroized on drop.
+///
+/// A tag is "public" if it is published on the wire, as opposed to
+/// being used as key material. For example, the `verify_data` field
+/// of TLS `Finished` messages are public (as they are published on
+/// the wire in TLS1.2, or sent encrypted under pre-authenticated
+/// secrets in TLS1.3).
+#[derive(Clone)]
+pub(crate) struct PublicTag {
+    buf: [u8; Tag::MAX_LEN],
+    used: usize,
+}
+
+impl PublicTag {
+    /// Build a tag by copying a byte slice.
+    ///
+    /// The slice can be up to [`Tag::MAX_LEN`] bytes in length.
+    pub(crate) fn new(bytes: &[u8]) -> Self {
+        let mut tag = Self {
+            buf: [0u8; Tag::MAX_LEN],
+            used: bytes.len(),
+        };
+        tag.buf[..bytes.len()].copy_from_slice(bytes);
+        tag
+    }
+}
+
+impl AsRef<[u8]> for PublicTag {
     fn as_ref(&self) -> &[u8] {
         &self.buf[..self.used]
     }
