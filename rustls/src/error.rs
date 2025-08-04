@@ -961,7 +961,7 @@ impl From<EncryptedClientHelloError> for Error {
 
 /// The server rejected the request to enable Encrypted Client Hello (ECH)
 ///
-/// If [`RejectedEch.can_retry()`] is true, then you may use this with
+/// If [`RejectedEch::can_retry()`] is true, then you may use this with
 /// [`crate::client::EchConfig::for_retry()`] to build a new `EchConfig` for a fresh client
 /// connection that will use a compatible ECH configuration provided by the server for a retry.
 #[non_exhaustive]
