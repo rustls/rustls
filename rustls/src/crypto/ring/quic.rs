@@ -130,26 +130,14 @@ impl quic::PacketKey for PacketKey {
         packet_number: u64,
         header: &[u8],
         payload: &mut [u8],
+        path_id: Option<u32>,
     ) -> Result<quic::Tag, Error> {
         let aad = aead::Aad::from(header);
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, packet_number).0);
-        let tag = self
-            .key
-            .seal_in_place_separate_tag(nonce, aad, payload)
-            .map_err(|_| Error::EncryptError)?;
-        Ok(quic::Tag::from(tag.as_ref()))
-    }
-
-    fn encrypt_in_place_for_path(
-        &self,
-        path_id: u32,
-        packet_number: u64,
-        header: &[u8],
-        payload: &mut [u8],
-    ) -> Result<quic::Tag, Error> {
-        let aad = aead::Aad::from(header);
-        let nonce =
-            aead::Nonce::assume_unique_for_key(Nonce::for_path(path_id, &self.iv, packet_number).0);
+        let nonce_value = match path_id {
+            Some(path_id) => Nonce::for_path(path_id, &self.iv, packet_number),
+            None => Nonce::new(&self.iv, packet_number),
+        };
+        let nonce = aead::Nonce::assume_unique_for_key(nonce_value.0);
         let tag = self
             .key
             .seal_in_place_separate_tag(nonce, aad, payload)
@@ -169,29 +157,15 @@ impl quic::PacketKey for PacketKey {
         packet_number: u64,
         header: &[u8],
         payload: &'a mut [u8],
+        path_id: Option<u32>,
     ) -> Result<&'a [u8], Error> {
         let payload_len = payload.len();
         let aad = aead::Aad::from(header);
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, packet_number).0);
-        self.key
-            .open_in_place(nonce, aad, payload)
-            .map_err(|_| Error::DecryptError)?;
-
-        let plain_len = payload_len - self.key.algorithm().tag_len();
-        Ok(&payload[..plain_len])
-    }
-
-    fn decrypt_in_place_for_path<'a>(
-        &self,
-        path_id: u32,
-        packet_number: u64,
-        header: &[u8],
-        payload: &'a mut [u8],
-    ) -> Result<&'a [u8], Error> {
-        let payload_len = payload.len();
-        let aad = aead::Aad::from(header);
-        let nonce =
-            aead::Nonce::assume_unique_for_key(Nonce::for_path(path_id, &self.iv, packet_number).0);
+        let nonce_value = match path_id {
+            Some(path_id) => Nonce::for_path(path_id, &self.iv, packet_number),
+            None => Nonce::new(&self.iv, packet_number),
+        };
+        let nonce = aead::Nonce::assume_unique_for_key(nonce_value.0);
         self.key
             .open_in_place(nonce, aad, payload)
             .map_err(|_| Error::DecryptError)?;
@@ -285,7 +259,7 @@ mod tests {
         let mut buf = PLAIN.to_vec();
         let (header, payload) = buf.split_at_mut(4);
         let tag = packet
-            .encrypt_in_place(PN, header, payload)
+            .encrypt_in_place(PN, header, payload, None)
             .unwrap();
         buf.extend(tag.as_ref());
 
@@ -306,7 +280,7 @@ mod tests {
 
         let (header, payload_tag) = buf.split_at_mut(4);
         let plain = packet
-            .decrypt_in_place(PN, header, payload_tag)
+            .decrypt_in_place(PN, header, payload_tag, None)
             .unwrap();
 
         assert_eq!(plain, &PLAIN[4..]);
@@ -419,7 +393,7 @@ mod tests {
         let tag = server
             .local
             .packet
-            .encrypt_in_place(1, &server_header, &mut server_payload)
+            .encrypt_in_place(1, &server_header, &mut server_payload, None)
             .unwrap();
         let (first, rest) = server_header.split_at_mut(1);
         let rest_len = rest.len();
@@ -485,7 +459,7 @@ mod tests {
         let packet = builder.packet_key();
         let mut buf = PAYLOAD.to_vec();
         let tag = packet
-            .encrypt_in_place_for_path(PATH_ID, PN, HEADER, &mut buf)
+            .encrypt_in_place(PN, HEADER, &mut buf, Some(PATH_ID))
             .unwrap();
         buf.extend_from_slice(tag.as_ref());
 
@@ -521,11 +495,11 @@ mod tests {
         for &path_id in TEST_PATH_IDS {
             let mut buf = PAYLOAD.to_vec();
             let tag = packet
-                .encrypt_in_place_for_path(path_id, PN, HEADER, &mut buf)
+                .encrypt_in_place(PN, HEADER, &mut buf, Some(path_id))
                 .unwrap();
             buf.extend_from_slice(tag.as_ref());
             let decrypted = packet
-                .decrypt_in_place_for_path(path_id, PN, HEADER, &mut buf)
+                .decrypt_in_place(PN, HEADER, &mut buf, Some(path_id))
                 .unwrap();
             assert_eq!(decrypted, PAYLOAD);
         }
