@@ -2179,7 +2179,7 @@ fn client_flush_does_nothing() {
     assert!(matches!(client.writer().flush(), Ok(())));
 }
 
-#[allow(clippy::no_effect)]
+#[allow(clippy::unnecessary_operation)]
 #[test]
 fn server_is_send_and_sync() {
     let (_, server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
@@ -2187,7 +2187,7 @@ fn server_is_send_and_sync() {
     &server as &dyn Sync;
 }
 
-#[allow(clippy::no_effect)]
+#[allow(clippy::unnecessary_operation)]
 #[test]
 fn client_is_send_and_sync() {
     let (client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
@@ -3621,7 +3621,7 @@ impl sign::SigningKey for SigningKeyNoneSpki {
 struct SigningKeySomeSpki;
 
 impl sign::SigningKey for SigningKeySomeSpki {
-    fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer> {
+    fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer<'_>> {
         let chain = KeyType::Rsa2048.get_chain();
         let cert = ParsedCertificate::try_from(chain.first().unwrap()).unwrap();
         Some(
