@@ -232,7 +232,7 @@ impl TestPki {
         &self,
         serials: Vec<rcgen::SerialNumber>,
         next_update_seconds: u64,
-    ) -> CertificateRevocationListDer {
+    ) -> CertificateRevocationListDer<'static> {
         // In a real use-case you would want to set this to the current date/time.
         let now = rcgen::date_time_ymd(2023, 1, 1);
 
