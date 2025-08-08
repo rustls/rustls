@@ -234,6 +234,53 @@ impl CryptoProvider {
         static_default::get_default()
     }
 
+    /// Checks whether a default `CryptoProvider` has been configured, or can
+    /// be configured implicitly by inferring from crate features. Returns true
+    /// if so, false otherwise.
+    ///
+    /// This can be used to check whether [`ServerConfig::builder`] or
+    /// [`ClientConfig::builder`] will panic if called.
+    ///
+    /// ```
+    /// # use rustls::crypto::CryptoProvider;
+    /// # fn _example() {
+    /// if !CryptoProvider::default_available() {
+    ///     // No provider is available. You must call
+    ///     // CryptoProvider::install_default() before using
+    ///     // the ServerConfig::builder() or ClientConfig::builder() APIs.
+    /// }
+    /// # }
+    /// ```
+    ///
+    /// [`ServerConfig::builder`]: crate::server::ServerConfig::builder
+    /// [`ClientConfig::builder`]: crate::client::ClientConfig::builder
+    pub fn default_available() -> bool {
+        if Self::get_default().is_some() {
+            return true;
+        }
+
+        #[cfg(all(
+            feature = "ring",
+            not(feature = "aws-lc-rs"),
+            not(feature = "custom-provider")
+        ))]
+        {
+            return true;
+        }
+
+        #[cfg(all(
+            feature = "aws-lc-rs",
+            not(feature = "ring"),
+            not(feature = "custom-provider")
+        ))]
+        {
+            return true;
+        }
+
+        #[allow(unreachable_code)]
+        false
+    }
+
     /// An internal function that:
     ///
     /// - gets the pre-installed default, or
