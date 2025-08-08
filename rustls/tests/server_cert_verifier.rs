@@ -7,8 +7,8 @@ use super::*;
 mod common;
 
 use common::{
-    Arc, ErrorFromPeer, KeyType, MockServerVerifier, client_config_builder, do_handshake,
-    do_handshake_until_both_error, do_handshake_until_error, make_client_config_with_versions,
+    Arc, ErrorFromPeer, KeyType, MockServerVerifier, all_versions, client_config_builder,
+    do_handshake, do_handshake_until_both_error, do_handshake_until_error, make_client_config,
     make_pair_for_arc_configs, make_server_config, server_config_builder,
 };
 use pki_types::{CertificateDer, ServerName};
@@ -31,8 +31,8 @@ fn client_can_override_certificate_verification() {
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        for version in rustls::ALL_VERSIONS {
-            let mut client_config = make_client_config_with_versions(*kt, &[version], &provider);
+        for version_provider in all_versions(&provider) {
+            let mut client_config = make_client_config(*kt, &version_provider);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
@@ -54,8 +54,8 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        for version in rustls::ALL_VERSIONS {
-            let mut client_config = make_client_config_with_versions(*kt, &[version], &provider);
+        for version_provider in all_versions(&provider) {
+            let mut client_config = make_client_config(*kt, &version_provider);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
@@ -80,8 +80,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
 fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_config =
-            make_client_config_with_versions(*kt, &[&rustls::version::TLS12], &provider);
+        let mut client_config = make_client_config(*kt, &provider.clone().with_only_tls12());
         let verifier = Arc::new(MockServerVerifier::rejects_tls12_signatures(
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
         ));
@@ -111,11 +110,7 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
 fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_config = make_client_config_with_versions(
-            *kt,
-            &[&rustls::version::TLS13],
-            &provider::default_provider(),
-        );
+        let mut client_config = make_client_config(*kt, &provider.clone().with_only_tls13());
         let verifier = Arc::new(MockServerVerifier::rejects_tls13_signatures(
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
         ));
@@ -149,8 +144,8 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        for version in rustls::ALL_VERSIONS {
-            let mut client_config = make_client_config_with_versions(*kt, &[version], &provider);
+        for version_provider in all_versions(&provider) {
+            let mut client_config = make_client_config(*kt, &version_provider);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
