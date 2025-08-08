@@ -876,6 +876,17 @@ mod connection {
         }
     }
 
+    impl Debug for Acceptor {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            let mut debug = f.debug_struct("Acceptor");
+            match &self.inner {
+                Some(conn) => debug.field("inner.core.data", &Some(&conn.core.data)),
+                None => debug.field("inner", &"None"),
+            };
+            debug.finish()
+        }
+    }
+
     /// Represents a TLS alert resulting from handling the client's `ClientHello` message.
     ///
     /// When [`Acceptor::accept()`] returns an error, it yields an `AcceptedAlert` such that the
