@@ -731,19 +731,56 @@ pub trait PacketKey: Send + Sync {
         payload: &mut [u8],
     ) -> Result<Tag, Error>;
 
+    /// Encrypts a multipath QUIC packet
+    ///
+    /// Takes a `path_id` and `packet_number`, used to derive the nonce; the packet `header`, which
+    /// is used as the additional authenticated data; and the `payload`. The authentication tag is
+    /// returned if encryption succeeds.
+    ///
+    /// Fails if and only if the payload is longer than allowed by the cipher suite's AEAD algorithm.
+    ///
+    /// See <https://www.ietf.org/archive/id/draft-ietf-quic-multipath-15.html#section-2.4>.
+    fn encrypt_in_place_for_path(
+        &self,
+        _path_id: u32,
+        _packet_number: u64,
+        _header: &[u8],
+        _payload: &mut [u8],
+    ) -> Result<Tag, Error> {
+        Err(Error::EncryptError)
+    }
+
     /// Decrypt a QUIC packet
     ///
     /// Takes the packet `header`, which is used as the additional authenticated data, and the
     /// `payload`, which includes the authentication tag.
     ///
-    /// If the return value is `Ok`, the decrypted payload can be found in `payload`, up to the
-    /// length found in the return value.
+    /// On success, returns the slice of `payload` containing the decrypted data.
     fn decrypt_in_place<'a>(
         &self,
         packet_number: u64,
         header: &[u8],
         payload: &'a mut [u8],
     ) -> Result<&'a [u8], Error>;
+
+    /// Decrypt a multipath QUIC packet
+    ///
+    /// Takes a `path_id` and `packet_number`, used to derive the nonce; the packet `header`, which
+    /// is used as the additional authenticated data; and the `payload` , which includes the
+    /// authentication tag.
+    ///
+    /// On success, returns the slice of `payload` containing the decrypted data.
+    ///
+    /// See <https://www.ietf.org/archive/id/draft-ietf-quic-multipath-15.html#section-2.4>.
+    fn decrypt_in_place_for_path<'a>(
+        &self,
+        _path_id: u32,
+        _packet_number: u64,
+        _header: &[u8],
+        _payload: &'a mut [u8],
+    ) -> Result<&'a [u8], Error> {
+        Err(Error::EncryptError)
+    }
 
     /// Tag length for the underlying AEAD algorithm
     fn tag_len(&self) -> usize;
