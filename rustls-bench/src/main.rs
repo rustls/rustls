@@ -813,8 +813,6 @@ impl Parameters {
         };
 
         let mut cfg = ServerConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_client_cert_verifier(client_auth)
             .with_single_cert(
                 self.proto.key_type.get_chain(),
@@ -853,8 +851,6 @@ impl Parameters {
             }
             .into(),
         )
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .with_root_certificates(root_store);
 
         let mut cfg = match self.client_auth {
@@ -864,7 +860,7 @@ impl Parameters {
                     self.proto.key_type.get_client_key(),
                 )
                 .unwrap(),
-            ClientAuth::No => cfg.with_no_client_auth(),
+            ClientAuth::No => cfg.with_no_client_auth().unwrap(),
         };
 
         cfg.resumption = match self.resume {

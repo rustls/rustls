@@ -7,8 +7,6 @@ use pki_types::{ServerName, UnixTime};
 
 use super::handy::NoClientSessionStorage;
 use super::hs::{self, ClientHelloInput};
-#[cfg(feature = "std")]
-use crate::WantsVerifier;
 use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
@@ -29,7 +27,7 @@ use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
 #[cfg(doc)]
 use crate::{DistinguishedName, crypto};
-use crate::{KeyLog, WantsVersions, compress, sign, verify, versions};
+use crate::{KeyLog, WantsVerifier, compress, sign, verify};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -241,10 +239,6 @@ pub struct ClientConfig {
     /// Source of randomness and other crypto.
     pub(super) provider: Arc<CryptoProvider>,
 
-    /// Supported versions, in no particular order.  The default
-    /// is all supported versions.
-    pub(super) versions: versions::EnabledVersions,
-
     /// How to verify the server certificate chain.
     pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
 
@@ -284,59 +278,26 @@ pub struct ClientConfig {
 
 impl ClientConfig {
     /// Create a builder for a client configuration with
-    /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider]
-    /// and safe protocol version defaults.
+    /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     #[cfg(feature = "std")]
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
-        Self::builder_with_protocol_versions(versions::DEFAULT_VERSIONS)
-    }
-
-    /// Create a builder for a client configuration with
-    /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider]
-    /// and the provided protocol versions.
-    ///
-    /// Panics if
-    /// - the supported versions are not compatible with the provider (eg.
-    ///   the combination of ciphersuites supported by the provider and supported
-    ///   versions lead to zero cipher suites being usable),
-    /// - if a `CryptoProvider` cannot be resolved using a combination of
-    ///   the crate features and process default.
-    ///
-    /// For more information, see the [`ConfigBuilder`] documentation.
-    #[cfg(feature = "std")]
-    pub fn builder_with_protocol_versions(
-        versions: &[&'static versions::SupportedProtocolVersion],
-    ) -> ConfigBuilder<Self, WantsVerifier> {
-        // Safety assumptions:
-        // 1. that the provider has been installed (explicitly or implicitly)
-        // 2. that the process-level default provider is usable with the supplied protocol versions.
         Self::builder_with_provider(
             CryptoProvider::get_default_or_install_from_crate_features().clone(),
         )
-        .with_protocol_versions(versions)
-        .unwrap()
     }
 
     /// Create a builder for a client configuration with a specific [`CryptoProvider`].
     ///
-    /// This will use the provider's configured ciphersuites. You must additionally choose
-    /// which protocol versions to enable, using `with_protocol_versions` or
-    /// `with_safe_default_protocol_versions` and handling the `Result` in case a protocol
-    /// version is not supported by the provider's ciphersuites.
+    /// This will use the provider's configured ciphersuites.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     #[cfg(feature = "std")]
     pub fn builder_with_provider(
         provider: Arc<CryptoProvider>,
-    ) -> ConfigBuilder<Self, WantsVersions> {
-        ConfigBuilder {
-            state: WantsVersions {},
-            provider,
-            time_provider: Arc::new(DefaultTimeProvider),
-            side: PhantomData,
-        }
+    ) -> ConfigBuilder<Self, WantsVerifier> {
+        Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
     /// Create a builder for a client configuration with no default implementation details.
     ///
@@ -346,18 +307,15 @@ impl ClientConfig {
     ///
     /// You must provide a specific [`CryptoProvider`].
     ///
-    /// This will use the provider's configured ciphersuites. You must additionally choose
-    /// which protocol versions to enable, using `with_protocol_versions` or
-    /// `with_safe_default_protocol_versions` and handling the `Result` in case a protocol
-    /// version is not supported by the provider's ciphersuites.
-    ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_details(
         provider: Arc<CryptoProvider>,
         time_provider: Arc<dyn TimeProvider>,
-    ) -> ConfigBuilder<Self, WantsVersions> {
+    ) -> ConfigBuilder<Self, WantsVerifier> {
         ConfigBuilder {
-            state: WantsVersions {},
+            state: WantsVerifier {
+                client_ech_mode: None,
+            },
             provider,
             time_provider,
             side: PhantomData,
@@ -399,12 +357,10 @@ impl ClientConfig {
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.versions.contains(v)
-            && self
-                .provider
-                .cipher_suites
-                .iter()
-                .any(|cs| cs.version().version() == v)
+        self.provider
+            .cipher_suites
+            .iter()
+            .any(|cs| cs.version().version() == v)
     }
 
     #[cfg(feature = "std")]

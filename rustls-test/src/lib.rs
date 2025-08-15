@@ -481,16 +481,12 @@ pub fn server_config_builder(
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
     ServerConfig::builder_with_provider(provider.clone().into())
-        .with_safe_default_protocol_versions()
-        .unwrap()
 }
 
 pub fn client_config_builder(
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     ClientConfig::builder_with_provider(provider.clone().into())
-        .with_safe_default_protocol_versions()
-        .unwrap()
 }
 
 pub fn finish_server_config(
@@ -519,9 +515,7 @@ pub fn make_server_config_with_kx_groups(
                 ..provider.clone()
             }
             .into(),
-        )
-        .with_safe_default_protocol_versions()
-        .unwrap(),
+        ),
     )
 }
 
@@ -600,6 +594,7 @@ pub fn make_server_config_with_raw_key_support(
     server_config_builder(provider)
         .with_client_cert_verifier(Arc::new(client_verifier))
         .with_cert_resolver(server_cert_resolver)
+        .unwrap()
 }
 
 pub fn make_client_config_with_raw_key_support(
@@ -616,6 +611,7 @@ pub fn make_client_config_with_raw_key_support(
         .dangerous()
         .with_custom_certificate_verifier(server_verifier)
         .with_client_cert_resolver(client_cert_resolver)
+        .unwrap()
 }
 
 pub fn finish_client_config(
@@ -630,6 +626,7 @@ pub fn finish_client_config(
     config
         .with_root_certificates(root_store)
         .with_no_client_auth()
+        .unwrap()
 }
 
 pub fn finish_client_config_with_creds(
@@ -662,9 +659,7 @@ pub fn make_client_config_with_kx_groups(
             ..provider.clone()
         }
         .into(),
-    )
-    .with_safe_default_protocol_versions()
-    .unwrap();
+    );
     finish_client_config(kt, builder)
 }
 
@@ -680,6 +675,7 @@ pub fn make_client_config_with_verifier(
         .dangerous()
         .with_custom_certificate_verifier(verifier_builder.build().unwrap())
         .with_no_client_auth()
+        .unwrap()
 }
 
 pub fn webpki_client_verifier_builder(

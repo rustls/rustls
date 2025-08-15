@@ -10,8 +10,6 @@ use std::io;
 use pki_types::{DnsName, UnixTime};
 
 use super::hs;
-#[cfg(feature = "std")]
-use crate::WantsVerifier;
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
@@ -33,9 +31,7 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{
-    DistinguishedName, KeyLog, NamedGroup, WantsVersions, compress, sign, verify, versions,
-};
+use crate::{DistinguishedName, KeyLog, NamedGroup, WantsVerifier, compress, sign, verify};
 
 /// A trait for the ability to store server session data.
 ///
@@ -335,10 +331,6 @@ pub struct ServerConfig {
     /// If empty we don't do ALPN at all.
     pub alpn_protocols: Vec<Vec<u8>>,
 
-    /// Supported protocol versions, in no particular order.
-    /// The default is all supported versions.
-    pub(super) versions: versions::EnabledVersions,
-
     /// How to verify client certificates.
     pub(super) verifier: Arc<dyn verify::ClientCertVerifier>,
 
@@ -447,59 +439,36 @@ pub struct ServerConfig {
 
 impl ServerConfig {
     /// Create a builder for a server configuration with
-    /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider]
-    /// and safe protocol version defaults.
+    /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider].
+    ///
+    /// This will use the provider's configured ciphersuites.  This implies which TLS
+    /// protocol versions are enabled.
+    ///
+    /// This function always succeeds.  Any internal consistency problems with `provider`
+    /// are reported at the end of the builder process.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     #[cfg(feature = "std")]
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
-        Self::builder_with_protocol_versions(versions::DEFAULT_VERSIONS)
-    }
-
-    /// Create a builder for a server configuration with
-    /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider]
-    /// and the provided protocol versions.
-    ///
-    /// Panics if
-    /// - the supported versions are not compatible with the provider (eg.
-    ///   the combination of ciphersuites supported by the provider and supported
-    ///   versions lead to zero cipher suites being usable),
-    /// - if a `CryptoProvider` cannot be resolved using a combination of
-    ///   the crate features and process default.
-    ///
-    /// For more information, see the [`ConfigBuilder`] documentation.
-    #[cfg(feature = "std")]
-    pub fn builder_with_protocol_versions(
-        versions: &[&'static versions::SupportedProtocolVersion],
-    ) -> ConfigBuilder<Self, WantsVerifier> {
-        // Safety assumptions:
-        // 1. that the provider has been installed (explicitly or implicitly)
-        // 2. that the process-level default provider is usable with the supplied protocol versions.
         Self::builder_with_provider(
             CryptoProvider::get_default_or_install_from_crate_features().clone(),
         )
-        .with_protocol_versions(versions)
-        .unwrap()
     }
 
     /// Create a builder for a server configuration with a specific [`CryptoProvider`].
     ///
-    /// This will use the provider's configured ciphersuites. You must additionally choose
-    /// which protocol versions to enable, using `with_protocol_versions` or
-    /// `with_safe_default_protocol_versions` and handling the `Result` in case a protocol
-    /// version is not supported by the provider's ciphersuites.
+    /// This will use the provider's configured ciphersuites.  This implies which TLS
+    /// protocol versions are enabled.
+    ///
+    /// This function always succeeds.  Any internal consistency problems with `provider`
+    /// are reported at the end of the builder process.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     #[cfg(feature = "std")]
     pub fn builder_with_provider(
         provider: Arc<CryptoProvider>,
-    ) -> ConfigBuilder<Self, WantsVersions> {
-        ConfigBuilder {
-            state: WantsVersions {},
-            provider,
-            time_provider: Arc::new(DefaultTimeProvider),
-            side: PhantomData,
-        }
+    ) -> ConfigBuilder<Self, WantsVerifier> {
+        Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
 
     /// Create a builder for a server configuration with no default implementation details.
@@ -510,18 +479,21 @@ impl ServerConfig {
     ///
     /// You must provide a specific [`CryptoProvider`].
     ///
-    /// This will use the provider's configured ciphersuites. You must additionally choose
-    /// which protocol versions to enable, using `with_protocol_versions` or
-    /// `with_safe_default_protocol_versions` and handling the `Result` in case a protocol
-    /// version is not supported by the provider's ciphersuites.
+    /// This will use the provider's configured ciphersuites.  This implies which TLS
+    /// protocol versions are enabled.
+    ///
+    /// This function always succeeds.  Any internal consistency problems with `provider`
+    /// are reported at the end of the builder process.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_details(
         provider: Arc<CryptoProvider>,
         time_provider: Arc<dyn TimeProvider>,
-    ) -> ConfigBuilder<Self, WantsVersions> {
+    ) -> ConfigBuilder<Self, WantsVerifier> {
         ConfigBuilder {
-            state: WantsVersions {},
+            state: WantsVerifier {
+                client_ech_mode: None,
+            },
             provider,
             time_provider,
             side: PhantomData,
@@ -547,12 +519,10 @@ impl ServerConfig {
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.versions.contains(v)
-            && self
-                .provider
-                .cipher_suites
-                .iter()
-                .any(|cs| cs.version().version() == v)
+        self.provider
+            .cipher_suites
+            .iter()
+            .any(|cs| cs.version().version() == v)
     }
 
     #[cfg(feature = "std")]

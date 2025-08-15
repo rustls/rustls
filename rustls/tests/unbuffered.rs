@@ -751,9 +751,7 @@ fn refresh_traffic_keys_automatically() {
         KeyType::Rsa2048,
         ClientConfig::builder_with_provider(aes_128_gcm_with_1024_confidentiality_limit(
             provider::default_provider(),
-        ))
-        .with_safe_default_protocol_versions()
-        .unwrap(),
+        )),
     );
 
     let server_config = make_server_config(KeyType::Rsa2048, &provider::default_provider());
@@ -828,9 +826,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
 
     let client_config = finish_client_config(
         KeyType::Ed25519,
-        ClientConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()
-            .unwrap(),
+        ClientConfig::builder_with_provider(provider),
     );
 
     let server_config = make_server_config(KeyType::Ed25519, &provider::default_provider());
@@ -907,13 +903,12 @@ fn tls13_packed_handshake() {
     let client_config = ClientConfig::builder_with_provider(unsafe_plaintext_crypto_provider(
         provider::default_provider(),
     ))
-    .with_safe_default_protocol_versions()
-    .unwrap()
     .dangerous()
     .with_custom_certificate_verifier(Arc::new(MockServerVerifier::rejects_certificate(
         CertificateError::UnknownIssuer.into(),
     )))
-    .with_no_client_auth();
+    .with_no_client_auth()
+    .unwrap();
 
     let mut client =
         UnbufferedClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
@@ -1554,8 +1549,6 @@ fn test_secret_extraction_enabled() {
             }
             .into(),
         )
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .with_no_client_auth()
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap();

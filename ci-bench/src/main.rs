@@ -547,9 +547,7 @@ impl ClientSideStepper<'_> {
                 ..params.provider.clone()
             }
             .into(),
-        )
-        .with_safe_default_protocol_versions()
-        .unwrap();
+        );
 
         let mut cfg = match params.auth_key {
             AuthKeySource::KeyType(key_type) => {
@@ -560,12 +558,14 @@ impl ClientSideStepper<'_> {
 
                 cfg.with_root_certificates(root_store)
                     .with_no_client_auth()
+                    .unwrap()
             }
 
             AuthKeySource::FuzzingProvider => cfg
                 .dangerous()
                 .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
-                .with_no_client_auth(),
+                .with_no_client_auth()
+                .unwrap(),
         };
 
         if resume != ResumptionKind::No {
@@ -636,9 +636,7 @@ impl ServerSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
         assert_eq!(params.ciphersuite.version().version(), params.version);
 
-        let cfg = ServerConfig::builder_with_provider(params.provider.clone().into())
-            .with_safe_default_protocol_versions()
-            .unwrap();
+        let cfg = ServerConfig::builder_with_provider(params.provider.clone().into());
 
         let mut cfg = match params.auth_key {
             AuthKeySource::KeyType(key_type) => cfg
@@ -648,7 +646,8 @@ impl ServerSideStepper<'_> {
 
             AuthKeySource::FuzzingProvider => cfg
                 .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
-                .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver()),
+                .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver())
+                .unwrap(),
         };
 
         if resume == ResumptionKind::SessionId {
