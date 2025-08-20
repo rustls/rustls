@@ -133,10 +133,7 @@ impl quic::PacketKey for PacketKey {
         path_id: Option<u32>,
     ) -> Result<quic::Tag, Error> {
         let aad = aead::Aad::from(header);
-        let nonce_value = match path_id {
-            Some(path_id) => Nonce::for_path(path_id, &self.iv, packet_number),
-            None => Nonce::new(&self.iv, packet_number),
-        };
+        let nonce_value = Nonce::quic(path_id, &self.iv, packet_number);
         let nonce = aead::Nonce::assume_unique_for_key(nonce_value.0);
         let tag = self
             .key
@@ -164,10 +161,7 @@ impl quic::PacketKey for PacketKey {
     ) -> Result<&'a [u8], Error> {
         let payload_len = payload.len();
         let aad = aead::Aad::from(header);
-        let nonce_value = match path_id {
-            Some(path_id) => Nonce::for_path(path_id, &self.iv, packet_number),
-            None => Nonce::new(&self.iv, packet_number),
-        };
+        let nonce_value = Nonce::quic(path_id, &self.iv, packet_number);
         let nonce = aead::Nonce::assume_unique_for_key(nonce_value.0);
         self.key
             .open_in_place(nonce, aad, payload)
