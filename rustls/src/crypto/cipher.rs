@@ -220,9 +220,9 @@ impl Nonce {
     /// Creates a unique nonce based on the multipath `path_id`, the `iv` and packet number `pn`.
     ///
     /// The nonce is computed as the XOR between the `iv` and the 96-bit big-endian integer formed
-    /// by concatenating `path_id` and `pn`.
-    pub fn for_path(path_id: u32, iv: &Iv, pn: u64) -> Self {
-        Self::new_inner(Some(path_id), iv, pn)
+    /// by concatenating `path_id` (or 0) and `pn`.
+    pub fn quic(path_id: Option<u32>, iv: &Iv, pn: u64) -> Self {
+        Self::new_inner(path_id, iv, pn)
     }
 
     /// Creates a unique nonce based on the `iv` and sequence number `seq`.
@@ -376,7 +376,7 @@ mod tests {
         const PN: u64 = 54321;
         const IV: [u8; 16] = 0x6b26114b9cba2b63a9e8dd4fu128.to_be_bytes();
         const EXPECTED_NONCE: [u8; 16] = 0x6b2611489cba2b63a9e8097eu128.to_be_bytes();
-        let nonce = Nonce::for_path(PATH_ID, &Iv::copy(&IV[4..]), PN).0;
+        let nonce = Nonce::quic(Some(PATH_ID), &Iv::copy(&IV[4..]), PN).0;
         assert_eq!(EXPECTED_NONCE[4..], nonce);
     }
 }
