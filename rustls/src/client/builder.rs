@@ -6,7 +6,6 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{ClientConfig, EchMode, ResolvesClientCert, handy};
-use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
@@ -159,21 +158,18 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         self.provider.consistency_check()?;
 
         if self.state.client_ech_mode.is_some() {
-            if !self
-                .provider
-                .iter_cipher_suites()
-                .any(|cs| cs.version().version() == ProtocolVersion::TLSv1_3)
-            {
-                return Err(Error::General("ECH requires TLS1.3 support".into()));
-            }
-
-            if self
-                .provider
-                .iter_cipher_suites()
-                .any(|cs| cs.version().version() == ProtocolVersion::TLSv1_2)
-            {
-                return Err(Error::General("ECH forbids TLS1.2 support".into()));
-            }
+            match (
+                self.provider
+                    .tls12_cipher_suites
+                    .is_empty(),
+                self.provider
+                    .tls13_cipher_suites
+                    .is_empty(),
+            ) {
+                (_, true) => return Err(Error::General("ECH requires TLS1.3 support".into())),
+                (false, _) => return Err(Error::General("ECH forbids TLS1.2 support".into())),
+                (true, false) => {}
+            };
         }
 
         Ok(ClientConfig {
