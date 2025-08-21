@@ -348,7 +348,11 @@ See the documentation of the CryptoProvider type for more information.
     }
 
     pub(crate) fn consistency_check(&self) -> Result<(), Error> {
-        if self.cipher_suites.is_empty() {
+        if self
+            .iter_cipher_suites()
+            .next()
+            .is_none()
+        {
             return Err(Error::General("no cipher suites configured".into()));
         }
 
@@ -370,7 +374,7 @@ See the documentation of the CryptoProvider type for more information.
             }
         }
 
-        for cs in self.cipher_suites.iter() {
+        for cs in self.iter_cipher_suites() {
             let cs_kx = cs.key_exchange_algorithms();
             if cs_kx
                 .iter()
@@ -386,6 +390,12 @@ See the documentation of the CryptoProvider type for more information.
         }
 
         Ok(())
+    }
+
+    pub(crate) fn iter_cipher_suites(
+        &self,
+    ) -> impl Iterator<Item = suites::SupportedCipherSuite> + '_ {
+        self.cipher_suites.iter().cloned()
     }
 }
 

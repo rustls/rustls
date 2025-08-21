@@ -379,9 +379,7 @@ impl ExpectClientHello {
         let client_suites = self
             .config
             .provider
-            .cipher_suites
-            .iter()
-            .copied()
+            .iter_cipher_suites()
             .filter(|scs| {
                 client_hello
                     .cipher_suites
@@ -581,8 +579,7 @@ impl ExpectClientHello {
         let mut suitable_suites_iter = self
             .config
             .provider
-            .cipher_suites
-            .iter()
+            .iter_cipher_suites()
             .filter(|suite| {
                 // Reduce our supported ciphersuites by the certified key's algorithm.
                 suite.usable_for_signature_algorithm(sig_key_algorithm)
@@ -629,18 +626,18 @@ impl ExpectClientHello {
 
         if selected_version == ProtocolVersion::TLSv1_3 {
             // This unwrap is structurally guaranteed by the early return for `!ffdhe_possible && !ecdhe_possible`
-            return Ok((*suite, *maybe_skxg.unwrap()));
+            return Ok((suite, *maybe_skxg.unwrap()));
         }
 
         // For TLS1.2, the server can unilaterally choose a DHE group if it has one and
         // there was no better option.
         match maybe_skxg {
-            Some(skxg) => Ok((*suite, *skxg)),
+            Some(skxg) => Ok((suite, *skxg)),
             None if suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE) => {
                 // If kx for the selected cipher suite is DHE and no DHE groups are specified in the extension,
                 // the server is free to choose DHE params, we choose the first DHE kx group of the provider.
                 if let Some(server_selected_ffdhe_skxg) = first_supported_dhe_kxg {
-                    Ok((*suite, *server_selected_ffdhe_skxg))
+                    Ok((suite, *server_selected_ffdhe_skxg))
                 } else {
                     Err(PeerIncompatible::NoKxGroupsInCommon)
                 }
