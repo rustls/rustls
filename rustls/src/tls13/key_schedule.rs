@@ -1046,7 +1046,7 @@ mod tests {
 
     use super::provider::ring_like::aead;
     use super::provider::tls13::{
-        TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
+        TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
     };
     use super::{KeySchedule, SecretKind, derive_traffic_iv, derive_traffic_key};
     use crate::KeyLog;
@@ -1054,14 +1054,10 @@ mod tests {
 
     #[test]
     fn empty_hash() {
-        let sha256 = super::provider::tls13::TLS13_AES_128_GCM_SHA256
-            .tls13()
-            .unwrap()
+        let sha256 = TLS13_AES_128_GCM_SHA256
             .common
             .hash_provider;
-        let sha384 = super::provider::tls13::TLS13_AES_256_GCM_SHA384
-            .tls13()
-            .unwrap()
+        let sha384 = TLS13_AES_256_GCM_SHA384
             .common
             .hash_provider;
 
@@ -1169,7 +1165,7 @@ mod tests {
             0x0d, 0xb2, 0x8f, 0x98, 0x85, 0x86, 0xa1, 0xb7, 0xe4, 0xd5, 0xc6, 0x9c,
         ];
 
-        let mut ks = KeySchedule::new_with_empty_secret(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL);
+        let mut ks = KeySchedule::new_with_empty_secret(TLS13_CHACHA20_POLY1305_SHA256);
         ks.input_secret(&ecdhe_secret);
 
         assert_traffic_secret(
@@ -1231,13 +1227,10 @@ mod tests {
 
         // Since we can't test key equality, we test the output of sealing with the key instead.
         let aead_alg = &aead::AES_128_GCM;
-        let expander = TLS13_AES_128_GCM_SHA256_INTERNAL
+        let expander = TLS13_AES_128_GCM_SHA256
             .hkdf_provider
             .expander_for_okm(&traffic_secret);
-        let key = derive_traffic_key(
-            expander.as_ref(),
-            TLS13_AES_128_GCM_SHA256_INTERNAL.aead_alg,
-        );
+        let key = derive_traffic_key(expander.as_ref(), TLS13_AES_128_GCM_SHA256.aead_alg);
         let key = aead::UnboundKey::new(aead_alg, key.as_ref()).unwrap();
         let seal_output = seal_zeroes(key);
         let expected_key = aead::UnboundKey::new(aead_alg, expected_key).unwrap();
@@ -1269,7 +1262,7 @@ mod benchmarks {
     fn bench_sha256(b: &mut test::Bencher) {
         use core::fmt::Debug;
 
-        use super::provider::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
+        use super::provider::tls13::TLS13_CHACHA20_POLY1305_SHA256;
         use super::{KeySchedule, SecretKind, derive_traffic_iv, derive_traffic_key};
         use crate::KeyLog;
 
@@ -1283,19 +1276,18 @@ mod benchmarks {
 
             let hash = [0u8; 32];
             let traffic_secret = ks.derive_logged_secret(kind, &hash, &Log, &[0u8; 32]);
-            let traffic_secret_expander = TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
+            let traffic_secret_expander = TLS13_CHACHA20_POLY1305_SHA256
                 .hkdf_provider
                 .expander_for_okm(&traffic_secret);
             test::black_box(derive_traffic_key(
                 traffic_secret_expander.as_ref(),
-                TLS13_CHACHA20_POLY1305_SHA256_INTERNAL.aead_alg,
+                TLS13_CHACHA20_POLY1305_SHA256.aead_alg,
             ));
             test::black_box(derive_traffic_iv(traffic_secret_expander.as_ref()));
         }
 
         b.iter(|| {
-            let mut ks =
-                KeySchedule::new_with_empty_secret(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL);
+            let mut ks = KeySchedule::new_with_empty_secret(TLS13_CHACHA20_POLY1305_SHA256);
             ks.input_secret(&[0u8; 32]);
 
             extract_traffic_secret(&ks, SecretKind::ClientHandshakeTrafficSecret);

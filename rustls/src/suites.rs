@@ -239,26 +239,26 @@ mod tests {
     use std::println;
 
     use super::provider::tls13::*;
+    use crate::SupportedCipherSuite;
 
     #[test]
     fn test_scs_is_debug() {
-        println!("{:?}", super::provider::ALL_CIPHER_SUITES);
+        println!(
+            "{:?}",
+            SupportedCipherSuite::Tls13(TLS13_AES_128_GCM_SHA256)
+        );
     }
 
     #[test]
     fn test_can_resume_to() {
         assert!(
             TLS13_AES_128_GCM_SHA256
-                .tls13()
-                .unwrap()
-                .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL)
+                .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256)
                 .is_some()
         );
         assert!(
             TLS13_AES_256_GCM_SHA384
-                .tls13()
-                .unwrap()
-                .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL)
+                .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256)
                 .is_none()
         );
     }

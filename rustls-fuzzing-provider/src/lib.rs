@@ -33,14 +33,15 @@ use rustls::pki_types::{
 use rustls::server::ProducesTickets;
 use rustls::{
     CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerMisbehaved,
-    ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme, SupportedCipherSuite,
-    Tls12CipherSuite, Tls13CipherSuite, crypto, server, sign,
+    ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme, Tls12CipherSuite,
+    Tls13CipherSuite, crypto, server, sign,
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
 pub fn provider() -> crypto::CryptoProvider {
     crypto::CryptoProvider {
-        cipher_suites: vec![TLS13_FUZZING_SUITE, TLS_FUZZING_SUITE],
+        tls12_cipher_suites: vec![TLS_FUZZING_SUITE],
+        tls13_cipher_suites: vec![TLS13_FUZZING_SUITE],
         kx_groups: vec![&KeyExchangeGroup],
         signature_verification_algorithms: VERIFY_ALGORITHMS,
         secure_random: &Provider,
@@ -101,32 +102,30 @@ impl crypto::KeyProvider for Provider {
     }
 }
 
-pub static TLS13_FUZZING_SUITE: SupportedCipherSuite =
-    SupportedCipherSuite::Tls13(&Tls13CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::Unknown(0xff13),
-            hash_provider: &Hash,
-            confidentiality_limit: u64::MAX,
-        },
-        protocol_version: rustls::version::TLS13_VERSION,
-        hkdf_provider: &tls13::HkdfUsingHmac(&Hmac),
-        aead_alg: &Aead,
-        quic: None,
-    });
+pub static TLS13_FUZZING_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite::Unknown(0xff13),
+        hash_provider: &Hash,
+        confidentiality_limit: u64::MAX,
+    },
+    protocol_version: rustls::version::TLS13_VERSION,
+    hkdf_provider: &tls13::HkdfUsingHmac(&Hmac),
+    aead_alg: &Aead,
+    quic: None,
+};
 
-pub static TLS_FUZZING_SUITE: SupportedCipherSuite =
-    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::Unknown(0xff12),
-            hash_provider: &Hash,
-            confidentiality_limit: u64::MAX,
-        },
-        protocol_version: rustls::version::TLS12_VERSION,
-        kx: KeyExchangeAlgorithm::ECDHE,
-        sign: &[SIGNATURE_SCHEME],
-        prf_provider: &tls12::PrfUsingHmac(&Hmac),
-        aead_alg: &Aead,
-    });
+pub static TLS_FUZZING_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite::Unknown(0xff12),
+        hash_provider: &Hash,
+        confidentiality_limit: u64::MAX,
+    },
+    protocol_version: rustls::version::TLS12_VERSION,
+    kx: KeyExchangeAlgorithm::ECDHE,
+    sign: &[SIGNATURE_SCHEME],
+    prf_provider: &tls12::PrfUsingHmac(&Hmac),
+    aead_alg: &Aead,
+};
 
 #[derive(Debug, Default)]
 pub struct Ticketer;

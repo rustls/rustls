@@ -3,10 +3,10 @@
 
 pub use std::sync::Arc;
 
-use rustls::RootCertStore;
 use rustls::client::{ClientConfig, ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::CryptoProvider;
 use rustls::server::{ClientCertVerifierBuilder, ServerConfig, WebPkiClientVerifier};
+use rustls::{RootCertStore, SupportedCipherSuite};
 pub use rustls_test::*;
 
 pub fn server_config_builder(
@@ -56,4 +56,34 @@ pub fn all_versions(provider: &CryptoProvider) -> impl Iterator<Item = CryptoPro
         provider.clone().with_only_tls13(),
     ]
     .into_iter()
+}
+
+pub fn provider_with_one_suite(
+    provider: &CryptoProvider,
+    suite: SupportedCipherSuite,
+) -> CryptoProvider {
+    provider_with_suites(provider, &[suite])
+}
+
+pub fn provider_with_suites(
+    provider: &CryptoProvider,
+    suites: &[SupportedCipherSuite],
+) -> CryptoProvider {
+    let mut provider = CryptoProvider {
+        tls12_cipher_suites: vec![],
+        tls13_cipher_suites: vec![],
+        ..provider.clone()
+    };
+    for suite in suites {
+        match suite {
+            SupportedCipherSuite::Tls12(suite) => {
+                provider.tls12_cipher_suites.push(suite);
+            }
+            SupportedCipherSuite::Tls13(suite) => {
+                provider.tls13_cipher_suites.push(suite);
+            }
+            _ => unreachable!(),
+        }
+    }
+    provider
 }

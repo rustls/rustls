@@ -310,17 +310,15 @@ fn all_benchmarks() -> anyhow::Result<Vec<Benchmark>> {
 fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     let mut all = Vec::new();
 
-    for (provider, suites, ticketer, provider_name) in [
+    for (provider, ticketer, provider_name) in [
         (
             derandomize(ring::default_provider()),
-            ring::ALL_CIPHER_SUITES,
             #[allow(trivial_casts)]
             &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "ring",
         ),
         (
             derandomize(aws_lc_rs::default_provider()),
-            aws_lc_rs::ALL_CIPHER_SUITES,
             #[allow(trivial_casts)]
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "aws_lc_rs",
@@ -371,10 +369,9 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
             ),
         ] {
             all.push(BenchmarkParams::new(
-                provider.clone(),
+                select_suite(provider.clone(), suite_name),
                 ticketer,
                 AuthKeySource::KeyType(key_type),
-                find_suite(suites, suite_name),
                 version,
                 format!("{provider_name}_{name}"),
             ));
@@ -386,19 +383,21 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         as fn() -> Arc<dyn rustls::server::ProducesTickets>);
 
     all.push(BenchmarkParams::new(
-        rustls_fuzzing_provider::provider(),
+        rustls_fuzzing_provider::provider()
+            .with_only_tls13()
+            .into(),
         make_ticketer,
         AuthKeySource::FuzzingProvider,
-        rustls_fuzzing_provider::TLS13_FUZZING_SUITE,
         ProtocolVersion::TLSv1_3,
         "1.3_no_crypto".to_string(),
     ));
 
     all.push(BenchmarkParams::new(
-        rustls_fuzzing_provider::provider(),
+        rustls_fuzzing_provider::provider()
+            .with_only_tls12()
+            .into(),
         make_ticketer,
         AuthKeySource::FuzzingProvider,
-        rustls_fuzzing_provider::TLS_FUZZING_SUITE,
         ProtocolVersion::TLSv1_2,
         "1.2_no_crypto".to_string(),
     ));
@@ -406,13 +405,14 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     all
 }
 
-fn find_suite(
-    all: &[rustls::SupportedCipherSuite],
-    name: CipherSuite,
-) -> rustls::SupportedCipherSuite {
-    *all.iter()
-        .find(|suite| suite.suite() == name)
-        .unwrap_or_else(|| panic!("cannot find cipher suite {name:?}"))
+fn select_suite(mut provider: CryptoProvider, name: CipherSuite) -> Arc<CryptoProvider> {
+    provider
+        .tls12_cipher_suites
+        .retain(|suite| suite.common.suite == name);
+    provider
+        .tls13_cipher_suites
+        .retain(|suite| suite.common.suite == name);
+    provider.into()
 }
 
 fn ring_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
@@ -539,15 +539,7 @@ struct ClientSideStepper<'a> {
 
 impl ClientSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
-        assert_eq!(params.ciphersuite.version().version(), params.version);
-
-        let cfg = ClientConfig::builder_with_provider(
-            CryptoProvider {
-                cipher_suites: vec![params.ciphersuite],
-                ..params.provider.clone()
-            }
-            .into(),
-        );
+        let cfg = ClientConfig::builder_with_provider(params.provider.clone());
 
         let mut cfg = match params.auth_key {
             AuthKeySource::KeyType(key_type) => {
@@ -634,9 +626,7 @@ struct ServerSideStepper<'a> {
 
 impl ServerSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
-        assert_eq!(params.ciphersuite.version().version(), params.version);
-
-        let cfg = ServerConfig::builder_with_provider(params.provider.clone().into());
+        let cfg = ServerConfig::builder_with_provider(params.provider.clone());
 
         let mut cfg = match params.auth_key {
             AuthKeySource::KeyType(key_type) => cfg

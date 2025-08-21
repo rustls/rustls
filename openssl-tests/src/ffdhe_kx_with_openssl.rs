@@ -195,10 +195,8 @@ fn load_private_key() -> PrivateKeyDer<'static> {
 
 fn ffdhe_provider() -> CryptoProvider {
     CryptoProvider {
-        cipher_suites: vec![
-            ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-            provider::cipher_suite::TLS13_AES_128_GCM_SHA256,
-        ],
+        tls12_cipher_suites: vec![&ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
+        tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
         kx_groups: vec![&FfdheKxGroup(
             rustls::NamedGroup::FFDHE2048,
             rustls::ffdhe_groups::FFDHE2048,

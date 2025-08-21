@@ -11,7 +11,7 @@ use rustls::unbuffered::{
 };
 use rustls::{
     AlertDescription, CertificateError, ClientConfig, ConnectionTrafficSecrets, Error,
-    InvalidMessage, ServerConfig, SideData,
+    InvalidMessage, ServerConfig, SideData, SupportedCipherSuite,
 };
 
 use super::*;
@@ -1530,28 +1530,23 @@ fn test_secret_extraction_enabled() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     for suite in [
-        cipher_suite::TLS13_AES_128_GCM_SHA256,
-        cipher_suite::TLS13_AES_256_GCM_SHA384,
+        SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_128_GCM_SHA256),
+        SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_256_GCM_SHA384),
         #[cfg(not(feature = "fips"))]
-        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        SupportedCipherSuite::Tls13(cipher_suite::TLS13_CHACHA20_POLY1305_SHA256),
+        SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256),
+        SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384),
         #[cfg(not(feature = "fips"))]
-        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256),
     ] {
         println!("Testing suite {:?}", suite.suite().as_str());
 
         // Only offer the cipher suite (and protocol version) that we're testing
-        let mut server_config = ServerConfig::builder_with_provider(
-            CryptoProvider {
-                cipher_suites: vec![suite],
-                ..provider.clone()
-            }
-            .into(),
-        )
-        .with_no_client_auth()
-        .with_single_cert(kt.get_chain(), kt.get_key())
-        .unwrap();
+        let mut server_config =
+            ServerConfig::builder_with_provider(provider_with_one_suite(&provider, suite).into())
+                .with_no_client_auth()
+                .with_single_cert(kt.get_chain(), kt.get_key())
+                .unwrap();
         // Opt into secret extraction from both sides
         server_config.enable_secret_extraction = true;
         let server_config = Arc::new(server_config);

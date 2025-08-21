@@ -224,9 +224,7 @@ impl quic::Algorithm for KeyBuilder {
 mod tests {
     use std::dbg;
 
-    use super::provider::tls13::{
-        TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
-    };
+    use super::provider::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256};
     use crate::common_state::Side;
     use crate::crypto::tls13::OkmBlock;
     use crate::quic::*;
@@ -243,10 +241,10 @@ mod tests {
         let builder = KeyBuilder::new(
             &secret,
             version,
-            TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
+            TLS13_CHACHA20_POLY1305_SHA256
                 .quic
                 .unwrap(),
-            TLS13_CHACHA20_POLY1305_SHA256_INTERNAL.hkdf_provider,
+            TLS13_CHACHA20_POLY1305_SHA256.hkdf_provider,
         );
         let packet = builder.packet_key();
         let hpk = builder.header_protection_key();
@@ -317,10 +315,8 @@ mod tests {
                     0x4e, 0xb1, 0xe4, 0x38, 0xd8, 0x55,
                 ][..],
             ),
-            TLS13_AES_128_GCM_SHA256_INTERNAL,
-            TLS13_AES_128_GCM_SHA256_INTERNAL
-                .quic
-                .unwrap(),
+            TLS13_AES_128_GCM_SHA256,
+            TLS13_AES_128_GCM_SHA256.quic.unwrap(),
             Side::Client,
             Version::V1,
         );
@@ -366,10 +362,8 @@ mod tests {
         let icid = [0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
         let server = Keys::initial(
             Version::V2,
-            TLS13_AES_128_GCM_SHA256_INTERNAL,
-            TLS13_AES_128_GCM_SHA256_INTERNAL
-                .quic
-                .unwrap(),
+            TLS13_AES_128_GCM_SHA256,
+            TLS13_AES_128_GCM_SHA256.quic.unwrap(),
             &icid,
             Side::Server,
         );
@@ -447,10 +441,8 @@ mod tests {
         let builder = KeyBuilder::new(
             &secret,
             Version::V1,
-            TLS13_AES_128_GCM_SHA256_INTERNAL
-                .quic
-                .unwrap(),
-            TLS13_AES_128_GCM_SHA256_INTERNAL.hkdf_provider,
+            TLS13_AES_128_GCM_SHA256.quic.unwrap(),
+            TLS13_AES_128_GCM_SHA256.hkdf_provider,
         );
 
         let packet = builder.packet_key();
@@ -482,10 +474,8 @@ mod tests {
         let builder = KeyBuilder::new(
             &secret,
             Version::V1,
-            TLS13_AES_128_GCM_SHA256_INTERNAL
-                .quic
-                .unwrap(),
-            TLS13_AES_128_GCM_SHA256_INTERNAL.hkdf_provider,
+            TLS13_AES_128_GCM_SHA256.quic.unwrap(),
+            TLS13_AES_128_GCM_SHA256.hkdf_provider,
         );
         let packet = builder.packet_key();
 
