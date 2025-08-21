@@ -353,13 +353,8 @@ impl ClientConfig {
         self.supports_version(ProtocolVersion::TLSv1_3)
     }
 
-    /// We support a given TLS version if it's quoted in the configured
-    /// versions *and* at least one ciphersuite for this version is
-    /// also configured.
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.provider
-            .iter_cipher_suites()
-            .any(|cs| cs.version().version() == v)
+        self.provider.supports_version(v)
     }
 
     #[cfg(feature = "std")]
