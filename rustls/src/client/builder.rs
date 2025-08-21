@@ -161,8 +161,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         if self.state.client_ech_mode.is_some() {
             if !self
                 .provider
-                .cipher_suites
-                .iter()
+                .iter_cipher_suites()
                 .any(|cs| cs.version().version() == ProtocolVersion::TLSv1_3)
             {
                 return Err(Error::General("ECH requires TLS1.3 support".into()));
@@ -170,8 +169,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
 
             if self
                 .provider
-                .cipher_suites
-                .iter()
+                .iter_cipher_suites()
                 .any(|cs| cs.version().version() == ProtocolVersion::TLSv1_2)
             {
                 return Err(Error::General("ECH forbids TLS1.2 support".into()));

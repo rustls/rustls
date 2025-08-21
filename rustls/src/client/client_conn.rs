@@ -358,24 +358,20 @@ impl ClientConfig {
     /// also configured.
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.provider
-            .cipher_suites
-            .iter()
+            .iter_cipher_suites()
             .any(|cs| cs.version().version() == v)
     }
 
     #[cfg(feature = "std")]
     pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
         self.provider
-            .cipher_suites
-            .iter()
+            .iter_cipher_suites()
             .any(|cs| cs.usable_for_protocol(proto))
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
         self.provider
-            .cipher_suites
-            .iter()
-            .copied()
+            .iter_cipher_suites()
             .find(|&scs| scs.suite() == suite)
     }
 
