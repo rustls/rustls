@@ -4,11 +4,7 @@ use rustls::crypto::{
     aws_lc_rs as provider,
 };
 use rustls::ffdhe_groups::FfdheGroup;
-use rustls::{CipherSuite, NamedGroup, SupportedCipherSuite, Tls12CipherSuite};
-
-/// The (test-only) TLS1.2 ciphersuite TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
-pub(crate) static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite::Tls12(&TLS12_DHE_RSA_WITH_AES_128_GCM_SHA256);
+use rustls::{CipherSuite, NamedGroup, Tls12CipherSuite};
 
 #[derive(Debug)]
 pub(crate) struct FfdheKxGroup(pub NamedGroup, pub FfdheGroup<'static>);
@@ -46,18 +42,14 @@ impl SupportedKxGroup for FfdheKxGroup {
     }
 }
 
-static TLS12_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite =
-    match &provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 {
-        SupportedCipherSuite::Tls12(original) => Tls12CipherSuite {
-            common: CipherSuiteCommon {
-                suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-                ..original.common
-            },
-            kx: KeyExchangeAlgorithm::DHE,
-            ..**original
-        },
-        _ => unreachable!(),
-    };
+pub(crate) static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+        ..provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.common
+    },
+    kx: KeyExchangeAlgorithm::DHE,
+    ..*provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+};
 
 struct ActiveFfdheKx {
     x_pub: Vec<u8>,

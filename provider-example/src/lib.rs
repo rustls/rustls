@@ -33,7 +33,8 @@ mod verify;
 
 pub fn provider() -> CryptoProvider {
     CryptoProvider {
-        cipher_suites: ALL_CIPHER_SUITES.to_vec(),
+        tls12_cipher_suites: ALL_TLS12_CIPHER_SUITES.to_vec(),
+        tls13_cipher_suites: ALL_TLS13_CIPHER_SUITES.to_vec(),
         kx_groups: kx::ALL_KX_GROUPS.to_vec(),
         signature_verification_algorithms: verify::ALGORITHMS,
         secure_random: &Provider,
@@ -70,26 +71,25 @@ impl rustls::crypto::KeyProvider for Provider {
     }
 }
 
-static ALL_CIPHER_SUITES: &[rustls::SupportedCipherSuite] = &[
-    TLS13_CHACHA20_POLY1305_SHA256,
-    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-];
+static ALL_TLS12_CIPHER_SUITES: &[&rustls::Tls12CipherSuite] =
+    &[TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256];
 
-pub static TLS13_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherSuite =
-    rustls::SupportedCipherSuite::Tls13(&rustls::Tls13CipherSuite {
-        common: rustls::crypto::CipherSuiteCommon {
-            suite: rustls::CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-            hash_provider: &hash::Sha256,
-            confidentiality_limit: u64::MAX,
-        },
-        protocol_version: rustls::version::TLS13_VERSION,
-        hkdf_provider: &rustls::crypto::tls13::HkdfUsingHmac(&hmac::Sha256Hmac),
-        aead_alg: &aead::Chacha20Poly1305,
-        quic: None,
-    });
+static ALL_TLS13_CIPHER_SUITES: &[&rustls::Tls13CipherSuite] = &[TLS13_CHACHA20_POLY1305_SHA256];
 
-pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherSuite =
-    rustls::SupportedCipherSuite::Tls12(&rustls::Tls12CipherSuite {
+pub static TLS13_CHACHA20_POLY1305_SHA256: &rustls::Tls13CipherSuite = &rustls::Tls13CipherSuite {
+    common: rustls::crypto::CipherSuiteCommon {
+        suite: rustls::CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+        hash_provider: &hash::Sha256,
+        confidentiality_limit: u64::MAX,
+    },
+    protocol_version: rustls::version::TLS13_VERSION,
+    hkdf_provider: &rustls::crypto::tls13::HkdfUsingHmac(&hmac::Sha256Hmac),
+    aead_alg: &aead::Chacha20Poly1305,
+    quic: None,
+};
+
+pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: &rustls::Tls12CipherSuite =
+    &rustls::Tls12CipherSuite {
         common: rustls::crypto::CipherSuiteCommon {
             suite: rustls::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             hash_provider: &hash::Sha256,
@@ -103,4 +103,4 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherS
         ],
         prf_provider: &rustls::crypto::tls12::PrfUsingHmac(&hmac::Sha256Hmac),
         aead_alg: &aead::Chacha20Poly1305,
-    });
+    };

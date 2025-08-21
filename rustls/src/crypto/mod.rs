@@ -5,8 +5,6 @@ use core::fmt::Debug;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
-#[cfg(doc)]
-use crate::Tls12CipherSuite;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;
 use crate::sign::SigningKey;
@@ -16,11 +14,11 @@ pub use crate::webpki::{
     verify_tls13_signature_with_raw_key,
 };
 #[cfg(doc)]
+use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server, sign};
 use crate::{
-    ClientConfig, ConfigBuilder, ServerConfig, SupportedCipherSuite, Tls13CipherSuite, client,
-    crypto, server, sign,
+    Error, NamedGroup, ProtocolVersion, SupportedCipherSuite, SupportedProtocolVersion,
+    Tls12CipherSuite, Tls13CipherSuite,
 };
-use crate::{Error, NamedGroup, ProtocolVersion, SupportedProtocolVersion, suites};
 
 /// *ring* based CryptoProvider.
 #[cfg(feature = "ring")]
@@ -182,14 +180,24 @@ pub use crate::suites::CipherSuiteCommon;
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug, Clone)]
 pub struct CryptoProvider {
-    /// List of supported ciphersuites, in preference order -- the first element
+    /// List of supported TLS1.2 cipher suites, in preference order -- the first element
     /// is the highest priority.
     ///
-    /// The `SupportedCipherSuite` type carries both configuration and implementation.
+    /// Note that the protocol version is negotiated before the cipher suite.
+    ///
+    /// The `Tls12CipherSuite` type carries both configuration and implementation.
     ///
     /// A valid `CryptoProvider` must ensure that all cipher suites are accompanied by at least
     /// one matching key exchange group in [`CryptoProvider::kx_groups`].
-    pub cipher_suites: Vec<suites::SupportedCipherSuite>,
+    pub tls12_cipher_suites: Vec<&'static Tls12CipherSuite>,
+
+    /// List of supported TLS1.3 cipher suites, in preference order -- the first element
+    /// is the highest priority.
+    ///
+    /// Note that the protocol version is negotiated before the cipher suite.
+    ///
+    /// The `Tls13CipherSuite` type carries both configuration and implementation.
+    pub tls13_cipher_suites: Vec<&'static Tls13CipherSuite>,
 
     /// List of supported key exchange groups, in preference order -- the
     /// first element is the highest priority.
@@ -308,13 +316,19 @@ See the documentation of the CryptoProvider type for more information.
     /// which take these into account.
     pub fn fips(&self) -> bool {
         let Self {
-            cipher_suites,
+            tls12_cipher_suites,
+            tls13_cipher_suites,
             kx_groups,
             signature_verification_algorithms,
             secure_random,
             key_provider,
         } = self;
-        cipher_suites.iter().all(|cs| cs.fips())
+        tls12_cipher_suites
+            .iter()
+            .all(|cs| cs.fips())
+            && tls13_cipher_suites
+                .iter()
+                .all(|cs| cs.fips())
             && kx_groups.iter().all(|kx| kx.fips())
             && signature_verification_algorithms.fips()
             && secure_random.fips()
@@ -323,36 +337,22 @@ See the documentation of the CryptoProvider type for more information.
 
     /// Return a new `CryptoProvider` that only supports TLS1.3.
     pub fn with_only_tls13(self) -> Self {
-        let cipher_suites = self
-            .cipher_suites
-            .into_iter()
-            .filter(|cs| cs.version() == crate::version::TLS13)
-            .collect();
         Self {
-            cipher_suites,
+            tls12_cipher_suites: Vec::new(),
             ..self
         }
     }
 
     /// Return a new `CryptoProvider` that only supports TLS1.2.
     pub fn with_only_tls12(self) -> Self {
-        let cipher_suites = self
-            .cipher_suites
-            .into_iter()
-            .filter(|cs| cs.version() == crate::version::TLS12)
-            .collect();
         Self {
-            cipher_suites,
+            tls13_cipher_suites: Vec::new(),
             ..self
         }
     }
 
     pub(crate) fn consistency_check(&self) -> Result<(), Error> {
-        if self
-            .iter_cipher_suites()
-            .next()
-            .is_none()
-        {
+        if self.tls12_cipher_suites.is_empty() && self.tls13_cipher_suites.is_empty() {
             return Err(Error::General("no cipher suites configured".into()));
         }
 
@@ -392,10 +392,17 @@ See the documentation of the CryptoProvider type for more information.
         Ok(())
     }
 
-    pub(crate) fn iter_cipher_suites(
-        &self,
-    ) -> impl Iterator<Item = suites::SupportedCipherSuite> + '_ {
-        self.cipher_suites.iter().cloned()
+    pub(crate) fn iter_cipher_suites(&self) -> impl Iterator<Item = SupportedCipherSuite> + '_ {
+        self.tls13_cipher_suites
+            .iter()
+            .cloned()
+            .map(SupportedCipherSuite::Tls13)
+            .chain(
+                self.tls12_cipher_suites
+                    .iter()
+                    .cloned()
+                    .map(SupportedCipherSuite::Tls12),
+            )
     }
 }
 

@@ -609,9 +609,7 @@ mod tests {
         }
 
         fn server_handshake_encrypter(&self) -> Box<dyn MessageEncrypter> {
-            let cipher_suite = super::provider::cipher_suite::TLS13_AES_128_GCM_SHA256
-                .tls13()
-                .unwrap();
+            let cipher_suite = super::provider::cipher_suite::TLS13_AES_128_GCM_SHA256;
 
             let secret = self
                 .server_handshake_secret

@@ -12,10 +12,9 @@ use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup}
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
-use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::webpki::WebPkiSupportedAlgorithms;
-use crate::{Error, OtherError};
+use crate::{Error, OtherError, Tls12CipherSuite, Tls13CipherSuite};
 
 /// Hybrid public key encryption (HPKE).
 pub mod hpke;
@@ -40,7 +39,8 @@ pub(crate) mod tls13;
 /// A `CryptoProvider` backed by aws-lc-rs.
 pub fn default_provider() -> CryptoProvider {
     CryptoProvider {
-        cipher_suites: DEFAULT_CIPHER_SUITES.to_vec(),
+        tls12_cipher_suites: DEFAULT_TLS12_CIPHER_SUITES.to_vec(),
+        tls13_cipher_suites: DEFAULT_TLS13_CIPHER_SUITES.to_vec(),
         kx_groups: default_kx_groups(),
         signature_verification_algorithms: SUPPORTED_SIG_ALGS,
         secure_random: &AwsLcRs,
@@ -99,17 +99,11 @@ impl KeyProvider for AwsLcRs {
     }
 }
 
-/// The cipher suite configuration that an application should use by default.
+/// The TLS1.2 cipher suite configuration that an application should use by default.
 ///
-/// This will be [`ALL_CIPHER_SUITES`] sans any supported cipher suites that
+/// This will be [`ALL_TLS12_CIPHER_SUITES`] sans any supported cipher suites that
 /// shouldn't be enabled by most applications.
-pub static DEFAULT_CIPHER_SUITES: &[SupportedCipherSuite] = &[
-    // TLS1.3 suites
-    tls13::TLS13_AES_256_GCM_SHA384,
-    tls13::TLS13_AES_128_GCM_SHA256,
-    #[cfg(not(feature = "fips"))]
-    tls13::TLS13_CHACHA20_POLY1305_SHA256,
-    // TLS1.2 suites
+pub static DEFAULT_TLS12_CIPHER_SUITES: &[&Tls12CipherSuite] = &[
     tls12::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     tls12::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     #[cfg(not(feature = "fips"))]
@@ -120,19 +114,32 @@ pub static DEFAULT_CIPHER_SUITES: &[SupportedCipherSuite] = &[
     tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 ];
 
-/// A list of all the cipher suites supported by the rustls aws-lc-rs provider.
-pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
-    // TLS1.3 suites
+/// The TLS1.3 cipher suite configuration that an application should use by default.
+///
+/// This will be [`ALL_TLS13_CIPHER_SUITES`] sans any supported cipher suites that
+/// shouldn't be enabled by most applications.
+pub static DEFAULT_TLS13_CIPHER_SUITES: &[&Tls13CipherSuite] = &[
     tls13::TLS13_AES_256_GCM_SHA384,
     tls13::TLS13_AES_128_GCM_SHA256,
+    #[cfg(not(feature = "fips"))]
     tls13::TLS13_CHACHA20_POLY1305_SHA256,
-    // TLS1.2 suites
+];
+
+/// A list of all the TLS1.2 cipher suites supported by the rustls aws-lc-rs provider.
+pub static ALL_TLS12_CIPHER_SUITES: &[&Tls12CipherSuite] = &[
     tls12::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     tls12::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     tls12::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
     tls12::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
     tls12::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
     tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+];
+
+/// A list of all the TLS1.3 cipher suites supported by the rustls aws-lc-rs provider.
+pub static ALL_TLS13_CIPHER_SUITES: &[&Tls13CipherSuite] = &[
+    tls13::TLS13_AES_256_GCM_SHA384,
+    tls13::TLS13_AES_128_GCM_SHA256,
+    tls13::TLS13_CHACHA20_POLY1305_SHA256,
 ];
 
 /// All defined cipher suites supported by aws-lc-rs appear in this module.
@@ -289,7 +296,12 @@ mod tests {
     #[test]
     fn default_suites_are_fips() {
         assert!(
-            super::DEFAULT_CIPHER_SUITES
+            super::DEFAULT_TLS12_CIPHER_SUITES
+                .iter()
+                .all(|scs| scs.fips())
+        );
+        assert!(
+            super::DEFAULT_TLS13_CIPHER_SUITES
                 .iter()
                 .all(|scs| scs.fips())
         );
@@ -298,6 +310,13 @@ mod tests {
     #[cfg(not(feature = "fips"))]
     #[test]
     fn default_suites() {
-        assert_eq!(super::DEFAULT_CIPHER_SUITES, super::ALL_CIPHER_SUITES);
+        assert_eq!(
+            super::DEFAULT_TLS12_CIPHER_SUITES,
+            super::ALL_TLS12_CIPHER_SUITES
+        );
+        assert_eq!(
+            super::DEFAULT_TLS13_CIPHER_SUITES,
+            super::ALL_TLS13_CIPHER_SUITES
+        );
     }
 }

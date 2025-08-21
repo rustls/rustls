@@ -319,9 +319,16 @@ fn find_key_exchange(name: &str) -> &'static dyn SupportedKxGroup {
 fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvider {
     // first, check `suites` all name known suites, and will have some effect
     let known_suites = provider
-        .cipher_suites
+        .tls12_cipher_suites
         .iter()
-        .map(|cs| format!("{:?}", cs.suite()).to_lowercase())
+        .map(|cs| cs.common.suite)
+        .chain(
+            provider
+                .tls13_cipher_suites
+                .iter()
+                .map(|cs| cs.common.suite),
+        )
+        .map(|cs| format!("{:?}", cs).to_lowercase())
         .collect::<Vec<String>>();
 
     for s in suites {
@@ -331,12 +338,22 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
     }
 
     // now discard non-named suites
-    provider.cipher_suites.retain(|cs| {
-        let name = format!("{:?}", cs.suite()).to_lowercase();
-        suites
-            .iter()
-            .any(|s| s.to_lowercase() == name)
-    });
+    provider
+        .tls12_cipher_suites
+        .retain(|cs| {
+            let name = format!("{:?}", cs.common.suite).to_lowercase();
+            suites
+                .iter()
+                .any(|s| s.to_lowercase() == name)
+        });
+    provider
+        .tls13_cipher_suites
+        .retain(|cs| {
+            let name = format!("{:?}", cs.common.suite).to_lowercase();
+            suites
+                .iter()
+                .any(|s| s.to_lowercase() == name)
+        });
 
     provider
 }

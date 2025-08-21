@@ -312,7 +312,8 @@ impl SelectedProvider {
                 // version of `aws_lc_rs::default_provider()`
                 CryptoProvider {
                     kx_groups: aws_lc_rs::DEFAULT_KX_GROUPS.to_vec(),
-                    cipher_suites: aws_lc_rs::ALL_CIPHER_SUITES.to_vec(),
+                    tls12_cipher_suites: aws_lc_rs::ALL_TLS12_CIPHER_SUITES.to_vec(),
+                    tls13_cipher_suites: aws_lc_rs::ALL_TLS13_CIPHER_SUITES.to_vec(),
                     ..aws_lc_rs::default_provider()
                 }
             }
