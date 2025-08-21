@@ -843,13 +843,9 @@ impl Parameters {
             .unwrap();
 
         let cfg = ClientConfig::builder_with_provider(
-            CryptoProvider {
-                cipher_suites: self
-                    .provider
-                    .find_suite(self.proto.ciphersuite),
-                ..self.provider.build()
-            }
-            .into(),
+            self.provider
+                .build_with_cipher_suite(self.proto.ciphersuite)
+                .into(),
         )
         .with_root_certificates(root_store);
 
@@ -993,18 +989,20 @@ impl Provider {
         }
     }
 
-    fn find_suite(&self, name: CipherSuite) -> Vec<rustls::SupportedCipherSuite> {
+    fn build_with_cipher_suite(&self, name: CipherSuite) -> CryptoProvider {
         let mut provider = self.build();
         provider
-            .cipher_suites
-            .retain(|cs| cs.suite() == name);
-        provider.cipher_suites
+            .tls12_cipher_suites
+            .retain(|cs| cs.common.suite == name);
+        provider
+            .tls13_cipher_suites
+            .retain(|cs| cs.common.suite == name);
+        provider
     }
 
     fn supports_benchmark(&self, param: &BenchmarkParam) -> bool {
-        !self
-            .find_suite(param.ciphersuite)
-            .is_empty()
+        let prov = self.build_with_cipher_suite(param.ciphersuite);
+        (prov.tls12_cipher_suites.len() + prov.tls13_cipher_suites.len()) > 0
             && self.supports_key_type(param.key_type)
     }
 

@@ -83,14 +83,14 @@ impl ResumptionKind {
 /// Parameters associated to a benchmark
 #[derive(Clone, Debug)]
 pub struct BenchmarkParams {
-    /// Which `CryptoProvider` to test
-    pub provider: rustls::crypto::CryptoProvider,
+    /// Which `CryptoProvider` to test.
+    ///
+    /// The choice of cipher suite is baked into this.
+    pub provider: Arc<rustls::crypto::CryptoProvider>,
     /// How to make a suitable [`rustls::server::ProducesTickets`].
     pub ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
     /// Where to get keys for server auth
     pub auth_key: AuthKeySource,
-    /// Cipher suite
-    pub ciphersuite: rustls::SupportedCipherSuite,
     /// TLS version
     pub version: rustls::ProtocolVersion,
     /// A user-facing label that identifies these params
@@ -100,10 +100,9 @@ pub struct BenchmarkParams {
 impl BenchmarkParams {
     /// Create a new set of benchmark params
     pub const fn new(
-        provider: rustls::crypto::CryptoProvider,
+        provider: Arc<rustls::crypto::CryptoProvider>,
         ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
         auth_key: AuthKeySource,
-        ciphersuite: rustls::SupportedCipherSuite,
         version: rustls::ProtocolVersion,
         label: String,
     ) -> Self {
@@ -111,7 +110,6 @@ impl BenchmarkParams {
             provider,
             ticketer,
             auth_key,
-            ciphersuite,
             version,
             label,
         }

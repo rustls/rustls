@@ -1461,11 +1461,9 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit(
 
     let tls13_limited = TLS13_LIMITED_SUITE.get_or_init(|| {
         let tls13 = provider
-            .cipher_suites
+            .tls13_cipher_suites
             .iter()
-            .find(|cs| cs.suite() == CipherSuite::TLS13_AES_128_GCM_SHA256)
-            .unwrap()
-            .tls13()
+            .find(|cs| cs.common.suite == CipherSuite::TLS13_AES_128_GCM_SHA256)
             .unwrap();
 
         rustls::Tls13CipherSuite {
@@ -1473,34 +1471,29 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit(
                 confidentiality_limit: CONFIDENTIALITY_LIMIT,
                 ..tls13.common
             },
-            ..*tls13
+            ..**tls13
         }
     });
 
     let tls12_limited = TLS12_LIMITED_SUITE.get_or_init(|| {
-        let SupportedCipherSuite::Tls12(tls12) = *provider
-            .cipher_suites
+        let tls12 = provider
+            .tls12_cipher_suites
             .iter()
-            .find(|cs| cs.suite() == CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256)
-            .unwrap()
-        else {
-            unreachable!();
-        };
+            .find(|cs| cs.common.suite == CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256)
+            .unwrap();
 
         rustls::Tls12CipherSuite {
             common: rustls::crypto::CipherSuiteCommon {
                 confidentiality_limit: CONFIDENTIALITY_LIMIT,
                 ..tls12.common
             },
-            ..*tls12
+            ..**tls12
         }
     });
 
     CryptoProvider {
-        cipher_suites: vec![
-            SupportedCipherSuite::Tls13(tls13_limited),
-            SupportedCipherSuite::Tls12(tls12_limited),
-        ],
+        tls12_cipher_suites: vec![tls12_limited],
+        tls13_cipher_suites: vec![tls13_limited],
         ..provider
     }
     .into()
@@ -1511,22 +1504,20 @@ pub fn unsafe_plaintext_crypto_provider(provider: CryptoProvider) -> Arc<CryptoP
 
     let tls13 = TLS13_PLAIN_SUITE.get_or_init(|| {
         let tls13 = provider
-            .cipher_suites
+            .tls13_cipher_suites
             .iter()
-            .find(|cs| cs.suite() == CipherSuite::TLS13_AES_256_GCM_SHA384)
-            .unwrap()
-            .tls13()
+            .find(|cs| cs.common.suite == CipherSuite::TLS13_AES_256_GCM_SHA384)
             .unwrap();
 
         rustls::Tls13CipherSuite {
             aead_alg: &plaintext::Aead,
             common: rustls::crypto::CipherSuiteCommon { ..tls13.common },
-            ..*tls13
+            ..**tls13
         }
     });
 
     CryptoProvider {
-        cipher_suites: vec![SupportedCipherSuite::Tls13(tls13)],
+        tls13_cipher_suites: vec![tls13],
         ..provider
     }
     .into()
