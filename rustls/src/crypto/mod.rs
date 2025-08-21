@@ -404,6 +404,16 @@ See the documentation of the CryptoProvider type for more information.
                     .map(SupportedCipherSuite::Tls12),
             )
     }
+
+    /// We support a given TLS version if at least one ciphersuite for the version
+    /// is available.
+    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
+        match v {
+            ProtocolVersion::TLSv1_2 => !self.tls12_cipher_suites.is_empty(),
+            ProtocolVersion::TLSv1_3 => !self.tls13_cipher_suites.is_empty(),
+            _ => false,
+        }
+    }
 }
 
 /// A source of cryptographically secure randomness.
