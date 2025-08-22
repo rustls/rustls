@@ -4,7 +4,6 @@ use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::{self, KeyExchangeAlgorithm};
 use crate::enums::{CipherSuite, SignatureAlgorithm, SignatureScheme};
-use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::versions::SupportedProtocolVersion;
@@ -135,17 +134,6 @@ impl SupportedCipherSuite {
         match self {
             Self::Tls12(cs) => cs.fips(),
             Self::Tls13(cs) => cs.fips(),
-        }
-    }
-
-    /// Return the list of `KeyExchangeAlgorithm`s supported by this cipher suite.
-    ///
-    /// TLS 1.3 cipher suites support both ECDHE and DHE key exchange, but TLS 1.2 suites
-    /// support one or the other.
-    pub(crate) fn key_exchange_algorithms(&self) -> &[KeyExchangeAlgorithm] {
-        match self {
-            Self::Tls12(tls12) => core::slice::from_ref(&tls12.kx),
-            Self::Tls13(_) => ALL_KEY_EXCHANGE_ALGORITHMS,
         }
     }
 
