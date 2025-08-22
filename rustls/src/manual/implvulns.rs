@@ -72,7 +72,7 @@ to data being encrypted with the wrong keys (specifically, keys which were not s
 from OpenSSL taking a *reactive* strategy to incoming messages ("when I get a message X, I should do Y")
 which allows it to diverge from the proper state machine under attacker control.
 
-[SMACK](https://mitls.org/pages/attacks/SMACK) is a similar suite of vulnerabilities found in JSSE,
+[SMACK](https://web.archive.org/web/mitls.org/pages/attacks/SMACK) is a similar suite of vulnerabilities found in JSSE,
 CyaSSL, OpenSSL, Mono and axTLS.  "SKIP-TLS" demonstrated that some implementations allowed handshake
 messages (and in one case, the entire handshake!) to be skipped leading to breaks in security.  "FREAK"
 found that some implementations incorrectly allowed export-only state transitions (i.e., transitions that
