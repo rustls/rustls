@@ -7,7 +7,6 @@ use zeroize::{Zeroize, Zeroizing};
 
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::ConnectionRandoms;
-use crate::crypto;
 use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::hash;
 use crate::enums::{AlertDescription, SignatureScheme};
@@ -16,6 +15,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{KeyExchangeAlgorithm, KxDecode};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::version::Tls12Version;
+use crate::{SignatureAlgorithm, crypto};
 
 /// A TLS 1.2 cipher suite supported by rustls.
 #[allow(clippy::exhaustive_structs)]
@@ -89,6 +89,14 @@ impl Tls12CipherSuite {
     /// All TLS1.2 suites support TCP-TLS. No TLS1.2 suites support QUIC.
     pub(crate) fn usable_for_protocol(&self, proto: Protocol) -> bool {
         matches!(proto, Protocol::Tcp)
+    }
+
+    /// Return true if this suite is usable for a key only offering `sig_alg`
+    /// signatures.
+    pub(crate) fn usable_for_signature_algorithm(&self, sig_alg: SignatureAlgorithm) -> bool {
+        self.sign
+            .iter()
+            .any(|scheme| scheme.algorithm() == sig_alg)
     }
 }
 
