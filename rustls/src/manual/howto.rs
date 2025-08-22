@@ -100,7 +100,7 @@ capture to `rustls.pcap`.
 Another approach is to use `tcp and port XXXX` instead of `tcp and dst host XX.XX.XX.XX`
 to capture all traffic to a specific port instead of a specific host server.
 
-[`tcpdump`]: https://www.redhat.com/en/blog/introduction-using-tcpdump-linux-command-line
+[`tcpdump`]: https://web.archive.org/web/www.redhat.com/en/blog/introduction-using-tcpdump-linux-command-line
 
 ### SSLKEYLOGFILE
 

@@ -63,6 +63,6 @@ by default out of conservatism.
 [Chrome]: <https://security.googleblog.com/2024/09/a-new-path-for-kyber-on-web.html>
 [Cloudflare]: <https://blog.cloudflare.com/pq-2024/#ml-kem-768-and-x25519>
 [interop-bug]: <https://github.com/rustls/rustls/issues/new?assignees=&labels=&projects=&template=bug_report.md&title=>
-[tldr.fail]: <https://tldr.fail/>
+[tldr.fail]: <https://web.archive.org/web/tldr.fail/>
 
 */

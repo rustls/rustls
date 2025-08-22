@@ -17,7 +17,7 @@ in favour of the remaining proven-secure option.  But that didn't happen, not in
 both RFCs included incorrect advice on countermeasures for implementers, suggesting that the flaw was "not believed to be large
 enough to be exploitable".
 
-[Lucky 13](http://www.isg.rhul.ac.uk/tls/Lucky13.html) (2013) exploited this flaw and affected all implementations, including
+[Lucky 13](https://web.archive.org/web/20190830051732/www.isg.rhul.ac.uk/tls/Lucky13.html) (2013) exploited this flaw and affected all implementations, including
 those written [after discovery](https://aws.amazon.com/blogs/security/s2n-and-lucky-13/). OpenSSL even had a
 [memory safety vulnerability in the fix for Lucky 13](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-2107), which
 gives a flavour of the kind of complexity required to remove the side channel.
@@ -36,21 +36,21 @@ public key.  This has two overall problems:
 
 1. It provides no _forward secrecy_: later compromise of the server's private key breaks confidentiality of
    *all* past sessions using that key.  This is a crucial property in the presence of software that is often
-   [poor at keeping a secret](http://heartbleed.com/).
+   [poor at keeping a secret](https://web.archive.org/web/heartbleed.com/).
 2. The padding used in practice in TLS ("PKCS#1", or fully "RSAES-PKCS1-v1_5") has been known to be broken since
    [1998](http://archiv.infsec.ethz.ch/education/fs08/secsem/bleichenbacher98.pdf).
 
 In a similar pattern to the MAC-then-encrypt problem discussed above, TLSv1.0 (1999), TLSv1.1 (2006) and TLSv1.2 (2008)
 continued to specify use of PKCS#1 encryption, again with incrementally more complex and incorrect advice on countermeasures.
 
-[ROBOT](https://robotattack.org/) (2018) showed that implementations were still vulnerable to these attacks twenty years later.
-[The Marvin Attack](https://people.redhat.com/~hkario/marvin/) (2023) demonstrated the same a further five years later.
+[ROBOT](https://web.archive.org/web/robotattack.org/) (2018) showed that implementations were still vulnerable to these attacks twenty years later.
+[The Marvin Attack](https://web.archive.org/web/people.redhat.com/~hkario/marvin/) (2023) demonstrated the same a further five years later.
 
 rustls does not support RSA key exchange.  TLSv1.3 also removed support.
 
 ## BEAST
 
-[BEAST](https://vnhacker.blogspot.com/2011/09/beast.html) ([CVE-2011-3389](https://nvd.nist.gov/vuln/detail/CVE-2011-3389))
+[BEAST](https://web.archive.org/web/vnhacker.blogspot.com/2011/09/beast.html) ([CVE-2011-3389](https://nvd.nist.gov/vuln/detail/CVE-2011-3389))
 was demonstrated in 2011 by Thai Duong and Juliano Rizzo,
 and was another vulnerability in CBC-based ciphersuites in SSLv3.0 and TLSv1.0.  CBC mode is vulnerable to adaptive
 chosen-plaintext attacks if the IV is predictable.  In the case of these protocol versions, the IV was the previous
@@ -86,8 +86,8 @@ to export control.  These controls were dropped in 2000.
 Since the "export-grade" ciphersuites no longer fulfilled any purpose, and because they were actively harmful to users,
 one may have expected software support to disappear quickly. This did not happen.
 
-In 2015 [the FREAK attack](https://mitls.org/pages/attacks/SMACK#freak) ([CVE-2015-0204](https://nvd.nist.gov/vuln/detail/CVE-2015-0204))
-and [the Logjam attack](https://weakdh.org/) ([CVE-2015-4000](https://nvd.nist.gov/vuln/detail/CVE-2015-4000)) both
+In 2015 [the FREAK attack](https://web.archive.org/web/mitls.org/pages/attacks/SMACK#freak) ([CVE-2015-0204](https://nvd.nist.gov/vuln/detail/CVE-2015-0204))
+and [the Logjam attack](https://web.archive.org/web/weakdh.org/) ([CVE-2015-4000](https://nvd.nist.gov/vuln/detail/CVE-2015-4000)) both
 demonstrated total breaks of security in the presence of servers that accepted export ciphersuites.  FREAK factored
 512-bit RSA keys, while Logjam optimised solving discrete logs in the 512-bit group used by many different servers.
 
@@ -99,7 +99,7 @@ Block ciphers are vulnerable to birthday attacks, where the probability of repea
 once a particular key has been used for many blocks.  For block ciphers with 64-bit blocks, this becomes probable
 once a given key encrypts the order of 32GB of data.
 
-[Sweet32](https://sweet32.info/) ([CVE-2016-2183](https://nvd.nist.gov/vuln/detail/CVE-2016-2183)) attacked this fact
+[Sweet32](https://web.archive.org/web/sweet32.info/) ([CVE-2016-2183](https://nvd.nist.gov/vuln/detail/CVE-2016-2183)) attacked this fact
 in the context of TLS support for 3DES, breaking confidentiality by analysing a large amount of attacker-induced traffic
 in one session.
 
@@ -107,7 +107,7 @@ rustls does not support any 64-bit block ciphers.
 
 ## DROWN
 
-[DROWN](https://drownattack.com/) ([CVE-2016-0800](https://nvd.nist.gov/vuln/detail/CVE-2016-0800)) is a cross-protocol
+[DROWN](https://web.archive.org/web/drownattack.com/) ([CVE-2016-0800](https://nvd.nist.gov/vuln/detail/CVE-2016-0800)) is a cross-protocol
 attack that breaks the security of TLSv1.2 and earlier (when used with RSA key exchange) by using SSLv2.  It is required
 that the server uses the same key for both protocol versions.
 
@@ -115,7 +115,7 @@ rustls naturally does not support SSLv2, but most importantly does not support R
 
 ## Poodle
 
-[POODLE](https://cdn1.vox-cdn.com/uploads/chorus_asset/file/2354994/ssl-poodle.0.pdf) ([CVE-2014-3566](https://nvd.nist.gov/vuln/detail/CVE-2014-3566))
+[POODLE](https://web.archive.org/web/cdn1.vox-cdn.com/uploads/chorus_asset/file/2354994/ssl-poodle.0.pdf) ([CVE-2014-3566](https://nvd.nist.gov/vuln/detail/CVE-2014-3566))
 is an attack against CBC mode ciphersuites in SSLv3.  This was possible in most cases because some clients willingly
 downgraded to SSLv3 after failed handshakes for later versions.
 
@@ -146,7 +146,7 @@ standardise this method.
 
 ## Renegotiation
 
-In 2009 Marsh Ray and Steve Dispensa [discovered](https://kryptera.se/Renegotiating%20TLS.pdf) that the renegotiation
+In 2009 Marsh Ray and Steve Dispensa [discovered](https://web.archive.org/web/kryptera.se/Renegotiating%20TLS.pdf) that the renegotiation
 feature of all versions of TLS allows a MitM to splice a request of their choice onto the front of the client's real HTTP
 request.  A countermeasure was proposed and widely implemented to bind renegotiations to their previous negotiations;
 unfortunately this was insufficient.
@@ -155,7 +155,7 @@ rustls does not support renegotiation in TLSv1.2.  TLSv1.3 also no longer suppor
 
 ## 3SHAKE
 
-[3SHAKE](https://www.mitls.org/pages/attacks/3SHAKE) (2014) described a complex attack that broke the "Secure Renegotiation" extension
+[3SHAKE](https://web.archive.org/web/www.mitls.org/pages/attacks/3SHAKE) (2014) described a complex attack that broke the "Secure Renegotiation" extension
 introduced as a countermeasure to the previous protocol flaw.
 
 rustls does not support renegotiation for TLSv1.2 connections, or RSA key exchange, and both are required for this attack
@@ -165,7 +165,7 @@ TLSv1.3 no longer supports renegotiation and RSA key exchange.  It also effectiv
 
 ## KCI
 
-[This vulnerability](https://kcitls.org/) makes use of TLS ciphersuites (those offering static DH) which were standardised
+[This vulnerability](https://web.archive.org/web/kcitls.org/) makes use of TLS ciphersuites (those offering static DH) which were standardised
 yet not widely used. However, they were implemented by libraries, and as a result enabled for various clients.  It coupled
 this with misconfigured certificates (on services including facebook.com) which allowed their misuse to MitM connections.
 
