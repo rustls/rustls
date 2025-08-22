@@ -98,6 +98,11 @@ impl Tls12CipherSuite {
             .iter()
             .any(|scheme| scheme.algorithm() == sig_alg)
     }
+
+    /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
+    pub(crate) fn usable_for_kx_algorithm(&self, kxa: KeyExchangeAlgorithm) -> bool {
+        self.kx == kxa
+    }
 }
 
 impl From<&'static Tls12CipherSuite> for SupportedCipherSuite {
