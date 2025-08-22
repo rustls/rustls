@@ -473,15 +473,11 @@ struct Args {
 
 impl Args {
     fn provider(&self) -> (Vec<ProtocolVersion>, CryptoProvider) {
-        let cipher_suites = if !self.suite.is_empty() {
-            lookup_suites(&self.suite)
-        } else {
-            provider::ALL_CIPHER_SUITES.to_vec()
-        };
+        let provider = provider::default_provider();
 
-        let provider = CryptoProvider {
-            cipher_suites,
-            ..provider::default_provider()
+        let provider = match self.suite.as_slice() {
+            [] => provider,
+            _ => filter_suites(provider, &self.suite),
         };
 
         let versions = lookup_versions(&self.protover);
@@ -496,30 +492,30 @@ impl Args {
     }
 }
 
-fn find_suite(name: &str) -> Option<rustls::SupportedCipherSuite> {
-    for suite in provider::ALL_CIPHER_SUITES {
-        let sname = format!("{:?}", suite.suite()).to_lowercase();
+/// Alter `provider` to reduce the set of ciphersuites to just `suites`
+fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvider {
+    // first, check `suites` all name known suites, and will have some effect
+    let known_suites = provider
+        .cipher_suites
+        .iter()
+        .map(|cs| format!("{:?}", cs.suite()).to_lowercase())
+        .collect::<Vec<String>>();
 
-        if sname == name.to_string().to_lowercase() {
-            return Some(*suite);
+    for s in suites {
+        if !known_suites.contains(&s.to_lowercase()) {
+            panic!("cannot look up ciphersuite '{s}'. should be one of {known_suites:?}");
         }
     }
 
-    None
-}
+    // now discard non-named suites
+    provider.cipher_suites.retain(|cs| {
+        let name = format!("{:?}", cs.suite()).to_lowercase();
+        suites
+            .iter()
+            .any(|s| s.to_lowercase() == name)
+    });
 
-fn lookup_suites(suites: &[String]) -> Vec<rustls::SupportedCipherSuite> {
-    let mut out = Vec::new();
-
-    for csname in suites {
-        let scs = find_suite(csname);
-        match scs {
-            Some(s) => out.push(s),
-            None => panic!("cannot look up ciphersuite '{csname}'"),
-        }
-    }
-
-    out
+    provider
 }
 
 /// Make a vector of protocol versions named in `versions`
