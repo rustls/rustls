@@ -105,13 +105,10 @@ impl SupportedCipherSuite {
 
     /// Return true if this suite is usable for a key only offering `sig_alg`
     /// signatures.  This resolves to true for all TLS1.3 suites.
-    pub fn usable_for_signature_algorithm(&self, _sig_alg: SignatureAlgorithm) -> bool {
+    pub fn usable_for_signature_algorithm(&self, sig_alg: SignatureAlgorithm) -> bool {
         match self {
-            Self::Tls13(_) => true, // no constraint expressed by ciphersuite (e.g., TLS1.3)
-            Self::Tls12(inner) => inner
-                .sign
-                .iter()
-                .any(|scheme| scheme.algorithm() == _sig_alg),
+            Self::Tls12(tls12) => tls12.usable_for_signature_algorithm(sig_alg),
+            Self::Tls13(_) => true,
         }
     }
 

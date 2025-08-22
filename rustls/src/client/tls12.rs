@@ -31,7 +31,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sign::Signer;
-use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
+use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::verify::{self, DigitallySignedStruct};
@@ -915,9 +915,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
             // Check the signature is compatible with the ciphersuite.
             let sig = &st.server_kx.kx_sig;
-            if !SupportedCipherSuite::from(suite)
-                .usable_for_signature_algorithm(sig.scheme.algorithm())
-            {
+            if !suite.usable_for_signature_algorithm(sig.scheme.algorithm()) {
                 warn!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     sig.scheme.algorithm(),
