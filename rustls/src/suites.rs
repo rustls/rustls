@@ -132,9 +132,9 @@ impl SupportedCipherSuite {
     ///
     /// TLS 1.3 cipher suites support all key exchange types, but TLS 1.2 suites
     /// support only one.
-    pub(crate) fn usable_for_kx_algorithm(&self, _kxa: KeyExchangeAlgorithm) -> bool {
+    pub(crate) fn usable_for_kx_algorithm(&self, kxa: KeyExchangeAlgorithm) -> bool {
         match self {
-            Self::Tls12(tls12) => tls12.kx == _kxa,
+            Self::Tls12(tls12) => tls12.usable_for_kx_algorithm(kxa),
             Self::Tls13(_) => true,
         }
     }
