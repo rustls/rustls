@@ -374,18 +374,15 @@ See the documentation of the CryptoProvider type for more information.
             }
         }
 
-        for cs in self.iter_cipher_suites() {
-            let cs_kx = cs.key_exchange_algorithms();
-            if cs_kx
-                .iter()
-                .any(|kx| supported_kx_algos.contains(kx))
-            {
+        for cs in &self.tls12_cipher_suites {
+            if supported_kx_algos.contains(&cs.kx) {
                 continue;
             }
-            let suite_name = cs.common().suite;
+            let suite_name = cs.common.suite;
             return Err(Error::General(alloc::format!(
-                "Ciphersuite {suite_name:?} requires {cs_kx:?} key exchange, but no {cs_kx:?}-compatible \
+                "TLS1.2 cipher suite {suite_name:?} requires {0:?} key exchange, but no {0:?}-compatible \
                 key exchange groups were present in `CryptoProvider`'s `kx_groups` field",
+                cs.kx,
             )));
         }
 
