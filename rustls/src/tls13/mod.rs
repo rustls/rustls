@@ -1,5 +1,6 @@
 use core::fmt;
 
+use crate::common_state::Protocol;
 use crate::crypto;
 use crate::crypto::hash;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
@@ -77,6 +78,16 @@ impl Tls13CipherSuite {
     pub fn quic_suite(&'static self) -> Option<crate::quic::Suite> {
         self.quic
             .map(|quic| crate::quic::Suite { quic, suite: self })
+    }
+
+    /// Does this suite support the `proto` protocol?
+    ///
+    /// All TLS1.3 suites support TCP-TLS. QUIC support is conditional on `quic` slot.
+    pub(crate) fn usable_for_protocol(&self, proto: Protocol) -> bool {
+        match proto {
+            Protocol::Tcp => true,
+            Protocol::Quic => self.quic.is_some(),
+        }
     }
 }
 

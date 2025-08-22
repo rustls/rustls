@@ -76,7 +76,7 @@ mod tests {
     use crate::server::{AlwaysResolvesServerRawPublicKeys, ServerConfig, ServerConnection};
     use crate::sign::CertifiedKey;
     use crate::sync::Arc;
-    use crate::{CipherSuiteCommon, SupportedCipherSuite, Tls12CipherSuite};
+    use crate::{CipherSuiteCommon, Tls12CipherSuite};
 
     #[test]
     fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
@@ -126,8 +126,11 @@ mod tests {
         .unwrap();
 
         let mut ch = minimal_client_hello();
-        ch.cipher_suites
-            .push(TLS_DHE_RSA_WITH_AES_128_GCM_SHA256.suite());
+        ch.cipher_suites.push(
+            TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
+                .common
+                .suite,
+        );
 
         server_chooses_ffdhe_group_for_client_hello(
             ServerConnection::new(config.into()).unwrap(),
@@ -147,8 +150,11 @@ mod tests {
         .unwrap();
 
         let mut ch = minimal_client_hello();
-        ch.cipher_suites
-            .push(TLS_DHE_RSA_WITH_AES_128_GCM_SHA256.suite());
+        ch.cipher_suites.push(
+            TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
+                .common
+                .suite,
+        );
         ch.extensions.named_groups.take();
 
         server_chooses_ffdhe_group_for_client_hello(
@@ -169,8 +175,11 @@ mod tests {
         .unwrap();
 
         let mut ch = minimal_client_hello();
-        ch.cipher_suites
-            .push(TLS_DHE_RSA_WITH_AES_128_GCM_SHA256.suite());
+        ch.cipher_suites.push(
+            TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
+                .common
+                .suite,
+        );
         ch.extensions.ec_point_formats.take();
 
         server_chooses_ffdhe_group_for_client_hello(
@@ -283,7 +292,7 @@ mod tests {
     fn ffdhe_provider() -> CryptoProvider {
         CryptoProvider {
             kx_groups: vec![FAKE_FFDHE_GROUP],
-            cipher_suites: vec![TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
+            tls12_cipher_suites: vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
             ..super::provider::default_provider()
         }
     }
@@ -332,21 +341,14 @@ mod tests {
         }
     }
 
-    static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
-        SupportedCipherSuite::Tls12(&TLS12_DHE_RSA_WITH_AES_128_GCM_SHA256);
-
-    static TLS12_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite =
-        match &super::provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 {
-            SupportedCipherSuite::Tls12(provider) => Tls12CipherSuite {
-                common: CipherSuiteCommon {
-                    suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-                    ..provider.common
-                },
-                kx: KeyExchangeAlgorithm::DHE,
-                ..**provider
-            },
-            _ => unreachable!(),
-        };
+    static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+            ..super::provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.common
+        },
+        kx: KeyExchangeAlgorithm::DHE,
+        ..*super::provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    };
 }
 
 fn minimal_client_hello() -> ClientHelloPayload {

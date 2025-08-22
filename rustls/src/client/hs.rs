@@ -360,8 +360,7 @@ fn emit_client_hello_for_retry(
 
     let mut cipher_suites: Vec<_> = config
         .provider
-        .cipher_suites
-        .iter()
+        .iter_cipher_suites()
         .filter_map(|cs| match cs.usable_for_protocol(cx.common.protocol) {
             true => Some(cs.suite()),
             false => None,

@@ -384,7 +384,8 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
     assert_eq!(
         ClientConfig::builder_with_provider(
             CryptoProvider {
-                cipher_suites: Vec::default(),
+                tls12_cipher_suites: Vec::default(),
+                tls13_cipher_suites: Vec::default(),
                 ..provider::default_provider()
             }
             .into()
@@ -418,7 +419,8 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
     assert_eq!(
         ServerConfig::builder_with_provider(
             CryptoProvider {
-                cipher_suites: Vec::default(),
+                tls12_cipher_suites: Vec::default(),
+                tls13_cipher_suites: Vec::default(),
                 ..provider::default_provider()
             }
             .into()
@@ -755,7 +757,7 @@ fn test_config_builders_debug() {
 
     let b = ServerConfig::builder_with_provider(
         CryptoProvider {
-            cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
+            tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
             kx_groups: vec![provider::kx_group::X25519],
             ..provider::default_provider()
         }
@@ -769,7 +771,7 @@ fn test_config_builders_debug() {
 
     let b = ClientConfig::builder_with_provider(
         CryptoProvider {
-            cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
+            tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
             kx_groups: vec![provider::kx_group::X25519],
             ..provider::default_provider()
         }
@@ -1266,11 +1268,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
     let client_config = finish_client_config(
         kt,
         ClientConfig::builder_with_provider(
-            CryptoProvider {
-                cipher_suites: vec![find_suite(suite)],
-                ..provider::default_provider()
-            }
-            .into(),
+            provider_with_one_suite(&provider::default_provider(), find_suite(suite)).into(),
         ),
     );
 
@@ -3072,7 +3070,7 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::Rsa2048;
     let client_provider = CryptoProvider {
-        cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
+        tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
         ..provider::default_provider()
     };
     let server_config = finish_server_config(
@@ -3081,7 +3079,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     );
 
     let server_provider = CryptoProvider {
-        cipher_suites: vec![cipher_suite::TLS13_AES_256_GCM_SHA384],
+        tls13_cipher_suites: vec![cipher_suite::TLS13_AES_256_GCM_SHA384],
         ..provider::default_provider()
     };
     let client_config = finish_client_config(
@@ -3664,16 +3662,21 @@ fn test_tls13_exporter_maximum_output_length() {
 }
 
 fn find_suite(suite: CipherSuite) -> SupportedCipherSuite {
-    for scs in provider::ALL_CIPHER_SUITES
+    if let Some(found) = provider::ALL_TLS12_CIPHER_SUITES
         .iter()
-        .copied()
+        .find(|cs| cs.common.suite == suite)
     {
-        if scs.suite() == suite {
-            return scs;
-        }
+        return SupportedCipherSuite::Tls12(found);
     }
 
-    panic!("find_suite given unsupported suite");
+    if let Some(found) = provider::ALL_TLS13_CIPHER_SUITES
+        .iter()
+        .find(|cs| cs.common.suite == suite)
+    {
+        return SupportedCipherSuite::Tls13(found);
+    }
+
+    panic!("find_suite given unsupported suite {suite:?}");
 }
 
 fn test_ciphersuites() -> Vec<(ProtocolVersion, KeyType, CipherSuite)> {
@@ -3750,7 +3753,7 @@ fn negotiated_ciphersuite_default() {
 #[test]
 fn all_suites_covered() {
     assert_eq!(
-        provider::DEFAULT_CIPHER_SUITES.len(),
+        provider::DEFAULT_TLS12_CIPHER_SUITES.len() + provider::DEFAULT_TLS13_CIPHER_SUITES.len(),
         test_ciphersuites().len()
     );
 }
@@ -3762,11 +3765,7 @@ fn negotiated_ciphersuite_client() {
         let client_config = finish_client_config(
             kt,
             ClientConfig::builder_with_provider(
-                CryptoProvider {
-                    cipher_suites: vec![scs],
-                    ..provider::default_provider()
-                }
-                .into(),
+                provider_with_one_suite(&provider::default_provider(), scs).into(),
             ),
         );
 
@@ -3787,11 +3786,7 @@ fn negotiated_ciphersuite_server() {
         let server_config = finish_server_config(
             kt,
             ServerConfig::builder_with_provider(
-                CryptoProvider {
-                    cipher_suites: vec![scs],
-                    ..provider::default_provider()
-                }
-                .into(),
+                provider_with_one_suite(&provider::default_provider(), scs).into(),
             ),
         );
 
@@ -3826,11 +3821,7 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
         let mut server_config = finish_server_config(
             kt,
             ServerConfig::builder_with_provider(
-                CryptoProvider {
-                    cipher_suites: vec![scs, scs_other],
-                    ..provider::default_provider()
-                }
-                .into(),
+                provider_with_suites(&provider::default_provider(), &[scs, scs_other]).into(),
             ),
         );
         server_config.ignore_client_order = true;
@@ -3838,11 +3829,7 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
         let client_config = finish_client_config(
             kt,
             ClientConfig::builder_with_provider(
-                CryptoProvider {
-                    cipher_suites: vec![scs_other, scs],
-                    ..provider::default_provider()
-                }
-                .into(),
+                provider_with_suites(&provider::default_provider(), &[scs_other, scs]).into(),
             ),
         );
 
@@ -5273,14 +5260,8 @@ mod test_quic {
 
         let client_keys = Keys::initial(
             Version::V1,
-            TLS13_AES_128_GCM_SHA256
-                .tls13()
-                .unwrap(),
-            TLS13_AES_128_GCM_SHA256
-                .tls13()
-                .unwrap()
-                .quic
-                .unwrap(),
+            TLS13_AES_128_GCM_SHA256,
+            TLS13_AES_128_GCM_SHA256.quic.unwrap(),
             CONNECTION_ID,
             Side::Client,
         );
@@ -5407,14 +5388,8 @@ mod test_quic {
 
         let server_keys = Keys::initial(
             Version::V1,
-            TLS13_AES_128_GCM_SHA256
-                .tls13()
-                .unwrap(),
-            TLS13_AES_128_GCM_SHA256
-                .tls13()
-                .unwrap()
-                .quic
-                .unwrap(),
+            TLS13_AES_128_GCM_SHA256,
+            TLS13_AES_128_GCM_SHA256.quic.unwrap(),
             CONNECTION_ID,
             Side::Server,
         );
@@ -6387,28 +6362,23 @@ fn test_secret_extraction_enabled() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     for suite in [
-        cipher_suite::TLS13_AES_128_GCM_SHA256,
-        cipher_suite::TLS13_AES_256_GCM_SHA384,
+        SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_128_GCM_SHA256),
+        SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_256_GCM_SHA384),
         #[cfg(not(feature = "fips"))]
-        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        SupportedCipherSuite::Tls13(cipher_suite::TLS13_CHACHA20_POLY1305_SHA256),
+        SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256),
+        SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384),
         #[cfg(not(feature = "fips"))]
-        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256),
     ] {
         println!("Testing suite {:?}", suite.suite().as_str());
 
         // Only offer the cipher suite (and protocol version) that we're testing
-        let mut server_config = ServerConfig::builder_with_provider(
-            CryptoProvider {
-                cipher_suites: vec![suite],
-                ..provider.clone()
-            }
-            .into(),
-        )
-        .with_no_client_auth()
-        .with_single_cert(kt.get_chain(), kt.get_key())
-        .unwrap();
+        let mut server_config =
+            ServerConfig::builder_with_provider(provider_with_one_suite(&provider, suite).into())
+                .with_no_client_auth()
+                .with_single_cert(kt.get_chain(), kt.get_key())
+                .unwrap();
         // Opt into secret extraction from both sides
         server_config.enable_secret_extraction = true;
         let server_config = Arc::new(server_config);
@@ -6461,11 +6431,8 @@ fn test_secret_extract_produces_correct_variant() {
     fn check(suite: SupportedCipherSuite, f: impl Fn(ConnectionTrafficSecrets) -> bool) {
         let kt = KeyType::Rsa2048;
 
-        let provider: Arc<CryptoProvider> = CryptoProvider {
-            cipher_suites: vec![suite],
-            ..provider::default_provider()
-        }
-        .into();
+        let provider: Arc<CryptoProvider> =
+            provider_with_one_suite(&provider::default_provider(), suite).into();
 
         let mut server_config =
             finish_server_config(kt, ServerConfig::builder_with_provider(provider.clone()));
@@ -6495,24 +6462,29 @@ fn test_secret_extract_produces_correct_variant() {
         assert!(f(server_secrets.rx.1));
     }
 
-    check(cipher_suite::TLS13_AES_128_GCM_SHA256, |sec| {
-        matches!(sec, ConnectionTrafficSecrets::Aes128Gcm { .. })
-    });
-    check(cipher_suite::TLS13_AES_256_GCM_SHA384, |sec| {
-        matches!(sec, ConnectionTrafficSecrets::Aes256Gcm { .. })
-    });
-    check(cipher_suite::TLS13_CHACHA20_POLY1305_SHA256, |sec| {
-        matches!(sec, ConnectionTrafficSecrets::Chacha20Poly1305 { .. })
-    });
-
-    check(cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, |sec| {
-        matches!(sec, ConnectionTrafficSecrets::Aes128Gcm { .. })
-    });
-    check(cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, |sec| {
-        matches!(sec, ConnectionTrafficSecrets::Aes256Gcm { .. })
-    });
     check(
-        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_128_GCM_SHA256),
+        |sec| matches!(sec, ConnectionTrafficSecrets::Aes128Gcm { .. }),
+    );
+    check(
+        SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_256_GCM_SHA384),
+        |sec| matches!(sec, ConnectionTrafficSecrets::Aes256Gcm { .. }),
+    );
+    check(
+        SupportedCipherSuite::Tls13(cipher_suite::TLS13_CHACHA20_POLY1305_SHA256),
+        |sec| matches!(sec, ConnectionTrafficSecrets::Chacha20Poly1305 { .. }),
+    );
+
+    check(
+        SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256),
+        |sec| matches!(sec, ConnectionTrafficSecrets::Aes128Gcm { .. }),
+    );
+    check(
+        SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384),
+        |sec| matches!(sec, ConnectionTrafficSecrets::Aes256Gcm { .. }),
+    );
+    check(
+        SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256),
         |sec| matches!(sec, ConnectionTrafficSecrets::Chacha20Poly1305 { .. }),
     );
 }
@@ -6523,7 +6495,7 @@ fn test_secret_extract_produces_correct_variant() {
 fn test_secret_extraction_disabled_or_too_early() {
     let kt = KeyType::Rsa2048;
     let provider = Arc::new(CryptoProvider {
-        cipher_suites: vec![cipher_suite::TLS13_AES_128_GCM_SHA256],
+        tls13_cipher_suites: vec![cipher_suite::TLS13_AES_128_GCM_SHA256],
         ..provider::default_provider()
     });
 
@@ -6582,7 +6554,7 @@ fn test_received_plaintext_backpressure() {
     let server_config = Arc::new(
         ServerConfig::builder_with_provider(
             CryptoProvider {
-                cipher_suites: vec![cipher_suite::TLS13_AES_128_GCM_SHA256],
+                tls13_cipher_suites: vec![cipher_suite::TLS13_AES_128_GCM_SHA256],
                 ..provider.clone()
             }
             .into(),

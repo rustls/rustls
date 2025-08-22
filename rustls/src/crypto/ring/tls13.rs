@@ -13,15 +13,12 @@ use crate::error::Error;
 use crate::msgs::message::{
     InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
 };
-use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
+use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
 use crate::tls13::Tls13CipherSuite;
 use crate::version::TLS13_VERSION;
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
-pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite::Tls13(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL);
-
-pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
+pub static TLS13_CHACHA20_POLY1305_SHA256: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
         hash_provider: &super::hash::SHA256,
@@ -42,31 +39,27 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
 };
 
 /// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
-pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
-    SupportedCipherSuite::Tls13(&Tls13CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
-            hash_provider: &super::hash::SHA384,
-            confidentiality_limit: 1 << 24,
-        },
-        protocol_version: TLS13_VERSION,
-        hkdf_provider: &RingHkdf(hkdf::HKDF_SHA384, hmac::HMAC_SHA384),
-        aead_alg: &Aes256GcmAead(AeadAlgorithm(&aead::AES_256_GCM)),
-        quic: Some(&super::quic::KeyBuilder {
-            packet_alg: &aead::AES_256_GCM,
-            header_alg: &aead::quic::AES_256,
-            // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-b.1.1>
-            confidentiality_limit: 1 << 23,
-            // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-b.1.2>
-            integrity_limit: 1 << 52,
-        }),
-    });
+pub static TLS13_AES_256_GCM_SHA384: &Tls13CipherSuite = &Tls13CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
+        hash_provider: &super::hash::SHA384,
+        confidentiality_limit: 1 << 24,
+    },
+    protocol_version: TLS13_VERSION,
+    hkdf_provider: &RingHkdf(hkdf::HKDF_SHA384, hmac::HMAC_SHA384),
+    aead_alg: &Aes256GcmAead(AeadAlgorithm(&aead::AES_256_GCM)),
+    quic: Some(&super::quic::KeyBuilder {
+        packet_alg: &aead::AES_256_GCM,
+        header_alg: &aead::quic::AES_256,
+        // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-b.1.1>
+        confidentiality_limit: 1 << 23,
+        // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-b.1.2>
+        integrity_limit: 1 << 52,
+    }),
+};
 
 /// The TLS1.3 ciphersuite TLS_AES_128_GCM_SHA256
-pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite::Tls13(TLS13_AES_128_GCM_SHA256_INTERNAL);
-
-pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
+pub static TLS13_AES_128_GCM_SHA256: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
         hash_provider: &super::hash::SHA256,

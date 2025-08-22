@@ -252,7 +252,6 @@ mod tests {
     use crate::msgs::handshake::{CertificateChain, SessionId};
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::pki_types::CertificateDer;
-    use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
     use crate::{DigitallySignedStruct, Error, SignatureScheme, sign};
 
@@ -269,16 +268,11 @@ mod tests {
 
         {
             use crate::msgs::persist::Tls12ClientSessionValue;
-            let SupportedCipherSuite::Tls12(tls12_suite) =
-                cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
-            else {
-                unreachable!()
-            };
 
             c.set_tls12_session(
                 name.clone(),
                 Tls12ClientSessionValue::new(
-                    tls12_suite,
+                    cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
                     SessionId::empty(),
                     Arc::new(PayloadU16::empty()),
                     &[0u8; 48],
@@ -294,14 +288,10 @@ mod tests {
             c.remove_tls12_session(&name);
         }
 
-        let SupportedCipherSuite::Tls13(tls13_suite) = cipher_suite::TLS13_AES_256_GCM_SHA384
-        else {
-            unreachable!();
-        };
         c.insert_tls13_ticket(
             name.clone(),
             Tls13ClientSessionValue::new(
-                tls13_suite,
+                cipher_suite::TLS13_AES_256_GCM_SHA384,
                 Arc::new(PayloadU16::empty()),
                 &[],
                 CertificateChain::default(),

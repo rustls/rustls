@@ -515,21 +515,26 @@ impl ServerConfig {
         &self.provider
     }
 
-    /// We support a given TLS version if it's quoted in the configured
-    /// versions *and* at least one ciphersuite for this version is
-    /// also configured.
+    /// We support a given TLS version if at least one ciphersuite for the version
+    /// is available.
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.provider
-            .cipher_suites
-            .iter()
-            .any(|cs| cs.version().version() == v)
+        match v {
+            ProtocolVersion::TLSv1_2 => !self
+                .provider
+                .tls12_cipher_suites
+                .is_empty(),
+            ProtocolVersion::TLSv1_3 => !self
+                .provider
+                .tls13_cipher_suites
+                .is_empty(),
+            _ => false,
+        }
     }
 
     #[cfg(feature = "std")]
     pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
         self.provider
-            .cipher_suites
-            .iter()
+            .iter_cipher_suites()
             .any(|cs| cs.usable_for_protocol(proto))
     }
 
