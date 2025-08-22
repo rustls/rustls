@@ -581,15 +581,29 @@ impl ExpectClientHello {
             .provider
             .iter_cipher_suites()
             .filter(|suite| {
+                let tls12 = match suite {
+                    SupportedCipherSuite::Tls12(tls12)
+                        if selected_version == ProtocolVersion::TLSv1_2 =>
+                    {
+                        tls12
+                    }
+                    SupportedCipherSuite::Tls13(tls13)
+                        if selected_version == ProtocolVersion::TLSv1_3 =>
+                    {
+                        return tls13.usable_for_protocol(protocol);
+                    }
+                    _ => return false,
+                };
+
                 // Reduce our supported ciphersuites by the certified key's algorithm.
-                suite.usable_for_signature_algorithm(sig_key_algorithm)
-                // And version
-                && suite.version().version() == selected_version
+                tls12.usable_for_signature_algorithm(sig_key_algorithm)
+
                 // And protocol
-                && suite.usable_for_protocol(protocol)
-                // And support one of key exchange groups
-                && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
-                || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE))
+                && tls12.usable_for_protocol(protocol)
+
+                // And support for one of the key exchange groups
+                && (ecdhe_possible && tls12.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
+                || ffdhe_possible && tls12.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE))
             });
 
         // RFC 7919 (https://datatracker.ietf.org/doc/html/rfc7919#section-4) requires us to send
