@@ -276,12 +276,6 @@ struct Args {
 
 impl Args {
     fn provider(&self) -> CryptoProvider {
-        let cipher_suites = if !self.suite.is_empty() {
-            lookup_suites(&self.suite)
-        } else {
-            provider::DEFAULT_CIPHER_SUITES.to_vec()
-        };
-
         let kx_groups = match self.key_exchange.as_slice() {
             [] => provider::DEFAULT_KX_GROUPS.to_vec(),
             items => items
@@ -291,9 +285,13 @@ impl Args {
         };
 
         let provider = CryptoProvider {
-            cipher_suites,
             kx_groups,
             ..provider::default_provider()
+        };
+
+        let provider = match self.suite.as_slice() {
+            [] => provider,
+            _ => filter_suites(provider, &self.suite),
         };
 
         match lookup_versions(&self.protover).as_slice() {
@@ -302,19 +300,6 @@ impl Args {
             _ => provider,
         }
     }
-}
-
-/// Find a ciphersuite with the given name
-fn find_suite(name: &str) -> Option<rustls::SupportedCipherSuite> {
-    for suite in provider::ALL_CIPHER_SUITES {
-        let sname = format!("{:?}", suite.suite()).to_lowercase();
-
-        if sname == name.to_string().to_lowercase() {
-            return Some(*suite);
-        }
-    }
-
-    None
 }
 
 /// Find a key exchange with the given name
@@ -330,19 +315,30 @@ fn find_key_exchange(name: &str) -> &'static dyn SupportedKxGroup {
     panic!("cannot find key exchange with name '{name}'");
 }
 
-/// Make a vector of ciphersuites named in `suites`
-fn lookup_suites(suites: &[String]) -> Vec<rustls::SupportedCipherSuite> {
-    let mut out = Vec::new();
+/// Alter `provider` to reduce the set of ciphersuites to just `suites`
+fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvider {
+    // first, check `suites` all name known suites, and will have some effect
+    let known_suites = provider
+        .cipher_suites
+        .iter()
+        .map(|cs| format!("{:?}", cs.suite()).to_lowercase())
+        .collect::<Vec<String>>();
 
-    for csname in suites {
-        let scs = find_suite(csname);
-        match scs {
-            Some(s) => out.push(s),
-            None => panic!("cannot look up ciphersuite '{csname}'"),
+    for s in suites {
+        if !known_suites.contains(&s.to_lowercase()) {
+            panic!("cannot look up ciphersuite '{s}'. should be one of {known_suites:?}");
         }
     }
 
-    out
+    // now discard non-named suites
+    provider.cipher_suites.retain(|cs| {
+        let name = format!("{:?}", cs.suite()).to_lowercase();
+        suites
+            .iter()
+            .any(|s| s.to_lowercase() == name)
+    });
+
+    provider
 }
 
 /// Make a vector of protocol versions named in `versions`
