@@ -3,7 +3,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::common_state::{CommonState, Side};
 use crate::conn::ConnectionRandoms;
@@ -207,7 +207,7 @@ impl ConnectionSecrets {
         )
     }
 
-    fn make_key_block(&self) -> Vec<u8> {
+    fn make_key_block(&self) -> Zeroizing<Vec<u8>> {
         let shape = self.suite.aead_alg.key_block_shape();
 
         let len = (shape.enc_key_len + shape.fixed_iv_len) * 2 + shape.explicit_nonce_len;
@@ -220,7 +220,7 @@ impl ConnectionSecrets {
         self.master_secret_prf
             .prf(&mut out, b"key expansion", &randoms);
 
-        out
+        Zeroizing::new(out)
     }
 
     pub(crate) fn suite(&self) -> &'static Tls12CipherSuite {
@@ -231,18 +231,18 @@ impl ConnectionSecrets {
         &self.master_secret
     }
 
-    fn make_verify_data(&self, handshake_hash: &hash::Output, label: &[u8]) -> Vec<u8> {
-        let mut out = vec![0u8; 12];
+    fn make_verify_data(&self, handshake_hash: &hash::Output, label: &[u8]) -> [u8; 12] {
+        let mut out = [0u8; 12];
         self.master_secret_prf
             .prf(&mut out, label, handshake_hash.as_ref());
         out
     }
 
-    pub(crate) fn client_verify_data(&self, handshake_hash: &hash::Output) -> Vec<u8> {
+    pub(crate) fn client_verify_data(&self, handshake_hash: &hash::Output) -> [u8; 12] {
         self.make_verify_data(handshake_hash, b"client finished")
     }
 
-    pub(crate) fn server_verify_data(&self, handshake_hash: &hash::Output) -> Vec<u8> {
+    pub(crate) fn server_verify_data(&self, handshake_hash: &hash::Output) -> [u8; 12] {
         self.make_verify_data(handshake_hash, b"server finished")
     }
 

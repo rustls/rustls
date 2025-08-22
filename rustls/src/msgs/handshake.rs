@@ -2345,11 +2345,11 @@ pub(crate) struct NewSessionTicketPayloadTls13 {
 }
 
 impl NewSessionTicketPayloadTls13 {
-    pub(crate) fn new(lifetime: u32, age_add: u32, nonce: Vec<u8>, ticket: Vec<u8>) -> Self {
+    pub(crate) fn new(lifetime: u32, age_add: u32, nonce: [u8; 32], ticket: Vec<u8>) -> Self {
         Self {
             lifetime,
             age_add,
-            nonce: PayloadU8::new(nonce),
+            nonce: PayloadU8::new(nonce.to_vec()),
             ticket: Arc::new(PayloadU16::new(ticket)),
             extensions: NewSessionTicketExtensions::default(),
         }

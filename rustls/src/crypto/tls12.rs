@@ -92,17 +92,28 @@ pub trait PrfSecret: Send + Sync {
 }
 
 pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: &[u8]) {
+    // Whether `out` is public or secret is up to the caller: the caller must zeroize
+    // `out` if it is secret, irrespective of whether the intermediate values are
+    // zeroized in this function.  Therefore there is no reason to zeroize them at this
+    // level.
+
     // A(1)
-    let mut current_a = hmac_key.sign(&[label, seed]);
+    let mut current_a = hmac_key
+        .sign(&[label, seed])
+        .into_public();
 
     let chunk_size = hmac_key.tag_len();
     for chunk in out.chunks_mut(chunk_size) {
         // P_hash[i] = HMAC_hash(secret, A(i) + seed)
-        let p_term = hmac_key.sign(&[current_a.as_ref(), label, seed]);
+        let p_term = hmac_key
+            .sign(&[current_a.as_ref(), label, seed])
+            .into_public();
         chunk.copy_from_slice(&p_term.as_ref()[..chunk.len()]);
 
         // A(i+1) = HMAC_hash(secret, A(i))
-        current_a = hmac_key.sign(&[current_a.as_ref()]);
+        current_a = hmac_key
+            .sign(&[current_a.as_ref()])
+            .into_public();
     }
 }
 
