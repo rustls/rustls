@@ -5,7 +5,7 @@ use core::fmt;
 
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::common_state::{CommonState, Side};
+use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
 use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
@@ -82,6 +82,13 @@ impl Tls12CipherSuite {
     /// This means all the constituent parts that do cryptography return `true` for `fips()`.
     pub fn fips(&self) -> bool {
         self.common.fips() && self.prf_provider.fips() && self.aead_alg.fips()
+    }
+
+    /// Does this suite support the `proto` protocol?
+    ///
+    /// All TLS1.2 suites support TCP-TLS. No TLS1.2 suites support QUIC.
+    pub(crate) fn usable_for_protocol(&self, proto: Protocol) -> bool {
+        matches!(proto, Protocol::Tcp)
     }
 }
 
