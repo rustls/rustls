@@ -116,16 +116,10 @@ impl SupportedCipherSuite {
     }
 
     /// Return true if this suite is usable for the given [`Protocol`].
-    ///
-    /// All cipher suites are usable for TCP-TLS.  Only TLS1.3 suites
-    /// with `Tls13CipherSuite::quic` provided are usable for QUIC.
     pub(crate) fn usable_for_protocol(&self, proto: Protocol) -> bool {
-        match proto {
-            Protocol::Tcp => true,
-            Protocol::Quic => self
-                .tls13()
-                .and_then(|cs| cs.quic)
-                .is_some(),
+        match self {
+            Self::Tls12(tls12) => tls12.usable_for_protocol(proto),
+            Self::Tls13(tls13) => tls13.usable_for_protocol(proto),
         }
     }
 
