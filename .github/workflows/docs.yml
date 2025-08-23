@@ -76,7 +76,7 @@ jobs:
           mv target/website/rustls target/website/docs
 
       - name: Package and upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./target/website/
 
