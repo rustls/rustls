@@ -92,17 +92,22 @@ pub trait PrfSecret: Send + Sync {
 }
 
 pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: &[u8]) {
-    // A(1)
-    let mut current_a = hmac_key.sign(&[label, seed]);
+    let mut previous_a: Option<hmac::Tag> = None;
 
     let chunk_size = hmac_key.tag_len();
     for chunk in out.chunks_mut(chunk_size) {
-        // P_hash[i] = HMAC_hash(secret, A(i) + seed)
-        let p_term = hmac_key.sign(&[current_a.as_ref(), label, seed]);
+        let a_i = match previous_a {
+            // A(0) = HMAC_hash(secret, label + seed)
+            None => hmac_key.sign(&[label, seed]),
+            // A(i) = HMAC_hash(secret, A(i - 1))
+            Some(previous_a) => hmac_key.sign(&[previous_a.as_ref()]),
+        };
+
+        // P_hash[i] = HMAC_hash(secret, A(i) + label + seed)
+        let p_term = hmac_key.sign(&[a_i.as_ref(), label, seed]);
         chunk.copy_from_slice(&p_term.as_ref()[..chunk.len()]);
 
-        // A(i+1) = HMAC_hash(secret, A(i))
-        current_a = hmac_key.sign(&[current_a.as_ref()]);
+        previous_a = Some(a_i);
     }
 }
 
