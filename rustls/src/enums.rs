@@ -37,7 +37,7 @@ enum_builder! {
         MissingExtension => 0x6d,
         UnsupportedExtension => 0x6e,
         CertificateUnobtainable => 0x6f,
-        UnrecognisedName => 0x70,
+        UnrecognizedName => 0x70,
         BadCertificateStatusResponse => 0x71,
         BadCertificateHashValue => 0x72,
         UnknownPskIdentity => 0x73,
