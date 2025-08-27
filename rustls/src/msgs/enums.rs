@@ -468,6 +468,21 @@ pub(crate) mod tests {
 
             let t = T::read_bytes(&buf).unwrap();
             assert_eq!(val, get8(&t));
+            std::println!("{val:?}");
+        }
+    }
+
+    pub(crate) fn test_enum8_display<T: for<'a> Codec<'a> + core::fmt::Display + Copy + From<u8>>(
+        first: T,
+        last: T,
+    ) where
+        u8: From<T>,
+    {
+        test_enum8(first, last);
+
+        for val in u8::from(first)..u8::from(last) + 1 {
+            let t = T::from(val);
+            std::println!("0x{val:02x} => {t}");
         }
     }
 
@@ -482,6 +497,7 @@ pub(crate) mod tests {
 
             let t = T::read_bytes(&buf).unwrap();
             assert_eq!(val, get16(&t));
+            std::println!("{val:?}");
         }
     }
 

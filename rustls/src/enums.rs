@@ -47,6 +47,120 @@ enum_builder! {
     }
 }
 
+impl core::fmt::Display for AlertDescription {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // these should be:
+        // - in past tense
+        // - be syntactically correct if prefaced with 'the peer' to describe
+        //   received alerts
+        match self {
+            // this is normal.
+            Self::CloseNotify => write!(f, "cleanly closed the connection"),
+
+            // these are abnormal.  they are usually symptomatic of an interop failure.
+            // please file a bug report.
+            Self::UnexpectedMessage => write!(f, "received an unexpected message"),
+            Self::BadRecordMac => write!(f, "failed to verify a message"),
+            Self::RecordOverflow => write!(f, "rejected an over-length message"),
+            Self::IllegalParameter => write!(
+                f,
+                "rejected a message because a field was incorrect or inconsistent"
+            ),
+            Self::DecodeError => write!(f, "failed to decode a message"),
+            Self::DecryptError => {
+                write!(f, "failed to perform a handshake cryptographic operation")
+            }
+            Self::InappropriateFallback => {
+                write!(f, "detected an attempted version downgrade")
+            }
+            Self::MissingExtension => {
+                write!(f, "required a specific extension that was not provided")
+            }
+            Self::UnsupportedExtension => write!(f, "rejected an unsolicited extension"),
+
+            // these are deprecated by TLS1.3 and should be very rare (but possible
+            // with TLS1.2 or earlier peers)
+            Self::DecryptionFailed => write!(f, "failed to decrypt a message"),
+            Self::DecompressionFailure => write!(f, "failed to decompress a message"),
+            Self::NoCertificate => write!(f, "found no certificate"),
+            Self::ExportRestriction => write!(f, "refused due to export restrictions"),
+            Self::NoRenegotiation => write!(f, "rejected an attempt at renegotiation"),
+            Self::CertificateUnobtainable => {
+                write!(f, "failed to retrieve its certificate")
+            }
+            Self::BadCertificateHashValue => {
+                write!(f, "rejected the `certificate_hash` extension")
+            }
+
+            // this is fairly normal. it means a server cannot choose compatible parameters
+            // given our offer.  please use ssllabs.com or similar to investigate what parameters
+            // the server supports.
+            Self::HandshakeFailure => write!(
+                f,
+                "failed to negotiate an acceptable set of security parameters"
+            ),
+            Self::ProtocolVersion => write!(f, "did not support a suitable TLS version"),
+            Self::InsufficientSecurity => {
+                write!(f, "required a higher security level than was offered")
+            }
+
+            // these usually indicate a local misconfiguration, either in certificate selection
+            // or issuance.
+            Self::BadCertificate => {
+                write!(
+                    f,
+                    "rejected the certificate as corrupt or incorrectly signed"
+                )
+            }
+            Self::UnsupportedCertificate => {
+                write!(f, "did not support the certificate")
+            }
+            Self::CertificateRevoked => write!(f, "found the certificate to be revoked"),
+            Self::CertificateExpired => write!(f, "found the certificate to be expired"),
+            Self::CertificateUnknown => {
+                write!(f, "rejected the certificate for an unspecified reason")
+            }
+            Self::UnknownCa => write!(f, "found the certificate was not issued by a trusted CA"),
+            Self::BadCertificateStatusResponse => {
+                write!(f, "rejected the certificate status response")
+            }
+            // typically this means client authentication is required, in TLS1.2...
+            Self::AccessDenied => write!(f, "denied access"),
+            // and in TLS1.3...
+            Self::CertificateRequired => write!(f, "required a client certificate"),
+
+            Self::InternalError => write!(f, "encountered an internal error"),
+            Self::UserCanceled => write!(f, "canceled the handshake"),
+
+            // rejection of SNI (uncommon; usually servers behave as if it was not sent)
+            Self::UnrecognizedName => {
+                write!(f, "did not recognize a name in the `server_name` extension")
+            }
+
+            // rejection of PSK connections (NYI in this library); indicates a local
+            // misconfiguration.
+            Self::UnknownPskIdentity => {
+                write!(f, "did not recognize any offered PSK identity")
+            }
+
+            // rejection of ALPN (varying levels of support, but missing support is
+            // often dangerous if the peers fail to agree on the same protocol)
+            Self::NoApplicationProtocol => write!(
+                f,
+                "did not support any of the offered application protocols"
+            ),
+
+            // ECH requirement by clients, see
+            // <https://datatracker.ietf.org/doc/draft-ietf-tls-esni/25/>
+            Self::EncryptedClientHelloRequired => {
+                write!(f, "required use of encrypted client hello")
+            }
+
+            Self::Unknown(n) => write!(f, "sent an unknown alert (0x{n:02x?})"),
+        }
+    }
+}
+
 enum_builder! {
     /// The `HandshakeType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
@@ -603,16 +717,16 @@ enum_builder! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::msgs::enums::tests::{test_enum8, test_enum16};
+    use crate::msgs::enums::tests::{test_enum8, test_enum8_display, test_enum16};
 
     #[test]
     fn test_enums() {
         test_enum8::<SignatureAlgorithm>(SignatureAlgorithm::Anonymous, SignatureAlgorithm::ECDSA);
         test_enum8::<ContentType>(ContentType::ChangeCipherSpec, ContentType::Heartbeat);
         test_enum8::<HandshakeType>(HandshakeType::HelloRequest, HandshakeType::MessageHash);
-        test_enum8::<AlertDescription>(
+        test_enum8_display::<AlertDescription>(
             AlertDescription::CloseNotify,
-            AlertDescription::NoApplicationProtocol,
+            AlertDescription::EncryptedClientHelloRequired,
         );
         test_enum16::<CertificateCompressionAlgorithm>(
             CertificateCompressionAlgorithm::Zlib,
