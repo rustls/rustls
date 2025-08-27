@@ -652,7 +652,7 @@ impl From<CertificateError> for AlertDescription {
             UnknownIssuer
             | UnknownRevocationStatus
             | ExpiredRevocationList
-            | ExpiredRevocationListContext { .. } => Self::UnknownCA,
+            | ExpiredRevocationListContext { .. } => Self::UnknownCa,
             InvalidOcspResponse => Self::BadCertificateStatusResponse,
             #[allow(deprecated)]
             BadSignature
