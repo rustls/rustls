@@ -1,27 +1,20 @@
 //! This is a simple client using rustls' unbuffered API. Meaning that the application layer must
 //! handle the buffers required to receive, process and send TLS data. Additionally it demonstrates
-//! using asynchronous I/O using either async-std or tokio.
+//! using asynchronous I/O via tokio.
 
 use std::error::Error;
 use std::sync::Arc;
 
-#[cfg(feature = "async-std")]
-use async_std::io::{ReadExt, WriteExt};
-#[cfg(feature = "async-std")]
-use async_std::net::TcpStream;
 use rustls::client::{ClientConnectionData, UnbufferedClientConnection};
 use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus, WriteTraffic,
 };
 use rustls::{ClientConfig, RootCertStore};
-#[cfg(not(feature = "async-std"))]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-#[cfg(not(feature = "async-std"))]
 use tokio::net::TcpStream;
 
-#[cfg_attr(not(feature = "async-std"), tokio::main(flavor = "current_thread"))]
-#[cfg_attr(feature = "async-std", async_std::main)]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     let root_store = RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
