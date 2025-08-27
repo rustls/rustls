@@ -7,7 +7,6 @@ description = "Rustls example code and tests."
 publish = false
 
 [dependencies]
-async-std = { workspace = true, optional = true }
 clap = { workspace = true }
 env_logger = { workspace = true }
 hickory-resolver = { workspace = true }
