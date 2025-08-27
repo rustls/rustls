@@ -15,7 +15,9 @@ mod online {
     fn no_cbc() {
         connect("cbc.badssl.com")
             .fails()
-            .expect(r"TLS error: received fatal alert: HandshakeFailure")
+            .expect(
+                r"TLS error: received fatal alert: the peer failed to negotiate an acceptable set of security parameters",
+            )
             .go()
             .unwrap();
     }
@@ -24,7 +26,9 @@ mod online {
     fn no_rc4() {
         connect("rc4.badssl.com")
             .fails()
-            .expect(r"TLS error: received fatal alert: HandshakeFailure")
+            .expect(
+                r"TLS error: received fatal alert: the peer failed to negotiate an acceptable set of security parameters",
+            )
             .go()
             .unwrap();
     }
@@ -60,7 +64,9 @@ mod online {
     fn no_dh() {
         connect("dh2048.badssl.com")
             .fails()
-            .expect(r"TLS error: received fatal alert: HandshakeFailure")
+            .expect(
+                r"TLS error: received fatal alert: the peer failed to negotiate an acceptable set of security parameters",
+            )
             .go()
             .unwrap();
     }

@@ -1033,7 +1033,7 @@ impl fmt::Display for Error {
             }
             Self::PeerIncompatible(why) => write!(f, "peer is incompatible: {why:?}"),
             Self::PeerMisbehaved(why) => write!(f, "peer misbehaved: {why:?}"),
-            Self::AlertReceived(alert) => write!(f, "received fatal alert: {alert:?}"),
+            Self::AlertReceived(alert) => write!(f, "received fatal alert: the peer {alert}"),
             Self::InvalidCertificate(err) => {
                 write!(f, "invalid peer certificate: {err}")
             }
@@ -1153,7 +1153,8 @@ mod tests {
     use pki_types::ServerName;
 
     use super::{
-        CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError, UnixTime,
+        AlertDescription, CertRevocationListError, Error, InconsistentKeys, InvalidMessage,
+        OtherError, UnixTime,
     };
     #[cfg(feature = "std")]
     use crate::sync::Arc;
@@ -1428,6 +1429,17 @@ mod tests {
             println!("{err:?}:");
             println!("  fmt '{err}'");
         }
+    }
+
+    #[test]
+    fn alert_display() {
+        println!("Review the following error messages for syntax and grammar errors:");
+        for u in 0..=u8::MAX {
+            let err = Error::AlertReceived(AlertDescription::from(u));
+            println!(" - {err}");
+        }
+
+        // pipe the output of this test to `llm` for a quick check of these...
     }
 
     #[test]
