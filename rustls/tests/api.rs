@@ -1011,7 +1011,7 @@ fn test_tls13_valid_early_plaintext_alert() {
     server
         .read_tls(&mut io::Cursor::new(&build_alert(
             AlertLevel::Fatal,
-            AlertDescription::UnknownCA,
+            AlertDescription::UnknownCa,
             &[],
         )))
         .unwrap();
@@ -1019,7 +1019,7 @@ fn test_tls13_valid_early_plaintext_alert() {
     // The server should process the plaintext alert without error.
     assert_eq!(
         server.process_new_packets(),
-        Err(Error::AlertReceived(AlertDescription::UnknownCA)),
+        Err(Error::AlertReceived(AlertDescription::UnknownCa)),
     );
 }
 
@@ -1037,7 +1037,7 @@ fn test_tls13_too_short_early_plaintext_alert() {
     server
         .read_tls(&mut io::Cursor::new(&build_alert(
             AlertLevel::Fatal,
-            AlertDescription::UnknownCA,
+            AlertDescription::UnknownCa,
             &[0xff],
         )))
         .unwrap();
@@ -1058,7 +1058,7 @@ fn test_tls13_late_plaintext_alert() {
     server
         .read_tls(&mut io::Cursor::new(&build_alert(
             AlertLevel::Fatal,
-            AlertDescription::UnknownCA,
+            AlertDescription::UnknownCa,
             &[],
         )))
         .unwrap();

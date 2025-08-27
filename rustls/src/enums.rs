@@ -23,7 +23,7 @@ enum_builder! {
         CertificateExpired => 0x2d,
         CertificateUnknown => 0x2e,
         IllegalParameter => 0x2f,
-        UnknownCA => 0x30,
+        UnknownCa => 0x30,
         AccessDenied => 0x31,
         DecodeError => 0x32,
         DecryptError => 0x33,
@@ -40,7 +40,7 @@ enum_builder! {
         UnrecognisedName => 0x70,
         BadCertificateStatusResponse => 0x71,
         BadCertificateHashValue => 0x72,
-        UnknownPSKIdentity => 0x73,
+        UnknownPskIdentity => 0x73,
         CertificateRequired => 0x74,
         NoApplicationProtocol => 0x78,
         EncryptedClientHelloRequired => 0x79, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-11.2
