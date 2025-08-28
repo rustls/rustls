@@ -21,8 +21,9 @@ use rustls::{
     AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
     ExtendedKeyPurpose, HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog,
-    NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, ServerConfig,
-    ServerConnection, SideData, SignatureScheme, Stream, StreamOwned, SupportedCipherSuite, sign,
+    KeyingMaterialExporter, NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion,
+    RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, Stream, StreamOwned,
+    SupportedCipherSuite, sign,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
@@ -3531,7 +3532,10 @@ impl sign::SigningKey for SigningKeySomeSpki {
     }
 }
 
-fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
+fn do_exporter_test(
+    client_config: ClientConfig,
+    server_config: ServerConfig,
+) -> (KeyingMaterialExporter, KeyingMaterialExporter) {
     let mut client_secret = [0u8; 64];
     let mut server_secret = [0u8; 64];
 
@@ -3591,6 +3595,8 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
             .is_ok()
     );
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
+
+    (client_exporter, server_exporter)
 }
 
 #[test]
@@ -3600,7 +3606,19 @@ fn test_tls12_exporter() {
         let client_config = make_client_config(*kt, &provider);
         let server_config = make_server_config(*kt, &provider);
 
-        do_exporter_test(client_config, server_config);
+        let (client_exporter, _) = do_exporter_test(client_config, server_config);
+
+        // additionally, tls1.2 contexts over 0xffff bytes in length are not prefix-free,
+        // so outlaw them.
+        client_exporter
+            .derive(b"label", Some(&[0; 0xffff]), &mut [0])
+            .unwrap();
+        assert_eq!(
+            Error::General("excess context length".into()),
+            client_exporter
+                .derive(b"label", Some(&[0; 0x10000]), &mut [0])
+                .unwrap_err()
+        );
     }
 }
 
