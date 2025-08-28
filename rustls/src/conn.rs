@@ -358,6 +358,26 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
 #[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
 
+/// This trait is for any object that can export keying material.
+///
+/// The terminology comes from [RFC5705](https://datatracker.ietf.org/doc/html/rfc5705)
+/// but doesn't really involve "exporting" key material (in the usual meaning of "export"
+/// -- of moving an artifact from one domain to another) but is best thought of as key
+/// diversification using an existing secret.  That secret is implicit in this interface,
+/// so is assumed to be held by `self`. The secret should be zeroized in `drop()`.
+///
+/// There are several such internal implementations, depending on the context
+/// and protocol version.
+pub(crate) trait Exporter: Send + Sync {
+    /// Fills in `output` with derived keying material.
+    ///
+    /// This is deterministic depending on a base secret (implicit in `self`),
+    /// plus the `label` and `context` values.
+    ///
+    /// Must fill in `output` entirely, or return an error.
+    fn derive(&self, label: &[u8], context: Option<&[u8]>, output: &mut [u8]) -> Result<(), Error>;
+}
+
 #[derive(Debug)]
 pub(crate) struct ConnectionRandoms {
     pub(crate) client: [u8; 32],

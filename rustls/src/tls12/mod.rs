@@ -6,7 +6,7 @@ use core::fmt;
 use zeroize::Zeroizing;
 
 use crate::common_state::{CommonState, Protocol, Side};
-use crate::conn::ConnectionRandoms;
+use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::hash;
 use crate::enums::{AlertDescription, SignatureScheme};
@@ -271,23 +271,17 @@ impl ConnectionSecrets {
         self.make_verify_data(handshake_hash, b"server finished")
     }
 
-    pub(crate) fn export_keying_material(
-        &self,
-        output: &mut [u8],
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) {
-        let mut randoms = Vec::new();
-        randoms.extend_from_slice(&self.randoms.client);
-        randoms.extend_from_slice(&self.randoms.server);
-        if let Some(context) = context {
-            assert!(context.len() <= 0xffff);
-            (context.len() as u16).encode(&mut randoms);
-            randoms.extend_from_slice(context);
-        }
-
-        self.master_secret_prf
-            .prf(output, label, &randoms);
+    pub(crate) fn into_exporter(self) -> Box<dyn Exporter> {
+        let Self {
+            randoms,
+            master_secret_prf,
+            master_secret: _,
+            suite: _,
+        } = self;
+        Box::new(Tls12Exporter {
+            randoms,
+            master_secret_prf,
+        })
     }
 
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
@@ -316,6 +310,28 @@ impl ConnectionSecrets {
             Side::Server => (server_secrets, client_secrets),
         };
         Ok(PartiallyExtractedSecrets { tx, rx })
+    }
+}
+
+pub(crate) struct Tls12Exporter {
+    randoms: ConnectionRandoms,
+    master_secret_prf: Box<dyn crypto::tls12::PrfSecret>,
+}
+
+impl Exporter for Tls12Exporter {
+    fn derive(&self, label: &[u8], context: Option<&[u8]>, output: &mut [u8]) -> Result<(), Error> {
+        let mut randoms = Vec::new();
+        randoms.extend_from_slice(&self.randoms.client);
+        randoms.extend_from_slice(&self.randoms.server);
+        if let Some(context) = context {
+            assert!(context.len() <= 0xffff);
+            (context.len() as u16).encode(&mut randoms);
+            randoms.extend_from_slice(context);
+        }
+
+        self.master_secret_prf
+            .prf(output, label, &randoms);
+        Ok(())
     }
 }
 

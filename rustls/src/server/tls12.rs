@@ -13,8 +13,8 @@ use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
-use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
+use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -964,7 +964,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                     self.secrets
                         .extract_secrets(Side::Server)
                 }),
-            secrets: self.secrets,
+            exporter: self.secrets.into_exporter(),
             _fin_verified,
         }))
     }
@@ -978,7 +978,7 @@ impl State<ServerConnectionData> for ExpectFinished {
 struct ExpectTraffic {
     // only `Some` if `config.enable_secret_extraction` is true
     extracted_secrets: Option<Result<PartiallyExtractedSecrets, Error>>,
-    secrets: ConnectionSecrets,
+    exporter: Box<dyn Exporter>,
     _fin_verified: verify::FinishedMessageVerified,
 }
 
@@ -1013,9 +1013,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<(), Error> {
-        self.secrets
-            .export_keying_material(output, label, context);
-        Ok(())
+        self.exporter
+            .derive(output, label, context)
     }
 
     fn into_external_state(
