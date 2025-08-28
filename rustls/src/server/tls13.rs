@@ -1489,18 +1489,19 @@ impl State<ServerConnectionData> for ExpectTraffic {
             .export_keying_material(output, label, context)
     }
 
-    fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
-        self.key_schedule
-            .extract_secrets(Side::Server)
-    }
-
     fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {
         self.key_schedule
             .request_key_update_and_update_encrypter(common)
     }
 
-    fn into_external_state(self: Box<Self>) -> Result<Box<dyn KernelState + 'static>, Error> {
-        Ok(self)
+    fn into_external_state(
+        self: Box<Self>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        Ok((
+            self.key_schedule
+                .extract_secrets(Side::Server)?,
+            self,
+        ))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {

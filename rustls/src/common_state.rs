@@ -859,17 +859,15 @@ pub(crate) trait State<Data>: Send + Sync {
         Err(Error::HandshakeNotComplete)
     }
 
-    fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
-        Err(Error::HandshakeNotComplete)
-    }
-
     fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
         Err(Error::HandshakeNotComplete)
     }
 
     fn handle_decrypt_error(&self) {}
 
-    fn into_external_state(self: Box<Self>) -> Result<Box<dyn KernelState + 'static>, Error> {
+    fn into_external_state(
+        self: Box<Self>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
     }
 
