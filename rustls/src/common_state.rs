@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 
 use pki_types::CertificateDer;
 
+use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::SupportedKxGroup;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -35,6 +36,7 @@ pub struct CommonState {
     pub(crate) suite: Option<SupportedCipherSuite>,
     pub(crate) kx_state: KxState,
     pub(crate) alpn_protocol: Option<ProtocolName>,
+    pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) aligned_handshake: bool,
     pub(crate) may_send_application_data: bool,
     pub(crate) may_receive_application_data: bool,
@@ -72,6 +74,7 @@ impl CommonState {
             suite: None,
             kx_state: KxState::default(),
             alpn_protocol: None,
+            exporter: None,
             aligned_handshake: true,
             may_send_application_data: false,
             may_receive_application_data: false,
@@ -849,15 +852,6 @@ pub(crate) trait State<Data>: Send + Sync {
     ) -> Result<Box<dyn State<Data> + 'm>, Error>
     where
         Self: 'm;
-
-    fn export_keying_material(
-        &self,
-        _output: &mut [u8],
-        _label: &[u8],
-        _context: Option<&[u8]>,
-    ) -> Result<(), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
 
     fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
         Err(Error::HandshakeNotComplete)
