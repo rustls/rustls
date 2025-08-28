@@ -5,6 +5,7 @@ use alloc::string::ToString;
 use core::ops::Deref;
 
 use crate::common_state::{CommonState, Side};
+use crate::conn::Exporter;
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{SharedSecret, hash, hmac};
@@ -403,7 +404,11 @@ impl KeyScheduleBeforeFinished {
     pub(crate) fn into_traffic(
         self,
         hs_hash: hash::Output,
-    ) -> (KeyScheduleTraffic, KeyScheduleResumption) {
+    ) -> (
+        KeyScheduleTraffic,
+        KeyScheduleExporter,
+        KeyScheduleResumption,
+    ) {
         let Self {
             ks,
             current_client_traffic_secret,
@@ -419,6 +424,9 @@ impl KeyScheduleBeforeFinished {
                 ks: ks.inner,
                 current_client_traffic_secret,
                 current_server_traffic_secret,
+            },
+            KeyScheduleExporter {
+                ks: ks.inner,
                 current_exporter_secret,
             },
             KeyScheduleResumption {
@@ -441,7 +449,11 @@ impl KeyScheduleClientBeforeFinished {
         self,
         common: &mut CommonState,
         hs_hash: hash::Output,
-    ) -> (KeyScheduleTraffic, KeyScheduleResumption) {
+    ) -> (
+        KeyScheduleTraffic,
+        KeyScheduleExporter,
+        KeyScheduleResumption,
+    ) {
         let next = self.0;
 
         debug_assert_eq!(common.side, Side::Client);
@@ -515,7 +527,6 @@ pub(crate) struct KeyScheduleTraffic {
     ks: KeyScheduleSuite,
     current_client_traffic_secret: OkmBlock,
     current_server_traffic_secret: OkmBlock,
-    current_exporter_secret: OkmBlock,
 }
 
 impl KeyScheduleTraffic {
@@ -550,16 +561,6 @@ impl KeyScheduleTraffic {
         let secret = self.ks.derive_next(current);
         *current = secret.clone();
         secret
-    }
-
-    pub(crate) fn export_keying_material(
-        &self,
-        out: &mut [u8],
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) -> Result<(), Error> {
-        self.ks
-            .export_keying_material(&self.current_exporter_secret, out, label, context)
     }
 
     pub(crate) fn refresh_traffic_secret(
@@ -606,6 +607,18 @@ impl KeyScheduleTraffic {
             Side::Server => (server_secrets, client_secrets),
         };
         Ok(PartiallyExtractedSecrets { tx, rx })
+    }
+}
+
+pub(crate) struct KeyScheduleExporter {
+    ks: KeyScheduleSuite,
+    current_exporter_secret: OkmBlock,
+}
+
+impl Exporter for KeyScheduleExporter {
+    fn derive(&self, label: &[u8], context: Option<&[u8]>, out: &mut [u8]) -> Result<(), Error> {
+        self.ks
+            .export_keying_material(&self.current_exporter_secret, label, context, out)
     }
 }
 
@@ -828,9 +841,9 @@ impl KeyScheduleSuite {
     fn export_keying_material(
         &self,
         current_exporter_secret: &OkmBlock,
-        out: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
+        out: &mut [u8],
     ) -> Result<(), Error> {
         let secret = {
             let h_empty = self
