@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use core::fmt::Debug;
+use core::fmt::{self, Debug};
 use core::mem;
 use core::ops::{Deref, DerefMut, Range};
 #[cfg(feature = "std")]
@@ -33,6 +33,7 @@ mod connection {
 
     use crate::ConnectionCommon;
     use crate::common_state::{CommonState, IoState};
+    use crate::conn::KeyingMaterialExporter;
     use crate::error::Error;
     use crate::msgs::message::OutboundChunks;
     use crate::suites::ExtractedSecrets;
@@ -92,18 +93,13 @@ mod connection {
             }
         }
 
-        /// Derives key material from the agreed connection secrets.
+        /// Returns an object that can derive key material from the agreed connection secrets.
         ///
-        /// See [`ConnectionCommon::export_keying_material()`] for more information.
-        pub fn export_keying_material<T: AsMut<[u8]>>(
-            &self,
-            output: T,
-            label: &[u8],
-            context: Option<&[u8]>,
-        ) -> Result<T, Error> {
+        /// See [`ConnectionCommon::exporter()`] for more information.
+        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
             match self {
-                Self::Client(conn) => conn.export_keying_material(output, label, context),
-                Self::Server(conn) => conn.export_keying_material(output, label, context),
+                Self::Client(conn) => conn.exporter(),
+                Self::Server(conn) => conn.exporter(),
             }
         }
 
@@ -358,6 +354,51 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
 #[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
 
+/// An object of this type can export keying material.
+pub struct KeyingMaterialExporter {
+    inner: Box<dyn Exporter>,
+}
+
+impl KeyingMaterialExporter {
+    /// Derives key material from the agreed connection secrets.
+    ///
+    /// This function fills in `output` with `output.len()` bytes of key
+    /// material derived from a master connection secret using `label`
+    /// and `context` for diversification. Ownership of the buffer is taken
+    /// by the function and returned via the Ok result to ensure no key
+    /// material leaks if the function fails.
+    ///
+    /// See [RFC5705][] for more details on what this does and is for.  In
+    /// other libraries this is often named `SSL_export_keying_material()`
+    /// or `SslExportKeyingMaterial()`.
+    ///
+    /// This function is not meaningful if `output.len()` is zero and will
+    /// return an error in that case.
+    ///
+    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    pub fn derive<T: AsMut<[u8]>>(
+        &self,
+        label: &[u8],
+        context: Option<&[u8]>,
+        mut output: T,
+    ) -> Result<T, Error> {
+        if output.as_mut().is_empty() {
+            return Err(Error::General("derive() with zero-length output".into()));
+        }
+
+        self.inner
+            .derive(label, context, output.as_mut())
+            .map(|_| output)
+    }
+}
+
+impl Debug for KeyingMaterialExporter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KeyingMaterialExporter")
+            .finish_non_exhaustive()
+    }
+}
+
 /// This trait is for any object that can export keying material.
 ///
 /// The terminology comes from [RFC5705](https://datatracker.ietf.org/doc/html/rfc5705)
@@ -425,32 +466,21 @@ impl<Data> ConnectionCommon<Data> {
             .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)
     }
 
-    /// Derives key material from the agreed connection secrets.
+    /// Returns an object that can derive key material from the agreed connection secrets.
     ///
-    /// This function fills in `output` with `output.len()` bytes of key
-    /// material derived from the master session secret using `label`
-    /// and `context` for diversification. Ownership of the buffer is taken
-    /// by the function and returned via the Ok result to ensure no key
-    /// material leaks if the function fails.
+    /// See [RFC5705][] for more details on what this is for.
     ///
-    /// See RFC5705 for more details on what this does and is for.
+    /// This function can be called at most once per connection.
     ///
-    /// For TLS1.3 connections, this function does not use the
-    /// "early" exporter at any point.
+    /// This function will error:
     ///
-    /// This function fails if called prior to the handshake completing;
-    /// check with [`CommonState::is_handshaking`] first.
+    /// - if called prior to the handshake completing; (check with
+    ///   [`CommonState::is_handshaking`] first).
+    /// - if called more than once per connection.
     ///
-    /// This function fails if `output.len()` is zero.
-    #[inline]
-    pub fn export_keying_material<T: AsMut<[u8]>>(
-        &self,
-        output: T,
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) -> Result<T, Error> {
-        self.core
-            .export_keying_material(output, label, context)
+    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.core.exporter()
     }
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
@@ -1213,32 +1243,12 @@ impl<Data> ConnectionCore<Data> {
         Ok((secrets, external))
     }
 
-    pub(crate) fn export_keying_material<T: AsMut<[u8]>>(
-        &self,
-        mut output: T,
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) -> Result<T, Error> {
-        if output.as_mut().is_empty() {
-            return Err(Error::General(
-                "export_keying_material with zero-length output".into(),
-            ));
+    pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.common_state.exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None if self.common_state.is_handshaking() => Err(Error::HandshakeNotComplete),
+            None => Err(Error::General("exporter already used".into())),
         }
-
-        // promote fused error
-        if let Err(err) = &self.state {
-            return Err(err.clone());
-        }
-
-        let exporter = self
-            .common_state
-            .exporter
-            .as_ref()
-            .ok_or_else(|| Error::HandshakeNotComplete)?;
-
-        exporter
-            .derive(output.as_mut(), label, context)
-            .map(|_| output)
     }
 
     /// Trigger a `refresh_traffic_keys` if required by `CommonState`.
