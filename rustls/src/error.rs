@@ -119,6 +119,11 @@ pub enum Error {
     /// See [`RejectedEch::can_retry()`] and [`crate::client::EchConfig::for_retry()`].
     RejectedEch(RejectedEch),
 
+    /// Errors of this variant should never be produced by the library.
+    ///
+    /// Please file a bug if you see one.
+    Unreachable(&'static str),
+
     /// Any other error.
     ///
     /// This variant should only be used when the error is not better described by a more
@@ -1066,6 +1071,10 @@ impl fmt::Display for Error {
                 )
             }
             Self::General(err) => write!(f, "unexpected error: {err}"),
+            Self::Unreachable(err) => write!(
+                f,
+                "unreachable condition: {err} (please file a bug in rustls)"
+            ),
             Self::Other(err) => write!(f, "other error: {err}"),
         }
     }
@@ -1419,6 +1428,7 @@ mod tests {
             Error::InconsistentKeys(InconsistentKeys::KeyMismatch),
             Error::InconsistentKeys(InconsistentKeys::Unknown),
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
+            Error::Unreachable("smoke"),
             Error::Other(OtherError(
                 #[cfg(feature = "std")]
                 Arc::from(Box::from("")),
