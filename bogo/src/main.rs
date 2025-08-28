@@ -1334,20 +1334,22 @@ fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize
 
         if !sess.is_handshaking() && opts.export_keying_material > 0 && !sent_exporter {
             let mut export = vec![0; opts.export_keying_material];
-            sess.export_keying_material(
-                &mut export,
-                opts.export_keying_material_label
-                    .as_bytes(),
-                if opts.export_keying_material_context_used {
-                    Some(
-                        opts.export_keying_material_context
-                            .as_bytes(),
-                    )
-                } else {
-                    None
-                },
-            )
-            .unwrap();
+            sess.exporter()
+                .unwrap()
+                .derive(
+                    opts.export_keying_material_label
+                        .as_bytes(),
+                    if opts.export_keying_material_context_used {
+                        Some(
+                            opts.export_keying_material_context
+                                .as_bytes(),
+                        )
+                    } else {
+                        None
+                    },
+                    &mut export,
+                )
+                .unwrap();
             sess.writer()
                 .write_all(&export)
                 .unwrap();
