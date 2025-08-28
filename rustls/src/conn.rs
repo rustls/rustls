@@ -1225,12 +1225,20 @@ impl<Data> ConnectionCore<Data> {
             ));
         }
 
-        match self.state.as_ref() {
-            Ok(st) => st
-                .export_keying_material(output.as_mut(), label, context)
-                .map(|_| output),
-            Err(e) => Err(e.clone()),
+        // promote fused error
+        if let Err(err) = &self.state {
+            return Err(err.clone());
         }
+
+        let exporter = self
+            .common_state
+            .exporter
+            .as_ref()
+            .ok_or_else(|| Error::HandshakeNotComplete)?;
+
+        exporter
+            .derive(output.as_mut(), label, context)
+            .map(|_| output)
     }
 
     /// Trigger a `refresh_traffic_keys` if required by `CommonState`.

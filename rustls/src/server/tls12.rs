@@ -13,8 +13,8 @@ use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
+use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -956,15 +956,18 @@ impl State<ServerConnectionData> for ExpectFinished {
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
 
+        let extracted_secrets = self
+            .config
+            .enable_secret_extraction
+            .then(|| {
+                self.secrets
+                    .extract_secrets(Side::Server)
+            });
+
+        cx.common.exporter = Some(self.secrets.into_exporter());
+
         Ok(Box::new(ExpectTraffic {
-            extracted_secrets: self
-                .config
-                .enable_secret_extraction
-                .then(|| {
-                    self.secrets
-                        .extract_secrets(Side::Server)
-                }),
-            exporter: self.secrets.into_exporter(),
+            extracted_secrets,
             _fin_verified,
         }))
     }
@@ -978,7 +981,6 @@ impl State<ServerConnectionData> for ExpectFinished {
 struct ExpectTraffic {
     // only `Some` if `config.enable_secret_extraction` is true
     extracted_secrets: Option<Result<PartiallyExtractedSecrets, Error>>,
-    exporter: Box<dyn Exporter>,
     _fin_verified: verify::FinishedMessageVerified,
 }
 
@@ -1005,16 +1007,6 @@ impl State<ServerConnectionData> for ExpectTraffic {
             }
         }
         Ok(self)
-    }
-
-    fn export_keying_material(
-        &self,
-        output: &mut [u8],
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) -> Result<(), Error> {
-        self.exporter
-            .derive(output, label, context)
     }
 
     fn into_external_state(

@@ -14,8 +14,8 @@ use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::client::common::{ClientAuthDetails, ServerCertDetails};
 use crate::client::{ClientConfig, hs};
 use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
+use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
@@ -1294,12 +1294,15 @@ impl State<ClientConnectionData> for ExpectFinished {
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
 
+        let extracted_secrets = st
+            .config
+            .enable_secret_extraction
+            .then(|| st.secrets.extract_secrets(Side::Client));
+
+        cx.common.exporter = Some(st.secrets.into_exporter());
+
         Ok(Box::new(ExpectTraffic {
-            extracted_secrets: st
-                .config
-                .enable_secret_extraction
-                .then(|| st.secrets.extract_secrets(Side::Client)),
-            exporter: st.secrets.into_exporter(),
+            extracted_secrets,
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
             _fin_verified,
@@ -1327,7 +1330,6 @@ impl State<ClientConnectionData> for ExpectFinished {
 struct ExpectTraffic {
     // only `Some` if `config.enable_secret_extraction` is true
     extracted_secrets: Option<Result<PartiallyExtractedSecrets, Error>>,
-    exporter: Box<dyn Exporter>,
     _cert_verified: verify::ServerCertVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
@@ -1354,16 +1356,6 @@ impl State<ClientConnectionData> for ExpectTraffic {
             }
         }
         Ok(self)
-    }
-
-    fn export_keying_material(
-        &self,
-        output: &mut [u8],
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) -> Result<(), Error> {
-        self.exporter
-            .derive(output, label, context)
     }
 
     fn into_external_state(
