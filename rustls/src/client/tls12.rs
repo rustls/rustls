@@ -1360,13 +1360,14 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(())
     }
 
-    fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
-        self.secrets
-            .extract_secrets(Side::Client)
-    }
-
-    fn into_external_state(self: Box<Self>) -> Result<Box<dyn KernelState + 'static>, Error> {
-        Ok(self)
+    fn into_external_state(
+        self: Box<Self>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        Ok((
+            self.secrets
+                .extract_secrets(Side::Client)?,
+            self,
+        ))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {

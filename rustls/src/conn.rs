@@ -1182,13 +1182,12 @@ impl<Data> ConnectionCore<Data> {
         let state = self.state?;
 
         let record_layer = &self.common_state.record_layer;
-        let secrets = state.extract_secrets()?;
+
+        let (secrets, state) = state.into_external_state()?;
         let secrets = ExtractedSecrets {
             tx: (record_layer.write_seq(), secrets.tx),
             rx: (record_layer.read_seq(), secrets.rx),
         };
-
-        let state = state.into_external_state()?;
         let external = KernelConnection::new(state, self.common_state)?;
 
         Ok((secrets, external))
