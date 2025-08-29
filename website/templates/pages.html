@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% import "macros.html" as macros %}
+
+{% block content %}
+
+{% set perf = get_section(path="perf/_index.md") %}
+{% set release = get_section(path="release/_index.md") %}
+{% set blog = get_section(path="blog/_index.md") %}
+{% set posts = perf.pages | concat(with=release.pages) | concat(with=blog.pages) %}
+
+<h1 class="title">
+  {{ section.title }}
+</h1>
+<ul>
+  {% for page in posts | sort(attribute = "date") | reverse %}
+  <li><a href="{{ page.permalink | safe }}">{{ page.title }}</a> ({{ page.date }})
+      {% for tag in page.taxonomies["tags"] %}
+        <span class="tag">{{ tag }}</span>
+      {% endfor %}
+  </li>
+  {% endfor %}
+</ul>
+{{ section.content | safe }}
+{% endblock content %}
