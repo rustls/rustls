@@ -1,6 +1,9 @@
 +++
 title = "Measuring and (slightly) Improving Post-Quantum Handshake Performance"
 date = 2024-12-17
+
+[taxonomies]
+tags = ["performance"]
 +++
 
 To defend against the potential advent of "Cryptographically Relevant Quantum Computers"
