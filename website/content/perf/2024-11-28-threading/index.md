@@ -1,6 +1,9 @@
 +++
 title = "Measuring and Improving rustls's Multithreaded Performance"
 date = 2024-11-28
+
+[taxonomies]
+tags = ["performance"]
 +++
 
 ### System configuration
