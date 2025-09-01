@@ -918,7 +918,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             .as_deref()
             .unwrap_or_default()
             .iter()
-            .cloned()
+            .copied()
             .filter(SignatureScheme::supported_in_tls13)
             .collect::<Vec<SignatureScheme>>();
 
@@ -939,7 +939,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                     .iter()
                     .find(|compressor| offered.contains(&compressor.algorithm()))
             })
-            .cloned();
+            .copied();
 
         let client_auth = ClientAuthDetails::resolve(
             self.config

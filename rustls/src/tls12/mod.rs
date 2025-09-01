@@ -73,7 +73,7 @@ impl Tls12CipherSuite {
         self.sign
             .iter()
             .filter(|pref| offered.contains(pref))
-            .cloned()
+            .copied()
             .collect()
     }
 

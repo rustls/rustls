@@ -611,7 +611,7 @@ impl EchState {
                 .cipher_suites
                 .iter()
                 .filter(|cs| **cs != TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
-                .cloned()
+                .copied()
                 .collect(),
         };
 
