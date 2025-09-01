@@ -10,14 +10,14 @@ mod client {
     use std::sync::Arc;
 
     use rustls::client::AlwaysResolvesClientRawPublicKeys;
-    use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use rustls::client::danger::{
+        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+    };
     use rustls::crypto::{
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature_with_raw_key,
     };
     use rustls::pki_types::pem::PemObject;
-    use rustls::pki_types::{
-        CertificateDer, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer, UnixTime,
-    };
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::sign::CertifiedKey;
     use rustls::{
         CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct, Error,
@@ -100,13 +100,9 @@ mod client {
     impl ServerCertVerifier for SimpleRpkServerCertVerifier {
         fn verify_server_cert(
             &self,
-            end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
-            _server_name: &ServerName<'_>,
-            _ocsp_response: &[u8],
-            _now: UnixTime,
+            identity: &ServerIdentity<'_>,
         ) -> Result<ServerCertVerified, Error> {
-            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(end_entity.as_ref());
+            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(identity.end_entity.as_ref());
             match self
                 .trusted_spki
                 .contains(&end_entity_as_spki)

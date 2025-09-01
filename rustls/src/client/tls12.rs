@@ -34,7 +34,7 @@ use crate::sign::Signer;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::verify::{self, DigitallySignedStruct};
+use crate::verify::{self, DigitallySignedStruct, ServerIdentity};
 
 mod server_hello {
     use core::fmt;
@@ -887,18 +887,16 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             .split_first()
             .ok_or(Error::NoCertificatesPresented)?;
 
-        let now = st.config.current_time()?;
-
         let cert_verified = st
             .config
             .verifier
-            .verify_server_cert(
+            .verify_server_cert(&ServerIdentity {
                 end_entity,
                 intermediates,
-                &st.server_name,
-                &st.server_cert.ocsp_response,
-                now,
-            )
+                server_name: &st.server_name,
+                ocsp_response: &st.server_cert.ocsp_response,
+                now: st.config.current_time()?,
+            })
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)

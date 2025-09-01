@@ -17,7 +17,9 @@ use core::ops::DerefMut;
 use std::io;
 use std::sync::{Arc, OnceLock};
 
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::danger::{
+    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+};
 use rustls::client::{
     AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, UnbufferedClientConnection,
     WebPkiServerVerifier,
@@ -1092,17 +1094,11 @@ pub struct MockServerVerifier {
 impl ServerCertVerifier for MockServerVerifier {
     fn verify_server_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
-        server_name: &ServerName<'_>,
-        ocsp_response: &[u8],
-        now: UnixTime,
+        identity: &ServerIdentity<'_>,
     ) -> Result<ServerCertVerified, Error> {
-        println!(
-            "verify_server_cert({end_entity:?}, {intermediates:?}, {server_name:?}, {ocsp_response:?}, {now:?})"
-        );
+        println!("verify_server_cert({identity:?})");
         if let Some(expected_ocsp) = &self.expected_ocsp_response {
-            assert_eq!(expected_ocsp, ocsp_response);
+            assert_eq!(expected_ocsp, identity.ocsp_response);
         }
         match &self.cert_rejection_error {
             Some(error) => Err(error.clone()),

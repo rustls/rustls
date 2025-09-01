@@ -24,15 +24,7 @@ use crate::sync::Arc;
 /// signatures made by certificates.
 #[allow(unreachable_pub)]
 pub trait ServerCertVerifier: Debug + Send + Sync {
-    /// Verify the end-entity certificate `end_entity` is valid for the
-    /// hostname `dns_name` and chains to at least one trust anchor.
-    ///
-    /// `intermediates` contains all certificates other than `end_entity` that
-    /// were sent as part of the server's [Certificate] message. It is in the
-    /// same order that the server sent them and may be empty.
-    ///
-    /// `ocsp_response` is empty if no OCSP response was received, and that also
-    /// covers the case where `request_ocsp_response()` returns false.
+    /// Verify the server's identity.
     ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
     /// the implementer to handle invalid data. It is recommended that the implementer returns
@@ -42,11 +34,7 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
     fn verify_server_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
-        server_name: &ServerName<'_>,
-        ocsp_response: &[u8],
-        now: UnixTime,
+        identity: &ServerIdentity<'_>,
     ) -> Result<ServerCertVerified, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
@@ -119,6 +107,28 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         None
     }
+}
+
+/// Data required to verify a server's identity.
+#[allow(unreachable_pub)]
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct ServerIdentity<'a> {
+    /// Certificate for the server being verified.
+    pub end_entity: &'a CertificateDer<'a>,
+    /// All certificates other than `end_entity` received in the server's `Certificate` message.
+    ///
+    /// It is in the same order that the server sent them and may be empty.
+    pub intermediates: &'a [CertificateDer<'a>],
+    /// The server name the client specified when connecting to the server.
+    pub server_name: &'a ServerName<'a>,
+    /// OCSP response stapled to the server's `Certificate` message, if any.
+    ///
+    /// Empty if no OCSP response was received, and that also
+    /// covers the case where `request_ocsp_response()` returns false.
+    pub ocsp_response: &'a [u8],
+    /// Current time against which time-sensitive inputs should be validated.
+    pub now: UnixTime,
 }
 
 /// Something that can verify a client certificate chain
