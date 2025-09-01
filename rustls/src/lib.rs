@@ -627,7 +627,7 @@ pub mod server {
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
-        pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
+        pub use crate::verify::{ClientCertVerified, ClientCertVerifier, ClientIdentity};
     }
 
     pub(crate) use tls12::{TLS12_HANDLER, Tls12Handler};

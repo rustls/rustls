@@ -159,9 +159,9 @@ mod server {
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature_with_raw_key,
     };
     use rustls::pki_types::pem::PemObject;
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer, UnixTime};
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::AlwaysResolvesServerRawPublicKeys;
-    use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+    use rustls::server::danger::{ClientCertVerified, ClientCertVerifier, ClientIdentity};
     use rustls::sign::CertifiedKey;
     use rustls::{
         CertificateError, DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys,
@@ -263,11 +263,9 @@ mod server {
 
         fn verify_client_cert(
             &self,
-            end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
-            _now: UnixTime,
+            identity: &ClientIdentity<'_>,
         ) -> Result<ClientCertVerified, Error> {
-            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(end_entity.as_ref());
+            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(identity.end_entity.as_ref());
             match self
                 .trusted_spki
                 .contains(&end_entity_as_spki)

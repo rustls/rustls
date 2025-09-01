@@ -32,6 +32,7 @@ use crate::msgs::persist;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
+use crate::verify::ClientIdentity;
 use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
@@ -525,7 +526,11 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
                 self.config
                     .verifier
-                    .verify_client_cert(end_entity, intermediates, now)
+                    .verify_client_cert(&ClientIdentity {
+                        end_entity,
+                        intermediates,
+                        now,
+                    })
                     .map_err(|err| {
                         cx.common
                             .send_cert_verify_error_alert(err)

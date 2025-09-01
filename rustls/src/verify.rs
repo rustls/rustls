@@ -178,13 +178,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
     fn root_hint_subjects(&self) -> Arc<[DistinguishedName]>;
 
-    /// Verify the end-entity certificate `end_entity` is valid, acceptable,
-    /// and chains to at least one of the trust anchors trusted by
-    /// this verifier.
-    ///
-    /// `intermediates` contains the intermediate certificates the
-    /// client sent along with the end-entity certificate; it is in the same
-    /// order that the peer sent them and may be empty.
+    /// Verify the client's identity.
     ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
     /// the implementer to handle invalid data. It is recommended that the implementer returns
@@ -194,9 +188,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     /// [BadEncoding]: crate::CertificateError#variant.BadEncoding
     fn verify_client_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
-        now: UnixTime,
+        identity: &ClientIdentity<'_>,
     ) -> Result<ClientCertVerified, Error>;
 
     /// Verify a signature allegedly by the given client certificate.
@@ -250,6 +242,21 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     }
 }
 
+/// Data required to verify a client's identity.
+#[allow(unreachable_pub)]
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct ClientIdentity<'a> {
+    /// Certificate for the client being verified.
+    pub end_entity: &'a CertificateDer<'a>,
+    /// All certificates other than `end_entity` received in the client's `Certificate` message.
+    ///
+    /// It is in the same order that the server sent them and may be empty.
+    pub intermediates: &'a [CertificateDer<'a>],
+    /// Current time against which time-sensitive inputs should be validated.
+    pub now: UnixTime,
+}
+
 /// Turns off client authentication.
 ///
 /// In contrast to using
@@ -271,9 +278,7 @@ impl ClientCertVerifier for NoClientAuth {
 
     fn verify_client_cert(
         &self,
-        _end_entity: &CertificateDer<'_>,
-        _intermediates: &[CertificateDer<'_>],
-        _now: UnixTime,
+        _identity: &ClientIdentity<'_>,
     ) -> Result<ClientCertVerified, Error> {
         unimplemented!();
     }

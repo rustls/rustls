@@ -36,6 +36,7 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
+use crate::verify::ClientIdentity;
 use crate::{ConnectionTrafficSecrets, compress, rand, verify};
 
 mod client_hello {
@@ -1116,7 +1117,11 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
         self.config
             .verifier
-            .verify_client_cert(end_entity, intermediates, now)
+            .verify_client_cert(&ClientIdentity {
+                end_entity,
+                intermediates,
+                now,
+            })
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)
