@@ -18,10 +18,11 @@ mod client {
     };
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
+    use rustls::server::danger::SignatureVerificationInput;
     use rustls::sign::CertifiedKey;
     use rustls::{
-        CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct, Error,
-        InconsistentKeys, PeerIncompatible, SignatureScheme, Stream,
+        CertificateError, ClientConfig, ClientConnection, Error, InconsistentKeys,
+        PeerIncompatible, SignatureScheme, Stream,
     };
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
@@ -114,23 +115,19 @@ mod client {
 
         fn verify_tls12_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
+            _input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             Err(Error::PeerIncompatible(PeerIncompatible::Tls12NotOffered))
         }
 
         fn verify_tls13_signature(
             &self,
-            message: &[u8],
-            cert: &CertificateDer<'_>,
-            dss: &DigitallySignedStruct,
+            input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             verify_tls13_signature_with_raw_key(
-                message,
-                &SubjectPublicKeyInfoDer::from(cert.as_ref()),
-                dss,
+                input.message,
+                &SubjectPublicKeyInfoDer::from(input.signer.as_ref()),
+                input.signature,
                 &self.supported_algs,
             )
         }
@@ -161,11 +158,13 @@ mod server {
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::AlwaysResolvesServerRawPublicKeys;
-    use rustls::server::danger::{ClientCertVerified, ClientCertVerifier, ClientIdentity};
+    use rustls::server::danger::{
+        ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
+    };
     use rustls::sign::CertifiedKey;
     use rustls::{
-        CertificateError, DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys,
-        PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
+        CertificateError, DistinguishedName, Error, InconsistentKeys, PeerIncompatible,
+        ServerConfig, ServerConnection, SignatureScheme,
     };
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
@@ -277,23 +276,19 @@ mod server {
 
         fn verify_tls12_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
+            _input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             Err(Error::PeerIncompatible(PeerIncompatible::Tls12NotOffered))
         }
 
         fn verify_tls13_signature(
             &self,
-            message: &[u8],
-            cert: &CertificateDer<'_>,
-            dss: &DigitallySignedStruct,
+            input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             verify_tls13_signature_with_raw_key(
-                message,
-                &SubjectPublicKeyInfoDer::from(cert.as_ref()),
-                dss,
+                input.message,
+                &SubjectPublicKeyInfoDer::from(input.signer.as_ref()),
+                input.signature,
                 &self.supported_algs,
             )
         }

@@ -9,7 +9,7 @@ use super::anchors::RootCertStore;
 use super::pki_error;
 use crate::enums::SignatureScheme;
 use crate::error::{Error, PeerMisbehaved};
-use crate::verify::{DigitallySignedStruct, HandshakeSignatureValid};
+use crate::verify::{DigitallySignedStruct, HandshakeSignatureValid, SignatureVerificationInput};
 
 /// Verify that the end-entity certificate `end_entity` is a valid server cert
 /// and chains to at least one of the trust anchors in the `roots` [RootCertStore].
@@ -153,17 +153,15 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
 ///
 /// See [WebPkiSupportedAlgorithms::mapping] for more information.
 pub fn verify_tls12_signature(
-    message: &[u8],
-    cert: &CertificateDer<'_>,
-    dss: &DigitallySignedStruct,
+    input: &SignatureVerificationInput<'_>,
     supported_schemes: &WebPkiSupportedAlgorithms,
 ) -> Result<HandshakeSignatureValid, Error> {
-    let possible_algs = supported_schemes.convert_scheme(dss.scheme)?;
-    let cert = webpki::EndEntityCert::try_from(cert).map_err(pki_error)?;
+    let possible_algs = supported_schemes.convert_scheme(input.signature.scheme)?;
+    let cert = webpki::EndEntityCert::try_from(input.signer).map_err(pki_error)?;
 
     let mut error = None;
     for alg in possible_algs {
-        match cert.verify_signature(*alg, message, dss.signature()) {
+        match cert.verify_signature(*alg, input.message, input.signature.signature()) {
             Err(err @ webpki::Error::UnsupportedSignatureAlgorithmForPublicKeyContext(_)) => {
                 error = Some(err);
                 continue;
@@ -186,20 +184,22 @@ pub fn verify_tls12_signature(
 /// `cert`. Unlike [verify_tls12_signature], this function only tries the first matching scheme. See
 /// [WebPkiSupportedAlgorithms::mapping] for more information.
 pub fn verify_tls13_signature(
-    msg: &[u8],
-    cert: &CertificateDer<'_>,
-    dss: &DigitallySignedStruct,
+    input: &SignatureVerificationInput<'_>,
     supported_schemes: &WebPkiSupportedAlgorithms,
 ) -> Result<HandshakeSignatureValid, Error> {
-    if !dss.scheme.supported_in_tls13() {
+    if !input
+        .signature
+        .scheme
+        .supported_in_tls13()
+    {
         return Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into());
     }
 
-    let alg = supported_schemes.convert_scheme(dss.scheme)?[0];
+    let alg = supported_schemes.convert_scheme(input.signature.scheme)?[0];
 
-    let cert = webpki::EndEntityCert::try_from(cert).map_err(pki_error)?;
+    let cert = webpki::EndEntityCert::try_from(input.signer).map_err(pki_error)?;
 
-    cert.verify_signature(alg, msg, dss.signature())
+    cert.verify_signature(alg, input.message, input.signature.signature())
         .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
 }

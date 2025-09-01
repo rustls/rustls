@@ -388,10 +388,10 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 }
 
 mod danger {
-    use rustls::DigitallySignedStruct;
-    use rustls::client::danger::{HandshakeSignatureValid, ServerIdentity};
+    use rustls::client::danger::{
+        HandshakeSignatureValid, ServerIdentity, SignatureVerificationInput,
+    };
     use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
-    use rustls::pki_types::CertificateDer;
 
     #[derive(Debug)]
     pub struct NoCertificateVerification(CryptoProvider);
@@ -412,30 +412,16 @@ mod danger {
 
         fn verify_tls12_signature(
             &self,
-            message: &[u8],
-            cert: &CertificateDer<'_>,
-            dss: &DigitallySignedStruct,
+            input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            verify_tls12_signature(
-                message,
-                cert,
-                dss,
-                &self.0.signature_verification_algorithms,
-            )
+            verify_tls12_signature(input, &self.0.signature_verification_algorithms)
         }
 
         fn verify_tls13_signature(
             &self,
-            message: &[u8],
-            cert: &CertificateDer<'_>,
-            dss: &DigitallySignedStruct,
+            input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            verify_tls13_signature(
-                message,
-                cert,
-                dss,
-                &self.0.signature_verification_algorithms,
-            )
+            verify_tls13_signature(input, &self.0.signature_verification_algorithms)
         }
 
         fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {

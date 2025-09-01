@@ -34,7 +34,7 @@ use crate::sign::Signer;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::verify::{self, DigitallySignedStruct, ServerIdentity};
+use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
 
 mod server_hello {
     use core::fmt;
@@ -912,11 +912,11 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             message.extend_from_slice(&st.server_kx.kx_params);
 
             // Check the signature is compatible with the ciphersuite.
-            let sig = &st.server_kx.kx_sig;
-            if !suite.usable_for_signature_algorithm(sig.scheme.algorithm()) {
+            let signature = &st.server_kx.kx_sig;
+            if !suite.usable_for_signature_algorithm(signature.scheme.algorithm()) {
                 warn!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
-                    sig.scheme.algorithm(),
+                    signature.scheme.algorithm(),
                     suite.sign
                 );
                 return Err(PeerMisbehaved::SignedKxWithWrongAlgorithm.into());
@@ -924,7 +924,11 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
             st.config
                 .verifier
-                .verify_tls12_signature(&message, end_entity, sig)
+                .verify_tls12_signature(&SignatureVerificationInput {
+                    message: &message,
+                    signer: end_entity,
+                    signature,
+                })
                 .map_err(|err| {
                     cx.common
                         .send_cert_verify_error_alert(err)

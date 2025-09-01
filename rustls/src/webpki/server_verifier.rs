@@ -1,13 +1,13 @@
 use alloc::vec::Vec;
 
-use pki_types::{CertificateDer, CertificateRevocationListDer};
+use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::sync::Arc;
 use crate::verify::{
-    DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
-    ServerIdentity,
+    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+    SignatureVerificationInput,
 };
 use crate::webpki::verify::{
     ParsedCertificate, verify_server_cert_signed_by_trust_anchor_impl, verify_tls12_signature,
@@ -271,20 +271,16 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls12_signature(message, cert, dss, &self.supported)
+        verify_tls12_signature(input, &self.supported)
     }
 
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls13_signature(message, cert, dss, &self.supported)
+        verify_tls13_signature(input, &self.supported)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
