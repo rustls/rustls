@@ -39,12 +39,6 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
 
     /// Verify a signature allegedly by the given server certificate.
     ///
-    /// `message` is not hashed, and needs hashing during the verification.
-    /// The signature and algorithm are within `dss`.  `cert` contains the
-    /// public key to use.
-    ///
-    /// `cert` has already been validated by [`ServerCertVerifier::verify_server_cert`].
-    ///
     /// If and only if the signature is valid, return `Ok(HandshakeSignatureValid)`.
     /// Otherwise, return an error -- rustls will send an alert and abort the
     /// connection.
@@ -54,9 +48,7 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     /// in fact bound to the specific curve implied in their name.
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
@@ -68,16 +60,12 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     /// must only validate signatures using public keys on the right curve --
     /// rustls does not enforce this requirement for you.
     ///
-    /// `cert` has already been validated by [`ServerCertVerifier::verify_server_cert`].
-    ///
     /// If and only if the signature is valid, return `Ok(HandshakeSignatureValid)`.
     /// Otherwise, return an error -- rustls will send an alert and abort the
     /// connection.
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error>;
 
     /// Return the list of SignatureSchemes that this verifier will handle,
@@ -193,12 +181,6 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
 
     /// Verify a signature allegedly by the given client certificate.
     ///
-    /// `message` is not hashed, and needs hashing during the verification.
-    /// The signature and algorithm are within `dss`.  `cert` contains the
-    /// public key to use.
-    ///
-    /// `cert` has already been validated by [`ClientCertVerifier::verify_client_cert`].
-    ///
     /// If and only if the signature is valid, return `Ok(HandshakeSignatureValid)`.
     /// Otherwise, return an error -- rustls will send an alert and abort the
     /// connection.
@@ -208,9 +190,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     /// in fact bound to the specific curve implied in their name.
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error>;
 
     /// Verify a signature allegedly by the given client certificate.
@@ -224,9 +204,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     /// rustls does not enforce this requirement for you.
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error>;
 
     /// Return the list of SignatureSchemes that this verifier will handle,
@@ -257,6 +235,21 @@ pub struct ClientIdentity<'a> {
     pub now: UnixTime,
 }
 
+/// Input for message signature verification.
+#[allow(unreachable_pub)]
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct SignatureVerificationInput<'a> {
+    /// The message is not hashed, and needs hashing during verification.
+    pub message: &'a [u8],
+    /// The public key to use.
+    ///
+    /// `signer` has already been validated by the point this is called.
+    pub signer: &'a CertificateDer<'a>,
+    /// The signature scheme and payload.
+    pub signature: &'a DigitallySignedStruct,
+}
+
 /// Turns off client authentication.
 ///
 /// In contrast to using
@@ -285,18 +278,14 @@ impl ClientCertVerifier for NoClientAuth {
 
     fn verify_tls12_signature(
         &self,
-        _message: &[u8],
-        _cert: &CertificateDer<'_>,
-        _dss: &DigitallySignedStruct,
+        _input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         unimplemented!();
     }
 
     fn verify_tls13_signature(
         &self,
-        _message: &[u8],
-        _cert: &CertificateDer<'_>,
-        _dss: &DigitallySignedStruct,
+        _input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         unimplemented!();
     }

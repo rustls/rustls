@@ -251,10 +251,9 @@ mod tests {
     use crate::msgs::enums::NamedGroup;
     use crate::msgs::handshake::{CertificateChain, SessionId};
     use crate::msgs::persist::Tls13ClientSessionValue;
-    use crate::pki_types::CertificateDer;
     use crate::sync::Arc;
-    use crate::verify::ServerIdentity;
-    use crate::{DigitallySignedStruct, Error, SignatureScheme, sign};
+    use crate::verify::{ServerIdentity, SignatureVerificationInput};
+    use crate::{Error, SignatureScheme, sign};
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
@@ -322,9 +321,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_tls12_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
+            _input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             unreachable!()
         }
@@ -332,9 +329,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_tls13_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
+            _input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             unreachable!()
         }

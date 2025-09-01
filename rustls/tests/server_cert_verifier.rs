@@ -11,16 +11,15 @@ use common::{
     do_handshake, do_handshake_until_both_error, do_handshake_until_error, make_client_config,
     make_pair_for_arc_configs, make_server_config, server_config_builder,
 };
-use pki_types::CertificateDer;
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+    SignatureVerificationInput,
 };
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use rustls::{
-    AlertDescription, CertificateError, DigitallySignedStruct, DistinguishedName, Error,
-    InvalidMessage, RootCertStore,
+    AlertDescription, CertificateError, DistinguishedName, Error, InvalidMessage, RootCertStore,
 };
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::X509Name;
@@ -301,22 +300,18 @@ impl ServerCertVerifier for ServerCertVerifierWithCasExt {
 
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         self.verifier
-            .verify_tls12_signature(message, cert, dss)
+            .verify_tls12_signature(input)
     }
 
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         self.verifier
-            .verify_tls13_signature(message, cert, dss)
+            .verify_tls13_signature(input)
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {

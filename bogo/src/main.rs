@@ -45,15 +45,17 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
 };
-use rustls::server::danger::{ClientCertVerified, ClientCertVerifier, ClientIdentity};
+use rustls::server::danger::{
+    ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
+};
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
-    DigitallySignedStruct, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
-    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
-    SignatureScheme, client, compress, server, sign,
+    DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIncompatible,
+    PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm, SignatureScheme,
+    client, compress, server, sign,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -432,22 +434,18 @@ impl ClientCertVerifier for DummyClientAuth {
 
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         self.parent
-            .verify_tls12_signature(message, cert, dss)
+            .verify_tls12_signature(input)
     }
 
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         self.parent
-            .verify_tls13_signature(message, cert, dss)
+            .verify_tls13_signature(input)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
@@ -490,22 +488,18 @@ impl ServerCertVerifier for DummyServerAuth {
 
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         self.parent
-            .verify_tls12_signature(message, cert, dss)
+            .verify_tls12_signature(input)
     }
 
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         self.parent
-            .verify_tls13_signature(message, cert, dss)
+            .verify_tls13_signature(input)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {

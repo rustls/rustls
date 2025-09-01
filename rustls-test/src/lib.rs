@@ -35,7 +35,9 @@ use rustls::pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
     SubjectPublicKeyInfoDer,
 };
-use rustls::server::danger::{ClientCertVerified, ClientCertVerifier, ClientIdentity};
+use rustls::server::danger::{
+    ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
+};
 use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, UnbufferedServerConnection,
     WebPkiClientVerifier,
@@ -46,8 +48,8 @@ use rustls::unbuffered::{
 };
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
-    DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
-    RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
+    DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion, RootCertStore,
+    ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
 };
 
 macro_rules! embed_files {
@@ -1108,11 +1110,9 @@ impl ServerCertVerifier for MockServerVerifier {
 
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
-        println!("verify_tls12_signature({message:?}, {cert:?}, {dss:?})");
+        println!("verify_tls12_signature({input:?})");
         match &self.tls12_signature_error {
             Some(error) => Err(error.clone()),
             _ => Ok(HandshakeSignatureValid::assertion()),
@@ -1121,17 +1121,15 @@ impl ServerCertVerifier for MockServerVerifier {
 
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
-        println!("verify_tls13_signature({message:?}, {cert:?}, {dss:?})");
+        println!("verify_tls13_signature({input:?})");
         match &self.tls13_signature_error {
             Some(error) => Err(error.clone()),
             _ if self.requires_raw_public_keys => verify_tls13_signature_with_raw_key(
-                message,
-                &SubjectPublicKeyInfoDer::from(cert.as_ref()),
-                dss,
+                input.message,
+                &SubjectPublicKeyInfoDer::from(input.signer.as_ref()),
+                input.signature,
                 self.raw_public_key_algorithms
                     .as_ref()
                     .unwrap(),
@@ -1275,36 +1273,32 @@ impl ClientCertVerifier for MockClientVerifier {
 
     fn verify_tls12_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         if self.expect_raw_public_keys {
             Ok(HandshakeSignatureValid::assertion())
         } else {
             self.parent
-                .verify_tls12_signature(message, cert, dss)
+                .verify_tls12_signature(input)
         }
     }
 
     fn verify_tls13_signature(
         &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
+        input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         if self.expect_raw_public_keys {
             verify_tls13_signature_with_raw_key(
-                message,
-                &SubjectPublicKeyInfoDer::from(cert.as_ref()),
-                dss,
+                input.message,
+                &SubjectPublicKeyInfoDer::from(input.signer.as_ref()),
+                input.signature,
                 self.raw_public_key_algorithms
                     .as_ref()
                     .unwrap(),
             )
         } else {
             self.parent
-                .verify_tls13_signature(message, cert, dss)
+                .verify_tls13_signature(input)
         }
     }
 

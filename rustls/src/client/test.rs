@@ -42,6 +42,7 @@ mod tests {
     use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
     use crate::verify::{
         HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+        SignatureVerificationInput,
     };
     use crate::{DigitallySignedStruct, DistinguishedName, KeyLog};
 
@@ -316,11 +317,9 @@ mod tests {
 
         fn verify_tls12_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            dss: &DigitallySignedStruct,
+            input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
-            assert_eq!(dss.scheme, SignatureScheme::ECDSA_SHA1_Legacy);
+            assert_eq!(input.signature.scheme, SignatureScheme::ECDSA_SHA1_Legacy);
             self.seen_sha1_signature
                 .store(true, Ordering::SeqCst);
             Ok(HandshakeSignatureValid::assertion())
@@ -329,9 +328,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_tls13_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
+            _input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             todo!()
         }
@@ -515,9 +512,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_tls12_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
+            _input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             unreachable!()
         }
@@ -525,9 +520,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_tls13_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
+            _input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             unreachable!()
         }
@@ -556,9 +549,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_tls12_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
+            _input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             todo!()
         }
@@ -566,9 +557,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_tls13_signature(
             &self,
-            _message: &[u8],
-            _cert: &CertificateDer<'_>,
-            _dss: &DigitallySignedStruct,
+            _input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             todo!()
         }

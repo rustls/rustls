@@ -1161,19 +1161,21 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         Self: 'm,
     {
         let rc = {
-            let sig = require_handshake_msg!(
+            let signature = require_handshake_msg!(
                 m,
                 HandshakeType::CertificateVerify,
                 HandshakePayload::CertificateVerify
             )?;
             let handshake_hash = self.transcript.current_hash();
             self.transcript.abandon_client_auth();
-            let certs = &self.client_cert;
-            let msg = construct_client_verify_message(&handshake_hash);
 
             self.config
                 .verifier
-                .verify_tls13_signature(msg.as_ref(), &certs[0], sig)
+                .verify_tls13_signature(&verify::SignatureVerificationInput {
+                    message: construct_client_verify_message(&handshake_hash).as_ref(),
+                    signer: &self.client_cert[0],
+                    signature,
+                })
         };
 
         if let Err(e) = rc {

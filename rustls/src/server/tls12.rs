@@ -32,7 +32,7 @@ use crate::msgs::persist;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::verify::ClientIdentity;
+use crate::verify::{ClientIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
@@ -678,19 +678,21 @@ impl State<ServerConnectionData> for ExpectCertificateVerify<'_> {
         Self: 'm,
     {
         let rc = {
-            let sig = require_handshake_msg!(
+            let signature = require_handshake_msg!(
                 m,
                 HandshakeType::CertificateVerify,
                 HandshakePayload::CertificateVerify
             )?;
 
             match self.transcript.take_handshake_buf() {
-                Some(msgs) => {
-                    let certs = &self.client_cert;
-                    self.config
-                        .verifier
-                        .verify_tls12_signature(&msgs, &certs[0], sig)
-                }
+                Some(msgs) => self
+                    .config
+                    .verifier
+                    .verify_tls12_signature(&SignatureVerificationInput {
+                        message: &msgs,
+                        signer: &self.client_cert[0],
+                        signature,
+                    }),
                 None => {
                     // This should be unreachable; the handshake buffer was initialized with
                     // client authentication if the verifier wants to offer it.
