@@ -33,9 +33,9 @@ use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessa
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
-    SubjectPublicKeyInfoDer, UnixTime,
+    SubjectPublicKeyInfoDer,
 };
-use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier, ClientIdentity};
 use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, UnbufferedServerConnection,
     WebPkiClientVerifier,
@@ -1268,9 +1268,7 @@ impl ClientCertVerifier for MockClientVerifier {
 
     fn verify_client_cert(
         &self,
-        _end_entity: &CertificateDer<'_>,
-        _intermediates: &[CertificateDer<'_>],
-        _now: UnixTime,
+        _identity: &ClientIdentity<'_>,
     ) -> Result<ClientCertVerified, Error> {
         (self.verified)()
     }

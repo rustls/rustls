@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
+use pki_types::{CertificateDer, CertificateRevocationListDer};
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
 use super::{VerifierBuilderError, pki_error};
@@ -13,8 +13,8 @@ use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::server::ServerConfig;
 use crate::sync::Arc;
 use crate::verify::{
-    ClientCertVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
-    NoClientAuth,
+    ClientCertVerified, ClientCertVerifier, ClientIdentity, DigitallySignedStruct,
+    HandshakeSignatureValid, NoClientAuth,
 };
 use crate::webpki::parse_crls;
 use crate::webpki::verify::{ParsedCertificate, verify_tls12_signature, verify_tls13_signature};
@@ -359,11 +359,9 @@ impl ClientCertVerifier for WebPkiClientVerifier {
 
     fn verify_client_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
-        now: UnixTime,
+        identity: &ClientIdentity<'_>,
     ) -> Result<ClientCertVerified, Error> {
-        let cert = ParsedCertificate::try_from(end_entity)?;
+        let cert = ParsedCertificate::try_from(identity.end_entity)?;
 
         let crl_refs = self.crls.iter().collect::<Vec<_>>();
 
@@ -386,8 +384,8 @@ impl ClientCertVerifier for WebPkiClientVerifier {
             .verify_for_usage(
                 self.supported_algs.all,
                 &self.roots.roots,
-                intermediates,
-                now,
+                identity.intermediates,
+                identity.now,
                 webpki::KeyUsage::client_auth(),
                 revocation,
                 None,

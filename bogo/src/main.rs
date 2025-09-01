@@ -44,9 +44,8 @@ use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
-    UnixTime,
 };
-use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier, ClientIdentity};
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
@@ -426,9 +425,7 @@ impl ClientCertVerifier for DummyClientAuth {
 
     fn verify_client_cert(
         &self,
-        _end_entity: &CertificateDer<'_>,
-        _intermediates: &[CertificateDer<'_>],
-        _now: UnixTime,
+        _identity: &ClientIdentity<'_>,
     ) -> Result<ClientCertVerified, Error> {
         Ok(ClientCertVerified::assertion())
     }
