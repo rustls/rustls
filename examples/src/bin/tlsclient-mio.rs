@@ -389,9 +389,9 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 
 mod danger {
     use rustls::DigitallySignedStruct;
-    use rustls::client::danger::HandshakeSignatureValid;
+    use rustls::client::danger::{HandshakeSignatureValid, ServerIdentity};
     use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
-    use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+    use rustls::pki_types::CertificateDer;
 
     #[derive(Debug)]
     pub struct NoCertificateVerification(CryptoProvider);
@@ -405,11 +405,7 @@ mod danger {
     impl rustls::client::danger::ServerCertVerifier for NoCertificateVerification {
         fn verify_server_cert(
             &self,
-            _end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
-            _server_name: &ServerName<'_>,
-            _ocsp: &[u8],
-            _now: UnixTime,
+            _identity: &ServerIdentity<'_>,
         ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
             Ok(rustls::client::danger::ServerCertVerified::assertion())
         }

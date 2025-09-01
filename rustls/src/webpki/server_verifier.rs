@@ -1,12 +1,13 @@
 use alloc::vec::Vec;
 
-use pki_types::{CertificateDer, CertificateRevocationListDer, ServerName, UnixTime};
+use pki_types::{CertificateDer, CertificateRevocationListDer};
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::sync::Arc;
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
+    ServerIdentity,
 };
 use crate::webpki::verify::{
     ParsedCertificate, verify_server_cert_signed_by_trust_anchor_impl, verify_tls12_signature,
@@ -230,13 +231,9 @@ impl ServerCertVerifier for WebPkiServerVerifier {
     /// or allowed based on configuration.
     fn verify_server_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
-        server_name: &ServerName<'_>,
-        _ocsp_response: &[u8],
-        now: UnixTime,
+        identity: &ServerIdentity<'_>,
     ) -> Result<ServerCertVerified, Error> {
-        let cert = ParsedCertificate::try_from(end_entity)?;
+        let cert = ParsedCertificate::try_from(identity.end_entity)?;
 
         let crl_refs = self.crls.iter().collect::<Vec<_>>();
 
@@ -262,13 +259,13 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         verify_server_cert_signed_by_trust_anchor_impl(
             &cert,
             &self.roots,
-            intermediates,
+            identity.intermediates,
             revocation,
-            now,
+            identity.now,
             self.supported.all,
         )?;
 
-        verify_server_name(&cert, server_name)?;
+        verify_server_name(&cert, identity.server_name)?;
         Ok(ServerCertVerified::assertion())
     }
 

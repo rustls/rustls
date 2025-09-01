@@ -36,11 +36,13 @@ mod tests {
         ServerKeyExchangePayload,
     };
     use crate::msgs::message::PlainMessage;
+    use crate::pki_types::PrivateKeyDer;
     use crate::pki_types::pem::PemObject;
-    use crate::pki_types::{PrivateKeyDer, UnixTime};
     use crate::sign::CertifiedKey;
     use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
-    use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use crate::verify::{
+        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+    };
     use crate::{DigitallySignedStruct, DistinguishedName, KeyLog};
 
     /// Tests that session_ticket(35) extension
@@ -307,11 +309,7 @@ mod tests {
     impl ServerCertVerifier for ExpectSha1EcdsaVerifier {
         fn verify_server_cert(
             &self,
-            _end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
-            _server_name: &ServerName<'_>,
-            _ocsp_response: &[u8],
-            _now: UnixTime,
+            _identity: &ServerIdentity<'_>,
         ) -> Result<ServerCertVerified, Error> {
             Ok(ServerCertVerified::assertion())
         }
@@ -509,11 +507,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_server_cert(
             &self,
-            _end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
-            _server_name: &ServerName<'_>,
-            _ocsp_response: &[u8],
-            _now: UnixTime,
+            _identity: &ServerIdentity<'_>,
         ) -> Result<ServerCertVerified, Error> {
             unreachable!()
         }
@@ -554,11 +548,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_server_cert(
             &self,
-            _end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
-            _server_name: &ServerName<'_>,
-            _ocsp_response: &[u8],
-            _now: UnixTime,
+            _identity: &ServerIdentity<'_>,
         ) -> Result<ServerCertVerified, Error> {
             todo!()
         }

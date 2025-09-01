@@ -253,6 +253,7 @@ mod tests {
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::pki_types::CertificateDer;
     use crate::sync::Arc;
+    use crate::verify::ServerIdentity;
     use crate::{DigitallySignedStruct, Error, SignatureScheme, sign};
 
     #[test]
@@ -313,11 +314,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_server_cert(
             &self,
-            _end_entity: &CertificateDer<'_>,
-            _intermediates: &[CertificateDer<'_>],
-            _server_name: &ServerName<'_>,
-            _ocsp_response: &[u8],
-            _now: UnixTime,
+            _identity: &ServerIdentity<'_>,
         ) -> Result<ServerCertVerified, Error> {
             unreachable!()
         }

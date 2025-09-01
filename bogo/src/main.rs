@@ -29,7 +29,9 @@ use base64::prelude::{BASE64_STANDARD, Engine};
 use nix::sys::signal::{self, Signal};
 #[cfg(unix)]
 use nix::unistd::Pid;
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::danger::{
+    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+};
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
     Tls12Resumption, WebPkiServerVerifier,
@@ -481,11 +483,7 @@ impl DummyServerAuth {
 impl ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(
         &self,
-        _end_entity: &CertificateDer<'_>,
-        _certs: &[CertificateDer<'_>],
-        _hostname: &ServerName<'_>,
-        _ocsp: &[u8],
-        _now: UnixTime,
+        _identity: &ServerIdentity<'_>,
     ) -> Result<ServerCertVerified, Error> {
         if let OcspValidation::Reject = self.ocsp {
             return Err(CertificateError::InvalidOcspResponse.into());

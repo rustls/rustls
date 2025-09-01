@@ -11,9 +11,11 @@ use common::{
     do_handshake, do_handshake_until_both_error, do_handshake_until_error, make_client_config,
     make_pair_for_arc_configs, make_server_config, server_config_builder,
 };
-use pki_types::{CertificateDer, ServerName};
+use pki_types::CertificateDer;
 use rustls::client::WebPkiServerVerifier;
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::danger::{
+    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+};
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use rustls::{
@@ -291,14 +293,10 @@ struct ServerCertVerifierWithCasExt {
 impl ServerCertVerifier for ServerCertVerifierWithCasExt {
     fn verify_server_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
-        server_name: &ServerName<'_>,
-        ocsp_response: &[u8],
-        now: pki_types::UnixTime,
+        identity: &ServerIdentity<'_>,
     ) -> Result<ServerCertVerified, Error> {
         self.verifier
-            .verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now)
+            .verify_server_cert(identity)
     }
 
     fn verify_tls12_signature(

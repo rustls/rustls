@@ -48,7 +48,7 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::{self, DigitallySignedStruct};
+use crate::verify::{self, DigitallySignedStruct, ServerIdentity};
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
 
 // Extensions we expect in plaintext in the ServerHello.
@@ -1189,18 +1189,16 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             .split_first()
             .ok_or(Error::NoCertificatesPresented)?;
 
-        let now = self.config.current_time()?;
-
         let cert_verified = self
             .config
             .verifier
-            .verify_server_cert(
+            .verify_server_cert(&ServerIdentity {
                 end_entity,
                 intermediates,
-                &self.server_name,
-                &self.server_cert.ocsp_response,
-                now,
-            )
+                server_name: &self.server_name,
+                ocsp_response: &self.server_cert.ocsp_response,
+                now: self.config.current_time()?,
+            })
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)
