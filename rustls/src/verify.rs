@@ -20,50 +20,6 @@ use crate::sync::Arc;
 // means their origins can be precisely determined by looking
 // for their `assertion` constructors.
 
-/// Zero-sized marker type representing verification of a signature.
-#[derive(Debug)]
-pub struct HandshakeSignatureValid(());
-
-impl HandshakeSignatureValid {
-    /// Make a `HandshakeSignatureValid`
-    pub fn assertion() -> Self {
-        Self(())
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct FinishedMessageVerified(());
-
-impl FinishedMessageVerified {
-    pub(crate) fn assertion() -> Self {
-        Self(())
-    }
-}
-
-/// Zero-sized marker type representing verification of a server cert chain.
-#[allow(unreachable_pub)]
-#[derive(Debug)]
-pub struct ServerCertVerified(());
-
-#[allow(unreachable_pub)]
-impl ServerCertVerified {
-    /// Make a `ServerCertVerified`
-    pub fn assertion() -> Self {
-        Self(())
-    }
-}
-
-/// Zero-sized marker type representing verification of a client cert chain.
-#[derive(Debug)]
-pub struct ClientCertVerified(());
-
-impl ClientCertVerified {
-    /// Make a `ClientCertVerified`
-    pub fn assertion() -> Self {
-        Self(())
-    }
-}
-
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
 #[allow(unreachable_pub)]
@@ -368,6 +324,50 @@ impl Codec<'_> for DigitallySignedStruct {
         let sig = PayloadU16::read(r)?;
 
         Ok(Self { scheme, sig })
+    }
+}
+
+/// Zero-sized marker type representing verification of a signature.
+#[derive(Debug)]
+pub struct HandshakeSignatureValid(());
+
+impl HandshakeSignatureValid {
+    /// Make a `HandshakeSignatureValid`
+    pub fn assertion() -> Self {
+        Self(())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct FinishedMessageVerified(());
+
+impl FinishedMessageVerified {
+    pub(crate) fn assertion() -> Self {
+        Self(())
+    }
+}
+
+/// Zero-sized marker type representing verification of a server cert chain.
+#[allow(unreachable_pub)]
+#[derive(Debug)]
+pub struct ServerCertVerified(());
+
+#[allow(unreachable_pub)]
+impl ServerCertVerified {
+    /// Make a `ServerCertVerified`
+    pub fn assertion() -> Self {
+        Self(())
+    }
+}
+
+/// Zero-sized marker type representing verification of a client cert chain.
+#[derive(Debug)]
+pub struct ClientCertVerified(());
+
+impl ClientCertVerified {
+    /// Make a `ClientCertVerified`
+    pub fn assertion() -> Self {
+        Self(())
     }
 }
 
