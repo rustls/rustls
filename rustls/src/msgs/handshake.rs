@@ -1315,7 +1315,7 @@ impl ClientHelloPayload {
 
     pub(crate) fn has_certificate_compression_extension_with_duplicates(&self) -> bool {
         if let Some(algs) = &self.certificate_compression_algorithms {
-            has_duplicates::<_, _, u16>(algs.iter().cloned())
+            has_duplicates::<_, _, u16>(algs.iter().copied())
         } else {
             false
         }

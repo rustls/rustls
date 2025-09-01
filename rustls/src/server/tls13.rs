@@ -121,7 +121,7 @@ mod client_hello {
                         .cert_compressors
                         .iter()
                         .find(|compressor| offered.contains(&compressor.algorithm()))
-                        .cloned());
+                        .copied());
 
             let early_data_requested = client_hello
                 .early_data_request
