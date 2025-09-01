@@ -334,7 +334,7 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
     for s in suites {
         if !known_suites.contains(&s.to_lowercase()) {
             panic!(
-                "cannot look up ciphersuite '{s}'. should be one of {known_suites}",
+                "unsupported ciphersuite '{s}'; should be one of {known_suites}",
                 known_suites = known_suites.join(", ")
             );
         }
