@@ -392,12 +392,12 @@ See the documentation of the CryptoProvider type for more information.
     pub(crate) fn iter_cipher_suites(&self) -> impl Iterator<Item = SupportedCipherSuite> + '_ {
         self.tls13_cipher_suites
             .iter()
-            .cloned()
+            .copied()
             .map(SupportedCipherSuite::Tls13)
             .chain(
                 self.tls12_cipher_suites
                     .iter()
-                    .cloned()
+                    .copied()
                     .map(SupportedCipherSuite::Tls12),
             )
     }
