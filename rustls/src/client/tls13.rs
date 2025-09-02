@@ -457,6 +457,9 @@ pub(super) fn derive_early_traffic_secret(
         cx.common,
     );
 
+    cx.common.early_exporter =
+        Some(early_key_schedule.early_exporter(&client_hello_hash, key_log, client_random));
+
     // Now the client can send encrypted early data
     cx.common.early_traffic = true;
     trace!("Starting early data traffic");

@@ -87,6 +87,24 @@ impl KeyScheduleEarly {
         self.ks
             .sign_verify_data(&resumption_psk_binder_key, hs_hash)
     }
+
+    pub(crate) fn early_exporter(
+        &self,
+        hs_hash: &hash::Output,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+    ) -> Box<dyn Exporter> {
+        let early_exporter_secret = self.ks.derive_logged_secret(
+            SecretKind::EarlyExporterMasterSecret,
+            hs_hash.as_ref(),
+            key_log,
+            client_random,
+        );
+        Box::new(KeyScheduleExporter {
+            ks: self.ks.inner,
+            current_exporter_secret: early_exporter_secret,
+        })
+    }
 }
 
 /// The "early secret" stage of the key schedule.
@@ -1003,6 +1021,7 @@ where
 enum SecretKind {
     ResumptionPskBinderKey,
     ClientEarlyTrafficSecret,
+    EarlyExporterMasterSecret,
     ClientHandshakeTrafficSecret,
     ServerHandshakeTrafficSecret,
     ClientApplicationTrafficSecret,
@@ -1020,6 +1039,7 @@ impl SecretKind {
         match self {
             ResumptionPskBinderKey => b"res binder",
             ClientEarlyTrafficSecret => b"c e traffic",
+            EarlyExporterMasterSecret => b"e exp master",
             ClientHandshakeTrafficSecret => b"c hs traffic",
             ServerHandshakeTrafficSecret => b"s hs traffic",
             ClientApplicationTrafficSecret => b"c ap traffic",
@@ -1038,6 +1058,7 @@ impl SecretKind {
         use self::SecretKind::*;
         Some(match self {
             ClientEarlyTrafficSecret => "CLIENT_EARLY_TRAFFIC_SECRET",
+            EarlyExporterMasterSecret => "EARLY_EXPORTER_SECRET",
             ClientHandshakeTrafficSecret => "CLIENT_HANDSHAKE_TRAFFIC_SECRET",
             ServerHandshakeTrafficSecret => "SERVER_HANDSHAKE_TRAFFIC_SECRET",
             ClientApplicationTrafficSecret => "CLIENT_TRAFFIC_SECRET_0",

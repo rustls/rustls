@@ -4627,6 +4627,11 @@ fn early_data_is_available_on_resumption() {
             .unwrap(),
         5
     );
+    let client_early_exporter = client
+        .early_data()
+        .unwrap()
+        .exporter()
+        .unwrap();
     do_handshake(&mut client, &mut server);
 
     let mut received_early_data = [0u8; 5];
@@ -4639,6 +4644,20 @@ fn early_data_is_available_on_resumption() {
         5
     );
     assert_eq!(&received_early_data[..], b"hello");
+    let server_early_exporter = server
+        .early_data()
+        .unwrap()
+        .exporter()
+        .unwrap();
+
+    // check exporters agree
+    let client_secret = client_early_exporter
+        .derive(b"label", Some(b"context"), [0u8; 32])
+        .unwrap();
+    let server_secret = server_early_exporter
+        .derive(b"label", Some(b"context"), [0u8; 32])
+        .unwrap();
+    assert_eq!(client_secret, server_secret);
 }
 
 #[test]
