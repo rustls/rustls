@@ -543,10 +543,8 @@ mod connection {
 
     use pki_types::DnsName;
 
-    use super::{
-        Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData,
-        ServerExtensionsInput,
-    };
+    use super::{Accepted, Accepting, ServerConfig, ServerConnectionData, ServerExtensionsInput};
+    use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
@@ -561,18 +559,45 @@ mod connection {
     ///
     /// This type implements [`io::Read`].
     pub struct ReadEarlyData<'a> {
-        early_data: &'a mut EarlyDataState,
+        common: &'a mut ConnectionCommon<ServerConnectionData>,
     }
 
     impl<'a> ReadEarlyData<'a> {
-        fn new(early_data: &'a mut EarlyDataState) -> Self {
-            ReadEarlyData { early_data }
+        fn new(common: &'a mut ConnectionCommon<ServerConnectionData>) -> Self {
+            ReadEarlyData { common }
+        }
+
+        /// Returns the "early" exporter that can derive key material for use in early data
+        ///
+        /// See [RFC5705][] for general details on what exporters are, and [RFC8446 S7.5][] for
+        /// specific details on the "early" exporter.
+        ///
+        /// **Beware** that the early exporter requires care, as it is subject to the same
+        /// potential for replay as early data itself.  See [RFC8446 appendix E.5.1][] for
+        /// more detail.
+        ///
+        /// This function can be called at most once per connection. This function will error:
+        /// if called more than once per connection.
+        ///
+        /// If you are looking for the normal exporter, this is available from
+        /// [`ConnectionCommon::exporter()`].
+        ///
+        /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+        /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
+        /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
+        /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
+        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+            self.common.core.early_exporter()
         }
     }
 
     impl io::Read for ReadEarlyData<'_> {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            self.early_data.read(buf)
+            self.common
+                .core
+                .data
+                .early_data
+                .read(buf)
         }
     }
 
@@ -662,9 +687,14 @@ mod connection {
         /// - The connection doesn't resume an existing session.
         /// - The client hasn't sent a full ClientHello yet.
         pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
-            let data = &mut self.inner.core.data;
-            if data.early_data.was_accepted() {
-                Some(ReadEarlyData::new(&mut data.early_data))
+            if self
+                .inner
+                .core
+                .data
+                .early_data
+                .was_accepted()
+            {
+                Some(ReadEarlyData::new(&mut self.inner))
             } else {
                 None
             }

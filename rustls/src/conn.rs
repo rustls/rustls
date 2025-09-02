@@ -356,7 +356,7 @@ pub use connection::{Connection, Reader, Writer};
 
 /// An object of this type can export keying material.
 pub struct KeyingMaterialExporter {
-    inner: Box<dyn Exporter>,
+    pub(crate) inner: Box<dyn Exporter>,
 }
 
 impl KeyingMaterialExporter {
@@ -1248,6 +1248,13 @@ impl<Data> ConnectionCore<Data> {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None if self.common_state.is_handshaking() => Err(Error::HandshakeNotComplete),
             None => Err(Error::General("exporter already used".into())),
+        }
+    }
+
+    pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.common_state.early_exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(Error::General("early_exporter not available".into())),
         }
     }
 
