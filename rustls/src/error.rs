@@ -1176,6 +1176,9 @@ pub enum ApiMisuse {
     ///
     /// [`ServerConfig::max_early_data_size`]: crate::server::ServerConfig::max_early_data_size
     QuicApiRestrictsMaxEarlyDataSize,
+
+    /// A `CryptoProvider` must have at least one cipher suite.
+    NoCipherSuitesConfigured,
 }
 
 impl From<ApiMisuse> for Error {

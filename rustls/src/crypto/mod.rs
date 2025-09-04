@@ -13,12 +13,12 @@ pub use crate::webpki::{
     WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
     verify_tls13_signature_with_raw_key,
 };
-#[cfg(doc)]
-use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server, sign};
 use crate::{
-    Error, NamedGroup, ProtocolVersion, SupportedCipherSuite, SupportedProtocolVersion,
+    ApiMisuse, Error, NamedGroup, ProtocolVersion, SupportedCipherSuite, SupportedProtocolVersion,
     Tls12CipherSuite, Tls13CipherSuite,
 };
+#[cfg(doc)]
+use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server, sign};
 
 /// *ring* based CryptoProvider.
 #[cfg(feature = "ring")]
@@ -353,7 +353,7 @@ See the documentation of the CryptoProvider type for more information.
 
     pub(crate) fn consistency_check(&self) -> Result<(), Error> {
         if self.tls12_cipher_suites.is_empty() && self.tls13_cipher_suites.is_empty() {
-            return Err(Error::General("no cipher suites configured".into()));
+            return Err(ApiMisuse::NoCipherSuitesConfigured.into());
         }
 
         if self.kx_groups.is_empty() {
