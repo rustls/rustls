@@ -383,7 +383,7 @@ impl KeyingMaterialExporter {
         mut output: T,
     ) -> Result<T, Error> {
         if output.as_mut().is_empty() {
-            return Err(Error::General("derive() with zero-length output".into()));
+            return Err(ApiMisuse::ExporterOutputZeroLength.into());
         }
 
         self.inner
