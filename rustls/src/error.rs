@@ -1169,6 +1169,13 @@ pub enum ApiMisuse {
 
     /// QUIC attempted with a configuration that does not support a ciphersuite that supports QUIC.
     QuicApiRequiresAtLeastOneCipherSuiteSupportingQuic,
+
+    /// QUIC attempted with unsupported [`ServerConfig::max_early_data_size`][]
+    ///
+    /// This field must be either zero or [`u32::MAX`] for QUIC.
+    ///
+    /// [`ServerConfig::max_early_data_size`]: crate::server::ServerConfig::max_early_data_size
+    QuicApiRestrictsMaxEarlyDataSize,
 }
 
 impl From<ApiMisuse> for Error {
