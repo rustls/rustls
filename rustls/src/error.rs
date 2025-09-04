@@ -1141,6 +1141,14 @@ pub enum ApiMisuse {
     ///
     /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
     ExporterOutputTooLong,
+
+    /// The `output` object to [`KeyingMaterialExporter::derive()`][] was zero length.
+    ///
+    /// This doesn't make sense, so we explicitely return an error (rather than simply
+    /// producing no output as requested.)
+    ///
+    /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
+    ExporterOutputZeroLength,
 }
 
 impl From<ApiMisuse> for Error {

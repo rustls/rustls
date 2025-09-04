@@ -3574,13 +3574,13 @@ fn do_exporter_test(
         client_exporter
             .derive(b"label", Some(b"context"), &mut empty)
             .err(),
-        Some(Error::General("derive() with zero-length output".into()))
+        Some(ApiMisuse::ExporterOutputZeroLength.into())
     );
     assert_eq!(
         server_exporter
             .derive(b"label", Some(b"context"), &mut empty)
             .err(),
-        Some(Error::General("derive() with zero-length output".into()))
+        Some(ApiMisuse::ExporterOutputZeroLength.into())
     );
 
     assert!(
