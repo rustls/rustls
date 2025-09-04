@@ -1134,6 +1134,13 @@ pub enum ApiMisuse {
     ///
     /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
     ExporterContextTooLong,
+
+    /// The `output` object for [`KeyingMaterialExporter::derive()`][] was too long.
+    ///
+    /// For TLS1.3 connections this is limited to 255 times the hash output length.
+    ///
+    /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
+    ExporterOutputTooLong,
 }
 
 impl From<ApiMisuse> for Error {
