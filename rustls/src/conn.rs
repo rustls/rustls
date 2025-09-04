@@ -1211,7 +1211,7 @@ impl<Data> ConnectionCore<Data> {
             .common_state
             .enable_secret_extraction
         {
-            return Err(Error::General("Secret extraction is disabled".into()));
+            return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
 
         if self.common_state.is_handshaking() {
