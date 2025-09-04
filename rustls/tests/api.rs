@@ -8163,3 +8163,98 @@ impl ActiveKeyExchange for FakeHybridActive {
 }
 
 const CONFIDENTIALITY_LIMIT: u64 = 1024;
+
+#[test]
+fn server_invalid_sni_policy() {
+    const SERVER_NAME_GOOD: &str = "LXXXxxxXXXR";
+    const SERVER_NAME_BAD: &str = "[XXXxxxXXX]";
+    const SERVER_NAME_IPV4: &str = "10.11.12.13";
+
+    fn replace_sni(sni_replacement: &str) -> impl Fn(&mut Message) -> Altered + '_ {
+        assert_eq!(sni_replacement.len(), SERVER_NAME_GOOD.len());
+        move |m: &mut Message| match &mut m.payload {
+            MessagePayload::Handshake { parsed: _, encoded } => {
+                let mut payload_bytes = encoded.bytes().to_vec();
+                if let Some(ind) = payload_bytes
+                    .windows(SERVER_NAME_GOOD.len())
+                    .position(|w| w == SERVER_NAME_GOOD.as_bytes())
+                {
+                    payload_bytes[ind..][..SERVER_NAME_GOOD.len()]
+                        .copy_from_slice(sni_replacement.as_bytes());
+                }
+                *encoded = Payload::new(payload_bytes);
+
+                Altered::InPlace
+            }
+            _ => Altered::InPlace,
+        }
+    }
+
+    #[derive(Debug)]
+    enum ExpectedResult {
+        Accept,
+        AcceptNoSni,
+        Reject,
+    }
+    use ExpectedResult::*;
+    use rustls::server::InvalidSniPolicy as Policy;
+    let test_cases = [
+        (Policy::RejectAll, SERVER_NAME_GOOD, Accept),
+        (Policy::RejectAll, SERVER_NAME_IPV4, Reject),
+        (Policy::RejectAll, SERVER_NAME_BAD, Reject),
+        (Policy::IgnoreAll, SERVER_NAME_GOOD, Accept),
+        (Policy::IgnoreAll, SERVER_NAME_IPV4, AcceptNoSni),
+        (Policy::IgnoreAll, SERVER_NAME_BAD, AcceptNoSni),
+        (Policy::IgnoreIpAddresses, SERVER_NAME_GOOD, Accept),
+        (Policy::IgnoreIpAddresses, SERVER_NAME_IPV4, AcceptNoSni),
+        (Policy::IgnoreIpAddresses, SERVER_NAME_BAD, Reject),
+    ];
+
+    let accept_result = Err(Error::General(
+        "no server certificate chain resolved".to_string(),
+    ));
+    let reject_result = Err(Error::PeerMisbehaved(
+        PeerMisbehaved::ServerNameMustContainOneHostName,
+    ));
+
+    for (policy, sni, expected_result) in test_cases {
+        let provider = provider::default_provider();
+        let client_config = make_client_config(KeyType::EcdsaP256, &provider);
+        let mut server_config = make_server_config(KeyType::EcdsaP256, &provider);
+
+        server_config.cert_resolver = Arc::new(ServerCheckSni {
+            expect_sni: matches!(expected_result, ExpectedResult::Accept),
+        });
+        server_config.invalid_sni_policy = policy;
+
+        let client =
+            ClientConnection::new(Arc::new(client_config), server_name(SERVER_NAME_GOOD)).unwrap();
+        let server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        let (mut client, mut server) = (client.into(), server.into());
+
+        transfer_altered(&mut client, replace_sni(sni), &mut server);
+        assert_eq!(
+            &server.process_new_packets(),
+            match expected_result {
+                Accept | AcceptNoSni => &accept_result,
+                Reject => &reject_result,
+            }
+        );
+        println!(
+            "test case (policy: {policy:?}, sni: {sni:?}, expected_result: {expected_result:?}) succeeded!"
+        );
+    }
+}
+
+#[derive(Debug)]
+struct ServerCheckSni {
+    expect_sni: bool,
+}
+
+impl ResolvesServerCert for ServerCheckSni {
+    fn resolve(&self, client_hello: &ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+        assert_eq!(client_hello.server_name().is_some(), self.expect_sni);
+
+        None
+    }
+}

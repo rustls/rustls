@@ -1,4 +1,4 @@
-use alloc::borrow::ToOwned;
+use alloc::borrow::{Cow, ToOwned};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
@@ -287,6 +287,15 @@ impl ExpectClientHello {
             .config
             .supports_version(ProtocolVersion::TLSv1_2);
 
+        cx.data.sni = self
+            .config
+            .invalid_sni_policy
+            .accept(client_hello.server_name.as_ref())
+            .map_err(|e| {
+                cx.common
+                    .send_fatal_alert(AlertDescription::IllegalParameter, e)
+            })?;
+
         // Are we doing TLS1.3?
         let version = if let Some(versions) = &client_hello.supported_versions {
             if versions.tls13 && tls13_enabled {
@@ -354,7 +363,7 @@ impl ExpectClientHello {
         // Choose a certificate.
         let certkey = {
             let client_hello = ClientHello {
-                server_name: &cx.data.sni,
+                server_name: cx.data.sni.as_ref().map(Cow::Borrowed),
                 signature_schemes: &sig_schemes,
                 alpn: client_hello.protocols.as_ref(),
                 client_cert_types: client_hello
@@ -639,8 +648,6 @@ impl State<ServerConnectionData> for ExpectClientHello {
 /// doesn't depend on a `ServerConfig` being available and extract everything needed to build a
 /// [`ClientHello`] value for a [`ResolvesServerCert`].
 ///
-/// Note that this will modify `data.sni` even if config or certificate resolution fail.
-///
 /// [`ResolvesServerCert`]: crate::server::ResolvesServerCert
 pub(super) fn process_client_hello<'m>(
     m: &'m Message<'m>,
@@ -664,40 +671,16 @@ pub(super) fn process_client_hello<'m>(
     // No handshake messages should follow this one in this flight.
     cx.common.check_aligned_handshake()?;
 
-    // Extract and validate the SNI DNS name, if any, before giving it to
-    // the cert resolver. In particular, if it is invalid then we should
-    // send an Illegal Parameter alert instead of the Internal Error alert
-    // (or whatever) that we'd send if this were checked later or in a
-    // different way.
-    //
-    // [RFC6066][] specifies that literal IP addresses are illegal in
-    // `ServerName`s with a `name_type` of `host_name`.
-    //
-    // Some clients incorrectly send such extensions: we choose to
-    // successfully parse these (into `ServerNamePayload::IpAddress`)
-    // but then act like the client sent no `server_name` extension.
-    //
-    // [RFC6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
-    let sni = match &client_hello.server_name {
-        Some(ServerNamePayload::SingleDnsName(dns_name)) => Some(dns_name.to_lowercase_owned()),
-        Some(ServerNamePayload::IpAddress) => None,
-        Some(ServerNamePayload::Invalid) => {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerMisbehaved::ServerNameMustContainOneHostName,
-            ));
+    if done_retry {
+        let ch_sni = client_hello
+            .server_name
+            .as_ref()
+            .and_then(ServerNamePayload::to_dns_name_normalized);
+        if cx.data.sni != ch_sni {
+            return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
         }
-        None => None,
-    };
-
-    // save only the first SNI
-    if let (Some(sni), false) = (&sni, done_retry) {
-        // Save the SNI into the session.
-        // The SNI hostname is immutable once set.
-        assert!(cx.data.sni.is_none());
-        cx.data.sni = Some(sni.clone());
-    } else if cx.data.sni != sni {
-        return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
+    } else {
+        assert!(cx.data.sni.is_none())
     }
 
     let sig_schemes = client_hello
