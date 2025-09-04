@@ -320,7 +320,13 @@ pub(crate) struct Tls12Exporter {
 
 impl Exporter for Tls12Exporter {
     fn derive(&self, label: &[u8], context: Option<&[u8]>, output: &mut [u8]) -> Result<(), Error> {
-        let mut randoms = Vec::new();
+        let mut randoms = Vec::with_capacity(
+            32 + 32
+                + context
+                    .as_ref()
+                    .map(|c| 2 + c.len())
+                    .unwrap_or_default(),
+        );
         randoms.extend_from_slice(&self.randoms.client);
         randoms.extend_from_slice(&self.randoms.server);
         if let Some(context) = context {
