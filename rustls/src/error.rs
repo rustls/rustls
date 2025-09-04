@@ -1159,6 +1159,12 @@ pub enum ApiMisuse {
     ///
     /// [`quic::HeaderProtectionKey::encrypt_in_place()`]: crate::quic::HeaderProtectionKey::encrypt_in_place()
     InvalidQuicHeaderProtectionSampleLength,
+
+    /// Incorrect relation between sample length and header number length provided to
+    /// [`quic::HeaderProtectionKey::encrypt_in_place()`][]
+    ///
+    /// [`quic::HeaderProtectionKey::encrypt_in_place()`]: crate::quic::HeaderProtectionKey::encrypt_in_place()
+    InvalidQuicHeaderProtectionPacketNumberLength,
 }
 
 impl From<ApiMisuse> for Error {
