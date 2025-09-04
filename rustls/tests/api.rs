@@ -18,7 +18,7 @@ use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{CertificateType, ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
-    AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
+    AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
     ExtendedKeyPurpose, HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog,
     KeyingMaterialExporter, NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion,
@@ -3549,12 +3549,12 @@ fn do_exporter_test(
     let server_exporter = server.exporter().unwrap();
 
     assert_eq!(
-        Some(Error::General("exporter already used".into())),
-        client.exporter().err()
+        client.exporter().err(),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
     );
     assert_eq!(
-        Some(Error::General("exporter already used".into())),
-        server.exporter().err()
+        server.exporter().err(),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
     );
 
     assert!(
@@ -4632,6 +4632,14 @@ fn early_data_is_available_on_resumption() {
         .unwrap()
         .exporter()
         .unwrap();
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .exporter()
+            .err(),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+    );
     do_handshake(&mut client, &mut server);
 
     let mut received_early_data = [0u8; 5];
@@ -4649,6 +4657,14 @@ fn early_data_is_available_on_resumption() {
         .unwrap()
         .exporter()
         .unwrap();
+    assert_eq!(
+        server
+            .early_data()
+            .unwrap()
+            .exporter()
+            .err(),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+    );
 
     // check exporters agree
     let client_secret = client_early_exporter

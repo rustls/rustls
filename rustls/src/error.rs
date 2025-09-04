@@ -124,6 +124,19 @@ pub enum Error {
     /// Please file a bug if you see one.
     Unreachable(&'static str),
 
+    /// The caller misused the API
+    ///
+    /// Generally we try to make error cases like this unnecessary by embedding
+    /// the constraints in the type system, so misuses simply do not compile.  But,
+    /// for cases where that is not possible or exceptionally costly, we return errors
+    /// of this variant.
+    ///
+    /// This only results from the ordering, dependencies or parameter values of calls,
+    /// so (assuming parameter values are fixed) these can be determined and fixed by
+    /// reading the code.  They are never caused by the values of untrusted data, or
+    /// other non-determinism.
+    ApiMisuse(ApiMisuse),
+
     /// Any other error.
     ///
     /// This variant should only be used when the error is not better described by a more
@@ -1077,6 +1090,7 @@ impl fmt::Display for Error {
                 f,
                 "unreachable condition: {err} (please file a bug in rustls)"
             ),
+            Self::ApiMisuse(why) => write!(f, "API misuse: {why:?}"),
             Self::Other(err) => write!(f, "other error: {err}"),
         }
     }
@@ -1096,6 +1110,28 @@ impl std::error::Error for Error {}
 impl From<rand::GetRandomFailed> for Error {
     fn from(_: rand::GetRandomFailed) -> Self {
         Self::FailedToGetRandomBytes
+    }
+}
+
+/// Describes cases of API misuse
+///
+/// Variants here should be sufficiently detailed that the action needed is clear.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ApiMisuse {
+    /// The [`KeyingMaterialExporter`][] was already consumed.
+    ///
+    /// Methods that obtain an exporter (eg, [`ConnectionCommon::exporter()`][]) can only
+    /// be used once.  This error is returned on subsequent calls.
+    ///
+    /// [`KeyingMaterialExporter`]: crate::KeyingMaterialExporter
+    /// [`ConnectionCommon::exporter()`]: crate::ConnectionCommon::exporter()
+    ExporterAlreadyUsed,
+}
+
+impl From<ApiMisuse> for Error {
+    fn from(e: ApiMisuse) -> Self {
+        Self::ApiMisuse(e)
     }
 }
 
@@ -1431,6 +1467,7 @@ mod tests {
             Error::InconsistentKeys(InconsistentKeys::Unknown),
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
             Error::Unreachable("smoke"),
+            super::ApiMisuse::ExporterAlreadyUsed.into(),
             Error::Other(OtherError(
                 #[cfg(feature = "std")]
                 Arc::from(Box::from("")),
