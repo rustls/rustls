@@ -1181,6 +1181,9 @@ pub enum ApiMisuse {
 
     /// A `CryptoProvider` must have at least one cipher suite.
     NoCipherSuitesConfigured,
+
+    /// A `CryptoProvider` must have at least one key exchange group.
+    NoKeyExchangeGroupsConfigured,
 }
 
 impl From<ApiMisuse> for Error {

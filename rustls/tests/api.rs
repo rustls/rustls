@@ -376,7 +376,7 @@ fn config_builder_for_client_rejects_empty_kx_groups() {
         .with_root_certificates(get_client_root_store(KeyType::EcdsaP256))
         .with_no_client_auth()
         .err(),
-        Some(Error::General("no kx groups configured".into()))
+        Some(ApiMisuse::NoKeyExchangeGroupsConfigured.into())
     );
 }
 
@@ -411,7 +411,7 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
         .with_no_client_auth()
         .with_single_cert(KeyType::EcdsaP256.get_chain(), KeyType::EcdsaP256.get_key())
         .err(),
-        Some(Error::General("no kx groups configured".into()))
+        Some(ApiMisuse::NoKeyExchangeGroupsConfigured.into())
     );
 }
 

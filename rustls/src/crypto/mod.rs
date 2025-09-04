@@ -357,7 +357,7 @@ See the documentation of the CryptoProvider type for more information.
         }
 
         if self.kx_groups.is_empty() {
-            return Err(Error::General("no kx groups configured".into()));
+            return Err(ApiMisuse::NoKeyExchangeGroupsConfigured.into());
         }
 
         // verifying cipher suites have matching kx groups
