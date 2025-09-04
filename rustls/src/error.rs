@@ -1163,6 +1163,9 @@ pub enum ApiMisuse {
     ///
     /// [`quic::HeaderProtectionKey::encrypt_in_place()`]: crate::quic::HeaderProtectionKey::encrypt_in_place()
     InvalidQuicHeaderProtectionPacketNumberLength,
+
+    /// QUIC attempted with a configuration that does not support TLS1.3.
+    QuicApiRequiresTls13Support,
 }
 
 impl From<ApiMisuse> for Error {
