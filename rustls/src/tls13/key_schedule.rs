@@ -1,7 +1,6 @@
 //! Key schedule maintenance for TLS1.3
 
 use alloc::boxed::Box;
-use alloc::string::ToString;
 use core::ops::Deref;
 
 use crate::common_state::{CommonState, Side};
@@ -9,7 +8,7 @@ use crate::conn::Exporter;
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{SharedSecret, hash, hmac};
-use crate::error::Error;
+use crate::error::{ApiMisuse, Error};
 use crate::msgs::message::Message;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite, quic};
@@ -888,7 +887,7 @@ impl KeyScheduleSuite {
             .hkdf_provider
             .expander_for_okm(&secret);
         hkdf_expand_label_slice(expander.as_ref(), b"exporter", h_context.as_ref(), out)
-            .map_err(|_| Error::General("exporting too much".to_string()))
+            .map_err(|_| ApiMisuse::ExporterOutputTooLong.into())
     }
 }
 

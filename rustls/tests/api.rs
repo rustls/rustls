@@ -3675,13 +3675,13 @@ fn test_tls13_exporter_maximum_output_length() {
         client_exporter
             .derive(b"label", Some(b"context"), &mut too_long_output)
             .err(),
-        Some(Error::General("exporting too much".into()))
+        Some(ApiMisuse::ExporterOutputTooLong.into())
     );
     assert_eq!(
         server_exporter
             .derive(b"label", Some(b"context"), &mut too_long_output)
             .err(),
-        Some(Error::General("exporting too much".into()))
+        Some(ApiMisuse::ExporterOutputTooLong.into())
     );
 }
 
