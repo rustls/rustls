@@ -1204,6 +1204,14 @@ pub enum ApiMisuse {
     /// [`ClientConfig::enable_secret_extraction`][crate::client::ClientConfig::enable_secret_extraction] to true before calling
     /// these functions.
     SecretExtractionRequiresPriorOptIn,
+
+    /// Secret extraction operation attempted without first extracting all pending
+    /// TLS data.
+    ///
+    /// See [`Self::SecretExtractionRequiresPriorOptIn`] for a list of the affected
+    /// functions.  You must ensure any prior generated TLS records are extracted
+    /// from the library before using one of these functions.
+    SecretExtractionWithPendingSendableData,
 }
 
 impl From<ApiMisuse> for Error {
