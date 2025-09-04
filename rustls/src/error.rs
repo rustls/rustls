@@ -1182,6 +1182,9 @@ pub enum ApiMisuse {
 
     /// A `CryptoProvider` must have at least one key exchange group.
     NoKeyExchangeGroupsConfigured,
+
+    /// ECH attempted with a configuration that does not support TLS1.3.
+    EchRequiresTls13Support,
 }
 
 impl From<ApiMisuse> for Error {
