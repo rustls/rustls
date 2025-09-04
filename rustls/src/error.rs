@@ -1190,6 +1190,20 @@ pub enum ApiMisuse {
 
     /// ECH attempted with a configuration that also supports TLS1.2.
     EchForbidsTls12Support,
+
+    /// Secret extraction operation attempted without opting-in to secret extraction.
+    ///
+    /// This is possible from:
+    ///
+    /// - [`ClientConnection::dangerous_extract_secrets()`][crate::client::ClientConnection::dangerous_extract_secrets]
+    /// - [`ServerConnection::dangerous_extract_secrets()`][crate::server::ServerConnection::dangerous_extract_secrets]
+    /// - [`ClientConnection::dangerous_into_kernel_connection()`][crate::client::UnbufferedClientConnection::dangerous_into_kernel_connection]
+    /// - [`ServerConnection::dangerous_into_kernel_connection()`][crate::server::UnbufferedServerConnection::dangerous_into_kernel_connection]
+    ///
+    /// You must set [`ServerConfig::enable_secret_extraction`][crate::server::ServerConfig::enable_secret_extraction] or
+    /// [`ClientConfig::enable_secret_extraction`][crate::client::ClientConfig::enable_secret_extraction] to true before calling
+    /// these functions.
+    SecretExtractionRequiresPriorOptIn,
 }
 
 impl From<ApiMisuse> for Error {
