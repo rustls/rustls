@@ -285,6 +285,16 @@ impl ServerNamePayload<'_> {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("ServerNames"),
     };
+
+    /// Get the `DnsName` out of this `ServerNamePayload` if it contains one.
+    /// The returned `DnsName` will be normalized (converted to lowercase).
+    pub(crate) fn to_dns_name_normalized(&self) -> Option<DnsName<'static>> {
+        match self {
+            Self::SingleDnsName(dns_name) => Some(dns_name.to_lowercase_owned()),
+            Self::IpAddress => None,
+            Self::Invalid => None,
+        }
+    }
 }
 
 /// Simplified encoding/decoding for a `ServerName` extension payload to/from `DnsName`
@@ -342,9 +352,7 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
                 }
 
                 HostNamePayload::IpAddress(_invalid) => {
-                    warn!(
-                        "Illegal SNI extension: ignoring IP address presented as hostname ({_invalid:?})"
-                    );
+                    warn!("Illegal SNI extension: IP address presented as hostname ({_invalid:?})");
                     Some(Self::IpAddress)
                 }
 

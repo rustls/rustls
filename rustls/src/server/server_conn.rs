@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
@@ -23,7 +24,9 @@ use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
 use crate::msgs::base::Payload;
-use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtensionsInput};
+use crate::msgs::handshake::{
+    ClientHelloPayload, ProtocolName, ServerExtensionsInput, ServerNamePayload,
+};
 use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -31,7 +34,9 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{DistinguishedName, KeyLog, NamedGroup, WantsVerifier, compress, sign, verify};
+use crate::{
+    DistinguishedName, KeyLog, NamedGroup, PeerMisbehaved, WantsVerifier, compress, sign, verify,
+};
 
 /// A trait for the ability to store server session data.
 ///
@@ -133,7 +138,7 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
 /// A struct representing the received Client Hello
 #[derive(Debug)]
 pub struct ClientHello<'a> {
-    pub(super) server_name: &'a Option<DnsName<'a>>,
+    pub(super) server_name: Option<Cow<'a, DnsName<'a>>>,
     pub(super) signature_schemes: &'a [SignatureScheme],
     pub(super) alpn: Option<&'a Vec<ProtocolName>>,
     pub(super) server_cert_types: Option<&'a [CertificateType]>,
@@ -151,7 +156,7 @@ impl<'a> ClientHello<'a> {
     ///
     /// Returns `None` if the client did not supply a SNI.
     pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.server_name.as_ref()
+        self.server_name.as_deref()
     }
 
     /// Get the compatible signature schemes.
@@ -435,6 +440,9 @@ pub struct ServerConfig {
     ///
     /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
+
+    /// Policy for how an invalid Server Name Indication (SNI) value from a client is handled.
+    pub invalid_sni_policy: InvalidSniPolicy,
 }
 
 impl ServerConfig {
@@ -530,6 +538,59 @@ impl ServerConfig {
         self.time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
+    }
+}
+
+/// A policy describing how an invalid Server Name Indication (SNI) value from a client is handled by the server.
+///
+/// The only valid form of SNI according to relevant RFCs ([RFC6066], [RFC1035]) is
+/// non-IP-address host name, however some misconfigured clients may send a bare IP address, or
+/// another invalid value. Some servers may wish to ignore these invalid values instead of producing
+/// an error.
+///
+/// By default, Rustls will ignore invalid values that are an IP address (the most common misconfiguration)
+/// and error for all other invalid values.
+///
+/// When an SNI value is ignored, Rustls treats the client as if it sent no SNI at all.
+///
+/// [RFC1035]: https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.1
+/// [RFC6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
+#[non_exhaustive]
+pub enum InvalidSniPolicy {
+    /// Reject all ClientHello messages that contain an invalid SNI value.
+    RejectAll,
+    /// Ignore an invalid SNI value in ClientHello messages if the value is an IP address.
+    ///
+    /// "Ignoring SNI" means accepting the ClientHello message, but acting as if the client sent no SNI.
+    #[default]
+    IgnoreIpAddresses,
+    /// Ignore all invalid SNI in ClientHello messages.
+    ///
+    /// "Ignoring SNI" means accepting the ClientHello message, but acting as if the client sent no SNI.
+    IgnoreAll,
+}
+
+impl InvalidSniPolicy {
+    /// Returns the valid SNI value, or ignores the invalid SNI value if allowed by this policy; otherwise returns
+    /// an error.
+    pub(super) fn accept(
+        &self,
+        payload: Option<&ServerNamePayload<'_>>,
+    ) -> Result<Option<DnsName<'static>>, Error> {
+        let Some(payload) = payload else {
+            return Ok(None);
+        };
+        if let Some(server_name) = payload.to_dns_name_normalized() {
+            return Ok(Some(server_name));
+        }
+        match (self, payload) {
+            (Self::IgnoreAll, _) => Ok(None),
+            (Self::IgnoreIpAddresses, ServerNamePayload::IpAddress) => Ok(None),
+            _ => Err(Error::PeerMisbehaved(
+                PeerMisbehaved::ServerNameMustContainOneHostName,
+            )),
+        }
     }
 }
 
@@ -994,8 +1055,13 @@ impl Accepted {
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
         let payload = Self::client_hello_payload(&self.message);
+        let server_name = payload
+            .server_name
+            .as_ref()
+            .and_then(ServerNamePayload::to_dns_name_normalized)
+            .map(Cow::Owned);
         let ch = ClientHello {
-            server_name: &self.connection.core.data.sni,
+            server_name,
             signature_schemes: &self.sig_schemes,
             alpn: payload.protocols.as_ref(),
             server_cert_types: payload

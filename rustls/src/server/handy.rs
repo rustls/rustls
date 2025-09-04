@@ -260,6 +260,8 @@ mod sni_resolver {
 
     #[cfg(test)]
     mod tests {
+        use alloc::borrow::Cow;
+
         use super::*;
         use crate::server::ResolvesServerCert;
 
@@ -269,7 +271,7 @@ mod sni_resolver {
             assert!(
                 rscsni
                     .resolve(&ClientHello {
-                        server_name: &None,
+                        server_name: None,
                         signature_schemes: &[],
                         alpn: None,
                         server_cert_types: None,
@@ -291,7 +293,7 @@ mod sni_resolver {
             assert!(
                 rscsni
                     .resolve(&ClientHello {
-                        server_name: &Some(name),
+                        server_name: Some(Cow::Borrowed(&name)),
                         signature_schemes: &[],
                         alpn: None,
                         server_cert_types: None,
