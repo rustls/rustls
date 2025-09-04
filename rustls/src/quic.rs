@@ -177,9 +177,7 @@ mod connection {
             }
 
             if !config.supports_protocol(Protocol::Quic) {
-                return Err(Error::General(
-                    "at least one ciphersuite must support QUIC".into(),
-                ));
+                return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
             }
 
             let exts = ClientExtensionsInput {
@@ -259,9 +257,7 @@ mod connection {
             }
 
             if !config.supports_protocol(Protocol::Quic) {
-                return Err(Error::General(
-                    "at least one ciphersuite must support QUIC".into(),
-                ));
+                return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
             }
 
             if config.max_early_data_size != 0 && config.max_early_data_size != 0xffff_ffff {
