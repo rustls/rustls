@@ -1223,10 +1223,7 @@ impl<Data> ConnectionCore<Data> {
             .sendable_tls
             .is_empty()
         {
-            return Err(Error::General(
-                "cannot convert into an KernelConnection while there are still buffered TLS records to send"
-                    .into()
-            ));
+            return Err(ApiMisuse::SecretExtractionWithPendingSendableData.into());
         }
 
         let state = self.state?;
