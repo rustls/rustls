@@ -1549,8 +1549,8 @@ impl State<ServerConnectionData> for ExpectQuicTraffic {
 
 impl KernelState for ExpectQuicTraffic {
     fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        Err(Error::General(
-            "QUIC connections do not support key updates".into(),
+        Err(Error::Unreachable(
+            "QUIC connections do not support key updates",
         ))
     }
 
