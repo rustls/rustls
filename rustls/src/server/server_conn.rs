@@ -544,7 +544,6 @@ mod connection {
     use pki_types::DnsName;
 
     use super::{Accepted, Accepting, ServerConfig, ServerConnectionData, ServerExtensionsInput};
-    use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
@@ -552,6 +551,7 @@ mod connection {
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
+    use crate::{ApiMisuse, KeyingMaterialExporter};
 
     /// Allows reading of early data in resumed TLS1.3 connections.
     ///
@@ -839,7 +839,7 @@ mod connection {
         pub fn accept(&mut self) -> Result<Option<Accepted>, (Error, AcceptedAlert)> {
             let Some(mut connection) = self.inner.take() else {
                 return Err((
-                    Error::General("Acceptor polled after completion".into()),
+                    ApiMisuse::AcceptorPolledAfterCompletion.into(),
                     AcceptedAlert::empty(),
                 ));
             };
