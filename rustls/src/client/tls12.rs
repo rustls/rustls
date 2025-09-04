@@ -1376,8 +1376,8 @@ impl State<ClientConnectionData> for ExpectTraffic {
 
 impl KernelState for ExpectTraffic {
     fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        Err(Error::General(
-            "TLS 1.2 connections do not support traffic secret updates".into(),
+        Err(Error::Unreachable(
+            "TLS 1.2 connections do not support traffic secret updates",
         ))
     }
 
@@ -1386,8 +1386,8 @@ impl KernelState for ExpectTraffic {
         _cx: &mut KernelContext<'_>,
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        Err(Error::General(
-            "TLS 1.2 session tickets may not be sent once the handshake has completed".into(),
+        Err(Error::Unreachable(
+            "TLS 1.2 session tickets may not be sent once the handshake has completed",
         ))
     }
 }

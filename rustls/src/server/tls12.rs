@@ -1027,8 +1027,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
 
 impl KernelState for ExpectTraffic {
     fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        Err(Error::General(
-            "TLS 1.2 connections do not support traffic secret updates".into(),
+        Err(Error::Unreachable(
+            "TLS 1.2 connections do not support traffic secret updates",
         ))
     }
 
