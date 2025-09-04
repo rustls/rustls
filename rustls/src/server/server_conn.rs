@@ -23,7 +23,9 @@ use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
 use crate::msgs::base::Payload;
-use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtensionsInput};
+use crate::msgs::handshake::{
+    ClientHelloPayload, ProtocolName, ServerExtensionsInput, ServerNamePayload,
+};
 use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -435,6 +437,9 @@ pub struct ServerConfig {
     ///
     /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
+
+    /// Policy for how an invalid Server Name Indication (SNI) value from a client is handled.
+    pub invalid_sni_policy: InvalidSniPolicy,
 }
 
 impl ServerConfig {
@@ -530,6 +535,56 @@ impl ServerConfig {
         self.time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
+    }
+}
+
+/// A policy describing how an invalid Server Name Indication (SNI) value from a client is handled by the server.
+///
+/// The only valid form of SNI according to relevant RFCs ([RFC6066], [RFC1035]) is
+/// non-IP-address host name, however some misconfigured clients may send a bare IP address, or
+/// another invalid value. Some servers may wish to ignore these invalid values instead of producing
+/// an error.
+///
+/// By default, Rustls will ignore invalid values that are an IP address (the most common misconfiguration)
+/// and error for all other invalid values.
+///
+/// When an SNI value is ignored, Rustls treats the client as if it sent no SNI at all.
+///
+/// [RFC1035]: https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.1
+/// [RFC6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
+#[non_exhaustive]
+pub enum InvalidSniPolicy {
+    /// Reject all ClientHello messages that contain an invalid SNI value.
+    RejectAll,
+    /// Ignore an invalid SNI value in ClientHello messages if the value is an IP address.
+    ///
+    /// "Ignoring SNI" means accepting the ClientHello message, but acting as if the client sent no SNI.
+    #[default]
+    IgnoreIpAddresses,
+    /// Ignore all invalid SNI in ClientHello messages.
+    ///
+    /// "Ignoring SNI" means accepting the ClientHello message, but acting as if the client sent no SNI.
+    IgnoreAll,
+}
+
+impl InvalidSniPolicy {
+    /// Check if any potential invalid SNI in ClientHello is acceptable (i.e., ignorable)
+    /// by this policy.
+    ///
+    /// A `false` return value means there is an invalid SNI in ClientHello that is
+    /// rejected by this policy.
+    pub(super) fn is_acceptable(&self, client_hello: &ClientHelloPayload) -> bool {
+        let Some(server_name) = client_hello.server_name.as_ref() else {
+            return true;
+        };
+        match server_name {
+            ServerNamePayload::SingleDnsName(_) => true,
+            ServerNamePayload::IpAddress => {
+                matches!(self, Self::IgnoreIpAddresses | Self::IgnoreAll)
+            }
+            ServerNamePayload::Invalid => matches!(self, Self::IgnoreAll),
+        }
     }
 }
 
