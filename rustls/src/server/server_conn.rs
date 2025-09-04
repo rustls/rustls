@@ -1081,7 +1081,7 @@ impl State<ServerConnectionData> for Accepting {
     where
         Self: 'm,
     {
-        Err(Error::General("unreachable state".into()))
+        Err(Error::Unreachable("unreachable state"))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
