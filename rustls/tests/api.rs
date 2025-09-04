@@ -3614,7 +3614,7 @@ fn test_tls12_exporter() {
             .derive(b"label", Some(&[0; 0xffff]), &mut [0])
             .unwrap();
         assert_eq!(
-            Error::General("excess context length".into()),
+            Error::ApiMisuse(ApiMisuse::ExporterContextTooLong),
             client_exporter
                 .derive(b"label", Some(&[0; 0x10000]), &mut [0])
                 .unwrap_err()
