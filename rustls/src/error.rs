@@ -1187,6 +1187,9 @@ pub enum ApiMisuse {
 
     /// ECH attempted with a configuration that does not support TLS1.3.
     EchRequiresTls13Support,
+
+    /// ECH attempted with a configuration that also supports TLS1.2.
+    EchForbidsTls12Support,
 }
 
 impl From<ApiMisuse> for Error {

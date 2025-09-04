@@ -167,7 +167,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
                     .is_empty(),
             ) {
                 (_, true) => return Err(ApiMisuse::EchRequiresTls13Support.into()),
-                (false, _) => return Err(Error::General("ECH forbids TLS1.2 support".into())),
+                (false, _) => return Err(ApiMisuse::EchForbidsTls12Support.into()),
                 (true, false) => {}
             };
         }
