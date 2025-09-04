@@ -6261,7 +6261,7 @@ fn test_acceptor() {
     );
     assert_eq!(
         acceptor.accept().err().unwrap().0,
-        Error::General("Acceptor polled after completion".into())
+        ApiMisuse::AcceptorPolledAfterCompletion.into()
     );
 
     let mut acceptor = Acceptor::default();

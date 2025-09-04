@@ -1147,6 +1147,11 @@ pub enum ApiMisuse {
     ///
     /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
     ExporterOutputZeroLength,
+
+    /// [`Acceptor::accept()`][] called after it yielded a connection.
+    ///
+    /// [`Acceptor::accept()`]: crate::server::Acceptor::accept()
+    AcceptorPolledAfterCompletion,
 }
 
 impl From<ApiMisuse> for Error {
