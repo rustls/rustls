@@ -9,7 +9,7 @@ use kernel::KernelConnection;
 
 use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::log::trace;
 use crate::msgs::deframer::DeframerIter;
 use crate::msgs::deframer::buffers::{BufferProgress, DeframerVecBuffer, Delocator, Locator};
@@ -1247,14 +1247,14 @@ impl<Data> ConnectionCore<Data> {
         match self.common_state.exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None if self.common_state.is_handshaking() => Err(Error::HandshakeNotComplete),
-            None => Err(Error::General("exporter already used".into())),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }
 
     pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self.common_state.early_exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
-            None => Err(Error::General("early_exporter not available".into())),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }
 
