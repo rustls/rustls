@@ -36,7 +36,7 @@ impl HeaderProtectionKey {
         // It is OK for the `mask` to be longer than `packet_number`,
         // but a valid `packet_number` will never be longer than `mask`.
         if packet_number.len() > pn_mask.len() {
-            return Err(Error::General("packet number too long".into()));
+            return Err(ApiMisuse::InvalidQuicHeaderProtectionPacketNumberLength.into());
         }
 
         // Infallible from this point on. Before this point, `first` and
