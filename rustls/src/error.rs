@@ -1127,6 +1127,13 @@ pub enum ApiMisuse {
     /// [`KeyingMaterialExporter`]: crate::KeyingMaterialExporter
     /// [`ConnectionCommon::exporter()`]: crate::ConnectionCommon::exporter()
     ExporterAlreadyUsed,
+
+    /// The `context` parameter to [`KeyingMaterialExporter::derive()`][] was too long.
+    ///
+    /// For TLS1.2 connections (only) this parameter is limited to 64KB.
+    ///
+    /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
+    ExporterContextTooLong,
 }
 
 impl From<ApiMisuse> for Error {
