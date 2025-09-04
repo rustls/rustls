@@ -1166,6 +1166,9 @@ pub enum ApiMisuse {
 
     /// QUIC attempted with a configuration that does not support TLS1.3.
     QuicApiRequiresTls13Support,
+
+    /// QUIC attempted with a configuration that does not support a ciphersuite that supports QUIC.
+    QuicApiRequiresAtLeastOneCipherSuiteSupportingQuic,
 }
 
 impl From<ApiMisuse> for Error {
