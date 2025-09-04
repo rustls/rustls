@@ -4,7 +4,7 @@ use alloc::boxed::Box;
 
 use super::ring_like::aead;
 use crate::crypto::cipher::{AeadKey, Iv, Nonce};
-use crate::error::Error;
+use crate::error::{ApiMisuse, Error};
 use crate::quic;
 
 pub(crate) struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
@@ -27,7 +27,7 @@ impl HeaderProtectionKey {
         let mask = self
             .0
             .new_mask(sample)
-            .map_err(|_| Error::General("sample of invalid length".into()))?;
+            .map_err(|_| Error::ApiMisuse(ApiMisuse::InvalidQuicHeaderProtectionSampleLength))?;
 
         // The `unwrap()` will not panic because `new_mask` returns a
         // non-empty result.
