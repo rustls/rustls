@@ -394,7 +394,7 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
         .with_root_certificates(get_client_root_store(KeyType::EcdsaP256))
         .with_no_client_auth()
         .err(),
-        Some(Error::General("no cipher suites configured".into()))
+        Some(ApiMisuse::NoCipherSuitesConfigured.into())
     );
 }
 
@@ -429,7 +429,7 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
         .with_no_client_auth()
         .with_single_cert(KeyType::EcdsaP256.get_chain(), KeyType::EcdsaP256.get_key())
         .err(),
-        Some(Error::General("no cipher suites configured".into()))
+        Some(ApiMisuse::NoCipherSuitesConfigured.into())
     );
 }
 
