@@ -1548,12 +1548,14 @@ impl State<ServerConnectionData> for ExpectQuicTraffic {
 }
 
 impl KernelState for ExpectQuicTraffic {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
         Err(Error::Unreachable(
             "QUIC connections do not support key updates",
         ))
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle_new_session_ticket(
         &mut self,
         _cx: &mut KernelContext<'_>,
