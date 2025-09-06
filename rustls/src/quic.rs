@@ -117,6 +117,42 @@ mod connection {
                 Self::Server(conn) => conn.core.exporter(),
             }
         }
+
+        /// Set the resumption data to embed in future resumption tickets supplied to the client.
+        ///
+        /// This method is only available for server connections. For client connections,
+        /// resumption data is received from the server and cannot be set.
+        ///
+        /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
+        /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
+        /// resumption tickets are affected.
+        ///
+        /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
+        /// from the client is desired, encrypt the data separately.
+        pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
+            match self {
+                Self::Server(conn) => {
+                    conn.set_resumption_data(data);
+                    Ok(())
+                }
+                Self::Client(_) => Err(Error::General(
+                    "set_resumption_data is only available for server connections".into(),
+                )),
+            }
+        }
+
+        /// Retrieves the resumption data supplied by the peer, if any.
+        ///
+        /// For server connections, returns `Some` if and only if a valid resumption ticket
+        /// has been received from the cli
+        /// For client connections, this method is not typically used as clients receive
+        /// resumption tickets from servers.
+        pub fn received_resumption_data(&self) -> Option<&[u8]> {
+            match self {
+                Self::Server(conn) => conn.received_resumption_data(),
+                Self::Client(_) => None,
+            }
+        }
     }
 
     impl Deref for Connection {
@@ -312,6 +348,31 @@ mod connection {
         /// The server name is also used to match sessions during session resumption.
         pub fn server_name(&self) -> Option<&DnsName<'_>> {
             self.inner.core.data.sni.as_ref()
+        }
+
+        /// Set the resumption data to embed in future resumption tickets supplied to the client.
+        ///
+        /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
+        /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
+        /// resumption tickets are affected.
+        ///
+        /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
+        /// from the client is desired, encrypt the data separately.
+        pub fn set_resumption_data(&mut self, data: &[u8]) {
+            assert!(data.len() < 2usize.pow(15));
+            self.inner.core.data.resumption_data = data.into();
+        }
+
+        /// Retrieves the resumption data supplied by the client, if any.
+        ///
+        /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
+        pub fn received_resumption_data(&self) -> Option<&[u8]> {
+            self.inner
+                .core
+                .data
+                .received_resumption_data
+                .as_ref()
+                .map(|x| &x[..])
         }
     }
 
