@@ -5267,6 +5267,62 @@ mod test_quic {
     }
 
     #[test]
+    fn test_quic_resumption_data() {
+        let kt = KeyType::Rsa2048;
+        let provider = provider::default_provider().with_only_tls13();
+        let mut client_config = make_client_config(kt, &provider);
+        client_config.alpn_protocols = vec!["foo".into()];
+        client_config.enable_early_data = true;
+        let client_config = Arc::new(client_config);
+
+        let mut server_config = make_server_config(kt, &provider);
+        server_config.alpn_protocols = vec!["foo".into()];
+        server_config.max_early_data_size = 0xffff_ffff;
+        let server_config = Arc::new(server_config);
+
+        let client_params = b"client params";
+        let server_params = b"server params";
+
+        // Create server connection and set resumption data
+        let mut server = quic::ServerConnection::new(
+            server_config.clone(),
+            quic::Version::V1,
+            server_params.to_vec(),
+        )
+        .unwrap();
+
+        // Test setting resumption data
+        let test_data = b"test resumption data";
+        server.set_resumption_data(test_data);
+
+        // Test that we can retrieve it (though it won't be populated until a client sends it)
+        assert_eq!(server.received_resumption_data(), None);
+
+        // Test the Connection enum interface as well
+        let mut server_conn = quic::Connection::Server(server);
+
+        // Test setting resumption data through the enum
+        let test_data2 = b"test data 2";
+        server_conn.set_resumption_data(test_data2).unwrap();
+
+        // Test that received_resumption_data works through the enum
+        assert_eq!(server_conn.received_resumption_data(), None);
+
+        // Test that client connections return an error when trying to set resumption data
+        let client = quic::ClientConnection::new(
+            client_config,
+            quic::Version::V1,
+            server_name("localhost"),
+            client_params.to_vec(),
+        )
+        .unwrap();
+
+        let mut client_conn = quic::Connection::Client(client);
+        assert!(client_conn.set_resumption_data(test_data).is_err());
+        assert_eq!(client_conn.received_resumption_data(), None);
+    }
+
+    #[test]
     fn packet_key_api() {
         use cipher_suite::TLS13_AES_128_GCM_SHA256;
         use rustls::Side;
