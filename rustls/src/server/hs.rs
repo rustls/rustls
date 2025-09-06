@@ -27,7 +27,7 @@ use crate::msgs::persist;
 use crate::server::common::ActiveCertifiedKey;
 use crate::server::{ClientHello, ServerConfig, tls13};
 use crate::sync::Arc;
-use crate::{SupportedCipherSuite, suites};
+use crate::{InvalidMessage, SupportedCipherSuite, suites};
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
@@ -332,6 +332,17 @@ impl ExpectClientHello {
         let tls12_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_2);
+
+        if !self
+            .config
+            .invalid_sni_policy
+            .is_acceptable(client_hello)
+        {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                InvalidMessage::InvalidServerName,
+            ));
+        }
 
         // Are we doing TLS1.3?
         let version = if let Some(versions) = &client_hello.supported_versions {
@@ -711,28 +722,14 @@ pub(super) fn process_client_hello<'m>(
     cx.common.check_aligned_handshake()?;
 
     // Extract and validate the SNI DNS name, if any, before giving it to
-    // the cert resolver. In particular, if it is invalid then we should
-    // send an Illegal Parameter alert instead of the Internal Error alert
-    // (or whatever) that we'd send if this were checked later or in a
-    // different way.
-    //
-    // [RFC6066][] specifies that literal IP addresses are illegal in
-    // `ServerName`s with a `name_type` of `host_name`.
-    //
-    // Some clients incorrectly send such extensions: we choose to
-    // successfully parse these (into `ServerNamePayload::IpAddress`)
-    // but then act like the client sent no `server_name` extension.
-    //
-    // [RFC6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
+    // the cert resolver. If the DNS name is invalid (e.g., it's an IP address,
+    // or it contains invalid characters), we don't set it on the context, but
+    // we don't immediately return an error either, as dealing with invalid SNIs
+    // is subject to `InvalidSniPolicy` configured on the server.
     let sni = match &client_hello.server_name {
         Some(ServerNamePayload::SingleDnsName(dns_name)) => Some(dns_name.to_lowercase_owned()),
         Some(ServerNamePayload::IpAddress) => None,
-        Some(ServerNamePayload::Invalid) => {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerMisbehaved::ServerNameMustContainOneHostName,
-            ));
-        }
+        Some(ServerNamePayload::Invalid) => None,
         None => None,
     };
 

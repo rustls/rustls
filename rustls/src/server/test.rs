@@ -8,10 +8,10 @@ use crate::msgs::base::PayloadU16;
 use crate::msgs::enums::{Compression, NamedGroup};
 use crate::msgs::handshake::{
     ClientExtensions, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, KeyShareEntry,
-    Random, ServerNamePayload, SessionId, SupportedProtocolVersions,
+    Random, SessionId, SupportedProtocolVersions,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::{CommonState, Error, PeerIncompatible, PeerMisbehaved, ProtocolVersion, Side};
+use crate::{CommonState, Error, PeerIncompatible, ProtocolVersion, Side};
 
 #[test]
 fn null_compression_required() {
@@ -21,25 +21,6 @@ fn null_compression_required() {
             ..minimal_client_hello()
         }),
         Err(PeerIncompatible::NullCompressionRequired.into()),
-    );
-}
-
-#[test]
-fn server_ignores_sni_with_ip_address() {
-    let mut ch = minimal_client_hello();
-    ch.extensions.server_name = Some(ServerNamePayload::IpAddress);
-    std::println!("{:?}", ch.extensions);
-    assert_eq!(test_process_client_hello(ch), Ok(()));
-}
-
-#[test]
-fn server_rejects_sni_with_illegal_dns_name() {
-    let mut ch = minimal_client_hello();
-    ch.extensions.server_name = Some(ServerNamePayload::Invalid);
-    std::println!("{:?}", ch.extensions);
-    assert_eq!(
-        test_process_client_hello(ch),
-        Err(PeerMisbehaved::ServerNameMustContainOneHostName.into())
     );
 }
 
