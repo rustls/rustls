@@ -1209,8 +1209,8 @@ impl ConnectionCore<ServerConnectionData> {
 #[derive(Default, Debug)]
 pub struct ServerConnectionData {
     pub(crate) sni: Option<DnsName<'static>>,
-    pub(super) received_resumption_data: Option<Vec<u8>>,
-    pub(super) resumption_data: Vec<u8>,
+    pub(crate) received_resumption_data: Option<Vec<u8>>,
+    pub(crate) resumption_data: Vec<u8>,
     pub(super) early_data: EarlyDataState,
 }
 
