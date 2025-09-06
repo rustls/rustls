@@ -80,7 +80,7 @@ rcgen = { version = "0.14", features = ["pem", "aws_lc_rs"], default-features = 
 regex = "1"
 ring = "0.17"
 rsa = { version = "0.9", features = ["sha2"], default-features = false }
-rustls-graviola = { version = "0.2" }
+rustls-graviola = { version = "0.3" }
 rustls-test = { path = "rustls-test/" }
 rustls-fuzzing-provider = { path = "rustls-fuzzing-provider/" }
 serde = { version = "1", features = ["derive"] }
