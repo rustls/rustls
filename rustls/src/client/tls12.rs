@@ -1375,19 +1375,21 @@ impl State<ClientConnectionData> for ExpectTraffic {
 }
 
 impl KernelState for ExpectTraffic {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        Err(Error::General(
-            "TLS 1.2 connections do not support traffic secret updates".into(),
+        Err(Error::Unreachable(
+            "TLS 1.2 connections do not support traffic secret updates",
         ))
     }
 
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle_new_session_ticket(
         &mut self,
         _cx: &mut KernelContext<'_>,
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        Err(Error::General(
-            "TLS 1.2 session tickets may not be sent once the handshake has completed".into(),
+        Err(Error::Unreachable(
+            "TLS 1.2 session tickets may not be sent once the handshake has completed",
         ))
     }
 }

@@ -28,7 +28,7 @@ mod connection {
     use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
-    use crate::error::Error;
+    use crate::error::{ApiMisuse, Error};
     use crate::msgs::base::Payload;
     use crate::msgs::deframer::buffers::{DeframerVecBuffer, Locator};
     use crate::msgs::handshake::{
@@ -173,15 +173,11 @@ mod connection {
             alpn_protocols: Vec<Vec<u8>>,
         ) -> Result<Self, Error> {
             if !config.supports_version(ProtocolVersion::TLSv1_3) {
-                return Err(Error::General(
-                    "TLS 1.3 support is required for QUIC".into(),
-                ));
+                return Err(ApiMisuse::QuicApiRequiresTls13Support.into());
             }
 
             if !config.supports_protocol(Protocol::Quic) {
-                return Err(Error::General(
-                    "at least one ciphersuite must support QUIC".into(),
-                ));
+                return Err(ApiMisuse::QuicApiRequiresAtLeastOneCipherSuiteSupportingQuic.into());
             }
 
             let exts = ClientExtensionsInput {
@@ -257,21 +253,15 @@ mod connection {
             params: Vec<u8>,
         ) -> Result<Self, Error> {
             if !config.supports_version(ProtocolVersion::TLSv1_3) {
-                return Err(Error::General(
-                    "TLS 1.3 support is required for QUIC".into(),
-                ));
+                return Err(ApiMisuse::QuicApiRequiresTls13Support.into());
             }
 
             if !config.supports_protocol(Protocol::Quic) {
-                return Err(Error::General(
-                    "at least one ciphersuite must support QUIC".into(),
-                ));
+                return Err(ApiMisuse::QuicApiRequiresAtLeastOneCipherSuiteSupportingQuic.into());
             }
 
             if config.max_early_data_size != 0 && config.max_early_data_size != 0xffff_ffff {
-                return Err(Error::General(
-                    "QUIC sessions must set a max early data of 0 or 2^32-1".into(),
-                ));
+                return Err(ApiMisuse::QuicApiRestrictsMaxEarlyDataSize.into());
             }
 
             let exts = ServerExtensionsInput {

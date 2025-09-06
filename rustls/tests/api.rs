@@ -18,7 +18,7 @@ use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{CertificateType, ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
-    AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
+    AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
     ExtendedKeyPurpose, HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog,
     KeyingMaterialExporter, NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion,
@@ -376,7 +376,7 @@ fn config_builder_for_client_rejects_empty_kx_groups() {
         .with_root_certificates(get_client_root_store(KeyType::EcdsaP256))
         .with_no_client_auth()
         .err(),
-        Some(Error::General("no kx groups configured".into()))
+        Some(ApiMisuse::NoKeyExchangeGroupsConfigured.into())
     );
 }
 
@@ -394,7 +394,7 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
         .with_root_certificates(get_client_root_store(KeyType::EcdsaP256))
         .with_no_client_auth()
         .err(),
-        Some(Error::General("no cipher suites configured".into()))
+        Some(ApiMisuse::NoCipherSuitesConfigured.into())
     );
 }
 
@@ -411,7 +411,7 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
         .with_no_client_auth()
         .with_single_cert(KeyType::EcdsaP256.get_chain(), KeyType::EcdsaP256.get_key())
         .err(),
-        Some(Error::General("no kx groups configured".into()))
+        Some(ApiMisuse::NoKeyExchangeGroupsConfigured.into())
     );
 }
 
@@ -429,7 +429,7 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
         .with_no_client_auth()
         .with_single_cert(KeyType::EcdsaP256.get_chain(), KeyType::EcdsaP256.get_key())
         .err(),
-        Some(Error::General("no cipher suites configured".into()))
+        Some(ApiMisuse::NoCipherSuitesConfigured.into())
     );
 }
 
@@ -3549,11 +3549,11 @@ fn do_exporter_test(
     let server_exporter = server.exporter().unwrap();
 
     assert_eq!(
-        Some(Error::General("exporter already used".into())),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
         client.exporter().err()
     );
     assert_eq!(
-        Some(Error::General("exporter already used".into())),
+        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
         server.exporter().err()
     );
 
@@ -3574,13 +3574,13 @@ fn do_exporter_test(
         client_exporter
             .derive(b"label", Some(b"context"), &mut empty)
             .err(),
-        Some(Error::General("derive() with zero-length output".into()))
+        Some(ApiMisuse::ExporterOutputZeroLength.into())
     );
     assert_eq!(
         server_exporter
             .derive(b"label", Some(b"context"), &mut empty)
             .err(),
-        Some(Error::General("derive() with zero-length output".into()))
+        Some(ApiMisuse::ExporterOutputZeroLength.into())
     );
 
     assert!(
@@ -3614,7 +3614,7 @@ fn test_tls12_exporter() {
             .derive(b"label", Some(&[0; 0xffff]), &mut [0])
             .unwrap();
         assert_eq!(
-            Error::General("excess context length".into()),
+            Error::ApiMisuse(ApiMisuse::ExporterContextTooLong),
             client_exporter
                 .derive(b"label", Some(&[0; 0x10000]), &mut [0])
                 .unwrap_err()
@@ -3675,13 +3675,13 @@ fn test_tls13_exporter_maximum_output_length() {
         client_exporter
             .derive(b"label", Some(b"context"), &mut too_long_output)
             .err(),
-        Some(Error::General("exporting too much".into()))
+        Some(ApiMisuse::ExporterOutputTooLong.into())
     );
     assert_eq!(
         server_exporter
             .derive(b"label", Some(b"context"), &mut too_long_output)
             .err(),
-        Some(Error::General("exporting too much".into()))
+        Some(ApiMisuse::ExporterOutputTooLong.into())
     );
 }
 
@@ -4632,6 +4632,14 @@ fn early_data_is_available_on_resumption() {
         .unwrap()
         .exporter()
         .unwrap();
+    assert_eq!(
+        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+        client
+            .early_data()
+            .unwrap()
+            .exporter()
+            .err(),
+    );
     do_handshake(&mut client, &mut server);
 
     let mut received_early_data = [0u8; 5];
@@ -4649,6 +4657,14 @@ fn early_data_is_available_on_resumption() {
         .unwrap()
         .exporter()
         .unwrap();
+    assert_eq!(
+        Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+        server
+            .early_data()
+            .unwrap()
+            .exporter()
+            .err()
+    );
 
     // check exporters agree
     let client_secret = client_early_exporter
@@ -6245,7 +6261,7 @@ fn test_acceptor() {
     );
     assert_eq!(
         acceptor.accept().err().unwrap().0,
-        Error::General("Acceptor polled after completion".into())
+        ApiMisuse::AcceptorPolledAfterCompletion.into()
     );
 
     let mut acceptor = Acceptor::default();

@@ -124,6 +124,19 @@ pub enum Error {
     /// Please file a bug if you see one.
     Unreachable(&'static str),
 
+    /// The caller misused the API
+    ///
+    /// Generally we try to make error cases like this unnecessary by embedding
+    /// the constraints in the type system, so misuses simply do not compile.  But,
+    /// for cases where that is not possible or exceptionally costly, we return errors
+    /// of this variant.
+    ///
+    /// This only results from the ordering, dependencies or parameter values of calls,
+    /// so (assuming parameter values are fixed) these can be determined and fixed by
+    /// reading the code.  They are never caused by the values of untrusted data, or
+    /// other non-determinism.
+    ApiMisuse(ApiMisuse),
+
     /// Any other error.
     ///
     /// This variant should only be used when the error is not better described by a more
@@ -1075,6 +1088,7 @@ impl fmt::Display for Error {
                 f,
                 "unreachable condition: {err} (please file a bug in rustls)"
             ),
+            Self::ApiMisuse(why) => write!(f, "API misuse: {why:?}"),
             Self::Other(err) => write!(f, "other error: {err}"),
         }
     }
@@ -1094,6 +1108,113 @@ impl std::error::Error for Error {}
 impl From<rand::GetRandomFailed> for Error {
     fn from(_: rand::GetRandomFailed) -> Self {
         Self::FailedToGetRandomBytes
+    }
+}
+
+/// Describes cases of API misuse
+///
+/// Variants here should be sufficiently detailed that the action needed is clear.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ApiMisuse {
+    /// The [`KeyingMaterialExporter`][] was already consumed.
+    ///
+    /// Methods that obtain an exporter (eg, [`ConnectionCommon::exporter()`][]) can only
+    /// be used once.  This error is returned on subsequent calls.
+    ///
+    /// [`KeyingMaterialExporter`]: crate::KeyingMaterialExporter
+    /// [`ConnectionCommon::exporter()`]: crate::ConnectionCommon::exporter()
+    ExporterAlreadyUsed,
+
+    /// The `context` parameter to [`KeyingMaterialExporter::derive()`][] was too long.
+    ///
+    /// For TLS1.2 connections (only) this parameter is limited to 64KB.
+    ///
+    /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
+    ExporterContextTooLong,
+
+    /// The `output` object for [`KeyingMaterialExporter::derive()`][] was too long.
+    ///
+    /// For TLS1.3 connections this is limited to 255 times the hash output length.
+    ///
+    /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
+    ExporterOutputTooLong,
+
+    /// The `output` object to [`KeyingMaterialExporter::derive()`][] was zero length.
+    ///
+    /// This doesn't make sense, so we explicitely return an error (rather than simply
+    /// producing no output as requested.)
+    ///
+    /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
+    ExporterOutputZeroLength,
+
+    /// [`Acceptor::accept()`][] called after it yielded a connection.
+    ///
+    /// [`Acceptor::accept()`]: crate::server::Acceptor::accept()
+    AcceptorPolledAfterCompletion,
+
+    /// Incorrect sample length provided to [`quic::HeaderProtectionKey::encrypt_in_place()`][]
+    ///
+    /// [`quic::HeaderProtectionKey::encrypt_in_place()`]: crate::quic::HeaderProtectionKey::encrypt_in_place()
+    InvalidQuicHeaderProtectionSampleLength,
+
+    /// Incorrect relation between sample length and header number length provided to
+    /// [`quic::HeaderProtectionKey::encrypt_in_place()`][]
+    ///
+    /// [`quic::HeaderProtectionKey::encrypt_in_place()`]: crate::quic::HeaderProtectionKey::encrypt_in_place()
+    InvalidQuicHeaderProtectionPacketNumberLength,
+
+    /// QUIC attempted with a configuration that does not support TLS1.3.
+    QuicApiRequiresTls13Support,
+
+    /// QUIC attempted with a configuration that does not support a ciphersuite that supports QUIC.
+    QuicApiRequiresAtLeastOneCipherSuiteSupportingQuic,
+
+    /// QUIC attempted with unsupported [`ServerConfig::max_early_data_size`][]
+    ///
+    /// This field must be either zero or [`u32::MAX`] for QUIC.
+    ///
+    /// [`ServerConfig::max_early_data_size`]: crate::server::ServerConfig::max_early_data_size
+    QuicApiRestrictsMaxEarlyDataSize,
+
+    /// A `CryptoProvider` must have at least one cipher suite.
+    NoCipherSuitesConfigured,
+
+    /// A `CryptoProvider` must have at least one key exchange group.
+    NoKeyExchangeGroupsConfigured,
+
+    /// ECH attempted with a configuration that does not support TLS1.3.
+    EchRequiresTls13Support,
+
+    /// ECH attempted with a configuration that also supports TLS1.2.
+    EchForbidsTls12Support,
+
+    /// Secret extraction operation attempted without opting-in to secret extraction.
+    ///
+    /// This is possible from:
+    ///
+    /// - [`ClientConnection::dangerous_extract_secrets()`][crate::client::ClientConnection::dangerous_extract_secrets]
+    /// - [`ServerConnection::dangerous_extract_secrets()`][crate::server::ServerConnection::dangerous_extract_secrets]
+    /// - [`ClientConnection::dangerous_into_kernel_connection()`][crate::client::UnbufferedClientConnection::dangerous_into_kernel_connection]
+    /// - [`ServerConnection::dangerous_into_kernel_connection()`][crate::server::UnbufferedServerConnection::dangerous_into_kernel_connection]
+    ///
+    /// You must set [`ServerConfig::enable_secret_extraction`][crate::server::ServerConfig::enable_secret_extraction] or
+    /// [`ClientConfig::enable_secret_extraction`][crate::client::ClientConfig::enable_secret_extraction] to true before calling
+    /// these functions.
+    SecretExtractionRequiresPriorOptIn,
+
+    /// Secret extraction operation attempted without first extracting all pending
+    /// TLS data.
+    ///
+    /// See [`Self::SecretExtractionRequiresPriorOptIn`] for a list of the affected
+    /// functions.  You must ensure any prior generated TLS records are extracted
+    /// from the library before using one of these functions.
+    SecretExtractionWithPendingSendableData,
+}
+
+impl From<ApiMisuse> for Error {
+    fn from(e: ApiMisuse) -> Self {
+        Self::ApiMisuse(e)
     }
 }
 
@@ -1429,6 +1550,7 @@ mod tests {
             Error::InconsistentKeys(InconsistentKeys::Unknown),
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
             Error::Unreachable("smoke"),
+            super::ApiMisuse::ExporterAlreadyUsed.into(),
             Error::Other(OtherError(
                 #[cfg(feature = "std")]
                 Arc::from(Box::from("")),

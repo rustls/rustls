@@ -15,7 +15,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{KeyExchangeAlgorithm, KxDecode};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::version::Tls12Version;
-use crate::{SignatureAlgorithm, crypto};
+use crate::{ApiMisuse, SignatureAlgorithm, crypto};
 
 /// A TLS 1.2 cipher suite supported by rustls.
 #[allow(clippy::exhaustive_structs)]
@@ -332,7 +332,7 @@ impl Exporter for Tls12Exporter {
         if let Some(context) = context {
             match u16::try_from(context.len()) {
                 Ok(len) => len.encode(&mut randoms),
-                Err(_) => return Err(Error::General("excess context length".into())),
+                Err(_) => return Err(ApiMisuse::ExporterContextTooLong.into()),
             }
             randoms.extend_from_slice(context);
         }

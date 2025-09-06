@@ -544,7 +544,6 @@ mod connection {
     use pki_types::DnsName;
 
     use super::{Accepted, Accepting, ServerConfig, ServerConnectionData, ServerExtensionsInput};
-    use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
@@ -552,6 +551,7 @@ mod connection {
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
+    use crate::{ApiMisuse, KeyingMaterialExporter};
 
     /// Allows reading of early data in resumed TLS1.3 connections.
     ///
@@ -839,7 +839,7 @@ mod connection {
         pub fn accept(&mut self) -> Result<Option<Accepted>, (Error, AcceptedAlert)> {
             let Some(mut connection) = self.inner.take() else {
                 return Err((
-                    Error::General("Acceptor polled after completion".into()),
+                    ApiMisuse::AcceptorPolledAfterCompletion.into(),
                     AcceptedAlert::empty(),
                 ));
             };
@@ -1073,6 +1073,7 @@ struct Accepting;
 
 #[cfg(feature = "std")]
 impl State<ServerConnectionData> for Accepting {
+    #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle<'m>(
         self: Box<Self>,
         _cx: &mut hs::ServerContext<'_>,
@@ -1081,7 +1082,7 @@ impl State<ServerConnectionData> for Accepting {
     where
         Self: 'm,
     {
-        Err(Error::General("unreachable state".into()))
+        Err(Error::Unreachable("unreachable state"))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {

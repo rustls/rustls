@@ -524,7 +524,7 @@ pub use crate::enums::{
     ProtocolVersion, SignatureAlgorithm, SignatureScheme,
 };
 pub use crate::error::{
-    CertRevocationListError, CertificateError, EncryptedClientHelloError, Error,
+    ApiMisuse, CertRevocationListError, CertificateError, EncryptedClientHelloError, Error,
     ExtendedKeyPurpose, InconsistentKeys, InvalidMessage, OtherError, PeerIncompatible,
     PeerMisbehaved, RejectedEch,
 };

@@ -9,7 +9,7 @@ use kernel::KernelConnection;
 
 use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::log::trace;
 use crate::msgs::deframer::DeframerIter;
 use crate::msgs::deframer::buffers::{BufferProgress, DeframerVecBuffer, Delocator, Locator};
@@ -383,7 +383,7 @@ impl KeyingMaterialExporter {
         mut output: T,
     ) -> Result<T, Error> {
         if output.as_mut().is_empty() {
-            return Err(Error::General("derive() with zero-length output".into()));
+            return Err(ApiMisuse::ExporterOutputZeroLength.into());
         }
 
         self.inner
@@ -1211,7 +1211,7 @@ impl<Data> ConnectionCore<Data> {
             .common_state
             .enable_secret_extraction
         {
-            return Err(Error::General("Secret extraction is disabled".into()));
+            return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
 
         if self.common_state.is_handshaking() {
@@ -1223,10 +1223,7 @@ impl<Data> ConnectionCore<Data> {
             .sendable_tls
             .is_empty()
         {
-            return Err(Error::General(
-                "cannot convert into an KernelConnection while there are still buffered TLS records to send"
-                    .into()
-            ));
+            return Err(ApiMisuse::SecretExtractionWithPendingSendableData.into());
         }
 
         let state = self.state?;
@@ -1247,14 +1244,14 @@ impl<Data> ConnectionCore<Data> {
         match self.common_state.exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None if self.common_state.is_handshaking() => Err(Error::HandshakeNotComplete),
-            None => Err(Error::General("exporter already used".into())),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }
 
     pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self.common_state.early_exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
-            None => Err(Error::General("early_exporter not available".into())),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }
 

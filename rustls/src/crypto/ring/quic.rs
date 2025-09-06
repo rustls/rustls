@@ -4,7 +4,7 @@ use alloc::boxed::Box;
 
 use super::ring_like::aead;
 use crate::crypto::cipher::{AeadKey, Iv, Nonce};
-use crate::error::Error;
+use crate::error::{ApiMisuse, Error};
 use crate::quic;
 
 pub(crate) struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
@@ -27,7 +27,7 @@ impl HeaderProtectionKey {
         let mask = self
             .0
             .new_mask(sample)
-            .map_err(|_| Error::General("sample of invalid length".into()))?;
+            .map_err(|_| Error::ApiMisuse(ApiMisuse::InvalidQuicHeaderProtectionSampleLength))?;
 
         // The `unwrap()` will not panic because `new_mask` returns a
         // non-empty result.
@@ -36,7 +36,7 @@ impl HeaderProtectionKey {
         // It is OK for the `mask` to be longer than `packet_number`,
         // but a valid `packet_number` will never be longer than `mask`.
         if packet_number.len() > pn_mask.len() {
-            return Err(Error::General("packet number too long".into()));
+            return Err(ApiMisuse::InvalidQuicHeaderProtectionPacketNumberLength.into());
         }
 
         // Infallible from this point on. Before this point, `first` and
