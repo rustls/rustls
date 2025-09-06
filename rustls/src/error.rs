@@ -765,6 +765,8 @@ impl fmt::Display for CertificateError {
                 Ok(())
             }
 
+            Self::Other(other) => write!(f, "{other}"),
+
             other => write!(f, "{other:?}"),
         }
     }
