@@ -56,7 +56,6 @@ criterion = "0.6"
 der = "0.7"
 ecdsa = "0.16.8"
 env_logger = "0.11"
-fxhash = "0.2.1"
 hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
 hickory-resolver = { version = "0.25", features = ["https-aws-lc-rs", "webpki-roots"] }
@@ -80,6 +79,7 @@ rcgen = { version = "0.14", features = ["pem", "aws_lc_rs"], default-features = 
 regex = "1"
 ring = "0.17"
 rsa = { version = "0.9", features = ["sha2"], default-features = false }
+rustc-hash = "2"
 rustls-graviola = { version = "0.2" }
 rustls-test = { path = "rustls-test/" }
 rustls-fuzzing-provider = { path = "rustls-fuzzing-provider/" }
