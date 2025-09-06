@@ -5266,6 +5266,171 @@ mod test_quic {
         );
     }
 
+    fn do_quic_handshake<L: SideData, R: SideData>(
+        client: &mut ConnectionCommon<L>,
+        server: &mut ConnectionCommon<R>,
+    ) {
+        while client.is_handshaking() || server.is_handshaking() {
+            quic_transfer(client, server);
+            quic_transfer(server, client);
+        }
+    }
+
+    fn quic_transfer<L: SideData, R: SideData>(
+        sender: &mut ConnectionCommon<L>,
+        receiver: &mut ConnectionCommon<R>,
+    ) {
+        let mut buf = Vec::new();
+        while let Some(_change) = sender.write_hs(&mut buf) {
+            // In a real QUIC implementation, we would handle key changes here
+            // For testing, we just continue
+        }
+
+        if !buf.is_empty() {
+            receiver.read_hs(&buf).unwrap();
+            assert_eq!(receiver.alert(), None);
+        }
+    }
+
+    #[test]
+    fn test_quic_resumption_data_basic() {
+        let server_params = b"server params";
+        let kt = KeyType::Rsa2048;
+        let provider = provider::default_provider().with_only_tls13();
+
+        let mut server_config = make_server_config(kt, &provider);
+        server_config.alpn_protocols = vec!["foo".into()];
+        server_config.max_early_data_size = 0xffff_ffff;
+        server_config.ticketer = provider::Ticketer::new().unwrap();
+        server_config.send_tls13_tickets = 2;
+        let server_config = Arc::new(server_config);
+
+        let mut server =
+            quic::ServerConnection::new(server_config, quic::Version::V1, server_params.to_vec())
+                .unwrap();
+
+        // Initially, no resumption data should be received
+        assert_eq!(server.received_resumption_data(), None);
+
+        // Set resumption data
+        let test_data1 = b"test resumption data 1";
+        server.set_resumption_data(test_data1);
+        // Still no received data (server has set data, but hasn't received any from client)
+        assert_eq!(server.received_resumption_data(), None);
+
+        // Update resumption data with different content
+        let test_data2 = b"test resumption data 2";
+        server.set_resumption_data(test_data2);
+        // Still no received data
+        assert_eq!(server.received_resumption_data(), None);
+
+        // Test empty resumption data
+        server.set_resumption_data(b"");
+        assert_eq!(server.received_resumption_data(), None);
+    }
+
+    #[test]
+    fn test_quic_resumption_data_0rtt() {
+        let client_params = b"client params";
+        let server_params = b"server params";
+        let kt = KeyType::Rsa2048;
+        let provider = provider::default_provider().with_only_tls13();
+
+        let mut client_config = make_client_config(kt, &provider);
+        client_config.alpn_protocols = vec!["foo".into()];
+        client_config.enable_early_data = true;
+        client_config.resumption = Resumption::store(Arc::new(ClientStorage::new()));
+        let client_config = Arc::new(client_config);
+
+        let mut server_config = make_server_config(kt, &provider);
+        server_config.alpn_protocols = vec!["foo".into()];
+        server_config.max_early_data_size = 0xffff_ffff;
+        server_config.ticketer = provider::Ticketer::new().unwrap();
+        server_config.send_tls13_tickets = 2;
+        let server_config = Arc::new(server_config);
+
+        // QUIC 0-RTT parameters to store in resumption data
+        let quic_0rtt_params = b"active_connection_id_limit=2,initial_max_data=1048576,initial_max_stream_data_bidi_local=262144,initial_max_stream_data_bidi_remote=262144,initial_max_stream_data_uni=262144,initial_max_streams_bidi=100,initial_max_streams_uni=100,max_datagram_frame_size=1500";
+
+        // First connection: establish session with 0-RTT parameters
+        let mut server1 = quic::ServerConnection::new(
+            server_config.clone(),
+            quic::Version::V1,
+            server_params.to_vec(),
+        )
+        .unwrap();
+
+        server1.set_resumption_data(quic_0rtt_params);
+        assert_eq!(server1.received_resumption_data(), None);
+
+        let mut client1 = quic::ClientConnection::new(
+            client_config.clone(),
+            quic::Version::V1,
+            server_name("localhost"),
+            client_params.to_vec(),
+        )
+        .unwrap();
+
+        do_quic_handshake(&mut client1, &mut server1);
+
+        // Verify initial connection
+        assert_eq!(client1.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(server1.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(server1.received_resumption_data(), None);
+
+        // Second connection: attempt 0-RTT resumption
+        let mut server2 =
+            quic::ServerConnection::new(server_config, quic::Version::V1, server_params.to_vec())
+                .unwrap();
+
+        let mut client2 = quic::ClientConnection::new(
+            client_config,
+            quic::Version::V1,
+            server_name("localhost"),
+            client_params.to_vec(),
+        )
+        .unwrap();
+
+        // Check negotiated cipher suite for potential 0-RTT
+        assert!(
+            client2
+                .negotiated_cipher_suite()
+                .is_some()
+        );
+
+        // Start handshake and check transport parameters early
+        quic_transfer(&mut client2, &mut server2);
+        assert_eq!(
+            client2.quic_transport_parameters(),
+            Some(server_params.as_slice())
+        );
+
+        // Complete the handshake (whether 0-RTT or regular resumption)
+        do_quic_handshake(&mut client2, &mut server2);
+
+        // Verify resumption worked and parameters were received
+        assert_eq!(client2.handshake_kind(), Some(HandshakeKind::Resumed));
+        assert_eq!(server2.handshake_kind(), Some(HandshakeKind::Resumed));
+        assert_eq!(
+            server2.received_resumption_data(),
+            Some(quic_0rtt_params.as_slice()),
+            "Server should receive QUIC 0-RTT parameters from resumption data"
+        );
+
+        // Verify server can parse and use the received 0-RTT parameters
+        if let Some(received_params) = server2.received_resumption_data() {
+            let params_str = std::str::from_utf8(received_params).unwrap();
+            assert!(params_str.contains("active_connection_id_limit=2"));
+            assert!(params_str.contains("initial_max_data=1048576"));
+            assert!(params_str.contains("initial_max_stream_data_bidi_local=262144"));
+            assert!(params_str.contains("initial_max_stream_data_bidi_remote=262144"));
+            assert!(params_str.contains("initial_max_stream_data_uni=262144"));
+            assert!(params_str.contains("initial_max_streams_bidi=100"));
+            assert!(params_str.contains("initial_max_streams_uni=100"));
+            assert!(params_str.contains("max_datagram_frame_size=1500"));
+        }
+    }
+
     #[test]
     fn packet_key_api() {
         use cipher_suite::TLS13_AES_128_GCM_SHA256;
