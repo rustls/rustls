@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use fxhash::FxHashMap;
 use itertools::Itertools;
+use rustc_hash::FxHashMap;
 use rustls_test::KeyType;
 
 use crate::Side;
