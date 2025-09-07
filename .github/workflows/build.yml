@@ -233,8 +233,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo fuzz
         uses: taiki-e/cache-cargo-install-action@v2
@@ -242,6 +242,9 @@ jobs:
           tool: cargo-fuzz
 
       - name: Smoke-test fuzz targets
+        env:
+          # cargo fuzz uses a bunch of -Z options
+          RUSTC_BOOTSTRAP: 1
         run: |
           cargo fuzz build
           for target in $(cargo fuzz list) ; do
