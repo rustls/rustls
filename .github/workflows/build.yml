@@ -289,6 +289,7 @@ jobs:
           persist-credentials: false
 
       - name: Install rust toolchain
+        # use nightly to mirror docs.rs
         uses: dtolnay/rust-toolchain@nightly
 
       - name: cargo doc (rustls; all features)
