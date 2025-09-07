@@ -257,8 +257,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Smoke-test benchmark program (ring)
         run: cargo run -p rustls-bench --profile=bench --locked --features ring -- --multiplier 0.1
@@ -273,6 +273,8 @@ jobs:
         run: cargo bench --locked --all-features
         env:
           RUSTFLAGS: --cfg=bench
+          # unit-benchmarks are permanantly unstable
+          RUSTC_BOOTSTRAP: 1
 
   docs:
     name: Check for documentation errors
