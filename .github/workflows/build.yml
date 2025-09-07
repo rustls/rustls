@@ -339,7 +339,7 @@ jobs:
           persist-credentials: false
 
       - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-minimal-versions
         uses: taiki-e/install-action@cargo-minimal-versions
@@ -351,6 +351,9 @@ jobs:
       - name: Check direct-minimal-versions
         run: cargo minimal-versions --direct --ignore-private check
         working-directory: rustls/
+        env:
+          # `cargo minimal-versions` uses unstable cargo features
+          RUSTC_BOOTSTRAP: 1
 
   cross:
     name: cross-target testing
