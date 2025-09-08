@@ -6774,6 +6774,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 fn test_received_plaintext_backpressure() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
+    let plaintext_limit = 16_384;
 
     let server_config = Arc::new(
         ServerConfig::builder_with_provider(
@@ -6793,14 +6794,15 @@ fn test_received_plaintext_backpressure() {
     do_handshake(&mut client, &mut server);
 
     // Fill the server's received plaintext buffer with 16k bytes
-    let client_buf = [0; 16_385];
-    dbg!(
+    let client_buf = vec![0; plaintext_limit];
+    assert_eq!(
         client
             .writer()
             .write(&client_buf)
-            .unwrap()
+            .unwrap(),
+        plaintext_limit
     );
-    let mut network_buf = Vec::with_capacity(32_768);
+    let mut network_buf = Vec::with_capacity(plaintext_limit * 2);
     let sent = dbg!(
         client
             .write_tls(&mut network_buf)
@@ -6821,12 +6823,13 @@ fn test_received_plaintext_backpressure() {
     }
     server.process_new_packets().unwrap();
 
-    // Send two more bytes from client to server
-    dbg!(
+    // Send one more byte from client to server
+    assert_eq!(
         client
             .writer()
-            .write(&client_buf[..2])
-            .unwrap()
+            .write(&client_buf[..1])
+            .unwrap(),
+        1
     );
     let sent = dbg!(
         client
@@ -6835,16 +6838,20 @@ fn test_received_plaintext_backpressure() {
     );
 
     // Get an error because the received plaintext buffer is full
-    assert!(
-        server
-            .read_tls(&mut &network_buf[..sent])
-            .is_err()
+    assert_eq!(
+        format!(
+            "{:?}",
+            server
+                .read_tls(&mut &network_buf[..sent])
+                .unwrap_err()
+        ),
+        "Custom { kind: Other, error: \"received plaintext buffer full\" }"
     );
 
     // Read out some of the plaintext
     server
         .reader()
-        .read_exact(&mut [0; 2])
+        .read_exact(&mut [0; 1])
         .unwrap();
 
     // Now there's room again in the plaintext buffer
@@ -6852,7 +6859,7 @@ fn test_received_plaintext_backpressure() {
         server
             .read_tls(&mut &network_buf[..sent])
             .unwrap(),
-        24
+        sent
     );
 }
 

@@ -113,7 +113,7 @@ impl ChunkVecBuffer {
 impl ChunkVecBuffer {
     pub(crate) fn is_full(&self) -> bool {
         self.limit
-            .map(|limit| self.len() > limit)
+            .map(|limit| self.len() >= limit)
             .unwrap_or_default()
     }
 
