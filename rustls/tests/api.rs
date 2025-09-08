@@ -6607,9 +6607,13 @@ fn test_secret_extraction_disabled_or_too_early() {
 
 #[test]
 fn test_received_plaintext_backpressure() {
+    test_plaintext_buffer_limit(None, 16_384);
+    test_plaintext_buffer_limit(Some(18_000), 18_000);
+}
+
+fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
-    let plaintext_limit = 16_384;
 
     let server_config = Arc::new(
         ServerConfig::builder_with_provider(
@@ -6626,6 +6630,11 @@ fn test_received_plaintext_backpressure() {
 
     let client_config = Arc::new(make_client_config(kt, &provider));
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+
+    if let Some(limit) = limit {
+        server.set_plaintext_buffer_limit(Some(limit));
+    }
+
     do_handshake(&mut client, &mut server);
 
     // Fill the server's received plaintext buffer with 16k bytes
