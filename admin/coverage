@@ -2,7 +2,11 @@
 
 set -e
 
-source <(cargo llvm-cov show-env --export-prefix "$@")
+# for branch coverage support, which is unstable
+export RUSTC_BOOTSTRAP=1
+OPTIONS=--branch
+
+source <(cargo llvm-cov show-env --export-prefix $OPTIONS "$@")
 cargo llvm-cov clean --workspace
 
 cargo build --locked --all-targets --all-features
@@ -17,4 +21,4 @@ cargo test --locked $(admin/all-features-except brotli rustls)
 ## bogo
 cargo test --locked --test bogo -- --ignored --test-threads 1
 
-cargo llvm-cov report --ignore-filename-regex "(bogo|rustls-test)/" "$@"
+cargo llvm-cov report --ignore-filename-regex "(bogo|rustls-test)/" $OPTIONS "$@"
