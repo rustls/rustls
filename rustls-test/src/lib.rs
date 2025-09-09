@@ -25,9 +25,7 @@ use rustls::client::{
     WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
-use rustls::crypto::{
-    CryptoProvider, WebPkiSupportedAlgorithms, verify_tls13_signature_with_raw_key,
-};
+use rustls::crypto::{CryptoProvider, WebPkiSupportedAlgorithms, verify_tls13_signature};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::pki_types::pem::PemObject;
@@ -1114,10 +1112,8 @@ impl ServerCertVerifier for MockServerVerifier {
         println!("verify_tls13_signature({input:?})");
         match &self.tls13_signature_error {
             Some(error) => Err(error.clone()),
-            _ if self.requires_raw_public_keys => verify_tls13_signature_with_raw_key(
-                input.message,
-                &SubjectPublicKeyInfoDer::from(input.signer.as_ref()),
-                input.signature,
+            _ if self.requires_raw_public_keys => verify_tls13_signature(
+                input,
                 self.raw_public_key_algorithms
                     .as_ref()
                     .unwrap(),
@@ -1276,10 +1272,8 @@ impl ClientCertVerifier for MockClientVerifier {
         input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         if self.expect_raw_public_keys {
-            verify_tls13_signature_with_raw_key(
-                input.message,
-                &SubjectPublicKeyInfoDer::from(input.signer.as_ref()),
-                input.signature,
+            verify_tls13_signature(
+                input,
                 self.raw_public_key_algorithms
                     .as_ref()
                     .unwrap(),

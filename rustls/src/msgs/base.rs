@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
 use zeroize::Zeroize;
 
 use crate::error::InvalidMessage;
@@ -86,6 +86,20 @@ impl<'a> Codec<'a> for CertificateDer<'a> {
 impl fmt::Debug for Payload<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         hex(f, self.bytes())
+    }
+}
+
+impl<'a> Codec<'a> for SubjectPublicKeyInfoDer<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let nest = LengthPrefixedBuffer::new(Self::SIZE_LEN, bytes);
+        nest.buf.extend(self.as_ref());
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let len = Self::SIZE_LEN.read(r)?;
+        let mut sub = r.sub(len)?;
+        let body = sub.rest();
+        Ok(Self::from(body))
     }
 }
 

@@ -7,9 +7,10 @@ use pki_types::{
 
 use super::anchors::RootCertStore;
 use super::pki_error;
+use crate::ApiMisuse;
 use crate::enums::SignatureScheme;
 use crate::error::{Error, PeerMisbehaved};
-use crate::verify::{DigitallySignedStruct, HandshakeSignatureValid, SignatureVerificationInput};
+use crate::verify::{HandshakeSignatureValid, SignatureVerificationInput, SignerPublicKey};
 
 /// Verify that the end-entity certificate `end_entity` is a valid server cert
 /// and chains to at least one of the trust anchors in the `roots` [RootCertStore].
@@ -157,7 +158,14 @@ pub fn verify_tls12_signature(
     supported_schemes: &WebPkiSupportedAlgorithms,
 ) -> Result<HandshakeSignatureValid, Error> {
     let possible_algs = supported_schemes.convert_scheme(input.signature.scheme)?;
-    let cert = webpki::EndEntityCert::try_from(input.signer).map_err(pki_error)?;
+    let cert = match input.signer {
+        SignerPublicKey::X509(cert_der) => {
+            webpki::EndEntityCert::try_from(*cert_der).map_err(pki_error)?
+        }
+        SignerPublicKey::RawPublicKey(_) => {
+            return Err(ApiMisuse::InvalidSignerForProtocolVersion.into());
+        }
+    };
 
     let mut error = None;
     for alg in possible_algs {
@@ -196,33 +204,17 @@ pub fn verify_tls13_signature(
     }
 
     let alg = supported_schemes.convert_scheme(input.signature.scheme)?[0];
-
-    let cert = webpki::EndEntityCert::try_from(input.signer).map_err(pki_error)?;
-
-    cert.verify_signature(alg, input.message, input.signature.signature())
-        .map_err(pki_error)
-        .map(|_| HandshakeSignatureValid::assertion())
-}
-
-/// Verify a message signature using a raw public key and the first TLS 1.3 compatible
-/// supported scheme.
-pub fn verify_tls13_signature_with_raw_key(
-    msg: &[u8],
-    spki: &SubjectPublicKeyInfoDer<'_>,
-    dss: &DigitallySignedStruct,
-    supported_schemes: &WebPkiSupportedAlgorithms,
-) -> Result<HandshakeSignatureValid, Error> {
-    if !dss.scheme.supported_in_tls13() {
-        return Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into());
+    match input.signer {
+        SignerPublicKey::X509(cert_der) => {
+            webpki::EndEntityCert::try_from(*cert_der).and_then(|cert| {
+                cert.verify_signature(alg, input.message, input.signature.signature())
+            })
+        }
+        SignerPublicKey::RawPublicKey(spki) => webpki::RawPublicKeyEntity::try_from(*spki)
+            .and_then(|rpk| rpk.verify_signature(alg, input.message, input.signature.signature())),
     }
-
-    let raw_key = webpki::RawPublicKeyEntity::try_from(spki).map_err(pki_error)?;
-    let alg = supported_schemes.convert_scheme(dss.scheme)?[0];
-
-    raw_key
-        .verify_signature(alg, msg, dss.signature())
-        .map_err(pki_error)
-        .map(|_| HandshakeSignatureValid::assertion())
+    .map_err(pki_error)
+    .map(|_| HandshakeSignatureValid::assertion())
 }
 
 /// Verify that the end-entity certificate `end_entity` is a valid server cert

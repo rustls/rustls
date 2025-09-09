@@ -82,7 +82,7 @@ impl ExtensionProcessing {
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::CommonServerSessionValue>,
-    ) -> Result<(), Error> {
+    ) -> Result<CertificateTypes, Error> {
         // ALPN
         let our_protocols = &config.alpn_protocols;
         if let Some(their_protocols) = &hello.protocols {
@@ -159,18 +159,7 @@ impl ExtensionProcessing {
             ocsp_response.take();
         }
 
-        self.extensions.server_certificate_type = self.process_cert_type_extension(
-            hello
-                .server_certificate_types
-                .as_deref()
-                .unwrap_or_default(),
-            config
-                .cert_resolver
-                .only_raw_public_keys(),
-            cx,
-        )?;
-
-        self.extensions.client_certificate_type = self.process_cert_type_extension(
+        let expected_client_type = self.process_cert_type_extension(
             hello
                 .client_certificate_types
                 .as_deref()
@@ -181,7 +170,22 @@ impl ExtensionProcessing {
             cx,
         )?;
 
-        Ok(())
+        let expected_server_type = self.process_cert_type_extension(
+            hello
+                .server_certificate_types
+                .as_deref()
+                .unwrap_or_default(),
+            config
+                .cert_resolver
+                .only_raw_public_keys(),
+            cx,
+        )?;
+
+        self.extensions.client_certificate_type = expected_client_type;
+        self.extensions.server_certificate_type = expected_server_type;
+        Ok(CertificateTypes {
+            client: expected_client_type.unwrap_or_default(),
+        })
     }
 
     pub(super) fn process_tls12(
@@ -238,6 +242,10 @@ impl ExtensionProcessing {
             (false, false, false) => Ok(None),
         }
     }
+}
+
+pub(super) struct CertificateTypes {
+    pub(super) client: CertificateType,
 }
 
 pub(super) struct ExpectClientHello {

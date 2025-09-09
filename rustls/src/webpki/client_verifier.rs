@@ -14,11 +14,11 @@ use crate::server::ServerConfig;
 use crate::sync::Arc;
 use crate::verify::{
     ClientCertVerified, ClientCertVerifier, ClientIdentity, HandshakeSignatureValid, NoClientAuth,
-    SignatureVerificationInput,
+    PeerIdentity, SignatureVerificationInput,
 };
 use crate::webpki::parse_crls;
 use crate::webpki::verify::{ParsedCertificate, verify_tls12_signature, verify_tls13_signature};
-use crate::{DistinguishedName, Error, RootCertStore, SignatureScheme};
+use crate::{ApiMisuse, DistinguishedName, Error, RootCertStore, SignatureScheme};
 
 /// A builder for configuring a `webpki` client certificate verifier.
 ///
@@ -361,10 +361,15 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         &self,
         identity: &ClientIdentity<'_>,
     ) -> Result<ClientCertVerified, Error> {
-        let cert = ParsedCertificate::try_from(identity.certificates.end_entity)?;
+        let certificates = match identity.identity {
+            PeerIdentity::X509(certificates) => certificates,
+            PeerIdentity::RawPublicKey(_) => {
+                return Err(ApiMisuse::UnverifiableCertificateType.into());
+            }
+        };
 
+        let cert = ParsedCertificate::try_from(&certificates.end_entity)?;
         let crl_refs = self.crls.iter().collect::<Vec<_>>();
-
         let revocation = if self.crls.is_empty() {
             None
         } else {
@@ -384,7 +389,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
             .verify_for_usage(
                 self.supported_algs.all,
                 &self.roots.roots,
-                identity.certificates.intermediates,
+                &certificates.intermediates,
                 identity.now,
                 webpki::KeyUsage::client_auth(),
                 revocation,

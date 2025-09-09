@@ -543,7 +543,7 @@ pub use crate::suites::{
 pub use crate::ticketer::TicketRotator;
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
-pub use crate::verify::DigitallySignedStruct;
+pub use crate::verify::{CertificateIdentity, DigitallySignedStruct, PeerIdentity};
 pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersion};
 pub use crate::webpki::RootCertStore;
 
@@ -630,8 +630,7 @@ pub mod server {
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
         pub use crate::verify::{
-            CertificateIdentity, ClientCertVerified, ClientCertVerifier, ClientIdentity,
-            SignatureVerificationInput,
+            ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
         };
     }
 

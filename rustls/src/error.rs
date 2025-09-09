@@ -364,6 +364,7 @@ pub enum PeerIncompatible {
     ExtendedMasterSecretExtensionRequired,
     IncorrectCertificateTypeExtension,
     KeyShareExtensionRequired,
+    MultipleRawKeys,
     NamedGroupsExtensionRequired,
     NoCertificateRequestSignatureSchemesInCommon,
     NoCipherSuitesInCommon,
@@ -380,6 +381,7 @@ pub enum PeerIncompatible {
     Tls12NotOfferedOrEnabled,
     Tls13RequiredForQuic,
     UncompressedEcPointsRequired,
+    UnknownCertificateType(u8),
     UnsolicitedCertificateTypeExtension,
 }
 
@@ -1166,6 +1168,9 @@ pub enum ApiMisuse {
     /// [`quic::HeaderProtectionKey::encrypt_in_place()`]: crate::quic::HeaderProtectionKey::encrypt_in_place()
     InvalidQuicHeaderProtectionPacketNumberLength,
 
+    /// Raw keys cannot be used with TLS 1.2.
+    InvalidSignerForProtocolVersion,
+
     /// QUIC attempted with a configuration that does not support TLS1.3.
     QuicRequiresTls13Support,
 
@@ -1212,6 +1217,12 @@ pub enum ApiMisuse {
     /// functions.  You must ensure any prior generated TLS records are extracted
     /// from the library before using one of these functions.
     SecretExtractionWithPendingSendableData,
+
+    /// Attempt to verify a certificate with an unsupported type.
+    ///
+    /// A verifier indicated support for a certificate type but then failed to verify the peer's
+    /// identity of that type.
+    UnverifiableCertificateType,
 }
 
 impl From<ApiMisuse> for Error {

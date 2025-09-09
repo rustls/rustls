@@ -15,14 +15,16 @@ use crate::common_state::{
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
+use crate::enums::{
+    AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
+};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
-    CertificateChain, CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
+    CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
     NewSessionTicketPayloadTls13,
 };
 use crate::msgs::message::{Message, MessagePayload};
@@ -36,7 +38,7 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::{CertificateIdentity, ClientIdentity};
+use crate::verify::{ClientIdentity, PeerIdentity};
 use crate::{ConnectionTrafficSecrets, compress, rand, verify};
 
 mod client_hello {
@@ -56,6 +58,7 @@ mod client_hello {
     };
     use crate::sealed::Sealed;
     use crate::server::common::ActiveCertifiedKey;
+    use crate::server::hs::CertificateTypes;
     use crate::sign;
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
@@ -268,8 +271,8 @@ mod client_hello {
             if let Some(resume) = &resumedata {
                 cx.data.received_resumption_data = Some(resume.common.application_data.0.clone());
                 cx.common
-                    .peer_certificates
-                    .clone_from(&resume.common.client_cert_chain);
+                    .peer_identity
+                    .clone_from(&resume.common.peer_identity);
             }
 
             let full_handshake = resumedata.is_none();
@@ -301,7 +304,7 @@ mod client_hello {
 
             let mut ocsp_response = server_key.get_ocsp();
             let mut flight = HandshakeFlightTls13::new(&mut cch.transcript);
-            let doing_early_data = emit_encrypted_extensions(
+            let (cert_types, doing_early_data) = emit_encrypted_extensions(
                 &mut flight,
                 cch.suite,
                 cx,
@@ -382,6 +385,7 @@ mod client_hello {
                         key_schedule: key_schedule_traffic,
                         send_tickets: cch.send_tickets,
                         message_already_in_transcript: false,
+                        expected_certificate_type: cert_types.client,
                     }))
                 } else {
                     Ok(Box::new(ExpectCertificateOrCompressedCertificate {
@@ -390,6 +394,7 @@ mod client_hello {
                         suite: cch.suite,
                         key_schedule: key_schedule_traffic,
                         send_tickets: cch.send_tickets,
+                        expected_certificate_type: cert_types.client,
                     }))
                 }
             } else if doing_early_data == EarlyDataDecision::Accepted && !cx.common.is_quic() {
@@ -709,9 +714,9 @@ mod client_hello {
         resumedata: Option<&persist::Tls13ServerSessionValue>,
         extra_exts: ServerExtensionsInput<'static>,
         config: &ServerConfig,
-    ) -> Result<EarlyDataDecision, Error> {
+    ) -> Result<(CertificateTypes, EarlyDataDecision), Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts);
-        ep.process_common(
+        let cert_types = ep.process_common(
             config,
             cx,
             ocsp_response,
@@ -728,7 +733,7 @@ mod client_hello {
 
         trace!("sending encrypted extensions {ee:?}");
         flight.add(ee);
-        Ok(early_data)
+        Ok((cert_types, early_data))
     }
 
     fn emit_certificate_req_tls13(
@@ -908,6 +913,7 @@ struct ExpectCertificateOrCompressedCertificate {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     send_tickets: usize,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
@@ -930,6 +936,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 key_schedule: self.key_schedule,
                 send_tickets: self.send_tickets,
                 message_already_in_transcript: false,
+                expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
 
@@ -942,6 +949,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 suite: self.suite,
                 key_schedule: self.key_schedule,
                 send_tickets: self.send_tickets,
+                expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
 
@@ -967,6 +975,7 @@ struct ExpectCompressedCertificate {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     send_tickets: usize,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ServerConnectionData> for ExpectCompressedCertificate {
@@ -1049,6 +1058,7 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             key_schedule: self.key_schedule,
             send_tickets: self.send_tickets,
             message_already_in_transcript: true,
+            expected_certificate_type: self.expected_certificate_type,
         })
         .handle(cx, m)
     }
@@ -1065,6 +1075,7 @@ struct ExpectCertificate {
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     send_tickets: usize,
     message_already_in_transcript: bool,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ServerConnectionData> for ExpectCertificate {
@@ -1102,7 +1113,13 @@ impl State<ServerConnectionData> for ExpectCertificate {
             .verifier
             .client_auth_mandatory();
 
-        let Some((end_entity, intermediates)) = client_cert.split_first() else {
+        let peer_identity = PeerIdentity::from_cert_chain(
+            client_cert.0,
+            self.expected_certificate_type,
+            cx.common,
+        )?;
+
+        let Some(peer_identity) = peer_identity else {
             if !mandatory {
                 debug!("client auth requested but no certificate supplied");
                 self.transcript.abandon_client_auth();
@@ -1124,10 +1141,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         self.config
             .verifier
             .verify_client_cert(&ClientIdentity {
-                certificates: &CertificateIdentity {
-                    end_entity,
-                    intermediates,
-                },
+                identity: &peer_identity,
                 now: self.config.current_time()?,
             })
             .map_err(|err| {
@@ -1140,7 +1154,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
-            client_cert: client_cert.into_owned(),
+            peer_identity,
             send_tickets: self.send_tickets,
         }))
     }
@@ -1155,7 +1169,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    client_cert: CertificateChain<'static>,
+    peer_identity: PeerIdentity,
     send_tickets: usize,
 }
 
@@ -1181,7 +1195,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
                 .verifier
                 .verify_tls13_signature(&verify::SignatureVerificationInput {
                     message: construct_client_verify_message(&handshake_hash).as_ref(),
-                    signer: &self.client_cert[0],
+                    signer: &self.peer_identity.as_signer(),
                     signature,
                 })
         };
@@ -1193,7 +1207,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        cx.common.peer_certificates = Some(self.client_cert);
+        cx.common.peer_identity = Some(self.peer_identity);
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
@@ -1287,7 +1301,7 @@ fn get_server_session_value(
         persist::CommonServerSessionValue::new(
             cx.data.sni.as_ref(),
             suite.common.suite,
-            cx.common.peer_certificates.clone(),
+            cx.common.peer_identity.clone(),
             cx.common.alpn_protocol.clone(),
             cx.data.resumption_data.clone(),
             time_now,

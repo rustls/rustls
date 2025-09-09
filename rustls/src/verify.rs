@@ -1,10 +1,11 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use pki_types::{CertificateDer, ServerName, UnixTime};
+use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 
-use crate::enums::SignatureScheme;
-use crate::error::{Error, InvalidMessage};
+use crate::CommonState;
+use crate::enums::{AlertDescription, CertificateType, SignatureScheme};
+use crate::error::{Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::DistinguishedName;
@@ -102,8 +103,8 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct ServerIdentity<'a> {
-    /// All certificates received in the server's `Certificate` message.
-    pub certificates: &'a CertificateIdentity<'a>,
+    /// Identity information presented by the server.
+    pub identity: &'a PeerIdentity,
     /// The server name the client specified when connecting to the server.
     pub server_name: &'a ServerName<'a>,
     /// OCSP response stapled to the server's `Certificate` message, if any.
@@ -221,23 +222,111 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct ClientIdentity<'a> {
-    /// All certificates received in the client's `Certificate` message.
-    pub certificates: &'a CertificateIdentity<'a>,
+    /// Identity information presented by the client.
+    pub identity: &'a PeerIdentity,
     /// Current time against which time-sensitive inputs should be validated.
     pub now: UnixTime,
+}
+
+/// A peer's identity, depending on the negotiated certificate type.
+#[allow(unreachable_pub)]
+#[non_exhaustive]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PeerIdentity {
+    /// A standard X.509 certificate chain.
+    ///
+    /// This is the most common case.
+    X509(CertificateIdentity),
+    /// A raw public key, as defined in [RFC 7250](https://tools.ietf.org/html/rfc7250).
+    RawPublicKey(SubjectPublicKeyInfoDer<'static>),
+}
+
+impl PeerIdentity {
+    pub(crate) fn from_cert_chain(
+        mut cert_chain: Vec<CertificateDer<'_>>,
+        expected: CertificateType,
+        common: &mut CommonState,
+    ) -> Result<Option<Self>, Error> {
+        let mut iter = cert_chain.drain(..);
+        let Some(first) = iter.next() else {
+            return Ok(None);
+        };
+
+        match expected {
+            CertificateType::X509 => Ok(Some(Self::X509(CertificateIdentity {
+                end_entity: first.into_owned(),
+                intermediates: iter.map(|c| c.into_owned()).collect(),
+            }))),
+            CertificateType::RawPublicKey => match iter.count() {
+                0 => Ok(Some(Self::RawPublicKey(
+                    SubjectPublicKeyInfoDer::from(first.as_ref()).into_owned(),
+                ))),
+                _ => Err(common.send_fatal_alert(
+                    AlertDescription::BadCertificate,
+                    PeerIncompatible::MultipleRawKeys,
+                )),
+            },
+            CertificateType::Unknown(ty) => Err(common.send_fatal_alert(
+                AlertDescription::UnsupportedCertificate,
+                PeerIncompatible::UnknownCertificateType(ty),
+            )),
+        }
+    }
+
+    /// Get the public key of this identity as a `SignerPublicKey`.
+    pub fn as_signer(&self) -> SignerPublicKey<'_> {
+        match self {
+            Self::X509(cert) => SignerPublicKey::X509(&cert.end_entity),
+            Self::RawPublicKey(spki) => SignerPublicKey::RawPublicKey(spki),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for PeerIdentity {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Self::X509(certificates) => {
+                0u8.encode(bytes);
+                certificates.end_entity.encode(bytes);
+                certificates.intermediates.encode(bytes);
+            }
+            Self::RawPublicKey(spki) => {
+                1u8.encode(bytes);
+                spki.encode(bytes);
+            }
+        }
+    }
+
+    fn read(reader: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        match u8::read(reader)? {
+            0 => Ok(Self::X509(CertificateIdentity {
+                end_entity: CertificateDer::read(reader)?.into_owned(),
+                intermediates: Vec::<CertificateDer<'_>>::read(reader)?
+                    .into_iter()
+                    .map(|der| der.into_owned())
+                    .collect(),
+            })),
+            1 => Ok(Self::RawPublicKey(
+                SubjectPublicKeyInfoDer::read(reader)?.into_owned(),
+            )),
+            _ => Err(InvalidMessage::UnexpectedMessage(
+                "invalid PeerIdentity discriminant",
+            )),
+        }
+    }
 }
 
 /// Data required to verify the peer's identity.
 #[allow(unreachable_pub)]
 #[non_exhaustive]
-#[derive(Debug)]
-pub struct CertificateIdentity<'a> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CertificateIdentity {
     /// Certificate for the entity being verified.
-    pub end_entity: &'a CertificateDer<'a>,
+    pub end_entity: CertificateDer<'static>,
     /// All certificates other than `end_entity` received in the peer's `Certificate` message.
     ///
     /// It is in the same order that the peer sent them and may be empty.
-    pub intermediates: &'a [CertificateDer<'a>],
+    pub intermediates: Vec<CertificateDer<'static>>,
 }
 
 /// Input for message signature verification.
@@ -250,9 +339,19 @@ pub struct SignatureVerificationInput<'a> {
     /// The public key to use.
     ///
     /// `signer` has already been validated by the point this is called.
-    pub signer: &'a CertificateDer<'a>,
+    pub signer: &'a SignerPublicKey<'a>,
     /// The signature scheme and payload.
     pub signature: &'a DigitallySignedStruct,
+}
+
+#[allow(unreachable_pub)]
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum SignerPublicKey<'a> {
+    /// An X.509 certificate for the signing peer.
+    X509(&'a CertificateDer<'a>),
+    /// A raw public key, as defined in [RFC 7250](https://tools.ietf.org/html/rfc7250).
+    RawPublicKey(&'a SubjectPublicKeyInfoDer<'a>),
 }
 
 /// Turns off client authentication.

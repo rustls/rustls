@@ -14,15 +14,15 @@ mod client {
         HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
     };
     use rustls::crypto::{
-        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature_with_raw_key,
+        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
     };
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
     use rustls::sign::CertifiedKey;
     use rustls::{
-        CertificateError, ClientConfig, ClientConnection, Error, InconsistentKeys,
-        PeerIncompatible, SignatureScheme, Stream,
+        ApiMisuse, CertificateError, ClientConfig, ClientConnection, Error, InconsistentKeys,
+        PeerIdentity, PeerIncompatible, SignatureScheme, Stream,
     };
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
@@ -103,16 +103,11 @@ mod client {
             &self,
             identity: &ServerIdentity<'_>,
         ) -> Result<ServerCertVerified, Error> {
-            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(
-                identity
-                    .certificates
-                    .end_entity
-                    .as_ref(),
-            );
-            match self
-                .trusted_spki
-                .contains(&end_entity_as_spki)
-            {
+            let PeerIdentity::RawPublicKey(spki) = identity.identity else {
+                return Err(ApiMisuse::UnverifiableCertificateType.into());
+            };
+
+            match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
                 true => Ok(ServerCertVerified::assertion()),
             }
@@ -129,12 +124,7 @@ mod client {
             &self,
             input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
-            verify_tls13_signature_with_raw_key(
-                input.message,
-                &SubjectPublicKeyInfoDer::from(input.signer.as_ref()),
-                input.signature,
-                &self.supported_algs,
-            )
+            verify_tls13_signature(input, &self.supported_algs)
         }
 
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
@@ -158,7 +148,7 @@ mod server {
 
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{
-        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature_with_raw_key,
+        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
     };
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
@@ -168,8 +158,8 @@ mod server {
     };
     use rustls::sign::CertifiedKey;
     use rustls::{
-        CertificateError, DistinguishedName, Error, InconsistentKeys, PeerIncompatible,
-        ServerConfig, ServerConnection, SignatureScheme,
+        ApiMisuse, CertificateError, DistinguishedName, Error, InconsistentKeys, PeerIdentity,
+        PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
     };
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
@@ -269,16 +259,11 @@ mod server {
             &self,
             identity: &ClientIdentity<'_>,
         ) -> Result<ClientCertVerified, Error> {
-            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(
-                identity
-                    .certificates
-                    .end_entity
-                    .as_ref(),
-            );
-            match self
-                .trusted_spki
-                .contains(&end_entity_as_spki)
-            {
+            let PeerIdentity::RawPublicKey(spki) = identity.identity else {
+                return Err(ApiMisuse::UnverifiableCertificateType.into());
+            };
+
+            match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
                 true => Ok(ClientCertVerified::assertion()),
             }
@@ -295,12 +280,7 @@ mod server {
             &self,
             input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
-            verify_tls13_signature_with_raw_key(
-                input.message,
-                &SubjectPublicKeyInfoDer::from(input.signer.as_ref()),
-                input.signature,
-                &self.supported_algs,
-            )
+            verify_tls13_signature(input, &self.supported_algs)
         }
 
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
