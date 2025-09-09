@@ -157,8 +157,8 @@ impl ExtensionType {
     /// sometimes (e.g. server name, cert compression methods), but not always, SHOULD NOT be
     /// compressed.
     ///
-    /// See [draft-ietf-esni-18 §5](https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-5)
-    /// and [draft-ietf-esni-18 §10.5](https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-10.5)
+    /// See [draft-ietf-tls-esni-18 §5](https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-5)
+    /// and [draft-ietf-tls-esni-18 §10.5](https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-10.5)
     /// for more information.
     pub(crate) fn ech_compress(&self) -> bool {
         // We match which extensions we will compress with BoringSSL and Go's stdlib.
