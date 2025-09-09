@@ -105,7 +105,7 @@ impl ClientHelloInput {
         };
 
         // https://tools.ietf.org/html/rfc8446#appendix-D.4
-        // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
+        // https://tools.ietf.org/html/rfc9001#section-8.4
         let session_id = match session_id {
             Some(session_id) => session_id,
             None if cx.common.is_quic() => SessionId::empty(),
