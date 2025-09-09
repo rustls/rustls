@@ -23,10 +23,7 @@ pub use server_verifier::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 pub use verify::{
     ParsedCertificate, verify_server_cert_signed_by_trust_anchor, verify_server_name,
 };
-pub use verify::{
-    WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
-    verify_tls13_signature_with_raw_key,
-};
+pub use verify::{WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature};
 
 /// An error that can occur when building a certificate verifier.
 #[derive(Debug, Clone)]

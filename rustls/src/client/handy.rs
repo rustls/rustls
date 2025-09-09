@@ -241,7 +241,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
 mod tests {
     use std::prelude::v1::*;
 
-    use pki_types::{ServerName, UnixTime};
+    use pki_types::{CertificateDer, ServerName, UnixTime};
 
     use super::NoClientSessionStorage;
     use super::provider::cipher_suite;
@@ -249,10 +249,12 @@ mod tests {
     use crate::client::{ClientSessionStore, ResolvesClientCert};
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
-    use crate::msgs::handshake::{CertificateChain, SessionId};
+    use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::sync::Arc;
-    use crate::verify::{ServerIdentity, SignatureVerificationInput};
+    use crate::verify::{
+        CertificateIdentity, PeerIdentity, ServerIdentity, SignatureVerificationInput,
+    };
     use crate::{Error, SignatureScheme, sign};
 
     #[test]
@@ -276,7 +278,10 @@ mod tests {
                     SessionId::empty(),
                     Arc::new(PayloadU16::empty()),
                     &[0u8; 48],
-                    CertificateChain::default(),
+                    PeerIdentity::X509(CertificateIdentity {
+                        end_entity: CertificateDer::from(&[][..]),
+                        intermediates: Vec::new(),
+                    }),
                     &server_cert_verifier,
                     &resolves_client_cert,
                     now,
@@ -294,7 +299,10 @@ mod tests {
                 cipher_suite::TLS13_AES_256_GCM_SHA384,
                 Arc::new(PayloadU16::empty()),
                 &[],
-                CertificateChain::default(),
+                PeerIdentity::X509(CertificateIdentity {
+                    end_entity: CertificateDer::from(&[][..]),
+                    intermediates: Vec::new(),
+                }),
                 &server_cert_verifier,
                 &resolves_client_cert,
                 now,

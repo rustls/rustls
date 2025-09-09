@@ -48,7 +48,7 @@ use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
 use crate::verify::{
-    self, CertificateIdentity, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput,
+    self, DigitallySignedStruct, PeerIdentity, ServerIdentity, SignatureVerificationInput,
 };
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
 
@@ -606,11 +606,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         .set_handshake_encrypter(cx.common);
                 }
 
-                cx.common.peer_certificates = Some(
-                    resuming_session
-                        .server_cert_chain()
-                        .clone(),
-                );
+                cx.common.peer_identity = Some(resuming_session.peer_identity().clone());
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
                 // We *don't* reverify the certificate chain here: resumption is a
@@ -638,6 +634,9 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     .handshake_kind
                     .get_or_insert(HandshakeKind::Full);
 
+                let expected_certificate_type = exts
+                    .server_certificate_type
+                    .unwrap_or_default();
                 Ok(if self.hello.offered_cert_compression {
                     Box::new(ExpectCertificateOrCompressedCertificateOrCertReq {
                         config: self.config,
@@ -647,6 +646,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         transcript: self.transcript,
                         key_schedule: self.key_schedule,
                         ech_retry_configs,
+                        expected_certificate_type,
                     })
                 } else {
                     Box::new(ExpectCertificateOrCertReq {
@@ -657,6 +657,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         transcript: self.transcript,
                         key_schedule: self.key_schedule,
                         ech_retry_configs,
+                        expected_certificate_type,
                     })
                 })
             }
@@ -694,6 +695,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
@@ -719,6 +721,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 client_auth: None,
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
+                expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -733,6 +736,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 key_schedule: self.key_schedule,
                 client_auth: None,
                 ech_retry_configs: self.ech_retry_configs,
+                expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -747,6 +751,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 key_schedule: self.key_schedule,
                 offered_cert_compression: true,
                 ech_retry_configs: self.ech_retry_configs,
+                expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -775,6 +780,7 @@ struct ExpectCertificateOrCompressedCertificate {
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
@@ -800,6 +806,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 client_auth: self.client_auth,
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
+                expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -814,6 +821,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
                 ech_retry_configs: self.ech_retry_configs,
+                expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -840,6 +848,7 @@ struct ExpectCertificateOrCertReq {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
@@ -865,6 +874,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 client_auth: None,
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
+                expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -879,6 +889,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 key_schedule: self.key_schedule,
                 offered_cert_compression: false,
                 ech_retry_configs: self.ech_retry_configs,
+                expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -909,6 +920,7 @@ struct ExpectCertificateRequest {
     key_schedule: KeyScheduleHandshake,
     offered_cert_compression: bool,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateRequest {
@@ -992,6 +1004,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
                 ech_retry_configs: self.ech_retry_configs,
+                expected_certificate_type: self.expected_certificate_type,
             })
         } else {
             Box::new(ExpectCertificate {
@@ -1004,6 +1017,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 client_auth: Some(client_auth),
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
+                expected_certificate_type: self.expected_certificate_type,
             })
         })
     }
@@ -1022,6 +1036,7 @@ struct ExpectCompressedCertificate {
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ClientConnectionData> for ExpectCompressedCertificate {
@@ -1107,6 +1122,7 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             client_auth: self.client_auth,
             message_already_in_transcript: true,
             ech_retry_configs: self.ech_retry_configs,
+            expected_certificate_type: self.expected_certificate_type,
         })
         .handle(cx, m)
     }
@@ -1126,6 +1142,7 @@ struct ExpectCertificate {
     client_auth: Option<ClientAuthDetails>,
     message_already_in_transcript: bool,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
@@ -1172,6 +1189,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             server_cert,
             client_auth: self.client_auth,
             ech_retry_configs: self.ech_retry_configs,
+            expected_certificate_type: self.expected_certificate_type,
         }))
     }
 
@@ -1191,6 +1209,7 @@ struct ExpectCertificateVerify<'a> {
     server_cert: ServerCertDetails<'a>,
     client_auth: Option<ClientAuthDetails>,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    expected_certificate_type: CertificateType,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
@@ -1211,20 +1230,18 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
         trace!("Server cert is {:?}", self.server_cert.cert_chain);
 
         // 1. Verify the certificate chain.
-        let (end_entity, intermediates) = self
-            .server_cert
-            .cert_chain
-            .split_first()
-            .ok_or(Error::NoCertificatesPresented)?;
+        let identity = PeerIdentity::from_cert_chain(
+            self.server_cert.cert_chain.0,
+            self.expected_certificate_type,
+            cx.common,
+        )?
+        .ok_or(Error::NoCertificatesPresented)?;
 
         let cert_verified = self
             .config
             .verifier
             .verify_server_cert(&ServerIdentity {
-                certificates: &CertificateIdentity {
-                    end_entity,
-                    intermediates,
-                },
+                identity: &identity,
                 server_name: &self.server_name,
                 ocsp_response: &self.server_cert.ocsp_response,
                 now: self.config.current_time()?,
@@ -1241,7 +1258,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             .verifier
             .verify_tls13_signature(&SignatureVerificationInput {
                 message: construct_server_verify_message(&handshake_hash).as_ref(),
-                signer: end_entity,
+                signer: &identity.as_signer(),
                 signature: cert_verify,
             })
             .map_err(|err| {
@@ -1249,7 +1266,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
                     .send_cert_verify_error_alert(err)
             })?;
 
-        cx.common.peer_certificates = Some(self.server_cert.cert_chain.into_owned());
+        cx.common.peer_identity = Some(identity);
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
@@ -1277,6 +1294,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             server_cert: self.server_cert.into_owned(),
             client_auth: self.client_auth,
             ech_retry_configs: self.ech_retry_configs,
+            expected_certificate_type: self.expected_certificate_type,
         })
     }
 }
@@ -1546,9 +1564,9 @@ impl ExpectTraffic {
             self.suite,
             nst.ticket.clone(),
             secret.as_ref(),
-            cx.peer_certificates
-                .cloned()
-                .unwrap_or_default(),
+            cx.peer_identity
+                .unwrap() // should be Some() if we got this far
+                .clone(),
             &self.config.verifier,
             &self.config.client_auth_cert_resolver,
             now,
@@ -1582,7 +1600,7 @@ impl ExpectTraffic {
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         let mut kcx = KernelContext {
-            peer_certificates: cx.common.peer_certificates.as_ref(),
+            peer_identity: cx.common.peer_identity.as_ref(),
             protocol: cx.common.protocol,
             quic: &cx.common.quic,
         };

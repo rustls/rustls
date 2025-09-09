@@ -11,7 +11,6 @@ use crate::sign::SigningKey;
 use crate::sync::Arc;
 pub use crate::webpki::{
     WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
-    verify_tls13_signature_with_raw_key,
 };
 use crate::{
     ApiMisuse, Error, NamedGroup, ProtocolVersion, SupportedCipherSuite, SupportedProtocolVersion,

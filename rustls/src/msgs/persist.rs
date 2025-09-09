@@ -9,11 +9,11 @@ use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::handshake::{CertificateChain, ProtocolName, SessionId};
+use crate::msgs::handshake::{ProtocolName, SessionId};
 use crate::sync::{Arc, Weak};
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-use crate::verify::ServerCertVerifier;
+use crate::verify::{PeerIdentity, ServerCertVerifier};
 
 pub(crate) struct Retrieved<T> {
     pub(crate) value: T,
@@ -81,7 +81,7 @@ impl Tls13ClientSessionValue {
         suite: &'static Tls13CipherSuite,
         ticket: Arc<PayloadU16>,
         secret: &[u8],
-        server_cert_chain: CertificateChain<'static>,
+        peer_identity: PeerIdentity,
         server_cert_verifier: &Arc<dyn ServerCertVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
         time_now: UnixTime,
@@ -98,7 +98,7 @@ impl Tls13ClientSessionValue {
                 ticket,
                 time_now,
                 lifetime_secs,
-                server_cert_chain,
+                peer_identity,
                 server_cert_verifier,
                 client_creds,
             ),
@@ -163,7 +163,7 @@ impl Tls12ClientSessionValue {
         session_id: SessionId,
         ticket: Arc<PayloadU16>,
         master_secret: &[u8; 48],
-        server_cert_chain: CertificateChain<'static>,
+        peer_identity: PeerIdentity,
         server_cert_verifier: &Arc<dyn ServerCertVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
         time_now: UnixTime,
@@ -179,7 +179,7 @@ impl Tls12ClientSessionValue {
                 ticket,
                 time_now,
                 lifetime_secs,
-                server_cert_chain,
+                peer_identity,
                 server_cert_verifier,
                 client_creds,
             ),
@@ -222,7 +222,7 @@ pub struct ClientSessionCommon {
     ticket: Arc<PayloadU16>,
     epoch: u64,
     lifetime_secs: u32,
-    server_cert_chain: Arc<CertificateChain<'static>>,
+    peer_identity: Arc<PeerIdentity>,
     server_cert_verifier: Weak<dyn ServerCertVerifier>,
     client_creds: Weak<dyn ResolvesClientCert>,
 }
@@ -232,7 +232,7 @@ impl ClientSessionCommon {
         ticket: Arc<PayloadU16>,
         time_now: UnixTime,
         lifetime_secs: u32,
-        server_cert_chain: CertificateChain<'static>,
+        peer_identity: PeerIdentity,
         server_cert_verifier: &Arc<dyn ServerCertVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
     ) -> Self {
@@ -240,7 +240,7 @@ impl ClientSessionCommon {
             ticket,
             epoch: time_now.as_secs(),
             lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
-            server_cert_chain: Arc::new(server_cert_chain),
+            peer_identity: Arc::new(peer_identity),
             server_cert_verifier: Arc::downgrade(server_cert_verifier),
             client_creds: Arc::downgrade(client_creds),
         }
@@ -272,8 +272,8 @@ impl ClientSessionCommon {
         }
     }
 
-    pub(crate) fn server_cert_chain(&self) -> &CertificateChain<'static> {
-        &self.server_cert_chain
+    pub(crate) fn peer_identity(&self) -> &PeerIdentity {
+        &self.peer_identity
     }
 
     pub(crate) fn ticket(&self) -> &[u8] {
@@ -447,7 +447,7 @@ impl From<Tls13ServerSessionValue> for ServerSessionValue {
 pub struct CommonServerSessionValue {
     pub(crate) sni: Option<DnsName<'static>>,
     pub(crate) cipher_suite: CipherSuite,
-    pub(crate) client_cert_chain: Option<CertificateChain<'static>>,
+    pub(crate) peer_identity: Option<PeerIdentity>,
     pub(crate) alpn: Option<ProtocolName>,
     pub(crate) application_data: PayloadU16,
     #[doc(hidden)]
@@ -458,7 +458,7 @@ impl CommonServerSessionValue {
     pub(crate) fn new(
         sni: Option<&DnsName<'_>>,
         cipher_suite: CipherSuite,
-        client_cert_chain: Option<CertificateChain<'static>>,
+        peer_identity: Option<PeerIdentity>,
         alpn: Option<ProtocolName>,
         application_data: Vec<u8>,
         creation_time: UnixTime,
@@ -466,7 +466,7 @@ impl CommonServerSessionValue {
         Self {
             sni: sni.map(|s| s.to_owned()),
             cipher_suite,
-            client_cert_chain,
+            peer_identity,
             alpn,
             application_data: PayloadU16::new(application_data),
             creation_time_sec: creation_time.as_secs(),
@@ -484,9 +484,9 @@ impl Codec<'_> for CommonServerSessionValue {
             0u8.encode(bytes);
         }
         self.cipher_suite.encode(bytes);
-        if let Some(chain) = &self.client_cert_chain {
+        if let Some(identity) = &self.peer_identity {
             1u8.encode(bytes);
-            chain.encode(bytes);
+            identity.encode(bytes);
         } else {
             0u8.encode(bytes);
         }
@@ -517,8 +517,8 @@ impl Codec<'_> for CommonServerSessionValue {
         Ok(Self {
             sni,
             cipher_suite: CipherSuite::read(r)?,
-            client_cert_chain: match u8::read(r)? {
-                1 => Some(CertificateChain::read(r)?.into_owned()),
+            peer_identity: match u8::read(r)? {
+                1 => Some(PeerIdentity::read(r)?),
                 _ => None,
             },
             alpn: match u8::read(r)? {
@@ -536,6 +536,7 @@ mod tests {
     use pki_types::CertificateDer;
 
     use super::*;
+    use crate::verify::CertificateIdentity;
 
     #[cfg(feature = "std")] // for UnixTime::now
     #[test]
@@ -576,9 +577,10 @@ mod tests {
                 CommonServerSessionValue::new(
                     None,
                     CipherSuite::TLS13_AES_128_GCM_SHA256,
-                    Some(CertificateChain(alloc::vec![CertificateDer::from(
-                        &[10, 11, 12][..],
-                    )])),
+                    Some(PeerIdentity::X509(CertificateIdentity {
+                        end_entity: CertificateDer::from(&[10, 11, 12][..]),
+                        intermediates: alloc::vec![],
+                    })),
                     None,
                     alloc::vec![4, 5, 6],
                     UnixTime::now(),
@@ -590,9 +592,9 @@ mod tests {
         );
 
         let bytes = [
-            0x03, 0x04, 0x00, 0x13, 0x01, 0x01, 0x00, 0x00, 0x06, 0x00, 0x00, 0x03, 0x0a, 0x0b,
-            0x0c, 0x00, 0x00, 0x03, 0x04, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x68, 0xc1, 0x95,
-            0xb9, 0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
+            0x03, 0x04, 0x00, 0x13, 0x01, 0x01, 0x00, 0x00, 0x00, 0x03, 0x0a, 0x0b, 0x0c, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x68, 0xc1,
+            0x99, 0xac, 0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
         ];
         let mut rd = Reader::init(&bytes);
         let ssv = ServerSessionValue::read(&mut rd).unwrap();

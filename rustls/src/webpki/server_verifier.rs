@@ -6,7 +6,7 @@ use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, Unknown
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::sync::Arc;
 use crate::verify::{
-    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+    HandshakeSignatureValid, PeerIdentity, ServerCertVerified, ServerCertVerifier, ServerIdentity,
     SignatureVerificationInput,
 };
 use crate::webpki::verify::{
@@ -14,9 +14,9 @@ use crate::webpki::verify::{
     verify_tls13_signature,
 };
 use crate::webpki::{VerifierBuilderError, parse_crls, verify_server_name};
+use crate::{ApiMisuse, Error, RootCertStore, SignatureScheme};
 #[cfg(doc)]
 use crate::{ConfigBuilder, ServerConfig, crypto};
-use crate::{Error, RootCertStore, SignatureScheme};
 
 /// A builder for configuring a `webpki` server certificate verifier.
 ///
@@ -233,10 +233,15 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         &self,
         identity: &ServerIdentity<'_>,
     ) -> Result<ServerCertVerified, Error> {
-        let cert = ParsedCertificate::try_from(identity.certificates.end_entity)?;
+        let certificates = match identity.identity {
+            PeerIdentity::X509(certificates) => certificates,
+            PeerIdentity::RawPublicKey(_) => {
+                return Err(ApiMisuse::UnverifiableCertificateType.into());
+            }
+        };
 
+        let cert = ParsedCertificate::try_from(&certificates.end_entity)?;
         let crl_refs = self.crls.iter().collect::<Vec<_>>();
-
         let revocation = if self.crls.is_empty() {
             None
         } else {
@@ -259,7 +264,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         verify_server_cert_signed_by_trust_anchor_impl(
             &cert,
             &self.roots,
-            identity.certificates.intermediates,
+            &certificates.intermediates,
             revocation,
             identity.now,
             self.supported.all,

@@ -17,7 +17,9 @@ use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::KeyExchangeAlgorithm;
-use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
+use crate::enums::{
+    AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
+};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
@@ -35,7 +37,7 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::verify::{
-    self, CertificateIdentity, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput,
+    self, DigitallySignedStruct, PeerIdentity, ServerIdentity, SignatureVerificationInput,
 };
 
 mod server_hello {
@@ -169,12 +171,7 @@ mod server_hello {
 
                     // Since we're resuming, we verified the certificate and
                     // proof of possession in the prior session.
-                    cx.common.peer_certificates = Some(
-                        resuming
-                            .server_cert_chain()
-                            .clone()
-                            .into_owned(),
-                    );
+                    cx.common.peer_identity = Some(resuming.peer_identity().clone());
                     cx.common.handshake_kind = Some(HandshakeKind::Resumed);
                     let cert_verified = verify::ServerCertVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
@@ -883,20 +880,18 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         // 5. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
-        let (end_entity, intermediates) = st
-            .server_cert
-            .cert_chain
-            .split_first()
-            .ok_or(Error::NoCertificatesPresented)?;
+        let identity = PeerIdentity::from_cert_chain(
+            st.server_cert.cert_chain.0,
+            CertificateType::X509,
+            cx.common,
+        )?
+        .ok_or(Error::NoCertificatesPresented)?;
 
         let cert_verified = st
             .config
             .verifier
             .verify_server_cert(&ServerIdentity {
-                certificates: &CertificateIdentity {
-                    end_entity,
-                    intermediates,
-                },
+                identity: &identity,
                 server_name: &st.server_name,
                 ocsp_response: &st.server_cert.ocsp_response,
                 now: st.config.current_time()?,
@@ -930,7 +925,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
                 .verifier
                 .verify_tls12_signature(&SignatureVerificationInput {
                     message: &message,
-                    signer: end_entity,
+                    signer: &identity.as_signer(),
                     signature,
                 })
                 .map_err(|err| {
@@ -938,7 +933,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
                         .send_cert_verify_error_alert(err)
                 })?
         };
-        cx.common.peer_certificates = Some(st.server_cert.cert_chain.into_owned());
+        cx.common.peer_identity = Some(identity);
 
         // 3.
         if let Some(client_auth) = &st.client_auth {
@@ -1234,9 +1229,10 @@ impl ExpectFinished {
             ticket,
             self.secrets.master_secret(),
             cx.common
-                .peer_certificates
-                .clone()
-                .unwrap_or_default(),
+                .peer_identity
+                .as_ref()
+                .unwrap() // must be Some if we got this far
+                .clone(),
             &self.config.verifier,
             &self.config.client_auth_cert_resolver,
             now,

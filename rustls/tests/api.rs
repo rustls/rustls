@@ -18,12 +18,12 @@ use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{CertificateType, ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
-    AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
-    ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
-    ExtendedKeyPurpose, HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog,
-    KeyingMaterialExporter, NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion,
-    RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, Stream, StreamOwned,
-    SupportedCipherSuite, sign,
+    AlertDescription, ApiMisuse, CertificateError, CertificateIdentity, CipherSuite, ClientConfig,
+    ClientConnection, ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName,
+    Error, ExtendedKeyPurpose, HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage,
+    KeyLog, KeyingMaterialExporter, NamedGroup, PeerIdentity, PeerIncompatible, PeerMisbehaved,
+    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
+    Stream, StreamOwned, SupportedCipherSuite, sign,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
@@ -54,25 +54,29 @@ mod test_raw_keys {
             do_handshake(&mut client, &mut server);
 
             // Test that the client peer certificate is the server's public key
-            match client.peer_certificates() {
-                Some(certificates) => {
-                    assert_eq!(certificates.len(), 1);
-                    let cert: CertificateDer<'_> = certificates[0].clone();
-                    assert_eq!(cert.as_ref(), kt.spki().as_ref());
+            match client.peer_identity() {
+                Some(PeerIdentity::X509(certificates)) => {
+                    assert!(certificates.intermediates.is_empty());
+                    assert_eq!(certificates.end_entity.as_ref(), kt.spki().as_ref());
                 }
-                None => {
+                Some(PeerIdentity::RawPublicKey(spki)) => {
+                    assert_eq!(spki, &kt.spki());
+                }
+                _ => {
                     unreachable!("Client should have received a certificate")
                 }
             }
 
             // Test that the server peer certificate is the client's public key
-            match server.peer_certificates() {
-                Some(certificates) => {
-                    assert_eq!(certificates.len(), 1);
-                    let cert = certificates[0].clone();
-                    assert_eq!(cert.as_ref(), kt.client_spki().as_ref());
+            match server.peer_identity() {
+                Some(PeerIdentity::X509(certificates)) => {
+                    assert!(certificates.intermediates.is_empty());
+                    assert_eq!(certificates.end_entity.as_ref(), kt.client_spki().as_ref());
                 }
-                None => {
+                Some(PeerIdentity::RawPublicKey(spki)) => {
+                    assert_eq!(spki, &kt.client_spki());
+                }
+                _ => {
                     unreachable!("Server should have received a certificate")
                 }
             }
@@ -536,8 +540,13 @@ fn client_can_get_server_cert() {
                 make_pair_for_configs(client_config, make_server_config(*kt, &provider));
             do_handshake(&mut client, &mut server);
 
-            let certs = client.peer_certificates();
-            assert_eq!(certs, Some(kt.chain().as_slice()));
+            let certs = match client.peer_identity() {
+                Some(PeerIdentity::X509(certs)) => certs,
+                _ => panic!("expected X509 certs"),
+            };
+
+            assert_eq!(certs.end_entity, kt.chain()[0]);
+            assert_eq!(certs.intermediates, &kt.chain().as_slice()[1..]);
         }
     }
 }
@@ -554,14 +563,14 @@ fn client_can_get_server_cert_after_resumption() {
             do_handshake(&mut client, &mut server);
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 
-            let original_certs = client.peer_certificates();
+            let original_certs = client.peer_identity();
 
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
 
-            let resumed_certs = client.peer_certificates();
+            let resumed_certs = client.peer_identity();
 
             assert_eq!(original_certs, resumed_certs);
         }
@@ -649,8 +658,14 @@ fn server_can_get_client_cert() {
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             do_handshake(&mut client, &mut server);
 
-            let certs = server.peer_certificates();
-            assert_eq!(certs, Some(kt.client_chain().as_slice()));
+            let certs = match server.peer_identity() {
+                Some(PeerIdentity::X509(certs)) => certs,
+                _ => panic!("expected X509 certs"),
+            };
+
+            let client_chain = kt.client_chain();
+            assert_eq!(certs.end_entity, client_chain[0]);
+            assert_eq!(certs.intermediates, &client_chain[1..]);
         }
     }
 }
@@ -669,12 +684,12 @@ fn server_can_get_client_cert_after_resumption() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &server_config);
             do_handshake(&mut client, &mut server);
-            let original_certs = server.peer_certificates();
+            let original_certs = server.peer_identity();
 
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &server_config);
             do_handshake(&mut client, &mut server);
-            let resumed_certs = server.peer_certificates();
+            let resumed_certs = server.peer_identity();
             assert_eq!(original_certs, resumed_certs);
         }
     }
@@ -821,8 +836,20 @@ fn server_allow_any_anonymous_or_authenticated_client() {
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             do_handshake(&mut client, &mut server);
 
-            let certs = server.peer_certificates();
-            assert_eq!(certs, client_cert_chain.as_deref());
+            let certs = match server.peer_identity() {
+                Some(PeerIdentity::X509(certs)) => Some(certs),
+                None => None,
+                _ => panic!("expected X509 certs"),
+            };
+
+            let (certs, client_chain) = match (certs, &client_cert_chain) {
+                (Some(certs), Some(client_chain)) => (certs, client_chain),
+                (None, None) => continue,
+                _ => panic!("expected both sides to agree on presence of client certs"),
+            };
+
+            assert_eq!(certs.end_entity, client_chain[0]);
+            assert_eq!(certs.intermediates, &client_chain[1..]);
         }
     }
 }
@@ -4463,9 +4490,13 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .peer_certificates()
-            .map(|certs| certs.len()),
-        Some(3)
+            .peer_identity()
+            .map(|identity| match identity {
+                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
+                    intermediates.len(),
+                _ => 0,
+            }),
+        Some(2)
     );
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
@@ -4480,9 +4511,13 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.takes(), 1);
     assert_eq!(
         client
-            .peer_certificates()
-            .map(|certs| certs.len()),
-        Some(3)
+            .peer_identity()
+            .map(|identity| match identity {
+                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
+                    intermediates.len(),
+                _ => 0,
+            }),
+        Some(2)
     );
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
@@ -4497,9 +4532,13 @@ fn tls13_stateful_resumption() {
     assert_eq!(storage.takes(), 2);
     assert_eq!(
         client
-            .peer_certificates()
-            .map(|certs| certs.len()),
-        Some(3)
+            .peer_identity()
+            .map(|identity| match identity {
+                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
+                    intermediates.len(),
+                _ => 0,
+            }),
+        Some(2)
     );
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
@@ -4526,9 +4565,13 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .peer_certificates()
-            .map(|certs| certs.len()),
-        Some(3)
+            .peer_identity()
+            .map(|identity| match identity {
+                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
+                    intermediates.len(),
+                _ => 0,
+            }),
+        Some(2)
     );
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
@@ -4543,9 +4586,13 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .peer_certificates()
-            .map(|certs| certs.len()),
-        Some(3)
+            .peer_identity()
+            .map(|identity| match identity {
+                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
+                    intermediates.len(),
+                _ => 0,
+            }),
+        Some(2)
     );
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
@@ -4560,9 +4607,13 @@ fn tls13_stateless_resumption() {
     assert_eq!(storage.takes(), 0);
     assert_eq!(
         client
-            .peer_certificates()
-            .map(|certs| certs.len()),
-        Some(3)
+            .peer_identity()
+            .map(|identity| match identity {
+                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
+                    intermediates.len(),
+                _ => 0,
+            }),
+        Some(2)
     );
     assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
     assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));

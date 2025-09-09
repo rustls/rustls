@@ -1,8 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use pki_types::CertificateDer;
-
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::SupportedKxGroup;
@@ -15,7 +13,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
-use crate::msgs::handshake::{CertificateChain, HandshakeMessagePayload, ProtocolName};
+use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
 use crate::msgs::message::{
     Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage,
     PlainMessage,
@@ -25,6 +23,7 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
+use crate::verify::PeerIdentity;
 use crate::{quic, record_layer};
 
 /// Connection state common to both client and server connections.
@@ -49,7 +48,7 @@ pub struct CommonState {
     pub(crate) has_received_close_notify: bool,
     #[cfg(feature = "std")]
     pub(crate) has_seen_eof: bool,
-    pub(crate) peer_certificates: Option<CertificateChain<'static>>,
+    pub(crate) peer_identity: Option<PeerIdentity>,
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
@@ -86,7 +85,7 @@ impl CommonState {
             has_received_close_notify: false,
             #[cfg(feature = "std")]
             has_seen_eof: false,
-            peer_certificates: None,
+            peer_identity: None,
             message_fragmenter: MessageFragmenter::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
@@ -121,27 +120,14 @@ impl CommonState {
 
     /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
     ///
-    /// The order of the certificate chain is as it appears in the TLS
-    /// protocol: the first certificate relates to the peer, the
-    /// second certifies the first, the third certifies the second, and
-    /// so on.
-    ///
-    /// When using raw public keys, the first and only element is the raw public key.
-    ///
     /// This is made available for both full and resumed handshakes.
     ///
-    /// For clients, this is the certificate chain or the raw public key of the server.
-    ///
-    /// For servers, this is the certificate chain or the raw public key of the client,
-    /// if client authentication was completed.
+    /// For clients, this is the identity of the server. For servers, this is the identity of the
+    /// client, if client authentication was completed.
     ///
     /// The return value is None until this value is available.
-    ///
-    /// Note: the return type of the 'certificate', when using raw public keys is `CertificateDer<'static>`
-    /// even though this should technically be a `SubjectPublicKeyInfoDer<'static>`.
-    /// This choice simplifies the API and ensures backwards compatibility.
-    pub fn peer_certificates(&self) -> Option<&[CertificateDer<'static>]> {
-        self.peer_certificates.as_deref()
+    pub fn peer_identity(&self) -> Option<&PeerIdentity> {
+        self.peer_identity.as_ref()
     }
 
     /// Retrieves the protocol agreed with the peer via ALPN.

@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
 
 use crate::error::InvalidMessage;
 
@@ -281,6 +281,10 @@ impl TlsListElement for CertificateDer<'_> {
         max: CERTIFICATE_MAX_SIZE_LIMIT,
         error: InvalidMessage::CertificatePayloadTooLarge,
     };
+}
+
+impl TlsListElement for SubjectPublicKeyInfoDer<'_> {
+    const SIZE_LEN: ListLength = CertificateDer::SIZE_LEN;
 }
 
 /// A trait for types that can be encoded and decoded in a list.

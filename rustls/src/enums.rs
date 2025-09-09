@@ -701,6 +701,12 @@ enum_builder! {
     }
 }
 
+impl Default for CertificateType {
+    fn default() -> Self {
+        Self::X509
+    }
+}
+
 enum_builder! {
     /// The type of Encrypted Client Hello (`EchClientHelloType`).
     ///
