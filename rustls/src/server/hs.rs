@@ -159,8 +159,29 @@ impl ExtensionProcessing {
             ocsp_response.take();
         }
 
-        self.validate_server_cert_type_extension(hello, config, cx)?;
-        self.validate_client_cert_type_extension(hello, config, cx)?;
+        self.process_cert_type_extension(
+            hello
+                .server_certificate_types
+                .as_deref()
+                .unwrap_or_default(),
+            config
+                .cert_resolver
+                .only_raw_public_keys(),
+            ExtensionType::ServerCertificateType,
+            cx,
+        )?;
+
+        self.process_cert_type_extension(
+            hello
+                .client_certificate_types
+                .as_deref()
+                .unwrap_or_default(),
+            config
+                .verifier
+                .requires_raw_public_keys(),
+            ExtensionType::ClientCertificateType,
+            cx,
+        )?;
 
         Ok(())
     }
@@ -197,48 +218,6 @@ impl ExtensionProcessing {
             self.extensions
                 .extended_master_secret_ack = Some(());
         }
-    }
-
-    fn validate_server_cert_type_extension(
-        &mut self,
-        hello: &ClientHelloPayload,
-        config: &ServerConfig,
-        cx: &mut ServerContext<'_>,
-    ) -> Result<(), Error> {
-        let client_supports = hello
-            .server_certificate_types
-            .as_deref()
-            .unwrap_or_default();
-
-        self.process_cert_type_extension(
-            client_supports,
-            config
-                .cert_resolver
-                .only_raw_public_keys(),
-            ExtensionType::ServerCertificateType,
-            cx,
-        )
-    }
-
-    fn validate_client_cert_type_extension(
-        &mut self,
-        hello: &ClientHelloPayload,
-        config: &ServerConfig,
-        cx: &mut ServerContext<'_>,
-    ) -> Result<(), Error> {
-        let client_supports = hello
-            .client_certificate_types
-            .as_deref()
-            .unwrap_or_default();
-
-        self.process_cert_type_extension(
-            client_supports,
-            config
-                .verifier
-                .requires_raw_public_keys(),
-            ExtensionType::ClientCertificateType,
-            cx,
-        )
     }
 
     fn process_cert_type_extension(
