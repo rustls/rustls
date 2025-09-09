@@ -540,22 +540,20 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 .map(|protocol| protocol.as_ref()),
         )?;
 
-        process_cert_type_extension(
+        check_cert_type(
             cx.common,
             self.config
                 .client_auth_cert_resolver
                 .only_raw_public_keys(),
             exts.client_certificate_type,
-            ExtensionType::ClientCertificateType,
         )?;
 
-        process_cert_type_extension(
+        check_cert_type(
             cx.common,
             self.config
                 .verifier
                 .requires_raw_public_keys(),
             exts.server_certificate_type,
-            ExtensionType::ServerCertificateType,
         )?;
 
         let ech_retry_configs = match (cx.data.ech_status, &exts.encrypted_client_hello_ack) {
@@ -669,16 +667,13 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
     }
 }
 
-fn process_cert_type_extension(
+fn check_cert_type(
     common: &mut CommonState,
     client_expects: bool,
     server_negotiated: Option<CertificateType>,
-    extension_type: ExtensionType,
-) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
+) -> Result<(), Error> {
     match (client_expects, server_negotiated) {
-        (true, Some(CertificateType::RawPublicKey)) => {
-            Ok(Some((extension_type, CertificateType::RawPublicKey)))
-        }
+        (true, Some(CertificateType::RawPublicKey)) => Ok(()),
         (true, _) => Err(common.send_fatal_alert(
             AlertDescription::HandshakeFailure,
             Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
@@ -686,7 +681,7 @@ fn process_cert_type_extension(
         (_, Some(CertificateType::RawPublicKey)) => {
             unreachable!("Caught by `PeerMisbehaved::UnsolicitedEncryptedExtension`")
         }
-        (_, _) => Ok(None),
+        (_, _) => Ok(()),
     }
 }
 
