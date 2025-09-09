@@ -625,36 +625,6 @@ pub(super) fn process_alpn_protocol(
     Ok(())
 }
 
-pub(super) fn process_server_cert_type_extension(
-    common: &mut CommonState,
-    config: &ClientConfig,
-    server_cert_extension: Option<&CertificateType>,
-) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
-    process_cert_type_extension(
-        common,
-        config
-            .verifier
-            .requires_raw_public_keys(),
-        server_cert_extension.copied(),
-        ExtensionType::ServerCertificateType,
-    )
-}
-
-pub(super) fn process_client_cert_type_extension(
-    common: &mut CommonState,
-    config: &ClientConfig,
-    client_cert_extension: Option<&CertificateType>,
-) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
-    process_cert_type_extension(
-        common,
-        config
-            .client_auth_cert_resolver
-            .only_raw_public_keys(),
-        client_cert_extension.copied(),
-        ExtensionType::ClientCertificateType,
-    )
-}
-
 impl State<ClientConnectionData> for ExpectServerHello {
     fn handle<'m>(
         mut self: Box<Self>,
@@ -1058,27 +1028,6 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
 
     fn into_owned(self: Box<Self>) -> NextState<'static> {
         self
-    }
-}
-
-fn process_cert_type_extension(
-    common: &mut CommonState,
-    client_expects: bool,
-    server_negotiated: Option<CertificateType>,
-    extension_type: ExtensionType,
-) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
-    match (client_expects, server_negotiated) {
-        (true, Some(CertificateType::RawPublicKey)) => {
-            Ok(Some((extension_type, CertificateType::RawPublicKey)))
-        }
-        (true, _) => Err(common.send_fatal_alert(
-            AlertDescription::HandshakeFailure,
-            Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
-        )),
-        (_, Some(CertificateType::RawPublicKey)) => {
-            unreachable!("Caught by `PeerMisbehaved::UnsolicitedEncryptedExtension`")
-        }
-        (_, _) => Ok(None),
     }
 }
 

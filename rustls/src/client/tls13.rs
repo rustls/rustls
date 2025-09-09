@@ -20,7 +20,7 @@ use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::hash::Hash;
 use crate::crypto::{ActiveKeyExchange, SharedSecret};
 use crate::enums::{
-    AlertDescription, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
+    AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -539,15 +539,23 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 .as_ref()
                 .map(|protocol| protocol.as_ref()),
         )?;
-        hs::process_client_cert_type_extension(
+
+        process_cert_type_extension(
             cx.common,
-            &self.config,
-            exts.client_certificate_type.as_ref(),
+            self.config
+                .client_auth_cert_resolver
+                .only_raw_public_keys(),
+            exts.client_certificate_type,
+            ExtensionType::ClientCertificateType,
         )?;
-        hs::process_server_cert_type_extension(
+
+        process_cert_type_extension(
             cx.common,
-            &self.config,
-            exts.server_certificate_type.as_ref(),
+            self.config
+                .verifier
+                .requires_raw_public_keys(),
+            exts.server_certificate_type,
+            ExtensionType::ServerCertificateType,
         )?;
 
         let ech_retry_configs = match (cx.data.ech_status, &exts.encrypted_client_hello_ack) {
@@ -658,6 +666,27 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
         self
+    }
+}
+
+fn process_cert_type_extension(
+    common: &mut CommonState,
+    client_expects: bool,
+    server_negotiated: Option<CertificateType>,
+    extension_type: ExtensionType,
+) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
+    match (client_expects, server_negotiated) {
+        (true, Some(CertificateType::RawPublicKey)) => {
+            Ok(Some((extension_type, CertificateType::RawPublicKey)))
+        }
+        (true, _) => Err(common.send_fatal_alert(
+            AlertDescription::HandshakeFailure,
+            Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
+        )),
+        (_, Some(CertificateType::RawPublicKey)) => {
+            unreachable!("Caught by `PeerMisbehaved::UnsolicitedEncryptedExtension`")
+        }
+        (_, _) => Ok(None),
     }
 }
 
