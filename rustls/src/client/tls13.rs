@@ -48,7 +48,9 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
+use crate::verify::{
+    self, CertificateIdentity, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput,
+};
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
 
 // Extensions we expect in plaintext in the ServerHello.
@@ -1220,8 +1222,10 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             .config
             .verifier
             .verify_server_cert(&ServerIdentity {
-                end_entity,
-                intermediates,
+                certificates: &CertificateIdentity {
+                    end_entity,
+                    intermediates,
+                },
                 server_name: &self.server_name,
                 ocsp_response: &self.server_cert.ocsp_response,
                 now: self.config.current_time()?,
