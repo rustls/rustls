@@ -1,4 +1,6 @@
 name: CIFuzz
+permissions:
+  contents: read
 on: [pull_request]
 
 concurrency:
