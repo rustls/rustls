@@ -224,29 +224,18 @@ impl ExtensionProcessing {
         requires_raw_keys: bool,
         cx: &mut ServerContext<'_>,
     ) -> Result<Option<CertificateType>, Error> {
-        let raw_key_negotation_result = match (
+        match (
             requires_raw_keys,
             client_supports.contains(&CertificateType::RawPublicKey),
             client_supports.contains(&CertificateType::X509),
         ) {
-            (true, true, _) => Ok(CertificateType::RawPublicKey),
-            (false, _, true) => Ok(CertificateType::X509),
-            (false, true, false) => Err(Error::PeerIncompatible(
+            (true, true, _) => Ok(Some(CertificateType::RawPublicKey)),
+            (false, _, true) => Ok(Some(CertificateType::X509)),
+            (false, true, false) | (true, false, _) => Err(cx.common.send_fatal_alert(
+                AlertDescription::HandshakeFailure,
                 PeerIncompatible::IncorrectCertificateTypeExtension,
             )),
-            (true, false, _) => Err(Error::PeerIncompatible(
-                PeerIncompatible::IncorrectCertificateTypeExtension,
-            )),
-            (false, false, false) => return Ok(None),
-        };
-
-        match raw_key_negotation_result {
-            Ok(cert_type) => Ok(Some(cert_type)),
-            Err(err) => {
-                return Err(cx
-                    .common
-                    .send_fatal_alert(AlertDescription::HandshakeFailure, err));
-            }
+            (false, false, false) => Ok(None),
         }
     }
 }
