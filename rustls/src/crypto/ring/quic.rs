@@ -346,7 +346,7 @@ mod tests {
 
     #[test]
     fn short_packet_header_protection_v2() {
-        // https://www.ietf.org/archive/id/draft-ietf-quic-v2-10.html#name-chacha20-poly1305-short-head
+        // https://tools.ietf.org/html/rfc9369.html#name-chacha20-poly1305-short-hea
         test_short_packet(
             Version::V2,
             &[
@@ -358,7 +358,7 @@ mod tests {
 
     #[test]
     fn initial_test_vector_v2() {
-        // https://www.ietf.org/archive/id/draft-ietf-quic-v2-10.html#name-sample-packet-protection-2
+        // https://tools.ietf.org/html/rfc9369.html#name-sample-packet-protection
         let icid = [0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
         let server = Keys::initial(
             Version::V2,
