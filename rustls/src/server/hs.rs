@@ -16,7 +16,7 @@ use crate::enums::{
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
-use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
+use crate::msgs::enums::{Compression, NamedGroup};
 use crate::msgs::handshake::{
     ClientHelloPayload, HandshakePayload, KeyExchangeAlgorithm, ProtocolName, Random,
     ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId, SingleProtocolName,
@@ -159,7 +159,7 @@ impl ExtensionProcessing {
             ocsp_response.take();
         }
 
-        self.process_cert_type_extension(
+        self.extensions.server_certificate_type = self.process_cert_type_extension(
             hello
                 .server_certificate_types
                 .as_deref()
@@ -167,11 +167,10 @@ impl ExtensionProcessing {
             config
                 .cert_resolver
                 .only_raw_public_keys(),
-            ExtensionType::ServerCertificateType,
             cx,
         )?;
 
-        self.process_cert_type_extension(
+        self.extensions.client_certificate_type = self.process_cert_type_extension(
             hello
                 .client_certificate_types
                 .as_deref()
@@ -179,7 +178,6 @@ impl ExtensionProcessing {
             config
                 .verifier
                 .requires_raw_public_keys(),
-            ExtensionType::ClientCertificateType,
             cx,
         )?;
 
@@ -224,44 +222,32 @@ impl ExtensionProcessing {
         &mut self,
         client_supports: &[CertificateType],
         requires_raw_keys: bool,
-        extension_type: ExtensionType,
         cx: &mut ServerContext<'_>,
-    ) -> Result<(), Error> {
-        debug_assert!(
-            extension_type == ExtensionType::ClientCertificateType
-                || extension_type == ExtensionType::ServerCertificateType
-        );
+    ) -> Result<Option<CertificateType>, Error> {
         let raw_key_negotation_result = match (
             requires_raw_keys,
             client_supports.contains(&CertificateType::RawPublicKey),
             client_supports.contains(&CertificateType::X509),
         ) {
-            (true, true, _) => Ok((extension_type, CertificateType::RawPublicKey)),
-            (false, _, true) => Ok((extension_type, CertificateType::X509)),
+            (true, true, _) => Ok(CertificateType::RawPublicKey),
+            (false, _, true) => Ok(CertificateType::X509),
             (false, true, false) => Err(Error::PeerIncompatible(
                 PeerIncompatible::IncorrectCertificateTypeExtension,
             )),
             (true, false, _) => Err(Error::PeerIncompatible(
                 PeerIncompatible::IncorrectCertificateTypeExtension,
             )),
-            (false, false, false) => return Ok(()),
+            (false, false, false) => return Ok(None),
         };
 
         match raw_key_negotation_result {
-            Ok((ExtensionType::ClientCertificateType, cert_type)) => {
-                self.extensions.client_certificate_type = Some(cert_type);
-            }
-            Ok((ExtensionType::ServerCertificateType, cert_type)) => {
-                self.extensions.server_certificate_type = Some(cert_type);
-            }
+            Ok(cert_type) => Ok(Some(cert_type)),
             Err(err) => {
                 return Err(cx
                     .common
                     .send_fatal_alert(AlertDescription::HandshakeFailure, err));
             }
-            Ok((_, _)) => unreachable!(),
         }
-        Ok(())
     }
 }
 
