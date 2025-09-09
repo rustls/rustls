@@ -103,7 +103,12 @@ mod client {
             &self,
             identity: &ServerIdentity<'_>,
         ) -> Result<ServerCertVerified, Error> {
-            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(identity.end_entity.as_ref());
+            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(
+                identity
+                    .certificates
+                    .end_entity
+                    .as_ref(),
+            );
             match self
                 .trusted_spki
                 .contains(&end_entity_as_spki)
@@ -264,7 +269,12 @@ mod server {
             &self,
             identity: &ClientIdentity<'_>,
         ) -> Result<ClientCertVerified, Error> {
-            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(identity.end_entity.as_ref());
+            let end_entity_as_spki = SubjectPublicKeyInfoDer::from(
+                identity
+                    .certificates
+                    .end_entity
+                    .as_ref(),
+            );
             match self
                 .trusted_spki
                 .contains(&end_entity_as_spki)

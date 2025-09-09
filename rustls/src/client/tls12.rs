@@ -34,7 +34,9 @@ use crate::sign::Signer;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
+use crate::verify::{
+    self, CertificateIdentity, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput,
+};
 
 mod server_hello {
     use core::fmt;
@@ -891,8 +893,10 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             .config
             .verifier
             .verify_server_cert(&ServerIdentity {
-                end_entity,
-                intermediates,
+                certificates: &CertificateIdentity {
+                    end_entity,
+                    intermediates,
+                },
                 server_name: &st.server_name,
                 ocsp_response: &st.server_cert.ocsp_response,
                 now: st.config.current_time()?,

@@ -26,7 +26,7 @@ use pki_types::{CertificateDer, ServerName, UnixTime};
 use webpki_roots;
 
 use crate::crypto::CryptoProvider;
-use crate::verify::{ServerCertVerifier, ServerIdentity};
+use crate::verify::{CertificateIdentity, ServerCertVerifier, ServerIdentity};
 use crate::webpki::{RootCertStore, WebPkiServerVerifier};
 
 #[macro_rules_attribute::apply(bench_for_each_provider)]
@@ -233,8 +233,10 @@ impl Context {
         let (end_entity, intermediates) = self.chain.split_first().unwrap();
         self.verifier
             .verify_server_cert(&ServerIdentity {
-                end_entity,
-                intermediates,
+                certificates: &CertificateIdentity {
+                    end_entity,
+                    intermediates,
+                },
                 server_name: &self.server_name,
                 ocsp_response: OCSP_RESPONSE,
                 now: self.now,

@@ -102,12 +102,8 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct ServerIdentity<'a> {
-    /// Certificate for the server being verified.
-    pub end_entity: &'a CertificateDer<'a>,
-    /// All certificates other than `end_entity` received in the server's `Certificate` message.
-    ///
-    /// It is in the same order that the server sent them and may be empty.
-    pub intermediates: &'a [CertificateDer<'a>],
+    /// All certificates received in the server's `Certificate` message.
+    pub certificates: &'a CertificateIdentity<'a>,
     /// The server name the client specified when connecting to the server.
     pub server_name: &'a ServerName<'a>,
     /// OCSP response stapled to the server's `Certificate` message, if any.
@@ -225,14 +221,23 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct ClientIdentity<'a> {
-    /// Certificate for the client being verified.
-    pub end_entity: &'a CertificateDer<'a>,
-    /// All certificates other than `end_entity` received in the client's `Certificate` message.
-    ///
-    /// It is in the same order that the server sent them and may be empty.
-    pub intermediates: &'a [CertificateDer<'a>],
+    /// All certificates received in the client's `Certificate` message.
+    pub certificates: &'a CertificateIdentity<'a>,
     /// Current time against which time-sensitive inputs should be validated.
     pub now: UnixTime,
+}
+
+/// Data required to verify the peer's identity.
+#[allow(unreachable_pub)]
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct CertificateIdentity<'a> {
+    /// Certificate for the entity being verified.
+    pub end_entity: &'a CertificateDer<'a>,
+    /// All certificates other than `end_entity` received in the peer's `Certificate` message.
+    ///
+    /// It is in the same order that the peer sent them and may be empty.
+    pub intermediates: &'a [CertificateDer<'a>],
 }
 
 /// Input for message signature verification.

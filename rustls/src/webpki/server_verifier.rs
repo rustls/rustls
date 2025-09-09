@@ -233,7 +233,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         &self,
         identity: &ServerIdentity<'_>,
     ) -> Result<ServerCertVerified, Error> {
-        let cert = ParsedCertificate::try_from(identity.end_entity)?;
+        let cert = ParsedCertificate::try_from(identity.certificates.end_entity)?;
 
         let crl_refs = self.crls.iter().collect::<Vec<_>>();
 
@@ -259,7 +259,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         verify_server_cert_signed_by_trust_anchor_impl(
             &cert,
             &self.roots,
-            identity.intermediates,
+            identity.certificates.intermediates,
             revocation,
             identity.now,
             self.supported.all,

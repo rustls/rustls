@@ -361,7 +361,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         &self,
         identity: &ClientIdentity<'_>,
     ) -> Result<ClientCertVerified, Error> {
-        let cert = ParsedCertificate::try_from(identity.end_entity)?;
+        let cert = ParsedCertificate::try_from(identity.certificates.end_entity)?;
 
         let crl_refs = self.crls.iter().collect::<Vec<_>>();
 
@@ -384,7 +384,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
             .verify_for_usage(
                 self.supported_algs.all,
                 &self.roots.roots,
-                identity.intermediates,
+                identity.certificates.intermediates,
                 identity.now,
                 webpki::KeyUsage::client_auth(),
                 revocation,
