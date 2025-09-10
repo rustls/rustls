@@ -19,7 +19,8 @@ use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
 use crate::msgs::base::{MaybeEmpty, NonEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec::{
-    self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement, TlsListIter,
+    self, CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, Reader,
+    TlsListElement, TlsListIter,
 };
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
@@ -1637,20 +1638,6 @@ impl<'a> Deref for CertificateChain<'a> {
         &self.0
     }
 }
-
-impl TlsListElement for CertificateDer<'_> {
-    const SIZE_LEN: ListLength = ListLength::U24 {
-        max: CERTIFICATE_MAX_SIZE_LIMIT,
-        error: InvalidMessage::CertificatePayloadTooLarge,
-    };
-}
-
-/// TLS has a 16MB size limit on any handshake message,
-/// plus a 16MB limit on any given certificate.
-///
-/// We contract that to 64KB to limit the amount of memory allocation
-/// that is directly controllable by the peer.
-pub(crate) const CERTIFICATE_MAX_SIZE_LIMIT: usize = 0x1_0000;
 
 extension_struct! {
     pub(crate) struct CertificateExtensions<'a> {
