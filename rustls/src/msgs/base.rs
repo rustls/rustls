@@ -6,8 +6,10 @@ use pki_types::CertificateDer;
 use zeroize::Zeroize;
 
 use crate::error::InvalidMessage;
-use crate::msgs::codec;
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{
+    self, CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, Reader,
+    TlsListElement,
+};
 
 /// An externally length'd payload
 #[non_exhaustive]
@@ -63,12 +65,18 @@ impl Payload<'static> {
 
 impl<'a> Codec<'a> for CertificateDer<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::u24(self.as_ref().len() as u32).encode(bytes);
-        bytes.extend(self.as_ref());
+        let nest = LengthPrefixedBuffer::new(Self::SIZE_LEN, bytes);
+        nest.buf.extend(self.as_ref());
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let len = codec::u24::read(r)?.0 as usize;
+        let len = ListLength::NonZeroU24 {
+            max: CERTIFICATE_MAX_SIZE_LIMIT,
+            empty_error: InvalidMessage::IllegalEmptyList("CertificateDer"),
+            too_many_error: InvalidMessage::CertificatePayloadTooLarge,
+        }
+        .read(r)?;
+
         let mut sub = r.sub(len)?;
         let body = sub.rest();
         Ok(Self::from(body))

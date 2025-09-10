@@ -310,6 +310,13 @@ pub(crate) enum ListLength {
 
     /// U24 with imposed upper bound
     U24 { max: usize, error: InvalidMessage },
+
+    /// U24 but non-empty, with imposed upper bound
+    NonZeroU24 {
+        max: usize,
+        empty_error: InvalidMessage,
+        too_many_error: InvalidMessage,
+    },
 }
 
 impl ListLength {
@@ -326,6 +333,15 @@ impl ListLength {
             },
             Self::U24 { max, error } => match usize::from(u24::read(r)?) {
                 len if len > *max => return Err(*error),
+                len => len,
+            },
+            Self::NonZeroU24 {
+                max,
+                empty_error,
+                too_many_error,
+            } => match usize::from(u24::read(r)?) {
+                0 => return Err(*empty_error),
+                len if len > *max => return Err(*too_many_error),
                 len => len,
             },
         })
@@ -349,7 +365,7 @@ impl<'a> LengthPrefixedBuffer<'a> {
         buf.extend(match size_len {
             ListLength::NonZeroU8 { .. } => &[0xff][..],
             ListLength::U16 | ListLength::NonZeroU16 { .. } => &[0xff, 0xff],
-            ListLength::U24 { .. } => &[0xff, 0xff, 0xff],
+            ListLength::U24 { .. } | ListLength::NonZeroU24 { .. } => &[0xff, 0xff, 0xff],
         });
 
         Self {
@@ -377,7 +393,7 @@ impl Drop for LengthPrefixedBuffer<'_> {
                     .unwrap();
                 *out = u16::to_be_bytes(len as u16);
             }
-            ListLength::U24 { .. } => {
+            ListLength::U24 { .. } | ListLength::NonZeroU24 { .. } => {
                 let len = self.buf.len() - self.len_offset - 3;
                 debug_assert!(len <= 0xff_ffff);
                 let len_bytes = u32::to_be_bytes(len as u32);
