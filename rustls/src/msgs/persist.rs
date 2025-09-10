@@ -533,6 +533,8 @@ impl Codec<'_> for CommonServerSessionValue {
 
 #[cfg(test)]
 mod tests {
+    use pki_types::CertificateDer;
+
     use super::*;
 
     #[cfg(feature = "std")] // for UnixTime::now
@@ -568,10 +570,29 @@ mod tests {
 
     #[test]
     fn serversessionvalue_with_cert() {
+        std::eprintln!(
+            "{:#04x?}",
+            ServerSessionValue::Tls13(Tls13ServerSessionValue::new(
+                CommonServerSessionValue::new(
+                    None,
+                    CipherSuite::TLS13_AES_128_GCM_SHA256,
+                    Some(CertificateChain(alloc::vec![CertificateDer::from(
+                        &[10, 11, 12][..],
+                    )])),
+                    None,
+                    alloc::vec![4, 5, 6],
+                    UnixTime::now(),
+                ),
+                &[1, 2, 3],
+                0x12345678,
+            ))
+            .get_encoding()
+        );
+
         let bytes = [
-            0x03, 0x04, 0x00, 0x13, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x05,
-            0x06, 0x00, 0x00, 0x00, 0x00, 0x68, 0x6e, 0x94, 0x32, 0x03, 0x01, 0x02, 0x03, 0x12,
-            0x34, 0x56, 0x78,
+            0x03, 0x04, 0x00, 0x13, 0x01, 0x01, 0x00, 0x00, 0x06, 0x00, 0x00, 0x03, 0x0a, 0x0b,
+            0x0c, 0x00, 0x00, 0x03, 0x04, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x68, 0xc1, 0x95,
+            0xb9, 0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
         ];
         let mut rd = Reader::init(&bytes);
         let ssv = ServerSessionValue::read(&mut rd).unwrap();
