@@ -19,11 +19,11 @@ use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
-    CERTIFICATE_MAX_SIZE_LIMIT, CertificateChain, CertificatePayloadTls13, HandshakeMessagePayload,
-    HandshakePayload, NewSessionTicketPayloadTls13,
+    CertificateChain, CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
+    NewSessionTicketPayloadTls13,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;

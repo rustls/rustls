@@ -2,6 +2,8 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 
+use pki_types::CertificateDer;
+
 use crate::error::InvalidMessage;
 
 /// Wrapper over a slice of bytes that allows reading chunks from
@@ -274,6 +276,13 @@ impl Codec<'_> for () {
     }
 }
 
+impl TlsListElement for CertificateDer<'_> {
+    const SIZE_LEN: ListLength = ListLength::U24 {
+        max: CERTIFICATE_MAX_SIZE_LIMIT,
+        error: InvalidMessage::CertificatePayloadTooLarge,
+    };
+}
+
 /// A trait for types that can be encoded and decoded in a list.
 ///
 /// This trait is used to implement `Codec` for `Vec<T>`. Lists in the TLS wire format are
@@ -380,6 +389,13 @@ impl Drop for LengthPrefixedBuffer<'_> {
         }
     }
 }
+
+/// TLS has a 16MB size limit on any handshake message,
+/// plus a 16MB limit on any given certificate.
+///
+/// We contract that to 64KB to limit the amount of memory allocation
+/// that is directly controllable by the peer.
+pub(crate) const CERTIFICATE_MAX_SIZE_LIMIT: usize = 0x1_0000;
 
 #[cfg(test)]
 mod tests {
