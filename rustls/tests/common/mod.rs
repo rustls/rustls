@@ -16,7 +16,7 @@ pub fn webpki_client_verifier_builder(
     if exactly_one_provider() {
         WebPkiClientVerifier::builder(roots)
     } else {
-        WebPkiClientVerifier::builder_with_provider(roots, provider.clone().into())
+        WebPkiClientVerifier::builder_with_provider(roots, provider)
     }
 }
 
