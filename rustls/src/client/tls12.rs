@@ -885,7 +885,10 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             CertificateType::X509,
             cx.common,
         )?
-        .ok_or(Error::NoCertificatesPresented)?;
+        .ok_or(cx.common.send_fatal_alert(
+            AlertDescription::BadCertificate,
+            Error::NoCertificatesPresented,
+        ))?;
 
         let cert_verified = st
             .config
