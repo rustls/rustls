@@ -16,14 +16,14 @@ use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
-use rustls::server::{CertificateType, ClientHello, ParsedCertificate, ResolvesServerCert};
+use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
-    AlertDescription, ApiMisuse, CertificateError, CertificateIdentity, CipherSuite, ClientConfig,
-    ClientConnection, ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName,
-    Error, ExtendedKeyPurpose, HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage,
-    KeyLog, KeyingMaterialExporter, NamedGroup, PeerIdentity, PeerIncompatible, PeerMisbehaved,
-    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
-    Stream, StreamOwned, SupportedCipherSuite, sign,
+    AlertDescription, ApiMisuse, CertificateError, CertificateIdentity, CertificateType,
+    CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, ConnectionTrafficSecrets,
+    ContentType, DistinguishedName, Error, ExtendedKeyPurpose, HandshakeKind, HandshakeType,
+    InconsistentKeys, InvalidMessage, KeyLog, KeyingMaterialExporter, NamedGroup, PeerIdentity,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, ServerConfig,
+    ServerConnection, SideData, SignatureScheme, Stream, StreamOwned, SupportedCipherSuite, sign,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
