@@ -7,8 +7,8 @@ use super::*;
 mod common;
 
 use common::{
-    Arc, ErrorFromPeer, KeyType, MockServerVerifier, all_versions, client_config_builder,
-    do_handshake, do_handshake_until_both_error, do_handshake_until_error, make_client_config,
+    Arc, ErrorFromPeer, KeyType, MockServerVerifier, all_versions, do_handshake,
+    do_handshake_until_both_error, do_handshake_until_error, make_client_config,
     make_pair_for_arc_configs, make_server_config,
 };
 use rustls::client::WebPkiServerVerifier;
@@ -19,8 +19,8 @@ use rustls::client::danger::{
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use rustls::{
-    AlertDescription, CertificateError, DistinguishedName, Error, InvalidMessage, RootCertStore,
-    ServerConfig,
+    AlertDescription, CertificateError, ClientConfig, DistinguishedName, Error, InvalidMessage,
+    RootCertStore, ServerConfig,
 };
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::X509Name;
@@ -219,21 +219,23 @@ fn client_can_request_certain_trusted_cas() {
             )]),
         });
 
-        let cas_sending_client_config = client_config_builder(&provider)
-            .dangerous()
-            .with_custom_certificate_verifier(cas_sending_server_verifier)
-            .with_no_client_auth()
-            .unwrap();
+        let cas_sending_client_config =
+            ClientConfig::builder_with_provider(provider.clone().into())
+                .dangerous()
+                .with_custom_certificate_verifier(cas_sending_server_verifier)
+                .with_no_client_auth()
+                .unwrap();
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(cas_sending_client_config), &server_config);
         do_handshake(&mut client, &mut server);
 
-        let cas_unaware_client_config = client_config_builder(&provider)
-            .dangerous()
-            .with_custom_certificate_verifier(server_verifier)
-            .with_no_client_auth()
-            .unwrap();
+        let cas_unaware_client_config =
+            ClientConfig::builder_with_provider(provider.clone().into())
+                .dangerous()
+                .with_custom_certificate_verifier(server_verifier)
+                .with_no_client_auth()
+                .unwrap();
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(cas_unaware_client_config), &server_config);

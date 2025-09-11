@@ -783,7 +783,11 @@ fn test_config_builders_debug() {
         .into(),
     );
     let _ = format!("{b:?}");
-    let b = client_config_builder(&provider::default_provider().with_only_tls13());
+    let b = ClientConfig::builder_with_provider(
+        provider::default_provider()
+            .with_only_tls13()
+            .into(),
+    );
     let _ = format!("{b:?}");
 }
 
@@ -7397,7 +7401,7 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
             .with_single_cert_with_ocsp(kt.get_chain(), kt.get_key(), ocsp_response.to_vec())
             .unwrap();
 
-        let client_config = client_config_builder(&version_provider)
+        let client_config = ClientConfig::builder_with_provider(version_provider.into())
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(MockServerVerifier::expects_ocsp_response(
                 ocsp_response,
