@@ -481,12 +481,6 @@ impl KeyType {
     }
 }
 
-pub fn client_config_builder(
-    provider: &CryptoProvider,
-) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
-    ClientConfig::builder_with_provider(provider.clone().into())
-}
-
 pub fn finish_server_config(
     kt: KeyType,
     conf: rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier>,
@@ -608,7 +602,7 @@ pub fn make_client_config_with_raw_key_support(
             .unwrap(),
     ));
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    client_config_builder(provider)
+    ClientConfig::builder_with_provider(provider.clone().into())
         .dangerous()
         .with_custom_certificate_verifier(server_verifier)
         .with_client_cert_resolver(client_cert_resolver)
@@ -646,7 +640,10 @@ pub fn finish_client_config_with_creds(
 }
 
 pub fn make_client_config(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    finish_client_config(kt, client_config_builder(provider))
+    finish_client_config(
+        kt,
+        ClientConfig::builder_with_provider(provider.clone().into()),
+    )
 }
 
 pub fn make_client_config_with_kx_groups(
@@ -665,14 +662,17 @@ pub fn make_client_config_with_kx_groups(
 }
 
 pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    finish_client_config_with_creds(kt, client_config_builder(provider))
+    finish_client_config_with_creds(
+        kt,
+        ClientConfig::builder_with_provider(provider.clone().into()),
+    )
 }
 
 pub fn make_client_config_with_verifier(
     verifier_builder: ServerCertVerifierBuilder,
     provider: &CryptoProvider,
 ) -> ClientConfig {
-    client_config_builder(provider)
+    ClientConfig::builder_with_provider(provider.clone().into())
         .dangerous()
         .with_custom_certificate_verifier(verifier_builder.build().unwrap())
         .with_no_client_auth()
