@@ -37,7 +37,7 @@ fn server_config_with_verifier(
 ) -> ServerConfig {
     ServerConfig::builder_with_provider(provider::default_provider().into())
         .with_client_cert_verifier(Arc::new(client_cert_verifier))
-        .with_single_cert(kt.get_chain(), kt.get_key())
+        .with_single_cert(kt.chain(), kt.key())
         .unwrap()
 }
 

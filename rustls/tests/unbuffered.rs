@@ -1545,7 +1545,7 @@ fn test_secret_extraction_enabled() {
         let mut server_config =
             ServerConfig::builder_with_provider(provider_with_one_suite(&provider, suite).into())
                 .with_no_client_auth()
-                .with_single_cert(kt.get_chain(), kt.get_key())
+                .with_single_cert(kt.chain(), kt.key())
                 .unwrap();
         // Opt into secret extraction from both sides
         server_config.enable_secret_extraction = true;

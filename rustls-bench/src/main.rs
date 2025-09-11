@@ -797,7 +797,7 @@ impl Parameters {
         let provider = Arc::new(self.provider.build());
         let client_auth = match self.client_auth {
             ClientAuth::Yes => {
-                let roots = self.proto.key_type.get_chain();
+                let roots = self.proto.key_type.chain();
                 let mut client_auth_roots = RootCertStore::empty();
                 for root in roots {
                     client_auth_roots.add(root).unwrap();
@@ -814,10 +814,7 @@ impl Parameters {
 
         let mut cfg = ServerConfig::builder_with_provider(provider)
             .with_client_cert_verifier(client_auth)
-            .with_single_cert(
-                self.proto.key_type.get_chain(),
-                self.proto.key_type.get_key(),
-            )
+            .with_single_cert(self.proto.key_type.chain(), self.proto.key_type.key())
             .expect("bad certs/private key?");
 
         match self.resume {
@@ -852,8 +849,8 @@ impl Parameters {
         let mut cfg = match self.client_auth {
             ClientAuth::Yes => cfg
                 .with_client_auth_cert(
-                    self.proto.key_type.get_client_chain(),
-                    self.proto.key_type.get_client_key(),
+                    self.proto.key_type.client_chain(),
+                    self.proto.key_type.client_key(),
                 )
                 .unwrap(),
             ClientAuth::No => cfg.with_no_client_auth().unwrap(),
