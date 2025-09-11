@@ -9,7 +9,7 @@ mod common;
 use common::{
     Arc, ErrorFromPeer, KeyType, MockClientVerifier, all_versions, do_handshake_until_both_error,
     do_handshake_until_error, make_client_config, make_client_config_with_auth,
-    make_pair_for_arc_configs, server_config_builder, server_name,
+    make_pair_for_arc_configs, server_name,
 };
 use rustls::server::danger::ClientCertVerified;
 use rustls::{
@@ -35,7 +35,7 @@ fn server_config_with_verifier(
     kt: KeyType,
     client_cert_verifier: MockClientVerifier,
 ) -> ServerConfig {
-    server_config_builder(&provider::default_provider())
+    ServerConfig::builder_with_provider(provider::default_provider().into())
         .with_client_cert_verifier(Arc::new(client_cert_verifier))
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()

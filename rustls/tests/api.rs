@@ -765,7 +765,11 @@ fn test_config_builders_debug() {
         .into(),
     );
     let _ = format!("{b:?}");
-    let b = server_config_builder(&provider::default_provider().with_only_tls13());
+    let b = ServerConfig::builder_with_provider(
+        provider::default_provider()
+            .with_only_tls13()
+            .into(),
+    );
     let _ = format!("{b:?}");
     let b = b.with_no_client_auth();
     let _ = format!("{b:?}");
@@ -789,7 +793,7 @@ fn test_config_builders_debug() {
 /// certificate and not being given one.
 #[test]
 fn server_allow_any_anonymous_or_authenticated_client() {
-    let provider = provider::default_provider();
+    let provider = Arc::new(provider::default_provider());
     let kt = KeyType::Rsa2048;
     for client_cert_chain in [None, Some(kt.get_client_chain())] {
         let client_auth_roots = get_client_root_store(kt);
@@ -798,7 +802,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
             .build()
             .unwrap();
 
-        let server_config = server_config_builder(&provider)
+        let server_config = ServerConfig::builder_with_provider(provider.clone())
             .with_client_cert_verifier(client_auth)
             .with_single_cert(kt.get_chain(), kt.get_key())
             .unwrap();
@@ -6329,12 +6333,17 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
 
     let server_config_1 = Arc::new(common::finish_server_config(
         KeyType::Ed25519,
-        server_config_builder(&provider.clone().with_only_tls13()),
+        ServerConfig::builder_with_provider(
+            provider
+                .clone()
+                .with_only_tls13()
+                .into(),
+        ),
     ));
 
     let mut server_config_2 = common::finish_server_config(
         KeyType::Ed25519,
-        server_config_builder(&provider.with_only_tls12()),
+        ServerConfig::builder_with_provider(provider.with_only_tls12().into()),
     );
     server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
 
@@ -7383,7 +7392,7 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     let provider = provider::default_provider();
 
     for version_provider in all_versions(&provider) {
-        let server_config = server_config_builder(&provider)
+        let server_config = ServerConfig::builder_with_provider(provider.clone().into())
             .with_no_client_auth()
             .with_single_cert_with_ocsp(kt.get_chain(), kt.get_key(), ocsp_response.to_vec())
             .unwrap();

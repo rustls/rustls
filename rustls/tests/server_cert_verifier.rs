@@ -9,7 +9,7 @@ mod common;
 use common::{
     Arc, ErrorFromPeer, KeyType, MockServerVerifier, all_versions, client_config_builder,
     do_handshake, do_handshake_until_both_error, do_handshake_until_error, make_client_config,
-    make_pair_for_arc_configs, make_server_config, server_config_builder,
+    make_pair_for_arc_configs, make_server_config,
 };
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{
@@ -20,6 +20,7 @@ use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use rustls::{
     AlertDescription, CertificateError, DistinguishedName, Error, InvalidMessage, RootCertStore,
+    ServerConfig,
 };
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::X509Name;
@@ -189,7 +190,7 @@ fn client_can_request_certain_trusted_cas() {
     );
 
     let server_config = Arc::new(
-        server_config_builder(&provider)
+        ServerConfig::builder_with_provider(provider.clone().into())
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(cert_resolver.clone()))
             .unwrap(),

@@ -5,15 +5,9 @@ pub use std::sync::Arc;
 
 use rustls::client::{ClientConfig, ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::CryptoProvider;
-use rustls::server::{ClientCertVerifierBuilder, ServerConfig, WebPkiClientVerifier};
+use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 use rustls::{RootCertStore, SupportedCipherSuite};
 pub use rustls_test::*;
-
-pub fn server_config_builder(
-    provider: &CryptoProvider,
-) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
-    rustls::ServerConfig::builder_with_provider(provider.clone().into())
-}
 
 pub fn client_config_builder(
     provider: &CryptoProvider,
