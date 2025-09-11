@@ -19,8 +19,8 @@ use rustls::client::danger::{
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use rustls::{
-    AlertDescription, CertificateError, ClientConfig, DistinguishedName, Error, InvalidMessage,
-    RootCertStore, ServerConfig,
+    AlertDescription, CertificateError, CertificateType, ClientConfig, DistinguishedName, Error,
+    InvalidMessage, RootCertStore, ServerConfig,
 };
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::X509Name;
@@ -325,8 +325,9 @@ impl ServerCertVerifier for ServerCertVerifierWithCasExt {
         self.verifier.request_ocsp_response()
     }
 
-    fn requires_raw_public_keys(&self) -> bool {
-        self.verifier.requires_raw_public_keys()
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        self.verifier
+            .supported_certificate_types()
     }
 
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {

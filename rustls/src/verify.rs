@@ -81,10 +81,14 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     /// There is no guarantee the server will provide one.
     fn request_ocsp_response(&self) -> bool;
 
-    /// Returns whether this verifier requires raw public keys as defined
-    /// in [RFC 7250](https://tools.ietf.org/html/rfc7250).
-    fn requires_raw_public_keys(&self) -> bool {
-        false
+    /// Returns which [`CertificateType`]s this verifier supports.
+    ///
+    /// Returning an empty slice will result in an error. The default implementation signals
+    /// support for X.509 certificates. Implementations should return the same value every time.
+    ///
+    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[CertificateType::X509]
     }
 
     /// Return the [`DistinguishedName`]s of certificate authorities that this verifier trusts.
@@ -210,10 +214,14 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     /// This should be in priority order, with the most preferred first.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
 
-    /// Returns whether this verifier requires raw public keys as defined
-    /// in [RFC 7250](https://tools.ietf.org/html/rfc7250).
-    fn requires_raw_public_keys(&self) -> bool {
-        false
+    /// Returns which [`CertificateType`]s this verifier supports.
+    ///
+    /// Returning an empty slice will result in an error. The default implementation signals
+    /// support for X.509 certificates. Implementations should return the same value every time.
+    ///
+    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[CertificateType::X509]
     }
 }
 

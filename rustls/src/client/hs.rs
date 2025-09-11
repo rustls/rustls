@@ -7,7 +7,6 @@ use core::ops::Deref;
 use pki_types::ServerName;
 
 use super::{ResolvesClientCert, Tls12Resumption};
-use crate::SupportedCipherSuite;
 #[cfg(feature = "log")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
@@ -21,7 +20,7 @@ use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{
     AlertDescription, CertificateType, CipherSuite, ContentType, HandshakeType, ProtocolVersion,
 };
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -34,6 +33,7 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::verify::ServerCertVerifier;
@@ -328,18 +328,26 @@ fn emit_client_hello_for_retry(
             false
         };
 
-    if config
+    let client_certificate_types = config
         .client_auth_cert_resolver
-        .only_raw_public_keys()
-    {
-        exts.client_certificate_types = Some(vec![CertificateType::RawPublicKey]);
+        .supported_certificate_types();
+    match client_certificate_types {
+        &[] => return Err(ApiMisuse::NoSupportedCertificateTypes.into()),
+        &[CertificateType::X509] => {}
+        supported => {
+            exts.client_certificate_types = Some(supported.to_vec());
+        }
     }
 
-    if config
+    let server_certificate_types = config
         .verifier
-        .requires_raw_public_keys()
-    {
-        exts.server_certificate_types = Some(vec![CertificateType::RawPublicKey]);
+        .supported_certificate_types();
+    match server_certificate_types {
+        [] => return Err(ApiMisuse::NoSupportedCertificateTypes.into()),
+        [CertificateType::X509] => {}
+        supported => {
+            exts.server_certificate_types = Some(supported.to_vec());
+        }
     }
 
     // If this is a second client hello we're constructing in response to an HRR, and

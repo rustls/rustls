@@ -45,9 +45,9 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    CipherSuite, ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
-    DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion, RootCertStore,
-    ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
+    CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection, ConnectionCommon,
+    ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
+    RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
 };
 
 macro_rules! embed_files {
@@ -1130,8 +1130,11 @@ impl ServerCertVerifier for MockServerVerifier {
         self.expected_ocsp_response.is_some()
     }
 
-    fn requires_raw_public_keys(&self) -> bool {
-        self.requires_raw_public_keys
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        match self.requires_raw_public_keys {
+            false => &[CertificateType::X509],
+            true => &[CertificateType::RawPublicKey],
+        }
     }
 }
 
@@ -1292,8 +1295,11 @@ impl ClientCertVerifier for MockClientVerifier {
         }
     }
 
-    fn requires_raw_public_keys(&self) -> bool {
-        self.expect_raw_public_keys
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        match self.expect_raw_public_keys {
+            false => &[CertificateType::X509],
+            true => &[CertificateType::RawPublicKey],
+        }
     }
 }
 

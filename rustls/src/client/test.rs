@@ -570,8 +570,8 @@ mod tests {
             false
         }
 
-        fn requires_raw_public_keys(&self) -> bool {
-            true
+        fn supported_certificate_types(&self) -> &'static [CertificateType] {
+            &[CertificateType::RawPublicKey]
         }
     }
 
