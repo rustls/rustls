@@ -11,7 +11,7 @@ use rustls::{ClientConfig, ClientConnection};
 fuzz_target!(|data: &[u8]| {
     let _ = env_logger::try_init();
     let config = Arc::new(
-        ClientConfig::builder_with_provider(rustls_fuzzing_provider::provider().into())
+        ClientConfig::builder_with_provider(Arc::new(rustls_fuzzing_provider::provider()))
             .dangerous()
             .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
             .with_no_client_auth()

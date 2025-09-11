@@ -773,9 +773,10 @@ impl From<Vec<u8>> for SharedSecret {
 ///
 /// ```rust
 /// # #[cfg(feature = "fips")] {
+/// # use std::sync::Arc;
 /// # let root_store = rustls::RootCertStore::empty();
 /// let config = rustls::ClientConfig::builder_with_provider(
-///         rustls::crypto::default_fips_provider().into()
+///         Arc::new(rustls::crypto::default_fips_provider())
 ///     )
 ///     .with_root_certificates(root_store)
 ///     .with_no_client_auth()

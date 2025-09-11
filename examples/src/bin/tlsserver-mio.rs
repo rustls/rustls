@@ -616,7 +616,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let ocsp = load_ocsp(args.ocsp.as_deref());
 
     let (versions, provider) = args.provider();
-    let mut config = rustls::ServerConfig::builder_with_provider(provider.into())
+    let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(provider))
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp(certs, privkey, ocsp)
         .expect("bad certificates/private key");

@@ -3,6 +3,8 @@
 extern crate libfuzzer_sys;
 extern crate rustls;
 
+use std::sync::Arc;
+
 use rustls::client::UnbufferedClientConnection;
 use rustls::server::UnbufferedServerConnection;
 use rustls::unbuffered::{ConnectionState, UnbufferedStatus};
@@ -19,7 +21,7 @@ fuzz_target!(|data: &[u8]| {
 });
 
 fn client(data: &mut [u8]) {
-    let config = ClientConfig::builder_with_provider(rustls_fuzzing_provider::provider().into())
+    let config = ClientConfig::builder_with_provider(Arc::new(rustls_fuzzing_provider::provider()))
         .dangerous()
         .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
         .with_no_client_auth()
@@ -30,7 +32,7 @@ fn client(data: &mut [u8]) {
 }
 
 fn server(data: &mut [u8]) {
-    let config = ServerConfig::builder_with_provider(rustls_fuzzing_provider::provider().into())
+    let config = ServerConfig::builder_with_provider(Arc::new(rustls_fuzzing_provider::provider()))
         .with_no_client_auth()
         .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver())
         .unwrap();

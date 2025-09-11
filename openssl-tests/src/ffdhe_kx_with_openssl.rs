@@ -145,9 +145,7 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
 fn client_config_with_ffdhe_kx() -> ClientConfig {
     ClientConfig::builder_with_provider(
         // OpenSSL 3 does not support RFC 7919 with TLS 1.2: https://github.com/openssl/openssl/issues/10971
-        ffdhe_provider()
-            .with_only_tls13()
-            .into(),
+        Arc::new(ffdhe_provider().with_only_tls13()),
     )
     .with_root_certificates(root_ca())
     .with_no_client_auth()
@@ -206,7 +204,7 @@ fn ffdhe_provider() -> CryptoProvider {
 }
 
 fn server_config_with_ffdhe_kx(provider: CryptoProvider) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider.into())
+    ServerConfig::builder_with_provider(Arc::new(provider))
         .with_no_client_auth()
         .with_single_cert(load_certs(), load_private_key())
         .unwrap()

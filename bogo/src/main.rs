@@ -771,7 +771,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     let cred = &opts.credentials.default;
     let (certs, key) = cred.load_from_file();
 
-    let mut cfg = ServerConfig::builder_with_provider(opts.provider().into())
+    let mut cfg = ServerConfig::builder_with_provider(Arc::new(opts.provider()))
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp(certs, key, opts.server_ocsp_response.clone())
         .unwrap();
@@ -909,7 +909,8 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
     let cfg = ClientConfig::builder_with_provider(provider.clone());
 
     let cfg = if opts.selected_provider.supports_ech() {
-        let ech_cfg = ClientConfig::builder_with_provider(opts.provider().with_only_tls13().into());
+        let ech_cfg =
+            ClientConfig::builder_with_provider(Arc::new(opts.provider().with_only_tls13()));
 
         if let Some(ech_config_list) = &opts.ech_config_list {
             let ech_mode: EchMode = EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)

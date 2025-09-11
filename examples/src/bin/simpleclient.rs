@@ -19,9 +19,9 @@ fn main() {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let mut config = rustls::ClientConfig::builder_with_provider(
-        rustls::crypto::aws_lc_rs::default_provider().into(),
-    )
+    let mut config = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
     .with_root_certificates(root_store)
     .with_no_client_auth()
     .unwrap();

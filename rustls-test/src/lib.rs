@@ -503,7 +503,7 @@ impl ServerConfigExt for rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifi
 }
 
 pub fn make_server_config(kt: KeyType, provider: &CryptoProvider) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider.clone().into()).finish(kt)
+    ServerConfig::builder_with_provider(Arc::new(provider.clone())).finish(kt)
 }
 
 pub fn make_server_config_with_kx_groups(
@@ -511,13 +511,10 @@ pub fn make_server_config_with_kx_groups(
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
     provider: &CryptoProvider,
 ) -> ServerConfig {
-    ServerConfig::builder_with_provider(
-        CryptoProvider {
-            kx_groups,
-            ..provider.clone()
-        }
-        .into(),
-    )
+    ServerConfig::builder_with_provider(Arc::new(CryptoProvider {
+        kx_groups,
+        ..provider.clone()
+    }))
     .finish(kt)
 }
 
@@ -564,7 +561,7 @@ pub fn make_server_config_with_client_verifier(
     verifier_builder: ClientCertVerifierBuilder,
     provider: &CryptoProvider,
 ) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider.clone().into())
+    ServerConfig::builder_with_provider(Arc::new(provider.clone()))
         .with_client_cert_verifier(verifier_builder.build().unwrap())
         .with_single_cert(kt.chain(), kt.key())
         .unwrap()
@@ -582,7 +579,7 @@ pub fn make_server_config_with_raw_key_support(
     ));
     client_verifier.expect_raw_public_keys = true;
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    ServerConfig::builder_with_provider(provider.clone().into())
+    ServerConfig::builder_with_provider(Arc::new(provider.clone()))
         .with_client_cert_verifier(Arc::new(client_verifier))
         .with_cert_resolver(server_cert_resolver)
         .unwrap()
@@ -598,7 +595,7 @@ pub fn make_client_config_with_raw_key_support(
             .unwrap(),
     ));
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    ClientConfig::builder_with_provider(provider.clone().into())
+    ClientConfig::builder_with_provider(Arc::new(provider.clone()))
         .dangerous()
         .with_custom_certificate_verifier(server_verifier)
         .with_client_cert_resolver(client_cert_resolver)
@@ -635,7 +632,7 @@ impl ClientConfigExt for rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifi
 }
 
 pub fn make_client_config(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    ClientConfig::builder_with_provider(provider.clone().into()).finish(kt)
+    ClientConfig::builder_with_provider(Arc::new(provider.clone())).finish(kt)
 }
 
 pub fn make_client_config_with_kx_groups(
@@ -643,25 +640,22 @@ pub fn make_client_config_with_kx_groups(
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
     provider: &CryptoProvider,
 ) -> ClientConfig {
-    ClientConfig::builder_with_provider(
-        CryptoProvider {
-            kx_groups,
-            ..provider.clone()
-        }
-        .into(),
-    )
+    ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
+        kx_groups,
+        ..provider.clone()
+    }))
     .finish(kt)
 }
 
 pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    ClientConfig::builder_with_provider(provider.clone().into()).finish_with_creds(kt)
+    ClientConfig::builder_with_provider(Arc::new(provider.clone())).finish_with_creds(kt)
 }
 
 pub fn make_client_config_with_verifier(
     verifier_builder: ServerCertVerifierBuilder,
     provider: &CryptoProvider,
 ) -> ClientConfig {
-    ClientConfig::builder_with_provider(provider.clone().into())
+    ClientConfig::builder_with_provider(Arc::new(provider.clone()))
         .dangerous()
         .with_custom_certificate_verifier(verifier_builder.build().unwrap())
         .with_no_client_auth()
@@ -1467,12 +1461,11 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit(
         }
     });
 
-    CryptoProvider {
+    Arc::new(CryptoProvider {
         tls12_cipher_suites: vec![tls12_limited],
         tls13_cipher_suites: vec![tls13_limited],
         ..provider
-    }
-    .into()
+    })
 }
 
 pub fn unsafe_plaintext_crypto_provider(provider: CryptoProvider) -> Arc<CryptoProvider> {
@@ -1492,11 +1485,10 @@ pub fn unsafe_plaintext_crypto_provider(provider: CryptoProvider) -> Arc<CryptoP
         }
     });
 
-    CryptoProvider {
+    Arc::new(CryptoProvider {
         tls13_cipher_suites: vec![tls13],
         ..provider
-    }
-    .into()
+    })
 }
 
 mod plaintext {
