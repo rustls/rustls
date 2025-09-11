@@ -3078,10 +3078,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
         tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
         ..provider::default_provider()
     };
-    let server_config = finish_server_config(
-        kt,
-        ServerConfig::builder_with_provider(client_provider.into()),
-    );
+    let server_config = ServerConfig::builder_with_provider(client_provider.into()).finish(kt);
 
     let server_provider = CryptoProvider {
         tls13_cipher_suites: vec![cipher_suite::TLS13_AES_256_GCM_SHA384],
@@ -3811,12 +3808,10 @@ fn negotiated_ciphersuite_client() {
 fn negotiated_ciphersuite_server() {
     for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
-        let server_config = finish_server_config(
-            kt,
-            ServerConfig::builder_with_provider(
-                provider_with_one_suite(&provider::default_provider(), scs).into(),
-            ),
-        );
+        let server_config = ServerConfig::builder_with_provider(
+            provider_with_one_suite(&provider::default_provider(), scs).into(),
+        )
+        .finish(kt);
 
         do_suite_and_kx_test(
             make_client_config(kt, &provider::default_provider()),
@@ -3846,12 +3841,10 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
         };
         assert_ne!(scs, scs_other);
 
-        let mut server_config = finish_server_config(
-            kt,
-            ServerConfig::builder_with_provider(
-                provider_with_suites(&provider::default_provider(), &[scs, scs_other]).into(),
-            ),
-        );
+        let mut server_config = ServerConfig::builder_with_provider(
+            provider_with_suites(&provider::default_provider(), &[scs, scs_other]).into(),
+        )
+        .finish(kt);
         server_config.ignore_client_order = true;
 
         let client_config = finish_client_config(
@@ -6267,16 +6260,14 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
                 vec![provider::kx_group::X25519],
                 &version_provider,
             ),
-            finish_server_config(
-                KeyType::Rsa2048,
-                ServerConfig::builder_with_provider(
-                    CryptoProvider {
-                        kx_groups: vec![provider::kx_group::SECP384R1],
-                        ..version_provider
-                    }
-                    .into(),
-                ),
-            ),
+            ServerConfig::builder_with_provider(
+                CryptoProvider {
+                    kx_groups: vec![provider::kx_group::SECP384R1],
+                    ..version_provider
+                }
+                .into(),
+            )
+            .finish(KeyType::Rsa2048),
         );
         transfer(&mut client, &mut server);
         assert_eq!(
@@ -6331,20 +6322,19 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     client_config.resumption = Resumption::store(client_storage.clone());
     let client_config = Arc::new(client_config);
 
-    let server_config_1 = Arc::new(common::finish_server_config(
-        KeyType::Ed25519,
+    let server_config_1 = Arc::new(
         ServerConfig::builder_with_provider(
             provider
                 .clone()
                 .with_only_tls13()
                 .into(),
-        ),
-    ));
-
-    let mut server_config_2 = common::finish_server_config(
-        KeyType::Ed25519,
-        ServerConfig::builder_with_provider(provider.with_only_tls12().into()),
+        )
+        .finish(KeyType::Ed25519),
     );
+
+    let mut server_config_2 =
+        ServerConfig::builder_with_provider(provider.with_only_tls12().into())
+            .finish(KeyType::Ed25519);
     server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
 
     dbg!("handshake 1");
@@ -6512,14 +6502,12 @@ fn test_acceptor_rejected_handshake() {
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
 
-    let server_config = finish_server_config(
-        KeyType::Ed25519,
-        ServerConfig::builder_with_provider(
-            provider::default_provider()
-                .with_only_tls12()
-                .into(),
-        ),
-    );
+    let server_config = ServerConfig::builder_with_provider(
+        provider::default_provider()
+            .with_only_tls12()
+            .into(),
+    )
+    .finish(KeyType::Ed25519);
     let mut acceptor = Acceptor::default();
     acceptor
         .read_tls(&mut buf.as_slice())
@@ -6667,8 +6655,7 @@ fn test_secret_extract_produces_correct_variant() {
         let provider: Arc<CryptoProvider> =
             provider_with_one_suite(&provider::default_provider(), suite).into();
 
-        let mut server_config =
-            finish_server_config(kt, ServerConfig::builder_with_provider(provider.clone()));
+        let mut server_config = ServerConfig::builder_with_provider(provider.clone()).finish(kt);
 
         server_config.enable_secret_extraction = true;
         let server_config = Arc::new(server_config);
@@ -6909,12 +6896,10 @@ fn test_explicit_provider_selection() {
             rustls::crypto::ring::default_provider().into(),
         ),
     );
-    let server_config = finish_server_config(
-        KeyType::Rsa2048,
-        rustls::ServerConfig::builder_with_provider(
-            rustls::crypto::aws_lc_rs::default_provider().into(),
-        ),
-    );
+    let server_config = rustls::ServerConfig::builder_with_provider(
+        rustls::crypto::aws_lc_rs::default_provider().into(),
+    )
+    .finish(KeyType::Rsa2048);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
@@ -7924,10 +7909,7 @@ fn test_automatic_refresh_traffic_keys() {
         KeyType::Ed25519,
         ClientConfig::builder_with_provider(provider.clone()),
     );
-    let server_config = finish_server_config(
-        KeyType::Ed25519,
-        ServerConfig::builder_with_provider(provider),
-    );
+    let server_config = ServerConfig::builder_with_provider(provider).finish(KeyType::Ed25519);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
@@ -7989,10 +7971,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         KeyType::Ed25519,
         ClientConfig::builder_with_provider(provider.clone()),
     );
-    let server_config = finish_server_config(
-        KeyType::Ed25519,
-        ServerConfig::builder_with_provider(provider),
-    );
+    let server_config = ServerConfig::builder_with_provider(provider).finish(KeyType::Ed25519);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
