@@ -44,9 +44,6 @@ pub enum Error {
     /// The peer sent us a TLS message with invalid contents.
     InvalidMessage(InvalidMessage),
 
-    /// The peer didn't give us any certificates.
-    NoCertificatesPresented,
-
     /// The certificate verifier doesn't support the given type of name.
     UnsupportedNameType,
 
@@ -301,6 +298,7 @@ pub enum PeerMisbehaved {
     MissingKeyShare,
     MissingPskModesExtension,
     MissingQuicTransportParameters,
+    NoCertificatesPresented,
     OfferedDuplicateCertificateCompressions,
     OfferedDuplicateKeyShares,
     OfferedEarlyDataWithOldProtocolVersion,
@@ -1062,7 +1060,6 @@ impl fmt::Display for Error {
             Self::InvalidCertRevocationList(err) => {
                 write!(f, "invalid certificate revocation list: {err:?}")
             }
-            Self::NoCertificatesPresented => write!(f, "peer sent no certificates"),
             Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
             Self::DecryptError => write!(f, "cannot decrypt peer's message"),
             Self::InvalidEncryptedClientHello(err) => {
@@ -1176,6 +1173,9 @@ pub enum ApiMisuse {
 
     /// QUIC attempted with a configuration that does not support a ciphersuite that supports QUIC.
     NoQuicCompatibleCipherSuites,
+
+    /// An empty certificate chain was provided.
+    EmptyCertificateChain,
 
     /// QUIC attempted with unsupported [`ServerConfig::max_early_data_size`][]
     ///
@@ -1509,7 +1509,6 @@ mod tests {
                 got_type: HandshakeType::ServerHello,
             },
             Error::InvalidMessage(InvalidMessage::InvalidCcs),
-            Error::NoCertificatesPresented,
             Error::DecryptError,
             super::PeerIncompatible::Tls12NotOffered.into(),
             super::PeerMisbehaved::UnsolicitedCertExtension.into(),

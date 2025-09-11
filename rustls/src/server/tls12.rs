@@ -506,7 +506,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                 None if mandatory => {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::CertificateRequired,
-                        Error::NoCertificatesPresented,
+                        PeerMisbehaved::NoCertificatesPresented,
                     ));
                 }
                 None => {

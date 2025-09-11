@@ -1137,7 +1137,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::CertificateRequired,
-                Error::NoCertificatesPresented,
+                PeerMisbehaved::NoCertificatesPresented,
             ));
         };
 

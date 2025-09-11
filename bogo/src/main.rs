@@ -1159,8 +1159,8 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::KeyEpochWithPendingFragment) => {
             quit(":EXCESS_HANDSHAKE_DATA:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::NoCertificatesPresented) => quit(":NO_CERTS:"),
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
-        Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
