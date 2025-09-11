@@ -747,12 +747,10 @@ fn refresh_traffic_keys_automatically() {
     const CONFIDENTIALITY_LIMIT: usize = 1024;
     const CONFIDENTIALITY_LIMIT_PLUS_ONE: usize = CONFIDENTIALITY_LIMIT + 1;
 
-    let client_config = finish_client_config(
-        KeyType::Rsa2048,
-        ClientConfig::builder_with_provider(aes_128_gcm_with_1024_confidentiality_limit(
-            provider::default_provider(),
-        )),
-    );
+    let client_config = ClientConfig::builder_with_provider(
+        aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider()),
+    )
+    .finish(KeyType::Rsa2048);
 
     let server_config = make_server_config(KeyType::Rsa2048, &provider::default_provider());
     let mut outcome = run(
@@ -824,10 +822,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         .with_only_tls12(),
     );
 
-    let client_config = finish_client_config(
-        KeyType::Ed25519,
-        ClientConfig::builder_with_provider(provider),
-    );
+    let client_config = ClientConfig::builder_with_provider(provider).finish(KeyType::Ed25519);
 
     let server_config = make_server_config(KeyType::Ed25519, &provider::default_provider());
     let mut outcome = run(

@@ -607,41 +607,37 @@ pub fn make_client_config_with_raw_key_support(
         .unwrap()
 }
 
-pub fn finish_client_config(
-    kt: KeyType,
-    config: rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>,
-) -> ClientConfig {
-    let mut root_store = RootCertStore::empty();
-    root_store.add_parsable_certificates(
-        CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
-    );
-
-    config
-        .with_root_certificates(root_store)
-        .with_no_client_auth()
-        .unwrap()
+pub trait ClientConfigExt {
+    fn finish(self, kt: KeyType) -> ClientConfig;
+    fn finish_with_creds(self, kt: KeyType) -> ClientConfig;
 }
 
-pub fn finish_client_config_with_creds(
-    kt: KeyType,
-    config: rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>,
-) -> ClientConfig {
-    let mut root_store = RootCertStore::empty();
-    root_store.add_parsable_certificates(
-        CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
-    );
+impl ClientConfigExt for rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
+    fn finish(self, kt: KeyType) -> ClientConfig {
+        let mut root_store = RootCertStore::empty();
+        root_store.add_parsable_certificates(
+            CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
+        );
 
-    config
-        .with_root_certificates(root_store)
-        .with_client_auth_cert(kt.client_chain(), kt.client_key())
-        .unwrap()
+        self.with_root_certificates(root_store)
+            .with_no_client_auth()
+            .unwrap()
+    }
+
+    fn finish_with_creds(self, kt: KeyType) -> ClientConfig {
+        let mut root_store = RootCertStore::empty();
+        root_store.add_parsable_certificates(
+            CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
+        );
+
+        self.with_root_certificates(root_store)
+            .with_client_auth_cert(kt.client_chain(), kt.client_key())
+            .unwrap()
+    }
 }
 
 pub fn make_client_config(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    finish_client_config(
-        kt,
-        ClientConfig::builder_with_provider(provider.clone().into()),
-    )
+    ClientConfig::builder_with_provider(provider.clone().into()).finish(kt)
 }
 
 pub fn make_client_config_with_kx_groups(
@@ -649,21 +645,18 @@ pub fn make_client_config_with_kx_groups(
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
     provider: &CryptoProvider,
 ) -> ClientConfig {
-    let builder = ClientConfig::builder_with_provider(
+    ClientConfig::builder_with_provider(
         CryptoProvider {
             kx_groups,
             ..provider.clone()
         }
         .into(),
-    );
-    finish_client_config(kt, builder)
+    )
+    .finish(kt)
 }
 
 pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    finish_client_config_with_creds(
-        kt,
-        ClientConfig::builder_with_provider(provider.clone().into()),
-    )
+    ClientConfig::builder_with_provider(provider.clone().into()).finish_with_creds(kt)
 }
 
 pub fn make_client_config_with_verifier(
