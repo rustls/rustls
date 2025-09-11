@@ -373,7 +373,7 @@ fn config_builder_for_client_rejects_empty_kx_groups() {
             }
             .into()
         )
-        .with_root_certificates(get_client_root_store(KeyType::EcdsaP256))
+        .with_root_certificates(KeyType::EcdsaP256.client_root_store())
         .with_no_client_auth()
         .err(),
         Some(ApiMisuse::NoKeyExchangeGroupsConfigured.into())
@@ -391,7 +391,7 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
             }
             .into()
         )
-        .with_root_certificates(get_client_root_store(KeyType::EcdsaP256))
+        .with_root_certificates(KeyType::EcdsaP256.client_root_store())
         .with_no_client_auth()
         .err(),
         Some(ApiMisuse::NoCipherSuitesConfigured.into())
@@ -800,8 +800,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
     let provider = Arc::new(provider::default_provider());
     let kt = KeyType::Rsa2048;
     for client_cert_chain in [None, Some(kt.get_client_chain())] {
-        let client_auth_roots = get_client_root_store(kt);
-        let client_auth = webpki_client_verifier_builder(client_auth_roots.clone(), &provider)
+        let client_auth = webpki_client_verifier_builder(kt.client_root_store(), &provider)
             .allow_unauthenticated()
             .build()
             .unwrap();
@@ -1453,7 +1452,7 @@ fn client_check_server_certificate_ee_revoked() {
 
         // Setup a server verifier that will check the EE certificate's revocation status.
         let crls = vec![kt.end_entity_crl()];
-        let builder = webpki_server_verifier_builder(get_client_root_store(*kt), &provider)
+        let builder = webpki_server_verifier_builder(kt.client_root_store(), &provider)
             .with_crls(crls)
             .only_check_end_entity_revocation();
 
@@ -1487,13 +1486,13 @@ fn client_check_server_certificate_ee_unknown_revocation() {
         // to the EE cert to ensure its status is unknown.
         let unrelated_crls = vec![kt.intermediate_crl()];
         let forbid_unknown_verifier =
-            webpki_server_verifier_builder(get_client_root_store(*kt), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), &provider)
                 .with_crls(unrelated_crls.clone())
                 .only_check_end_entity_revocation();
 
         // Also set up a verifier builder that will allow unknown revocation status.
         let allow_unknown_verifier =
-            webpki_server_verifier_builder(get_client_root_store(*kt), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), &provider)
                 .with_crls(unrelated_crls)
                 .only_check_end_entity_revocation()
                 .allow_unknown_revocation_status();
@@ -1540,17 +1539,16 @@ fn client_check_server_certificate_intermediate_revoked() {
         // so the EE cert's unknown status doesn't cause an error.
         let crls = vec![kt.intermediate_crl()];
         let full_chain_verifier_builder =
-            webpki_server_verifier_builder(get_client_root_store(*kt), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), &provider)
                 .with_crls(crls.clone())
                 .allow_unknown_revocation_status();
 
         // Also set up a verifier builder that will use the same CRL, but only check the EE certificate
         // revocation status.
-        let ee_verifier_builder =
-            webpki_server_verifier_builder(get_client_root_store(*kt), &provider)
-                .with_crls(crls.clone())
-                .only_check_end_entity_revocation()
-                .allow_unknown_revocation_status();
+        let ee_verifier_builder = webpki_server_verifier_builder(kt.client_root_store(), &provider)
+            .with_crls(crls.clone())
+            .only_check_end_entity_revocation()
+            .allow_unknown_revocation_status();
 
         for version_provider in all_versions(&provider) {
             let client_config = make_client_config_with_verifier(
@@ -1593,7 +1591,7 @@ fn client_check_server_certificate_ee_crl_expired() {
         // Setup a server verifier that will check the EE certificate's revocation status, with CRL expiration enforced.
         let crls = vec![kt.end_entity_crl_expired()];
         let enforce_expiration_builder =
-            webpki_server_verifier_builder(get_client_root_store(*kt), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), &provider)
                 .with_crls(crls)
                 .only_check_end_entity_revocation()
                 .enforce_revocation_expiration();
@@ -1601,7 +1599,7 @@ fn client_check_server_certificate_ee_crl_expired() {
         // Also setup a server verifier without CRL expiration enforced.
         let crls = vec![kt.end_entity_crl_expired()];
         let ignore_expiration_builder =
-            webpki_server_verifier_builder(get_client_root_store(*kt), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), &provider)
                 .with_crls(crls)
                 .only_check_end_entity_revocation();
 
@@ -1645,11 +1643,12 @@ fn client_check_server_certificate_ee_crl_expired() {
 fn client_check_server_certificate_helper_api() {
     for kt in KeyType::all_for_provider(&provider::default_provider()) {
         let chain = kt.get_chain();
-        let correct_roots = get_client_root_store(*kt);
-        let incorrect_roots = get_client_root_store(match kt {
+        let correct_roots = kt.client_root_store();
+        let incorrect_roots = match kt {
             KeyType::Rsa2048 => KeyType::EcdsaP256,
             _ => KeyType::Rsa2048,
-        });
+        }
+        .client_root_store();
         // Using the correct trust anchors, we should verify without error.
         assert!(
             verify_server_cert_signed_by_trust_anchor(
@@ -1858,7 +1857,7 @@ fn client_cert_resolve_server_no_hints() {
     let provider = provider::default_provider();
     for key_type in KeyType::all_for_provider(&provider) {
         // Build a verifier with no hint subjects.
-        let verifier = webpki_client_verifier_builder(get_client_root_store(*key_type), &provider)
+        let verifier = webpki_client_verifier_builder(key_type.client_root_store(), &provider)
             .clear_root_hint_subjects();
         let server_config = make_server_config_with_client_verifier(*key_type, verifier, &provider);
         let expected_root_hint_subjects = Vec::default(); // no hints expected.
@@ -1881,7 +1880,7 @@ fn client_cert_resolve_server_added_hint() {
         ];
         // Create a verifier that adds the extra_name as a hint subject in addition to the ones
         // from the root cert store.
-        let verifier = webpki_client_verifier_builder(get_client_root_store(*key_type), &provider)
+        let verifier = webpki_client_verifier_builder(key_type.client_root_store(), &provider)
             .add_root_hint_subjects([DistinguishedName::from(extra_name.clone())].into_iter());
         let server_config = make_server_config_with_client_verifier(*key_type, verifier, &provider);
         test_client_cert_resolve(*key_type, server_config.into(), expected_hint_subjects);
@@ -1914,10 +1913,9 @@ fn client_mandatory_auth_client_revocation_works() {
         let relevant_crls = vec![kt.client_crl()];
         // Only check the EE certificate status. See client_mandatory_auth_intermediate_revocation_works
         // for testing revocation status of the whole chain.
-        let ee_verifier_builder =
-            webpki_client_verifier_builder(get_client_root_store(*kt), &provider)
-                .with_crls(relevant_crls)
-                .only_check_end_entity_revocation();
+        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), &provider)
+            .with_crls(relevant_crls)
+            .only_check_end_entity_revocation();
         let revoked_server_config = Arc::new(make_server_config_with_client_verifier(
             *kt,
             ee_verifier_builder,
@@ -1927,10 +1925,9 @@ fn client_mandatory_auth_client_revocation_works() {
         // Create a server configuration that includes a CRL that doesn't cover the client certificate,
         // and uses the default behaviour of treating unknown revocation status as an error.
         let unrelated_crls = vec![kt.intermediate_crl()];
-        let ee_verifier_builder =
-            webpki_client_verifier_builder(get_client_root_store(*kt), &provider)
-                .with_crls(unrelated_crls.clone())
-                .only_check_end_entity_revocation();
+        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), &provider)
+            .with_crls(unrelated_crls.clone())
+            .only_check_end_entity_revocation();
         let missing_client_crl_server_config = Arc::new(make_server_config_with_client_verifier(
             *kt,
             ee_verifier_builder,
@@ -1939,11 +1936,10 @@ fn client_mandatory_auth_client_revocation_works() {
 
         // Create a server configuration that includes a CRL that doesn't cover the client certificate,
         // but change the builder to allow unknown revocation status.
-        let ee_verifier_builder =
-            webpki_client_verifier_builder(get_client_root_store(*kt), &provider)
-                .with_crls(unrelated_crls.clone())
-                .only_check_end_entity_revocation()
-                .allow_unknown_revocation_status();
+        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), &provider)
+            .with_crls(unrelated_crls.clone())
+            .only_check_end_entity_revocation()
+            .allow_unknown_revocation_status();
         let allow_missing_client_crl_server_config = Arc::new(
             make_server_config_with_client_verifier(*kt, ee_verifier_builder, &provider),
         );
@@ -1991,7 +1987,7 @@ fn client_mandatory_auth_intermediate_revocation_works() {
         // revocation status so the EE's unknown revocation status isn't an error.
         let crls = vec![kt.intermediate_crl()];
         let full_chain_verifier_builder =
-            webpki_client_verifier_builder(get_client_root_store(*kt), &provider)
+            webpki_client_verifier_builder(kt.client_root_store(), &provider)
                 .with_crls(crls.clone())
                 .allow_unknown_revocation_status();
         let full_chain_server_config = Arc::new(make_server_config_with_client_verifier(
@@ -2003,7 +1999,7 @@ fn client_mandatory_auth_intermediate_revocation_works() {
         // Also create a server configuration that uses the same CRL, but that only checks the EE
         // cert revocation status.
         let ee_only_verifier_builder =
-            webpki_client_verifier_builder(get_client_root_store(*kt), &provider)
+            webpki_client_verifier_builder(kt.client_root_store(), &provider)
                 .with_crls(crls)
                 .only_check_end_entity_revocation()
                 .allow_unknown_revocation_status();
