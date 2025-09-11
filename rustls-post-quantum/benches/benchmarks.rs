@@ -75,26 +75,23 @@ fn bench_clienthello(c: &mut Criterion) {
 
     let config_x25519 =
         ClientConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_root_certificates(anchors.clone())
             .with_no_client_auth()
+            .unwrap()
             .into();
 
     let config_x25519mlkem768 =
         ClientConfig::builder_with_provider(Arc::new(rustls_post_quantum::provider()))
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_root_certificates(anchors.clone())
             .with_no_client_auth()
+            .unwrap()
             .into();
 
     let config_x25519mlkem768_x25519 =
         ClientConfig::builder_with_provider(Arc::new(separate_provider()))
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_root_certificates(anchors.clone())
             .with_no_client_auth()
+            .unwrap()
             .into();
 
     println!("Clienthello lengths:");

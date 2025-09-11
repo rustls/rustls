@@ -23,7 +23,8 @@ fn main() {
 
     let config = rustls::ClientConfig::builder()
         .with_root_certificates(root_store)
-        .with_no_client_auth();
+        .with_no_client_auth()
+        .unwrap();
 
     let server_name = "pq.cloudflareresearch.com"
         .try_into()
