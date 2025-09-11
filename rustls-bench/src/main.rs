@@ -836,11 +836,10 @@ impl Parameters {
             .add(self.proto.key_type.ca_cert())
             .unwrap();
 
-        let cfg = ClientConfig::builder_with_provider(
+        let cfg = ClientConfig::builder_with_provider(Arc::new(
             self.provider
-                .build_with_cipher_suite(self.proto.ciphersuite)
-                .into(),
-        )
+                .build_with_cipher_suite(self.proto.ciphersuite),
+        ))
         .with_root_certificates(root_store);
 
         let mut cfg = match self.client_auth {

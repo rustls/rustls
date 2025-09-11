@@ -383,9 +383,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         as fn() -> Arc<dyn rustls::server::ProducesTickets>);
 
     all.push(BenchmarkParams::new(
-        rustls_fuzzing_provider::provider()
-            .with_only_tls13()
-            .into(),
+        Arc::new(rustls_fuzzing_provider::provider().with_only_tls13()),
         make_ticketer,
         AuthKeySource::FuzzingProvider,
         ProtocolVersion::TLSv1_3,
@@ -393,9 +391,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     ));
 
     all.push(BenchmarkParams::new(
-        rustls_fuzzing_provider::provider()
-            .with_only_tls12()
-            .into(),
+        Arc::new(rustls_fuzzing_provider::provider().with_only_tls12()),
         make_ticketer,
         AuthKeySource::FuzzingProvider,
         ProtocolVersion::TLSv1_2,
@@ -412,7 +408,7 @@ fn select_suite(mut provider: CryptoProvider, name: CipherSuite) -> Arc<CryptoPr
     provider
         .tls13_cipher_suites
         .retain(|suite| suite.common.suite == name);
-    provider.into()
+    Arc::new(provider)
 }
 
 fn ring_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {

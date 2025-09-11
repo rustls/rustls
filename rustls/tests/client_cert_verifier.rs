@@ -35,7 +35,7 @@ fn server_config_with_verifier(
     kt: KeyType,
     client_cert_verifier: MockClientVerifier,
 ) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider::default_provider().into())
+    ServerConfig::builder_with_provider(Arc::new(provider::default_provider()))
         .with_client_cert_verifier(Arc::new(client_cert_verifier))
         .with_single_cert(kt.chain(), kt.key())
         .unwrap()

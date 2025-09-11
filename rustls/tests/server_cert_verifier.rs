@@ -190,7 +190,7 @@ fn client_can_request_certain_trusted_cas() {
     );
 
     let server_config = Arc::new(
-        ServerConfig::builder_with_provider(provider.clone().into())
+        ServerConfig::builder_with_provider(Arc::new(provider.clone()))
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(cert_resolver.clone()))
             .unwrap(),
@@ -218,7 +218,7 @@ fn client_can_request_certain_trusted_cas() {
         });
 
         let cas_sending_client_config =
-            ClientConfig::builder_with_provider(provider.clone().into())
+            ClientConfig::builder_with_provider(Arc::new(provider.clone()))
                 .dangerous()
                 .with_custom_certificate_verifier(cas_sending_server_verifier)
                 .with_no_client_auth()
@@ -229,7 +229,7 @@ fn client_can_request_certain_trusted_cas() {
         do_handshake(&mut client, &mut server);
 
         let cas_unaware_client_config =
-            ClientConfig::builder_with_provider(provider.clone().into())
+            ClientConfig::builder_with_provider(Arc::new(provider.clone()))
                 .dangerous()
                 .with_custom_certificate_verifier(server_verifier)
                 .with_no_client_auth()

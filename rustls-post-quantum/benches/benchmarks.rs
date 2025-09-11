@@ -73,15 +73,16 @@ fn bench_clienthello(c: &mut Criterion) {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     });
 
-    let config_x25519 = ClientConfig::builder_with_provider(aws_lc_rs::default_provider().into())
-        .with_safe_default_protocol_versions()
-        .unwrap()
-        .with_root_certificates(anchors.clone())
-        .with_no_client_auth()
-        .into();
+    let config_x25519 =
+        ClientConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(anchors.clone())
+            .with_no_client_auth()
+            .into();
 
     let config_x25519mlkem768 =
-        ClientConfig::builder_with_provider(rustls_post_quantum::provider().into())
+        ClientConfig::builder_with_provider(Arc::new(rustls_post_quantum::provider()))
             .with_safe_default_protocol_versions()
             .unwrap()
             .with_root_certificates(anchors.clone())
@@ -89,7 +90,7 @@ fn bench_clienthello(c: &mut Criterion) {
             .into();
 
     let config_x25519mlkem768_x25519 =
-        ClientConfig::builder_with_provider(separate_provider().into())
+        ClientConfig::builder_with_provider(Arc::new(separate_provider()))
             .with_safe_default_protocol_versions()
             .unwrap()
             .with_root_certificates(anchors.clone())

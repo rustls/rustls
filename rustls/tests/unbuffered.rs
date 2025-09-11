@@ -1537,11 +1537,12 @@ fn test_secret_extraction_enabled() {
         println!("Testing suite {:?}", suite.suite().as_str());
 
         // Only offer the cipher suite (and protocol version) that we're testing
-        let mut server_config =
-            ServerConfig::builder_with_provider(provider_with_one_suite(&provider, suite).into())
-                .with_no_client_auth()
-                .with_single_cert(kt.chain(), kt.key())
-                .unwrap();
+        let mut server_config = ServerConfig::builder_with_provider(Arc::new(
+            provider_with_one_suite(&provider, suite),
+        ))
+        .with_no_client_auth()
+        .with_single_cert(kt.chain(), kt.key())
+        .unwrap();
         // Opt into secret extraction from both sides
         server_config.enable_secret_extraction = true;
         let server_config = Arc::new(server_config);
