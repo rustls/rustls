@@ -481,12 +481,6 @@ impl KeyType {
     }
 }
 
-pub fn server_config_builder(
-    provider: &CryptoProvider,
-) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
-    ServerConfig::builder_with_provider(provider.clone().into())
-}
-
 pub fn client_config_builder(
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
@@ -503,7 +497,10 @@ pub fn finish_server_config(
 }
 
 pub fn make_server_config(kt: KeyType, provider: &CryptoProvider) -> ServerConfig {
-    finish_server_config(kt, server_config_builder(provider))
+    finish_server_config(
+        kt,
+        ServerConfig::builder_with_provider(provider.clone().into()),
+    )
 }
 
 pub fn make_server_config_with_kx_groups(
@@ -577,7 +574,7 @@ pub fn make_server_config_with_client_verifier(
     verifier_builder: ClientCertVerifierBuilder,
     provider: &CryptoProvider,
 ) -> ServerConfig {
-    server_config_builder(provider)
+    ServerConfig::builder_with_provider(provider.clone().into())
         .with_client_cert_verifier(verifier_builder.build().unwrap())
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
@@ -595,7 +592,7 @@ pub fn make_server_config_with_raw_key_support(
     ));
     client_verifier.expect_raw_public_keys = true;
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    server_config_builder(provider)
+    ServerConfig::builder_with_provider(provider.clone().into())
         .with_client_cert_verifier(Arc::new(client_verifier))
         .with_cert_resolver(server_cert_resolver)
         .unwrap()
