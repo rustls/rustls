@@ -1223,6 +1223,9 @@ pub enum ApiMisuse {
     /// A verifier indicated support for a certificate type but then failed to verify the peer's
     /// identity of that type.
     UnverifiableCertificateType,
+
+    /// A verifier or resolver implementation signalled that it does not support any certificate types.
+    NoSupportedCertificateTypes,
 }
 
 impl From<ApiMisuse> for Error {

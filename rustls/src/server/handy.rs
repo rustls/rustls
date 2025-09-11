@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use crate::enums::CertificateType;
 use crate::server::ClientHello;
 use crate::sync::Arc;
 use crate::{server, sign};
@@ -186,8 +187,8 @@ impl server::ResolvesServerCert for AlwaysResolvesServerRawPublicKeys {
         Some(self.0.clone())
     }
 
-    fn only_raw_public_keys(&self) -> bool {
-        true
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[CertificateType::RawPublicKey]
     }
 }
 

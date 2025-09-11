@@ -21,8 +21,8 @@ mod client {
     use rustls::server::danger::SignatureVerificationInput;
     use rustls::sign::CertifiedKey;
     use rustls::{
-        ApiMisuse, CertificateError, ClientConfig, ClientConnection, Error, InconsistentKeys,
-        PeerIdentity, PeerIncompatible, SignatureScheme, Stream,
+        ApiMisuse, CertificateError, CertificateType, ClientConfig, ClientConnection, Error,
+        InconsistentKeys, PeerIdentity, PeerIncompatible, SignatureScheme, Stream,
     };
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
@@ -135,8 +135,8 @@ mod client {
             false
         }
 
-        fn requires_raw_public_keys(&self) -> bool {
-            true
+        fn supported_certificate_types(&self) -> &'static [CertificateType] {
+            &[CertificateType::RawPublicKey]
         }
     }
 }
@@ -158,8 +158,8 @@ mod server {
     };
     use rustls::sign::CertifiedKey;
     use rustls::{
-        ApiMisuse, CertificateError, DistinguishedName, Error, InconsistentKeys, PeerIdentity,
-        PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
+        ApiMisuse, CertificateError, CertificateType, DistinguishedName, Error, InconsistentKeys,
+        PeerIdentity, PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
     };
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
@@ -287,8 +287,8 @@ mod server {
             self.supported_algs.supported_schemes()
         }
 
-        fn requires_raw_public_keys(&self) -> bool {
-            true
+        fn supported_certificate_types(&self) -> &'static [CertificateType] {
+            &[CertificateType::RawPublicKey]
         }
     }
 }
