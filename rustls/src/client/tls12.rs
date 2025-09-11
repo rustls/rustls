@@ -888,7 +888,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         .ok_or_else(|| {
             cx.common.send_fatal_alert(
                 AlertDescription::BadCertificate,
-                Error::NoCertificatesPresented,
+                PeerMisbehaved::NoCertificatesPresented,
             )
         })?;
 

@@ -10,7 +10,7 @@ use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
-use crate::x509;
+use crate::{ApiMisuse, x509};
 
 /// An abstract signing key.
 ///
@@ -187,7 +187,7 @@ impl CertifiedKey {
         let parsed = ParsedCertificate::try_from(
             cert_chain
                 .first()
-                .ok_or(Error::NoCertificatesPresented)?,
+                .ok_or(ApiMisuse::EmptyCertificateChain)?,
         )?;
 
         match (key.public_key(), parsed.subject_public_key_info()) {
@@ -239,7 +239,7 @@ impl CertifiedKey {
     pub fn end_entity_cert(&self) -> Result<&CertificateDer<'_>, Error> {
         self.cert_chain
             .first()
-            .ok_or(Error::NoCertificatesPresented)
+            .ok_or(Error::ApiMisuse(ApiMisuse::EmptyCertificateChain))
     }
 }
 
