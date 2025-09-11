@@ -342,7 +342,7 @@ impl KeyType {
     pub fn all_for_provider(provider: &CryptoProvider) -> &'static [Self] {
         match provider
             .key_provider
-            .load_private_key(Self::EcdsaP521.get_key())
+            .load_private_key(Self::EcdsaP521.key())
             .is_ok()
         {
             true => ALL_KEY_TYPES,
@@ -363,67 +363,67 @@ impl KeyType {
     }
 
     pub fn ca_cert(&self) -> CertificateDer<'_> {
-        self.get_chain()
+        self.chain()
             .into_iter()
             .next_back()
             .expect("cert chain cannot be empty")
     }
 
-    pub fn get_chain(&self) -> Vec<CertificateDer<'static>> {
+    pub fn chain(&self) -> Vec<CertificateDer<'static>> {
         CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
             .map(|result| result.unwrap())
             .collect()
     }
 
-    pub fn get_spki(&self) -> SubjectPublicKeyInfoDer<'static> {
+    pub fn spki(&self) -> SubjectPublicKeyInfoDer<'static> {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("end.spki.pem")).unwrap()
     }
 
-    pub fn get_key(&self) -> PrivateKeyDer<'static> {
+    pub fn key(&self) -> PrivateKeyDer<'static> {
         PrivatePkcs8KeyDer::from_pem_slice(self.bytes_for("end.key"))
             .unwrap()
             .into()
     }
 
-    pub fn get_client_chain(&self) -> Vec<CertificateDer<'static>> {
+    pub fn client_chain(&self) -> Vec<CertificateDer<'static>> {
         CertificateDer::pem_slice_iter(self.bytes_for("client.fullchain"))
             .map(|result| result.unwrap())
             .collect()
     }
 
     pub fn end_entity_crl(&self) -> CertificateRevocationListDer<'static> {
-        self.get_crl("end", "revoked")
+        self.crl("end", "revoked")
     }
 
     pub fn client_crl(&self) -> CertificateRevocationListDer<'static> {
-        self.get_crl("client", "revoked")
+        self.crl("client", "revoked")
     }
 
     pub fn intermediate_crl(&self) -> CertificateRevocationListDer<'static> {
-        self.get_crl("inter", "revoked")
+        self.crl("inter", "revoked")
     }
 
     pub fn end_entity_crl_expired(&self) -> CertificateRevocationListDer<'static> {
-        self.get_crl("end", "expired")
+        self.crl("end", "expired")
     }
 
-    pub fn get_client_key(&self) -> PrivateKeyDer<'static> {
+    pub fn client_key(&self) -> PrivateKeyDer<'static> {
         PrivatePkcs8KeyDer::from_pem_slice(self.bytes_for("client.key"))
             .unwrap()
             .into()
     }
 
-    pub fn get_client_spki(&self) -> SubjectPublicKeyInfoDer<'static> {
+    pub fn client_spki(&self) -> SubjectPublicKeyInfoDer<'static> {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("client.spki.pem")).unwrap()
     }
 
-    pub fn get_certified_client_key(
+    pub fn certified_client_key(
         &self,
         provider: &CryptoProvider,
     ) -> Result<Arc<CertifiedKey>, Error> {
         let private_key = provider
             .key_provider
-            .load_private_key(self.get_client_key())?;
+            .load_private_key(self.client_key())?;
         let public_key = private_key
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
@@ -440,7 +440,7 @@ impl KeyType {
     ) -> Result<Arc<CertifiedKey>, Error> {
         let private_key = provider
             .key_provider
-            .load_private_key(self.get_key())?;
+            .load_private_key(self.key())?;
         let public_key = private_key
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
@@ -457,11 +457,11 @@ impl KeyType {
     ) -> Result<Arc<CertifiedKey>, Error> {
         let private_key = provider
             .key_provider
-            .load_private_key(self.get_key())?;
-        Ok(Arc::new(CertifiedKey::new(self.get_chain(), private_key)?))
+            .load_private_key(self.key())?;
+        Ok(Arc::new(CertifiedKey::new(self.chain(), private_key)?))
     }
 
-    fn get_crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
+    fn crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
         CertificateRevocationListDer::from_pem_slice(
             self.bytes_for(&format!("{role}.{type}.crl.pem")),
         )
@@ -483,7 +483,7 @@ impl KeyType {
     pub fn client_root_store(&self) -> Arc<RootCertStore> {
         // The key type's chain file contains the DER encoding of the EE cert, the intermediate cert,
         // and the root trust anchor. We want only the trust anchor to build the root cert store.
-        let chain = self.get_chain();
+        let chain = self.chain();
         let mut roots = RootCertStore::empty();
         roots
             .add(chain.last().unwrap().clone())
@@ -497,7 +497,7 @@ pub fn finish_server_config(
     conf: rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier>,
 ) -> ServerConfig {
     conf.with_no_client_auth()
-        .with_single_cert(kt.get_chain(), kt.get_key())
+        .with_single_cert(kt.chain(), kt.key())
         .unwrap()
 }
 
@@ -570,7 +570,7 @@ pub fn make_server_config_with_client_verifier(
 ) -> ServerConfig {
     ServerConfig::builder_with_provider(provider.clone().into())
         .with_client_cert_verifier(verifier_builder.build().unwrap())
-        .with_single_cert(kt.get_chain(), kt.get_key())
+        .with_single_cert(kt.chain(), kt.key())
         .unwrap()
 }
 
@@ -598,7 +598,7 @@ pub fn make_client_config_with_raw_key_support(
 ) -> ClientConfig {
     let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(provider));
     let client_cert_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-        kt.get_certified_client_key(provider)
+        kt.certified_client_key(provider)
             .unwrap(),
     ));
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
@@ -635,7 +635,7 @@ pub fn finish_client_config_with_creds(
 
     config
         .with_root_certificates(root_store)
-        .with_client_auth_cert(kt.get_client_chain(), kt.get_client_key())
+        .with_client_auth_cert(kt.client_chain(), kt.client_key())
         .unwrap()
 }
 

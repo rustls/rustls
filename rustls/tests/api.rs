@@ -58,7 +58,7 @@ mod test_raw_keys {
                 Some(certificates) => {
                     assert_eq!(certificates.len(), 1);
                     let cert: CertificateDer<'_> = certificates[0].clone();
-                    assert_eq!(cert.as_ref(), kt.get_spki().as_ref());
+                    assert_eq!(cert.as_ref(), kt.spki().as_ref());
                 }
                 None => {
                     unreachable!("Client should have received a certificate")
@@ -70,7 +70,7 @@ mod test_raw_keys {
                 Some(certificates) => {
                     assert_eq!(certificates.len(), 1);
                     let cert = certificates[0].clone();
-                    assert_eq!(cert.as_ref(), kt.get_client_spki().as_ref());
+                    assert_eq!(cert.as_ref(), kt.client_spki().as_ref());
                 }
                 None => {
                     unreachable!("Server should have received a certificate")
@@ -409,7 +409,7 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
             .into()
         )
         .with_no_client_auth()
-        .with_single_cert(KeyType::EcdsaP256.get_chain(), KeyType::EcdsaP256.get_key())
+        .with_single_cert(KeyType::EcdsaP256.chain(), KeyType::EcdsaP256.key())
         .err(),
         Some(ApiMisuse::NoKeyExchangeGroupsConfigured.into())
     );
@@ -427,7 +427,7 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
             .into()
         )
         .with_no_client_auth()
-        .with_single_cert(KeyType::EcdsaP256.get_chain(), KeyType::EcdsaP256.get_key())
+        .with_single_cert(KeyType::EcdsaP256.chain(), KeyType::EcdsaP256.key())
         .err(),
         Some(ApiMisuse::NoCipherSuitesConfigured.into())
     );
@@ -537,7 +537,7 @@ fn client_can_get_server_cert() {
             do_handshake(&mut client, &mut server);
 
             let certs = client.peer_certificates();
-            assert_eq!(certs, Some(kt.get_chain().as_slice()));
+            assert_eq!(certs, Some(kt.chain().as_slice()));
         }
     }
 }
@@ -650,7 +650,7 @@ fn server_can_get_client_cert() {
             do_handshake(&mut client, &mut server);
 
             let certs = server.peer_certificates();
-            assert_eq!(certs, Some(kt.get_client_chain().as_slice()));
+            assert_eq!(certs, Some(kt.client_chain().as_slice()));
         }
     }
 }
@@ -799,7 +799,7 @@ fn test_config_builders_debug() {
 fn server_allow_any_anonymous_or_authenticated_client() {
     let provider = Arc::new(provider::default_provider());
     let kt = KeyType::Rsa2048;
-    for client_cert_chain in [None, Some(kt.get_client_chain())] {
+    for client_cert_chain in [None, Some(kt.client_chain())] {
         let client_auth = webpki_client_verifier_builder(kt.client_root_store(), &provider)
             .allow_unauthenticated()
             .build()
@@ -807,7 +807,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
 
         let server_config = ServerConfig::builder_with_provider(provider.clone())
             .with_client_cert_verifier(client_auth)
-            .with_single_cert(kt.get_chain(), kt.get_key())
+            .with_single_cert(kt.chain(), kt.key())
             .unwrap();
         let server_config = Arc::new(server_config);
 
@@ -1642,7 +1642,7 @@ fn client_check_server_certificate_ee_crl_expired() {
 #[test]
 fn client_check_server_certificate_helper_api() {
     for kt in KeyType::all_for_provider(&provider::default_provider()) {
-        let chain = kt.get_chain();
+        let chain = kt.chain();
         let correct_roots = kt.client_root_store();
         let incorrect_roots = match kt {
             KeyType::Rsa2048 => KeyType::EcdsaP256,
@@ -1677,7 +1677,7 @@ fn client_check_server_certificate_helper_api() {
 
 #[test]
 fn client_check_server_valid_purpose() {
-    let chain = KeyType::EcdsaP256.get_client_chain();
+    let chain = KeyType::EcdsaP256.client_chain();
     let trust_anchor = chain.last().unwrap();
     let roots = RootCertStore {
         roots: vec![
@@ -3309,12 +3309,12 @@ fn sni_resolver_works() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
     resolver
         .add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match"),
+            sign::CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match"),
         )
         .unwrap();
 
@@ -3350,14 +3350,14 @@ fn sni_resolver_works() {
 fn sni_resolver_rejects_wrong_names() {
     let kt = KeyType::Rsa2048;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
+            sign::CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match")
         )
     );
     assert_eq!(
@@ -3366,7 +3366,7 @@ fn sni_resolver_rejects_wrong_names() {
         ))),
         resolver.add(
             DnsName::try_from("not-localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
+            sign::CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match")
         )
     );
 }
@@ -3392,14 +3392,14 @@ fn sni_resolver_lower_cases_configured_names() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
         Ok(()),
         resolver.add(
             DnsName::try_from("LOCALHOST").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
+            sign::CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match")
         )
     );
 
@@ -3423,14 +3423,14 @@ fn sni_resolver_lower_cases_queried_names() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()).expect("keys match")
+            sign::CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match")
         )
     );
 
@@ -3452,7 +3452,7 @@ fn sni_resolver_lower_cases_queried_names() {
 fn sni_resolver_rejects_bad_certs() {
     let kt = KeyType::Rsa2048;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
@@ -3477,12 +3477,12 @@ fn sni_resolver_rejects_bad_certs() {
 fn test_keys_match() {
     // Consistent: Both of these should have the same SPKI values
     let expect_consistent =
-        sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeySomeSpki));
+        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Arc::new(SigningKeySomeSpki));
     assert!(expect_consistent.is_ok());
 
     // Inconsistent: These should not have the same SPKI values
     let expect_inconsistent =
-        sign::CertifiedKey::new(KeyType::EcdsaP256.get_chain(), Arc::new(SigningKeySomeSpki));
+        sign::CertifiedKey::new(KeyType::EcdsaP256.chain(), Arc::new(SigningKeySomeSpki));
     assert!(matches!(
         expect_inconsistent,
         Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
@@ -3490,7 +3490,7 @@ fn test_keys_match() {
 
     // Unknown: This signing key returns None for its SPKI, so we can't tell if the certified key is consistent
     assert!(matches!(
-        sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeyNoneSpki)),
+        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Arc::new(SigningKeyNoneSpki)),
         Err(Error::InconsistentKeys(InconsistentKeys::Unknown))
     ));
 }
@@ -3519,7 +3519,7 @@ struct SigningKeySomeSpki;
 
 impl sign::SigningKey for SigningKeySomeSpki {
     fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer<'_>> {
-        let chain = KeyType::Rsa2048.get_chain();
+        let chain = KeyType::Rsa2048.chain();
         let cert = ParsedCertificate::try_from(chain.first().unwrap()).unwrap();
         Some(
             cert.subject_public_key_info()
@@ -6610,7 +6610,7 @@ fn test_secret_extraction_enabled() {
         let mut server_config =
             ServerConfig::builder_with_provider(provider_with_one_suite(&provider, suite).into())
                 .with_no_client_auth()
-                .with_single_cert(kt.get_chain(), kt.get_key())
+                .with_single_cert(kt.chain(), kt.key())
                 .unwrap();
         // Opt into secret extraction from both sides
         server_config.enable_secret_extraction = true;
@@ -6735,7 +6735,7 @@ fn test_secret_extraction_disabled_or_too_early() {
     for (server_enable, client_enable) in [(true, false), (false, true)] {
         let mut server_config = ServerConfig::builder_with_provider(provider.clone())
             .with_no_client_auth()
-            .with_single_cert(kt.get_chain(), kt.get_key())
+            .with_single_cert(kt.chain(), kt.key())
             .unwrap();
         server_config.enable_secret_extraction = server_enable;
         let server_config = Arc::new(server_config);
@@ -6798,7 +6798,7 @@ fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
             .into(),
         )
         .with_no_client_auth()
-        .with_single_cert(kt.get_chain(), kt.get_key())
+        .with_single_cert(kt.chain(), kt.key())
         .unwrap(),
     );
 
@@ -7394,7 +7394,7 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     for version_provider in all_versions(&provider) {
         let server_config = ServerConfig::builder_with_provider(provider.clone().into())
             .with_no_client_auth()
-            .with_single_cert_with_ocsp(kt.get_chain(), kt.get_key(), ocsp_response.to_vec())
+            .with_single_cert_with_ocsp(kt.chain(), kt.key(), ocsp_response.to_vec())
             .unwrap();
 
         let client_config = ClientConfig::builder_with_provider(version_provider.into())
@@ -7634,7 +7634,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
     let big_cert = CertificateDer::from(vec![0u8; 0xffff]);
     let key = provider::default_provider()
         .key_provider
-        .load_private_key(KeyType::Rsa2048.get_client_key())
+        .load_private_key(KeyType::Rsa2048.client_key())
         .unwrap();
     let big_cert_and_key = sign::CertifiedKey::new_unchecked(vec![big_cert], key);
     client_config.client_auth_cert_resolver =
@@ -8027,9 +8027,9 @@ fn test_keys_match_for_all_signing_key_types() {
     for kt in KeyType::all_for_provider(&provider) {
         let key = provider
             .key_provider
-            .load_private_key(kt.get_client_key())
+            .load_private_key(kt.client_key())
             .unwrap();
-        let _ = sign::CertifiedKey::new(kt.get_client_chain(), key).expect("keys match");
+        let _ = sign::CertifiedKey::new(kt.client_chain(), key).expect("keys match");
         println!("{kt:?} ok");
     }
 }
