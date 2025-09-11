@@ -492,20 +492,20 @@ impl KeyType {
     }
 }
 
-pub fn finish_server_config(
-    kt: KeyType,
-    conf: rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier>,
-) -> ServerConfig {
-    conf.with_no_client_auth()
-        .with_single_cert(kt.chain(), kt.key())
-        .unwrap()
+pub trait ServerConfigExt {
+    fn finish(self, kt: KeyType) -> ServerConfig;
+}
+
+impl ServerConfigExt for rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
+    fn finish(self, kt: KeyType) -> ServerConfig {
+        self.with_no_client_auth()
+            .with_single_cert(kt.chain(), kt.key())
+            .unwrap()
+    }
 }
 
 pub fn make_server_config(kt: KeyType, provider: &CryptoProvider) -> ServerConfig {
-    finish_server_config(
-        kt,
-        ServerConfig::builder_with_provider(provider.clone().into()),
-    )
+    ServerConfig::builder_with_provider(provider.clone().into()).finish(kt)
 }
 
 pub fn make_server_config_with_kx_groups(
@@ -513,16 +513,14 @@ pub fn make_server_config_with_kx_groups(
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
     provider: &CryptoProvider,
 ) -> ServerConfig {
-    finish_server_config(
-        kt,
-        ServerConfig::builder_with_provider(
-            CryptoProvider {
-                kx_groups,
-                ..provider.clone()
-            }
-            .into(),
-        ),
+    ServerConfig::builder_with_provider(
+        CryptoProvider {
+            kx_groups,
+            ..provider.clone()
+        }
+        .into(),
     )
+    .finish(kt)
 }
 
 pub fn make_server_config_with_mandatory_client_auth_crls(
