@@ -520,8 +520,8 @@ pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
 pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
 pub use crate::enums::{
-    AlertDescription, CertificateCompressionAlgorithm, CipherSuite, ContentType, HandshakeType,
-    ProtocolVersion, SignatureAlgorithm, SignatureScheme,
+    AlertDescription, CertificateCompressionAlgorithm, CertificateType, CipherSuite, ContentType,
+    HandshakeType, ProtocolVersion, SignatureAlgorithm, SignatureScheme,
 };
 pub use crate::error::{
     ApiMisuse, CertRevocationListError, CertificateError, EncryptedClientHelloError, Error,
@@ -621,7 +621,6 @@ pub mod server {
     #[cfg(feature = "std")]
     pub use server_conn::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
-    pub use crate::enums::CertificateType;
     pub use crate::verify::NoClientAuth;
     pub use crate::webpki::{
         ClientCertVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
