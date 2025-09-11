@@ -1273,12 +1273,10 @@ fn check_sigalgs_reduced_by_ciphersuite(
     suite: CipherSuite,
     expected_sigalgs: Vec<SignatureScheme>,
 ) {
-    let client_config = finish_client_config(
-        kt,
-        ClientConfig::builder_with_provider(
-            provider_with_one_suite(&provider::default_provider(), find_suite(suite)).into(),
-        ),
-    );
+    let client_config = ClientConfig::builder_with_provider(
+        provider_with_one_suite(&provider::default_provider(), find_suite(suite)).into(),
+    )
+    .finish(kt);
 
     let mut server_config = make_server_config(kt, &provider::default_provider());
 
@@ -3084,10 +3082,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
         tls13_cipher_suites: vec![cipher_suite::TLS13_AES_256_GCM_SHA384],
         ..provider::default_provider()
     };
-    let client_config = finish_client_config(
-        kt,
-        ClientConfig::builder_with_provider(server_provider.into()),
-    );
+    let client_config = ClientConfig::builder_with_provider(server_provider.into()).finish(kt);
 
     (client_config, server_config)
 }
@@ -3787,12 +3782,10 @@ fn all_suites_covered() {
 fn negotiated_ciphersuite_client() {
     for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
-        let client_config = finish_client_config(
-            kt,
-            ClientConfig::builder_with_provider(
-                provider_with_one_suite(&provider::default_provider(), scs).into(),
-            ),
-        );
+        let client_config = ClientConfig::builder_with_provider(
+            provider_with_one_suite(&provider::default_provider(), scs).into(),
+        )
+        .finish(kt);
 
         do_suite_and_kx_test(
             client_config,
@@ -3847,12 +3840,10 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
         .finish(kt);
         server_config.ignore_client_order = true;
 
-        let client_config = finish_client_config(
-            kt,
-            ClientConfig::builder_with_provider(
-                provider_with_suites(&provider::default_provider(), &[scs_other, scs]).into(),
-            ),
-        );
+        let client_config = ClientConfig::builder_with_provider(
+            provider_with_suites(&provider::default_provider(), &[scs_other, scs]).into(),
+        )
+        .finish(kt);
 
         do_suite_and_kx_test(
             client_config,
@@ -6490,14 +6481,12 @@ fn test_acceptor() {
 fn test_acceptor_rejected_handshake() {
     use rustls::server::Acceptor;
 
-    let client_config = finish_client_config(
-        KeyType::Ed25519,
-        ClientConfig::builder_with_provider(
-            provider::default_provider()
-                .with_only_tls13()
-                .into(),
-        ),
-    );
+    let client_config = ClientConfig::builder_with_provider(
+        provider::default_provider()
+            .with_only_tls13()
+            .into(),
+    )
+    .finish(KeyType::Ed25519);
     let mut client = ClientConnection::new(client_config.into(), server_name("localhost")).unwrap();
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
@@ -6660,8 +6649,7 @@ fn test_secret_extract_produces_correct_variant() {
         server_config.enable_secret_extraction = true;
         let server_config = Arc::new(server_config);
 
-        let mut client_config =
-            finish_client_config(kt, ClientConfig::builder_with_provider(provider));
+        let mut client_config = ClientConfig::builder_with_provider(provider).finish(kt);
         client_config.enable_secret_extraction = true;
 
         let (mut client, mut server) =
@@ -6890,12 +6878,11 @@ fn test_debug_server_name_from_string() {
 #[cfg(all(feature = "ring", feature = "aws-lc-rs"))]
 #[test]
 fn test_explicit_provider_selection() {
-    let client_config = finish_client_config(
-        KeyType::Rsa2048,
-        rustls::ClientConfig::builder_with_provider(
-            rustls::crypto::ring::default_provider().into(),
-        ),
-    );
+    let client_config = rustls::ClientConfig::builder_with_provider(
+        rustls::crypto::ring::default_provider().into(),
+    )
+    .finish(KeyType::Rsa2048);
+
     let server_config = rustls::ServerConfig::builder_with_provider(
         rustls::crypto::aws_lc_rs::default_provider().into(),
     )
@@ -6938,16 +6925,14 @@ fn test_client_construction_fails_if_random_source_fails_in_first_request() {
         rand_queue: Mutex::new(b""),
     };
 
-    let client_config = finish_client_config(
-        KeyType::Rsa2048,
-        rustls::ClientConfig::builder_with_provider(
-            CryptoProvider {
-                secure_random: &FAULTY_RANDOM,
-                ..provider::default_provider()
-            }
-            .into(),
-        ),
-    );
+    let client_config = rustls::ClientConfig::builder_with_provider(
+        CryptoProvider {
+            secure_random: &FAULTY_RANDOM,
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .finish(KeyType::Rsa2048);
 
     assert_eq!(
         ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
@@ -6961,16 +6946,14 @@ fn test_client_construction_fails_if_random_source_fails_in_second_request() {
         rand_queue: Mutex::new(b"nice random number generator huh"),
     };
 
-    let client_config = finish_client_config(
-        KeyType::Rsa2048,
-        rustls::ClientConfig::builder_with_provider(
-            CryptoProvider {
-                secure_random: &FAULTY_RANDOM,
-                ..provider::default_provider()
-            }
-            .into(),
-        ),
-    );
+    let client_config = rustls::ClientConfig::builder_with_provider(
+        CryptoProvider {
+            secure_random: &FAULTY_RANDOM,
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .finish(KeyType::Rsa2048);
 
     assert_eq!(
         ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
@@ -6987,16 +6970,14 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
         ),
     };
 
-    let client_config = finish_client_config(
-        KeyType::Rsa2048,
-        rustls::ClientConfig::builder_with_provider(
-            CryptoProvider {
-                secure_random: &FAULTY_RANDOM,
-                ..provider::default_provider()
-            }
-            .into(),
-        ),
-    );
+    let client_config = rustls::ClientConfig::builder_with_provider(
+        CryptoProvider {
+            secure_random: &FAULTY_RANDOM,
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .finish(KeyType::Rsa2048);
 
     ClientConnection::new(Arc::new(client_config), server_name("localhost"))
         .expect("check how much random material ClientConnection::new consumes");
@@ -7146,7 +7127,7 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
                 .into(),
         )
         .with_ech(EchMode::Enable(ech_config));
-        let config = finish_client_config(KeyType::Rsa2048, config);
+        let config = config.finish(KeyType::Rsa2048);
         assert_eq!(config.fips(), suite.fips());
 
         // The same applies if an ECH GREASE client configuration is used.
@@ -7157,7 +7138,7 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
                 .into(),
         )
         .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)));
-        let config = finish_client_config(KeyType::Rsa2048, config);
+        let config = config.finish(KeyType::Rsa2048);
         assert_eq!(config.fips(), suite.fips());
 
         // And a connection made from a client config should retain the fips status of the
@@ -7905,10 +7886,8 @@ fn test_automatic_refresh_traffic_keys() {
     const KEY_UPDATE_SIZE: usize = encrypted_size(5);
     let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider());
 
-    let client_config = finish_client_config(
-        KeyType::Ed25519,
-        ClientConfig::builder_with_provider(provider.clone()),
-    );
+    let client_config =
+        ClientConfig::builder_with_provider(provider.clone()).finish(KeyType::Ed25519);
     let server_config = ServerConfig::builder_with_provider(provider).finish(KeyType::Ed25519);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -7967,10 +7946,8 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         .with_only_tls12(),
     );
 
-    let client_config = finish_client_config(
-        KeyType::Ed25519,
-        ClientConfig::builder_with_provider(provider.clone()),
-    );
+    let client_config =
+        ClientConfig::builder_with_provider(provider.clone()).finish(KeyType::Ed25519);
     let server_config = ServerConfig::builder_with_provider(provider).finish(KeyType::Ed25519);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -8089,16 +8066,14 @@ fn large_client_hello_acceptor() {
 #[test]
 fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
     let kt = KeyType::Rsa2048;
-    let client_config = finish_client_config(
-        kt,
-        ClientConfig::builder_with_provider(
-            CryptoProvider {
-                kx_groups: vec![&FakeHybrid, provider::kx_group::SECP384R1],
-                ..provider::default_provider()
-            }
-            .into(),
-        ),
-    );
+    let client_config = ClientConfig::builder_with_provider(
+        CryptoProvider {
+            kx_groups: vec![&FakeHybrid, provider::kx_group::SECP384R1],
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .finish(kt);
     let provider = provider::default_provider();
     let server_config = make_server_config(kt, &provider);
 

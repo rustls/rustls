@@ -41,14 +41,14 @@ fn test_explicit_choice_required() {
     CryptoProvider::get_default().expect("provider missing");
 
     // does not panic
-    finish_client_config(KeyType::Rsa2048, ClientConfig::builder());
+    ClientConfig::builder().finish(KeyType::Rsa2048);
 }
 
 fn test_ring_used_as_implicit_provider() {
     assert!(CryptoProvider::get_default().is_none());
 
     // implicitly installs ring provider
-    finish_client_config(KeyType::Rsa2048, ClientConfig::builder());
+    ClientConfig::builder().finish(KeyType::Rsa2048);
 
     let default = CryptoProvider::get_default().expect("provider missing");
     let debug = format!("{default:?}");
@@ -62,7 +62,7 @@ fn test_aws_lc_rs_used_as_implicit_provider() {
     assert!(CryptoProvider::get_default().is_none());
 
     // implicitly installs aws-lc-rs provider
-    finish_client_config(KeyType::Rsa2048, ClientConfig::builder());
+    ClientConfig::builder().finish(KeyType::Rsa2048);
 
     let default = CryptoProvider::get_default().expect("provider missing");
     let debug = format!("{default:?}");
