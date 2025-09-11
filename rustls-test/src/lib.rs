@@ -479,6 +479,17 @@ impl KeyType {
             Self::Ed25519 => b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA",
         }
     }
+
+    pub fn client_root_store(&self) -> Arc<RootCertStore> {
+        // The key type's chain file contains the DER encoding of the EE cert, the intermediate cert,
+        // and the root trust anchor. We want only the trust anchor to build the root cert store.
+        let chain = self.get_chain();
+        let mut roots = RootCertStore::empty();
+        roots
+            .add(chain.last().unwrap().clone())
+            .unwrap();
+        roots.into()
+    }
 }
 
 pub fn finish_server_config(
@@ -514,17 +525,6 @@ pub fn make_server_config_with_kx_groups(
     )
 }
 
-pub fn get_client_root_store(kt: KeyType) -> Arc<RootCertStore> {
-    // The key type's chain file contains the DER encoding of the EE cert, the intermediate cert,
-    // and the root trust anchor. We want only the trust anchor to build the root cert store.
-    let chain = kt.get_chain();
-    let mut roots = RootCertStore::empty();
-    roots
-        .add(chain.last().unwrap().clone())
-        .unwrap();
-    roots.into()
-}
-
 pub fn make_server_config_with_mandatory_client_auth_crls(
     kt: KeyType,
     crls: Vec<CertificateRevocationListDer<'static>>,
@@ -532,7 +532,7 @@ pub fn make_server_config_with_mandatory_client_auth_crls(
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
-        webpki_client_verifier_builder(get_client_root_store(kt), provider).with_crls(crls),
+        webpki_client_verifier_builder(kt.client_root_store(), provider).with_crls(crls),
         provider,
     )
 }
@@ -543,7 +543,7 @@ pub fn make_server_config_with_mandatory_client_auth(
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
-        webpki_client_verifier_builder(get_client_root_store(kt), provider),
+        webpki_client_verifier_builder(kt.client_root_store(), provider),
         provider,
     )
 }
@@ -555,7 +555,7 @@ pub fn make_server_config_with_optional_client_auth(
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
-        webpki_client_verifier_builder(get_client_root_store(kt), provider)
+        webpki_client_verifier_builder(kt.client_root_store(), provider)
             .with_crls(crls)
             .allow_unknown_revocation_status()
             .allow_unauthenticated(),
@@ -1239,11 +1239,11 @@ impl MockClientVerifier {
         provider: &CryptoProvider,
     ) -> Self {
         Self {
-            parent: webpki_client_verifier_builder(get_client_root_store(kt), provider)
+            parent: webpki_client_verifier_builder(kt.client_root_store(), provider)
                 .build()
                 .unwrap(),
             verified,
-            subjects: Arc::from(get_client_root_store(kt).subjects()),
+            subjects: Arc::from(kt.client_root_store().subjects()),
             mandatory: true,
             offered_schemes: None,
             expect_raw_public_keys: false,

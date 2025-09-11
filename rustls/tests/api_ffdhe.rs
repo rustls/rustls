@@ -21,7 +21,7 @@ fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups(
     };
 
     let build_err = ClientConfig::builder_with_provider(bad_crypto_provider.into())
-        .with_root_certificates(get_client_root_store(KeyType::EcdsaP256))
+        .with_root_certificates(KeyType::EcdsaP256.client_root_store())
         .with_no_client_auth()
         .unwrap_err()
         .to_string();
