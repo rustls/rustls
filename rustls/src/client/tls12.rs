@@ -887,7 +887,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         )?
         .ok_or(cx.common.send_fatal_alert(
             AlertDescription::BadCertificate,
-            Error::NoCertificatesPresented,
+            PeerMisbehaved::NoCertificatesPresented,
         ))?;
 
         let cert_verified = st

@@ -1821,7 +1821,9 @@ fn test_client_cert_resolve(
 
         assert_eq!(
             do_handshake_until_error(&mut client, &mut server),
-            Err(ErrorFromPeer::Server(Error::NoCertificatesPresented))
+            Err(ErrorFromPeer::Server(Error::PeerMisbehaved(
+                PeerMisbehaved::NoCertificatesPresented
+            )))
         );
     }
 }
@@ -3475,7 +3477,7 @@ fn sni_resolver_rejects_bad_certs() {
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
-        Err(Error::NoCertificatesPresented),
+        Err(PeerMisbehaved::NoCertificatesPresented.into()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
             sign::CertifiedKey::new_unchecked(vec![], signing_key.clone())
