@@ -56,7 +56,7 @@ pub fn server_verifier() -> Arc<dyn ServerCertVerifier> {
         &include_bytes!("../../test-ca/ecdsa-p256/inter.der")[..],
     )]);
 
-    WebPkiServerVerifier::builder_with_provider(root_store.into(), provider().into())
+    WebPkiServerVerifier::builder_with_provider(root_store.into(), &provider())
         .build()
         .unwrap()
 }
