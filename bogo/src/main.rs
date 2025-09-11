@@ -402,9 +402,7 @@ impl DummyClientAuth {
             root_hint_subjects,
             parent: WebPkiClientVerifier::builder_with_provider(
                 load_root_certs(trusted_cert_file),
-                SelectedProvider::from_env()
-                    .provider()
-                    .into(),
+                &SelectedProvider::from_env().provider(),
             )
             .build()
             .unwrap(),

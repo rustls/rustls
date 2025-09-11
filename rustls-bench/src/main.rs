@@ -802,12 +802,9 @@ impl Parameters {
                 for root in roots {
                     client_auth_roots.add(root).unwrap();
                 }
-                WebPkiClientVerifier::builder_with_provider(
-                    client_auth_roots.into(),
-                    provider.clone(),
-                )
-                .build()
-                .unwrap()
+                WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), &provider)
+                    .build()
+                    .unwrap()
             }
             ClientAuth::No => WebPkiClientVerifier::no_client_auth(),
         };
