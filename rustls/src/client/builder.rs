@@ -6,7 +6,7 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{ClientConfig, EchMode, ResolvesClientCert, handy};
-use crate::crypto::InternalCryptoProvider;
+use crate::crypto::CryptoProvider;
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
@@ -156,7 +156,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         self,
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
     ) -> Result<ClientConfig, Error> {
-        let provider: Arc<dyn InternalCryptoProvider> = self.provider;
+        let provider: Arc<dyn CryptoProvider> = self.provider;
         provider.consistency_check()?;
 
         if self.state.client_ech_mode.is_some() {

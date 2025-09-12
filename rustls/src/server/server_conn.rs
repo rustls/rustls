@@ -18,7 +18,7 @@ use crate::common_state::{Protocol, State};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{DefaultCryptoProvider, InternalCryptoProvider};
+use crate::crypto::{CryptoProvider, DefaultCryptoProvider};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -300,7 +300,7 @@ impl<'a> ClientHello<'a> {
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     /// Source of randomness and other crypto.
-    pub(super) provider: Arc<dyn InternalCryptoProvider>,
+    pub(super) provider: Arc<dyn CryptoProvider>,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list
@@ -479,7 +479,7 @@ impl ServerConfig {
     /// For more information, see the [`ConfigBuilder`] documentation.
     #[cfg(feature = "std")]
     pub fn builder_with_provider(
-        provider: Arc<dyn InternalCryptoProvider>,
+        provider: Arc<dyn CryptoProvider>,
     ) -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
@@ -500,7 +500,7 @@ impl ServerConfig {
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_details(
-        provider: Arc<dyn InternalCryptoProvider>,
+        provider: Arc<dyn CryptoProvider>,
         time_provider: Arc<dyn TimeProvider>,
     ) -> ConfigBuilder<Self, WantsVerifier> {
         ConfigBuilder {
@@ -524,7 +524,7 @@ impl ServerConfig {
     }
 
     /// Return the crypto provider used to construct this client configuration.
-    pub fn crypto_provider(&self) -> &Arc<dyn InternalCryptoProvider> {
+    pub fn crypto_provider(&self) -> &Arc<dyn CryptoProvider> {
         &self.provider
     }
 

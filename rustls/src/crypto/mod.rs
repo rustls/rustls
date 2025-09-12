@@ -55,8 +55,8 @@ pub use crate::suites::CipherSuiteCommon;
 
 /// Controls core cryptography used by rustls.
 ///
-/// Generalises over multiple concrete representations of `CryptoProvider`
-pub trait InternalCryptoProvider: Send + Sync + Debug {
+/// Generalises over multiple concrete representations of provider
+pub trait CryptoProvider: Send + Sync + Debug {
     /// List of supported TLS1.2 cipher suites, in preference order -- the first element
     /// is the highest priority.
     ///
@@ -101,7 +101,7 @@ pub trait InternalCryptoProvider: Send + Sync + Debug {
     fn key_provider(&self) -> &'static dyn KeyProvider;
 }
 
-impl dyn InternalCryptoProvider {
+impl dyn CryptoProvider {
     /// Returns `true` if this provider is operating in FIPS mode.
     ///
     /// This covers only the cryptographic parts of FIPS approval.  There are
@@ -358,7 +358,7 @@ impl OwnedCryptoProvider {
     }
 }
 
-impl InternalCryptoProvider for OwnedCryptoProvider {
+impl CryptoProvider for OwnedCryptoProvider {
     fn tls12_cipher_suites(&self) -> &[&'static Tls12CipherSuite] {
         &self.tls12_cipher_suites
     }
@@ -416,16 +416,14 @@ impl DefaultCryptoProvider {
     /// Call this early in your process to configure which provider is used for
     /// the provider.  The configuration should happen before any use of
     /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
-    pub fn install(
-        prov: Arc<dyn InternalCryptoProvider>,
-    ) -> Result<(), Arc<dyn InternalCryptoProvider>> {
+    pub fn install(prov: Arc<dyn CryptoProvider>) -> Result<(), Arc<dyn CryptoProvider>> {
         static_default::install_default(prov)
     }
 
     /// Returns the default `CryptoProvider` for this process.
     ///
     /// This will be `None` if no default has been set yet.
-    pub fn get() -> Option<&'static Arc<dyn InternalCryptoProvider>> {
+    pub fn get() -> Option<&'static Arc<dyn CryptoProvider>> {
         static_default::get_default()
     }
 
@@ -434,7 +432,7 @@ impl DefaultCryptoProvider {
     /// - gets the pre-installed default, or
     /// - installs one `from_crate_features()`, or else
     /// - panics about the need to call [`CryptoProvider::install_default()`]
-    pub(crate) fn get_or_install_from_crate_features() -> &'static Arc<dyn InternalCryptoProvider> {
+    pub(crate) fn get_or_install_from_crate_features() -> &'static Arc<dyn CryptoProvider> {
         if let Some(provider) = Self::get() {
             return provider;
         }
@@ -881,33 +879,33 @@ mod static_default {
     #[cfg(not(feature = "std"))]
     use once_cell::race::OnceBox;
 
-    use crate::crypto::InternalCryptoProvider;
+    use crate::crypto::CryptoProvider;
     use crate::sync::Arc;
 
     #[cfg(feature = "std")]
     pub(crate) fn install_default(
-        default_provider: Arc<dyn InternalCryptoProvider>,
-    ) -> Result<(), Arc<dyn InternalCryptoProvider>> {
+        default_provider: Arc<dyn CryptoProvider>,
+    ) -> Result<(), Arc<dyn CryptoProvider>> {
         PROCESS_DEFAULT_PROVIDER.set(default_provider)
     }
 
     #[cfg(not(feature = "std"))]
     pub(crate) fn install_default(
-        default_provider: Arc<dyn InternalCryptoProvider>,
-    ) -> Result<(), Arc<dyn InternalCryptoProvider>> {
+        default_provider: Arc<dyn CryptoProvider>,
+    ) -> Result<(), Arc<dyn CryptoProvider>> {
         PROCESS_DEFAULT_PROVIDER
             .set(Box::new(default_provider))
             .map_err(|e| *e)
     }
 
-    pub(crate) fn get_default() -> Option<&'static Arc<dyn InternalCryptoProvider>> {
+    pub(crate) fn get_default() -> Option<&'static Arc<dyn CryptoProvider>> {
         PROCESS_DEFAULT_PROVIDER.get()
     }
 
     #[cfg(feature = "std")]
-    static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<dyn InternalCryptoProvider>> = OnceLock::new();
+    static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<dyn CryptoProvider>> = OnceLock::new();
     #[cfg(not(feature = "std"))]
-    static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<dyn InternalCryptoProvider>> = OnceBox::new();
+    static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<dyn CryptoProvider>> = OnceBox::new();
 }
 
 #[cfg(test)]

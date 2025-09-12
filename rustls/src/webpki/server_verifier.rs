@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
-use crate::crypto::{DefaultCryptoProvider, InternalCryptoProvider, WebPkiSupportedAlgorithms};
+use crate::crypto::{DefaultCryptoProvider, CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::sync::Arc;
 use crate::verify::{
     HandshakeSignatureValid, PeerIdentity, ServerCertVerified, ServerCertVerifier, ServerIdentity,
@@ -167,7 +167,7 @@ impl WebPkiServerVerifier {
     /// For more information, see the [`ServerCertVerifierBuilder`] documentation.
     pub fn builder_with_provider(
         roots: Arc<RootCertStore>,
-        provider: &dyn InternalCryptoProvider,
+        provider: &dyn CryptoProvider,
     ) -> ServerCertVerifierBuilder {
         ServerCertVerifierBuilder::new(roots, provider.signature_verification_algorithms())
     }
