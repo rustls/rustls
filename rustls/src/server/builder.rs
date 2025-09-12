@@ -6,7 +6,6 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use super::server_conn::InvalidSniPolicy;
 use super::{ResolvesServerCert, ServerConfig, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::crypto::InternalCryptoProvider;
 use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
@@ -67,7 +66,8 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         cert_chain: Vec<CertificateDer<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
-        let certified_key = CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
+        let certified_key =
+            CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider().as_ref())?;
         self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 
@@ -91,7 +91,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         ocsp: Vec<u8>,
     ) -> Result<ServerConfig, Error> {
         let mut certified_key =
-            CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
+            CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider().as_ref())?;
         certified_key.ocsp = Some(ocsp);
         self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
@@ -101,10 +101,9 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         self,
         cert_resolver: Arc<dyn ResolvesServerCert>,
     ) -> Result<ServerConfig, Error> {
-        let provider: Arc<dyn InternalCryptoProvider> = self.provider;
-        provider.consistency_check()?;
+        self.provider.consistency_check()?;
         Ok(ServerConfig {
-            provider,
+            provider: self.provider,
             verifier: self.state.verifier,
             cert_resolver,
             ignore_client_order: false,
