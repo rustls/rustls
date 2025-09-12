@@ -384,6 +384,75 @@ impl CryptoProvider for OwnedCryptoProvider {
     }
 }
 
+/// This is a [`CryptoProvider`] that is const-constructable.
+#[allow(clippy::exhaustive_structs)]
+#[derive(Debug, Clone, Copy)]
+pub struct ConstCryptoProvider {
+    /// List of supported TLS1.2 cipher suites, in preference order -- the first element
+    /// is the highest priority.
+    pub tls12_cipher_suites: &'static [&'static Tls12CipherSuite],
+
+    /// List of supported TLS1.3 cipher suites, in preference order -- the first element
+    /// is the highest priority.
+    pub tls13_cipher_suites: &'static [&'static Tls13CipherSuite],
+
+    /// List of supported key exchange groups, in preference order -- the
+    /// first element is the highest priority.
+    pub kx_groups: &'static [&'static dyn SupportedKxGroup],
+
+    /// List of signature verification algorithms for use with webpki.
+    pub signature_verification_algorithms: WebPkiSupportedAlgorithms,
+
+    /// Source of cryptographically secure random numbers.
+    pub secure_random: &'static dyn SecureRandom,
+
+    /// Provider for loading private [`SigningKey`]s from [`PrivateKeyDer`].
+    pub key_provider: &'static dyn KeyProvider,
+}
+
+impl ConstCryptoProvider {
+    /// Turn this into an [`OwnedCryptoProvider`]
+    ///
+    /// This is typically useful to do conditional alteration of the provider at
+    /// run-time.
+    pub fn into_owned(self) -> OwnedCryptoProvider {
+        OwnedCryptoProvider {
+            tls12_cipher_suites: self.tls12_cipher_suites.to_vec(),
+            tls13_cipher_suites: self.tls13_cipher_suites.to_vec(),
+            kx_groups: self.kx_groups.to_vec(),
+            signature_verification_algorithms: self.signature_verification_algorithms,
+            secure_random: self.secure_random,
+            key_provider: self.key_provider,
+        }
+    }
+}
+
+impl CryptoProvider for ConstCryptoProvider {
+    fn tls12_cipher_suites(&self) -> &[&'static Tls12CipherSuite] {
+        self.tls12_cipher_suites
+    }
+
+    fn tls13_cipher_suites(&self) -> &[&'static Tls13CipherSuite] {
+        self.tls13_cipher_suites
+    }
+
+    fn kx_groups(&self) -> &[&'static dyn SupportedKxGroup] {
+        self.kx_groups
+    }
+
+    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
+        self.signature_verification_algorithms
+    }
+
+    fn secure_random(&self) -> &'static dyn SecureRandom {
+        self.secure_random
+    }
+
+    fn key_provider(&self) -> &'static dyn KeyProvider {
+        self.key_provider
+    }
+}
+
 /// Interacting with the per-process default `CryptoProvider`
 ///
 /// There is the concept of an implicit default provider, configured at run-time once in
