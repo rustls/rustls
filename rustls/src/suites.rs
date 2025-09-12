@@ -111,14 +111,6 @@ impl SupportedCipherSuite {
         }
     }
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
-    pub fn fips(&self) -> bool {
-        match self {
-            Self::Tls12(cs) => cs.fips(),
-            Self::Tls13(cs) => cs.fips(),
-        }
-    }
-
     /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
     ///
     /// TLS 1.3 cipher suites support all key exchange types, but TLS 1.2 suites
