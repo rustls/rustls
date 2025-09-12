@@ -392,7 +392,12 @@ impl ExpectClientHello {
         sig_schemes.retain(|scheme| {
             client_suites
                 .iter()
-                .any(|&suite| suite.usable_for_signature_algorithm(scheme.algorithm()))
+                .any(|&suite| match suite {
+                    SupportedCipherSuite::Tls12(tls12) => {
+                        tls12.usable_for_signature_algorithm(scheme.algorithm())
+                    }
+                    SupportedCipherSuite::Tls13(_) => true,
+                })
         });
 
         // Choose a certificate.
