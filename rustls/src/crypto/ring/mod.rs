@@ -2,7 +2,7 @@ use pki_types::PrivateKeyDer;
 pub(crate) use ring as ring_like;
 use webpki::ring as webpki_algs;
 
-use crate::crypto::{KeyProvider, OwnedCryptoProvider, SecureRandom, SupportedKxGroup};
+use crate::crypto::{ConstCryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -25,18 +25,34 @@ pub(crate) mod tls13;
 /// A `CryptoProvider` backed by the [*ring*] crate.
 ///
 /// [*ring*]: https://github.com/briansmith/ring
-pub fn default_provider() -> OwnedCryptoProvider {
-    OwnedCryptoProvider {
-        tls12_cipher_suites: DEFAULT_TLS12_CIPHER_SUITES.to_vec(),
-        tls13_cipher_suites: DEFAULT_TLS13_CIPHER_SUITES.to_vec(),
-        kx_groups: DEFAULT_KX_GROUPS.to_vec(),
-        signature_verification_algorithms: SUPPORTED_SIG_ALGS,
-        secure_random: &Ring,
-        key_provider: &Ring,
-    }
+pub fn default_provider() -> ConstCryptoProvider {
+    DEFAULT_PROVIDER
 }
 
-/// Default crypto provider.
+/// The default `CryptoProvider` backed by *ring*.
+pub static DEFAULT_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls12_cipher_suites: DEFAULT_TLS12_CIPHER_SUITES,
+    tls13_cipher_suites: DEFAULT_TLS13_CIPHER_SUITES,
+    kx_groups: DEFAULT_KX_GROUPS,
+    signature_verification_algorithms: SUPPORTED_SIG_ALGS,
+    secure_random: &Ring,
+    key_provider: &Ring,
+};
+
+/// The default `CryptoProvider` backed by *ring* that only supports TLS1.3.
+pub static DEFAULT_TLS13_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls12_cipher_suites: &[],
+    ..DEFAULT_PROVIDER
+};
+
+/// The default `CryptoProvider` backed by *ring* that only supports TLS1.2.
+///
+/// Use of TLS1.3 is **strongly** recommended.
+pub static DEFAULT_TLS12_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls13_cipher_suites: &[],
+    ..DEFAULT_PROVIDER
+};
+
 #[derive(Debug)]
 struct Ring;
 

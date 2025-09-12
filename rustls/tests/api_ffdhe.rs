@@ -17,7 +17,7 @@ fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups(
             provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
         ],
-        ..provider::default_provider()
+        ..provider::default_provider().into_owned()
     });
 
     let build_err = ClientConfig::builder_with_provider(bad_crypto_provider)
@@ -72,26 +72,28 @@ fn ffdhe_ciphersuite() {
 fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() {
     use rustls::{CipherSuite, NamedGroup};
 
-    let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
-        tls12_cipher_suites: vec![
-            &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-            provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        ],
-        tls13_cipher_suites: vec![],
-        kx_groups: vec![&ffdhe::FFDHE4096_KX_GROUP, provider::kx_group::SECP256R1],
-        ..provider::default_provider()
-    }))
-    .finish(KeyType::Rsa2048);
+    let client_config =
+        rustls::ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
+            tls12_cipher_suites: vec![
+                &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+                provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            ],
+            tls13_cipher_suites: vec![],
+            kx_groups: vec![&ffdhe::FFDHE4096_KX_GROUP, provider::kx_group::SECP256R1],
+            ..provider::default_provider().into_owned()
+        }))
+        .finish(KeyType::Rsa2048);
 
-    let server_config = rustls::ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
-        tls12_cipher_suites: vec![
-            &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-            provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        ],
-        kx_groups: vec![&ffdhe::FFDHE2048_KX_GROUP, provider::kx_group::SECP256R1],
-        ..provider::default_provider()
-    }))
-    .finish(KeyType::Rsa2048);
+    let server_config =
+        rustls::ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
+            tls12_cipher_suites: vec![
+                &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+                provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            ],
+            kx_groups: vec![&ffdhe::FFDHE2048_KX_GROUP, provider::kx_group::SECP256R1],
+            ..provider::default_provider().into_owned()
+        }))
+        .finish(KeyType::Rsa2048);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
@@ -113,17 +115,18 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
 
 #[test]
 fn server_avoids_cipher_suite_with_no_common_kx_groups() {
-    let server_config = rustls::ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
-        tls12_cipher_suites: vec![
-            provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-            &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-        ],
-        tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
-        kx_groups: vec![provider::kx_group::SECP256R1, &ffdhe::FFDHE2048_KX_GROUP],
-        ..provider::default_provider()
-    }))
-    .finish(KeyType::Rsa2048)
-    .into();
+    let server_config =
+        rustls::ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
+            tls12_cipher_suites: vec![
+                provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+            ],
+            tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
+            kx_groups: vec![provider::kx_group::SECP256R1, &ffdhe::FFDHE2048_KX_GROUP],
+            ..provider::default_provider().into_owned()
+        }))
+        .finish(KeyType::Rsa2048)
+        .into();
 
     let test_cases = [
         (
@@ -198,7 +201,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
             ],
             tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
             kx_groups: client_kx_groups,
-            ..provider::default_provider()
+            ..provider::default_provider().into_owned()
         };
         let provider = match protocol_version {
             ProtocolVersion::TLSv1_2 => provider.with_only_tls12(),
@@ -239,8 +242,8 @@ fn non_ffdhe_kx_does_not_have_ffdhe_group() {
 mod ffdhe {
     use num_bigint::BigUint;
     use rustls::crypto::{
-        ActiveKeyExchange, CipherSuiteCommon, OwnedCryptoProvider, KeyExchangeAlgorithm, SharedSecret,
-        SupportedKxGroup,
+        ActiveKeyExchange, CipherSuiteCommon, KeyExchangeAlgorithm, OwnedCryptoProvider,
+        SharedSecret, SupportedKxGroup,
     };
     use rustls::ffdhe_groups::FfdheGroup;
     use rustls::{CipherSuite, NamedGroup, Tls12CipherSuite, ffdhe_groups};
@@ -253,7 +256,7 @@ mod ffdhe {
             tls12_cipher_suites: vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
             tls13_cipher_suites: vec![provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
             kx_groups: FFDHE_KX_GROUPS.to_vec(),
-            ..provider::default_provider()
+            ..provider::default_provider().into_owned()
         }
     }
 

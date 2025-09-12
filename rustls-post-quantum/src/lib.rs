@@ -21,7 +21,7 @@ use webpki::aws_lc_rs as webpki_algs;
 
 pub fn provider() -> OwnedCryptoProvider {
     #[cfg_attr(not(feature = "aws-lc-rs-unstable"), allow(unused_mut))]
-    let mut provider = rustls::crypto::aws_lc_rs::default_provider();
+    let mut provider = rustls::crypto::aws_lc_rs::default_provider().into_owned();
     #[cfg(feature = "aws-lc-rs-unstable")]
     {
         provider.signature_verification_algorithms = SUPPORTED_SIG_ALGS;

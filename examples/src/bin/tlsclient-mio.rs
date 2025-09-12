@@ -286,7 +286,7 @@ impl Args {
 
         let provider = OwnedCryptoProvider {
             kx_groups,
-            ..provider::default_provider()
+            ..provider::default_provider().into_owned()
         };
 
         let provider = match self.suite.as_slice() {
@@ -497,7 +497,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         config
             .dangerous()
             .set_certificate_verifier(Arc::new(danger::NoCertificateVerification::new(
-                provider::default_provider(),
+                provider::default_provider().into_owned(),
             )));
     }
 

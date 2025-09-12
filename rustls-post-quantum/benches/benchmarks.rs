@@ -133,7 +133,7 @@ fn separate_provider() -> OwnedCryptoProvider {
             aws_lc_rs::kx_group::SECP256R1,
             aws_lc_rs::kx_group::SECP384R1,
         ],
-        ..aws_lc_rs::default_provider()
+        ..aws_lc_rs::default_provider().into_owned()
     }
 }
 

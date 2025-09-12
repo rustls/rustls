@@ -6,7 +6,7 @@ use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::crypto::{OwnedCryptoProvider, aws_lc_rs as provider};
+use rustls::crypto::{ConstCryptoProvider, aws_lc_rs as provider};
 
 fn main() {
     let root_store = rustls::RootCertStore::from_iter(
@@ -15,17 +15,10 @@ fn main() {
             .cloned(),
     );
 
-    let config = rustls::ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
-        tls12_cipher_suites: vec![],
-        tls13_cipher_suites: vec![provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
-        kx_groups: vec![provider::kx_group::X25519],
-        signature_verification_algorithms: provider::SUPPORTED_SIG_ALGS,
-        secure_random: provider::DEFAULT_SECURE_RANDOM,
-        key_provider: provider::DEFAULT_KEY_PROVIDER,
-    }))
-    .with_root_certificates(root_store)
-    .with_no_client_auth()
-    .unwrap();
+    let config = rustls::ClientConfig::builder_with_provider(Arc::new(PROVIDER))
+        .with_root_certificates(root_store)
+        .with_no_client_auth()
+        .unwrap();
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
@@ -56,3 +49,12 @@ fn main() {
     tls.read_to_end(&mut plaintext).unwrap();
     stdout().write_all(&plaintext).unwrap();
 }
+
+const PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls12_cipher_suites: &[],
+    tls13_cipher_suites: &[provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
+    kx_groups: &[provider::kx_group::X25519],
+    signature_verification_algorithms: provider::SUPPORTED_SIG_ALGS,
+    secure_random: provider::DEFAULT_SECURE_RANDOM,
+    key_provider: provider::DEFAULT_KEY_PROVIDER,
+};

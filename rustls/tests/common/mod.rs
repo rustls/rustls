@@ -4,14 +4,14 @@
 pub use std::sync::Arc;
 
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
-use rustls::crypto::OwnedCryptoProvider;
+use rustls::crypto::{ConstCryptoProvider, CryptoProvider, OwnedCryptoProvider};
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 use rustls::{RootCertStore, SupportedCipherSuite};
 pub use rustls_test::*;
 
 pub fn webpki_client_verifier_builder(
     roots: Arc<RootCertStore>,
-    provider: &OwnedCryptoProvider,
+    provider: &dyn CryptoProvider,
 ) -> ClientCertVerifierBuilder {
     if exactly_one_provider() {
         WebPkiClientVerifier::builder(roots)
@@ -22,7 +22,7 @@ pub fn webpki_client_verifier_builder(
 
 pub fn webpki_server_verifier_builder(
     roots: Arc<RootCertStore>,
-    provider: &OwnedCryptoProvider,
+    provider: &dyn CryptoProvider,
 ) -> ServerCertVerifierBuilder {
     if exactly_one_provider() {
         WebPkiServerVerifier::builder(roots)
@@ -38,29 +38,29 @@ fn exactly_one_provider() -> bool {
     ))
 }
 
-pub fn all_versions(provider: &OwnedCryptoProvider) -> impl Iterator<Item = OwnedCryptoProvider> {
+pub fn all_versions(provider: &ConstCryptoProvider) -> impl Iterator<Item = OwnedCryptoProvider> {
     vec![
-        provider.clone().with_only_tls12(),
-        provider.clone().with_only_tls13(),
+        provider.into_owned().with_only_tls12(),
+        provider.into_owned().with_only_tls13(),
     ]
     .into_iter()
 }
 
 pub fn provider_with_one_suite(
-    provider: &OwnedCryptoProvider,
+    provider: &dyn CryptoProvider,
     suite: SupportedCipherSuite,
 ) -> OwnedCryptoProvider {
     provider_with_suites(provider, &[suite])
 }
 
 pub fn provider_with_suites(
-    provider: &OwnedCryptoProvider,
+    provider: &dyn CryptoProvider,
     suites: &[SupportedCipherSuite],
 ) -> OwnedCryptoProvider {
     let mut provider = OwnedCryptoProvider {
         tls12_cipher_suites: vec![],
         tls13_cipher_suites: vec![],
-        ..provider.clone()
+        ..OwnedCryptoProvider::new(provider)
     };
     for suite in suites {
         match suite {

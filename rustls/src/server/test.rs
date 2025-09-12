@@ -48,7 +48,7 @@ mod tests {
     use super::super::*;
     use crate::common_state::KxState;
     use crate::crypto::{
-        ActiveKeyExchange, KeyExchangeAlgorithm, OwnedCryptoProvider, SupportedKxGroup,
+        ActiveKeyExchange, ConstCryptoProvider, KeyExchangeAlgorithm, SupportedKxGroup,
     };
     use crate::enums::CertificateType;
     use crate::ffdhe_groups::FfdheGroup;
@@ -61,11 +61,11 @@ mod tests {
 
     #[test]
     fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
-        let provider = super::provider::default_provider().with_only_tls12();
-        let mut config = ServerConfig::builder_with_provider(Arc::new(provider))
-            .with_no_client_auth()
-            .with_single_cert(server_cert(), server_key())
-            .unwrap();
+        let mut config =
+            ServerConfig::builder_with_provider(Arc::new(super::provider::DEFAULT_TLS12_PROVIDER))
+                .with_no_client_auth()
+                .with_single_cert(server_cert(), server_key())
+                .unwrap();
 
         if config.provider.fips() {
             assert!(config.require_ems);
@@ -97,11 +97,10 @@ mod tests {
 
     #[test]
     fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
-        let config =
-            ServerConfig::builder_with_provider(Arc::new(ffdhe_provider().with_only_tls12()))
-                .with_no_client_auth()
-                .with_single_cert(server_cert(), server_key())
-                .unwrap();
+        let config = ServerConfig::builder_with_provider(Arc::new(FFDHE_TLS12_PROVIDER))
+            .with_no_client_auth()
+            .with_single_cert(server_cert(), server_key())
+            .unwrap();
 
         let mut ch = minimal_client_hello();
         ch.cipher_suites.push(
@@ -118,11 +117,10 @@ mod tests {
 
     #[test]
     fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
-        let config =
-            ServerConfig::builder_with_provider(Arc::new(ffdhe_provider().with_only_tls12()))
-                .with_no_client_auth()
-                .with_single_cert(server_cert(), server_key())
-                .unwrap();
+        let config = ServerConfig::builder_with_provider(Arc::new(FFDHE_TLS12_PROVIDER))
+            .with_no_client_auth()
+            .with_single_cert(server_cert(), server_key())
+            .unwrap();
 
         let mut ch = minimal_client_hello();
         ch.cipher_suites.push(
@@ -140,11 +138,10 @@ mod tests {
 
     #[test]
     fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites() {
-        let config =
-            ServerConfig::builder_with_provider(Arc::new(ffdhe_provider().with_only_tls12()))
-                .with_no_client_auth()
-                .with_single_cert(server_cert(), server_key())
-                .unwrap();
+        let config = ServerConfig::builder_with_provider(Arc::new(FFDHE_TLS12_PROVIDER))
+            .with_no_client_auth()
+            .with_single_cert(server_cert(), server_key())
+            .unwrap();
 
         let mut ch = minimal_client_hello();
         ch.cipher_suites.push(
@@ -221,11 +218,11 @@ mod tests {
     }
 
     fn server_config_for_rpk() -> ServerConfig {
-        let x25519_provider = OwnedCryptoProvider {
-            kx_groups: vec![super::provider::kx_group::X25519],
-            ..super::provider::default_provider()
+        const X25519_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+            kx_groups: &[super::provider::kx_group::X25519],
+            ..super::provider::DEFAULT_TLS12_PROVIDER
         };
-        ServerConfig::builder_with_provider(Arc::new(x25519_provider.with_only_tls12()))
+        ServerConfig::builder_with_provider(Arc::new(X25519_PROVIDER))
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(AlwaysResolvesServerRawPublicKeys::new(Arc::new(
                 server_certified_key(),
@@ -261,13 +258,11 @@ mod tests {
         ]
     }
 
-    fn ffdhe_provider() -> OwnedCryptoProvider {
-        OwnedCryptoProvider {
-            kx_groups: vec![FAKE_FFDHE_GROUP],
-            tls12_cipher_suites: vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
-            ..super::provider::default_provider()
-        }
-    }
+    const FFDHE_TLS12_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+        kx_groups: &[FAKE_FFDHE_GROUP],
+        tls12_cipher_suites: &[&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
+        ..super::provider::DEFAULT_TLS12_PROVIDER
+    };
 
     static FAKE_FFDHE_GROUP: &'static dyn SupportedKxGroup = &FakeFfdheGroup;
 

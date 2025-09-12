@@ -6,7 +6,7 @@ pub(crate) use aws_lc_rs as ring_like;
 use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
 
-use crate::crypto::{KeyProvider, OwnedCryptoProvider, SecureRandom, SupportedKxGroup};
+use crate::crypto::{ConstCryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -35,16 +35,33 @@ pub(crate) mod tls12;
 pub(crate) mod tls13;
 
 /// A `CryptoProvider` backed by aws-lc-rs.
-pub fn default_provider() -> OwnedCryptoProvider {
-    OwnedCryptoProvider {
-        tls12_cipher_suites: DEFAULT_TLS12_CIPHER_SUITES.to_vec(),
-        tls13_cipher_suites: DEFAULT_TLS13_CIPHER_SUITES.to_vec(),
-        kx_groups: DEFAULT_KX_GROUPS.to_vec(),
-        signature_verification_algorithms: SUPPORTED_SIG_ALGS,
-        secure_random: &AwsLcRs,
-        key_provider: &AwsLcRs,
-    }
+pub fn default_provider() -> ConstCryptoProvider {
+    DEFAULT_PROVIDER
 }
+
+/// The default `CryptoProvider` backed by aws-lc-rs.
+pub static DEFAULT_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls12_cipher_suites: DEFAULT_TLS12_CIPHER_SUITES,
+    tls13_cipher_suites: DEFAULT_TLS13_CIPHER_SUITES,
+    kx_groups: DEFAULT_KX_GROUPS,
+    signature_verification_algorithms: SUPPORTED_SIG_ALGS,
+    secure_random: &AwsLcRs,
+    key_provider: &AwsLcRs,
+};
+
+/// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.3.
+pub static DEFAULT_TLS13_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls12_cipher_suites: &[],
+    ..DEFAULT_PROVIDER
+};
+
+/// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.2.
+///
+/// Use of TLS1.3 is **strongly** recommended.
+pub static DEFAULT_TLS12_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls13_cipher_suites: &[],
+    ..DEFAULT_PROVIDER
+};
 
 /// `KeyProvider` impl for aws-lc-rs
 pub static DEFAULT_KEY_PROVIDER: &dyn KeyProvider = &AwsLcRs;

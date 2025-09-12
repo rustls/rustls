@@ -31,7 +31,7 @@ use rayon::iter::Either;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
-use rustls::crypto::{OwnedCryptoProvider, GetRandomFailed, SecureRandom, aws_lc_rs, ring};
+use rustls::crypto::{GetRandomFailed, OwnedCryptoProvider, SecureRandom, aws_lc_rs, ring};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, HandshakeKind, ProtocolVersion, RootCertStore,
@@ -312,13 +312,13 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 
     for (provider, ticketer, provider_name) in [
         (
-            derandomize(ring::default_provider()),
+            derandomize(ring::default_provider().into_owned()),
             #[allow(trivial_casts)]
             &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "ring",
         ),
         (
-            derandomize(aws_lc_rs::default_provider()),
+            derandomize(aws_lc_rs::default_provider().into_owned()),
             #[allow(trivial_casts)]
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "aws_lc_rs",
