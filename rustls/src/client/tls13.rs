@@ -1235,7 +1235,10 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             self.expected_certificate_type,
             cx.common,
         )?
-        .ok_or(Error::NoCertificatesPresented)?;
+        .ok_or(cx.common.send_fatal_alert(
+            AlertDescription::BadCertificate,
+            PeerMisbehaved::NoCertificatesPresented,
+        ))?;
 
         let cert_verified = self
             .config

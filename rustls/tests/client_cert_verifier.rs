@@ -13,7 +13,8 @@ use common::{
 };
 use rustls::server::danger::ClientCertVerified;
 use rustls::{
-    AlertDescription, ClientConnection, Error, InvalidMessage, ServerConfig, ServerConnection,
+    AlertDescription, ClientConnection, Error, InvalidMessage, PeerMisbehaved, ServerConfig,
+    ServerConnection,
 };
 
 // Client is authorized!
@@ -104,7 +105,9 @@ fn client_verifier_no_auth_yes_root() {
             assert_eq!(
                 errs,
                 Err(vec![
-                    ErrorFromPeer::Server(Error::NoCertificatesPresented),
+                    ErrorFromPeer::Server(Error::PeerMisbehaved(
+                        PeerMisbehaved::NoCertificatesPresented
+                    )),
                     ErrorFromPeer::Client(Error::AlertReceived(
                         AlertDescription::CertificateRequired
                     ))
