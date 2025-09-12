@@ -373,7 +373,7 @@ extern crate alloc;
 extern crate std;
 
 #[cfg(doc)]
-use crate::crypto::CryptoProvider;
+use crate::crypto::OwnedCryptoProvider;
 
 // Import `test` sysroot crate for `Bencher` definitions.
 #[cfg(bench)]

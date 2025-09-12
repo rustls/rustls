@@ -29,7 +29,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::OwnedCryptoProvider;
 use rustls::server::{
     NoServerSessionStorage, ProducesTickets, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,
@@ -957,7 +957,7 @@ enum Provider {
 }
 
 impl Provider {
-    fn build(self) -> CryptoProvider {
+    fn build(self) -> OwnedCryptoProvider {
         match self {
             #[cfg(feature = "aws-lc-rs")]
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::default_provider(),
@@ -985,7 +985,7 @@ impl Provider {
         }
     }
 
-    fn build_with_cipher_suite(&self, name: CipherSuite) -> CryptoProvider {
+    fn build_with_cipher_suite(&self, name: CipherSuite) -> OwnedCryptoProvider {
         let mut provider = self.build();
         provider
             .tls12_cipher_suites

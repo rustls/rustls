@@ -31,7 +31,7 @@ use rayon::iter::Either;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
-use rustls::crypto::{CryptoProvider, GetRandomFailed, SecureRandom, aws_lc_rs, ring};
+use rustls::crypto::{OwnedCryptoProvider, GetRandomFailed, SecureRandom, aws_lc_rs, ring};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, HandshakeKind, ProtocolVersion, RootCertStore,
@@ -401,7 +401,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     all
 }
 
-fn select_suite(mut provider: CryptoProvider, name: CipherSuite) -> Arc<CryptoProvider> {
+fn select_suite(mut provider: OwnedCryptoProvider, name: CipherSuite) -> Arc<OwnedCryptoProvider> {
     provider
         .tls12_cipher_suites
         .retain(|suite| suite.common.suite == name);
@@ -419,8 +419,8 @@ fn aws_lc_rs_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
     aws_lc_rs::Ticketer::new().unwrap()
 }
 
-fn derandomize(base: CryptoProvider) -> CryptoProvider {
-    CryptoProvider {
+fn derandomize(base: OwnedCryptoProvider) -> OwnedCryptoProvider {
+    OwnedCryptoProvider {
         secure_random: &NotRandom,
         ..base
     }

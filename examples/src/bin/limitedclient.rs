@@ -6,7 +6,7 @@ use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
+use rustls::crypto::{OwnedCryptoProvider, aws_lc_rs as provider};
 
 fn main() {
     let root_store = rustls::RootCertStore::from_iter(
@@ -15,7 +15,7 @@ fn main() {
             .cloned(),
     );
 
-    let config = rustls::ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
+    let config = rustls::ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
         tls12_cipher_suites: vec![],
         tls13_cipher_suites: vec![provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
         kx_groups: vec![provider::kx_group::X25519],

@@ -26,7 +26,7 @@ use std::{process, str};
 
 use clap::Parser;
 use mio::net::TcpStream;
-use rustls::crypto::{CryptoProvider, SupportedKxGroup, aws_lc_rs as provider};
+use rustls::crypto::{OwnedCryptoProvider, SupportedKxGroup, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::{ProtocolVersion, RootCertStore};
@@ -275,7 +275,7 @@ struct Args {
 }
 
 impl Args {
-    fn provider(&self) -> CryptoProvider {
+    fn provider(&self) -> OwnedCryptoProvider {
         let kx_groups = match self.key_exchange.as_slice() {
             [] => provider::DEFAULT_KX_GROUPS.to_vec(),
             items => items
@@ -284,7 +284,7 @@ impl Args {
                 .collect::<Vec<&'static dyn SupportedKxGroup>>(),
         };
 
-        let provider = CryptoProvider {
+        let provider = OwnedCryptoProvider {
             kx_groups,
             ..provider::default_provider()
         };
@@ -316,7 +316,7 @@ fn find_key_exchange(name: &str) -> &'static dyn SupportedKxGroup {
 }
 
 /// Alter `provider` to reduce the set of ciphersuites to just `suites`
-fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvider {
+fn filter_suites(mut provider: OwnedCryptoProvider, suites: &[String]) -> OwnedCryptoProvider {
     // first, check `suites` all name known suites, and will have some effect
     let known_suites = provider
         .tls12_cipher_suites
@@ -394,13 +394,13 @@ mod danger {
     use rustls::client::danger::{
         HandshakeSignatureValid, ServerIdentity, SignatureVerificationInput,
     };
-    use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
+    use rustls::crypto::{OwnedCryptoProvider, verify_tls12_signature, verify_tls13_signature};
 
     #[derive(Debug)]
-    pub struct NoCertificateVerification(CryptoProvider);
+    pub struct NoCertificateVerification(OwnedCryptoProvider);
 
     impl NoCertificateVerification {
-        pub fn new(provider: CryptoProvider) -> Self {
+        pub fn new(provider: OwnedCryptoProvider) -> Self {
             Self(provider)
         }
     }

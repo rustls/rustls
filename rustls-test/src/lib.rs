@@ -25,7 +25,7 @@ use rustls::client::{
     WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
-use rustls::crypto::{CryptoProvider, WebPkiSupportedAlgorithms, verify_tls13_signature};
+use rustls::crypto::{OwnedCryptoProvider, WebPkiSupportedAlgorithms, verify_tls13_signature};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::pki_types::pem::PemObject;
@@ -337,7 +337,7 @@ static ALL_KEY_TYPES_EXCEPT_P521: &[KeyType] = &[
 ];
 
 impl KeyType {
-    pub fn all_for_provider(provider: &CryptoProvider) -> &'static [Self] {
+    pub fn all_for_provider(provider: &OwnedCryptoProvider) -> &'static [Self] {
         match provider
             .key_provider
             .load_private_key(Self::EcdsaP521.key())
@@ -417,7 +417,7 @@ impl KeyType {
 
     pub fn certified_client_key(
         &self,
-        provider: &CryptoProvider,
+        provider: &OwnedCryptoProvider,
     ) -> Result<Arc<CertifiedKey>, Error> {
         let private_key = provider
             .key_provider
@@ -434,7 +434,7 @@ impl KeyType {
 
     pub fn certified_key_with_raw_pub_key(
         &self,
-        provider: &CryptoProvider,
+        provider: &OwnedCryptoProvider,
     ) -> Result<Arc<CertifiedKey>, Error> {
         let private_key = provider
             .key_provider
@@ -451,7 +451,7 @@ impl KeyType {
 
     pub fn certified_key_with_cert_chain(
         &self,
-        provider: &CryptoProvider,
+        provider: &OwnedCryptoProvider,
     ) -> Result<Arc<CertifiedKey>, Error> {
         let private_key = provider
             .key_provider
@@ -502,16 +502,16 @@ impl ServerConfigExt for rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifi
     }
 }
 
-pub fn make_server_config(kt: KeyType, provider: &CryptoProvider) -> ServerConfig {
+pub fn make_server_config(kt: KeyType, provider: &OwnedCryptoProvider) -> ServerConfig {
     ServerConfig::builder_with_provider(Arc::new(provider.clone())).finish(kt)
 }
 
 pub fn make_server_config_with_kx_groups(
     kt: KeyType,
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ServerConfig {
-    ServerConfig::builder_with_provider(Arc::new(CryptoProvider {
+    ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
         kx_groups,
         ..provider.clone()
     }))
@@ -521,7 +521,7 @@ pub fn make_server_config_with_kx_groups(
 pub fn make_server_config_with_mandatory_client_auth_crls(
     kt: KeyType,
     crls: Vec<CertificateRevocationListDer<'static>>,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
@@ -532,7 +532,7 @@ pub fn make_server_config_with_mandatory_client_auth_crls(
 
 pub fn make_server_config_with_mandatory_client_auth(
     kt: KeyType,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
@@ -544,7 +544,7 @@ pub fn make_server_config_with_mandatory_client_auth(
 pub fn make_server_config_with_optional_client_auth(
     kt: KeyType,
     crls: Vec<CertificateRevocationListDer<'static>>,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
@@ -559,7 +559,7 @@ pub fn make_server_config_with_optional_client_auth(
 pub fn make_server_config_with_client_verifier(
     kt: KeyType,
     verifier_builder: ClientCertVerifierBuilder,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ServerConfig {
     ServerConfig::builder_with_provider(Arc::new(provider.clone()))
         .with_client_cert_verifier(verifier_builder.build().unwrap())
@@ -569,7 +569,7 @@ pub fn make_server_config_with_client_verifier(
 
 pub fn make_server_config_with_raw_key_support(
     kt: KeyType,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ServerConfig {
     let mut client_verifier =
         MockClientVerifier::new(|| Ok(ClientCertVerified::assertion()), kt, provider);
@@ -587,7 +587,7 @@ pub fn make_server_config_with_raw_key_support(
 
 pub fn make_client_config_with_raw_key_support(
     kt: KeyType,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ClientConfig {
     let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(provider));
     let client_cert_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
@@ -631,29 +631,29 @@ impl ClientConfigExt for rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifi
     }
 }
 
-pub fn make_client_config(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
+pub fn make_client_config(kt: KeyType, provider: &OwnedCryptoProvider) -> ClientConfig {
     ClientConfig::builder_with_provider(Arc::new(provider.clone())).finish(kt)
 }
 
 pub fn make_client_config_with_kx_groups(
     kt: KeyType,
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ClientConfig {
-    ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
+    ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
         kx_groups,
         ..provider.clone()
     }))
     .finish(kt)
 }
 
-pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
+pub fn make_client_config_with_auth(kt: KeyType, provider: &OwnedCryptoProvider) -> ClientConfig {
     ClientConfig::builder_with_provider(Arc::new(provider.clone())).finish_with_creds(kt)
 }
 
 pub fn make_client_config_with_verifier(
     verifier_builder: ServerCertVerifierBuilder,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ClientConfig {
     ClientConfig::builder_with_provider(Arc::new(provider.clone()))
         .dangerous()
@@ -664,19 +664,22 @@ pub fn make_client_config_with_verifier(
 
 pub fn webpki_client_verifier_builder(
     roots: Arc<RootCertStore>,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ClientCertVerifierBuilder {
     WebPkiClientVerifier::builder_with_provider(roots, provider)
 }
 
 pub fn webpki_server_verifier_builder(
     roots: Arc<RootCertStore>,
-    provider: &CryptoProvider,
+    provider: &OwnedCryptoProvider,
 ) -> ServerCertVerifierBuilder {
     WebPkiServerVerifier::builder_with_provider(roots, provider)
 }
 
-pub fn make_pair(kt: KeyType, provider: &CryptoProvider) -> (ClientConnection, ServerConnection) {
+pub fn make_pair(
+    kt: KeyType,
+    provider: &OwnedCryptoProvider,
+) -> (ClientConnection, ServerConnection) {
     make_pair_for_configs(
         make_client_config(kt, provider),
         make_server_config(kt, provider),
@@ -1175,7 +1178,7 @@ impl MockServerVerifier {
         }
     }
 
-    pub fn expects_raw_public_keys(provider: &CryptoProvider) -> Self {
+    pub fn expects_raw_public_keys(provider: &OwnedCryptoProvider) -> Self {
         Self {
             requires_raw_public_keys: true,
             raw_public_key_algorithms: Some(provider.signature_verification_algorithms),
@@ -1220,7 +1223,7 @@ impl MockClientVerifier {
     pub fn new(
         verified: fn() -> Result<ClientCertVerified, Error>,
         kt: KeyType,
-        provider: &CryptoProvider,
+        provider: &OwnedCryptoProvider,
     ) -> Self {
         Self {
             parent: webpki_client_verifier_builder(kt.client_root_store(), provider)
@@ -1421,8 +1424,8 @@ impl RawTls {
 }
 
 pub fn aes_128_gcm_with_1024_confidentiality_limit(
-    provider: CryptoProvider,
-) -> Arc<CryptoProvider> {
+    provider: OwnedCryptoProvider,
+) -> Arc<OwnedCryptoProvider> {
     const CONFIDENTIALITY_LIMIT: u64 = 1024;
 
     // needed to extend lifetime of Tls13CipherSuite to 'static
@@ -1461,14 +1464,14 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit(
         }
     });
 
-    Arc::new(CryptoProvider {
+    Arc::new(OwnedCryptoProvider {
         tls12_cipher_suites: vec![tls12_limited],
         tls13_cipher_suites: vec![tls13_limited],
         ..provider
     })
 }
 
-pub fn unsafe_plaintext_crypto_provider(provider: CryptoProvider) -> Arc<CryptoProvider> {
+pub fn unsafe_plaintext_crypto_provider(provider: OwnedCryptoProvider) -> Arc<OwnedCryptoProvider> {
     static TLS13_PLAIN_SUITE: OnceLock<rustls::Tls13CipherSuite> = OnceLock::new();
 
     let tls13 = TLS13_PLAIN_SUITE.get_or_init(|| {
@@ -1485,7 +1488,7 @@ pub fn unsafe_plaintext_crypto_provider(provider: CryptoProvider) -> Arc<CryptoP
         }
     });
 
-    Arc::new(CryptoProvider {
+    Arc::new(OwnedCryptoProvider {
         tls13_cipher_suites: vec![tls13],
         ..provider
     })

@@ -241,8 +241,8 @@ impl dyn InternalCryptoProvider {
 /// # mod fictious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 /// use rustls::crypto::aws_lc_rs;
 ///
-/// pub fn provider() -> rustls::crypto::CryptoProvider {
-///   rustls::crypto::CryptoProvider{
+/// pub fn provider() -> rustls::crypto::OwnedCryptoProvider {
+///   rustls::crypto::OwnedCryptoProvider {
 ///     key_provider: &HsmKeyLoader,
 ///     ..aws_lc_rs::default_provider()
 ///   }
@@ -295,7 +295,7 @@ impl dyn InternalCryptoProvider {
 /// [`ServerConfig::fips()`]/[`ClientConfig::fips()`] return `true`.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug, Clone)]
-pub struct CryptoProvider {
+pub struct OwnedCryptoProvider {
     /// List of supported TLS1.2 cipher suites, in preference order -- the first element
     /// is the highest priority.
     ///
@@ -340,7 +340,7 @@ pub struct CryptoProvider {
     pub key_provider: &'static dyn KeyProvider,
 }
 
-impl CryptoProvider {
+impl OwnedCryptoProvider {
     /// Return a new `CryptoProvider` that only supports TLS1.3.
     pub fn with_only_tls13(self) -> Self {
         Self {
@@ -358,7 +358,7 @@ impl CryptoProvider {
     }
 }
 
-impl InternalCryptoProvider for CryptoProvider {
+impl InternalCryptoProvider for OwnedCryptoProvider {
     fn tls12_cipher_suites(&self) -> &[&'static Tls12CipherSuite] {
         &self.tls12_cipher_suites
     }
@@ -471,7 +471,7 @@ See the documentation of the CryptoProvider type for more information.
     ///
     /// [`ClientConfig::builder()`]: crate::ClientConfig::builder
     /// [`ServerConfig::builder()`]: crate::ServerConfig::builder
-    pub fn from_crate_features() -> Option<CryptoProvider> {
+    pub fn from_crate_features() -> Option<OwnedCryptoProvider> {
         #[cfg(all(
             feature = "ring",
             not(feature = "aws-lc-rs"),
@@ -868,7 +868,7 @@ impl From<Vec<u8>> for SharedSecret {
 /// ```
 #[cfg(all(feature = "aws-lc-rs", any(feature = "fips", docsrs)))]
 #[cfg_attr(docsrs, doc(cfg(feature = "fips")))]
-pub fn default_fips_provider() -> CryptoProvider {
+pub fn default_fips_provider() -> OwnedCryptoProvider {
     aws_lc_rs::default_provider()
 }
 

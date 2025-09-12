@@ -3,7 +3,7 @@
 use std::num::NonZeroUsize;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::OwnedCryptoProvider;
 use rustls::server::{ServerConnectionData, UnbufferedServerConnection};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, ReadTraffic,
@@ -107,12 +107,12 @@ fn tls13_handshake_fragmented() {
     );
 }
 
-fn handshake(provider: CryptoProvider) -> Outcome {
+fn handshake(provider: OwnedCryptoProvider) -> Outcome {
     handshake_config(provider, |_, _| ())
 }
 
 fn handshake_config(
-    provider: CryptoProvider,
+    provider: OwnedCryptoProvider,
     editor: impl Fn(&mut ClientConfig, &mut ServerConfig),
 ) -> Outcome {
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
@@ -1436,7 +1436,7 @@ impl Buffer {
 }
 
 fn make_connection_pair(
-    provider: CryptoProvider,
+    provider: OwnedCryptoProvider,
 ) -> (UnbufferedClientConnection, UnbufferedServerConnection) {
     let server_config = make_server_config(KeyType::Rsa2048, &provider);
     let client_config = make_client_config(KeyType::Rsa2048, &provider);

@@ -6,7 +6,7 @@ use std::vec;
 use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
-use crate::crypto::CryptoProvider;
+use crate::crypto::OwnedCryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::Reader;
@@ -477,10 +477,10 @@ mod tests {
         .unwrap()
     }
 
-    fn x25519_provider() -> CryptoProvider {
+    fn x25519_provider() -> OwnedCryptoProvider {
         // ensures X25519 is offered irrespective of cfg(feature = "fips"), which eases
         // creation of fake server messages.
-        CryptoProvider {
+        OwnedCryptoProvider {
             kx_groups: vec![super::provider::kx_group::X25519],
             ..super::provider::default_provider()
         }
@@ -640,7 +640,7 @@ fn hybrid_kx_component_share_offered_if_supported_separately() {
 #[test]
 fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
     use crate::crypto::aws_lc_rs;
-    let provider = CryptoProvider {
+    let provider = OwnedCryptoProvider {
         kx_groups: vec![aws_lc_rs::kx_group::X25519MLKEM768],
         ..aws_lc_rs::default_provider()
     };

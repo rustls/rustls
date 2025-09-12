@@ -38,8 +38,8 @@ use rustls::{
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
-pub fn provider() -> crypto::CryptoProvider {
-    crypto::CryptoProvider {
+pub fn provider() -> crypto::OwnedCryptoProvider {
+    crypto::OwnedCryptoProvider {
         tls12_cipher_suites: vec![TLS_FUZZING_SUITE],
         tls13_cipher_suites: vec![TLS13_FUZZING_SUITE],
         kx_groups: vec![&KeyExchangeGroup],

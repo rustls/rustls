@@ -20,7 +20,7 @@ extern crate std;
 
 use alloc::sync::Arc;
 
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::OwnedCryptoProvider;
 use rustls::pki_types::PrivateKeyDer;
 
 mod aead;
@@ -31,8 +31,8 @@ mod kx;
 mod sign;
 mod verify;
 
-pub fn provider() -> CryptoProvider {
-    CryptoProvider {
+pub fn provider() -> OwnedCryptoProvider {
+    OwnedCryptoProvider {
         tls12_cipher_suites: ALL_TLS12_CIPHER_SUITES.to_vec(),
         tls13_cipher_suites: ALL_TLS13_CIPHER_SUITES.to_vec(),
         kx_groups: kx::ALL_KX_GROUPS.to_vec(),
