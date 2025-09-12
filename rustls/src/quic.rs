@@ -36,6 +36,7 @@ mod connection {
     };
     use crate::msgs::message::InboundPlainMessage;
     use crate::server::{ServerConfig, ServerConnectionData};
+    use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
 
@@ -386,7 +387,10 @@ mod connection {
                 .core
                 .common_state
                 .suite
-                .and_then(|suite| suite.tls13())?;
+                .and_then(|suite| match suite {
+                    SupportedCipherSuite::Tls13(suite) => Some(suite),
+                    _ => None,
+                })?;
             Some(DirectionalKeys::new(
                 suite,
                 suite.quic?,
