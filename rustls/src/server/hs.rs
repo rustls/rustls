@@ -25,6 +25,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig, tls13};
+use crate::sign::CertifiedKey;
 use crate::sync::Arc;
 use crate::{SupportedCipherSuite, suites};
 
@@ -368,7 +369,7 @@ impl ExpectClientHello {
                 .as_deref(),
         };
         // Choose a certificate.
-        let certkey = {
+        let cert_key = {
             let client_hello = ClientHello {
                 server_name: cx.data.sni.as_ref().map(Cow::Borrowed),
                 signature_schemes: &sig_schemes,
@@ -401,7 +402,7 @@ impl ExpectClientHello {
         let (suite, skxg) = self
             .choose_suite_and_kx_group(
                 version,
-                certkey.key.algorithm(),
+                cert_key.key.algorithm(),
                 cx.common.protocol,
                 client_hello
                     .named_groups
@@ -435,53 +436,47 @@ impl ExpectClientHello {
             }
         };
 
-        // Save their Random.
-        let randoms = ConnectionRandoms::new(
-            client_hello.random,
-            Random::new(self.config.provider.secure_random)?,
-        );
+        let state = ClientHelloState {
+            randoms: ConnectionRandoms::new(
+                client_hello.random,
+                Random::new(self.config.provider.secure_random)?,
+            ),
+            config: self.config,
+            transcript,
+            extra_exts: self.extra_exts,
+            message: m,
+            client_hello,
+            kx_group: skxg,
+            sig_schemes,
+            cert_key,
+        };
+
         match suite {
             SupportedCipherSuite::Tls13(suite) => suite
                 .protocol_version
                 .server
                 .handle_client_hello(
                     tls13::CompleteClientHelloHandling {
-                        config: self.config,
-                        transcript,
                         suite,
-                        randoms,
                         done_retry: self.done_retry,
                         send_tickets: self.send_tickets,
-                        extra_exts: self.extra_exts,
                     },
+                    state,
                     cx,
-                    &certkey,
-                    m,
-                    client_hello,
-                    skxg,
-                    sig_schemes,
                 ),
             SupportedCipherSuite::Tls12(suite) => suite
                 .protocol_version
                 .server
                 .handle_client_hello(
                     tls12::CompleteClientHelloHandling {
-                        config: self.config,
-                        transcript,
                         session_id: self.session_id,
                         suite,
                         using_ems: self.using_ems,
-                        randoms,
                         send_ticket: self.send_tickets > 0,
-                        extra_exts: self.extra_exts,
                     },
-                    cx,
-                    &certkey,
-                    m,
-                    client_hello,
-                    skxg,
-                    sig_schemes,
+                    state,
                     tls13_enabled,
+                    cx,
                 ),
         }
     }
@@ -646,6 +641,18 @@ impl State<ServerConnectionData> for ExpectClientHello {
     fn into_owned(self: Box<Self>) -> NextState<'static> {
         self
     }
+}
+
+pub(crate) struct ClientHelloState<'a> {
+    pub(super) config: Arc<ServerConfig>,
+    pub(super) transcript: HandshakeHash,
+    pub(super) randoms: ConnectionRandoms,
+    pub(super) extra_exts: ServerExtensionsInput<'static>,
+    pub(super) message: &'a Message<'a>,
+    pub(super) client_hello: &'a ClientHelloPayload,
+    pub(super) kx_group: &'static dyn SupportedKxGroup,
+    pub(super) sig_schemes: Vec<SignatureScheme>,
+    pub(super) cert_key: Arc<CertifiedKey>,
 }
 
 /// Configuration-independent validation of a `ClientHello` message.
