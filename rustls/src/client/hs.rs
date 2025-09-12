@@ -744,13 +744,17 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 )
             })?;
 
-        if version != suite.version().version() {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::SelectedUnusableCipherSuiteForVersion,
-                )
-            });
+        match suite {
+            SupportedCipherSuite::Tls13(_) if version == TLSv1_3 => {}
+            SupportedCipherSuite::Tls12(_) if version == TLSv1_2 => {}
+            _ => {
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::SelectedUnusableCipherSuiteForVersion,
+                    )
+                });
+            }
         }
 
         match self.suite {
