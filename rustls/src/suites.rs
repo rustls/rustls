@@ -6,7 +6,6 @@ use crate::crypto::{self, KeyExchangeAlgorithm};
 use crate::enums::CipherSuite;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-use crate::versions::SupportedProtocolVersion;
 
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
 #[allow(clippy::exhaustive_structs)]
@@ -92,14 +91,6 @@ impl SupportedCipherSuite {
         match self {
             Self::Tls12(_) => None,
             Self::Tls13(inner) => Some(inner),
-        }
-    }
-
-    /// Return supported protocol version for the cipher suite.
-    pub fn version(&self) -> SupportedProtocolVersion {
-        match self {
-            Self::Tls12(suite) => SupportedProtocolVersion::TLS12(suite.protocol_version),
-            Self::Tls13(suite) => SupportedProtocolVersion::TLS13(suite.protocol_version),
         }
     }
 
