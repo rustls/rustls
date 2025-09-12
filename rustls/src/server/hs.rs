@@ -10,6 +10,7 @@ use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
+use crate::crypto::hash::Hash;
 use crate::enums::{
     AlertDescription, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
     SignatureAlgorithm, SignatureScheme,
@@ -437,30 +438,15 @@ impl ExpectClientHello {
         cx.common.suite = Some(suite);
         cx.common.kx_state = KxState::Start(skxg);
 
-        // Start handshake hash.
-        let starting_hash = suite.hash_provider();
-        let transcript = match self.transcript {
-            HandshakeHashOrBuffer::Buffer(inner) => inner.start_hash(starting_hash),
-            HandshakeHashOrBuffer::Hash(inner)
-                if inner.algorithm() == starting_hash.algorithm() =>
-            {
-                inner
-            }
-            _ => {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::HandshakeHashVariedAfterRetry,
-                ));
-            }
-        };
-
         let state = ClientHelloState {
             randoms: ConnectionRandoms::new(
                 client_hello.random,
                 Random::new(self.config.provider.secure_random)?,
             ),
             config: self.config,
-            transcript,
+            transcript: self
+                .transcript
+                .start(suite.hash_provider(), cx)?,
             extra_exts: self.extra_exts,
             message: m,
             client_hello,
@@ -730,4 +716,21 @@ pub(super) fn process_client_hello<'m>(
 pub(crate) enum HandshakeHashOrBuffer {
     Buffer(HandshakeHashBuffer),
     Hash(HandshakeHash),
+}
+
+impl HandshakeHashOrBuffer {
+    fn start(
+        self,
+        hash: &'static dyn Hash,
+        cx: &mut ServerContext<'_>,
+    ) -> Result<HandshakeHash, Error> {
+        match self {
+            Self::Buffer(inner) => Ok(inner.start_hash(hash)),
+            Self::Hash(inner) if inner.algorithm() == hash.algorithm() => Ok(inner),
+            _ => Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::HandshakeHashVariedAfterRetry,
+            )),
+        }
+    }
 }
