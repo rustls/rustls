@@ -6,6 +6,7 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{ClientConfig, EchMode, ResolvesClientCert, handy};
+use crate::crypto::InternalCryptoProvider;
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
@@ -155,15 +156,16 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         self,
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
     ) -> Result<ClientConfig, Error> {
-        self.provider.consistency_check()?;
+        let provider: Arc<dyn InternalCryptoProvider> = self.provider;
+        provider.consistency_check()?;
 
         if self.state.client_ech_mode.is_some() {
             match (
-                self.provider
-                    .tls12_cipher_suites
+                provider
+                    .tls12_cipher_suites()
                     .is_empty(),
-                self.provider
-                    .tls13_cipher_suites
+                provider
+                    .tls13_cipher_suites()
                     .is_empty(),
             ) {
                 (_, true) => return Err(ApiMisuse::EchRequiresTls13Support.into()),
@@ -173,7 +175,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         }
 
         Ok(ClientConfig {
-            provider: self.provider,
+            provider,
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
             max_fragment_size: None,
