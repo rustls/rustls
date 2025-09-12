@@ -339,8 +339,6 @@ impl ExpectClientHello {
             ProtocolVersion::TLSv1_2
         };
 
-        cx.common.negotiated_version = Some(version);
-
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
         // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).

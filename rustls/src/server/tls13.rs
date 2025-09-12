@@ -45,6 +45,7 @@ mod client_hello {
     use core::fmt;
 
     use super::*;
+    use crate::SupportedCipherSuite;
     use crate::compress::CertCompressor;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
@@ -688,7 +689,7 @@ mod client_hello {
          * (RFC8446, 4.2.10) */
         let early_data_possible = early_data_requested
             && resume.is_fresh()
-            && Some(ProtocolVersion::TLSv1_3) == cx.common.negotiated_version
+            && matches!(cx.common.suite, Some(SupportedCipherSuite::Tls13(_)))
             && resume.common.cipher_suite == suite.common.suite
             && resume.common.alpn == cx.common.alpn_protocol;
 

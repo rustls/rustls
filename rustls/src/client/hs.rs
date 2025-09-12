@@ -702,8 +702,6 @@ impl State<ClientConnectionData> for ExpectServerHello {
             ));
         }
 
-        cx.common.negotiated_version = Some(version);
-
         // Extract ALPN protocol
         if !cx.common.is_tls13() {
             process_alpn_protocol(
@@ -898,9 +896,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
         match hrr.supported_versions {
-            Some(ProtocolVersion::TLSv1_3) => {
-                cx.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
-            }
+            Some(ProtocolVersion::TLSv1_3) => {}
             _ => {
                 return Err({
                     cx.common.send_fatal_alert(
