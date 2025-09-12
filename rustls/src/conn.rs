@@ -7,6 +7,7 @@ use std::io;
 
 use kernel::KernelConnection;
 
+use crate::SupportedCipherSuite;
 use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
@@ -1010,8 +1011,8 @@ impl<Data> ConnectionCore<Data> {
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
         let version_is_tls13 = matches!(
-            self.common_state.negotiated_version,
-            Some(ProtocolVersion::TLSv1_3)
+            self.common_state.suite,
+            Some(SupportedCipherSuite::Tls13(_))
         );
 
         let locator = Locator::new(buffer);

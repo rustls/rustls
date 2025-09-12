@@ -28,7 +28,6 @@ use crate::{quic, record_layer};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
-    pub(crate) negotiated_version: Option<ProtocolVersion>,
     pub(crate) handshake_kind: Option<HandshakeKind>,
     pub(crate) side: Side,
     pub(crate) record_layer: record_layer::RecordLayer,
@@ -67,7 +66,6 @@ pub struct CommonState {
 impl CommonState {
     pub(crate) fn new(side: Side) -> Self {
         Self {
-            negotiated_version: None,
             handshake_kind: None,
             side,
             record_layer: record_layer::RecordLayer::new(),
@@ -166,7 +164,10 @@ impl CommonState {
     ///
     /// This returns `None` until the version is agreed.
     pub fn protocol_version(&self) -> Option<ProtocolVersion> {
-        self.negotiated_version
+        match self.suite? {
+            SupportedCipherSuite::Tls12(_) => Some(ProtocolVersion::TLSv1_2),
+            SupportedCipherSuite::Tls13(_) => Some(ProtocolVersion::TLSv1_3),
+        }
     }
 
     /// Which kind of handshake was performed.
@@ -180,7 +181,10 @@ impl CommonState {
     }
 
     pub(crate) fn is_tls13(&self) -> bool {
-        matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+        matches!(
+            self.negotiated_cipher_suite(),
+            Some(SupportedCipherSuite::Tls13(_))
+        )
     }
 
     pub(crate) fn process_main_protocol<Data>(
@@ -246,8 +250,8 @@ impl CommonState {
                 .pre_encrypt_action(f as u64)
             {
                 PreEncryptAction::Nothing => {}
-                PreEncryptAction::RefreshOrClose => match self.negotiated_version {
-                    Some(ProtocolVersion::TLSv1_3) => {
+                PreEncryptAction::RefreshOrClose => match self.suite {
+                    Some(SupportedCipherSuite::Tls13(_)) => {
                         // driven by caller, as we don't have the `State` here
                         self.refresh_traffic_keys_pending = true;
                     }
@@ -351,8 +355,8 @@ impl CommonState {
             // Close connection once we start to run out of
             // sequence space.
             PreEncryptAction::RefreshOrClose => {
-                match self.negotiated_version {
-                    Some(ProtocolVersion::TLSv1_3) => {
+                match self.suite {
+                    Some(SupportedCipherSuite::Tls13(_)) => {
                         // driven by caller, as we don't have the `State` here
                         self.refresh_traffic_keys_pending = true;
                     }

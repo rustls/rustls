@@ -77,7 +77,6 @@ pub struct KernelConnection<Data> {
     peer_identity: Option<PeerIdentity>,
     quic: Quic,
 
-    negotiated_version: ProtocolVersion,
     protocol: Protocol,
     suite: SupportedCipherSuite,
 
@@ -91,9 +90,6 @@ impl<Data> KernelConnection<Data> {
 
             peer_identity: common.peer_identity,
             quic: common.quic,
-            negotiated_version: common
-                .negotiated_version
-                .ok_or(Error::HandshakeNotComplete)?,
             protocol: common.protocol,
             suite: common
                 .suite
@@ -110,7 +106,10 @@ impl<Data> KernelConnection<Data> {
 
     /// Retrieves the protocol version agreed with the peer.
     pub fn protocol_version(&self) -> ProtocolVersion {
-        self.negotiated_version
+        match self.suite {
+            SupportedCipherSuite::Tls12(_) => ProtocolVersion::TLSv1_2,
+            SupportedCipherSuite::Tls13(_) => ProtocolVersion::TLSv1_3,
+        }
     }
 
     /// Update the traffic secret used for encrypting messages sent to the peer.
