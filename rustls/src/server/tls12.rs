@@ -8,7 +8,6 @@ pub(crate) use client_hello::{TLS12_HANDLER, Tls12Handler};
 use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
-use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 use crate::check::inappropriate_message;
@@ -53,7 +52,7 @@ mod client_hello {
         ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
     use crate::sealed::Sealed;
-    use crate::sign;
+    use crate::sign::{CertifiedKey, SigningKey};
     use crate::verify::DigitallySignedStruct;
 
     pub(crate) static TLS12_HANDLER: &dyn Tls12Handler = &Handler;
@@ -66,7 +65,7 @@ mod client_hello {
             &self,
             mut cch: CompleteClientHelloHandling,
             cx: &mut ServerContext<'_>,
-            server_key: ActiveCertifiedKey<'_>,
+            server_key: &CertifiedKey,
             chm: &Message<'_>,
             client_hello: &ClientHelloPayload,
             selected_kxg: &'static dyn SupportedKxGroup,
@@ -180,7 +179,7 @@ mod client_hello {
                 ));
             }
 
-            let mut ocsp_response = server_key.get_ocsp();
+            let mut ocsp_response = server_key.ocsp.as_deref();
 
             // If we're not offered a ticket or a potential session ID, allocate a session ID.
             if !cch.config.session_storage.can_cache() {
@@ -207,7 +206,7 @@ mod client_hello {
                 &cch.randoms,
                 cch.extra_exts,
             )?;
-            emit_certificate(&mut flight, server_key.get_cert());
+            emit_certificate(&mut flight, &server_key.cert_chain);
             if let Some(ocsp_response) = ocsp_response {
                 emit_cert_status(&mut flight, ocsp_response);
             }
@@ -215,7 +214,7 @@ mod client_hello {
                 &mut flight,
                 sigschemes,
                 selected_kxg,
-                server_key.get_key(),
+                &*server_key.key,
                 &cch.randoms,
             )?;
             let doing_client_auth = emit_certificate_req(&mut flight, &cch.config)?;
@@ -257,7 +256,7 @@ mod client_hello {
             &self,
             cch: CompleteClientHelloHandling,
             cx: &mut ServerContext<'_>,
-            server_key: ActiveCertifiedKey<'_>,
+            server_key: &CertifiedKey,
             chm: &Message<'_>,
             client_hello: &ClientHelloPayload,
             selected_kxg: &'static dyn SupportedKxGroup,
@@ -409,7 +408,7 @@ mod client_hello {
         flight: &mut HandshakeFlightTls12<'_>,
         sigschemes: Vec<SignatureScheme>,
         selected_group: &'static dyn SupportedKxGroup,
-        signing_key: &dyn sign::SigningKey,
+        signing_key: &dyn SigningKey,
         randoms: &ConnectionRandoms,
     ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
         let kx = selected_group.start()?;

@@ -24,7 +24,6 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::common::ActiveCertifiedKey;
 use crate::server::{ClientHello, ServerConfig, tls13};
 use crate::sync::Arc;
 use crate::{SupportedCipherSuite, suites};
@@ -398,12 +397,11 @@ impl ExpectClientHello {
                 )
             })?
         };
-        let certkey = ActiveCertifiedKey::from_certified_key(&certkey);
 
         let (suite, skxg) = self
             .choose_suite_and_kx_group(
                 version,
-                certkey.get_key().algorithm(),
+                certkey.key.algorithm(),
                 cx.common.protocol,
                 client_hello
                     .named_groups
@@ -457,7 +455,7 @@ impl ExpectClientHello {
                         extra_exts: self.extra_exts,
                     },
                     cx,
-                    certkey,
+                    &certkey,
                     m,
                     client_hello,
                     skxg,
@@ -478,7 +476,7 @@ impl ExpectClientHello {
                         extra_exts: self.extra_exts,
                     },
                     cx,
-                    certkey,
+                    &certkey,
                     m,
                     client_hello,
                     skxg,
