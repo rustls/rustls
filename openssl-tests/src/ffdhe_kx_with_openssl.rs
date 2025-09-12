@@ -199,7 +199,7 @@ fn ffdhe_provider() -> OwnedCryptoProvider {
             rustls::NamedGroup::FFDHE2048,
             rustls::ffdhe_groups::FFDHE2048,
         )],
-        ..provider::default_provider()
+        ..provider::default_provider().into_owned()
     }
 }
 

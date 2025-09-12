@@ -177,7 +177,7 @@
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
-//! # rustls::crypto::aws_lc_rs::default_provider().install_default();
+//! # rustls::crypto::DefaultCryptoProvider::install(Arc::new(rustls::crypto::aws_lc_rs::default_provider()));
 //! # let root_store = rustls::RootCertStore::from_iter(
 //! #  webpki_roots::TLS_SERVER_ROOTS
 //! #      .iter()

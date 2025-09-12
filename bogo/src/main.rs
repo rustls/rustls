@@ -38,7 +38,7 @@ use rustls::client::{
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
-use rustls::crypto::{OwnedCryptoProvider, aws_lc_rs, ring};
+use rustls::crypto::{ConstCryptoProvider, OwnedCryptoProvider, aws_lc_rs, ring};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::pki_types::pem::PemObject;
@@ -118,7 +118,7 @@ struct Options {
     expect_handshake_kind_resumed: Option<Vec<HandshakeKind>>,
     install_cert_compression_algs: CompressionAlgs,
     selected_provider: SelectedProvider,
-    provider: OwnedCryptoProvider,
+    provider: ConstCryptoProvider,
     ech_config_list: Option<EchConfigListBytes<'static>>,
     expect_ech_accept: bool,
     expect_ech_retry_configs: Option<EchConfigListBytes<'static>>,
@@ -220,7 +220,7 @@ impl Options {
     }
 
     fn provider(&self) -> OwnedCryptoProvider {
-        let mut provider = self.provider.clone();
+        let mut provider = self.provider.into_owned();
 
         if let Some(groups) = &self.groups {
             provider
@@ -306,17 +306,17 @@ impl SelectedProvider {
         }
     }
 
-    fn provider(&self) -> OwnedCryptoProvider {
+    fn provider(&self) -> ConstCryptoProvider {
         match self {
             Self::AwsLcRs | Self::AwsLcRsFips => {
                 // ensure all suites and kx groups are included (even in fips builds)
                 // as non-fips test cases require them.  runner activates fips mode via -fips-202205 option
                 // this includes rustls-post-quantum, which just returns an altered
                 // version of `aws_lc_rs::default_provider()`
-                OwnedCryptoProvider {
-                    kx_groups: aws_lc_rs::ALL_KX_GROUPS.to_vec(),
-                    tls12_cipher_suites: aws_lc_rs::ALL_TLS12_CIPHER_SUITES.to_vec(),
-                    tls13_cipher_suites: aws_lc_rs::ALL_TLS13_CIPHER_SUITES.to_vec(),
+                ConstCryptoProvider {
+                    kx_groups: aws_lc_rs::ALL_KX_GROUPS,
+                    tls12_cipher_suites: aws_lc_rs::ALL_TLS12_CIPHER_SUITES,
+                    tls13_cipher_suites: aws_lc_rs::ALL_TLS13_CIPHER_SUITES,
                     ..aws_lc_rs::default_provider()
                 }
             }

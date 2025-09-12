@@ -6,7 +6,7 @@ use std::vec;
 use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
-use crate::crypto::OwnedCryptoProvider;
+use crate::crypto::ConstCryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::Reader;
@@ -50,12 +50,11 @@ mod tests {
     /// is not sent if the client does not support TLS 1.2.
     #[test]
     fn test_no_session_ticket_request_on_tls_1_3() {
-        let mut config = ClientConfig::builder_with_provider(Arc::new(
-            super::provider::default_provider().with_only_tls13(),
-        ))
-        .with_root_certificates(roots())
-        .with_no_client_auth()
-        .unwrap();
+        let mut config =
+            ClientConfig::builder_with_provider(Arc::new(super::provider::DEFAULT_TLS13_PROVIDER))
+                .with_root_certificates(roots())
+                .with_no_client_auth()
+                .unwrap();
         config.resumption = Resumption::in_memory_sessions(128)
             .tls12_resumption(Tls12Resumption::SessionIdOrTickets);
         let ch = client_hello_sent_for_config(config).unwrap();
@@ -65,12 +64,10 @@ mod tests {
     #[test]
     fn test_no_renegotiation_scsv_on_tls_1_3() {
         let ch = client_hello_sent_for_config(
-            ClientConfig::builder_with_provider(Arc::new(
-                super::provider::default_provider().with_only_tls13(),
-            ))
-            .with_root_certificates(roots())
-            .with_no_client_auth()
-            .unwrap(),
+            ClientConfig::builder_with_provider(Arc::new(super::provider::DEFAULT_TLS13_PROVIDER))
+                .with_root_certificates(roots())
+                .with_no_client_auth()
+                .unwrap(),
         )
         .unwrap();
         assert!(
@@ -82,8 +79,8 @@ mod tests {
     #[test]
     fn test_client_does_not_offer_sha1() {
         for provider in [
-            super::provider::default_provider().with_only_tls12(),
-            super::provider::default_provider().with_only_tls13(),
+            super::provider::DEFAULT_TLS12_PROVIDER,
+            super::provider::DEFAULT_TLS13_PROVIDER,
         ] {
             let config = ClientConfig::builder_with_provider(Arc::new(provider))
                 .with_root_certificates(roots())
@@ -188,8 +185,8 @@ mod tests {
             )]));
 
         for (provider, cas_extension_expected) in [
-            (super::provider::default_provider().with_only_tls12(), false),
-            (super::provider::default_provider().with_only_tls13(), true),
+            (super::provider::DEFAULT_TLS12_PROVIDER, false),
+            (super::provider::DEFAULT_TLS13_PROVIDER, true),
         ] {
             let client_hello = client_hello_sent_for_config(
                 ClientConfig::builder_with_provider(Arc::new(provider))
@@ -213,7 +210,7 @@ mod tests {
     #[test]
     fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         let verifier = Arc::new(ExpectSha1EcdsaVerifier::default());
-        let config = ClientConfig::builder_with_provider(Arc::new(x25519_provider()))
+        let config = ClientConfig::builder_with_provider(Arc::new(X25519_PROVIDER))
             .dangerous()
             .with_custom_certificate_verifier(verifier.clone())
             .with_no_client_auth()
@@ -444,14 +441,13 @@ mod tests {
     }
 
     fn client_config_for_rpk(key_log: Arc<dyn KeyLog>) -> ClientConfig {
-        let mut config =
-            ClientConfig::builder_with_provider(Arc::new(x25519_provider().with_only_tls13()))
-                .dangerous()
-                .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
-                .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-                    Arc::new(client_certified_key()),
-                )))
-                .unwrap();
+        let mut config = ClientConfig::builder_with_provider(Arc::new(X25519_PROVIDER))
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
+            .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(Arc::new(
+                client_certified_key(),
+            ))))
+            .unwrap();
         config.key_log = key_log;
         config
     }
@@ -477,14 +473,12 @@ mod tests {
         .unwrap()
     }
 
-    fn x25519_provider() -> OwnedCryptoProvider {
-        // ensures X25519 is offered irrespective of cfg(feature = "fips"), which eases
-        // creation of fake server messages.
-        OwnedCryptoProvider {
-            kx_groups: vec![super::provider::kx_group::X25519],
-            ..super::provider::default_provider()
-        }
-    }
+    // ensures X25519 is offered irrespective of cfg(feature = "fips"), which eases
+    // creation of fake server messages.
+    const X25519_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+        kx_groups: &[super::provider::kx_group::X25519],
+        ..super::provider::DEFAULT_PROVIDER
+    };
 
     #[derive(Clone, Debug)]
     struct ServerVerifierWithAuthorityNames(Arc<[DistinguishedName]>);
@@ -640,12 +634,14 @@ fn hybrid_kx_component_share_offered_if_supported_separately() {
 #[test]
 fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
     use crate::crypto::aws_lc_rs;
-    let provider = OwnedCryptoProvider {
-        kx_groups: vec![aws_lc_rs::kx_group::X25519MLKEM768],
-        ..aws_lc_rs::default_provider()
+
+    const X25519MLKEM768_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+        kx_groups: &[aws_lc_rs::kx_group::X25519MLKEM768],
+        ..aws_lc_rs::DEFAULT_PROVIDER
     };
+
     let ch = client_hello_sent_for_config(
-        ClientConfig::builder_with_provider(Arc::new(provider))
+        ClientConfig::builder_with_provider(Arc::new(X25519MLKEM768_PROVIDER))
             .with_root_certificates(roots())
             .with_no_client_auth()
             .unwrap(),

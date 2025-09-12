@@ -241,8 +241,8 @@ impl dyn CryptoProvider {
 /// # mod fictious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 /// use rustls::crypto::aws_lc_rs;
 ///
-/// pub fn provider() -> rustls::crypto::OwnedCryptoProvider {
-///   rustls::crypto::OwnedCryptoProvider {
+/// pub fn provider() -> rustls::crypto::ConstCryptoProvider {
+///   rustls::crypto::ConstCryptoProvider {
 ///     key_provider: &HsmKeyLoader,
 ///     ..aws_lc_rs::default_provider()
 ///   }
@@ -341,6 +341,18 @@ pub struct OwnedCryptoProvider {
 }
 
 impl OwnedCryptoProvider {
+    /// Create a new `OwnedCryptoProvider` from any other provider.
+    pub fn new(other: &dyn CryptoProvider) -> Self {
+        Self {
+            tls12_cipher_suites: other.tls12_cipher_suites().to_vec(),
+            tls13_cipher_suites: other.tls13_cipher_suites().to_vec(),
+            kx_groups: other.kx_groups().to_vec(),
+            signature_verification_algorithms: other.signature_verification_algorithms(),
+            secure_random: other.secure_random(),
+            key_provider: other.key_provider(),
+        }
+    }
+
     /// Return a new `CryptoProvider` that only supports TLS1.3.
     pub fn with_only_tls13(self) -> Self {
         Self {
@@ -416,14 +428,7 @@ impl ConstCryptoProvider {
     /// This is typically useful to do conditional alteration of the provider at
     /// run-time.
     pub fn into_owned(self) -> OwnedCryptoProvider {
-        OwnedCryptoProvider {
-            tls12_cipher_suites: self.tls12_cipher_suites.to_vec(),
-            tls13_cipher_suites: self.tls13_cipher_suites.to_vec(),
-            kx_groups: self.kx_groups.to_vec(),
-            signature_verification_algorithms: self.signature_verification_algorithms,
-            secure_random: self.secure_random,
-            key_provider: self.key_provider,
-        }
+        OwnedCryptoProvider::new(&self)
     }
 }
 
@@ -538,7 +543,7 @@ See the documentation of the CryptoProvider type for more information.
     ///
     /// [`ClientConfig::builder()`]: crate::ClientConfig::builder
     /// [`ServerConfig::builder()`]: crate::ServerConfig::builder
-    pub fn from_crate_features() -> Option<OwnedCryptoProvider> {
+    pub fn from_crate_features() -> Option<ConstCryptoProvider> {
         #[cfg(all(
             feature = "ring",
             not(feature = "aws-lc-rs"),
@@ -914,7 +919,8 @@ impl From<Vec<u8>> for SharedSecret {
 ///
 /// ```rust
 /// # #[cfg(feature = "fips")] {
-/// rustls::crypto::default_fips_provider().install_default()
+/// # use std::sync::Arc;
+/// rustls::crypto::DefaultCryptoProvider::install(Arc::new(rustls::crypto::default_fips_provider()))
 ///     .expect("default provider already set elsewhere");
 /// # }
 /// ```
@@ -935,7 +941,7 @@ impl From<Vec<u8>> for SharedSecret {
 /// ```
 #[cfg(all(feature = "aws-lc-rs", any(feature = "fips", docsrs)))]
 #[cfg_attr(docsrs, doc(cfg(feature = "fips")))]
-pub fn default_fips_provider() -> OwnedCryptoProvider {
+pub fn default_fips_provider() -> ConstCryptoProvider {
     aws_lc_rs::default_provider()
 }
 

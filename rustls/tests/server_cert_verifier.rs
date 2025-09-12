@@ -31,10 +31,10 @@ fn client_can_override_certificate_verification() {
     for kt in KeyType::all_for_provider(&provider).iter() {
         let verifier = Arc::new(MockServerVerifier::accepts_anything());
 
-        let server_config = Arc::new(make_server_config(*kt, &provider));
+        let server_config = Arc::new(make_server_config(*kt, provider));
 
         for version_provider in all_versions(&provider) {
-            let mut client_config = make_client_config(*kt, &version_provider);
+            let mut client_config = make_client_config(*kt, version_provider);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
@@ -54,10 +54,10 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
         ));
 
-        let server_config = Arc::new(make_server_config(*kt, &provider));
+        let server_config = Arc::new(make_server_config(*kt, provider));
 
         for version_provider in all_versions(&provider) {
-            let mut client_config = make_client_config(*kt, &version_provider);
+            let mut client_config = make_client_config(*kt, version_provider);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
@@ -82,7 +82,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
 fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_config = make_client_config(*kt, &provider.clone().with_only_tls12());
+        let mut client_config = make_client_config(*kt, provider::DEFAULT_TLS12_PROVIDER);
         let verifier = Arc::new(MockServerVerifier::rejects_tls12_signatures(
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
         ));
@@ -91,7 +91,7 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
             .dangerous()
             .set_certificate_verifier(verifier);
 
-        let server_config = Arc::new(make_server_config(*kt, &provider));
+        let server_config = Arc::new(make_server_config(*kt, provider));
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -112,7 +112,7 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
 fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_config = make_client_config(*kt, &provider.clone().with_only_tls13());
+        let mut client_config = make_client_config(*kt, provider::DEFAULT_TLS13_PROVIDER);
         let verifier = Arc::new(MockServerVerifier::rejects_tls13_signatures(
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
         ));
@@ -121,7 +121,7 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
             .dangerous()
             .set_certificate_verifier(verifier);
 
-        let server_config = Arc::new(make_server_config(*kt, &provider));
+        let server_config = Arc::new(make_server_config(*kt, provider));
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -144,10 +144,10 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
     for kt in KeyType::all_for_provider(&provider).iter() {
         let verifier = Arc::new(MockServerVerifier::offers_no_signature_schemes());
 
-        let server_config = Arc::new(make_server_config(*kt, &provider));
+        let server_config = Arc::new(make_server_config(*kt, provider));
 
         for version_provider in all_versions(&provider) {
-            let mut client_config = make_client_config(*kt, &version_provider);
+            let mut client_config = make_client_config(*kt, version_provider);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
@@ -190,7 +190,7 @@ fn client_can_request_certain_trusted_cas() {
     );
 
     let server_config = Arc::new(
-        ServerConfig::builder_with_provider(Arc::new(provider.clone()))
+        ServerConfig::builder_with_provider(Arc::new(provider))
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(cert_resolver.clone()))
             .unwrap(),
@@ -217,23 +217,21 @@ fn client_can_request_certain_trusted_cas() {
             )]),
         });
 
-        let cas_sending_client_config =
-            ClientConfig::builder_with_provider(Arc::new(provider.clone()))
-                .dangerous()
-                .with_custom_certificate_verifier(cas_sending_server_verifier)
-                .with_no_client_auth()
-                .unwrap();
+        let cas_sending_client_config = ClientConfig::builder_with_provider(Arc::new(provider))
+            .dangerous()
+            .with_custom_certificate_verifier(cas_sending_server_verifier)
+            .with_no_client_auth()
+            .unwrap();
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(cas_sending_client_config), &server_config);
         do_handshake(&mut client, &mut server);
 
-        let cas_unaware_client_config =
-            ClientConfig::builder_with_provider(Arc::new(provider.clone()))
-                .dangerous()
-                .with_custom_certificate_verifier(server_verifier)
-                .with_no_client_auth()
-                .unwrap();
+        let cas_unaware_client_config = ClientConfig::builder_with_provider(Arc::new(provider))
+            .dangerous()
+            .with_custom_certificate_verifier(server_verifier)
+            .with_no_client_auth()
+            .unwrap();
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(cas_unaware_client_config), &server_config);
