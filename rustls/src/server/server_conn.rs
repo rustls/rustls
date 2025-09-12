@@ -152,6 +152,34 @@ pub struct ClientHello<'a> {
 }
 
 impl<'a> ClientHello<'a> {
+    pub(super) fn new(
+        client_hello: &'a ClientHelloPayload,
+        sni: Option<&'a DnsName<'static>>,
+        sig_schemes: &'a [SignatureScheme],
+        version: ProtocolVersion,
+    ) -> Self {
+        Self {
+            server_name: sni.map(Cow::Borrowed),
+            signature_schemes: &sig_schemes,
+            alpn: client_hello.protocols.as_ref(),
+            client_cert_types: client_hello
+                .client_certificate_types
+                .as_deref(),
+            server_cert_types: client_hello
+                .server_certificate_types
+                .as_deref(),
+            cipher_suites: &client_hello.cipher_suites,
+            // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
+            certificate_authorities: match version {
+                ProtocolVersion::TLSv1_2 => None,
+                _ => client_hello
+                    .certificate_authority_names
+                    .as_deref(),
+            },
+            named_groups: client_hello.named_groups.as_deref(),
+        }
+    }
+
     /// Get the server name indicator.
     ///
     /// Returns `None` if the client did not supply a SNI.
