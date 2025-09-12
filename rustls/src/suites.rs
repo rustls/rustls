@@ -86,14 +86,6 @@ impl SupportedCipherSuite {
         }
     }
 
-    /// Return the inner `Tls13CipherSuite` for this suite, if it is a TLS1.3 suite.
-    pub fn tls13(&self) -> Option<&'static Tls13CipherSuite> {
-        match self {
-            Self::Tls12(_) => None,
-            Self::Tls13(inner) => Some(inner),
-        }
-    }
-
     /// Return true if this suite is usable for the given [`Protocol`].
     pub(crate) fn usable_for_protocol(&self, proto: Protocol) -> bool {
         match self {

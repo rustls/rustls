@@ -948,8 +948,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
         cx.common.handshake_kind = Some(HandshakeKind::FullWithHelloRetryRequest);
 
         // If we offered ECH, we need to confirm that the server accepted it.
-        match (self.next.ech_state.as_ref(), cs.tls13()) {
-            (Some(ech_state), Some(tls13_cs)) => {
+        match (self.next.ech_state.as_ref(), cs) {
+            (Some(ech_state), SupportedCipherSuite::Tls13(tls13_cs)) => {
                 if !ech_state.confirm_hrr_acceptance(hrr, tls13_cs, cx.common)? {
                     // If the server did not confirm, then note the new ECH status but
                     // continue the handshake. We will abort with an ECH required error
@@ -957,7 +957,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
                     cx.data.ech_status = EchStatus::Rejected;
                 }
             }
-            (Some(_), None) => {
+            (Some(_), SupportedCipherSuite::Tls12(_)) => {
                 unreachable!("ECH state should only be set when TLS 1.3 was negotiated")
             }
             _ => {}
