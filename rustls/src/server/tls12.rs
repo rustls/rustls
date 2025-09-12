@@ -193,13 +193,10 @@ mod client_hello {
 
             let mut flight = HandshakeFlightTls12::new(&mut st.transcript);
 
-            cch.send_ticket = emit_server_hello(
+            cch.send_ticket = cch.emit_server_hello(
                 &mut flight,
                 &st.config,
                 cx,
-                cch.session_id,
-                cch.suite,
-                cch.using_ems,
                 &mut ocsp_response,
                 st.client_hello,
                 None,
@@ -286,13 +283,10 @@ mod client_hello {
 
             self.session_id = state.client_hello.session_id;
             let mut flight = HandshakeFlightTls12::new(&mut state.transcript);
-            self.send_ticket = emit_server_hello(
+            self.send_ticket = self.emit_server_hello(
                 &mut flight,
                 &state.config,
                 cx,
-                self.session_id,
-                self.suite,
-                self.using_ems,
                 &mut None,
                 state.client_hello,
                 Some(&resumedata),
@@ -341,43 +335,41 @@ mod client_hello {
                 send_ticket: self.send_ticket,
             }))
         }
-    }
 
-    fn emit_server_hello(
-        flight: &mut HandshakeFlightTls12<'_>,
-        config: &ServerConfig,
-        cx: &mut ServerContext<'_>,
-        session_id: SessionId,
-        suite: &'static Tls12CipherSuite,
-        using_ems: bool,
-        ocsp_response: &mut Option<&[u8]>,
-        hello: &ClientHelloPayload,
-        resumedata: Option<&persist::Tls12ServerSessionValue>,
-        randoms: &ConnectionRandoms,
-        extra_exts: ServerExtensionsInput<'static>,
-    ) -> Result<bool, Error> {
-        let mut ep = hs::ExtensionProcessing::new(extra_exts);
-        ep.process_common(
-            config,
-            cx,
-            ocsp_response,
-            hello,
-            resumedata.map(|r| &r.common),
-        )?;
-        ep.process_tls12(config, hello, using_ems);
+        fn emit_server_hello(
+            &self,
+            flight: &mut HandshakeFlightTls12<'_>,
+            config: &ServerConfig,
+            cx: &mut ServerContext<'_>,
+            ocsp_response: &mut Option<&[u8]>,
+            hello: &ClientHelloPayload,
+            resumedata: Option<&persist::Tls12ServerSessionValue>,
+            randoms: &ConnectionRandoms,
+            extra_exts: ServerExtensionsInput<'static>,
+        ) -> Result<bool, Error> {
+            let mut ep = hs::ExtensionProcessing::new(extra_exts);
+            ep.process_common(
+                config,
+                cx,
+                ocsp_response,
+                hello,
+                resumedata.map(|r| &r.common),
+            )?;
+            ep.process_tls12(config, hello, self.using_ems);
 
-        let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
-            legacy_version: ProtocolVersion::TLSv1_2,
-            random: Random::from(randoms.server),
-            session_id,
-            cipher_suite: suite.common.suite,
-            compression_method: Compression::Null,
-            extensions: ep.extensions,
-        }));
-        trace!("sending server hello {sh:?}");
-        flight.add(sh);
+            let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
+                legacy_version: ProtocolVersion::TLSv1_2,
+                random: Random::from(randoms.server),
+                session_id: self.session_id,
+                cipher_suite: self.suite.common.suite,
+                compression_method: Compression::Null,
+                extensions: ep.extensions,
+            }));
+            trace!("sending server hello {sh:?}");
+            flight.add(sh);
 
-        Ok(ep.send_ticket)
+            Ok(ep.send_ticket)
+        }
     }
 
     fn emit_certificate(
