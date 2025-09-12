@@ -11,7 +11,7 @@ use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
-use crate::crypto::{CryptoProvider, InternalCryptoProvider, SupportedKxGroup};
+use crate::crypto::{DefaultCryptoProvider, InternalCryptoProvider, SupportedKxGroup};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -287,7 +287,7 @@ impl ClientConfig {
     #[cfg(feature = "std")]
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_provider(
-            CryptoProvider::get_default_or_install_from_crate_features().clone(),
+            DefaultCryptoProvider::get_or_install_from_crate_features().clone(),
         )
     }
 

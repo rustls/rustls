@@ -18,7 +18,7 @@ use crate::common_state::{Protocol, State};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CryptoProvider, InternalCryptoProvider};
+use crate::crypto::{DefaultCryptoProvider, InternalCryptoProvider};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -464,7 +464,7 @@ impl ServerConfig {
     #[cfg(feature = "std")]
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_provider(
-            CryptoProvider::get_default_or_install_from_crate_features().clone(),
+            DefaultCryptoProvider::get_or_install_from_crate_features().clone(),
         )
     }
 

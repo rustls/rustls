@@ -204,26 +204,6 @@ impl dyn InternalCryptoProvider {
 /// This structure provides defaults. Everything in it can be overridden at
 /// runtime by replacing field values as needed.
 ///
-/// # Using the per-process default `CryptoProvider`
-///
-/// There is the concept of an implicit default provider, configured at run-time once in
-/// a given process.
-///
-/// It is used for functions like [`ClientConfig::builder()`] and [`ServerConfig::builder()`].
-///
-/// The intention is that an application can specify the [`CryptoProvider`] they wish to use
-/// once, and have that apply to the variety of places where their application does TLS
-/// (which may be wrapped inside other libraries).
-/// They should do this by calling [`CryptoProvider::install_default()`] early on.
-///
-/// To achieve this goal:
-///
-/// - _libraries_ should use [`ClientConfig::builder()`]/[`ServerConfig::builder()`]
-///   or otherwise rely on the [`CryptoProvider::get_default()`] provider.
-/// - _applications_ should call [`CryptoProvider::install_default()`] early
-///   in their `fn main()`. If _applications_ uses a custom provider based on the one built-in,
-///   they can activate the `custom-provider` feature to ensure its usage.
-///
 /// # Using a specific `CryptoProvider`
 ///
 /// Supply the provider when constructing your [`ClientConfig`] or [`ServerConfig`]:
@@ -361,90 +341,6 @@ pub struct CryptoProvider {
 }
 
 impl CryptoProvider {
-    /// Sets this `CryptoProvider` as the default for this process.
-    ///
-    /// This can be called successfully at most once in any process execution.
-    ///
-    /// Call this early in your process to configure which provider is used for
-    /// the provider.  The configuration should happen before any use of
-    /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
-    pub fn install_default(self) -> Result<(), Arc<dyn InternalCryptoProvider>> {
-        static_default::install_default(Arc::new(self))
-    }
-
-    /// Returns the default `CryptoProvider` for this process.
-    ///
-    /// This will be `None` if no default has been set yet.
-    pub fn get_default() -> Option<&'static Arc<dyn InternalCryptoProvider>> {
-        static_default::get_default()
-    }
-
-    /// An internal function that:
-    ///
-    /// - gets the pre-installed default, or
-    /// - installs one `from_crate_features()`, or else
-    /// - panics about the need to call [`CryptoProvider::install_default()`]
-    pub(crate) fn get_default_or_install_from_crate_features()
-    -> &'static Arc<dyn InternalCryptoProvider> {
-        if let Some(provider) = Self::get_default() {
-            return provider;
-        }
-
-        let provider = Self::from_crate_features()
-            .expect(r###"
-Could not automatically determine the process-level CryptoProvider from Rustls crate features.
-Call CryptoProvider::install_default() before this point to select a provider manually, or make sure exactly one of the 'aws-lc-rs' and 'ring' features is enabled.
-See the documentation of the CryptoProvider type for more information.
-            "###);
-        // Ignore the error resulting from us losing a race, and accept the outcome.
-        let _ = provider.install_default();
-        Self::get_default().unwrap()
-    }
-
-    /// Returns a provider named unambiguously by rustls crate features.
-    ///
-    /// This function returns `None` if the crate features are ambiguous (ie, specify two
-    /// providers), or specify no providers, or the feature `custom-provider` is activated.
-    /// In all cases the application should explicitly specify the provider to use
-    /// with [`CryptoProvider::install_default`].
-    ///
-    /// This can be used to check if a default provider is available before
-    /// invoking functions that require an installed `CryptoProvider`, like
-    /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
-    ///
-    /// ```rust,no_run
-    /// # use rustls::crypto::CryptoProvider;
-    /// if CryptoProvider::get_default().is_some() || CryptoProvider::from_crate_features().is_some() {
-    ///     // A default provider is available, either from the
-    ///     // process-level default or from the crate features.
-    /// }
-    /// ```
-    ///
-    /// [`ClientConfig::builder()`]: crate::ClientConfig::builder
-    /// [`ServerConfig::builder()`]: crate::ServerConfig::builder
-    pub fn from_crate_features() -> Option<Self> {
-        #[cfg(all(
-            feature = "ring",
-            not(feature = "aws-lc-rs"),
-            not(feature = "custom-provider")
-        ))]
-        {
-            return Some(ring::default_provider());
-        }
-
-        #[cfg(all(
-            feature = "aws-lc-rs",
-            not(feature = "ring"),
-            not(feature = "custom-provider")
-        ))]
-        {
-            return Some(aws_lc_rs::default_provider());
-        }
-
-        #[allow(unreachable_code)]
-        None
-    }
-
     /// Return a new `CryptoProvider` that only supports TLS1.3.
     pub fn with_only_tls13(self) -> Self {
         Self {
@@ -485,6 +381,117 @@ impl InternalCryptoProvider for CryptoProvider {
 
     fn key_provider(&self) -> &'static dyn KeyProvider {
         self.key_provider
+    }
+}
+
+/// Interacting with the per-process default `CryptoProvider`
+///
+/// There is the concept of an implicit default provider, configured at run-time once in
+/// a given process.
+///
+/// It is used for functions like [`ClientConfig::builder()`] and [`ServerConfig::builder()`].
+///
+/// The intention is that an application can specify the [`CryptoProvider`] they wish to use
+/// once, and have that apply to the variety of places where their application does TLS
+/// (which may be wrapped inside other libraries).
+/// They should do this by calling [`CryptoProvider::install_default()`] early on.
+///
+/// To achieve this goal:
+///
+/// - _libraries_ should use [`ClientConfig::builder()`]/[`ServerConfig::builder()`]
+///   or otherwise rely on the [`DefaultCryptoProvider::get()`] provider.
+/// - _applications_ should call [`DefaultCryptoProvider::install()`] early
+///   in their `fn main()`. If _applications_ uses a custom provider based on the one built-in,
+///   they can activate the `custom-provider` feature to ensure its usage.
+///
+#[derive(Debug)]
+#[allow(clippy::exhaustive_structs)]
+pub struct DefaultCryptoProvider;
+
+impl DefaultCryptoProvider {
+    /// Sets this `CryptoProvider` as the default for this process.
+    ///
+    /// This can be called successfully at most once in any process execution.
+    ///
+    /// Call this early in your process to configure which provider is used for
+    /// the provider.  The configuration should happen before any use of
+    /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
+    pub fn install(
+        prov: Arc<dyn InternalCryptoProvider>,
+    ) -> Result<(), Arc<dyn InternalCryptoProvider>> {
+        static_default::install_default(prov)
+    }
+
+    /// Returns the default `CryptoProvider` for this process.
+    ///
+    /// This will be `None` if no default has been set yet.
+    pub fn get() -> Option<&'static Arc<dyn InternalCryptoProvider>> {
+        static_default::get_default()
+    }
+
+    /// An internal function that:
+    ///
+    /// - gets the pre-installed default, or
+    /// - installs one `from_crate_features()`, or else
+    /// - panics about the need to call [`CryptoProvider::install_default()`]
+    pub(crate) fn get_or_install_from_crate_features() -> &'static Arc<dyn InternalCryptoProvider> {
+        if let Some(provider) = Self::get() {
+            return provider;
+        }
+
+        let provider = Self::from_crate_features()
+            .expect(r###"
+Could not automatically determine the process-level CryptoProvider from Rustls crate features.
+Call CryptoProvider::install_default() before this point to select a provider manually, or make sure exactly one of the 'aws-lc-rs' and 'ring' features is enabled.
+See the documentation of the CryptoProvider type for more information.
+            "###);
+        // Ignore the error resulting from us losing a race, and accept the outcome.
+        let _ = Self::install(Arc::new(provider));
+        Self::get().unwrap()
+    }
+
+    /// Returns a provider named unambiguously by rustls crate features.
+    ///
+    /// This function returns `None` if the crate features are ambiguous (ie, specify two
+    /// providers), or specify no providers, or the feature `custom-provider` is activated.
+    /// In all cases the application should explicitly specify the provider to use
+    /// with [`CryptoProvider::install_default`].
+    ///
+    /// This can be used to check if a default provider is available before
+    /// invoking functions that require an installed `CryptoProvider`, like
+    /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
+    ///
+    /// ```rust,no_run
+    /// # use rustls::crypto::DefaultCryptoProvider;
+    /// if DefaultCryptoProvider::get().is_some() || DefaultCryptoProvider::from_crate_features().is_some() {
+    ///     // A default provider is available, either from the
+    ///     // process-level default or from the crate features.
+    /// }
+    /// ```
+    ///
+    /// [`ClientConfig::builder()`]: crate::ClientConfig::builder
+    /// [`ServerConfig::builder()`]: crate::ServerConfig::builder
+    pub fn from_crate_features() -> Option<CryptoProvider> {
+        #[cfg(all(
+            feature = "ring",
+            not(feature = "aws-lc-rs"),
+            not(feature = "custom-provider")
+        ))]
+        {
+            return Some(ring::default_provider());
+        }
+
+        #[cfg(all(
+            feature = "aws-lc-rs",
+            not(feature = "ring"),
+            not(feature = "custom-provider")
+        ))]
+        {
+            return Some(aws_lc_rs::default_provider());
+        }
+
+        #[allow(unreachable_code)]
+        None
     }
 }
 
@@ -874,7 +881,6 @@ mod static_default {
     #[cfg(not(feature = "std"))]
     use once_cell::race::OnceBox;
 
-    #[cfg(feature = "std")]
     use crate::crypto::InternalCryptoProvider;
     use crate::sync::Arc;
 
