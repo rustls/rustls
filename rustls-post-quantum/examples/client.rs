@@ -13,8 +13,7 @@ use std::sync::Arc;
 
 fn main() {
     env_logger::init();
-    rustls_post_quantum::provider()
-        .install_default()
+    rustls::crypto::DefaultCryptoProvider::install(Arc::new(rustls_post_quantum::provider()))
         .unwrap();
 
     let root_store = rustls::RootCertStore {
