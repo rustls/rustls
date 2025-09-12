@@ -3,7 +3,7 @@ use core::fmt;
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::{self, KeyExchangeAlgorithm};
-use crate::enums::{CipherSuite, SignatureAlgorithm};
+use crate::enums::CipherSuite;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::versions::SupportedProtocolVersion;
@@ -100,15 +100,6 @@ impl SupportedCipherSuite {
         match self {
             Self::Tls12(suite) => SupportedProtocolVersion::TLS12(suite.protocol_version),
             Self::Tls13(suite) => SupportedProtocolVersion::TLS13(suite.protocol_version),
-        }
-    }
-
-    /// Return true if this suite is usable for a key only offering `sig_alg`
-    /// signatures.  This resolves to true for all TLS1.3 suites.
-    pub fn usable_for_signature_algorithm(&self, sig_alg: SignatureAlgorithm) -> bool {
-        match self {
-            Self::Tls12(tls12) => tls12.usable_for_signature_algorithm(sig_alg),
-            Self::Tls13(_) => true,
         }
     }
 
