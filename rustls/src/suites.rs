@@ -3,7 +3,7 @@ use core::fmt;
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::{self, KeyExchangeAlgorithm};
-use crate::enums::{CipherSuite, SignatureAlgorithm, SignatureScheme};
+use crate::enums::{CipherSuite, SignatureAlgorithm};
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::versions::SupportedProtocolVersion;
@@ -144,17 +144,6 @@ impl fmt::Debug for SupportedCipherSuite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.suite().fmt(f)
     }
-}
-
-/// Return true if `sigscheme` is usable by any of the given suites.
-pub(crate) fn compatible_sigscheme_for_suites(
-    sigscheme: SignatureScheme,
-    common_suites: &[SupportedCipherSuite],
-) -> bool {
-    let sigalg = sigscheme.algorithm();
-    common_suites
-        .iter()
-        .any(|&suite| suite.usable_for_signature_algorithm(sigalg))
 }
 
 /// Secrets for transmitting/receiving data over a TLS session.
