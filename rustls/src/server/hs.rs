@@ -6,6 +6,7 @@ use pki_types::DnsName;
 
 use super::server_conn::ServerConnectionData;
 use super::tls12;
+use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
@@ -27,7 +28,6 @@ use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig, tls13};
 use crate::sign::CertifiedKey;
 use crate::sync::Arc;
-use crate::{SupportedCipherSuite, suites};
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
@@ -389,8 +389,11 @@ impl ExpectClientHello {
             })
             .collect::<Vec<_>>();
 
-        sig_schemes
-            .retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
+        sig_schemes.retain(|scheme| {
+            client_suites
+                .iter()
+                .any(|&suite| suite.usable_for_signature_algorithm(scheme.algorithm()))
+        });
 
         // Choose a certificate.
         let cert_key = self
