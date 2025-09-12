@@ -51,7 +51,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         let algorithms = self
             .provider
-            .signature_verification_algorithms;
+            .signature_verification_algorithms();
         self.with_webpki_verifier(
             WebPkiServerVerifier::new_without_revocation(root_store, algorithms).into(),
         )
@@ -142,7 +142,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         cert_chain: Vec<CertificateDer<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
-        let certified_key = CertifiedKey::from_der(cert_chain, key_der, &self.provider)?;
+        let certified_key = CertifiedKey::from_der(cert_chain, key_der, self.provider.as_ref())?;
         self.with_client_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 

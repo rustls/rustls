@@ -8,7 +8,7 @@ use super::{VerifierBuilderError, pki_error};
 use crate::ConfigBuilder;
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
+use crate::crypto::{CryptoProvider, InternalCryptoProvider, WebPkiSupportedAlgorithms};
 #[cfg(doc)]
 use crate::server::ServerConfig;
 use crate::sync::Arc;
@@ -274,7 +274,7 @@ impl WebPkiClientVerifier {
     pub fn builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {
         Self::builder_with_provider(
             roots,
-            CryptoProvider::get_default_or_install_from_crate_features(),
+            CryptoProvider::get_default_or_install_from_crate_features().as_ref(),
         )
     }
 
@@ -290,9 +290,9 @@ impl WebPkiClientVerifier {
     /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
     pub fn builder_with_provider(
         roots: Arc<RootCertStore>,
-        provider: &CryptoProvider,
+        provider: &dyn InternalCryptoProvider,
     ) -> ClientCertVerifierBuilder {
-        ClientCertVerifierBuilder::new(roots, provider.signature_verification_algorithms)
+        ClientCertVerifierBuilder::new(roots, provider.signature_verification_algorithms())
     }
 
     /// Create a new `WebPkiClientVerifier` that disables client authentication. The server will
