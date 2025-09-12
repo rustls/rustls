@@ -1,4 +1,4 @@
-use alloc::borrow::{Cow, ToOwned};
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
@@ -392,43 +392,22 @@ impl ExpectClientHello {
         sig_schemes
             .retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
 
-        // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
-        let certificate_authorities = match version {
-            ProtocolVersion::TLSv1_2 => None,
-            _ => client_hello
-                .certificate_authority_names
-                .as_deref(),
-        };
         // Choose a certificate.
-        let cert_key = {
-            let client_hello = ClientHello {
-                server_name: cx.data.sni.as_ref().map(Cow::Borrowed),
-                signature_schemes: &sig_schemes,
-                alpn: client_hello.protocols.as_ref(),
-                client_cert_types: client_hello
-                    .client_certificate_types
-                    .as_deref(),
-                server_cert_types: client_hello
-                    .server_certificate_types
-                    .as_deref(),
-                cipher_suites: &client_hello.cipher_suites,
-                certificate_authorities,
-                named_groups: client_hello.named_groups.as_deref(),
-            };
-            trace!("Resolving server certificate: {client_hello:#?}");
-
-            let certkey = self
-                .config
-                .cert_resolver
-                .resolve(&client_hello);
-
-            certkey.ok_or_else(|| {
+        let cert_key = self
+            .config
+            .cert_resolver
+            .resolve(&ClientHello::new(
+                client_hello,
+                cx.data.sni.as_ref(),
+                &sig_schemes,
+                version,
+            ))
+            .ok_or_else(|| {
                 cx.common.send_fatal_alert(
                     AlertDescription::AccessDenied,
                     Error::General("no server certificate chain resolved".to_owned()),
                 )
-            })?
-        };
+            })?;
 
         let (suite, skxg) = self
             .choose_suite_and_kx_group(
