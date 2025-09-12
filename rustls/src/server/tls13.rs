@@ -57,9 +57,8 @@ mod client_hello {
         ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
     };
     use crate::sealed::Sealed;
-    use crate::server::common::ActiveCertifiedKey;
     use crate::server::hs::CertificateTypes;
-    use crate::sign;
+    use crate::sign::{CertifiedKey, SigningKey};
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
@@ -75,7 +74,7 @@ mod client_hello {
             &self,
             mut cch: CompleteClientHelloHandling,
             cx: &mut ServerContext<'_>,
-            server_key: ActiveCertifiedKey<'_>,
+            server_key: &CertifiedKey,
             chm: &Message<'_>,
             client_hello: &ClientHelloPayload,
             selected_kxg: &'static dyn SupportedKxGroup,
@@ -302,7 +301,7 @@ mod client_hello {
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
             }
 
-            let mut ocsp_response = server_key.get_ocsp();
+            let mut ocsp_response = server_key.ocsp.as_deref();
             let mut flight = HandshakeFlightTls13::new(&mut cch.transcript);
             let (cert_types, doing_early_data) = emit_encrypted_extensions(
                 &mut flight,
@@ -322,17 +321,17 @@ mod client_hello {
                     emit_compressed_certificate_tls13(
                         &mut flight,
                         &cch.config,
-                        server_key.get_cert(),
+                        &server_key.cert_chain,
                         ocsp_response,
                         compressor,
                     );
                 } else {
-                    emit_certificate_tls13(&mut flight, server_key.get_cert(), ocsp_response);
+                    emit_certificate_tls13(&mut flight, &server_key.cert_chain, ocsp_response);
                 }
                 emit_certificate_verify_tls13(
                     &mut flight,
                     cx.common,
-                    server_key.get_key(),
+                    &*server_key.key,
                     &sigschemes_ext,
                 )?;
                 client_auth
@@ -427,7 +426,7 @@ mod client_hello {
             &self,
             cch: CompleteClientHelloHandling,
             cx: &mut ServerContext<'_>,
-            server_key: ActiveCertifiedKey<'_>,
+            server_key: &CertifiedKey,
             chm: &Message<'_>,
             client_hello: &ClientHelloPayload,
             selected_kxg: &'static dyn SupportedKxGroup,
@@ -819,7 +818,7 @@ mod client_hello {
     fn emit_certificate_verify_tls13(
         flight: &mut HandshakeFlightTls13<'_>,
         common: &mut CommonState,
-        signing_key: &dyn sign::SigningKey,
+        signing_key: &dyn SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
         let message = construct_server_verify_message(&flight.transcript.current_hash());
