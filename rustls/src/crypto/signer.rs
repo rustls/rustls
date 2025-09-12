@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
 use crate::client::ResolvesClientCert;
-use crate::crypto::InternalCryptoProvider;
+use crate::crypto::CryptoProvider;
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
@@ -160,7 +160,7 @@ impl CertifiedKey {
     pub fn from_der(
         cert_chain: Vec<CertificateDer<'static>>,
         key: PrivateKeyDer<'static>,
-        provider: &dyn InternalCryptoProvider,
+        provider: &dyn CryptoProvider,
     ) -> Result<Self, Error> {
         Self::new(
             cert_chain,

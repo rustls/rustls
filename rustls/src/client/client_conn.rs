@@ -11,7 +11,7 @@ use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
-use crate::crypto::{DefaultCryptoProvider, InternalCryptoProvider, SupportedKxGroup};
+use crate::crypto::{DefaultCryptoProvider, CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -237,7 +237,7 @@ pub struct ClientConfig {
     pub time_provider: Arc<dyn TimeProvider>,
 
     /// Source of randomness and other crypto.
-    pub(super) provider: Arc<dyn InternalCryptoProvider>,
+    pub(super) provider: Arc<dyn CryptoProvider>,
 
     /// How to verify the server certificate chain.
     pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
@@ -295,7 +295,7 @@ impl ClientConfig {
     /// For more information, see the [`ConfigBuilder`] documentation.
     #[cfg(feature = "std")]
     pub fn builder_with_provider(
-        provider: Arc<dyn InternalCryptoProvider>,
+        provider: Arc<dyn CryptoProvider>,
     ) -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
@@ -309,7 +309,7 @@ impl ClientConfig {
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_details(
-        provider: Arc<dyn InternalCryptoProvider>,
+        provider: Arc<dyn CryptoProvider>,
         time_provider: Arc<dyn TimeProvider>,
     ) -> ConfigBuilder<Self, WantsVerifier> {
         ConfigBuilder {
@@ -339,7 +339,7 @@ impl ClientConfig {
     }
 
     /// Return the crypto provider used to construct this client configuration.
-    pub fn crypto_provider(&self) -> &Arc<dyn InternalCryptoProvider> {
+    pub fn crypto_provider(&self) -> &Arc<dyn CryptoProvider> {
         &self.provider
     }
 

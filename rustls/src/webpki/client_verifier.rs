@@ -8,7 +8,7 @@ use super::{VerifierBuilderError, pki_error};
 use crate::ConfigBuilder;
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{DefaultCryptoProvider, InternalCryptoProvider, WebPkiSupportedAlgorithms};
+use crate::crypto::{CryptoProvider, DefaultCryptoProvider, WebPkiSupportedAlgorithms};
 #[cfg(doc)]
 use crate::server::ServerConfig;
 use crate::sync::Arc;
@@ -290,7 +290,7 @@ impl WebPkiClientVerifier {
     /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
     pub fn builder_with_provider(
         roots: Arc<RootCertStore>,
-        provider: &dyn InternalCryptoProvider,
+        provider: &dyn CryptoProvider,
     ) -> ClientCertVerifierBuilder {
         ClientCertVerifierBuilder::new(roots, provider.signature_verification_algorithms())
     }
