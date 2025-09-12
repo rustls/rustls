@@ -11,7 +11,7 @@ use std::{fmt, mem};
 
 use pki_types::{CertificateDer, DnsName, IpAddr, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
-use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
+use rustls::crypto::{ActiveKeyExchange, OwnedCryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
@@ -280,7 +280,10 @@ fn version_test(
     }
 }
 
-fn apply_versions(provider: CryptoProvider, versions: &[ProtocolVersion]) -> CryptoProvider {
+fn apply_versions(
+    provider: OwnedCryptoProvider,
+    versions: &[ProtocolVersion],
+) -> OwnedCryptoProvider {
     match versions {
         []
         | [ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2]
@@ -366,7 +369,7 @@ fn check_fill_buf_err(reader: &mut dyn io::BufRead, err_kind: io::ErrorKind) {
 #[test]
 fn config_builder_for_client_rejects_empty_kx_groups() {
     assert_eq!(
-        ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
+        ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
             kx_groups: Vec::default(),
             ..provider::default_provider()
         }))
@@ -380,7 +383,7 @@ fn config_builder_for_client_rejects_empty_kx_groups() {
 #[test]
 fn config_builder_for_client_rejects_empty_cipher_suites() {
     assert_eq!(
-        ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
+        ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
             tls12_cipher_suites: Vec::default(),
             tls13_cipher_suites: Vec::default(),
             ..provider::default_provider()
@@ -395,7 +398,7 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
 #[test]
 fn config_builder_for_server_rejects_empty_kx_groups() {
     assert_eq!(
-        ServerConfig::builder_with_provider(Arc::new(CryptoProvider {
+        ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
             kx_groups: Vec::default(),
             ..provider::default_provider()
         }))
@@ -409,7 +412,7 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
 #[test]
 fn config_builder_for_server_rejects_empty_cipher_suites() {
     assert_eq!(
-        ServerConfig::builder_with_provider(Arc::new(CryptoProvider {
+        ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
             tls12_cipher_suites: Vec::default(),
             tls13_cipher_suites: Vec::default(),
             ..provider::default_provider()
@@ -744,7 +747,7 @@ fn test_config_builders_debug() {
         return;
     }
 
-    let b = ServerConfig::builder_with_provider(Arc::new(CryptoProvider {
+    let b = ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
         tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
         kx_groups: vec![provider::kx_group::X25519],
         ..provider::default_provider()
@@ -757,7 +760,7 @@ fn test_config_builders_debug() {
     let b = b.with_no_client_auth();
     let _ = format!("{b:?}");
 
-    let b = ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
+    let b = ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
         tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
         kx_groups: vec![provider::kx_group::X25519],
         ..provider::default_provider()
@@ -3050,13 +3053,13 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
 
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::Rsa2048;
-    let client_provider = Arc::new(CryptoProvider {
+    let client_provider = Arc::new(OwnedCryptoProvider {
         tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
         ..provider::default_provider()
     });
     let server_config = ServerConfig::builder_with_provider(client_provider).finish(kt);
 
-    let server_provider = Arc::new(CryptoProvider {
+    let server_provider = Arc::new(OwnedCryptoProvider {
         tls13_cipher_suites: vec![cipher_suite::TLS13_AES_256_GCM_SHA384],
         ..provider::default_provider()
     });
@@ -6232,7 +6235,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
                 vec![provider::kx_group::X25519],
                 &version_provider,
             ),
-            ServerConfig::builder_with_provider(Arc::new(CryptoProvider {
+            ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
                 kx_groups: vec![provider::kx_group::SECP384R1],
                 ..version_provider
             }))
@@ -6611,7 +6614,7 @@ fn test_secret_extract_produces_correct_variant() {
     fn check(suite: SupportedCipherSuite, f: impl Fn(ConnectionTrafficSecrets) -> bool) {
         let kt = KeyType::Rsa2048;
 
-        let provider: Arc<CryptoProvider> = Arc::new(provider_with_one_suite(
+        let provider: Arc<OwnedCryptoProvider> = Arc::new(provider_with_one_suite(
             &provider::default_provider(),
             suite,
         ));
@@ -6674,7 +6677,7 @@ fn test_secret_extract_produces_correct_variant() {
 #[test]
 fn test_secret_extraction_disabled_or_too_early() {
     let kt = KeyType::Rsa2048;
-    let provider = Arc::new(CryptoProvider {
+    let provider = Arc::new(OwnedCryptoProvider {
         tls13_cipher_suites: vec![cipher_suite::TLS13_AES_128_GCM_SHA256],
         ..provider::default_provider()
     });
@@ -6737,7 +6740,7 @@ fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
     let provider = provider::default_provider();
 
     let server_config = Arc::new(
-        ServerConfig::builder_with_provider(Arc::new(CryptoProvider {
+        ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
             tls13_cipher_suites: vec![cipher_suite::TLS13_AES_128_GCM_SHA256],
             ..provider.clone()
         }))
@@ -6894,11 +6897,12 @@ fn test_client_construction_fails_if_random_source_fails_in_first_request() {
         rand_queue: Mutex::new(b""),
     };
 
-    let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
-        secure_random: &FAULTY_RANDOM,
-        ..provider::default_provider()
-    }))
-    .finish(KeyType::Rsa2048);
+    let client_config =
+        rustls::ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
+            secure_random: &FAULTY_RANDOM,
+            ..provider::default_provider()
+        }))
+        .finish(KeyType::Rsa2048);
 
     assert_eq!(
         ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
@@ -6912,11 +6916,12 @@ fn test_client_construction_fails_if_random_source_fails_in_second_request() {
         rand_queue: Mutex::new(b"nice random number generator huh"),
     };
 
-    let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
-        secure_random: &FAULTY_RANDOM,
-        ..provider::default_provider()
-    }))
-    .finish(KeyType::Rsa2048);
+    let client_config =
+        rustls::ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
+            secure_random: &FAULTY_RANDOM,
+            ..provider::default_provider()
+        }))
+        .finish(KeyType::Rsa2048);
 
     assert_eq!(
         ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
@@ -6933,11 +6938,12 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
         ),
     };
 
-    let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
-        secure_random: &FAULTY_RANDOM,
-        ..provider::default_provider()
-    }))
-    .finish(KeyType::Rsa2048);
+    let client_config =
+        rustls::ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
+            secure_random: &FAULTY_RANDOM,
+            ..provider::default_provider()
+        }))
+        .finish(KeyType::Rsa2048);
 
     ClientConnection::new(Arc::new(client_config), server_name("localhost"))
         .expect("check how much random material ClientConnection::new consumes");
@@ -8022,7 +8028,7 @@ fn large_client_hello_acceptor() {
 #[test]
 fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
     let kt = KeyType::Rsa2048;
-    let client_config = ClientConfig::builder_with_provider(Arc::new(CryptoProvider {
+    let client_config = ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
         kx_groups: vec![&FakeHybrid, provider::kx_group::SECP384R1],
         ..provider::default_provider()
     }))

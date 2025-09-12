@@ -12,14 +12,14 @@
 
 #[cfg(feature = "aws-lc-rs-unstable")]
 use rustls::SignatureScheme;
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::OwnedCryptoProvider;
 #[cfg(feature = "aws-lc-rs-unstable")]
 use rustls::crypto::WebPkiSupportedAlgorithms;
 pub use rustls::crypto::aws_lc_rs::kx_group::{MLKEM768, X25519MLKEM768};
 #[cfg(feature = "aws-lc-rs-unstable")]
 use webpki::aws_lc_rs as webpki_algs;
 
-pub fn provider() -> CryptoProvider {
+pub fn provider() -> OwnedCryptoProvider {
     #[cfg_attr(not(feature = "aws-lc-rs-unstable"), allow(unused_mut))]
     let mut provider = rustls::crypto::aws_lc_rs::default_provider();
     #[cfg(feature = "aws-lc-rs-unstable")]

@@ -48,7 +48,7 @@ mod tests {
     use super::super::*;
     use crate::common_state::KxState;
     use crate::crypto::{
-        ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm, SupportedKxGroup,
+        ActiveKeyExchange, KeyExchangeAlgorithm, OwnedCryptoProvider, SupportedKxGroup,
     };
     use crate::enums::CertificateType;
     use crate::ffdhe_groups::FfdheGroup;
@@ -221,7 +221,7 @@ mod tests {
     }
 
     fn server_config_for_rpk() -> ServerConfig {
-        let x25519_provider = CryptoProvider {
+        let x25519_provider = OwnedCryptoProvider {
             kx_groups: vec![super::provider::kx_group::X25519],
             ..super::provider::default_provider()
         };
@@ -261,8 +261,8 @@ mod tests {
         ]
     }
 
-    fn ffdhe_provider() -> CryptoProvider {
-        CryptoProvider {
+    fn ffdhe_provider() -> OwnedCryptoProvider {
+        OwnedCryptoProvider {
             kx_groups: vec![FAKE_FFDHE_GROUP],
             tls12_cipher_suites: vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
             ..super::provider::default_provider()

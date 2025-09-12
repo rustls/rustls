@@ -28,7 +28,7 @@ use std::{fs, net};
 use clap::{Parser, Subcommand};
 use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
-use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
+use rustls::crypto::{OwnedCryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
@@ -472,7 +472,7 @@ struct Args {
 }
 
 impl Args {
-    fn provider(&self) -> (Vec<ProtocolVersion>, CryptoProvider) {
+    fn provider(&self) -> (Vec<ProtocolVersion>, OwnedCryptoProvider) {
         let provider = provider::default_provider();
 
         let provider = match self.suite.as_slice() {
@@ -493,7 +493,7 @@ impl Args {
 }
 
 /// Alter `provider` to reduce the set of ciphersuites to just `suites`
-fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvider {
+fn filter_suites(mut provider: OwnedCryptoProvider, suites: &[String]) -> OwnedCryptoProvider {
     // first, check `suites` all name known suites, and will have some effect
     let known_suites = provider
         .tls12_cipher_suites

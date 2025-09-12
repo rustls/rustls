@@ -2,7 +2,7 @@ use pki_types::PrivateKeyDer;
 pub(crate) use ring as ring_like;
 use webpki::ring as webpki_algs;
 
-use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
+use crate::crypto::{KeyProvider, OwnedCryptoProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -25,8 +25,8 @@ pub(crate) mod tls13;
 /// A `CryptoProvider` backed by the [*ring*] crate.
 ///
 /// [*ring*]: https://github.com/briansmith/ring
-pub fn default_provider() -> CryptoProvider {
-    CryptoProvider {
+pub fn default_provider() -> OwnedCryptoProvider {
+    OwnedCryptoProvider {
         tls12_cipher_suites: DEFAULT_TLS12_CIPHER_SUITES.to_vec(),
         tls13_cipher_suites: DEFAULT_TLS13_CIPHER_SUITES.to_vec(),
         kx_groups: DEFAULT_KX_GROUPS.to_vec(),

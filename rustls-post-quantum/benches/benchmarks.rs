@@ -4,7 +4,7 @@ use std::sync::Arc;
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use rustls::crypto::aws_lc_rs::kx_group::X25519;
 use rustls::crypto::{
-    ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup, aws_lc_rs,
+    ActiveKeyExchange, OwnedCryptoProvider, SharedSecret, SupportedKxGroup, aws_lc_rs,
 };
 use rustls::{ClientConfig, ClientConnection, Error, NamedGroup, RootCertStore};
 use rustls_post_quantum::{MLKEM768, X25519MLKEM768};
@@ -124,8 +124,8 @@ fn do_client_hello(config: &Arc<ClientConfig>) -> usize {
     len
 }
 
-fn separate_provider() -> CryptoProvider {
-    CryptoProvider {
+fn separate_provider() -> OwnedCryptoProvider {
+    OwnedCryptoProvider {
         kx_groups: vec![
             &SeparateX25519Mlkem768,
             MLKEM768,
