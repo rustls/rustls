@@ -1,6 +1,6 @@
 use pki_types::ServerName;
 
-use crate::enums::SignatureScheme;
+use crate::enums::{CertificateType, SignatureScheme};
 use crate::msgs::persist;
 use crate::sync::Arc;
 use crate::{NamedGroup, client, sign};
@@ -223,8 +223,8 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
         Some(self.0.clone())
     }
 
-    fn only_raw_public_keys(&self) -> bool {
-        true
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[CertificateType::RawPublicKey]
     }
 
     /// Returns true if the resolver is ready to present an identity.

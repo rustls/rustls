@@ -22,7 +22,7 @@ use crate::crypto::{ActiveKeyExchange, SharedSecret};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
-use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -545,7 +545,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             cx.common,
             self.config
                 .client_auth_cert_resolver
-                .only_raw_public_keys(),
+                .supported_certificate_types(),
             exts.client_certificate_type,
         )?;
 
@@ -553,7 +553,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             cx.common,
             self.config
                 .verifier
-                .requires_raw_public_keys(),
+                .supported_certificate_types(),
             exts.server_certificate_type,
         )?;
 
@@ -671,19 +671,20 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
 fn check_cert_type(
     common: &mut CommonState,
-    client_expects: bool,
+    client_supported: &[CertificateType],
     server_negotiated: Option<CertificateType>,
 ) -> Result<(), Error> {
-    match (client_expects, server_negotiated) {
-        (true, Some(CertificateType::RawPublicKey)) => Ok(()),
-        (true, _) => Err(common.send_fatal_alert(
+    if client_supported.is_empty() {
+        return Err(ApiMisuse::NoSupportedCertificateTypes.into());
+    }
+
+    match server_negotiated {
+        None if client_supported.contains(&CertificateType::X509) => Ok(()),
+        Some(ct) if client_supported.contains(&ct) => Ok(()),
+        _ => Err(common.send_fatal_alert(
             AlertDescription::HandshakeFailure,
             Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
         )),
-        (_, Some(CertificateType::RawPublicKey)) => {
-            unreachable!("Caught by `PeerMisbehaved::UnsolicitedEncryptedExtension`")
-        }
-        (_, _) => Ok(()),
     }
 }
 

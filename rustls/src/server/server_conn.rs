@@ -129,9 +129,14 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
     /// Return `None` to abort the handshake.
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>>;
 
-    /// Return true when the server only supports raw public keys.
-    fn only_raw_public_keys(&self) -> bool {
-        false
+    /// Returns which [`CertificateType`]s this resolver supports.
+    ///
+    /// Returning an empty slice will result in an error. The default implementation signals
+    /// support for X.509 certificates. Implementations should return the same value every time.
+    ///
+    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[CertificateType::X509]
     }
 }
 

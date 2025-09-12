@@ -12,7 +12,7 @@ use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
@@ -119,11 +119,14 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
         sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>>;
 
-    /// Return true if the client only supports raw public keys.
+    /// Returns which [`CertificateType`]s this resolver supports.
     ///
-    /// See [RFC 7250](https://www.rfc-editor.org/rfc/rfc7250).
-    fn only_raw_public_keys(&self) -> bool {
-        false
+    /// Returning an empty slice will result in an error. The default implementation signals
+    /// support for X.509 certificates. Implementations should return the same value every time.
+    ///
+    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[CertificateType::X509]
     }
 
     /// Return true if any certificates at all are available.

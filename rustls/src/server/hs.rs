@@ -13,7 +13,7 @@ use crate::enums::{
     AlertDescription, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
     SignatureAlgorithm, SignatureScheme,
 };
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 use crate::msgs::enums::{Compression, NamedGroup};
@@ -162,29 +162,31 @@ impl ExtensionProcessing {
         let expected_client_type = self.process_cert_type_extension(
             hello
                 .client_certificate_types
-                .as_deref()
-                .unwrap_or_default(),
+                .as_deref(),
             config
                 .verifier
-                .requires_raw_public_keys(),
+                .supported_certificate_types(),
             cx,
         )?;
 
         let expected_server_type = self.process_cert_type_extension(
             hello
                 .server_certificate_types
-                .as_deref()
-                .unwrap_or_default(),
+                .as_deref(),
             config
                 .cert_resolver
-                .only_raw_public_keys(),
+                .supported_certificate_types(),
             cx,
         )?;
 
-        self.extensions.client_certificate_type = expected_client_type;
-        self.extensions.server_certificate_type = expected_server_type;
+        if hello.client_certificate_types.is_some() && config.verifier.offer_client_auth() {
+            self.extensions.client_certificate_type = Some(expected_client_type);
+        }
+        if hello.server_certificate_types.is_some() {
+            self.extensions.server_certificate_type = Some(expected_server_type);
+        }
         Ok(CertificateTypes {
-            client: expected_client_type.unwrap_or_default(),
+            client: expected_client_type,
         })
     }
 
@@ -224,23 +226,52 @@ impl ExtensionProcessing {
 
     fn process_cert_type_extension(
         &mut self,
-        client_supports: &[CertificateType],
-        requires_raw_keys: bool,
+        client: Option<&[CertificateType]>,
+        server: &[CertificateType],
         cx: &mut ServerContext<'_>,
-    ) -> Result<Option<CertificateType>, Error> {
-        match (
-            requires_raw_keys,
-            client_supports.contains(&CertificateType::RawPublicKey),
-            client_supports.contains(&CertificateType::X509),
-        ) {
-            (true, true, _) => Ok(Some(CertificateType::RawPublicKey)),
-            (false, _, true) => Ok(Some(CertificateType::X509)),
-            (false, true, false) | (true, false, _) => Err(cx.common.send_fatal_alert(
-                AlertDescription::HandshakeFailure,
-                PeerIncompatible::IncorrectCertificateTypeExtension,
-            )),
-            (false, false, false) => Ok(None),
+    ) -> Result<CertificateType, Error> {
+        if server.is_empty() {
+            return Err(ApiMisuse::NoSupportedCertificateTypes.into());
         }
+
+        // https://www.rfc-editor.org/rfc/rfc7250#section-4.1
+        // If the client has no remaining certificate types to send in
+        // the client hello, other than the default X.509 type, it MUST omit the
+        // client_certificate_type extension in the client hello.
+
+        // If the client has no remaining certificate types to send in
+        // the client hello, other than the default X.509 certificate type, it
+        // MUST omit the entire server_certificate_type extension from the
+        // client hello.
+        let client = match client {
+            Some([]) => {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerIncompatible::IncorrectCertificateTypeExtension,
+                ));
+            }
+            Some(c) => c,
+            None => {
+                return match server.contains(&CertificateType::X509) {
+                    true => Ok(CertificateType::X509),
+                    false => Err(cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::IncorrectCertificateTypeExtension,
+                    )),
+                };
+            }
+        };
+
+        for &ct in client {
+            if server.contains(&ct) {
+                return Ok(ct);
+            }
+        }
+
+        Err(cx.common.send_fatal_alert(
+            AlertDescription::UnsupportedCertificate,
+            PeerIncompatible::IncorrectCertificateTypeExtension,
+        ))
     }
 }
 
