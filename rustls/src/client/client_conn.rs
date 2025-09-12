@@ -11,7 +11,7 @@ use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::{CryptoProvider, InternalCryptoProvider, SupportedKxGroup};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -240,7 +240,7 @@ pub struct ClientConfig {
     pub time_provider: Arc<dyn TimeProvider>,
 
     /// Source of randomness and other crypto.
-    pub(super) provider: Arc<CryptoProvider>,
+    pub(super) provider: Arc<dyn InternalCryptoProvider>,
 
     /// How to verify the server certificate chain.
     pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
@@ -342,7 +342,7 @@ impl ClientConfig {
     }
 
     /// Return the crypto provider used to construct this client configuration.
-    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+    pub fn crypto_provider(&self) -> &Arc<dyn InternalCryptoProvider> {
         &self.provider
     }
 
@@ -383,7 +383,7 @@ impl ClientConfig {
         }
 
         self.provider
-            .kx_groups
+            .kx_groups()
             .iter()
             .find(|skxg| skxg.name() == group)
             .copied()

@@ -470,7 +470,7 @@ impl ExpectClientHello {
         let state = ClientHelloState {
             randoms: ConnectionRandoms::new(
                 client_hello.random,
-                Random::new(self.config.provider.secure_random)?,
+                Random::new(self.config.provider.secure_random())?,
             ),
             config: self.config,
             transcript,
@@ -531,7 +531,7 @@ impl ExpectClientHello {
             let supported = self
                 .config
                 .provider
-                .kx_groups
+                .kx_groups()
                 .iter()
                 .find(|skxg| {
                     let named_group = skxg.name();
@@ -557,7 +557,7 @@ impl ExpectClientHello {
             let first_supported_dhe_kxg = self
                 .config
                 .provider
-                .kx_groups
+                .kx_groups()
                 .iter()
                 .find(|skxg| skxg.name().key_exchange_algorithm() == KeyExchangeAlgorithm::DHE);
             ffdhe_possible |= !ffdhe_offered && first_supported_dhe_kxg.is_some();

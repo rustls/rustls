@@ -18,7 +18,7 @@ use crate::common_state::{Protocol, State};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, InternalCryptoProvider};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -300,7 +300,7 @@ impl<'a> ClientHello<'a> {
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     /// Source of randomness and other crypto.
-    pub(super) provider: Arc<CryptoProvider>,
+    pub(super) provider: Arc<dyn InternalCryptoProvider>,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list
@@ -524,7 +524,7 @@ impl ServerConfig {
     }
 
     /// Return the crypto provider used to construct this client configuration.
-    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+    pub fn crypto_provider(&self) -> &Arc<dyn InternalCryptoProvider> {
         &self.provider
     }
 

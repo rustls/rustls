@@ -961,7 +961,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
                 st.config
                     .provider
-                    .kx_groups
+                    .kx_groups()
                     .iter()
                     .find(|kxg| kxg.ffdhe_group() == Some(ffdhe_group))
                     .copied()

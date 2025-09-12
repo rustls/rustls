@@ -55,6 +55,143 @@ pub use crate::suites::CipherSuiteCommon;
 
 /// Controls core cryptography used by rustls.
 ///
+/// Generalises over multiple concrete representations of `CryptoProvider`
+pub trait InternalCryptoProvider: Send + Sync + Debug {
+    /// List of supported TLS1.2 cipher suites, in preference order -- the first element
+    /// is the highest priority.
+    ///
+    /// Note that the protocol version is negotiated before the cipher suite.
+    ///
+    /// The `Tls12CipherSuite` type carries both configuration and implementation.
+    ///
+    /// A valid `CryptoProvider` must ensure that all cipher suites are accompanied by at least
+    /// one matching key exchange group in [`CryptoProvider::kx_groups`].
+    fn tls12_cipher_suites(&self) -> &[&'static Tls12CipherSuite];
+
+    /// List of supported TLS1.3 cipher suites, in preference order -- the first element
+    /// is the highest priority.
+    ///
+    /// Note that the protocol version is negotiated before the cipher suite.
+    ///
+    /// The `Tls13CipherSuite` type carries both configuration and implementation.
+    fn tls13_cipher_suites(&self) -> &[&'static Tls13CipherSuite];
+
+    /// List of supported key exchange groups, in preference order -- the
+    /// first element is the highest priority.
+    ///
+    /// The first element in this list is the _default key share algorithm_,
+    /// and in TLS1.3 a key share for it is sent in the client hello.
+    ///
+    /// The `SupportedKxGroup` type carries both configuration and implementation.
+    fn kx_groups(&self) -> &[&'static dyn SupportedKxGroup];
+
+    /// List of signature verification algorithms for use with webpki.
+    ///
+    /// These are used for both certificate chain verification and handshake signature verification.
+    ///
+    /// This is called by [`ConfigBuilder::with_root_certificates()`],
+    /// [`server::WebPkiClientVerifier::builder_with_provider()`] and
+    /// [`client::WebPkiServerVerifier::builder_with_provider()`].
+    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms;
+
+    /// Source of cryptographically secure random numbers.
+    fn secure_random(&self) -> &'static dyn SecureRandom;
+
+    /// Provider for loading private [`SigningKey`]s from [`PrivateKeyDer`].
+    fn key_provider(&self) -> &'static dyn KeyProvider;
+}
+
+impl dyn InternalCryptoProvider {
+    /// Returns `true` if this provider is operating in FIPS mode.
+    ///
+    /// This covers only the cryptographic parts of FIPS approval.  There are
+    /// also TLS protocol-level recommendations made by NIST.  You should
+    /// prefer to call [`ClientConfig::fips()`] or [`ServerConfig::fips()`]
+    /// which take these into account.
+    pub fn fips(&self) -> bool {
+        self.tls12_cipher_suites()
+            .iter()
+            .all(|cs| cs.fips())
+            && self
+                .tls13_cipher_suites()
+                .iter()
+                .all(|cs| cs.fips())
+            && self
+                .kx_groups()
+                .iter()
+                .all(|kx| kx.fips())
+            && self
+                .signature_verification_algorithms()
+                .fips()
+            && self.secure_random().fips()
+            && self.key_provider().fips()
+    }
+
+    pub(crate) fn consistency_check(&self) -> Result<(), Error> {
+        if self.tls12_cipher_suites().is_empty() && self.tls13_cipher_suites().is_empty() {
+            return Err(ApiMisuse::NoCipherSuitesConfigured.into());
+        }
+
+        let kx_groups = self.kx_groups();
+        if kx_groups.is_empty() {
+            return Err(ApiMisuse::NoKeyExchangeGroupsConfigured.into());
+        }
+
+        // verifying cipher suites have matching kx groups
+        let mut supported_kx_algos = Vec::with_capacity(ALL_KEY_EXCHANGE_ALGORITHMS.len());
+        for group in kx_groups.iter() {
+            let kx = group.name().key_exchange_algorithm();
+            if !supported_kx_algos.contains(&kx) {
+                supported_kx_algos.push(kx);
+            }
+            // Small optimization. We don't need to go over other key exchange groups
+            // if we already cover all supported key exchange algorithms
+            if supported_kx_algos.len() == ALL_KEY_EXCHANGE_ALGORITHMS.len() {
+                break;
+            }
+        }
+
+        for cs in self.tls12_cipher_suites() {
+            if supported_kx_algos.contains(&cs.kx) {
+                continue;
+            }
+            let suite_name = cs.common.suite;
+            return Err(Error::General(alloc::format!(
+                "TLS1.2 cipher suite {suite_name:?} requires {0:?} key exchange, but no {0:?}-compatible \
+                    key exchange groups were present in `CryptoProvider`'s `kx_groups` field",
+                cs.kx,
+            )));
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn iter_cipher_suites(&self) -> impl Iterator<Item = SupportedCipherSuite> + '_ {
+        self.tls13_cipher_suites()
+            .iter()
+            .copied()
+            .map(SupportedCipherSuite::Tls13)
+            .chain(
+                self.tls12_cipher_suites()
+                    .iter()
+                    .copied()
+                    .map(SupportedCipherSuite::Tls12),
+            )
+    }
+
+    /// We support a given TLS version if at least one ciphersuite for the version
+    /// is available.
+    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
+        match v {
+            ProtocolVersion::TLSv1_2 => !self.tls12_cipher_suites().is_empty(),
+            ProtocolVersion::TLSv1_3 => !self.tls13_cipher_suites().is_empty(),
+            _ => false,
+        }
+    }
+}
+
+/// Controls core cryptography used by rustls.
+///
 /// This crate comes with two built-in options, provided as
 /// `CryptoProvider` structures:
 ///
@@ -307,33 +444,6 @@ See the documentation of the CryptoProvider type for more information.
         None
     }
 
-    /// Returns `true` if this `CryptoProvider` is operating in FIPS mode.
-    ///
-    /// This covers only the cryptographic parts of FIPS approval.  There are
-    /// also TLS protocol-level recommendations made by NIST.  You should
-    /// prefer to call [`ClientConfig::fips()`] or [`ServerConfig::fips()`]
-    /// which take these into account.
-    pub fn fips(&self) -> bool {
-        let Self {
-            tls12_cipher_suites,
-            tls13_cipher_suites,
-            kx_groups,
-            signature_verification_algorithms,
-            secure_random,
-            key_provider,
-        } = self;
-        tls12_cipher_suites
-            .iter()
-            .all(|cs| cs.fips())
-            && tls13_cipher_suites
-                .iter()
-                .all(|cs| cs.fips())
-            && kx_groups.iter().all(|kx| kx.fips())
-            && signature_verification_algorithms.fips()
-            && secure_random.fips()
-            && key_provider.fips()
-    }
-
     /// Return a new `CryptoProvider` that only supports TLS1.3.
     pub fn with_only_tls13(self) -> Self {
         Self {
@@ -349,66 +459,31 @@ See the documentation of the CryptoProvider type for more information.
             ..self
         }
     }
+}
 
-    pub(crate) fn consistency_check(&self) -> Result<(), Error> {
-        if self.tls12_cipher_suites.is_empty() && self.tls13_cipher_suites.is_empty() {
-            return Err(ApiMisuse::NoCipherSuitesConfigured.into());
-        }
-
-        if self.kx_groups.is_empty() {
-            return Err(ApiMisuse::NoKeyExchangeGroupsConfigured.into());
-        }
-
-        // verifying cipher suites have matching kx groups
-        let mut supported_kx_algos = Vec::with_capacity(ALL_KEY_EXCHANGE_ALGORITHMS.len());
-        for group in self.kx_groups.iter() {
-            let kx = group.name().key_exchange_algorithm();
-            if !supported_kx_algos.contains(&kx) {
-                supported_kx_algos.push(kx);
-            }
-            // Small optimization. We don't need to go over other key exchange groups
-            // if we already cover all supported key exchange algorithms
-            if supported_kx_algos.len() == ALL_KEY_EXCHANGE_ALGORITHMS.len() {
-                break;
-            }
-        }
-
-        for cs in &self.tls12_cipher_suites {
-            if supported_kx_algos.contains(&cs.kx) {
-                continue;
-            }
-            let suite_name = cs.common.suite;
-            return Err(Error::General(alloc::format!(
-                "TLS1.2 cipher suite {suite_name:?} requires {0:?} key exchange, but no {0:?}-compatible \
-                key exchange groups were present in `CryptoProvider`'s `kx_groups` field",
-                cs.kx,
-            )));
-        }
-
-        Ok(())
+impl InternalCryptoProvider for CryptoProvider {
+    fn tls12_cipher_suites(&self) -> &[&'static Tls12CipherSuite] {
+        &self.tls12_cipher_suites
     }
 
-    pub(crate) fn iter_cipher_suites(&self) -> impl Iterator<Item = SupportedCipherSuite> + '_ {
-        self.tls13_cipher_suites
-            .iter()
-            .copied()
-            .map(SupportedCipherSuite::Tls13)
-            .chain(
-                self.tls12_cipher_suites
-                    .iter()
-                    .copied()
-                    .map(SupportedCipherSuite::Tls12),
-            )
+    fn tls13_cipher_suites(&self) -> &[&'static Tls13CipherSuite] {
+        &self.tls13_cipher_suites
     }
 
-    /// We support a given TLS version if at least one ciphersuite for the version
-    /// is available.
-    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        match v {
-            ProtocolVersion::TLSv1_2 => !self.tls12_cipher_suites.is_empty(),
-            ProtocolVersion::TLSv1_3 => !self.tls13_cipher_suites.is_empty(),
-            _ => false,
-        }
+    fn kx_groups(&self) -> &[&'static dyn SupportedKxGroup] {
+        &self.kx_groups
+    }
+
+    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
+        self.signature_verification_algorithms
+    }
+
+    fn secure_random(&self) -> &'static dyn SecureRandom {
+        self.secure_random
+    }
+
+    fn key_provider(&self) -> &'static dyn KeyProvider {
+        self.key_provider
     }
 }
 

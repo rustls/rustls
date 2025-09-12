@@ -185,7 +185,7 @@ mod client_hello {
             if !st.config.session_storage.can_cache() {
                 cch.session_id = SessionId::empty();
             } else if cch.session_id.is_empty() && !ticket_received {
-                cch.session_id = SessionId::random(st.config.provider.secure_random)?;
+                cch.session_id = SessionId::random(st.config.provider.secure_random())?;
             }
 
             cx.common.kx_state = KxState::Start(st.kx_group);

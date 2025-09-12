@@ -6,6 +6,7 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use super::server_conn::InvalidSniPolicy;
 use super::{ResolvesServerCert, ServerConfig, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
+use crate::crypto::InternalCryptoProvider;
 use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
@@ -100,9 +101,10 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         self,
         cert_resolver: Arc<dyn ResolvesServerCert>,
     ) -> Result<ServerConfig, Error> {
-        self.provider.consistency_check()?;
+        let provider: Arc<dyn InternalCryptoProvider> = self.provider;
+        provider.consistency_check()?;
         Ok(ServerConfig {
-            provider: self.provider,
+            provider,
             verifier: self.state.verifier,
             cert_resolver,
             ignore_client_order: false,

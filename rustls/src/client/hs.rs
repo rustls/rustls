@@ -81,6 +81,7 @@ impl ClientHelloInput {
         cx: &mut ClientContext<'_>,
         config: Arc<ClientConfig>,
     ) -> Result<Self, Error> {
+        let secure_random = config.provider.secure_random();
         let mut resuming = ClientSessionValue::retrieve(&server_name, &config, cx);
         let session_id = match &mut resuming {
             Some(_resuming) => {
@@ -91,7 +92,7 @@ impl ClientHelloInput {
                         // we're  doing an abbreviated handshake.  See section 3.4 in
                         // RFC5077.
                         if !inner.ticket().0.is_empty() {
-                            inner.session_id = SessionId::random(config.provider.secure_random)?;
+                            inner.session_id = SessionId::random(secure_random)?;
                         }
                         Some(inner.session_id)
                     }
@@ -110,7 +111,7 @@ impl ClientHelloInput {
             Some(session_id) => session_id,
             None if cx.common.is_quic() => SessionId::empty(),
             None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
-            None => SessionId::random(config.provider.secure_random)?,
+            None => SessionId::random(secure_random)?,
         };
 
         let hello = ClientHelloDetails::new(
@@ -118,12 +119,12 @@ impl ClientHelloInput {
                 .protocols
                 .clone()
                 .unwrap_or_default(),
-            crate::rand::random_u16(config.provider.secure_random)?,
+            crate::rand::random_u16(secure_random)?,
         );
 
         Ok(Self {
             resuming,
-            random: Random::new(config.provider.secure_random)?,
+            random: Random::new(secure_random)?,
             sent_tls13_fake_ccs: false,
             hello,
             session_id,
@@ -210,7 +211,7 @@ fn emit_client_hello_for_retry(
         named_groups: Some(
             config
                 .provider
-                .kx_groups
+                .kx_groups()
                 .iter()
                 .filter_map(|skxg| {
                     let named_group = skxg.name();
@@ -248,7 +249,7 @@ fn emit_client_hello_for_retry(
     // Send the ECPointFormat extension only if we are proposing ECDHE
     if config
         .provider
-        .kx_groups
+        .kx_groups()
         .iter()
         .any(|skxg| skxg.name().key_exchange_algorithm() == KeyExchangeAlgorithm::ECDHE)
     {
@@ -394,7 +395,7 @@ fn emit_client_hello_for_retry(
         .as_ref()
         .and_then(|mode| match mode {
             EchMode::Grease(cfg) => Some(cfg.grease_ext(
-                config.provider.secure_random,
+                config.provider.secure_random(),
                 input.server_name.clone(),
                 &chp_payload,
             )),
