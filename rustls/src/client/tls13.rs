@@ -1312,7 +1312,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
                 ));
             }
 
-            // Enforce delegated credential validity window (RFC 9345 §3):
+            // Enforce delegated credential validity window https://datatracker.ietf.org/doc/html/rfc9345#solution-overview:
             // - DC validity MUST NOT exceed 7 days.
             // - DC is valid only for the window [cert.notBefore, cert.notBefore + valid_time].
             // We avoid direct certificate parsing for notBefore by probing chain validity at
