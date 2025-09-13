@@ -79,7 +79,7 @@ pub static TLS13_VERSION: &Tls13Version = &Tls13Version {
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Tls12Version {
-    pub(crate) client: &'static dyn crate::client::Tls12Handler,
+    pub(crate) client: &'static dyn crate::client::ClientHandler<Tls12CipherSuite>,
     pub(crate) server: &'static dyn crate::server::ServerHandler<Tls12CipherSuite>,
 }
 
@@ -89,6 +89,6 @@ pub struct Tls12Version {
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Tls13Version {
-    pub(crate) client: &'static dyn crate::client::Tls13Handler,
+    pub(crate) client: &'static dyn crate::client::ClientHandler<Tls13CipherSuite>,
     pub(crate) server: &'static dyn crate::server::ServerHandler<Tls13CipherSuite>,
 }

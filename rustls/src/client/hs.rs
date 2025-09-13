@@ -2,6 +2,7 @@ use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::Deref;
 
 use pki_types::ServerName;
@@ -27,11 +28,13 @@ use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, KeyShareEntry, ProtocolName, PskKeyExchangeModes, Random, ServerNamePayload,
-    SessionId, SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
+    HelloRetryRequest, KeyShareEntry, ProtocolName, PskKeyExchangeModes, Random,
+    ServerHelloPayload, ServerNamePayload, SessionId, SupportedEcPointFormats,
+    SupportedProtocolVersions, TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::sealed::Sealed;
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleEarly;
@@ -1104,4 +1107,15 @@ impl Deref for ClientSessionValue {
     fn deref(&self) -> &Self::Target {
         self.common()
     }
+}
+
+pub(crate) trait ClientHandler<T>: fmt::Debug + Sealed + Send + Sync {
+    fn handle_server_hello(
+        &self,
+        suite: &'static T,
+        server_hello: &ServerHelloPayload,
+        message: &Message<'_>,
+        st: ExpectServerHello,
+        cx: &mut ClientContext<'_>,
+    ) -> NextStateOrError<'static>;
 }
