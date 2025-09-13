@@ -1670,7 +1670,8 @@ pub(crate) struct Credential<'a> {
 impl<'a> Codec<'a> for Credential<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.valid_time.encode(bytes);
-        self.dc_cert_verify_algorithm.encode(bytes);
+        self.dc_cert_verify_algorithm
+            .encode(bytes);
         self.spki.encode(bytes);
     }
 
@@ -1743,7 +1744,9 @@ impl CertificateExtensions<'_> {
     fn into_owned(self) -> CertificateExtensions<'static> {
         CertificateExtensions {
             status: self.status.map(|s| s.into_owned()),
-            delegated_credential: self.delegated_credential.map(|dc| dc.into_owned()),
+            delegated_credential: self
+                .delegated_credential
+                .map(|dc| dc.into_owned()),
         }
     }
 }
@@ -3260,7 +3263,7 @@ mod tests {
 
     #[test]
     fn dc_credential_round_trip() {
-    let spki = PayloadU24(Payload::new(vec![0x01, 0x02, 0x03, 0x04]));
+        let spki = PayloadU24(Payload::new(vec![0x01, 0x02, 0x03, 0x04]));
         let cred = Credential {
             valid_time: 3600,
             dc_cert_verify_algorithm: SignatureScheme::ECDSA_NISTP256_SHA256,
@@ -3271,7 +3274,10 @@ mod tests {
         let mut r = Reader::init(&bytes);
         let decoded = Credential::read(&mut r).unwrap();
         assert_eq!(decoded.valid_time, 3600);
-        assert_eq!(decoded.dc_cert_verify_algorithm, SignatureScheme::ECDSA_NISTP256_SHA256);
+        assert_eq!(
+            decoded.dc_cert_verify_algorithm,
+            SignatureScheme::ECDSA_NISTP256_SHA256
+        );
         assert_eq!(decoded.spki.0.bytes(), &[0x01, 0x02, 0x03, 0x04]);
     }
 
@@ -3291,10 +3297,13 @@ mod tests {
         let mut r = Reader::init(&bytes);
         let decoded = DelegatedCredential::read(&mut r).unwrap();
         assert_eq!(decoded.cred.valid_time, 10);
-        assert_eq!(decoded.cred.dc_cert_verify_algorithm, SignatureScheme::ED25519);
+        assert_eq!(
+            decoded.cred.dc_cert_verify_algorithm,
+            SignatureScheme::ED25519
+        );
         assert_eq!(decoded.algorithm, SignatureScheme::ED25519);
-    assert_eq!(decoded.cred.spki.0.bytes(), &[0xAA, 0xBB]);
-    assert_eq!(&decoded.signature.0, &[0xDE, 0xAD, 0xBE, 0xEF]);
+        assert_eq!(decoded.cred.spki.0.bytes(), &[0xAA, 0xBB]);
+        assert_eq!(&decoded.signature.0, &[0xDE, 0xAD, 0xBE, 0xEF]);
     }
 
     #[test]
@@ -3308,7 +3317,9 @@ mod tests {
         ce.encode(&mut bytes);
         let mut r = Reader::init(&bytes);
         let decoded = ClientExtensions::read(&mut r).unwrap();
-        let got = decoded.delegated_credential_algorithms.unwrap();
+        let got = decoded
+            .delegated_credential_algorithms
+            .unwrap();
         assert_eq!(got.len(), 2);
         assert_eq!(got[0], SignatureScheme::ED25519);
         assert_eq!(got[1], SignatureScheme::ECDSA_NISTP256_SHA256);

@@ -228,7 +228,11 @@ fn emit_client_hello_for_retry(
         ),
         // RFC 9345: a client willing to use delegated credentials SHALL send this extension
         delegated_credential_algorithms: if supported_versions.tls13 {
-            Some(config.verifier.supported_verify_schemes())
+            Some(
+                config
+                    .verifier
+                    .supported_verify_schemes(),
+            )
         } else {
             None
         },
