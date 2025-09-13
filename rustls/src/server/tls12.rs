@@ -3,7 +3,7 @@ use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 
-pub(crate) use client_hello::{TLS12_HANDLER, Tls12Handler};
+pub(crate) use client_hello::TLS12_HANDLER;
 use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
@@ -36,8 +36,6 @@ use crate::verify::{ClientIdentity, PeerIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
-    use core::fmt;
-
     use pki_types::CertificateDer;
 
     use super::*;
@@ -51,16 +49,16 @@ mod client_hello {
         ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
     use crate::sealed::Sealed;
-    use crate::server::hs::{ClientHelloInput, ExpectClientHello};
+    use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler};
     use crate::sign::{CertifiedKey, SigningKey};
     use crate::verify::DigitallySignedStruct;
 
-    pub(crate) static TLS12_HANDLER: &dyn Tls12Handler = &Handler;
+    pub(crate) static TLS12_HANDLER: &dyn ServerHandler<Tls12CipherSuite> = &Handler;
 
     #[derive(Debug)]
     struct Handler;
 
-    impl Tls12Handler for Handler {
+    impl ServerHandler<Tls12CipherSuite> for Handler {
         fn handle_client_hello(
             &self,
             suite: &'static Tls12CipherSuite,
@@ -266,18 +264,6 @@ mod client_hello {
     }
 
     impl Sealed for Handler {}
-
-    pub(crate) trait Tls12Handler: fmt::Debug + Sealed + Send + Sync {
-        fn handle_client_hello(
-            &self,
-            suite: &'static Tls12CipherSuite,
-            kx_group: &'static dyn SupportedKxGroup,
-            cert_key: &CertifiedKey,
-            input: ClientHelloInput<'_>,
-            st: ExpectClientHello,
-            cx: &mut ServerContext<'_>,
-        ) -> hs::NextStateOrError<'static>;
-    }
 
     fn start_resumption(
         suite: &'static Tls12CipherSuite,
