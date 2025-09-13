@@ -86,6 +86,10 @@ impl Tls12CipherSuite {
 }
 
 impl Suite for Tls12CipherSuite {
+    fn client_handler(&self) -> &'static dyn crate::client::ClientHandler<Self> {
+        self.protocol_version.client
+    }
+
     fn server_handler(&self) -> &'static dyn crate::server::ServerHandler<Self> {
         self.protocol_version.server
     }
