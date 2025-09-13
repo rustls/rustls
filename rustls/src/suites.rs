@@ -3,10 +3,9 @@ use core::fmt;
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::{self, KeyExchangeAlgorithm};
-use crate::enums::{CipherSuite, SignatureAlgorithm, SignatureScheme};
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureAlgorithm};
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-use crate::versions::SupportedProtocolVersion;
 
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
 #[allow(clippy::exhaustive_structs)]
@@ -87,55 +86,10 @@ impl SupportedCipherSuite {
         }
     }
 
-    /// Return the inner `Tls13CipherSuite` for this suite, if it is a TLS1.3 suite.
-    pub fn tls13(&self) -> Option<&'static Tls13CipherSuite> {
-        match self {
-            Self::Tls12(_) => None,
-            Self::Tls13(inner) => Some(inner),
-        }
-    }
-
-    /// Return supported protocol version for the cipher suite.
-    pub fn version(&self) -> SupportedProtocolVersion {
-        match self {
-            Self::Tls12(suite) => SupportedProtocolVersion::TLS12(suite.protocol_version),
-            Self::Tls13(suite) => SupportedProtocolVersion::TLS13(suite.protocol_version),
-        }
-    }
-
-    /// Return true if this suite is usable for a key only offering `sig_alg`
-    /// signatures.  This resolves to true for all TLS1.3 suites.
-    pub fn usable_for_signature_algorithm(&self, sig_alg: SignatureAlgorithm) -> bool {
-        match self {
-            Self::Tls12(tls12) => tls12.usable_for_signature_algorithm(sig_alg),
-            Self::Tls13(_) => true,
-        }
-    }
-
-    /// Return true if this suite is usable for the given [`Protocol`].
     pub(crate) fn usable_for_protocol(&self, proto: Protocol) -> bool {
         match self {
-            Self::Tls12(tls12) => tls12.usable_for_protocol(proto),
-            Self::Tls13(tls13) => tls13.usable_for_protocol(proto),
-        }
-    }
-
-    /// Return `true` if this is backed by a FIPS-approved implementation.
-    pub fn fips(&self) -> bool {
-        match self {
-            Self::Tls12(cs) => cs.fips(),
-            Self::Tls13(cs) => cs.fips(),
-        }
-    }
-
-    /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
-    ///
-    /// TLS 1.3 cipher suites support all key exchange types, but TLS 1.2 suites
-    /// support only one.
-    pub(crate) fn usable_for_kx_algorithm(&self, kxa: KeyExchangeAlgorithm) -> bool {
-        match self {
-            Self::Tls12(tls12) => tls12.usable_for_kx_algorithm(kxa),
-            Self::Tls13(_) => true,
+            Self::Tls12(s) => s.usable_for_protocol(proto),
+            Self::Tls13(s) => s.usable_for_protocol(proto),
         }
     }
 }
@@ -146,15 +100,31 @@ impl fmt::Debug for SupportedCipherSuite {
     }
 }
 
-/// Return true if `sigscheme` is usable by any of the given suites.
-pub(crate) fn compatible_sigscheme_for_suites(
-    sigscheme: SignatureScheme,
-    common_suites: &[SupportedCipherSuite],
-) -> bool {
-    let sigalg = sigscheme.algorithm();
-    common_suites
-        .iter()
-        .any(|&suite| suite.usable_for_signature_algorithm(sigalg))
+pub(crate) trait Suite: fmt::Debug {
+    fn handlers(
+        &self,
+    ) -> (
+        &'static dyn crate::client::ClientHandler<Self>,
+        &'static dyn crate::server::ServerHandler<Self>,
+    );
+
+    fn usable_for_protocol(&self, proto: Protocol) -> bool;
+
+    fn usable_for_signature_algorithm(&self, _alg: SignatureAlgorithm) -> bool {
+        true
+    }
+
+    fn usable_for_kx_algorithm(&self, _kxa: KeyExchangeAlgorithm) -> bool {
+        true
+    }
+
+    fn suite(&self) -> CipherSuite {
+        self.common().suite
+    }
+
+    fn common(&self) -> &CipherSuiteCommon;
+
+    const VERSION: ProtocolVersion;
 }
 
 /// Secrets for transmitting/receiving data over a TLS session.

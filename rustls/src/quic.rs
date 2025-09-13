@@ -36,6 +36,7 @@ mod connection {
     };
     use crate::msgs::message::InboundPlainMessage;
     use crate::server::{ServerConfig, ServerConnectionData};
+    use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
 
@@ -172,11 +173,15 @@ mod connection {
             params: Vec<u8>,
             alpn_protocols: Vec<Vec<u8>>,
         ) -> Result<Self, Error> {
-            if !config.supports_version(ProtocolVersion::TLSv1_3) {
+            let suites = &config.provider.tls13_cipher_suites;
+            if !suites.is_empty() {
                 return Err(ApiMisuse::QuicRequiresTls13Support.into());
             }
 
-            if !config.supports_protocol(Protocol::Quic) {
+            if suites
+                .iter()
+                .any(|scs| scs.quic.is_some())
+            {
                 return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
             }
 
@@ -252,11 +257,15 @@ mod connection {
             quic_version: Version,
             params: Vec<u8>,
         ) -> Result<Self, Error> {
-            if !config.supports_version(ProtocolVersion::TLSv1_3) {
+            let suites = &config.provider.tls13_cipher_suites;
+            if !suites.is_empty() {
                 return Err(ApiMisuse::QuicRequiresTls13Support.into());
             }
 
-            if !config.supports_protocol(Protocol::Quic) {
+            if suites
+                .iter()
+                .any(|scs| scs.quic.is_some())
+            {
                 return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
             }
 
@@ -386,7 +395,10 @@ mod connection {
                 .core
                 .common_state
                 .suite
-                .and_then(|suite| suite.tls13())?;
+                .and_then(|suite| match suite {
+                    SupportedCipherSuite::Tls13(suite) => Some(suite),
+                    _ => None,
+                })?;
             Some(DirectionalKeys::new(
                 suite,
                 suite.quic?,

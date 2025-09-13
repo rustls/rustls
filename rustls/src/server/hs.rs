@@ -1,14 +1,18 @@
-use alloc::borrow::{Cow, ToOwned};
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::borrow::Borrow;
+use core::fmt;
 
 use pki_types::DnsName;
 
 use super::server_conn::ServerConnectionData;
-use super::tls12;
+use super::{ClientHello, ServerConfig};
+use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::SupportedKxGroup;
+use crate::crypto::hash::Hash;
+use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{
     AlertDescription, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
     SignatureAlgorithm, SignatureScheme,
@@ -24,10 +28,12 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::{ClientHello, ServerConfig, tls13};
+use crate::sealed::Sealed;
 use crate::sign::CertifiedKey;
+use crate::suites::Suite;
 use crate::sync::Arc;
-use crate::{SupportedCipherSuite, suites};
+use crate::tls12::Tls12CipherSuite;
+use crate::tls13::Tls13CipherSuite;
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
@@ -248,7 +254,7 @@ pub(super) struct CertificateTypes {
     pub(super) client: CertificateType,
 }
 
-pub(super) struct ExpectClientHello {
+pub(crate) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) extra_exts: ServerExtensionsInput<'static>,
     pub(super) transcript: HandshakeHashOrBuffer,
@@ -283,9 +289,7 @@ impl ExpectClientHello {
     /// Continues handling of a `ClientHello` message once config and certificate are available.
     pub(super) fn with_certified_key(
         self,
-        mut sig_schemes: Vec<SignatureScheme>,
-        client_hello: &ClientHelloPayload,
-        m: &Message<'_>,
+        input: ClientHelloInput<'_>,
         cx: &mut ServerContext<'_>,
     ) -> NextStateOrError<'static> {
         let tls13_enabled = self
@@ -298,117 +302,111 @@ impl ExpectClientHello {
         cx.data.sni = self
             .config
             .invalid_sni_policy
-            .accept(client_hello.server_name.as_ref())
+            .accept(input.client_hello.server_name.as_ref())
             .map_err(|e| {
                 cx.common
                     .send_fatal_alert(AlertDescription::IllegalParameter, e)
             })?;
 
         // Are we doing TLS1.3?
-        let version = if let Some(versions) = &client_hello.supported_versions {
+        if let Some(versions) = &input.client_hello.supported_versions {
             if versions.tls13 && tls13_enabled {
-                ProtocolVersion::TLSv1_3
+                self.with_version::<Tls13CipherSuite>(input, cx)
             } else if !versions.tls12 || !tls12_enabled {
-                return Err(cx.common.send_fatal_alert(
+                Err(cx.common.send_fatal_alert(
                     AlertDescription::ProtocolVersion,
                     PeerIncompatible::Tls12NotOfferedOrEnabled,
-                ));
+                ))
             } else if cx.common.is_quic() {
-                return Err(cx.common.send_fatal_alert(
+                Err(cx.common.send_fatal_alert(
                     AlertDescription::ProtocolVersion,
                     PeerIncompatible::Tls13RequiredForQuic,
-                ));
+                ))
             } else {
-                ProtocolVersion::TLSv1_2
+                self.with_version::<Tls12CipherSuite>(input, cx)
             }
-        } else if u16::from(client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2) {
-            return Err(cx.common.send_fatal_alert(
+        } else if u16::from(input.client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2)
+        {
+            Err(cx.common.send_fatal_alert(
                 AlertDescription::ProtocolVersion,
                 PeerIncompatible::Tls12NotOffered,
-            ));
+            ))
         } else if !tls12_enabled && tls13_enabled {
-            return Err(cx.common.send_fatal_alert(
+            Err(cx.common.send_fatal_alert(
                 AlertDescription::ProtocolVersion,
                 PeerIncompatible::SupportedVersionsExtensionRequired,
-            ));
+            ))
         } else if cx.common.is_quic() {
-            return Err(cx.common.send_fatal_alert(
+            Err(cx.common.send_fatal_alert(
                 AlertDescription::ProtocolVersion,
                 PeerIncompatible::Tls13RequiredForQuic,
-            ));
+            ))
         } else {
-            ProtocolVersion::TLSv1_2
-        };
+            self.with_version::<Tls12CipherSuite>(input, cx)
+        }
+    }
 
-        cx.common.negotiated_version = Some(version);
+    fn with_version<T: Suite + 'static>(
+        self,
+        mut input: ClientHelloInput<'_>,
+        cx: &mut ServerContext<'_>,
+    ) -> NextStateOrError<'static>
+    where
+        CryptoProvider: Borrow<[&'static T]>,
+        SupportedCipherSuite: From<&'static T>,
+    {
+        cx.common.negotiated_version = Some(T::VERSION);
 
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
         // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
         // So: reduce the offered sigschemes to those compatible with the
         // intersection of ciphersuites.
-        let client_suites = self
-            .config
-            .provider
-            .iter_cipher_suites()
-            .filter(|scs| {
-                client_hello
+        let suites = <CryptoProvider as Borrow<[&'static T]>>::borrow(&self.config.provider);
+        let client_suites = suites
+            .iter()
+            .filter(|&&scs| {
+                input
+                    .client_hello
                     .cipher_suites
                     .contains(&scs.suite())
             })
             .collect::<Vec<_>>();
 
-        sig_schemes
-            .retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
+        input.sig_schemes.retain(|scheme| {
+            client_suites
+                .iter()
+                .any(|&suite| suite.usable_for_signature_algorithm(scheme.algorithm()))
+        });
 
-        // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
-        let certificate_authorities = match version {
-            ProtocolVersion::TLSv1_2 => None,
-            _ => client_hello
-                .certificate_authority_names
-                .as_deref(),
-        };
         // Choose a certificate.
-        let cert_key = {
-            let client_hello = ClientHello {
-                server_name: cx.data.sni.as_ref().map(Cow::Borrowed),
-                signature_schemes: &sig_schemes,
-                alpn: client_hello.protocols.as_ref(),
-                client_cert_types: client_hello
-                    .client_certificate_types
-                    .as_deref(),
-                server_cert_types: client_hello
-                    .server_certificate_types
-                    .as_deref(),
-                cipher_suites: &client_hello.cipher_suites,
-                certificate_authorities,
-                named_groups: client_hello.named_groups.as_deref(),
-            };
-            trace!("Resolving server certificate: {client_hello:#?}");
-
-            let certkey = self
-                .config
-                .cert_resolver
-                .resolve(&client_hello);
-
-            certkey.ok_or_else(|| {
+        let cert_key = self
+            .config
+            .cert_resolver
+            .resolve(&ClientHello::new(
+                input.client_hello,
+                cx.data.sni.as_ref(),
+                &input.sig_schemes,
+                T::VERSION,
+            ))
+            .ok_or_else(|| {
                 cx.common.send_fatal_alert(
                     AlertDescription::AccessDenied,
                     Error::General("no server certificate chain resolved".to_owned()),
                 )
-            })?
-        };
+            })?;
 
         let (suite, skxg) = self
             .choose_suite_and_kx_group(
-                version,
+                suites,
                 cert_key.key.algorithm(),
                 cx.common.protocol,
-                client_hello
+                input
+                    .client_hello
                     .named_groups
                     .as_deref()
                     .unwrap_or_default(),
-                &client_hello.cipher_suites,
+                &input.client_hello.cipher_suites,
             )
             .map_err(|incompat| {
                 cx.common
@@ -416,79 +414,23 @@ impl ExpectClientHello {
             })?;
 
         debug!("decided upon suite {suite:?}");
-        cx.common.suite = Some(suite);
+        cx.common.suite = Some(suite.into());
         cx.common.kx_state = KxState::Start(skxg);
 
-        // Start handshake hash.
-        let starting_hash = suite.hash_provider();
-        let transcript = match self.transcript {
-            HandshakeHashOrBuffer::Buffer(inner) => inner.start_hash(starting_hash),
-            HandshakeHashOrBuffer::Hash(inner)
-                if inner.algorithm() == starting_hash.algorithm() =>
-            {
-                inner
-            }
-            _ => {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::HandshakeHashVariedAfterRetry,
-                ));
-            }
-        };
-
-        let state = ClientHelloState {
-            randoms: ConnectionRandoms::new(
-                client_hello.random,
-                Random::new(self.config.provider.secure_random)?,
-            ),
-            config: self.config,
-            transcript,
-            extra_exts: self.extra_exts,
-            message: m,
-            client_hello,
-            kx_group: skxg,
-            sig_schemes,
-            cert_key,
-        };
-
-        match suite {
-            SupportedCipherSuite::Tls13(suite) => suite
-                .protocol_version
-                .server
-                .handle_client_hello(
-                    tls13::CompleteClientHelloHandling {
-                        suite,
-                        done_retry: self.done_retry,
-                        send_tickets: self.send_tickets,
-                    },
-                    state,
-                    cx,
-                ),
-            SupportedCipherSuite::Tls12(suite) => suite
-                .protocol_version
-                .server
-                .handle_client_hello(
-                    tls12::CompleteClientHelloHandling {
-                        session_id: self.session_id,
-                        suite,
-                        using_ems: self.using_ems,
-                        send_ticket: self.send_tickets > 0,
-                    },
-                    state,
-                    tls13_enabled,
-                    cx,
-                ),
-        }
+        suite
+            .handlers()
+            .1
+            .handle_client_hello(suite, skxg, &cert_key, input, self, cx)
     }
 
-    fn choose_suite_and_kx_group(
+    fn choose_suite_and_kx_group<T: Suite + 'static>(
         &self,
-        selected_version: ProtocolVersion,
+        suites: &[&'static T],
         sig_key_algorithm: SignatureAlgorithm,
         protocol: Protocol,
         client_groups: &[NamedGroup],
         client_suites: &[CipherSuite],
-    ) -> Result<(SupportedCipherSuite, &'static dyn SupportedKxGroup), PeerIncompatible> {
+    ) -> Result<(&'static T, &'static dyn SupportedKxGroup), PeerIncompatible> {
         // Determine which `KeyExchangeAlgorithm`s are theoretically possible, based
         // on the offered and supported groups.
         let mut ecdhe_possible = false;
@@ -504,8 +446,7 @@ impl ExpectClientHello {
                 .iter()
                 .find(|skxg| {
                     let named_group = skxg.name();
-                    named_group == *offered_group
-                        && named_group.usable_for_version(selected_version)
+                    named_group == *offered_group && named_group.usable_for_version(T::VERSION)
                 });
 
             match offered_group.key_exchange_algorithm() {
@@ -518,10 +459,12 @@ impl ExpectClientHello {
                 }
             }
 
-            supported_groups.push(supported);
+            if let Some(&supported) = supported {
+                supported_groups.push(supported);
+            }
         }
 
-        let first_supported_dhe_kxg = if selected_version == ProtocolVersion::TLSv1_2 {
+        let first_supported_dhe_kxg = if T::VERSION == ProtocolVersion::TLSv1_2 {
             // https://datatracker.ietf.org/doc/html/rfc7919#section-4 (paragraph 2)
             let first_supported_dhe_kxg = self
                 .config
@@ -540,35 +483,15 @@ impl ExpectClientHello {
             return Err(PeerIncompatible::NoKxGroupsInCommon);
         }
 
-        let mut suitable_suites_iter = self
-            .config
-            .provider
-            .iter_cipher_suites()
-            .filter(|suite| {
-                let tls12 = match suite {
-                    SupportedCipherSuite::Tls12(tls12)
-                        if selected_version == ProtocolVersion::TLSv1_2 =>
-                    {
-                        tls12
-                    }
-                    SupportedCipherSuite::Tls13(tls13)
-                        if selected_version == ProtocolVersion::TLSv1_3 =>
-                    {
-                        return tls13.usable_for_protocol(protocol);
-                    }
-                    _ => return false,
-                };
-
-                // Reduce our supported ciphersuites by the certified key's algorithm.
-                tls12.usable_for_signature_algorithm(sig_key_algorithm)
-
+        let mut suitable_suites_iter = suites.iter().filter(|suite| {
+            // Reduce our supported ciphersuites by the certified key's algorithm.
+            suite.usable_for_signature_algorithm(sig_key_algorithm)
                 // And protocol
-                && tls12.usable_for_protocol(protocol)
-
+                && suite.usable_for_protocol(protocol)
                 // And support for one of the key exchange groups
-                && (ecdhe_possible && tls12.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
-                || ffdhe_possible && tls12.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE))
-            });
+                && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
+                || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE))
+        });
 
         // RFC 7919 (https://datatracker.ietf.org/doc/html/rfc7919#section-4) requires us to send
         // the InsufficientSecurity alert in case we don't recognize client's FFDHE groups (i.e.,
@@ -595,14 +518,11 @@ impl ExpectClientHello {
         // suite.
         let maybe_skxg = supported_groups
             .iter()
-            .find_map(|maybe_skxg| match maybe_skxg {
-                Some(skxg) => suite
-                    .usable_for_kx_algorithm(skxg.name().key_exchange_algorithm())
-                    .then_some(*skxg),
-                None => None,
+            .find(|kx_group| {
+                suite.usable_for_kx_algorithm(kx_group.name().key_exchange_algorithm())
             });
 
-        if selected_version == ProtocolVersion::TLSv1_3 {
+        if T::VERSION == ProtocolVersion::TLSv1_3 {
             // This unwrap is structurally guaranteed by the early return for `!ffdhe_possible && !ecdhe_possible`
             return Ok((suite, *maybe_skxg.unwrap()));
         }
@@ -623,6 +543,13 @@ impl ExpectClientHello {
             None => Err(PeerIncompatible::NoKxGroupsInCommon),
         }
     }
+
+    pub(super) fn randoms(&self, input: &ClientHelloInput<'_>) -> Result<ConnectionRandoms, Error> {
+        Ok(ConnectionRandoms::new(
+            input.client_hello.random,
+            Random::new(self.config.provider.secure_random)?,
+        ))
+    }
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
@@ -634,8 +561,8 @@ impl State<ServerConnectionData> for ExpectClientHello {
     where
         Self: 'm,
     {
-        let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
-        self.with_certified_key(sig_schemes, client_hello, &m, cx)
+        let input = process_client_hello(&m, self.done_retry, cx)?;
+        self.with_certified_key(input, cx)
     }
 
     fn into_owned(self: Box<Self>) -> NextState<'static> {
@@ -643,16 +570,22 @@ impl State<ServerConnectionData> for ExpectClientHello {
     }
 }
 
-pub(crate) struct ClientHelloState<'a> {
-    pub(super) config: Arc<ServerConfig>,
-    pub(super) transcript: HandshakeHash,
-    pub(super) randoms: ConnectionRandoms,
-    pub(super) extra_exts: ServerExtensionsInput<'static>,
+pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
+    fn handle_client_hello(
+        &self,
+        suite: &'static T,
+        kx_group: &'static dyn SupportedKxGroup,
+        cert_key: &CertifiedKey,
+        input: ClientHelloInput<'_>,
+        st: ExpectClientHello,
+        cx: &mut ServerContext<'_>,
+    ) -> NextStateOrError<'static>;
+}
+
+pub(crate) struct ClientHelloInput<'a> {
     pub(super) message: &'a Message<'a>,
     pub(super) client_hello: &'a ClientHelloPayload,
-    pub(super) kx_group: &'static dyn SupportedKxGroup,
     pub(super) sig_schemes: Vec<SignatureScheme>,
-    pub(super) cert_key: Arc<CertifiedKey>,
 }
 
 /// Configuration-independent validation of a `ClientHello` message.
@@ -666,7 +599,7 @@ pub(super) fn process_client_hello<'m>(
     m: &'m Message<'m>,
     done_retry: bool,
     cx: &mut ServerContext<'_>,
-) -> Result<(&'m ClientHelloPayload, Vec<SignatureScheme>), Error> {
+) -> Result<ClientHelloInput<'m>, Error> {
     let client_hello =
         require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
     trace!("we got a clienthello {client_hello:?}");
@@ -706,10 +639,31 @@ pub(super) fn process_client_hello<'m>(
             )
         })?;
 
-    Ok((client_hello, sig_schemes.to_owned()))
+    Ok(ClientHelloInput {
+        message: m,
+        client_hello,
+        sig_schemes: sig_schemes.to_owned(),
+    })
 }
 
 pub(crate) enum HandshakeHashOrBuffer {
     Buffer(HandshakeHashBuffer),
     Hash(HandshakeHash),
+}
+
+impl HandshakeHashOrBuffer {
+    pub(super) fn start(
+        self,
+        hash: &'static dyn Hash,
+        cx: &mut ServerContext<'_>,
+    ) -> Result<HandshakeHash, Error> {
+        match self {
+            Self::Buffer(inner) => Ok(inner.start_hash(hash)),
+            Self::Hash(inner) if inner.algorithm() == hash.algorithm() => Ok(inner),
+            _ => Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::HandshakeHashVariedAfterRetry,
+            )),
+        }
+    }
 }

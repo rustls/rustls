@@ -12,9 +12,9 @@ use pki_types::{DnsName, UnixTime};
 
 use super::hs;
 use crate::builder::ConfigBuilder;
-use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
-use crate::common_state::{Protocol, State};
+use crate::common_state::State;
+use crate::common_state::{CommonState, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -152,6 +152,34 @@ pub struct ClientHello<'a> {
 }
 
 impl<'a> ClientHello<'a> {
+    pub(super) fn new(
+        client_hello: &'a ClientHelloPayload,
+        sni: Option<&'a DnsName<'static>>,
+        sig_schemes: &'a [SignatureScheme],
+        version: ProtocolVersion,
+    ) -> Self {
+        Self {
+            server_name: sni.map(Cow::Borrowed),
+            signature_schemes: &sig_schemes,
+            alpn: client_hello.protocols.as_ref(),
+            client_cert_types: client_hello
+                .client_certificate_types
+                .as_deref(),
+            server_cert_types: client_hello
+                .server_certificate_types
+                .as_deref(),
+            cipher_suites: &client_hello.cipher_suites,
+            // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
+            certificate_authorities: match version {
+                ProtocolVersion::TLSv1_2 => None,
+                _ => client_hello
+                    .certificate_authority_names
+                    .as_deref(),
+            },
+            named_groups: client_hello.named_groups.as_deref(),
+        }
+    }
+
     /// Get the server name indicator.
     ///
     /// Returns `None` if the client did not supply a SNI.
@@ -295,7 +323,7 @@ impl<'a> ClientHello<'a> {
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     /// Source of randomness and other crypto.
-    pub(super) provider: Arc<CryptoProvider>,
+    pub(crate) provider: Arc<CryptoProvider>,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list
@@ -527,13 +555,6 @@ impl ServerConfig {
         self.provider.supports_version(v)
     }
 
-    #[cfg(feature = "std")]
-    pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
-        self.provider
-            .iter_cipher_suites()
-            .any(|cs| cs.usable_for_protocol(proto))
-    }
-
     pub(super) fn current_time(&self) -> Result<UnixTime, Error> {
         self.time_provider
             .current_time()
@@ -608,7 +629,7 @@ mod connection {
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
-    use crate::server::hs;
+    use crate::server::hs::{self, ClientHelloInput};
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
@@ -916,7 +937,7 @@ mod connection {
 
             let mut cx = Context::from(&mut connection);
             let sig_schemes = match hs::process_client_hello(&message, false, &mut cx) {
-                Ok((_, sig_schemes)) => sig_schemes,
+                Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
                     return Err((err, AcceptedAlert::from(connection)));
                 }
@@ -1091,6 +1112,8 @@ impl Accepted {
         mut self,
         config: Arc<ServerConfig>,
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
+        use crate::server::hs::ClientHelloInput;
+
         if let Err(err) = self
             .connection
             .set_max_fragment_size(config.max_fragment_size)
@@ -1106,7 +1129,13 @@ impl Accepted {
         let mut cx = hs::ServerContext::from(&mut self.connection);
 
         let ch = Self::client_hello_payload(&self.message);
-        let new = match state.with_certified_key(self.sig_schemes, ch, &self.message, &mut cx) {
+        let input = ClientHelloInput {
+            message: &self.message,
+            client_hello: ch,
+            sig_schemes: self.sig_schemes,
+        };
+
+        let new = match state.with_certified_key(input, &mut cx) {
             Ok(new) => new,
             Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
         };

@@ -3,8 +3,7 @@ use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
 
-pub(super) use client_hello::CompleteClientHelloHandling;
-pub(crate) use client_hello::{TLS12_HANDLER, Tls12Handler};
+pub(crate) use client_hello::TLS12_HANDLER;
 use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
@@ -37,8 +36,6 @@ use crate::verify::{ClientIdentity, PeerIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
-    use core::fmt;
-
     use pki_types::CertificateDer;
 
     use super::*;
@@ -52,32 +49,39 @@ mod client_hello {
         ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
     use crate::sealed::Sealed;
-    use crate::server::hs::ClientHelloState;
-    use crate::sign::SigningKey;
+    use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler};
+    use crate::sign::{CertifiedKey, SigningKey};
     use crate::verify::DigitallySignedStruct;
 
-    pub(crate) static TLS12_HANDLER: &dyn Tls12Handler = &Handler;
+    pub(crate) static TLS12_HANDLER: &dyn ServerHandler<Tls12CipherSuite> = &Handler;
 
     #[derive(Debug)]
     struct Handler;
 
-    impl Tls12Handler for Handler {
+    impl ServerHandler<Tls12CipherSuite> for Handler {
         fn handle_client_hello(
             &self,
-            mut cch: CompleteClientHelloHandling,
-            mut st: ClientHelloState<'_>,
-            tls13_enabled: bool,
+            suite: &'static Tls12CipherSuite,
+            kx_group: &'static dyn SupportedKxGroup,
+            cert_key: &CertifiedKey,
+            input: ClientHelloInput<'_>,
+            mut st: ExpectClientHello,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static> {
-            // -- TLS1.2 only from hereon in --
-            st.transcript.add_message(st.message);
+            let mut randoms = st.randoms(&input)?;
+            let mut transcript = st
+                .transcript
+                .start(suite.common.hash_provider, cx)?;
 
-            if st
+            // -- TLS1.2 only from hereon in --
+            transcript.add_message(input.message);
+
+            if input
                 .client_hello
                 .extended_master_secret_request
                 .is_some()
             {
-                cch.using_ems = true;
+                st.using_ems = true;
             } else if st.config.require_ems {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
@@ -89,7 +93,7 @@ mod client_hello {
             // it means that only the uncompressed point format is
             // supported"
             // - <https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.2>
-            let supported_ec_point_formats = st
+            let supported_ec_point_formats = input
                 .client_hello
                 .ec_point_formats
                 .unwrap_or_default();
@@ -104,8 +108,13 @@ mod client_hello {
             }
 
             // -- If TLS1.3 is enabled, signal the downgrade in the server random
-            if tls13_enabled {
-                st.randoms.server[24..].copy_from_slice(&tls12::DOWNGRADE_SENTINEL);
+            if !st
+                .config
+                .provider
+                .tls13_cipher_suites
+                .is_empty()
+            {
+                randoms.server[24..].copy_from_slice(&tls12::DOWNGRADE_SENTINEL);
             }
 
             // -- Check for resumption --
@@ -121,7 +130,7 @@ mod client_hello {
             // our handling of the ClientHello.
             //
             let mut ticket_received = false;
-            let resume_data = st
+            let resume_data = input
                 .client_hello
                 .session_ticket
                 .as_ref()
@@ -144,13 +153,13 @@ mod client_hello {
                 .or_else(|| {
                     // Perhaps resume?  If we received a ticket, the sessionid
                     // does not correspond to a real session.
-                    if st.client_hello.session_id.is_empty() || ticket_received {
+                    if input.client_hello.session_id.is_empty() || ticket_received {
                         return None;
                     }
 
                     st.config
                         .session_storage
-                        .get(st.client_hello.session_id.as_ref())
+                        .get(input.client_hello.session_id.as_ref())
                 })
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x).ok())
                 .and_then(|resumedata| match resumedata {
@@ -158,19 +167,27 @@ mod client_hello {
                     _ => None,
                 })
                 .filter(|resumedata| {
-                    hs::can_resume(cch.suite.into(), &cx.data.sni, &resumedata.common)
-                        && (resumedata.extended_ms == cch.using_ems
-                            || (resumedata.extended_ms && !cch.using_ems))
+                    hs::can_resume(suite.into(), &cx.data.sni, &resumedata.common)
+                        && (resumedata.extended_ms == st.using_ems
+                            || (resumedata.extended_ms && !st.using_ems))
                 });
 
             if let Some(data) = resume_data {
-                return cch.start_resumption(cx, st, data);
+                return start_resumption(
+                    data,
+                    transcript,
+                    randoms,
+                    suite,
+                    input,
+                    st.extra_exts,
+                    st.using_ems,
+                    st.config,
+                    cx,
+                );
             }
 
             // Now we have chosen a ciphersuite, we can make kx decisions.
-            let sigschemes = cch
-                .suite
-                .resolve_sig_schemes(&st.sig_schemes);
+            let sigschemes = suite.resolve_sig_schemes(&input.sig_schemes);
 
             if sigschemes.is_empty() {
                 return Err(cx.common.send_fatal_alert(
@@ -179,44 +196,39 @@ mod client_hello {
                 ));
             }
 
-            let mut ocsp_response = st.cert_key.ocsp.as_deref();
+            let mut ocsp_response = cert_key.ocsp.as_deref();
 
             // If we're not offered a ticket or a potential session ID, allocate a session ID.
             if !st.config.session_storage.can_cache() {
-                cch.session_id = SessionId::empty();
-            } else if cch.session_id.is_empty() && !ticket_received {
-                cch.session_id = SessionId::random(st.config.provider.secure_random)?;
+                st.session_id = SessionId::empty();
+            } else if st.session_id.is_empty() && !ticket_received {
+                st.session_id = SessionId::random(st.config.provider.secure_random)?;
             }
 
-            cx.common.kx_state = KxState::Start(st.kx_group);
+            cx.common.kx_state = KxState::Start(kx_group);
             cx.common.handshake_kind = Some(HandshakeKind::Full);
 
-            let mut flight = HandshakeFlightTls12::new(&mut st.transcript);
+            let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
-            cch.send_ticket = emit_server_hello(
+            let send_ticket = emit_server_hello(
                 &mut flight,
+                &mut ocsp_response,
+                input.client_hello,
+                None,
+                &randoms,
+                suite,
+                st.session_id,
+                st.using_ems,
+                st.extra_exts,
                 &st.config,
                 cx,
-                cch.session_id,
-                cch.suite,
-                cch.using_ems,
-                &mut ocsp_response,
-                st.client_hello,
-                None,
-                &st.randoms,
-                st.extra_exts,
             )?;
-            emit_certificate(&mut flight, &st.cert_key.cert_chain);
+            emit_certificate(&mut flight, &cert_key.cert_chain);
             if let Some(ocsp_response) = ocsp_response {
                 emit_cert_status(&mut flight, ocsp_response);
             }
-            let server_kx = emit_server_kx(
-                &mut flight,
-                sigschemes,
-                st.kx_group,
-                &*st.cert_key.key,
-                &st.randoms,
-            )?;
+            let server_kx =
+                emit_server_kx(&mut flight, sigschemes, kx_group, &*cert_key.key, &randoms)?;
             let doing_client_auth = emit_certificate_req(&mut flight, &st.config)?;
             emit_server_hello_done(&mut flight);
 
@@ -225,25 +237,25 @@ mod client_hello {
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
                     config: st.config,
-                    transcript: st.transcript,
-                    randoms: st.randoms,
-                    session_id: cch.session_id,
-                    suite: cch.suite,
-                    using_ems: cch.using_ems,
+                    transcript,
+                    randoms,
+                    session_id: st.session_id,
+                    suite,
+                    using_ems: st.using_ems,
                     server_kx,
-                    send_ticket: cch.send_ticket,
+                    send_ticket,
                 }))
             } else {
                 Ok(Box::new(ExpectClientKx {
                     config: st.config,
-                    transcript: st.transcript,
-                    randoms: st.randoms,
-                    session_id: cch.session_id,
-                    suite: cch.suite,
-                    using_ems: cch.using_ems,
+                    transcript,
+                    randoms,
+                    session_id: st.session_id,
+                    suite,
+                    using_ems: st.using_ems,
                     server_kx,
                     peer_identity: None,
-                    send_ticket: cch.send_ticket,
+                    send_ticket,
                 }))
             }
         }
@@ -251,110 +263,95 @@ mod client_hello {
 
     impl Sealed for Handler {}
 
-    pub(crate) trait Tls12Handler: fmt::Debug + Sealed + Send + Sync {
-        fn handle_client_hello(
-            &self,
-            cch: CompleteClientHelloHandling,
-            st: ClientHelloState<'_>,
-            tls13_enabled: bool,
-            cx: &mut ServerContext<'_>,
-        ) -> hs::NextStateOrError<'static>;
-    }
+    fn start_resumption(
+        resumedata: persist::Tls12ServerSessionValue,
+        mut transcript: HandshakeHash,
+        randoms: ConnectionRandoms,
+        suite: &'static Tls12CipherSuite,
+        input: ClientHelloInput<'_>,
+        extra_exts: ServerExtensionsInput<'static>,
+        using_ems: bool,
+        config: Arc<ServerConfig>,
+        cx: &mut ServerContext<'_>,
+    ) -> hs::NextStateOrError<'static> {
+        debug!("Resuming connection");
 
-    pub(crate) struct CompleteClientHelloHandling {
-        pub(in crate::server) session_id: SessionId,
-        pub(in crate::server) suite: &'static Tls12CipherSuite,
-        pub(in crate::server) using_ems: bool,
-        pub(in crate::server) send_ticket: bool,
-    }
-
-    impl CompleteClientHelloHandling {
-        fn start_resumption(
-            mut self,
-            cx: &mut ServerContext<'_>,
-            mut state: ClientHelloState<'_>,
-            resumedata: persist::Tls12ServerSessionValue,
-        ) -> hs::NextStateOrError<'static> {
-            debug!("Resuming connection");
-
-            if resumedata.extended_ms && !self.using_ems {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::ResumptionAttemptedWithVariedEms,
-                ));
-            }
-
-            self.session_id = state.client_hello.session_id;
-            let mut flight = HandshakeFlightTls12::new(&mut state.transcript);
-            self.send_ticket = emit_server_hello(
-                &mut flight,
-                &state.config,
-                cx,
-                self.session_id,
-                self.suite,
-                self.using_ems,
-                &mut None,
-                state.client_hello,
-                Some(&resumedata),
-                &state.randoms,
-                state.extra_exts,
-            )?;
-            flight.finish(cx.common);
-
-            let secrets =
-                ConnectionSecrets::new_resume(state.randoms, self.suite, &resumedata.master_secret);
-            state.config.key_log.log(
-                "CLIENT_RANDOM",
-                &secrets.randoms.client,
-                secrets.master_secret(),
-            );
-            cx.common
-                .start_encryption_tls12(&secrets, Side::Server);
-            cx.common.peer_identity = resumedata.common.peer_identity;
-            cx.common.handshake_kind = Some(HandshakeKind::Resumed);
-
-            if self.send_ticket {
-                let now = state.config.current_time()?;
-
-                emit_ticket(
-                    &secrets,
-                    &mut state.transcript,
-                    self.using_ems,
-                    cx,
-                    &*state.config.ticketer,
-                    now,
-                )?;
-            }
-            emit_ccs(cx.common);
-            cx.common
-                .record_layer
-                .start_encrypting();
-            emit_finished(&secrets, &mut state.transcript, cx.common);
-
-            Ok(Box::new(ExpectCcs {
-                config: state.config,
-                secrets,
-                transcript: state.transcript,
-                session_id: self.session_id,
-                using_ems: self.using_ems,
-                resuming: true,
-                send_ticket: self.send_ticket,
-            }))
+        if resumedata.extended_ms && !using_ems {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::ResumptionAttemptedWithVariedEms,
+            ));
         }
+
+        let session_id = input.client_hello.session_id;
+        let mut flight = HandshakeFlightTls12::new(&mut transcript);
+        let send_ticket = emit_server_hello(
+            &mut flight,
+            &mut None,
+            input.client_hello,
+            Some(&resumedata),
+            &randoms,
+            suite,
+            session_id,
+            using_ems,
+            extra_exts,
+            &config,
+            cx,
+        )?;
+        flight.finish(cx.common);
+
+        let secrets = ConnectionSecrets::new_resume(randoms, suite, &resumedata.master_secret);
+        config.key_log.log(
+            "CLIENT_RANDOM",
+            &secrets.randoms.client,
+            secrets.master_secret(),
+        );
+        cx.common
+            .start_encryption_tls12(&secrets, Side::Server);
+        cx.common.peer_identity = resumedata.common.peer_identity;
+        cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+
+        if send_ticket {
+            let now = config.current_time()?;
+
+            emit_ticket(
+                &secrets,
+                &mut transcript,
+                using_ems,
+                cx,
+                &*config.ticketer,
+                now,
+            )?;
+        }
+        emit_ccs(cx.common);
+        cx.common
+            .record_layer
+            .start_encrypting();
+        emit_finished(&secrets, &mut transcript, cx.common);
+
+        Ok(Box::new(ExpectCcs {
+            config,
+            secrets,
+            transcript,
+            session_id,
+            using_ems,
+            resuming: true,
+            send_ticket,
+        }))
     }
 
     fn emit_server_hello(
         flight: &mut HandshakeFlightTls12<'_>,
-        config: &ServerConfig,
-        cx: &mut ServerContext<'_>,
-        session_id: SessionId,
-        suite: &'static Tls12CipherSuite,
-        using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::Tls12ServerSessionValue>,
         randoms: &ConnectionRandoms,
+        suite: &'static Tls12CipherSuite,
+        session_id: SessionId,
+        using_ems: bool,
         extra_exts: ServerExtensionsInput<'static>,
+        config: &ServerConfig,
+        cx: &mut ServerContext<'_>,
     ) -> Result<bool, Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts);
         ep.process_common(
