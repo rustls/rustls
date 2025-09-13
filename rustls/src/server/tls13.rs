@@ -23,7 +23,7 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
-    CertificatePayloadTls13, DelegatedCredential, HandshakeMessagePayload, HandshakePayload,
+    CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
     NewSessionTicketPayloadTls13,
 };
 use crate::msgs::message::{Message, MessagePayload};
@@ -37,9 +37,8 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::{ClientIdentity, DigitallySignedStruct, PeerIdentity, SignatureVerificationInput};
+use crate::verify::{ClientIdentity, PeerIdentity};
 use crate::{ConnectionTrafficSecrets, compress, rand, verify};
-use pki_types::SubjectPublicKeyInfoDer;
 
 mod client_hello {
     use core::fmt;
@@ -787,13 +786,10 @@ mod client_hello {
         flight: &mut HandshakeFlightTls13<'_>,
         cert_chain: &[CertificateDer<'static>],
         ocsp_response: Option<&[u8]>,
-        delegated_credential: Option<&DelegatedCredential<'static>>,
     ) {
-        let mut payload = CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response);
-        if let (Some(first), Some(dc)) = (payload.entries.first_mut(), delegated_credential) {
-            first.extensions.delegated_credential = Some(dc.clone());
-        }
-        let cert = HandshakeMessagePayload(HandshakePayload::CertificateTls13(payload));
+        let cert = HandshakeMessagePayload(HandshakePayload::CertificateTls13(
+            CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response),
+        ));
 
         trace!("sending certificate {cert:?}");
         flight.add(cert);
@@ -805,12 +801,8 @@ mod client_hello {
         cert_chain: &[CertificateDer<'static>],
         ocsp_response: Option<&[u8]>,
         cert_compressor: &'static dyn CertCompressor,
-        delegated_credential: Option<&DelegatedCredential<'static>>,
     ) {
-        let mut payload = CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response);
-        if let (Some(first), Some(dc)) = (payload.entries.first_mut(), delegated_credential) {
-            first.extensions.delegated_credential = Some(dc.clone());
-        }
+        let payload = CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response);
 
         let Ok(entry) = config
             .cert_compression_cache
