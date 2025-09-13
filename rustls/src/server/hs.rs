@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 use pki_types::DnsName;
 
 use super::server_conn::ServerConnectionData;
-use super::tls12;
 use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
@@ -26,8 +25,7 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::{ClientHello, ServerConfig, tls13};
-use crate::sign::CertifiedKey;
+use crate::server::{ClientHello, ServerConfig};
 use crate::sync::Arc;
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
@@ -249,7 +247,7 @@ pub(super) struct CertificateTypes {
     pub(super) client: CertificateType,
 }
 
-pub(super) struct ExpectClientHello {
+pub(crate) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) extra_exts: ServerExtensionsInput<'static>,
     pub(super) transcript: HandshakeHashOrBuffer,
@@ -284,9 +282,7 @@ impl ExpectClientHello {
     /// Continues handling of a `ClientHello` message once config and certificate are available.
     pub(super) fn with_certified_key(
         self,
-        mut sig_schemes: Vec<SignatureScheme>,
-        client_hello: &ClientHelloPayload,
-        m: &Message<'_>,
+        mut input: ClientHelloInput<'_>,
         cx: &mut ServerContext<'_>,
     ) -> NextStateOrError<'static> {
         let tls13_enabled = self
@@ -299,14 +295,14 @@ impl ExpectClientHello {
         cx.data.sni = self
             .config
             .invalid_sni_policy
-            .accept(client_hello.server_name.as_ref())
+            .accept(input.client_hello.server_name.as_ref())
             .map_err(|e| {
                 cx.common
                     .send_fatal_alert(AlertDescription::IllegalParameter, e)
             })?;
 
         // Are we doing TLS1.3?
-        let version = if let Some(versions) = &client_hello.supported_versions {
+        let version = if let Some(versions) = &input.client_hello.supported_versions {
             if versions.tls13 && tls13_enabled {
                 ProtocolVersion::TLSv1_3
             } else if !versions.tls12 || !tls12_enabled {
@@ -322,7 +318,8 @@ impl ExpectClientHello {
             } else {
                 ProtocolVersion::TLSv1_2
             }
-        } else if u16::from(client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2) {
+        } else if u16::from(input.client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2)
+        {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::ProtocolVersion,
                 PeerIncompatible::Tls12NotOffered,
@@ -353,13 +350,14 @@ impl ExpectClientHello {
             .provider
             .iter_cipher_suites()
             .filter(|scs| {
-                client_hello
+                input
+                    .client_hello
                     .cipher_suites
                     .contains(&scs.suite())
             })
             .collect::<Vec<_>>();
 
-        sig_schemes.retain(|scheme| {
+        input.sig_schemes.retain(|scheme| {
             client_suites
                 .iter()
                 .any(|&suite| match suite {
@@ -375,9 +373,9 @@ impl ExpectClientHello {
             .config
             .cert_resolver
             .resolve(&ClientHello::new(
-                client_hello,
+                input.client_hello,
                 cx.data.sni.as_ref(),
-                &sig_schemes,
+                &input.sig_schemes,
                 version,
             ))
             .ok_or_else(|| {
@@ -392,11 +390,12 @@ impl ExpectClientHello {
                 version,
                 cert_key.key.algorithm(),
                 cx.common.protocol,
-                client_hello
+                input
+                    .client_hello
                     .named_groups
                     .as_deref()
                     .unwrap_or_default(),
-                &client_hello.cipher_suites,
+                &input.client_hello.cipher_suites,
             )
             .map_err(|incompat| {
                 cx.common
@@ -407,50 +406,15 @@ impl ExpectClientHello {
         cx.common.suite = Some(suite);
         cx.common.kx_state = KxState::Start(skxg);
 
-        let state = ClientHelloState {
-            randoms: ConnectionRandoms::new(
-                client_hello.random,
-                Random::new(self.config.provider.secure_random)?,
-            ),
-            config: self.config,
-            transcript: self
-                .transcript
-                .start(suite.hash_provider(), cx)?,
-            extra_exts: self.extra_exts,
-            message: m,
-            client_hello,
-            kx_group: skxg,
-            sig_schemes,
-            cert_key,
-        };
-
         match suite {
             SupportedCipherSuite::Tls13(suite) => suite
                 .protocol_version
                 .server
-                .handle_client_hello(
-                    tls13::CompleteClientHelloHandling {
-                        suite,
-                        done_retry: self.done_retry,
-                        send_tickets: self.send_tickets,
-                    },
-                    state,
-                    cx,
-                ),
+                .handle_client_hello(suite, skxg, &cert_key, input, self, cx),
             SupportedCipherSuite::Tls12(suite) => suite
                 .protocol_version
                 .server
-                .handle_client_hello(
-                    tls12::CompleteClientHelloHandling {
-                        session_id: self.session_id,
-                        suite,
-                        using_ems: self.using_ems,
-                        send_ticket: self.send_tickets > 0,
-                    },
-                    state,
-                    tls13_enabled,
-                    cx,
-                ),
+                .handle_client_hello(suite, skxg, &cert_key, input, self, cx),
         }
     }
 
@@ -595,6 +559,13 @@ impl ExpectClientHello {
             None => Err(PeerIncompatible::NoKxGroupsInCommon),
         }
     }
+
+    pub(super) fn randoms(&self, input: &ClientHelloInput<'_>) -> Result<ConnectionRandoms, Error> {
+        Ok(ConnectionRandoms::new(
+            input.client_hello.random,
+            Random::new(self.config.provider.secure_random)?,
+        ))
+    }
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
@@ -606,8 +577,8 @@ impl State<ServerConnectionData> for ExpectClientHello {
     where
         Self: 'm,
     {
-        let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
-        self.with_certified_key(sig_schemes, client_hello, &m, cx)
+        let input = process_client_hello(&m, self.done_retry, cx)?;
+        self.with_certified_key(input, cx)
     }
 
     fn into_owned(self: Box<Self>) -> NextState<'static> {
@@ -615,16 +586,10 @@ impl State<ServerConnectionData> for ExpectClientHello {
     }
 }
 
-pub(crate) struct ClientHelloState<'a> {
-    pub(super) config: Arc<ServerConfig>,
-    pub(super) transcript: HandshakeHash,
-    pub(super) randoms: ConnectionRandoms,
-    pub(super) extra_exts: ServerExtensionsInput<'static>,
+pub(crate) struct ClientHelloInput<'a> {
     pub(super) message: &'a Message<'a>,
     pub(super) client_hello: &'a ClientHelloPayload,
-    pub(super) kx_group: &'static dyn SupportedKxGroup,
     pub(super) sig_schemes: Vec<SignatureScheme>,
-    pub(super) cert_key: Arc<CertifiedKey>,
 }
 
 /// Configuration-independent validation of a `ClientHello` message.
@@ -638,7 +603,7 @@ pub(super) fn process_client_hello<'m>(
     m: &'m Message<'m>,
     done_retry: bool,
     cx: &mut ServerContext<'_>,
-) -> Result<(&'m ClientHelloPayload, Vec<SignatureScheme>), Error> {
+) -> Result<ClientHelloInput<'m>, Error> {
     let client_hello =
         require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
     trace!("we got a clienthello {client_hello:?}");
@@ -678,7 +643,11 @@ pub(super) fn process_client_hello<'m>(
             )
         })?;
 
-    Ok((client_hello, sig_schemes.to_owned()))
+    Ok(ClientHelloInput {
+        message: m,
+        client_hello,
+        sig_schemes: sig_schemes.to_owned(),
+    })
 }
 
 pub(crate) enum HandshakeHashOrBuffer {
@@ -687,7 +656,7 @@ pub(crate) enum HandshakeHashOrBuffer {
 }
 
 impl HandshakeHashOrBuffer {
-    fn start(
+    pub(super) fn start(
         self,
         hash: &'static dyn Hash,
         cx: &mut ServerContext<'_>,

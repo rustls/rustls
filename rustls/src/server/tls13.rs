@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec;
 
-pub(super) use client_hello::CompleteClientHelloHandling;
 pub(crate) use client_hello::{TLS13_HANDLER, Tls13Handler};
 use pki_types::{CertificateDer, UnixTime};
 use subtle::ConstantTimeEq;
@@ -56,8 +55,8 @@ mod client_hello {
         ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
     };
     use crate::sealed::Sealed;
-    use crate::server::hs::{CertificateTypes, ClientHelloState};
-    use crate::sign::SigningKey;
+    use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello};
+    use crate::sign::{CertifiedKey, SigningKey};
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
@@ -71,11 +70,19 @@ mod client_hello {
     impl Tls13Handler for Handler {
         fn handle_client_hello(
             &self,
-            mut cch: CompleteClientHelloHandling,
-            mut st: ClientHelloState<'_>,
+            suite: &'static Tls13CipherSuite,
+            kx_group: &'static dyn SupportedKxGroup,
+            cert_key: &CertifiedKey,
+            mut input: ClientHelloInput<'_>,
+            mut st: ExpectClientHello,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static> {
-            if st
+            let randoms = st.randoms(&input)?;
+            let mut transcript = st
+                .transcript
+                .start(suite.common.hash_provider, cx)?;
+
+            if input
                 .client_hello
                 .compression_methods
                 .len()
@@ -87,10 +94,11 @@ mod client_hello {
                 ));
             }
 
-            st.sig_schemes
+            input
+                .sig_schemes
                 .retain(SignatureScheme::supported_in_tls13);
 
-            let shares_ext = st
+            let shares_ext = input
                 .client_hello
                 .key_shares
                 .as_ref()
@@ -101,7 +109,7 @@ mod client_hello {
                     )
                 })?;
 
-            if st
+            if input
                 .client_hello
                 .has_keyshare_extension_with_duplicates()
             {
@@ -111,7 +119,7 @@ mod client_hello {
                 ));
             }
 
-            if st
+            if input
                 .client_hello
                 .has_certificate_compression_extension_with_duplicates()
             {
@@ -121,7 +129,7 @@ mod client_hello {
                 ));
             }
 
-            let cert_compressor = st
+            let cert_compressor = input
                 .client_hello
                 .certificate_compression_algorithms
                 .as_ref()
@@ -134,13 +142,13 @@ mod client_hello {
                         .find(|compressor| offered.contains(&compressor.algorithm()))
                         .copied());
 
-            let early_data_requested = st
+            let early_data_requested = input
                 .client_hello
                 .early_data_request
                 .is_some();
 
             // EarlyData extension is illegal in second ClientHello
-            if cch.done_retry && early_data_requested {
+            if st.done_retry && early_data_requested {
                 return Err({
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
@@ -150,16 +158,16 @@ mod client_hello {
             }
 
             // See if there is a KeyShare for the selected kx group.
-            let chosen_share_and_kxg = shares_ext.iter().find_map(|share| {
-                (share.group == st.kx_group.name()).then_some((share, st.kx_group))
-            });
+            let chosen_share_and_kxg = shares_ext
+                .iter()
+                .find_map(|share| (share.group == kx_group.name()).then_some((share, kx_group)));
 
             let Some(chosen_share_and_kxg) = chosen_share_and_kxg else {
                 // We don't have a suitable key share.  Send a HelloRetryRequest
                 // for the mutually_preferred_group.
-                st.transcript.add_message(st.message);
+                transcript.add_message(input.message);
 
-                if cch.done_retry {
+                if st.done_retry {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::RefusedToFollowHelloRetryRequest,
@@ -167,25 +175,21 @@ mod client_hello {
                 }
 
                 emit_hello_retry_request(
-                    &mut st.transcript,
-                    cch.suite,
-                    st.client_hello.session_id,
+                    &mut transcript,
+                    suite,
+                    input.client_hello.session_id,
                     cx.common,
-                    st.kx_group.name(),
+                    kx_group.name(),
                 );
                 emit_fake_ccs(cx.common);
 
                 let skip_early_data = max_early_data_size(st.config.max_early_data_size);
 
-                let next = Box::new(hs::ExpectClientHello {
-                    config: st.config,
-                    transcript: HandshakeHashOrBuffer::Hash(st.transcript),
-                    session_id: SessionId::empty(),
-                    using_ems: false,
-                    done_retry: true,
-                    send_tickets: cch.send_tickets,
-                    extra_exts: st.extra_exts,
-                });
+                st.transcript = HandshakeHashOrBuffer::Hash(transcript);
+                st.session_id = SessionId::empty();
+                st.using_ems = false;
+                st.done_retry = true;
+                let next = Box::new(st);
 
                 return if early_data_requested {
                     Ok(Box::new(ExpectAndSkipRejectedEarlyData {
@@ -200,12 +204,12 @@ mod client_hello {
             let mut chosen_psk_index = None;
             let mut resumedata = None;
 
-            if let Some(psk_offer) = &st.client_hello.preshared_key_offer {
+            if let Some(psk_offer) = &input.client_hello.preshared_key_offer {
                 // "A client MUST provide a "psk_key_exchange_modes" extension if it
                 //  offers a "pre_shared_key" extension. If clients offer
                 //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
                 //  servers MUST abort the handshake." - RFC8446 4.2.9
-                if st
+                if input
                     .client_hello
                     .preshared_key_modes
                     .is_none()
@@ -233,23 +237,23 @@ mod client_hello {
                 let now = st.config.current_time()?;
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-                    let maybe_resume_data = cch
-                        .attempt_tls13_ticket_decryption(&psk_id.identity.0, &st.config)
-                        .map(|resumedata| {
-                            resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
-                        })
-                        .filter(|resumedata| {
-                            hs::can_resume(cch.suite.into(), &cx.data.sni, &resumedata.common)
-                        });
+                    let maybe_resume_data =
+                        attempt_tls13_ticket_decryption(&psk_id.identity.0, &st.config)
+                            .map(|resumedata| {
+                                resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
+                            })
+                            .filter(|resumedata| {
+                                hs::can_resume(suite.into(), &cx.data.sni, &resumedata.common)
+                            });
 
                     let Some(resume) = maybe_resume_data else {
                         continue;
                     };
 
                     if !check_binder(
-                        &mut st.transcript,
-                        cch.suite,
-                        st.message,
+                        &mut transcript,
+                        suite,
+                        input.message,
                         &resume.secret.0,
                         psk_offer.binders[i].as_ref(),
                     ) {
@@ -265,7 +269,7 @@ mod client_hello {
                 }
             }
 
-            if !st
+            if !input
                 .client_hello
                 .preshared_key_modes
                 .as_ref()
@@ -273,11 +277,11 @@ mod client_hello {
                 .unwrap_or_default()
             {
                 debug!("Client unwilling to resume, PSK_DHE_KE not offered");
-                cch.send_tickets = 0;
+                st.send_tickets = 0;
                 chosen_psk_index = None;
                 resumedata = None;
             } else {
-                cch.send_tickets = st.config.send_tls13_tickets;
+                st.send_tickets = st.config.send_tls13_tickets;
             }
 
             if let Some(resume) = &resumedata {
@@ -288,13 +292,13 @@ mod client_hello {
             }
 
             let full_handshake = resumedata.is_none();
-            st.transcript.add_message(st.message);
+            transcript.add_message(input.message);
             let key_schedule = emit_server_hello(
-                &mut st.transcript,
-                &st.randoms,
-                cch.suite,
+                &mut transcript,
+                &randoms,
+                suite,
                 cx,
-                &st.client_hello.session_id,
+                &input.client_hello.session_id,
                 chosen_share_and_kxg,
                 chosen_psk_index,
                 resumedata
@@ -302,7 +306,7 @@ mod client_hello {
                     .map(|x| &x.secret.0[..]),
                 &st.config,
             )?;
-            if !cch.done_retry {
+            if !st.done_retry {
                 emit_fake_ccs(cx.common);
             }
 
@@ -314,14 +318,14 @@ mod client_hello {
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
             }
 
-            let mut ocsp_response = st.cert_key.ocsp.as_deref();
-            let mut flight = HandshakeFlightTls13::new(&mut st.transcript);
+            let mut ocsp_response = cert_key.ocsp.as_deref();
+            let mut flight = HandshakeFlightTls13::new(&mut transcript);
             let (cert_types, doing_early_data) = emit_encrypted_extensions(
                 &mut flight,
-                cch.suite,
+                suite,
                 cx,
                 &mut ocsp_response,
-                st.client_hello,
+                input.client_hello,
                 resumedata.as_ref(),
                 st.extra_exts,
                 &st.config,
@@ -334,18 +338,18 @@ mod client_hello {
                     emit_compressed_certificate_tls13(
                         &mut flight,
                         &st.config,
-                        &st.cert_key.cert_chain,
+                        &cert_key.cert_chain,
                         ocsp_response,
                         compressor,
                     );
                 } else {
-                    emit_certificate_tls13(&mut flight, &st.cert_key.cert_chain, ocsp_response);
+                    emit_certificate_tls13(&mut flight, &cert_key.cert_chain, ocsp_response);
                 }
                 emit_certificate_verify_tls13(
                     &mut flight,
                     cx.common,
-                    &*st.cert_key.key,
-                    &st.sig_schemes,
+                    &*cert_key.key,
+                    &input.sig_schemes,
                 )?;
                 client_auth
             } else {
@@ -378,7 +382,7 @@ mod client_hello {
 
             cx.common.check_aligned_handshake()?;
             let key_schedule_traffic =
-                emit_finished_tls13(flight, &st.randoms, cx, key_schedule, &st.config);
+                emit_finished_tls13(flight, &randoms, cx, key_schedule, &st.config);
 
             if !doing_client_auth && st.config.send_half_rtt_data {
                 // Application data can be sent immediately after Finished, in one
@@ -392,20 +396,20 @@ mod client_hello {
                 if st.config.cert_decompressors.is_empty() {
                     Ok(Box::new(ExpectCertificate {
                         config: st.config,
-                        transcript: st.transcript,
-                        suite: cch.suite,
+                        transcript,
+                        suite,
                         key_schedule: key_schedule_traffic,
-                        send_tickets: cch.send_tickets,
+                        send_tickets: st.send_tickets,
                         message_already_in_transcript: false,
                         expected_certificate_type: cert_types.client,
                     }))
                 } else {
                     Ok(Box::new(ExpectCertificateOrCompressedCertificate {
                         config: st.config,
-                        transcript: st.transcript,
-                        suite: cch.suite,
+                        transcript,
+                        suite,
                         key_schedule: key_schedule_traffic,
-                        send_tickets: cch.send_tickets,
+                        send_tickets: st.send_tickets,
                         expected_certificate_type: cert_types.client,
                     }))
                 }
@@ -415,18 +419,18 @@ mod client_hello {
                 // connection error of type PROTOCOL_VIOLATION.
                 Ok(Box::new(ExpectEarlyData {
                     config: st.config,
-                    transcript: st.transcript,
-                    suite: cch.suite,
+                    transcript,
+                    suite,
                     key_schedule: key_schedule_traffic,
-                    send_tickets: cch.send_tickets,
+                    send_tickets: st.send_tickets,
                 }))
             } else {
                 Ok(Box::new(ExpectFinished {
                     config: st.config,
-                    transcript: st.transcript,
-                    suite: cch.suite,
+                    transcript,
+                    suite,
                     key_schedule: key_schedule_traffic,
-                    send_tickets: cch.send_tickets,
+                    send_tickets: st.send_tickets,
                 }))
             }
         }
@@ -437,8 +441,11 @@ mod client_hello {
     pub(crate) trait Tls13Handler: fmt::Debug + Sealed + Send + Sync {
         fn handle_client_hello(
             &self,
-            cch: CompleteClientHelloHandling,
-            st: ClientHelloState<'_>,
+            suite: &'static Tls13CipherSuite,
+            kx_group: &'static dyn SupportedKxGroup,
+            cert_key: &CertifiedKey,
+            input: ClientHelloInput<'_>,
+            stt: ExpectClientHello,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static>;
     }
@@ -448,12 +455,6 @@ mod client_hello {
         Disabled,
         RequestedButRejected,
         Accepted,
-    }
-
-    pub(crate) struct CompleteClientHelloHandling {
-        pub(in crate::server) suite: &'static Tls13CipherSuite,
-        pub(in crate::server) done_retry: bool,
-        pub(in crate::server) send_tickets: usize,
     }
 
     fn max_early_data_size(configured: u32) -> usize {
@@ -494,28 +495,25 @@ mod client_hello {
         ConstantTimeEq::ct_eq(real_binder.as_ref(), binder).into()
     }
 
-    impl CompleteClientHelloHandling {
-        fn attempt_tls13_ticket_decryption(
-            &mut self,
-            ticket: &[u8],
-            config: &ServerConfig,
-        ) -> Option<persist::Tls13ServerSessionValue> {
-            let sess = if config.ticketer.enabled() {
-                config
-                    .ticketer
-                    .decrypt(ticket)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
-            } else {
-                config
-                    .session_storage
-                    .take(ticket)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
-            };
+    fn attempt_tls13_ticket_decryption(
+        ticket: &[u8],
+        config: &ServerConfig,
+    ) -> Option<persist::Tls13ServerSessionValue> {
+        let sess = if config.ticketer.enabled() {
+            config
+                .ticketer
+                .decrypt(ticket)
+                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
+        } else {
+            config
+                .session_storage
+                .take(ticket)
+                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
+        };
 
-            match sess {
-                Some(persist::ServerSessionValue::Tls13(tls13)) => Some(tls13),
-                _ => None,
-            }
+        match sess {
+            Some(persist::ServerSessionValue::Tls13(tls13)) => Some(tls13),
+            _ => None,
         }
     }
 
