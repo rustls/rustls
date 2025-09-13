@@ -1,6 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::fmt;
 
 use super::server_conn::ServerConnectionData;
 use crate::SupportedCipherSuite;
@@ -23,7 +24,9 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::sealed::Sealed;
 use crate::server::{ClientHello, ServerConfig};
+use crate::sign::CertifiedKey;
 use crate::sync::Arc;
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
@@ -590,6 +593,18 @@ impl State<ServerConnectionData> for ExpectClientHello {
     fn into_owned(self: Box<Self>) -> NextState<'static> {
         self
     }
+}
+
+pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
+    fn handle_client_hello(
+        &self,
+        suite: &'static T,
+        kx_group: &'static dyn SupportedKxGroup,
+        cert_key: &CertifiedKey,
+        input: ClientHelloInput<'_>,
+        st: ExpectClientHello,
+        cx: &mut ServerContext<'_>,
+    ) -> NextStateOrError<'static>;
 }
 
 /// Configuration-independent validation of a `ClientHello` message.

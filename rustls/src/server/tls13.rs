@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec;
 
-pub(crate) use client_hello::{TLS13_HANDLER, Tls13Handler};
+pub(crate) use client_hello::TLS13_HANDLER;
 use pki_types::{CertificateDer, UnixTime};
 use subtle::ConstantTimeEq;
 
@@ -40,8 +40,6 @@ use crate::verify::{ClientIdentity, PeerIdentity};
 use crate::{ConnectionTrafficSecrets, compress, rand, verify};
 
 mod client_hello {
-    use core::fmt;
-
     use super::*;
     use crate::compress::CertCompressor;
     use crate::crypto::SupportedKxGroup;
@@ -56,19 +54,19 @@ mod client_hello {
     };
     use crate::msgs::persist::{ServerSessionValue, Tls13ServerSessionValue};
     use crate::sealed::Sealed;
-    use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello};
+    use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello, ServerHandler};
     use crate::sign::{CertifiedKey, SigningKey};
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
     use crate::verify::DigitallySignedStruct;
 
-    pub(crate) static TLS13_HANDLER: &'static dyn Tls13Handler = &Handler;
+    pub(crate) static TLS13_HANDLER: &'static dyn ServerHandler<Tls13CipherSuite> = &Handler;
 
     #[derive(Debug)]
     struct Handler;
 
-    impl Tls13Handler for Handler {
+    impl ServerHandler<Tls13CipherSuite> for Handler {
         fn handle_client_hello(
             &self,
             suite: &'static Tls13CipherSuite,
@@ -441,18 +439,6 @@ mod client_hello {
     }
 
     impl Sealed for Handler {}
-
-    pub(crate) trait Tls13Handler: fmt::Debug + Sealed + Send + Sync {
-        fn handle_client_hello(
-            &self,
-            suite: &'static Tls13CipherSuite,
-            kx_group: &'static dyn SupportedKxGroup,
-            cert_key: &CertifiedKey,
-            input: ClientHelloInput<'_>,
-            st: ExpectClientHello,
-            cx: &mut ServerContext<'_>,
-        ) -> hs::NextStateOrError<'static>;
-    }
 
     #[derive(PartialEq)]
     pub(super) enum EarlyDataDecision {
