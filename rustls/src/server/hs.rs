@@ -522,7 +522,9 @@ impl ExpectClientHello {
                 }
             }
 
-            supported_groups.push(supported);
+            if let Some(&supported) = supported {
+                supported_groups.push(supported);
+            }
         }
 
         let first_supported_dhe_kxg = if selected_version == ProtocolVersion::TLSv1_2 {
@@ -599,11 +601,8 @@ impl ExpectClientHello {
         // suite.
         let maybe_skxg = supported_groups
             .iter()
-            .find_map(|maybe_skxg| match maybe_skxg {
-                Some(skxg) => suite
-                    .usable_for_kx_algorithm(skxg.name().key_exchange_algorithm())
-                    .then_some(*skxg),
-                None => None,
+            .find(|kx_group| {
+                suite.usable_for_kx_algorithm(kx_group.name().key_exchange_algorithm())
             });
 
         if selected_version == ProtocolVersion::TLSv1_3 {
