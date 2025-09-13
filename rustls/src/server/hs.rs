@@ -3,7 +3,6 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::server_conn::ServerConnectionData;
-use super::tls12;
 use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
@@ -24,8 +23,7 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::{ClientHello, ServerConfig, tls13};
-use crate::sign::CertifiedKey;
+use crate::server::{ClientHello, ServerConfig};
 use crate::sync::Arc;
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
@@ -260,7 +258,7 @@ pub(super) struct CertificateTypes {
     pub(super) client: CertificateType,
 }
 
-pub(super) struct ExpectClientHello {
+pub(crate) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) extra_exts: ServerExtensionsInput<'static>,
     pub(super) transcript: HandshakeHashOrBuffer,
@@ -414,48 +412,15 @@ impl ExpectClientHello {
         cx.common.suite = Some(suite);
         cx.common.kx_state = KxState::Start(skxg);
 
-        let state = ClientHelloState {
-            randoms: ConnectionRandoms::new(
-                input.client_hello.random,
-                Random::new(self.config.provider.secure_random)?,
-            ),
-            config: self.config,
-            transcript: self
-                .transcript
-                .start(suite.hash_provider(), cx)?,
-            extra_exts: self.extra_exts,
-            kx_group: skxg,
-            cert_key,
-        };
-
         match suite {
             SupportedCipherSuite::Tls13(suite) => suite
                 .protocol_version
                 .server
-                .handle_client_hello(
-                    tls13::CompleteClientHelloHandling {
-                        suite,
-                        done_retry: self.done_retry,
-                        send_tickets: self.send_tickets,
-                    },
-                    input,
-                    state,
-                    cx,
-                ),
+                .handle_client_hello(suite, skxg, &cert_key, input, self, cx),
             SupportedCipherSuite::Tls12(suite) => suite
                 .protocol_version
                 .server
-                .handle_client_hello(
-                    tls12::CompleteClientHelloHandling {
-                        session_id: self.session_id,
-                        suite,
-                        using_ems: self.using_ems,
-                        send_ticket: self.send_tickets > 0,
-                    },
-                    input,
-                    state,
-                    cx,
-                ),
+                .handle_client_hello(suite, skxg, &cert_key, input, self, cx),
         }
     }
 
@@ -600,6 +565,13 @@ impl ExpectClientHello {
             None => Err(PeerIncompatible::NoKxGroupsInCommon),
         }
     }
+
+    pub(super) fn randoms(&self, input: &ClientHelloInput<'_>) -> Result<ConnectionRandoms, Error> {
+        Ok(ConnectionRandoms::new(
+            input.client_hello.random,
+            Random::new(self.config.provider.secure_random)?,
+        ))
+    }
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
@@ -618,15 +590,6 @@ impl State<ServerConnectionData> for ExpectClientHello {
     fn into_owned(self: Box<Self>) -> NextState<'static> {
         self
     }
-}
-
-pub(crate) struct ClientHelloState {
-    pub(super) config: Arc<ServerConfig>,
-    pub(super) transcript: HandshakeHash,
-    pub(super) randoms: ConnectionRandoms,
-    pub(super) extra_exts: ServerExtensionsInput<'static>,
-    pub(super) kx_group: &'static dyn SupportedKxGroup,
-    pub(super) cert_key: Arc<CertifiedKey>,
 }
 
 /// Configuration-independent validation of a `ClientHello` message.
@@ -702,7 +665,7 @@ pub(crate) enum HandshakeHashOrBuffer {
 }
 
 impl HandshakeHashOrBuffer {
-    fn start(
+    pub(super) fn start(
         self,
         hash: &'static dyn Hash,
         cx: &mut ServerContext<'_>,
