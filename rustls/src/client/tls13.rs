@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::fmt;
 
 use pki_types::ServerName;
 use subtle::ConstantTimeEq;
@@ -11,7 +10,7 @@ use super::hs::{ClientContext, ClientHelloInput, ClientSessionValue};
 use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::client::ech::{self, EchStatus};
-use crate::client::hs::ExpectServerHello;
+use crate::client::hs::{ClientHandler, ExpectServerHello};
 use crate::client::{ClientConfig, ClientSessionStore, hs};
 use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
@@ -69,12 +68,12 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ExtendedMasterSecret,
 ];
 
-pub(crate) static TLS13_HANDLER: &dyn Tls13Handler = &Handler;
+pub(crate) static TLS13_HANDLER: &dyn ClientHandler<Tls13CipherSuite> = &Handler;
 
 #[derive(Debug)]
 struct Handler;
 
-impl Tls13Handler for Handler {
+impl ClientHandler<Tls13CipherSuite> for Handler {
     /// `early_data_key_schedule` is `Some` if we sent the
     /// "early_data" extension to the server.
     fn handle_server_hello(
@@ -266,17 +265,6 @@ impl Tls13Handler for Handler {
 }
 
 impl Sealed for Handler {}
-
-pub(crate) trait Tls13Handler: fmt::Debug + Sealed + Send + Sync {
-    fn handle_server_hello(
-        &self,
-        suite: &'static Tls13CipherSuite,
-        server_hello: &ServerHelloPayload,
-        message: &Message<'_>,
-        st: ExpectServerHello,
-        cx: &mut ClientContext<'_>,
-    ) -> hs::NextStateOrError<'static>;
-}
 
 enum KeyExchangeChoice {
     Whole(Box<dyn ActiveKeyExchange>),
