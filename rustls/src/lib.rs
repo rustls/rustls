@@ -583,8 +583,9 @@ pub mod client {
         };
     }
 
-    pub(crate) use tls12::{TLS12_HANDLER, Tls12Handler};
-    pub(crate) use tls13::{TLS13_HANDLER, Tls13Handler};
+    pub(crate) use hs::ClientHandler;
+    pub(crate) use tls12::TLS12_HANDLER;
+    pub(crate) use tls13::TLS13_HANDLER;
 
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     pub use crate::webpki::{

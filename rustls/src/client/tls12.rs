@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use pki_types::ServerName;
-pub(crate) use server_hello::{TLS12_HANDLER, Tls12Handler};
+pub(crate) use server_hello::TLS12_HANDLER;
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
@@ -41,19 +41,19 @@ use crate::verify::{
 };
 
 mod server_hello {
-    use core::fmt;
-
     use super::*;
-    use crate::client::hs::{ClientHelloInput, ClientSessionValue, ExpectServerHello};
+    use crate::client::hs::{
+        ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello,
+    };
     use crate::msgs::handshake::ServerHelloPayload;
     use crate::sealed::Sealed;
 
-    pub(crate) static TLS12_HANDLER: &dyn Tls12Handler = &Handler;
+    pub(crate) static TLS12_HANDLER: &dyn ClientHandler<Tls12CipherSuite> = &Handler;
 
     #[derive(Debug)]
     struct Handler;
 
-    impl Tls12Handler for Handler {
+    impl ClientHandler<Tls12CipherSuite> for Handler {
         fn handle_server_hello(
             &self,
             suite: &'static Tls12CipherSuite,
@@ -235,17 +235,6 @@ mod server_hello {
     }
 
     impl Sealed for Handler {}
-
-    pub(crate) trait Tls12Handler: fmt::Debug + Sealed + Send + Sync {
-        fn handle_server_hello(
-            &self,
-            suite: &'static Tls12CipherSuite,
-            server_hello: &ServerHelloPayload,
-            message: &Message<'_>,
-            st: ExpectServerHello,
-            cx: &mut ClientContext<'_>,
-        ) -> hs::NextStateOrError<'static>;
-    }
 }
 
 struct ExpectCertificate {
