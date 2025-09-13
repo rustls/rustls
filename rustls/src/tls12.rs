@@ -13,9 +13,9 @@ use crate::enums::{AlertDescription, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{KeyExchangeAlgorithm, KxDecode};
-use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, SupportedCipherSuite};
+use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
 use crate::version::Tls12Version;
-use crate::{ApiMisuse, SignatureAlgorithm, crypto};
+use crate::{ApiMisuse, ProtocolVersion, SignatureAlgorithm, crypto};
 
 /// A TLS 1.2 cipher suite supported by rustls.
 #[allow(clippy::exhaustive_structs)]
@@ -83,26 +83,38 @@ impl Tls12CipherSuite {
     pub fn fips(&self) -> bool {
         self.common.fips() && self.prf_provider.fips() && self.aead_alg.fips()
     }
+}
+
+impl Suite for Tls12CipherSuite {
+    fn server_handler(&self) -> &'static dyn crate::server::ServerHandler<Self> {
+        self.protocol_version.server
+    }
 
     /// Does this suite support the `proto` protocol?
     ///
     /// All TLS1.2 suites support TCP-TLS. No TLS1.2 suites support QUIC.
-    pub(crate) fn usable_for_protocol(&self, proto: Protocol) -> bool {
+    fn usable_for_protocol(&self, proto: Protocol) -> bool {
         matches!(proto, Protocol::Tcp)
+    }
+
+    /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
+    fn usable_for_kx_algorithm(&self, kxa: KeyExchangeAlgorithm) -> bool {
+        self.kx == kxa
     }
 
     /// Return true if this suite is usable for a key only offering `sig_alg`
     /// signatures.
-    pub(crate) fn usable_for_signature_algorithm(&self, sig_alg: SignatureAlgorithm) -> bool {
+    fn usable_for_signature_algorithm(&self, sig_alg: SignatureAlgorithm) -> bool {
         self.sign
             .iter()
             .any(|scheme| scheme.algorithm() == sig_alg)
     }
 
-    /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
-    pub(crate) fn usable_for_kx_algorithm(&self, kxa: KeyExchangeAlgorithm) -> bool {
-        self.kx == kxa
+    fn common(&self) -> &CipherSuiteCommon {
+        &self.common
     }
+
+    const VERSION: ProtocolVersion = ProtocolVersion::TLSv1_2;
 }
 
 impl From<&'static Tls12CipherSuite> for SupportedCipherSuite {
