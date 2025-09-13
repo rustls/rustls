@@ -1312,6 +1312,45 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
                 ));
             }
 
+            // Enforce delegated credential validity window (RFC 9345 §3):
+            // - DC validity MUST NOT exceed 7 days.
+            // - DC is valid only for the window [cert.notBefore, cert.notBefore + valid_time].
+            // We avoid direct certificate parsing for notBefore by probing chain validity at
+            // time (now - valid_time - 1). If the certificate chain is valid at that time, it
+            // means cert.notBefore <= now - valid_time - 1, so the DC has expired (reject).
+            const DC_MAX_LIFETIME_SECS: u32 = 7 * 24 * 60 * 60; // 7 days
+            if dc.cred.valid_time > DC_MAX_LIFETIME_SECS {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::UnexpectedCleartextExtension,
+                ));
+            }
+
+            let now = self.config.current_time()?;
+            let probe_secs = now
+                .as_secs()
+                .saturating_sub(dc.cred.valid_time as u64 + 1);
+            let probe_time = pki_types::UnixTime::since_unix_epoch(core::time::Duration::from_secs(probe_secs));
+
+            // If the certificate was already valid before the allowed DC window begins,
+            // then the DC must have expired.
+            let early_ok = self
+                .config
+                .verifier
+                .verify_server_cert(&ServerIdentity {
+                    identity: &identity,
+                    server_name: &self.server_name,
+                    ocsp_response: &self.server_cert.ocsp_response,
+                    now: probe_time,
+                })
+                .is_ok();
+            if early_ok {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::UnexpectedCleartextExtension,
+                ));
+            }
+
             // Build the DC signature input per RFC 9345 §4: 64*0x20 || context || 0x00 || EE cert || cred || algorithm
             let mut dc_message = Vec::new();
             dc_message.extend_from_slice(&[0x20u8; 64]);
