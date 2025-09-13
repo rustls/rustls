@@ -1,8 +1,8 @@
 use alloc::boxed::Box;
 
 use super::{ActiveKeyExchange, hmac};
+use crate::enums::ProtocolVersion;
 use crate::error::Error;
-use crate::version::TLS12;
 
 /// Implements [`Prf`] using a [`hmac::Hmac`].
 #[allow(clippy::exhaustive_structs)]
@@ -21,7 +21,7 @@ impl Prf for PrfUsingHmac<'_> {
             output,
             self.0
                 .with_key(
-                    kx.complete_for_tls_version(peer_pub_key, &TLS12)?
+                    kx.complete_for_tls_version(peer_pub_key, ProtocolVersion::TLSv1_2)?
                         .secret_bytes(),
                 )
                 .as_ref(),
