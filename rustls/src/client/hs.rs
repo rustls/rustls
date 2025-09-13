@@ -15,7 +15,6 @@ use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
-use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{
     AlertDescription, CertificateType, CipherSuite, ContentType, HandshakeType, ProtocolVersion,
@@ -42,9 +41,9 @@ pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
-struct ExpectServerHello {
-    input: ClientHelloInput,
-    transcript_buffer: HandshakeHashBuffer,
+pub(crate) struct ExpectServerHello {
+    pub(super) input: ClientHelloInput,
+    pub(super) transcript_buffer: HandshakeHashBuffer,
     // The key schedule for sending early data.
     //
     // If the server accepts the PSK used for early data then
@@ -52,10 +51,10 @@ struct ExpectServerHello {
     // Otherwise, it is thrown away.
     //
     // If this is `None` then we do not support early data.
-    early_data_key_schedule: Option<KeyScheduleEarly>,
-    offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
-    suite: Option<SupportedCipherSuite>,
-    ech_state: Option<EchState>,
+    pub(super) early_data_key_schedule: Option<KeyScheduleEarly>,
+    pub(super) offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
+    pub(super) suite: Option<SupportedCipherSuite>,
+    pub(super) ech_state: Option<EchState>,
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
@@ -198,45 +197,17 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
         }
 
-        // Start our handshake hash, and input the server-hello.
-        let mut transcript = self
-            .transcript_buffer
-            .start_hash(suite.hash_provider());
-        transcript.add_message(&m);
-
-        let randoms = ConnectionRandoms::new(self.input.random, server_hello.random);
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         match suite {
             SupportedCipherSuite::Tls13(suite) => suite
                 .protocol_version
                 .client
-                .handle_server_hello(
-                    cx,
-                    server_hello,
-                    randoms,
-                    suite,
-                    transcript,
-                    self.early_data_key_schedule,
-                    // We always send a key share when TLS 1.3 is enabled.
-                    self.offered_key_share.unwrap(),
-                    &m,
-                    self.ech_state,
-                    self.input,
-                ),
-
+                .handle_server_hello(suite, server_hello, &m, *self, cx),
             SupportedCipherSuite::Tls12(suite) => suite
                 .protocol_version
                 .client
-                .handle_server_hello(
-                    cx,
-                    server_hello,
-                    randoms,
-                    suite,
-                    transcript,
-                    tls13_supported,
-                    self.input,
-                ),
+                .handle_server_hello(suite, server_hello, &m, *self, cx),
         }
     }
 

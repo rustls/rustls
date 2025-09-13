@@ -44,7 +44,7 @@ mod server_hello {
     use core::fmt;
 
     use super::*;
-    use crate::client::hs::{ClientHelloInput, ClientSessionValue};
+    use crate::client::hs::{ClientHelloInput, ClientSessionValue, ExpectServerHello};
     use crate::msgs::handshake::ServerHelloPayload;
     use crate::sealed::Sealed;
 
@@ -56,14 +56,19 @@ mod server_hello {
     impl Tls12Handler for Handler {
         fn handle_server_hello(
             &self,
-            cx: &mut ClientContext<'_>,
-            server_hello: &ServerHelloPayload,
-            mut randoms: ConnectionRandoms,
             suite: &'static Tls12CipherSuite,
-            transcript: HandshakeHash,
-            tls13_supported: bool,
-            input: ClientHelloInput,
+            server_hello: &ServerHelloPayload,
+            message: &Message<'_>,
+            st: ExpectServerHello,
+            cx: &mut ClientContext<'_>,
         ) -> hs::NextStateOrError<'static> {
+            // Start our handshake hash, and input the server-hello.
+            let mut transcript = st
+                .transcript_buffer
+                .start_hash(suite.common.hash_provider);
+            transcript.add_message(message);
+
+            let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);
             randoms
                 .server
                 .clone_from_slice(&server_hello.random.0[..]);
@@ -72,7 +77,12 @@ mod server_hello {
             // both the server random and TLS12_DOWNGRADE_SENTINEL are
             // public values and don't require constant time comparison
             let has_downgrade_marker = randoms.server[24..] == tls12::DOWNGRADE_SENTINEL;
-            if tls13_supported && has_downgrade_marker {
+            if st
+                .input
+                .config
+                .supports_version(ProtocolVersion::TLSv1_3)
+                && has_downgrade_marker
+            {
                 return Err({
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
@@ -86,9 +96,9 @@ mod server_hello {
             // In this instance since we're now continuing a TLS 1.2 handshake the server
             // should not have echoed it back: it's a randomly generated session ID it couldn't
             // have known.
-            if input.resuming.is_none()
-                && !input.session_id.is_empty()
-                && input.session_id == server_hello.session_id
+            if st.input.resuming.is_none()
+                && !st.input.session_id.is_empty()
+                && st.input.session_id == server_hello.session_id
             {
                 return Err({
                     cx.common.send_fatal_alert(
@@ -102,9 +112,10 @@ mod server_hello {
                 config,
                 server_name,
                 ..
-            } = input;
+            } = st.input;
 
-            let resuming_session = input
+            let resuming_session = st
+                .input
                 .resuming
                 .and_then(|resuming| match resuming.value {
                     ClientSessionValue::Tls12(inner) => Some(inner),
@@ -228,13 +239,11 @@ mod server_hello {
     pub(crate) trait Tls12Handler: fmt::Debug + Sealed + Send + Sync {
         fn handle_server_hello(
             &self,
-            cx: &mut ClientContext<'_>,
-            server_hello: &ServerHelloPayload,
-            randoms: ConnectionRandoms,
             suite: &'static Tls12CipherSuite,
-            transcript: HandshakeHash,
-            tls13_supported: bool,
-            input: ClientHelloInput,
+            server_hello: &ServerHelloPayload,
+            message: &Message<'_>,
+            st: ExpectServerHello,
+            cx: &mut ClientContext<'_>,
         ) -> hs::NextStateOrError<'static>;
     }
 }
