@@ -101,7 +101,12 @@ impl fmt::Debug for SupportedCipherSuite {
 }
 
 pub(crate) trait Suite: fmt::Debug {
-    fn handler(&self) -> &'static dyn crate::server::ServerHandler<Self>;
+    fn handlers(
+        &self,
+    ) -> (
+        &'static dyn crate::client::ClientHandler<Self>,
+        &'static dyn crate::server::ServerHandler<Self>,
+    );
 
     fn usable_for_protocol(&self, proto: Protocol) -> bool;
 

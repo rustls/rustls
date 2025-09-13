@@ -418,7 +418,8 @@ impl ExpectClientHello {
         cx.common.kx_state = KxState::Start(skxg);
 
         suite
-            .handler()
+            .handlers()
+            .1
             .handle_client_hello(suite, skxg, &cert_key, input, self, cx)
     }
 

@@ -86,8 +86,13 @@ impl Tls12CipherSuite {
 }
 
 impl Suite for Tls12CipherSuite {
-    fn handler(&self) -> &'static dyn crate::server::ServerHandler<Self> {
-        crate::server::TLS12_HANDLER
+    fn handlers(
+        &self,
+    ) -> (
+        &'static dyn crate::client::ClientHandler<Self>,
+        &'static dyn crate::server::ServerHandler<Self>,
+    ) {
+        (crate::client::TLS12_HANDLER, crate::server::TLS12_HANDLER)
     }
 
     /// Does this suite support the `proto` protocol?
