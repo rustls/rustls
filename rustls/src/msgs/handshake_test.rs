@@ -1062,6 +1062,7 @@ fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
                 status: Some(CertificateStatus {
                     ocsp_response: PayloadU24(Payload::new(vec![1, 2, 3])),
                 }),
+                delegated_credential: None,
             },
         }],
     }

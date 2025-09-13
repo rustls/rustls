@@ -3207,6 +3207,8 @@ fn low_quality_integer_hash(mut x: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::msgs::base::{Payload, PayloadU24};
+    use alloc::vec;
 
     #[test]
     fn test_ech_config_dupe_exts() {
@@ -3254,5 +3256,83 @@ mod tests {
             public_name: DnsName::try_from("example.com").unwrap(),
             extensions: vec![],
         }
+    }
+
+    #[test]
+    fn dc_credential_round_trip() {
+    let spki = PayloadU24(Payload::new(vec![0x01, 0x02, 0x03, 0x04]));
+        let cred = Credential {
+            valid_time: 3600,
+            dc_cert_verify_algorithm: SignatureScheme::ECDSA_NISTP256_SHA256,
+            spki,
+        };
+        let mut bytes = Vec::new();
+        cred.encode(&mut bytes);
+        let mut r = Reader::init(&bytes);
+        let decoded = Credential::read(&mut r).unwrap();
+        assert_eq!(decoded.valid_time, 3600);
+        assert_eq!(decoded.dc_cert_verify_algorithm, SignatureScheme::ECDSA_NISTP256_SHA256);
+        assert_eq!(decoded.spki.0.bytes(), &[0x01, 0x02, 0x03, 0x04]);
+    }
+
+    #[test]
+    fn delegated_credential_round_trip() {
+        let dc = DelegatedCredential {
+            cred: Credential {
+                valid_time: 10,
+                dc_cert_verify_algorithm: SignatureScheme::ED25519,
+                spki: PayloadU24(Payload::new(vec![0xAA, 0xBB])),
+            },
+            algorithm: SignatureScheme::ED25519,
+            signature: PayloadU16::new(vec![0xDE, 0xAD, 0xBE, 0xEF]),
+        };
+        let mut bytes = Vec::new();
+        dc.encode(&mut bytes);
+        let mut r = Reader::init(&bytes);
+        let decoded = DelegatedCredential::read(&mut r).unwrap();
+        assert_eq!(decoded.cred.valid_time, 10);
+        assert_eq!(decoded.cred.dc_cert_verify_algorithm, SignatureScheme::ED25519);
+        assert_eq!(decoded.algorithm, SignatureScheme::ED25519);
+    assert_eq!(decoded.cred.spki.0.bytes(), &[0xAA, 0xBB]);
+    assert_eq!(&decoded.signature.0, &[0xDE, 0xAD, 0xBE, 0xEF]);
+    }
+
+    #[test]
+    fn client_extensions_dc_algorithms_encode_decode() {
+        let mut ce = ClientExtensions::default();
+        ce.delegated_credential_algorithms = Some(vec![
+            SignatureScheme::ED25519,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+        ]);
+        let mut bytes = Vec::new();
+        ce.encode(&mut bytes);
+        let mut r = Reader::init(&bytes);
+        let decoded = ClientExtensions::read(&mut r).unwrap();
+        let got = decoded.delegated_credential_algorithms.unwrap();
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0], SignatureScheme::ED25519);
+        assert_eq!(got[1], SignatureScheme::ECDSA_NISTP256_SHA256);
+    }
+
+    #[test]
+    fn certificate_extensions_with_dc_encode_decode() {
+        let mut exts = CertificateExtensions::default();
+        exts.delegated_credential = Some(DelegatedCredential {
+            cred: Credential {
+                valid_time: 5,
+                dc_cert_verify_algorithm: SignatureScheme::ED25519,
+                spki: PayloadU24(Payload::new(vec![0x01])),
+            },
+            algorithm: SignatureScheme::ED25519,
+            signature: PayloadU16::new(vec![0x02, 0x03]),
+        });
+        let mut bytes = Vec::new();
+        exts.encode(&mut bytes);
+        let mut r = Reader::init(&bytes);
+        let decoded = CertificateExtensions::read(&mut r).unwrap();
+        let dc = decoded.delegated_credential.unwrap();
+        assert_eq!(dc.cred.valid_time, 5);
+        assert_eq!(dc.cred.spki.0.bytes(), &[0x01]);
+        assert_eq!(&dc.signature.0, &[0x02, 0x03]);
     }
 }
