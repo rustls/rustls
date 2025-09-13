@@ -12,9 +12,9 @@ use pki_types::{DnsName, UnixTime};
 
 use super::hs;
 use crate::builder::ConfigBuilder;
-use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
-use crate::common_state::{Protocol, State};
+use crate::common_state::State;
+use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
 use crate::conn::ConnectionCommon;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
@@ -568,13 +568,6 @@ impl ServerConfig {
 
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.provider.supports_version(v)
-    }
-
-    #[cfg(feature = "std")]
-    pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
-        self.provider
-            .iter_cipher_suites()
-            .any(|cs| cs.usable_for_protocol(proto))
     }
 
     pub(super) fn current_time(&self) -> Result<UnixTime, Error> {

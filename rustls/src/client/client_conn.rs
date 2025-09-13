@@ -240,7 +240,7 @@ pub struct ClientConfig {
     pub time_provider: Arc<dyn TimeProvider>,
 
     /// Source of randomness and other crypto.
-    pub(super) provider: Arc<CryptoProvider>,
+    pub(crate) provider: Arc<CryptoProvider>,
 
     /// How to verify the server certificate chain.
     pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
@@ -358,13 +358,6 @@ impl ClientConfig {
 
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.provider.supports_version(v)
-    }
-
-    #[cfg(feature = "std")]
-    pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
-        self.provider
-            .iter_cipher_suites()
-            .any(|cs| cs.usable_for_protocol(proto))
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
