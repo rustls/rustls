@@ -819,7 +819,7 @@ mod client_hello {
             return emit_certificate_tls13(flight, cert_chain, ocsp_response);
         };
 
-        let c = HandshakeMessagePayload(HandshakePayload::CompressedCertificate(
+        let c = Handshake:MessagePayload(HandshakePayload::CompressedCertificate(
             entry.compressed_cert_payload(),
         ));
 
