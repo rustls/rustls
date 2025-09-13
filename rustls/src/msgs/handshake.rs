@@ -1684,7 +1684,7 @@ impl<'a> Codec<'a> for Credential<'a> {
 }
 
 impl Credential<'_> {
-    fn into_owned(self) -> Credential<'static> {
+    pub(crate) fn into_owned(self) -> Credential<'static> {
         Credential {
             valid_time: self.valid_time,
             dc_cert_verify_algorithm: self.dc_cert_verify_algorithm,
@@ -1719,7 +1719,7 @@ impl<'a> Codec<'a> for DelegatedCredential<'a> {
 }
 
 impl DelegatedCredential<'_> {
-    fn into_owned(self) -> DelegatedCredential<'static> {
+    pub(crate) fn into_owned(self) -> DelegatedCredential<'static> {
         DelegatedCredential {
             cred: self.cred.into_owned(),
             algorithm: self.algorithm,

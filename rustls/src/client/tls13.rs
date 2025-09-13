@@ -724,7 +724,6 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
-                delegated_credential: None,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -810,7 +809,6 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
-                delegated_credential: None,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -879,7 +877,6 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
-                delegated_credential: None,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -1023,7 +1020,6 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
-                delegated_credential: None,
             })
         })
     }
@@ -1129,7 +1125,6 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             message_already_in_transcript: true,
             ech_retry_configs: self.ech_retry_configs,
             expected_certificate_type: self.expected_certificate_type,
-            delegated_credential: None,
         })
         .handle(cx, m)
     }
@@ -1150,7 +1145,6 @@ struct ExpectCertificate {
     message_already_in_transcript: bool,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
     expected_certificate_type: CertificateType,
-    delegated_credential: Option<DelegatedCredential<'static>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
@@ -1195,7 +1189,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
         {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::IllegalParameter,
-                PeerMisbehaved::UnsolicitedEncryptedExtension,
+                PeerMisbehaved::UnsolicitedCertExtension,
             ));
         }
 
@@ -1266,6 +1260,12 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             cx.common,
         )?
         .ok_or(Error::NoCertificatesPresented)?;
+        // Prepare end-entity DER for delegated credential verification without borrowing
+        // from self.server_cert after moving the chain into PeerIdentity.
+        let ee_der_for_dc: Option<&[u8]> = match &identity {
+            PeerIdentity::X509(ci) => Some(ci.end_entity.as_ref()),
+            PeerIdentity::RawPublicKey(_) => None,
+        };
 
         let cert_verified = self
             .config
@@ -1308,7 +1308,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
-                    PeerMisbehaved::BadCertificate,
+                    PeerMisbehaved::UnexpectedCleartextExtension,
                 ));
             }
 
@@ -1317,15 +1317,14 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             dc_message.extend_from_slice(&[0x20u8; 64]);
             dc_message.extend_from_slice(b"TLS, server delegated credentials");
             dc_message.push(0x00);
-            // end-entity certificate DER
-            let ee = self
-                .server_cert
-                .cert_chain
-                .0
-                .first()
-                .ok_or(Error::NoCertificatesPresented)?
-                .clone();
-            dc_message.extend_from_slice(ee.as_ref());
+            // end-entity certificate DER (must be present and X.509 when DC is used)
+            let ee_der = ee_der_for_dc.ok_or_else(|| {
+                cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::UnexpectedCleartextExtension,
+                )
+            })?;
+            dc_message.extend_from_slice(ee_der);
             // cred encoding
             dc.cred.encode(&mut dc_message);
             // algorithm encoding
@@ -1343,7 +1342,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
                 .map_err(|_| {
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
-                        PeerMisbehaved::BadCertificate,
+                        PeerMisbehaved::UnexpectedCleartextExtension,
                     )
                 })?;
 
@@ -1351,7 +1350,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             if cert_verify.scheme != dc.cred.dc_cert_verify_algorithm {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
-                    PeerMisbehaved::BadCertificate,
+                    PeerMisbehaved::UnexpectedCleartextExtension,
                 ));
             }
 
