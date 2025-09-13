@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::borrow::Borrow;
 use core::fmt::Debug;
 
 use pki_types::PrivateKeyDer;
@@ -409,6 +410,18 @@ See the documentation of the CryptoProvider type for more information.
             ProtocolVersion::TLSv1_3 => !self.tls13_cipher_suites.is_empty(),
             _ => false,
         }
+    }
+}
+
+impl Borrow<[&'static Tls12CipherSuite]> for CryptoProvider {
+    fn borrow(&self) -> &[&'static Tls12CipherSuite] {
+        &self.tls12_cipher_suites
+    }
+}
+
+impl Borrow<[&'static Tls13CipherSuite]> for CryptoProvider {
+    fn borrow(&self) -> &[&'static Tls13CipherSuite] {
+        &self.tls13_cipher_suites
     }
 }
 

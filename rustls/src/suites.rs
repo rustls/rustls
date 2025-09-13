@@ -3,7 +3,7 @@ use core::fmt;
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::{self, KeyExchangeAlgorithm};
-use crate::enums::CipherSuite;
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureAlgorithm};
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
@@ -93,23 +93,34 @@ impl SupportedCipherSuite {
             Self::Tls13(tls13) => tls13.usable_for_protocol(proto),
         }
     }
-
-    /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
-    ///
-    /// TLS 1.3 cipher suites support all key exchange types, but TLS 1.2 suites
-    /// support only one.
-    pub(crate) fn usable_for_kx_algorithm(&self, kxa: KeyExchangeAlgorithm) -> bool {
-        match self {
-            Self::Tls12(tls12) => tls12.usable_for_kx_algorithm(kxa),
-            Self::Tls13(_) => true,
-        }
-    }
 }
 
 impl fmt::Debug for SupportedCipherSuite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.suite().fmt(f)
     }
+}
+
+pub(crate) trait Suite: fmt::Debug {
+    fn server_handler(&self) -> &'static dyn crate::server::ServerHandler<Self>;
+
+    fn usable_for_protocol(&self, proto: Protocol) -> bool;
+
+    fn usable_for_signature_algorithm(&self, _alg: SignatureAlgorithm) -> bool {
+        true
+    }
+
+    fn usable_for_kx_algorithm(&self, _kxa: KeyExchangeAlgorithm) -> bool {
+        true
+    }
+
+    fn suite(&self) -> CipherSuite {
+        self.common().suite
+    }
+
+    fn common(&self) -> &CipherSuiteCommon;
+
+    const VERSION: ProtocolVersion;
 }
 
 /// Secrets for transmitting/receiving data over a TLS session.
