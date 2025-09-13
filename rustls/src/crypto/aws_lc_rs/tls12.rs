@@ -9,7 +9,7 @@ use crate::crypto::cipher::{
 };
 use crate::crypto::tls12::{Prf, PrfSecret};
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
-use crate::enums::{CipherSuite, SignatureScheme};
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{
@@ -17,7 +17,7 @@ use crate::msgs::message::{
 };
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
 use crate::tls12::Tls12CipherSuite;
-use crate::version::{TLS12, TLS12_VERSION};
+use crate::version::TLS12_VERSION;
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: &Tls12CipherSuite = &Tls12CipherSuite {
@@ -439,7 +439,9 @@ impl Prf for Tls12Prf {
     ) -> Result<(), Error> {
         Tls12PrfSecret {
             alg: self.0,
-            secret: Secret::KeyExchange(kx.complete_for_tls_version(peer_pub_key, &TLS12)?),
+            secret: Secret::KeyExchange(
+                kx.complete_for_tls_version(peer_pub_key, ProtocolVersion::TLSv1_2)?,
+            ),
         }
         .prf(output, label, seed);
         Ok(())
