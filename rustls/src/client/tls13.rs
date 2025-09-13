@@ -30,10 +30,10 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
-    CertificatePayloadTls13, ClientExtensions, EchConfigPayload, HandshakeMessagePayload,
-    HandshakePayload, KeyShareEntry, NewSessionTicketPayloadTls13, PresharedKeyBinder,
-    PresharedKeyIdentity, PresharedKeyOffer, ServerExtensions, ServerHelloPayload,
-    DelegatedCredential,
+    CertificatePayloadTls13, ClientExtensions, DelegatedCredential, EchConfigPayload,
+    HandshakeMessagePayload, HandshakePayload, KeyShareEntry, NewSessionTicketPayloadTls13,
+    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ServerExtensions,
+    ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::{self, Retrieved};
@@ -51,8 +51,8 @@ use crate::tls13::{
 use crate::verify::{
     self, DigitallySignedStruct, PeerIdentity, ServerIdentity, SignatureVerificationInput,
 };
-use pki_types::SubjectPublicKeyInfoDer;
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
+use pki_types::SubjectPublicKeyInfoDer;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -1178,14 +1178,22 @@ impl State<ClientConnectionData> for ExpectCertificate {
         let delegated_credential = cert_chain
             .entries
             .first()
-            .and_then(|e| e.extensions.delegated_credential.clone())
+            .and_then(|e| {
+                e.extensions
+                    .delegated_credential
+                    .clone()
+            })
             .map(|dc| dc.into_owned());
 
         if cert_chain
             .entries
             .iter()
             .skip(1)
-            .any(|e| e.extensions.delegated_credential.is_some())
+            .any(|e| {
+                e.extensions
+                    .delegated_credential
+                    .is_some()
+            })
         {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::IllegalParameter,
@@ -1260,8 +1268,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             cx.common,
         )?
         .ok_or(Error::NoCertificatesPresented)?;
-        // Prepare end-entity DER for delegated credential verification without borrowing
-        // from self.server_cert after moving the chain into PeerIdentity.
+
         let ee_der_for_dc: Option<&[u8]> = match &identity {
             PeerIdentity::X509(ci) => Some(ci.end_entity.as_ref()),
             PeerIdentity::RawPublicKey(_) => None,
@@ -1282,8 +1289,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             })?;
 
         // 2. Verify delegated credential if present, then verify their signature on the handshake.
-        //    If a delegated credential is present and valid, use its public key and required
-        //    scheme for CertificateVerify; otherwise verify using the certificate public key.
+        //    If a delegated credential is present and valid, use its public key and required scheme for CertificateVerify;
         let handshake_hash = self.transcript.current_hash();
         let verify_message = construct_server_verify_message(&handshake_hash);
 
@@ -1301,7 +1307,10 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
         // Optional DC validation
         if let Some(dc) = self.delegated_credential.as_ref() {
             // Enforce that signature algorithms are ones we advertised/support.
-            let supported = self.config.verifier.supported_verify_schemes();
+            let supported = self
+                .config
+                .verifier
+                .supported_verify_schemes();
             if !supported.contains(&dc.algorithm)
                 || !supported.contains(&dc.cred.dc_cert_verify_algorithm)
                 || !dc_scheme_allowed(dc.cred.dc_cert_verify_algorithm)
@@ -1312,7 +1321,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
                 ));
             }
 
-            // Enforce delegated credential validity window https://datatracker.ietf.org/doc/html/rfc9345#solution-overview:
+            // Enforce delegated credential validity window https://datatracker.ietf.org/doc/html/rfc9345#section-3:
             // - DC validity MUST NOT exceed 7 days.
             // - DC is valid only for the window [cert.notBefore, cert.notBefore + valid_time].
             // We avoid direct certificate parsing for notBefore by probing chain validity at
@@ -1330,7 +1339,8 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             let probe_secs = now
                 .as_secs()
                 .saturating_sub(dc.cred.valid_time as u64 + 1);
-            let probe_time = pki_types::UnixTime::since_unix_epoch(core::time::Duration::from_secs(probe_secs));
+            let probe_time =
+                pki_types::UnixTime::since_unix_epoch(core::time::Duration::from_secs(probe_secs));
 
             // If the certificate was already valid before the allowed DC window begins,
             // then the DC must have expired.
@@ -1351,7 +1361,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
                 ));
             }
 
-            // Build the DC signature input per RFC 9345 §4: 64*0x20 || context || 0x00 || EE cert || cred || algorithm
+            // Build the DC signature input per https://datatracker.ietf.org/doc/html/rfc9345#section-4: 64*0x20 || context || 0x00 || EE cert || cred || algorithm
             let mut dc_message = Vec::new();
             dc_message.extend_from_slice(&[0x20u8; 64]);
             dc_message.extend_from_slice(b"TLS, server delegated credentials");
@@ -1423,7 +1433,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             }));
         }
 
-        // No DC: verify CertificateVerify against the certificate public key as usual.
+        // 3. No DC: verify CertificateVerify against the certificate public key as usual.
         let sig_verified = self
             .config
             .verifier
