@@ -9,6 +9,7 @@ use crate::client::ResolvesClientCert;
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+use crate::msgs::handshake::DelegatedCredential;
 use crate::sync::Arc;
 use crate::x509;
 
@@ -147,6 +148,16 @@ pub struct CertifiedKey {
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
     pub ocsp: Option<Vec<u8>>,
+
+    /// Optional pre-signed delegated credential to advertise when acting as a server (RFC 9345).
+    /// If present, and if the peer supports delegated credentials and indicates support for the
+    /// delegated credential's CertificateVerify algorithm, the server may include this in the
+    /// end-entity Certificate entry and sign CertificateVerify with the delegated private key.
+    pub delegated_credential: Option<DelegatedCredential<'static>>,
+
+    /// Optional delegated private key matching `delegated_credential.spki`, used to sign the
+    /// TLS 1.3 CertificateVerify message when serving a delegated credential.
+    pub delegated_key: Option<Arc<dyn SigningKey>>,
 }
 
 impl CertifiedKey {
@@ -199,6 +210,8 @@ impl CertifiedKey {
                 cert_chain,
                 key,
                 ocsp: None,
+                delegated_credential: None,
+                delegated_key: None,
             }),
         }
     }
@@ -218,6 +231,8 @@ impl CertifiedKey {
             cert_chain,
             key,
             ocsp: None,
+            delegated_credential: None,
+            delegated_key: None,
         }
     }
 
@@ -240,6 +255,21 @@ impl CertifiedKey {
         self.cert_chain
             .first()
             .ok_or(Error::NoCertificatesPresented)
+    }
+
+    /// Attach a pre-signed delegated credential and its delegated private key to this CertifiedKey.
+    ///
+    /// The delegated credential must be compatible with the end-entity certificate contained in
+    /// this `CertifiedKey` (i.e., signed by it and within its validity/policy), and the delegated
+    /// private key must correspond to `cred.spki`.
+    pub fn with_delegated_credential(
+        mut self,
+        dc: DelegatedCredential<'static>,
+        delegated_key: Arc<dyn SigningKey>,
+    ) -> Self {
+        self.delegated_credential = Some(dc);
+        self.delegated_key = Some(delegated_key);
+        self
     }
 }
 
