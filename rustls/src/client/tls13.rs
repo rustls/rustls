@@ -33,6 +33,7 @@ use crate::msgs::handshake::{
     CertificatePayloadTls13, ClientExtensions, EchConfigPayload, HandshakeMessagePayload,
     HandshakePayload, KeyShareEntry, NewSessionTicketPayloadTls13, PresharedKeyBinder,
     PresharedKeyIdentity, PresharedKeyOffer, ServerExtensions, ServerHelloPayload,
+    DelegatedCredential,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::{self, Retrieved};
@@ -50,6 +51,7 @@ use crate::tls13::{
 use crate::verify::{
     self, DigitallySignedStruct, PeerIdentity, ServerIdentity, SignatureVerificationInput,
 };
+use pki_types::SubjectPublicKeyInfoDer;
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
 
 // Extensions we expect in plaintext in the ServerHello.
@@ -722,6 +724,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
+                delegated_credential: None,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -807,6 +810,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
+                delegated_credential: None,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -875,6 +879,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
+                delegated_credential: None,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -1018,6 +1023,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
+                delegated_credential: None,
             })
         })
     }
@@ -1123,6 +1129,7 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             message_already_in_transcript: true,
             ech_retry_configs: self.ech_retry_configs,
             expected_certificate_type: self.expected_certificate_type,
+            delegated_credential: None,
         })
         .handle(cx, m)
     }
@@ -1143,6 +1150,7 @@ struct ExpectCertificate {
     message_already_in_transcript: bool,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
     expected_certificate_type: CertificateType,
+    delegated_credential: Option<DelegatedCredential<'static>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
@@ -1171,6 +1179,26 @@ impl State<ClientConnectionData> for ExpectCertificate {
             ));
         }
 
+        // Extract a delegated credential (DC) from the end-entity entry, if present,
+        // and enforce that only the EE entry may carry it.
+        let delegated_credential = cert_chain
+            .entries
+            .first()
+            .and_then(|e| e.extensions.delegated_credential.clone())
+            .map(|dc| dc.into_owned());
+
+        if cert_chain
+            .entries
+            .iter()
+            .skip(1)
+            .any(|e| e.extensions.delegated_credential.is_some())
+        {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::UnsolicitedEncryptedExtension,
+            ));
+        }
+
         let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
         let server_cert = ServerCertDetails::new(
             cert_chain
@@ -1190,6 +1218,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             client_auth: self.client_auth,
             ech_retry_configs: self.ech_retry_configs,
             expected_certificate_type: self.expected_certificate_type,
+            delegated_credential,
         }))
     }
 
@@ -1210,6 +1239,7 @@ struct ExpectCertificateVerify<'a> {
     client_auth: Option<ClientAuthDetails>,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
     expected_certificate_type: CertificateType,
+    delegated_credential: Option<DelegatedCredential<'static>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
@@ -1251,13 +1281,116 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
                     .send_cert_verify_error_alert(err)
             })?;
 
-        // 2. Verify their signature on the handshake.
+        // 2. Verify delegated credential if present, then verify their signature on the handshake.
+        //    If a delegated credential is present and valid, use its public key and required
+        //    scheme for CertificateVerify; otherwise verify using the certificate public key.
         let handshake_hash = self.transcript.current_hash();
+        let verify_message = construct_server_verify_message(&handshake_hash);
+
+        // Helper: check whether a SignatureScheme is permitted for delegated credential use.
+        fn dc_scheme_allowed(s: SignatureScheme) -> bool {
+            s.supported_in_tls13()
+                && !matches!(
+                    s,
+                    SignatureScheme::RSA_PSS_SHA256
+                        | SignatureScheme::RSA_PSS_SHA384
+                        | SignatureScheme::RSA_PSS_SHA512
+                )
+        }
+
+        // Optional DC validation
+        if let Some(dc) = self.delegated_credential.as_ref() {
+            // Enforce that signature algorithms are ones we advertised/support.
+            let supported = self.config.verifier.supported_verify_schemes();
+            if !supported.contains(&dc.algorithm)
+                || !supported.contains(&dc.cred.dc_cert_verify_algorithm)
+                || !dc_scheme_allowed(dc.cred.dc_cert_verify_algorithm)
+            {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::BadCertificate,
+                ));
+            }
+
+            // Build the DC signature input per RFC 9345 §4: 64*0x20 || context || 0x00 || EE cert || cred || algorithm
+            let mut dc_message = Vec::new();
+            dc_message.extend_from_slice(&[0x20u8; 64]);
+            dc_message.extend_from_slice(b"TLS, server delegated credentials");
+            dc_message.push(0x00);
+            // end-entity certificate DER
+            let ee = self
+                .server_cert
+                .cert_chain
+                .0
+                .first()
+                .ok_or(Error::NoCertificatesPresented)?
+                .clone();
+            dc_message.extend_from_slice(ee.as_ref());
+            // cred encoding
+            dc.cred.encode(&mut dc_message);
+            // algorithm encoding
+            dc.algorithm.encode(&mut dc_message);
+
+            // Verify DC signature with the end-entity certificate public key
+            let dc_sig = DigitallySignedStruct::new(dc.algorithm, dc.signature.0.clone());
+            self.config
+                .verifier
+                .verify_tls13_signature(&SignatureVerificationInput {
+                    message: &dc_message,
+                    signer: &identity.as_signer(),
+                    signature: &dc_sig,
+                })
+                .map_err(|_| {
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::BadCertificate,
+                    )
+                })?;
+
+            // DC is valid: ensure CertificateVerify uses the DC-declared scheme and public key.
+            if cert_verify.scheme != dc.cred.dc_cert_verify_algorithm {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::BadCertificate,
+                ));
+            }
+
+            let spki = SubjectPublicKeyInfoDer::from(dc.cred.spki.0.bytes());
+            let sig_verified = self
+                .config
+                .verifier
+                .verify_tls13_signature(&SignatureVerificationInput {
+                    message: verify_message.as_ref(),
+                    signer: &verify::SignerPublicKey::RawPublicKey(&spki),
+                    signature: cert_verify,
+                })
+                .map_err(|err| {
+                    cx.common
+                        .send_cert_verify_error_alert(err)
+                })?;
+            cx.common.peer_identity = Some(identity);
+            self.transcript.add_message(&m);
+
+            return Ok(Box::new(ExpectFinished {
+                config: self.config,
+                server_name: self.server_name,
+                randoms: self.randoms,
+                suite: self.suite,
+                transcript: self.transcript,
+                key_schedule: self.key_schedule,
+                client_auth: self.client_auth,
+                cert_verified,
+                sig_verified,
+                ech_retry_configs: self.ech_retry_configs,
+            }));
+        }
+
+        // No DC: verify CertificateVerify against the certificate public key as usual.
         let sig_verified = self
             .config
             .verifier
             .verify_tls13_signature(&SignatureVerificationInput {
-                message: construct_server_verify_message(&handshake_hash).as_ref(),
+                message: verify_message.as_ref(),
                 signer: &identity.as_signer(),
                 signature: cert_verify,
             })
@@ -1295,6 +1428,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             client_auth: self.client_auth,
             ech_retry_configs: self.ech_retry_configs,
             expected_certificate_type: self.expected_certificate_type,
+            delegated_credential: self.delegated_credential,
         })
     }
 }

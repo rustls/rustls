@@ -226,6 +226,12 @@ fn emit_client_hello_for_retry(
                 .verifier
                 .supported_verify_schemes(),
         ),
+        // RFC 9345: a client willing to use delegated credentials SHALL send this extension
+        delegated_credential_algorithms: if supported_versions.tls13 {
+            Some(config.verifier.supported_verify_schemes())
+        } else {
+            None
+        },
         extended_master_secret_request: Some(()),
         certificate_status_request: match config.verifier.request_ocsp_response() {
             true => Some(CertificateStatusRequest::build_ocsp()),

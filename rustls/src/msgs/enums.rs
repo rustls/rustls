@@ -121,6 +121,7 @@ enum_builder! {
         SignatureAlgorithms => 0x000d,
         UseSRTP => 0x000e,
         Heartbeat => 0x000f,
+        DelegatedCredential => 0x0022, // https://datatracker.ietf.org/doc/html/rfc9345#section-4.1
         ALProtocolNegotiation => 0x0010,
         SCT => 0x0012,
         ClientCertificateType => 0x0013,

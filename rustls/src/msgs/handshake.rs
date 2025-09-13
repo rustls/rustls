@@ -857,6 +857,10 @@ extension_struct! {
         ExtensionType::SignatureAlgorithms =>
             pub(crate) signature_schemes: Option<Vec<SignatureScheme>>,
 
+        /// Supported delegated credential signature schemes (RFC9345)
+        ExtensionType::DelegatedCredential =>
+            pub(crate) delegated_credential_algorithms: Option<Vec<SignatureScheme>>,
+
         /// Offered ALPN protocols (RFC6066)
         ExtensionType::ALProtocolNegotiation =>
             pub(crate) protocols: Option<Vec<ProtocolName>>,
@@ -941,6 +945,7 @@ impl ClientExtensions<'_> {
             named_groups,
             ec_point_formats,
             signature_schemes,
+            delegated_credential_algorithms,
             protocols,
             client_certificate_types,
             server_certificate_types,
@@ -967,6 +972,7 @@ impl ClientExtensions<'_> {
             named_groups,
             ec_point_formats,
             signature_schemes,
+            delegated_credential_algorithms,
             protocols,
             client_certificate_types,
             server_certificate_types,
@@ -1647,10 +1653,89 @@ impl<'a> Deref for CertificateChain<'a> {
     }
 }
 
+// -- RFC 9345 delegated credentials structures --
+
+/// RFC 9345: Credential structure carried inside a delegated credential
+#[derive(Clone, Debug)]
+pub(crate) struct Credential<'a> {
+    /// Time, in seconds relative to the delegator certificate's notBefore
+    pub(crate) valid_time: u32,
+    /// Signature scheme expected to be used in CertificateVerify with the DC key
+    pub(crate) dc_cert_verify_algorithm: SignatureScheme,
+    /// DER-encoded SubjectPublicKeyInfo of the delegated credential public key
+    /// RFC allows 1..2^24-1. We do not enforce non-empty at this layer.
+    pub(crate) spki: PayloadU24<'a>,
+}
+
+impl<'a> Codec<'a> for Credential<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.valid_time.encode(bytes);
+        self.dc_cert_verify_algorithm.encode(bytes);
+        self.spki.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            valid_time: u32::read(r)?,
+            dc_cert_verify_algorithm: SignatureScheme::read(r)?,
+            spki: PayloadU24::read(r)?,
+        })
+    }
+}
+
+impl Credential<'_> {
+    fn into_owned(self) -> Credential<'static> {
+        Credential {
+            valid_time: self.valid_time,
+            dc_cert_verify_algorithm: self.dc_cert_verify_algorithm,
+            spki: self.spki.into_owned(),
+        }
+    }
+}
+
+/// RFC 9345: DelegatedCredential carried as a certificate entry extension in TLS 1.3
+#[derive(Clone, Debug)]
+pub(crate) struct DelegatedCredential<'a> {
+    pub(crate) cred: Credential<'a>,
+    pub(crate) algorithm: SignatureScheme,
+    /// Signature over the RFC-defined structure using the delegator EEC key
+    pub(crate) signature: PayloadU16<NonEmpty>,
+}
+
+impl<'a> Codec<'a> for DelegatedCredential<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.cred.encode(bytes);
+        self.algorithm.encode(bytes);
+        self.signature.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            cred: Credential::read(r)?,
+            algorithm: SignatureScheme::read(r)?,
+            signature: PayloadU16::<NonEmpty>::read(r)?,
+        })
+    }
+}
+
+impl DelegatedCredential<'_> {
+    fn into_owned(self) -> DelegatedCredential<'static> {
+        DelegatedCredential {
+            cred: self.cred.into_owned(),
+            algorithm: self.algorithm,
+            signature: PayloadU16::new(self.signature.0.to_vec()),
+        }
+    }
+}
+
 extension_struct! {
     pub(crate) struct CertificateExtensions<'a> {
         ExtensionType::StatusRequest =>
             pub(crate) status: Option<CertificateStatus<'a>>,
+
+        /// Delegated credential carried in end-entity certificate entry (RFC 9345)
+        ExtensionType::DelegatedCredential =>
+            pub(crate) delegated_credential: Option<DelegatedCredential<'a>>,
     }
 }
 
@@ -1658,6 +1743,7 @@ impl CertificateExtensions<'_> {
     fn into_owned(self) -> CertificateExtensions<'static> {
         CertificateExtensions {
             status: self.status.map(|s| s.into_owned()),
+            delegated_credential: self.delegated_credential.map(|dc| dc.into_owned()),
         }
     }
 }
