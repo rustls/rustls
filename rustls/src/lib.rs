@@ -614,12 +614,12 @@ pub mod server {
     #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ServerSessionMemoryCache;
     pub use handy::{AlwaysResolvesServerRawPublicKeys, NoServerSessionStorage};
+    #[cfg(feature = "std")]
+    pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
     pub use server_conn::{
-        Accepted, ClientHello, InvalidSniPolicy, ProducesTickets, ResolvesServerCert, ServerConfig,
+        ClientHello, InvalidSniPolicy, ProducesTickets, ResolvesServerCert, ServerConfig,
         ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
     };
-    #[cfg(feature = "std")]
-    pub use server_conn::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
     pub use crate::verify::NoClientAuth;
     pub use crate::webpki::{

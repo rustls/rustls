@@ -15,18 +15,22 @@ use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
 use crate::common_state::{Protocol, State};
-use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
+#[cfg(feature = "std")]
+use crate::conn::ConnectionCommon;
+use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::CryptoProvider;
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
+#[cfg(feature = "std")]
 use crate::log::trace;
 use crate::msgs::base::Payload;
-use crate::msgs::handshake::{
-    ClientHelloPayload, ProtocolName, ServerExtensionsInput, ServerNamePayload,
-};
+#[cfg(feature = "std")]
+use crate::msgs::handshake::ClientHelloPayload;
+use crate::msgs::handshake::{ProtocolName, ServerExtensionsInput, ServerNamePayload};
+#[cfg(feature = "std")]
 use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -1050,12 +1054,14 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
 /// Represents a `ClientHello` message received through the [`Acceptor`].
 ///
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
+#[cfg(feature = "std")]
 pub struct Accepted {
     connection: ConnectionCommon<ServerConnectionData>,
     message: Message<'static>,
     sig_schemes: Vec<SignatureScheme>,
 }
 
+#[cfg(feature = "std")]
 impl Accepted {
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
@@ -1091,7 +1097,6 @@ impl Accepted {
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
     /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
     /// configuration-dependent validation of the received `ClientHello` message fails.
-    #[cfg(feature = "std")]
     pub fn into_connection(
         mut self,
         config: Arc<ServerConfig>,
@@ -1133,6 +1138,7 @@ impl Accepted {
     }
 }
 
+#[cfg(feature = "std")]
 impl Debug for Accepted {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Accepted").finish()
