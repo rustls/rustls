@@ -325,6 +325,7 @@
     clippy::exhaustive_enums,
     clippy::exhaustive_structs,
     clippy::manual_let_else,
+    clippy::or_fun_call,
     clippy::std_instead_of_core,
     clippy::use_self,
     clippy::upper_case_acronyms,
