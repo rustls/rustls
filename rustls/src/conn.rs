@@ -1268,6 +1268,7 @@ impl<Data> ConnectionCore<Data> {
         }
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self.common_state.early_exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
