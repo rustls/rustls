@@ -724,7 +724,7 @@ impl SharedSecret {
             .enumerate()
             .find(|(_i, x)| **x != 0)
             .map(|(i, _x)| i)
-            .unwrap_or(self.secret_bytes().len());
+            .unwrap_or_else(|| self.secret_bytes().len());
         self.offset += start;
     }
 }
