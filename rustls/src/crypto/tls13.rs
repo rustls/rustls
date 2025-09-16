@@ -370,7 +370,7 @@ mod tests {
 
         let hkdf = HkdfUsingHmac(&hmac::HMAC_SHA384);
         let ikm = &[0x0b; 40];
-        let info = &[&b"hel"[..], &b"lo"[..]];
+        let info = &[&b"hell"[..], &b"o"[..]];
 
         let output: ByteArray<96> = expand(
             hkdf.extract_from_secret(None, ikm)
