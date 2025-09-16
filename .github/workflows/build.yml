@@ -309,6 +309,12 @@ jobs:
           ./admin/pull-readme
           git diff --exit-code
 
+      - name: Spell check code
+        uses: crate-ci/typos@v1
+        with:
+          config: .github/typos.toml
+
+
   coverage:
     name: Measure coverage
     runs-on: ubuntu-latest
