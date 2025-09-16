@@ -529,7 +529,7 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// Completes the key exchange, given the peer's public key.
     ///
     /// This method must return an error if `peer_pub_key` is invalid: either
-    /// mis-encoded, or an invalid public key (such as, but not limited to, being
+    /// misencoded, or an invalid public key (such as, but not limited to, being
     /// in a small order subgroup).
     ///
     /// If the key exchange algorithm is FFDHE, the result must be left-padded with zeros,
@@ -559,7 +559,7 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// implementation of this method handle TLS 1.2-specific requirements.
     ///
     /// This method must return an error if `peer_pub_key` is invalid: either
-    /// mis-encoded, or an invalid public key (such as, but not limited to, being
+    /// misencoded, or an invalid public key (such as, but not limited to, being
     /// in a small order subgroup).
     ///
     /// The shared secret is returned as a [`SharedSecret`] which can be constructed
@@ -650,7 +650,7 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// This is only called if `hybrid_component` returns `Some(_)`.
     ///
     /// This method must return an error if `peer_pub_key` is invalid: either
-    /// mis-encoded, or an invalid public key (such as, but not limited to, being
+    /// misencoded, or an invalid public key (such as, but not limited to, being
     /// in a small order subgroup).
     ///
     /// The shared secret is returned as a [`SharedSecret`] which can be constructed
