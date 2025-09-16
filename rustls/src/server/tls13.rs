@@ -56,7 +56,7 @@ mod client_hello {
         ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
     };
     use crate::sealed::Sealed;
-    use crate::server::hs::{CertificateTypes, ClientHelloState};
+    use crate::server::hs::{CertificateTypes, ClientHelloInput, ClientHelloState};
     use crate::sign::SigningKey;
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
@@ -72,10 +72,11 @@ mod client_hello {
         fn handle_client_hello(
             &self,
             mut cch: CompleteClientHelloHandling,
-            mut st: ClientHelloState<'_>,
+            mut input: ClientHelloInput<'_>,
+            mut st: ClientHelloState,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static> {
-            if st
+            if input
                 .client_hello
                 .compression_methods
                 .len()
@@ -87,10 +88,11 @@ mod client_hello {
                 ));
             }
 
-            st.sig_schemes
+            input
+                .sig_schemes
                 .retain(SignatureScheme::supported_in_tls13);
 
-            let shares_ext = st
+            let shares_ext = input
                 .client_hello
                 .key_shares
                 .as_ref()
@@ -101,7 +103,7 @@ mod client_hello {
                     )
                 })?;
 
-            if st
+            if input
                 .client_hello
                 .has_keyshare_extension_with_duplicates()
             {
@@ -111,7 +113,7 @@ mod client_hello {
                 ));
             }
 
-            if st
+            if input
                 .client_hello
                 .has_certificate_compression_extension_with_duplicates()
             {
@@ -121,7 +123,7 @@ mod client_hello {
                 ));
             }
 
-            let cert_compressor = st
+            let cert_compressor = input
                 .client_hello
                 .certificate_compression_algorithms
                 .as_ref()
@@ -134,7 +136,7 @@ mod client_hello {
                         .find(|compressor| offered.contains(&compressor.algorithm()))
                         .copied());
 
-            let early_data_requested = st
+            let early_data_requested = input
                 .client_hello
                 .early_data_request
                 .is_some();
@@ -157,7 +159,7 @@ mod client_hello {
             let Some(chosen_share_and_kxg) = chosen_share_and_kxg else {
                 // We don't have a suitable key share.  Send a HelloRetryRequest
                 // for the mutually_preferred_group.
-                st.transcript.add_message(st.message);
+                st.transcript.add_message(input.message);
 
                 if cch.done_retry {
                     return Err(cx.common.send_fatal_alert(
@@ -169,7 +171,7 @@ mod client_hello {
                 emit_hello_retry_request(
                     &mut st.transcript,
                     cch.suite,
-                    st.client_hello.session_id,
+                    input.client_hello.session_id,
                     cx.common,
                     st.kx_group.name(),
                 );
@@ -200,12 +202,12 @@ mod client_hello {
             let mut chosen_psk_index = None;
             let mut resumedata = None;
 
-            if let Some(psk_offer) = &st.client_hello.preshared_key_offer {
+            if let Some(psk_offer) = &input.client_hello.preshared_key_offer {
                 // "A client MUST provide a "psk_key_exchange_modes" extension if it
                 //  offers a "pre_shared_key" extension. If clients offer
                 //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
                 //  servers MUST abort the handshake." - RFC8446 4.2.9
-                if st
+                if input
                     .client_hello
                     .preshared_key_modes
                     .is_none()
@@ -249,7 +251,7 @@ mod client_hello {
                     if !check_binder(
                         &mut st.transcript,
                         cch.suite,
-                        st.message,
+                        input.message,
                         &resume.secret.0,
                         psk_offer.binders[i].as_ref(),
                     ) {
@@ -265,7 +267,7 @@ mod client_hello {
                 }
             }
 
-            if !st
+            if !input
                 .client_hello
                 .preshared_key_modes
                 .as_ref()
@@ -288,13 +290,13 @@ mod client_hello {
             }
 
             let full_handshake = resumedata.is_none();
-            st.transcript.add_message(st.message);
+            st.transcript.add_message(input.message);
             let key_schedule = emit_server_hello(
                 &mut st.transcript,
                 &st.randoms,
                 cch.suite,
                 cx,
-                &st.client_hello.session_id,
+                &input.client_hello.session_id,
                 chosen_share_and_kxg,
                 chosen_psk_index,
                 resumedata
@@ -321,7 +323,7 @@ mod client_hello {
                 cch.suite,
                 cx,
                 &mut ocsp_response,
-                st.client_hello,
+                input.client_hello,
                 resumedata.as_ref(),
                 st.extra_exts,
                 &st.config,
@@ -345,7 +347,7 @@ mod client_hello {
                     &mut flight,
                     cx.common,
                     &*st.cert_key.key,
-                    &st.sig_schemes,
+                    &input.sig_schemes,
                 )?;
                 client_auth
             } else {
@@ -438,7 +440,8 @@ mod client_hello {
         fn handle_client_hello(
             &self,
             cch: CompleteClientHelloHandling,
-            st: ClientHelloState<'_>,
+            input: ClientHelloInput<'_>,
+            st: ClientHelloState,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static>;
     }

@@ -444,10 +444,7 @@ impl ExpectClientHello {
                 .transcript
                 .start(suite.hash_provider(), cx)?,
             extra_exts: self.extra_exts,
-            message: input.message,
-            client_hello: input.client_hello,
             kx_group: skxg,
-            sig_schemes: input.sig_schemes,
             cert_key,
         };
 
@@ -461,6 +458,7 @@ impl ExpectClientHello {
                         done_retry: self.done_retry,
                         send_tickets: self.send_tickets,
                     },
+                    input,
                     state,
                     cx,
                 ),
@@ -474,6 +472,7 @@ impl ExpectClientHello {
                         using_ems: self.using_ems,
                         send_ticket: self.send_tickets > 0,
                     },
+                    input,
                     state,
                     cx,
                 ),
@@ -641,15 +640,12 @@ impl State<ServerConnectionData> for ExpectClientHello {
     }
 }
 
-pub(crate) struct ClientHelloState<'a> {
+pub(crate) struct ClientHelloState {
     pub(super) config: Arc<ServerConfig>,
     pub(super) transcript: HandshakeHash,
     pub(super) randoms: ConnectionRandoms,
     pub(super) extra_exts: ServerExtensionsInput<'static>,
-    pub(super) message: &'a Message<'a>,
-    pub(super) client_hello: &'a ClientHelloPayload,
     pub(super) kx_group: &'static dyn SupportedKxGroup,
-    pub(super) sig_schemes: Vec<SignatureScheme>,
     pub(super) cert_key: Arc<CertifiedKey>,
 }
 
@@ -714,7 +710,7 @@ pub(super) fn process_client_hello<'m>(
     })
 }
 
-pub(super) struct ClientHelloInput<'a> {
+pub(crate) struct ClientHelloInput<'a> {
     pub(super) message: &'a Message<'a>,
     pub(super) client_hello: &'a ClientHelloPayload,
     pub(super) sig_schemes: Vec<SignatureScheme>,
