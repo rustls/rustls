@@ -7,7 +7,7 @@ use crate::msgs::codec::{Codec, Reader};
 enum_builder! {
     /// The `HashAlgorithm` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum HashAlgorithm {
         NONE => 0x00,
@@ -49,7 +49,7 @@ impl HashAlgorithm {
 enum_builder! {
     /// The `ClientCertificateType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub(crate) enum ClientCertificateType {
         RSASign => 0x01,
@@ -68,7 +68,7 @@ enum_builder! {
 enum_builder! {
     /// The `Compression` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum Compression {
         Null => 0x00,
@@ -80,7 +80,7 @@ enum_builder! {
 enum_builder! {
     /// The `AlertLevel` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum AlertLevel {
         Warning => 0x01,
@@ -91,7 +91,7 @@ enum_builder! {
 enum_builder! {
     /// The `HeartbeatMessageType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub(crate) enum HeartbeatMessageType {
         Request => 0x01,
@@ -102,7 +102,7 @@ enum_builder! {
 enum_builder! {
     /// The `ExtensionType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u16)]
     pub enum ExtensionType {
         ServerName => 0x0000,
@@ -180,7 +180,7 @@ impl ExtensionType {
 enum_builder! {
     /// The `ServerNameType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub(crate) enum ServerNameType {
         HostName => 0x00,
@@ -190,7 +190,7 @@ enum_builder! {
 enum_builder! {
     /// The `NamedGroup` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     ///
     /// This enum is used for recognizing key exchange groups advertised
     /// by a peer during a TLS handshake. It is **not** a list of groups that
@@ -263,7 +263,7 @@ impl NamedGroup {
 enum_builder! {
     /// The `ECPointFormat` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum ECPointFormat {
         Uncompressed => 0x00,
@@ -275,7 +275,7 @@ enum_builder! {
 enum_builder! {
     /// The `HeartbeatMode` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub(crate) enum HeartbeatMode {
         PeerAllowedToSend => 0x01,
@@ -286,7 +286,7 @@ enum_builder! {
 enum_builder! {
     /// The `ECCurveType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub(crate) enum ECCurveType {
         ExplicitPrime => 0x01,
@@ -298,7 +298,7 @@ enum_builder! {
 enum_builder! {
     /// The `PskKeyExchangeMode` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum PskKeyExchangeMode {
         PSK_KE => 0x00,
@@ -309,7 +309,7 @@ enum_builder! {
 enum_builder! {
     /// The `KeyUpdateRequest` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum KeyUpdateRequest {
         UpdateNotRequested => 0x00,
@@ -320,7 +320,7 @@ enum_builder! {
 enum_builder! {
     /// The `CertificateStatusType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum CertificateStatusType {
         OCSP => 0x01,
