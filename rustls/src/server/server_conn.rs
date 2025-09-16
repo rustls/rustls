@@ -27,11 +27,12 @@ use crate::kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::log::trace;
 use crate::msgs::base::Payload;
-use crate::msgs::handshake::{
-    ClientHelloPayload, ProtocolName, ServerExtensionsInput, ServerNamePayload,
-};
+#[cfg(feature = "std")]
+use crate::msgs::handshake::ClientHelloPayload;
+use crate::msgs::handshake::{ProtocolName, ServerExtensionsInput, ServerNamePayload};
 #[cfg(feature = "std")]
 use crate::msgs::message::Message;
+use crate::server::hs::ClientHelloInput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 #[cfg(feature = "std")]
@@ -162,30 +163,35 @@ pub struct ClientHello<'a> {
 
 impl<'a> ClientHello<'a> {
     pub(super) fn new(
-        client_hello: &'a ClientHelloPayload,
+        input: &'a ClientHelloInput<'a>,
         sni: Option<&'a DnsName<'static>>,
-        signature_schemes: &'a [SignatureScheme],
         version: ProtocolVersion,
     ) -> Self {
         Self {
             server_name: sni.map(Cow::Borrowed),
-            signature_schemes,
-            alpn: client_hello.protocols.as_ref(),
-            client_cert_types: client_hello
+            signature_schemes: &input.sig_schemes,
+            alpn: input.client_hello.protocols.as_ref(),
+            client_cert_types: input
+                .client_hello
                 .client_certificate_types
                 .as_deref(),
-            server_cert_types: client_hello
+            server_cert_types: input
+                .client_hello
                 .server_certificate_types
                 .as_deref(),
-            cipher_suites: &client_hello.cipher_suites,
+            cipher_suites: &input.client_hello.cipher_suites,
             // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
             certificate_authorities: match version {
                 ProtocolVersion::TLSv1_2 => None,
-                _ => client_hello
+                _ => input
+                    .client_hello
                     .certificate_authority_names
                     .as_deref(),
             },
-            named_groups: client_hello.named_groups.as_deref(),
+            named_groups: input
+                .client_hello
+                .named_groups
+                .as_deref(),
         }
     }
 
@@ -645,7 +651,7 @@ mod connection {
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
-    use crate::server::hs;
+    use crate::server::hs::{self, ClientHelloInput};
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
@@ -953,7 +959,7 @@ mod connection {
 
             let mut cx = Context::from(&mut connection);
             let sig_schemes = match hs::process_client_hello(&message, false, &mut cx) {
-                Ok((_, sig_schemes)) => sig_schemes,
+                Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
                     return Err((err, AcceptedAlert::from(connection)));
                 }
@@ -1143,8 +1149,13 @@ impl Accepted {
         let state = hs::ExpectClientHello::new(config, ServerExtensionsInput::default());
         let mut cx = hs::ServerContext::from(&mut self.connection);
 
-        let ch = Self::client_hello_payload(&self.message);
-        let new = match state.with_certified_key(self.sig_schemes, ch, &self.message, &mut cx) {
+        let input = ClientHelloInput {
+            client_hello: Self::client_hello_payload(&self.message),
+            message: &self.message,
+            sig_schemes: self.sig_schemes,
+        };
+
+        let new = match state.with_certified_key(input, &mut cx) {
             Ok(new) => new,
             Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
         };
