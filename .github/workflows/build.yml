@@ -77,24 +77,24 @@ jobs:
       # this is required for fips on windows.
       # nb. "--all-targets" does not include doctests
       - name: cargo test (release; all features)
-        run: cargo test --release --locked --all-features --all-targets
+        run: cargo test --locked --release --all-features --all-targets
         env:
           RUST_BACKTRACE: 1
 
       # nb. this is separate since `--doc` option cannot be combined with other target option(s) ref:
       # - https://doc.rust-lang.org/cargo/commands/cargo-test.html
       - name: cargo test --doc (release; all-features)
-        run: cargo test --release --locked --all-features --doc
+        run: cargo test --locked --release --all-features --doc
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (debug; aws-lc-rs)
-        run: cargo test --no-default-features --features aws-lc-rs,log,std --all-targets
+        run: cargo test --locked --no-default-features --features aws-lc-rs,log,std --all-targets
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (release; fips)
-        run: cargo test --release --no-default-features --features fips,log,std --all-targets
+        run: cargo test --locked --release --no-default-features --features fips,log,std --all-targets
         env:
           RUST_BACKTRACE: 1
 
@@ -108,13 +108,13 @@ jobs:
         run: cargo build --locked -p rustls-provider-example --no-default-features
 
       - name: cargo test (debug; rustls-provider-example; all features)
-        run: cargo test --all-features -p rustls-provider-example
+        run: cargo test --locked --all-features -p rustls-provider-example
 
       - name: cargo build (debug; rustls-provider-test)
         run: cargo build --locked -p rustls-provider-test
 
       - name: cargo test (debug; rustls-provider-test; all features)
-        run: cargo test --all-features -p rustls-provider-test
+        run: cargo test --locked --all-features -p rustls-provider-test
 
       - name: cargo package --all-features -p rustls
         run: cargo package --all-features -p rustls
@@ -183,11 +183,11 @@ jobs:
         working-directory: rustls
 
       - name: cargo test (debug; no default features; std+aws-lc-rs)
-        run: cargo test --no-default-features --features aws-lc-rs,std
+        run: cargo test --locked --no-default-features --features aws-lc-rs,std
         working-directory: rustls
 
       - name: cargo test (debug; no default features; std+fips)
-        run: cargo test --no-default-features --features fips,std
+        run: cargo test --locked --no-default-features --features fips,std
         working-directory: rustls
 
       - name: cargo test (release; no run)
