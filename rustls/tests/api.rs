@@ -6210,7 +6210,7 @@ fn bad_client_max_fragment_sizes() {
 }
 
 #[test]
-fn handshakes_complete_and_data_flows_with_gratuitious_max_fragment_sizes() {
+fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
     // general exercising of msgs::fragmenter and msgs::deframer
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider) {
