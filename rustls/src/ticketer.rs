@@ -1,17 +1,13 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
-#[cfg(feature = "std")]
 use std::sync::{RwLock, RwLockReadGuard};
 
 use pki_types::UnixTime;
 
 use crate::Error;
 use crate::server::ProducesTickets;
-#[cfg(not(feature = "std"))]
-use crate::time_provider::TimeProvider;
 
-#[cfg(feature = "std")]
 #[derive(Debug)]
 pub(crate) struct TicketRotatorState {
     current: Box<dyn ProducesTickets>,
@@ -111,7 +107,6 @@ impl TicketRotator {
     pub(crate) const SIX_HOURS: u32 = 6 * 60 * 60;
 }
 
-#[cfg(feature = "std")]
 impl ProducesTickets for TicketRotator {
     fn lifetime(&self) -> u32 {
         self.lifetime
@@ -143,7 +138,6 @@ impl ProducesTickets for TicketRotator {
     }
 }
 
-#[cfg(feature = "std")]
 impl core::fmt::Debug for TicketRotator {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TicketRotator")
