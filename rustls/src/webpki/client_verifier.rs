@@ -520,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn test_client_verifier_without_crls_opptional_auth() {
+    fn test_client_verifier_without_crls_optional_auth() {
         // We should be able to build a verifier that allows client authentication,
         // and anonymous access, that does no revocation checking.
         let builder = WebPkiClientVerifier::builder_with_provider(
