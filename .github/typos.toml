@@ -1,0 +1,15 @@
+[default.extend-words]
+# encrypter as an active verb
+encrypter = "encrypter"
+
+# "type", but side-stepping the keyword and avoiding the very ugly r#type
+typ = "typ"
+
+# pn -> packet number in quic parlance
+pn = "pn"
+
+# as in Josh
+Aas = "Aas"
+
+[files]
+extend-exclude = ["*.json", "*.json.in", "*.svg", "macros.html", "test-ca/"]
