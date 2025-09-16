@@ -315,9 +315,7 @@ impl ExpectClientHello {
     /// Continues handling of a `ClientHello` message once config and certificate are available.
     pub(super) fn with_certified_key(
         self,
-        mut sig_schemes: Vec<SignatureScheme>,
-        client_hello: &ClientHelloPayload,
-        m: &Message<'_>,
+        mut input: ClientHelloInput<'_>,
         cx: &mut ServerContext<'_>,
     ) -> NextStateOrError<'static> {
         let tls13_enabled = self
@@ -330,14 +328,14 @@ impl ExpectClientHello {
         cx.data.sni = self
             .config
             .invalid_sni_policy
-            .accept(client_hello.server_name.as_ref())
+            .accept(input.client_hello.server_name.as_ref())
             .map_err(|e| {
                 cx.common
                     .send_fatal_alert(AlertDescription::IllegalParameter, e)
             })?;
 
         // Are we doing TLS1.3?
-        let version = if let Some(versions) = &client_hello.supported_versions {
+        let version = if let Some(versions) = &input.client_hello.supported_versions {
             if versions.tls13 && tls13_enabled {
                 ProtocolVersion::TLSv1_3
             } else if !versions.tls12 || !tls12_enabled {
@@ -353,7 +351,8 @@ impl ExpectClientHello {
             } else {
                 ProtocolVersion::TLSv1_2
             }
-        } else if u16::from(client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2) {
+        } else if u16::from(input.client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2)
+        {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::ProtocolVersion,
                 PeerIncompatible::Tls12NotOffered,
@@ -384,13 +383,14 @@ impl ExpectClientHello {
             .provider
             .iter_cipher_suites()
             .filter(|scs| {
-                client_hello
+                input
+                    .client_hello
                     .cipher_suites
                     .contains(&scs.suite())
             })
             .collect::<Vec<_>>();
 
-        sig_schemes.retain(|scheme| {
+        input.sig_schemes.retain(|scheme| {
             client_suites
                 .iter()
                 .any(|&suite| match suite {
@@ -405,12 +405,7 @@ impl ExpectClientHello {
         let cert_key = self
             .config
             .cert_resolver
-            .resolve(&ClientHello::new(
-                client_hello,
-                cx.data.sni.as_ref(),
-                &sig_schemes,
-                version,
-            ))
+            .resolve(&ClientHello::new(&input, cx.data.sni.as_ref(), version))
             .ok_or_else(|| {
                 cx.common.send_fatal_alert(
                     AlertDescription::AccessDenied,
@@ -423,11 +418,12 @@ impl ExpectClientHello {
                 version,
                 cert_key.key.algorithm(),
                 cx.common.protocol,
-                client_hello
+                input
+                    .client_hello
                     .named_groups
                     .as_deref()
                     .unwrap_or_default(),
-                &client_hello.cipher_suites,
+                &input.client_hello.cipher_suites,
             )
             .map_err(|incompat| {
                 cx.common
@@ -440,7 +436,7 @@ impl ExpectClientHello {
 
         let state = ClientHelloState {
             randoms: ConnectionRandoms::new(
-                client_hello.random,
+                input.client_hello.random,
                 Random::new(self.config.provider.secure_random)?,
             ),
             config: self.config,
@@ -448,10 +444,10 @@ impl ExpectClientHello {
                 .transcript
                 .start(suite.hash_provider(), cx)?,
             extra_exts: self.extra_exts,
-            message: m,
-            client_hello,
+            message: input.message,
+            client_hello: input.client_hello,
             kx_group: skxg,
-            sig_schemes,
+            sig_schemes: input.sig_schemes,
             cert_key,
         };
 
@@ -637,8 +633,8 @@ impl State<ServerConnectionData> for ExpectClientHello {
     where
         Self: 'm,
     {
-        let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
-        self.with_certified_key(sig_schemes, client_hello, &m, cx)
+        let input = process_client_hello(&m, self.done_retry, cx)?;
+        self.with_certified_key(input, cx)
     }
 
     fn into_owned(self: Box<Self>) -> NextState<'static> {
@@ -666,12 +662,15 @@ pub(crate) struct ClientHelloState<'a> {
 ///
 /// [`ResolvesServerCert`]: crate::server::ResolvesServerCert
 pub(super) fn process_client_hello<'m>(
-    m: &'m Message<'m>,
+    message: &'m Message<'m>,
     done_retry: bool,
     cx: &mut ServerContext<'_>,
-) -> Result<(&'m ClientHelloPayload, Vec<SignatureScheme>), Error> {
-    let client_hello =
-        require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
+) -> Result<ClientHelloInput<'m>, Error> {
+    let client_hello = require_handshake_msg!(
+        message,
+        HandshakeType::ClientHello,
+        HandshakePayload::ClientHello
+    )?;
     trace!("we got a clienthello {client_hello:?}");
 
     if !client_hello
@@ -709,7 +708,17 @@ pub(super) fn process_client_hello<'m>(
             )
         })?;
 
-    Ok((client_hello, sig_schemes.to_owned()))
+    Ok(ClientHelloInput {
+        message,
+        client_hello,
+        sig_schemes: sig_schemes.to_owned(),
+    })
+}
+
+pub(super) struct ClientHelloInput<'a> {
+    pub(super) message: &'a Message<'a>,
+    pub(super) client_hello: &'a ClientHelloPayload,
+    pub(super) sig_schemes: Vec<SignatureScheme>,
 }
 
 pub(crate) enum HandshakeHashOrBuffer {
