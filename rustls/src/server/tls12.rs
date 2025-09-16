@@ -66,7 +66,6 @@ mod client_hello {
             &self,
             mut cch: CompleteClientHelloHandling,
             mut st: ClientHelloState<'_>,
-            tls13_enabled: bool,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static> {
             // -- TLS1.2 only from hereon in --
@@ -104,7 +103,12 @@ mod client_hello {
             }
 
             // -- If TLS1.3 is enabled, signal the downgrade in the server random
-            if tls13_enabled {
+            if !st
+                .config
+                .provider
+                .tls13_cipher_suites
+                .is_empty()
+            {
                 st.randoms.server[24..].copy_from_slice(&tls12::DOWNGRADE_SENTINEL);
             }
 
@@ -256,7 +260,6 @@ mod client_hello {
             &self,
             cch: CompleteClientHelloHandling,
             st: ClientHelloState<'_>,
-            tls13_enabled: bool,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static>;
     }

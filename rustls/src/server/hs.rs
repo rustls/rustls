@@ -475,7 +475,6 @@ impl ExpectClientHello {
                         send_ticket: self.send_tickets > 0,
                     },
                     state,
-                    tls13_enabled,
                     cx,
                 ),
         }
