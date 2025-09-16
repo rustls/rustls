@@ -52,7 +52,7 @@ mod client_hello {
         ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
     use crate::sealed::Sealed;
-    use crate::server::hs::ClientHelloState;
+    use crate::server::hs::{ClientHelloInput, ClientHelloState};
     use crate::sign::SigningKey;
     use crate::verify::DigitallySignedStruct;
 
@@ -65,13 +65,14 @@ mod client_hello {
         fn handle_client_hello(
             &self,
             mut cch: CompleteClientHelloHandling,
-            mut st: ClientHelloState<'_>,
+            input: ClientHelloInput<'_>,
+            mut st: ClientHelloState,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static> {
             // -- TLS1.2 only from hereon in --
-            st.transcript.add_message(st.message);
+            st.transcript.add_message(input.message);
 
-            if st
+            if input
                 .client_hello
                 .extended_master_secret_request
                 .is_some()
@@ -88,7 +89,7 @@ mod client_hello {
             // it means that only the uncompressed point format is
             // supported"
             // - <https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.2>
-            let supported_ec_point_formats = st
+            let supported_ec_point_formats = input
                 .client_hello
                 .ec_point_formats
                 .unwrap_or_default();
@@ -125,7 +126,7 @@ mod client_hello {
             // our handling of the ClientHello.
             //
             let mut ticket_received = false;
-            let resume_data = st
+            let resume_data = input
                 .client_hello
                 .session_ticket
                 .as_ref()
@@ -148,13 +149,13 @@ mod client_hello {
                 .or_else(|| {
                     // Perhaps resume?  If we received a ticket, the sessionid
                     // does not correspond to a real session.
-                    if st.client_hello.session_id.is_empty() || ticket_received {
+                    if input.client_hello.session_id.is_empty() || ticket_received {
                         return None;
                     }
 
                     st.config
                         .session_storage
-                        .get(st.client_hello.session_id.as_ref())
+                        .get(input.client_hello.session_id.as_ref())
                 })
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x).ok())
                 .and_then(|resumedata| match resumedata {
@@ -168,13 +169,13 @@ mod client_hello {
                 });
 
             if let Some(data) = resume_data {
-                return cch.start_resumption(cx, st, data);
+                return cch.start_resumption(cx, input, st, data);
             }
 
             // Now we have chosen a ciphersuite, we can make kx decisions.
             let sigschemes = cch
                 .suite
-                .resolve_sig_schemes(&st.sig_schemes);
+                .resolve_sig_schemes(&input.sig_schemes);
 
             if sigschemes.is_empty() {
                 return Err(cx.common.send_fatal_alert(
@@ -205,7 +206,7 @@ mod client_hello {
                 cch.suite,
                 cch.using_ems,
                 &mut ocsp_response,
-                st.client_hello,
+                input.client_hello,
                 None,
                 &st.randoms,
                 st.extra_exts,
@@ -259,7 +260,8 @@ mod client_hello {
         fn handle_client_hello(
             &self,
             cch: CompleteClientHelloHandling,
-            st: ClientHelloState<'_>,
+            input: ClientHelloInput<'_>,
+            st: ClientHelloState,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static>;
     }
@@ -275,7 +277,8 @@ mod client_hello {
         fn start_resumption(
             mut self,
             cx: &mut ServerContext<'_>,
-            mut state: ClientHelloState<'_>,
+            input: ClientHelloInput<'_>,
+            mut state: ClientHelloState,
             resumedata: persist::Tls12ServerSessionValue,
         ) -> hs::NextStateOrError<'static> {
             debug!("Resuming connection");
@@ -287,7 +290,7 @@ mod client_hello {
                 ));
             }
 
-            self.session_id = state.client_hello.session_id;
+            self.session_id = input.client_hello.session_id;
             let mut flight = HandshakeFlightTls12::new(&mut state.transcript);
             self.send_ticket = emit_server_hello(
                 &mut flight,
@@ -297,7 +300,7 @@ mod client_hello {
                 self.suite,
                 self.using_ems,
                 &mut None,
-                state.client_hello,
+                input.client_hello,
                 Some(&resumedata),
                 &state.randoms,
                 state.extra_exts,
