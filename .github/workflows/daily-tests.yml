@@ -157,7 +157,6 @@ jobs:
             --package rustls
             --feature-powerset
             --no-dev-deps
-            --group-features aws-lc-rs,aws-lc-rs
             --group-features fips,aws-lc-rs
             --mutually-exclusive-features fips,ring
             --mutually-exclusive-features custom_provider,aws-lc-rs
