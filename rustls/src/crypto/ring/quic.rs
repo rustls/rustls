@@ -150,7 +150,7 @@ impl quic::PacketKey for PacketKey {
     ///
     /// On success, returns the slice of `payload` containing the decrypted data.
     ///
-    /// When provided, the `path_id` is used for multipath ecryption as described in
+    /// When provided, the `path_id` is used for multipath encryption as described in
     /// <https://www.ietf.org/archive/id/draft-ietf-quic-multipath-15.html#section-2.4>.
     fn decrypt_in_place<'a>(
         &self,

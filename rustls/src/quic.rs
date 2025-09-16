@@ -731,7 +731,7 @@ pub trait PacketKey: Send + Sync {
     ///
     /// Fails if and only if the payload is longer than allowed by the cipher suite's AEAD algorithm.
     ///
-    /// When provided, the `path_id` is used for multipath ecryption as described in
+    /// When provided, the `path_id` is used for multipath encryption as described in
     /// <https://www.ietf.org/archive/id/draft-ietf-quic-multipath-15.html#section-2.4>.
     fn encrypt_in_place(
         &self,
@@ -749,7 +749,7 @@ pub trait PacketKey: Send + Sync {
     ///
     /// On success, returns the slice of `payload` containing the decrypted data.
     ///
-    /// When provided, the `path_id` is used for multipath ecryption as described in
+    /// When provided, the `path_id` is used for multipath encryption as described in
     /// <https://www.ietf.org/archive/id/draft-ietf-quic-multipath-15.html#section-2.4>.
     fn decrypt_in_place<'a>(
         &self,
