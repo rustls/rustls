@@ -139,9 +139,9 @@ impl CommonState {
         self.get_alpn_protocol()
     }
 
-    /// Retrieves the ciphersuite agreed with the peer.
+    /// Retrieves the cipher suite agreed with the peer.
     ///
-    /// This returns None until the ciphersuite is agreed.
+    /// This returns None until the cipher suite is agreed.
     pub fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
         self.suite
     }
