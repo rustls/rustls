@@ -302,7 +302,7 @@ impl SelectedProvider {
             #[cfg(feature = "fips")]
             Some("aws-lc-rs-fips") => Self::AwsLcRsFips,
             Some("ring") => Self::Ring,
-            Some(other) => panic!("unrecognised value for BOGO_SHIM_PROVIDER: {other:?}"),
+            Some(other) => panic!("unrecognized value for BOGO_SHIM_PROVIDER: {other:?}"),
         }
     }
 

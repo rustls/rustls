@@ -6,7 +6,7 @@ use crate::msgs::enums::HashAlgorithm;
 enum_builder! {
     /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum AlertDescription {
         CloseNotify => 0x00,
@@ -164,7 +164,7 @@ impl core::fmt::Display for AlertDescription {
 enum_builder! {
     /// The `HandshakeType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum HandshakeType {
         HelloRequest => 0x00,
@@ -193,7 +193,7 @@ enum_builder! {
 enum_builder! {
     /// The `ContentType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum ContentType {
         ChangeCipherSpec => 0x14,
@@ -207,7 +207,7 @@ enum_builder! {
 enum_builder! {
     /// The `ProtocolVersion` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u16)]
     pub enum ProtocolVersion {
         SSLv2 => 0x0002,
@@ -225,7 +225,7 @@ enum_builder! {
 enum_builder! {
     /// The `CipherSuite` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u16)]
     pub enum CipherSuite {
         /// The `TLS_DHE_RSA_WITH_AES_128_GCM_SHA256` cipher suite.  Recommended=Y.  Defined in
@@ -578,7 +578,7 @@ enum_builder! {
 enum_builder! {
     /// The `SignatureScheme` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u16)]
     pub enum SignatureScheme {
         RSA_PKCS1_SHA1 => 0x0201,
@@ -663,7 +663,7 @@ impl SignatureScheme {
 enum_builder! {
     /// The `SignatureAlgorithm` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub enum SignatureAlgorithm {
         Anonymous => 0x00,
