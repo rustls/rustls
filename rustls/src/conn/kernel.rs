@@ -103,7 +103,7 @@ impl<Data> KernelConnection<Data> {
         })
     }
 
-    /// Retrieves the ciphersuite agreed with the peer.
+    /// Retrieves the cipher suite agreed with the peer.
     pub fn negotiated_cipher_suite(&self) -> SupportedCipherSuite {
         self.suite
     }
