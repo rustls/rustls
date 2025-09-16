@@ -151,16 +151,22 @@ jobs:
       - name: cargo build (debug; default features)
         run: cargo build --locked
         working-directory: rustls
+        env:
+          RUSTFLAGS: --deny warnings
 
         # this target does _not_ include the libstd crate in its sysroot
         # it will catch unwanted usage of libstd in _dependencies_
       - name: cargo build (debug; no default features; no-std)
         run: cargo build --locked --no-default-features --target x86_64-unknown-none
         working-directory: rustls
+        env:
+          RUSTFLAGS: --deny warnings
 
       - name: cargo build (debug; no default features; no-std, hashbrown)
         run: cargo build --locked --no-default-features --features hashbrown --target x86_64-unknown-none
         working-directory: rustls
+        env:
+          RUSTFLAGS: --deny warnings
 
       - name: cargo test (debug; default features)
         run: cargo test --locked
