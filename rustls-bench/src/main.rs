@@ -466,7 +466,7 @@ fn multithreaded(
 
         threads
             .into_iter()
-            .map(|thr| thr.join().unwrap())
+            .map(|thread| thread.join().unwrap())
             .collect::<Vec<Timings>>()
     })
 }

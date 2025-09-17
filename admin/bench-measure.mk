@@ -48,14 +48,14 @@ memory: $(BENCH)
 	$(MEMUSAGE) $^ memory TLS13_AES_256_GCM_SHA384 5000
 
 threads: $(BENCH)
-	for thr in $(shell admin/threads-seq.rs) ; do \
-	  $^ --threads $$thr handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
-	  $^ --threads $$thr handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
-	  $^ --threads $$thr handshake-ticket TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
-	  $^ --key-type rsa2048 --threads $$thr handshake TLS13_AES_256_GCM_SHA384 ; \
-	  $^ --threads $$thr handshake-ticket TLS13_AES_256_GCM_SHA384 ; \
-	  $^ --threads $$thr bulk TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
-	  $^ --key-type rsa2048 --threads $$thr bulk TLS13_AES_256_GCM_SHA384 ; \
+	for t in $(shell admin/threads-seq.rs) ; do \
+	  $^ --threads $$t handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$t handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$t handshake-ticket TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
+	  $^ --key-type rsa2048 --threads $$t handshake TLS13_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$t handshake-ticket TLS13_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$t bulk TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
+	  $^ --key-type rsa2048 --threads $$t bulk TLS13_AES_256_GCM_SHA384 ; \
 	done
 
 thread-latency: $(BENCH)
