@@ -85,10 +85,6 @@ path = "tests/process_provider.rs"
 name = "server_cert_verifier"
 path = "tests/runners/server_cert_verifier.rs"
 
-[[test]]
-name = "unbuffered"
-path = "tests/runners/unbuffered.rs"
-
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
 features = ["aws-lc-rs", "brotli", "custom-provider", "hashbrown", "log", "ring", "std", "zlib"]
