@@ -242,7 +242,9 @@ mod client_hello {
                                 resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
                             })
                             .filter(|resumedata| {
-                                hs::can_resume(cch.suite.into(), &cx.data.sni, &resumedata.common)
+                                resumedata
+                                    .common
+                                    .can_resume(cch.suite.common.suite, &cx.data.sni)
                             });
 
                     let Some(resume) = maybe_resume_data else {

@@ -2,8 +2,6 @@ use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use pki_types::DnsName;
-
 use super::server_conn::ServerConnectionData;
 use super::tls12;
 use crate::SupportedCipherSuite;
@@ -33,24 +31,6 @@ use crate::sync::Arc;
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
 pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
-
-pub(super) fn can_resume(
-    suite: SupportedCipherSuite,
-    sni: &Option<DnsName<'_>>,
-    resume: &persist::CommonServerSessionValue,
-) -> bool {
-    // The RFCs underspecify what happens if we try to resume to
-    // an unoffered/varying suite.  We merely don't resume in weird cases.
-    //
-    // RFC 6066 says "A server that implements this extension MUST NOT accept
-    // the request to resume the session if the server_name extension contains
-    // a different name. Instead, it proceeds with a full handshake to
-    // establish a new session."
-    //
-    // RFC 8446: "The server MUST ensure that it selects
-    // a compatible PSK (if any) and cipher suite."
-    resume.cipher_suite == suite.suite() && &resume.sni == sni
-}
 
 #[derive(Default)]
 pub(super) struct ExtensionProcessing {

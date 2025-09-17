@@ -163,7 +163,9 @@ mod client_hello {
                     _ => None,
                 })
                 .filter(|resumedata| {
-                    hs::can_resume(cch.suite.into(), &cx.data.sni, &resumedata.common)
+                    resumedata
+                        .common
+                        .can_resume(cch.suite.common.suite, &cx.data.sni)
                         && (resumedata.extended_ms == cch.using_ems
                             || (resumedata.extended_ms && !cch.using_ems))
                 });
