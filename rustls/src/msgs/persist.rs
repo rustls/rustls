@@ -472,6 +472,20 @@ impl CommonServerSessionValue {
             creation_time_sec: creation_time.as_secs(),
         }
     }
+
+    pub(crate) fn can_resume(&self, suite: CipherSuite, sni: &Option<DnsName<'_>>) -> bool {
+        // The RFCs underspecify what happens if we try to resume to
+        // an unoffered/varying suite.  We merely don't resume in weird cases.
+        //
+        // RFC 6066 says "A server that implements this extension MUST NOT accept
+        // the request to resume the session if the server_name extension contains
+        // a different name. Instead, it proceeds with a full handshake to
+        // establish a new session."
+        //
+        // RFC 8446: "The server MUST ensure that it selects
+        // a compatible PSK (if any) and cipher suite."
+        self.cipher_suite == suite && &self.sni == sni
+    }
 }
 
 impl Codec<'_> for CommonServerSessionValue {
