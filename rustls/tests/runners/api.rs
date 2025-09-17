@@ -16,6 +16,8 @@ mod tests_with_ring {
     mod ffdhe;
     #[path = "../api.rs"]
     mod tests;
+    #[path = "../unbuffered.rs"]
+    mod unbuffered;
 }
 
 #[cfg(feature = "aws-lc-rs")]
@@ -31,6 +33,8 @@ mod tests_with_aws_lc_rs {
     mod ffdhe;
     #[path = "../api.rs"]
     mod tests;
+    #[path = "../unbuffered.rs"]
+    mod unbuffered;
 }
 
 // this must be outside tests_with_*, as we want
