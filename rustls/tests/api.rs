@@ -7442,31 +7442,6 @@ fn test_read_tls_artificial_eof_after_close_notify() {
     );
 }
 
-#[test]
-fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
-    let ocsp_response = b"hello-ocsp-world!";
-    let kt = KeyType::EcdsaP256;
-    let provider = provider::default_provider();
-
-    for version_provider in all_versions(&provider) {
-        let server_config = ServerConfig::builder_with_provider(provider.clone().into())
-            .with_no_client_auth()
-            .with_single_cert_with_ocsp(kt.chain(), kt.key(), ocsp_response.to_vec())
-            .unwrap();
-
-        let client_config = ClientConfig::builder_with_provider(version_provider.into())
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(MockServerVerifier::expects_ocsp_response(
-                ocsp_response,
-            )))
-            .with_no_client_auth()
-            .unwrap();
-
-        let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-        do_handshake(&mut client, &mut server);
-    }
-}
-
 #[cfg(feature = "zlib")]
 #[test]
 fn test_server_uses_cached_compressed_certificates() {
