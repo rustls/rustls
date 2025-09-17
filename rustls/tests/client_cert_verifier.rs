@@ -36,7 +36,7 @@ fn server_config_with_verifier(
     kt: KeyType,
     client_cert_verifier: MockClientVerifier,
 ) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider::default_provider().into())
+    ServerConfig::builder_with_provider(Arc::new(provider::default_provider()))
         .with_client_cert_verifier(Arc::new(client_cert_verifier))
         .with_single_cert(kt.chain(), kt.key())
         .unwrap()
@@ -52,7 +52,7 @@ fn client_verifier_works() {
         let server_config = Arc::new(server_config);
 
         for version_provider in all_versions(&provider) {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
+            let client_config = make_client_config_with_auth(*kt, version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -72,7 +72,7 @@ fn client_verifier_no_schemes() {
         let server_config = Arc::new(server_config);
 
         for version_provider in all_versions(&provider) {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
+            let client_config = make_client_config_with_auth(*kt, version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -97,7 +97,7 @@ fn client_verifier_no_auth_yes_root() {
         let server_config = Arc::new(server_config);
 
         for version_provider in all_versions(&provider) {
-            let client_config = make_client_config(*kt, &version_provider);
+            let client_config = make_client_config(*kt, version_provider);
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
@@ -127,7 +127,7 @@ fn client_verifier_fails_properly() {
         let server_config = Arc::new(server_config);
 
         for version_provider in all_versions(&provider) {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
+            let client_config = make_client_config_with_auth(*kt, version_provider);
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();

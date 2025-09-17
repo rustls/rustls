@@ -1,7 +1,8 @@
 use std::fs;
 use std::io::Write;
+use std::sync::Arc;
 
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::OwnedCryptoProvider;
 use rustls::{ClientConfig, ClientConnection, ServerConfig, ServerConnection};
 
 // These tests exercise rustls_fuzzing_provider and makes sure it can
@@ -71,16 +72,16 @@ fn pairwise_tls13() {
     .unwrap();
 }
 
-fn test_version(provider: CryptoProvider) -> Transcript {
+fn test_version(provider: OwnedCryptoProvider) -> Transcript {
     let _ = env_logger::try_init();
 
-    let server_config = ServerConfig::builder_with_provider(provider.clone().into())
+    let server_config = ServerConfig::builder_with_provider(Arc::new(provider.clone()))
         .with_no_client_auth()
         .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver())
         .unwrap();
     let mut server = ServerConnection::new(server_config.into()).unwrap();
 
-    let client_config = ClientConfig::builder_with_provider(provider.into())
+    let client_config = ClientConfig::builder_with_provider(Arc::new(provider))
         .dangerous()
         .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
         .with_no_client_auth()

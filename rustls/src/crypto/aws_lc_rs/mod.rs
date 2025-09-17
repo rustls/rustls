@@ -1,5 +1,3 @@
-use alloc::vec::Vec;
-
 // aws-lc-rs has a -- roughly -- ring-compatible API, so we just reuse all that
 // glue here.  The shared files should always use `super::ring_like` to access a
 // ring-compatible crate, and `super::ring_shim` to bridge the gaps where they are
@@ -8,7 +6,7 @@ pub(crate) use aws_lc_rs as ring_like;
 use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
 
-use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
+use crate::crypto::{ConstCryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -37,31 +35,33 @@ pub(crate) mod tls12;
 pub(crate) mod tls13;
 
 /// A `CryptoProvider` backed by aws-lc-rs.
-pub fn default_provider() -> CryptoProvider {
-    CryptoProvider {
-        tls12_cipher_suites: DEFAULT_TLS12_CIPHER_SUITES.to_vec(),
-        tls13_cipher_suites: DEFAULT_TLS13_CIPHER_SUITES.to_vec(),
-        kx_groups: default_kx_groups(),
-        signature_verification_algorithms: SUPPORTED_SIG_ALGS,
-        secure_random: &AwsLcRs,
-        key_provider: &AwsLcRs,
-    }
+pub fn default_provider() -> ConstCryptoProvider {
+    DEFAULT_PROVIDER
 }
 
-fn default_kx_groups() -> Vec<&'static dyn SupportedKxGroup> {
-    #[cfg(feature = "fips")]
-    {
-        DEFAULT_KX_GROUPS
-            .iter()
-            .filter(|cs| cs.fips())
-            .copied()
-            .collect()
-    }
-    #[cfg(not(feature = "fips"))]
-    {
-        DEFAULT_KX_GROUPS.to_vec()
-    }
-}
+/// The default `CryptoProvider` backed by aws-lc-rs.
+pub static DEFAULT_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls12_cipher_suites: DEFAULT_TLS12_CIPHER_SUITES,
+    tls13_cipher_suites: DEFAULT_TLS13_CIPHER_SUITES,
+    kx_groups: DEFAULT_KX_GROUPS,
+    signature_verification_algorithms: SUPPORTED_SIG_ALGS,
+    secure_random: &AwsLcRs,
+    key_provider: &AwsLcRs,
+};
+
+/// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.3.
+pub static DEFAULT_TLS13_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls12_cipher_suites: &[],
+    ..DEFAULT_PROVIDER
+};
+
+/// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.2.
+///
+/// Use of TLS1.3 is **strongly** recommended.
+pub static DEFAULT_TLS12_PROVIDER: ConstCryptoProvider = ConstCryptoProvider {
+    tls13_cipher_suites: &[],
+    ..DEFAULT_PROVIDER
+};
 
 /// `KeyProvider` impl for aws-lc-rs
 pub static DEFAULT_KEY_PROVIDER: &dyn KeyProvider = &AwsLcRs;
@@ -245,6 +245,7 @@ pub mod kx_group {
 /// in hybrid with X25519.
 pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     kx_group::X25519MLKEM768,
+    #[cfg(not(feature = "fips"))]
     kx_group::X25519,
     kx_group::SECP256R1,
     kx_group::SECP384R1,

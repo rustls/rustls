@@ -135,7 +135,7 @@ impl EchConfig {
             config
                 .client_auth_cert_resolver
                 .has_certs(),
-            config.provider.secure_random,
+            config.provider.secure_random(),
             config.enable_sni,
         )
     }

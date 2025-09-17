@@ -38,7 +38,7 @@ use rustls::client::{
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
-use rustls::crypto::{CryptoProvider, aws_lc_rs, ring};
+use rustls::crypto::{ConstCryptoProvider, OwnedCryptoProvider, aws_lc_rs, ring};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::pki_types::pem::PemObject;
@@ -118,7 +118,7 @@ struct Options {
     expect_handshake_kind_resumed: Option<Vec<HandshakeKind>>,
     install_cert_compression_algs: CompressionAlgs,
     selected_provider: SelectedProvider,
-    provider: CryptoProvider,
+    provider: ConstCryptoProvider,
     ech_config_list: Option<EchConfigListBytes<'static>>,
     expect_ech_accept: bool,
     expect_ech_retry_configs: Option<EchConfigListBytes<'static>>,
@@ -219,8 +219,8 @@ impl Options {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
     }
 
-    fn provider(&self) -> CryptoProvider {
-        let mut provider = self.provider.clone();
+    fn provider(&self) -> OwnedCryptoProvider {
+        let mut provider = self.provider.into_owned();
 
         if let Some(groups) = &self.groups {
             provider
@@ -306,17 +306,17 @@ impl SelectedProvider {
         }
     }
 
-    fn provider(&self) -> CryptoProvider {
+    fn provider(&self) -> ConstCryptoProvider {
         match self {
             Self::AwsLcRs | Self::AwsLcRsFips => {
                 // ensure all suites and kx groups are included (even in fips builds)
                 // as non-fips test cases require them.  runner activates fips mode via -fips-202205 option
                 // this includes rustls-post-quantum, which just returns an altered
                 // version of `aws_lc_rs::default_provider()`
-                CryptoProvider {
-                    kx_groups: aws_lc_rs::DEFAULT_KX_GROUPS.to_vec(),
-                    tls12_cipher_suites: aws_lc_rs::ALL_TLS12_CIPHER_SUITES.to_vec(),
-                    tls13_cipher_suites: aws_lc_rs::ALL_TLS13_CIPHER_SUITES.to_vec(),
+                ConstCryptoProvider {
+                    kx_groups: aws_lc_rs::ALL_KX_GROUPS,
+                    tls12_cipher_suites: aws_lc_rs::ALL_TLS12_CIPHER_SUITES,
+                    tls13_cipher_suites: aws_lc_rs::ALL_TLS13_CIPHER_SUITES,
                     ..aws_lc_rs::default_provider()
                 }
             }
@@ -771,7 +771,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     let cred = &opts.credentials.default;
     let (certs, key) = cred.load_from_file();
 
-    let mut cfg = ServerConfig::builder_with_provider(opts.provider().into())
+    let mut cfg = ServerConfig::builder_with_provider(Arc::new(opts.provider()))
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp(certs, key, opts.server_ocsp_response.clone())
         .unwrap();
@@ -909,7 +909,8 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
     let cfg = ClientConfig::builder_with_provider(provider.clone());
 
     let cfg = if opts.selected_provider.supports_ech() {
-        let ech_cfg = ClientConfig::builder_with_provider(opts.provider().with_only_tls13().into());
+        let ech_cfg =
+            ClientConfig::builder_with_provider(Arc::new(opts.provider().with_only_tls13()));
 
         if let Some(ech_config_list) = &opts.ech_config_list {
             let ech_mode: EchMode = EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)

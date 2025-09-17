@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::{fs, str, thread};
 
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
+use rustls::crypto::{OwnedCryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ClientConfig, RootCertStore, ServerConfig};
@@ -22,7 +22,7 @@ fn rustls_server_with_ffdhe_kx_tls12() {
     test_rustls_server_with_ffdhe_kx(ffdhe_provider().with_only_tls12(), 1)
 }
 
-fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
+fn test_rustls_server_with_ffdhe_kx(provider: OwnedCryptoProvider, iters: usize) {
     verify_openssl3_available();
 
     let message = "Hello from rustls!\n";
@@ -145,9 +145,7 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
 fn client_config_with_ffdhe_kx() -> ClientConfig {
     ClientConfig::builder_with_provider(
         // OpenSSL 3 does not support RFC 7919 with TLS 1.2: https://github.com/openssl/openssl/issues/10971
-        ffdhe_provider()
-            .with_only_tls13()
-            .into(),
+        Arc::new(ffdhe_provider().with_only_tls13()),
     )
     .with_root_certificates(root_ca())
     .with_no_client_auth()
@@ -193,20 +191,20 @@ fn load_private_key() -> PrivateKeyDer<'static> {
     PrivateKeyDer::from_pem_file(PRIV_KEY_FILE).unwrap()
 }
 
-fn ffdhe_provider() -> CryptoProvider {
-    CryptoProvider {
+fn ffdhe_provider() -> OwnedCryptoProvider {
+    OwnedCryptoProvider {
         tls12_cipher_suites: vec![&ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
         tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
         kx_groups: vec![&FfdheKxGroup(
             rustls::NamedGroup::FFDHE2048,
             rustls::ffdhe_groups::FFDHE2048,
         )],
-        ..provider::default_provider()
+        ..provider::default_provider().into_owned()
     }
 }
 
-fn server_config_with_ffdhe_kx(provider: CryptoProvider) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider.into())
+fn server_config_with_ffdhe_kx(provider: OwnedCryptoProvider) -> ServerConfig {
+    ServerConfig::builder_with_provider(Arc::new(provider))
         .with_no_client_auth()
         .with_single_cert(load_certs(), load_private_key())
         .unwrap()

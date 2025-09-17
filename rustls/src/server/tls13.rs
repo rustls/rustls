@@ -1331,7 +1331,7 @@ impl ExpectFinished {
         resumption: &KeyScheduleResumption,
         config: &ServerConfig,
     ) -> Result<(), Error> {
-        let secure_random = config.provider.secure_random;
+        let secure_random = config.provider.secure_random();
         let nonce = rand::random_array(secure_random)?;
         let age_add = rand::random_u32(secure_random)?;
 

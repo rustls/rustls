@@ -349,7 +349,7 @@ pub(super) fn initial_key_share(
         .unwrap_or_else(|| {
             config
                 .provider
-                .kx_groups
+                .kx_groups()
                 .iter()
                 .copied()
                 .next()

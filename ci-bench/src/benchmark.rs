@@ -86,7 +86,7 @@ pub struct BenchmarkParams {
     /// Which `CryptoProvider` to test.
     ///
     /// The choice of cipher suite is baked into this.
-    pub provider: Arc<rustls::crypto::CryptoProvider>,
+    pub provider: Arc<rustls::crypto::OwnedCryptoProvider>,
     /// How to make a suitable [`rustls::server::ProducesTickets`].
     pub ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
     /// Where to get keys for server auth
@@ -100,7 +100,7 @@ pub struct BenchmarkParams {
 impl BenchmarkParams {
     /// Create a new set of benchmark params
     pub const fn new(
-        provider: Arc<rustls::crypto::CryptoProvider>,
+        provider: Arc<rustls::crypto::OwnedCryptoProvider>,
         ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
         auth_key: AuthKeySource,
         version: rustls::ProtocolVersion,

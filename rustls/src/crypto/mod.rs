@@ -55,6 +55,143 @@ pub use crate::suites::CipherSuiteCommon;
 
 /// Controls core cryptography used by rustls.
 ///
+/// Generalises over multiple concrete representations of provider
+pub trait CryptoProvider: Send + Sync + Debug {
+    /// List of supported TLS1.2 cipher suites, in preference order -- the first element
+    /// is the highest priority.
+    ///
+    /// Note that the protocol version is negotiated before the cipher suite.
+    ///
+    /// The `Tls12CipherSuite` type carries both configuration and implementation.
+    ///
+    /// A valid `CryptoProvider` must ensure that all cipher suites are accompanied by at least
+    /// one matching key exchange group in [`CryptoProvider::kx_groups`].
+    fn tls12_cipher_suites(&self) -> &[&'static Tls12CipherSuite];
+
+    /// List of supported TLS1.3 cipher suites, in preference order -- the first element
+    /// is the highest priority.
+    ///
+    /// Note that the protocol version is negotiated before the cipher suite.
+    ///
+    /// The `Tls13CipherSuite` type carries both configuration and implementation.
+    fn tls13_cipher_suites(&self) -> &[&'static Tls13CipherSuite];
+
+    /// List of supported key exchange groups, in preference order -- the
+    /// first element is the highest priority.
+    ///
+    /// The first element in this list is the _default key share algorithm_,
+    /// and in TLS1.3 a key share for it is sent in the client hello.
+    ///
+    /// The `SupportedKxGroup` type carries both configuration and implementation.
+    fn kx_groups(&self) -> &[&'static dyn SupportedKxGroup];
+
+    /// List of signature verification algorithms for use with webpki.
+    ///
+    /// These are used for both certificate chain verification and handshake signature verification.
+    ///
+    /// This is called by [`ConfigBuilder::with_root_certificates()`],
+    /// [`server::WebPkiClientVerifier::builder_with_provider()`] and
+    /// [`client::WebPkiServerVerifier::builder_with_provider()`].
+    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms;
+
+    /// Source of cryptographically secure random numbers.
+    fn secure_random(&self) -> &'static dyn SecureRandom;
+
+    /// Provider for loading private [`SigningKey`]s from [`PrivateKeyDer`].
+    fn key_provider(&self) -> &'static dyn KeyProvider;
+}
+
+impl dyn CryptoProvider {
+    /// Returns `true` if this provider is operating in FIPS mode.
+    ///
+    /// This covers only the cryptographic parts of FIPS approval.  There are
+    /// also TLS protocol-level recommendations made by NIST.  You should
+    /// prefer to call [`ClientConfig::fips()`] or [`ServerConfig::fips()`]
+    /// which take these into account.
+    pub fn fips(&self) -> bool {
+        self.tls12_cipher_suites()
+            .iter()
+            .all(|cs| cs.fips())
+            && self
+                .tls13_cipher_suites()
+                .iter()
+                .all(|cs| cs.fips())
+            && self
+                .kx_groups()
+                .iter()
+                .all(|kx| kx.fips())
+            && self
+                .signature_verification_algorithms()
+                .fips()
+            && self.secure_random().fips()
+            && self.key_provider().fips()
+    }
+
+    pub(crate) fn consistency_check(&self) -> Result<(), Error> {
+        if self.tls12_cipher_suites().is_empty() && self.tls13_cipher_suites().is_empty() {
+            return Err(ApiMisuse::NoCipherSuitesConfigured.into());
+        }
+
+        let kx_groups = self.kx_groups();
+        if kx_groups.is_empty() {
+            return Err(ApiMisuse::NoKeyExchangeGroupsConfigured.into());
+        }
+
+        // verifying cipher suites have matching kx groups
+        let mut supported_kx_algos = Vec::with_capacity(ALL_KEY_EXCHANGE_ALGORITHMS.len());
+        for group in kx_groups.iter() {
+            let kx = group.name().key_exchange_algorithm();
+            if !supported_kx_algos.contains(&kx) {
+                supported_kx_algos.push(kx);
+            }
+            // Small optimization. We don't need to go over other key exchange groups
+            // if we already cover all supported key exchange algorithms
+            if supported_kx_algos.len() == ALL_KEY_EXCHANGE_ALGORITHMS.len() {
+                break;
+            }
+        }
+
+        for cs in self.tls12_cipher_suites() {
+            if supported_kx_algos.contains(&cs.kx) {
+                continue;
+            }
+            let suite_name = cs.common.suite;
+            return Err(Error::General(alloc::format!(
+                "TLS1.2 cipher suite {suite_name:?} requires {0:?} key exchange, but no {0:?}-compatible \
+                    key exchange groups were present in `CryptoProvider`'s `kx_groups` field",
+                cs.kx,
+            )));
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn iter_cipher_suites(&self) -> impl Iterator<Item = SupportedCipherSuite> + '_ {
+        self.tls13_cipher_suites()
+            .iter()
+            .copied()
+            .map(SupportedCipherSuite::Tls13)
+            .chain(
+                self.tls12_cipher_suites()
+                    .iter()
+                    .copied()
+                    .map(SupportedCipherSuite::Tls12),
+            )
+    }
+
+    /// We support a given TLS version if at least one ciphersuite for the version
+    /// is available.
+    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
+        match v {
+            ProtocolVersion::TLSv1_2 => !self.tls12_cipher_suites().is_empty(),
+            ProtocolVersion::TLSv1_3 => !self.tls13_cipher_suites().is_empty(),
+            _ => false,
+        }
+    }
+}
+
+/// Controls core cryptography used by rustls.
+///
 /// This crate comes with two built-in options, provided as
 /// `CryptoProvider` structures:
 ///
@@ -66,26 +203,6 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// This structure provides defaults. Everything in it can be overridden at
 /// runtime by replacing field values as needed.
-///
-/// # Using the per-process default `CryptoProvider`
-///
-/// There is the concept of an implicit default provider, configured at run-time once in
-/// a given process.
-///
-/// It is used for functions like [`ClientConfig::builder()`] and [`ServerConfig::builder()`].
-///
-/// The intention is that an application can specify the [`CryptoProvider`] they wish to use
-/// once, and have that apply to the variety of places where their application does TLS
-/// (which may be wrapped inside other libraries).
-/// They should do this by calling [`CryptoProvider::install_default()`] early on.
-///
-/// To achieve this goal:
-///
-/// - _libraries_ should use [`ClientConfig::builder()`]/[`ServerConfig::builder()`]
-///   or otherwise rely on the [`CryptoProvider::get_default()`] provider.
-/// - _applications_ should call [`CryptoProvider::install_default()`] early
-///   in their `fn main()`. If _applications_ uses a custom provider based on the one built-in,
-///   they can activate the `custom-provider` feature to ensure its usage.
 ///
 /// # Using a specific `CryptoProvider`
 ///
@@ -124,8 +241,8 @@ pub use crate::suites::CipherSuiteCommon;
 /// # mod fictitious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 /// use rustls::crypto::aws_lc_rs;
 ///
-/// pub fn provider() -> rustls::crypto::CryptoProvider {
-///   rustls::crypto::CryptoProvider{
+/// pub fn provider() -> rustls::crypto::ConstCryptoProvider {
+///   rustls::crypto::ConstCryptoProvider {
 ///     key_provider: &HsmKeyLoader,
 ///     ..aws_lc_rs::default_provider()
 ///   }
@@ -178,7 +295,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// [`ServerConfig::fips()`]/[`ClientConfig::fips()`] return `true`.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug, Clone)]
-pub struct CryptoProvider {
+pub struct OwnedCryptoProvider {
     /// List of supported TLS1.2 cipher suites, in preference order -- the first element
     /// is the highest priority.
     ///
@@ -223,7 +340,149 @@ pub struct CryptoProvider {
     pub key_provider: &'static dyn KeyProvider,
 }
 
-impl CryptoProvider {
+impl OwnedCryptoProvider {
+    /// Create a new `OwnedCryptoProvider` from any other provider.
+    pub fn new(other: &dyn CryptoProvider) -> Self {
+        Self {
+            tls12_cipher_suites: other.tls12_cipher_suites().to_vec(),
+            tls13_cipher_suites: other.tls13_cipher_suites().to_vec(),
+            kx_groups: other.kx_groups().to_vec(),
+            signature_verification_algorithms: other.signature_verification_algorithms(),
+            secure_random: other.secure_random(),
+            key_provider: other.key_provider(),
+        }
+    }
+
+    /// Return a new `CryptoProvider` that only supports TLS1.3.
+    pub fn with_only_tls13(self) -> Self {
+        Self {
+            tls12_cipher_suites: Vec::new(),
+            ..self
+        }
+    }
+
+    /// Return a new `CryptoProvider` that only supports TLS1.2.
+    pub fn with_only_tls12(self) -> Self {
+        Self {
+            tls13_cipher_suites: Vec::new(),
+            ..self
+        }
+    }
+}
+
+impl CryptoProvider for OwnedCryptoProvider {
+    fn tls12_cipher_suites(&self) -> &[&'static Tls12CipherSuite] {
+        &self.tls12_cipher_suites
+    }
+
+    fn tls13_cipher_suites(&self) -> &[&'static Tls13CipherSuite] {
+        &self.tls13_cipher_suites
+    }
+
+    fn kx_groups(&self) -> &[&'static dyn SupportedKxGroup] {
+        &self.kx_groups
+    }
+
+    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
+        self.signature_verification_algorithms
+    }
+
+    fn secure_random(&self) -> &'static dyn SecureRandom {
+        self.secure_random
+    }
+
+    fn key_provider(&self) -> &'static dyn KeyProvider {
+        self.key_provider
+    }
+}
+
+/// This is a [`CryptoProvider`] that is const-constructable.
+#[allow(clippy::exhaustive_structs)]
+#[derive(Debug, Clone, Copy)]
+pub struct ConstCryptoProvider {
+    /// List of supported TLS1.2 cipher suites, in preference order -- the first element
+    /// is the highest priority.
+    pub tls12_cipher_suites: &'static [&'static Tls12CipherSuite],
+
+    /// List of supported TLS1.3 cipher suites, in preference order -- the first element
+    /// is the highest priority.
+    pub tls13_cipher_suites: &'static [&'static Tls13CipherSuite],
+
+    /// List of supported key exchange groups, in preference order -- the
+    /// first element is the highest priority.
+    pub kx_groups: &'static [&'static dyn SupportedKxGroup],
+
+    /// List of signature verification algorithms for use with webpki.
+    pub signature_verification_algorithms: WebPkiSupportedAlgorithms,
+
+    /// Source of cryptographically secure random numbers.
+    pub secure_random: &'static dyn SecureRandom,
+
+    /// Provider for loading private [`SigningKey`]s from [`PrivateKeyDer`].
+    pub key_provider: &'static dyn KeyProvider,
+}
+
+impl ConstCryptoProvider {
+    /// Turn this into an [`OwnedCryptoProvider`]
+    ///
+    /// This is typically useful to do conditional alteration of the provider at
+    /// run-time.
+    pub fn into_owned(self) -> OwnedCryptoProvider {
+        OwnedCryptoProvider::new(&self)
+    }
+}
+
+impl CryptoProvider for ConstCryptoProvider {
+    fn tls12_cipher_suites(&self) -> &[&'static Tls12CipherSuite] {
+        self.tls12_cipher_suites
+    }
+
+    fn tls13_cipher_suites(&self) -> &[&'static Tls13CipherSuite] {
+        self.tls13_cipher_suites
+    }
+
+    fn kx_groups(&self) -> &[&'static dyn SupportedKxGroup] {
+        self.kx_groups
+    }
+
+    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
+        self.signature_verification_algorithms
+    }
+
+    fn secure_random(&self) -> &'static dyn SecureRandom {
+        self.secure_random
+    }
+
+    fn key_provider(&self) -> &'static dyn KeyProvider {
+        self.key_provider
+    }
+}
+
+/// Interacting with the per-process default `CryptoProvider`
+///
+/// There is the concept of an implicit default provider, configured at run-time once in
+/// a given process.
+///
+/// It is used for functions like [`ClientConfig::builder()`] and [`ServerConfig::builder()`].
+///
+/// The intention is that an application can specify the [`CryptoProvider`] they wish to use
+/// once, and have that apply to the variety of places where their application does TLS
+/// (which may be wrapped inside other libraries).
+/// They should do this by calling [`CryptoProvider::install_default()`] early on.
+///
+/// To achieve this goal:
+///
+/// - _libraries_ should use [`ClientConfig::builder()`]/[`ServerConfig::builder()`]
+///   or otherwise rely on the [`DefaultCryptoProvider::get()`] provider.
+/// - _applications_ should call [`DefaultCryptoProvider::install()`] early
+///   in their `fn main()`. If _applications_ uses a custom provider based on the one built-in,
+///   they can activate the `custom-provider` feature to ensure its usage.
+///
+#[derive(Debug)]
+#[allow(clippy::exhaustive_structs)]
+pub struct DefaultCryptoProvider;
+
+impl DefaultCryptoProvider {
     /// Sets this `CryptoProvider` as the default for this process.
     ///
     /// This can be called successfully at most once in any process execution.
@@ -231,14 +490,14 @@ impl CryptoProvider {
     /// Call this early in your process to configure which provider is used for
     /// the provider.  The configuration should happen before any use of
     /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
-    pub fn install_default(self) -> Result<(), Arc<Self>> {
-        static_default::install_default(self)
+    pub fn install(prov: Arc<dyn CryptoProvider>) -> Result<(), Arc<dyn CryptoProvider>> {
+        static_default::install_default(prov)
     }
 
     /// Returns the default `CryptoProvider` for this process.
     ///
     /// This will be `None` if no default has been set yet.
-    pub fn get_default() -> Option<&'static Arc<Self>> {
+    pub fn get() -> Option<&'static Arc<dyn CryptoProvider>> {
         static_default::get_default()
     }
 
@@ -247,8 +506,8 @@ impl CryptoProvider {
     /// - gets the pre-installed default, or
     /// - installs one `from_crate_features()`, or else
     /// - panics about the need to call [`CryptoProvider::install_default()`]
-    pub(crate) fn get_default_or_install_from_crate_features() -> &'static Arc<Self> {
-        if let Some(provider) = Self::get_default() {
+    pub(crate) fn get_or_install_from_crate_features() -> &'static Arc<dyn CryptoProvider> {
+        if let Some(provider) = Self::get() {
             return provider;
         }
 
@@ -259,8 +518,8 @@ Call CryptoProvider::install_default() before this point to select a provider ma
 See the documentation of the CryptoProvider type for more information.
             "###);
         // Ignore the error resulting from us losing a race, and accept the outcome.
-        let _ = provider.install_default();
-        Self::get_default().unwrap()
+        let _ = Self::install(Arc::new(provider));
+        Self::get().unwrap()
     }
 
     /// Returns a provider named unambiguously by rustls crate features.
@@ -275,8 +534,8 @@ See the documentation of the CryptoProvider type for more information.
     /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
     ///
     /// ```rust,no_run
-    /// # use rustls::crypto::CryptoProvider;
-    /// if CryptoProvider::get_default().is_some() || CryptoProvider::from_crate_features().is_some() {
+    /// # use rustls::crypto::DefaultCryptoProvider;
+    /// if DefaultCryptoProvider::get().is_some() || DefaultCryptoProvider::from_crate_features().is_some() {
     ///     // A default provider is available, either from the
     ///     // process-level default or from the crate features.
     /// }
@@ -284,7 +543,7 @@ See the documentation of the CryptoProvider type for more information.
     ///
     /// [`ClientConfig::builder()`]: crate::ClientConfig::builder
     /// [`ServerConfig::builder()`]: crate::ServerConfig::builder
-    pub fn from_crate_features() -> Option<Self> {
+    pub fn from_crate_features() -> Option<ConstCryptoProvider> {
         #[cfg(all(
             feature = "ring",
             not(feature = "aws-lc-rs"),
@@ -305,110 +564,6 @@ See the documentation of the CryptoProvider type for more information.
 
         #[allow(unreachable_code)]
         None
-    }
-
-    /// Returns `true` if this `CryptoProvider` is operating in FIPS mode.
-    ///
-    /// This covers only the cryptographic parts of FIPS approval.  There are
-    /// also TLS protocol-level recommendations made by NIST.  You should
-    /// prefer to call [`ClientConfig::fips()`] or [`ServerConfig::fips()`]
-    /// which take these into account.
-    pub fn fips(&self) -> bool {
-        let Self {
-            tls12_cipher_suites,
-            tls13_cipher_suites,
-            kx_groups,
-            signature_verification_algorithms,
-            secure_random,
-            key_provider,
-        } = self;
-        tls12_cipher_suites
-            .iter()
-            .all(|cs| cs.fips())
-            && tls13_cipher_suites
-                .iter()
-                .all(|cs| cs.fips())
-            && kx_groups.iter().all(|kx| kx.fips())
-            && signature_verification_algorithms.fips()
-            && secure_random.fips()
-            && key_provider.fips()
-    }
-
-    /// Return a new `CryptoProvider` that only supports TLS1.3.
-    pub fn with_only_tls13(self) -> Self {
-        Self {
-            tls12_cipher_suites: Vec::new(),
-            ..self
-        }
-    }
-
-    /// Return a new `CryptoProvider` that only supports TLS1.2.
-    pub fn with_only_tls12(self) -> Self {
-        Self {
-            tls13_cipher_suites: Vec::new(),
-            ..self
-        }
-    }
-
-    pub(crate) fn consistency_check(&self) -> Result<(), Error> {
-        if self.tls12_cipher_suites.is_empty() && self.tls13_cipher_suites.is_empty() {
-            return Err(ApiMisuse::NoCipherSuitesConfigured.into());
-        }
-
-        if self.kx_groups.is_empty() {
-            return Err(ApiMisuse::NoKeyExchangeGroupsConfigured.into());
-        }
-
-        // verifying cipher suites have matching kx groups
-        let mut supported_kx_algos = Vec::with_capacity(ALL_KEY_EXCHANGE_ALGORITHMS.len());
-        for group in self.kx_groups.iter() {
-            let kx = group.name().key_exchange_algorithm();
-            if !supported_kx_algos.contains(&kx) {
-                supported_kx_algos.push(kx);
-            }
-            // Small optimization. We don't need to go over other key exchange groups
-            // if we already cover all supported key exchange algorithms
-            if supported_kx_algos.len() == ALL_KEY_EXCHANGE_ALGORITHMS.len() {
-                break;
-            }
-        }
-
-        for cs in &self.tls12_cipher_suites {
-            if supported_kx_algos.contains(&cs.kx) {
-                continue;
-            }
-            let suite_name = cs.common.suite;
-            return Err(Error::General(alloc::format!(
-                "TLS1.2 cipher suite {suite_name:?} requires {0:?} key exchange, but no {0:?}-compatible \
-                key exchange groups were present in `CryptoProvider`'s `kx_groups` field",
-                cs.kx,
-            )));
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn iter_cipher_suites(&self) -> impl Iterator<Item = SupportedCipherSuite> + '_ {
-        self.tls13_cipher_suites
-            .iter()
-            .copied()
-            .map(SupportedCipherSuite::Tls13)
-            .chain(
-                self.tls12_cipher_suites
-                    .iter()
-                    .copied()
-                    .map(SupportedCipherSuite::Tls12),
-            )
-    }
-
-    /// We support a given TLS version if at least one ciphersuite for the version
-    /// is available.
-    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        match v {
-            ProtocolVersion::TLSv1_2 => !self.tls12_cipher_suites.is_empty(),
-            ProtocolVersion::TLSv1_3 => !self.tls13_cipher_suites.is_empty(),
-            _ => false,
-        }
     }
 }
 
@@ -764,7 +919,8 @@ impl From<Vec<u8>> for SharedSecret {
 ///
 /// ```rust
 /// # #[cfg(feature = "fips")] {
-/// rustls::crypto::default_fips_provider().install_default()
+/// # use std::sync::Arc;
+/// rustls::crypto::DefaultCryptoProvider::install(Arc::new(rustls::crypto::default_fips_provider()))
 ///     .expect("default provider already set elsewhere");
 /// # }
 /// ```
@@ -773,9 +929,10 @@ impl From<Vec<u8>> for SharedSecret {
 ///
 /// ```rust
 /// # #[cfg(feature = "fips")] {
+/// # use std::sync::Arc;
 /// # let root_store = rustls::RootCertStore::empty();
 /// let config = rustls::ClientConfig::builder_with_provider(
-///         rustls::crypto::default_fips_provider().into()
+///         Arc::new(rustls::crypto::default_fips_provider())
 ///     )
 ///     .with_root_certificates(root_store)
 ///     .with_no_client_auth()
@@ -784,7 +941,7 @@ impl From<Vec<u8>> for SharedSecret {
 /// ```
 #[cfg(all(feature = "aws-lc-rs", any(feature = "fips", docsrs)))]
 #[cfg_attr(docsrs, doc(cfg(feature = "fips")))]
-pub fn default_fips_provider() -> CryptoProvider {
+pub fn default_fips_provider() -> ConstCryptoProvider {
     aws_lc_rs::default_provider()
 }
 
@@ -797,33 +954,33 @@ mod static_default {
     #[cfg(not(feature = "std"))]
     use once_cell::race::OnceBox;
 
-    use super::CryptoProvider;
+    use crate::crypto::CryptoProvider;
     use crate::sync::Arc;
 
     #[cfg(feature = "std")]
     pub(crate) fn install_default(
-        default_provider: CryptoProvider,
-    ) -> Result<(), Arc<CryptoProvider>> {
-        PROCESS_DEFAULT_PROVIDER.set(Arc::new(default_provider))
+        default_provider: Arc<dyn CryptoProvider>,
+    ) -> Result<(), Arc<dyn CryptoProvider>> {
+        PROCESS_DEFAULT_PROVIDER.set(default_provider)
     }
 
     #[cfg(not(feature = "std"))]
     pub(crate) fn install_default(
-        default_provider: CryptoProvider,
-    ) -> Result<(), Arc<CryptoProvider>> {
+        default_provider: Arc<dyn CryptoProvider>,
+    ) -> Result<(), Arc<dyn CryptoProvider>> {
         PROCESS_DEFAULT_PROVIDER
-            .set(Box::new(Arc::new(default_provider)))
+            .set(Box::new(default_provider))
             .map_err(|e| *e)
     }
 
-    pub(crate) fn get_default() -> Option<&'static Arc<CryptoProvider>> {
+    pub(crate) fn get_default() -> Option<&'static Arc<dyn CryptoProvider>> {
         PROCESS_DEFAULT_PROVIDER.get()
     }
 
     #[cfg(feature = "std")]
-    static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
+    static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<dyn CryptoProvider>> = OnceLock::new();
     #[cfg(not(feature = "std"))]
-    static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
+    static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<dyn CryptoProvider>> = OnceBox::new();
 }
 
 #[cfg(test)]

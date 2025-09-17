@@ -4,23 +4,23 @@
 
 mod common;
 use common::*;
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::OwnedCryptoProvider;
 use rustls::{CipherSuite, ClientConfig, NamedGroup, ProtocolVersion, SupportedCipherSuite};
 
 use super::*;
 
 #[test]
 fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups() {
-    let bad_crypto_provider = CryptoProvider {
+    let bad_crypto_provider = Arc::new(OwnedCryptoProvider {
         kx_groups: vec![&ffdhe::FFDHE2048_KX_GROUP],
         tls12_cipher_suites: vec![
             provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
         ],
-        ..provider::default_provider()
-    };
+        ..provider::default_provider().into_owned()
+    });
 
-    let build_err = ClientConfig::builder_with_provider(bad_crypto_provider.into())
+    let build_err = ClientConfig::builder_with_provider(bad_crypto_provider)
         .with_root_certificates(KeyType::EcdsaP256.client_root_store())
         .with_no_client_auth()
         .unwrap_err()
@@ -72,32 +72,28 @@ fn ffdhe_ciphersuite() {
 fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() {
     use rustls::{CipherSuite, NamedGroup};
 
-    let client_config = rustls::ClientConfig::builder_with_provider(
-        CryptoProvider {
+    let client_config =
+        rustls::ClientConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
             tls12_cipher_suites: vec![
                 &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             ],
             tls13_cipher_suites: vec![],
             kx_groups: vec![&ffdhe::FFDHE4096_KX_GROUP, provider::kx_group::SECP256R1],
-            ..provider::default_provider()
-        }
-        .into(),
-    )
-    .finish(KeyType::Rsa2048);
+            ..provider::default_provider().into_owned()
+        }))
+        .finish(KeyType::Rsa2048);
 
-    let server_config = rustls::ServerConfig::builder_with_provider(
-        CryptoProvider {
+    let server_config =
+        rustls::ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
             tls12_cipher_suites: vec![
                 &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             ],
             kx_groups: vec![&ffdhe::FFDHE2048_KX_GROUP, provider::kx_group::SECP256R1],
-            ..provider::default_provider()
-        }
-        .into(),
-    )
-    .finish(KeyType::Rsa2048);
+            ..provider::default_provider().into_owned()
+        }))
+        .finish(KeyType::Rsa2048);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
@@ -119,20 +115,18 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
 
 #[test]
 fn server_avoids_cipher_suite_with_no_common_kx_groups() {
-    let server_config = rustls::ServerConfig::builder_with_provider(
-        CryptoProvider {
+    let server_config =
+        rustls::ServerConfig::builder_with_provider(Arc::new(OwnedCryptoProvider {
             tls12_cipher_suites: vec![
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                 &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
             ],
             tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
             kx_groups: vec![provider::kx_group::SECP256R1, &ffdhe::FFDHE2048_KX_GROUP],
-            ..provider::default_provider()
-        }
-        .into(),
-    )
-    .finish(KeyType::Rsa2048)
-    .into();
+            ..provider::default_provider().into_owned()
+        }))
+        .finish(KeyType::Rsa2048)
+        .into();
 
     let test_cases = [
         (
@@ -200,21 +194,21 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
     ];
 
     for (client_kx_groups, protocol_version, expected_cipher_suite, expected_group) in test_cases {
-        let provider = CryptoProvider {
+        let provider = OwnedCryptoProvider {
             tls12_cipher_suites: vec![
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                 &ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
             ],
             tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
             kx_groups: client_kx_groups,
-            ..provider::default_provider()
+            ..provider::default_provider().into_owned()
         };
         let provider = match protocol_version {
             ProtocolVersion::TLSv1_2 => provider.with_only_tls12(),
             ProtocolVersion::TLSv1_3 => provider.with_only_tls13(),
             _ => unreachable!(),
         };
-        let client_config = rustls::ClientConfig::builder_with_provider(provider.into())
+        let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
             .finish(KeyType::Rsa2048)
             .into();
 
@@ -248,8 +242,8 @@ fn non_ffdhe_kx_does_not_have_ffdhe_group() {
 mod ffdhe {
     use num_bigint::BigUint;
     use rustls::crypto::{
-        ActiveKeyExchange, CipherSuiteCommon, CryptoProvider, KeyExchangeAlgorithm, SharedSecret,
-        SupportedKxGroup,
+        ActiveKeyExchange, CipherSuiteCommon, KeyExchangeAlgorithm, OwnedCryptoProvider,
+        SharedSecret, SupportedKxGroup,
     };
     use rustls::ffdhe_groups::FfdheGroup;
     use rustls::{CipherSuite, NamedGroup, Tls12CipherSuite, ffdhe_groups};
@@ -257,12 +251,12 @@ mod ffdhe {
     use super::provider;
 
     /// A test-only `CryptoProvider`, only supporting FFDHE key exchange
-    pub fn ffdhe_provider() -> CryptoProvider {
-        CryptoProvider {
+    pub fn ffdhe_provider() -> OwnedCryptoProvider {
+        OwnedCryptoProvider {
             tls12_cipher_suites: vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
             tls13_cipher_suites: vec![provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
             kx_groups: FFDHE_KX_GROUPS.to_vec(),
-            ..provider::default_provider()
+            ..provider::default_provider().into_owned()
         }
     }
 

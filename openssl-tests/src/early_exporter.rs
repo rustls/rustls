@@ -22,10 +22,11 @@ fn test_early_exporter() {
     let port = listener.local_addr().unwrap().port();
 
     let server_thread = thread::spawn(move || {
-        let mut config = ServerConfig::builder_with_provider(provider::default_provider().into())
-            .with_no_client_auth()
-            .with_single_cert(load_certs(), load_private_key())
-            .unwrap();
+        let mut config =
+            ServerConfig::builder_with_provider(Arc::new(provider::default_provider()))
+                .with_no_client_auth()
+                .with_single_cert(load_certs(), load_private_key())
+                .unwrap();
         config.max_early_data_size = 8192;
         let config = Arc::new(config);
 

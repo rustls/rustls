@@ -1,11 +1,12 @@
 #![cfg(any(feature = "ring", feature = "aws-lc-rs"))]
+#![allow(clippy::disallowed_types)]
 
 //! Note that the default test runner builds each test file into a separate
 //! executable, and runs tests in an indeterminate order.  That restricts us
 //! to doing all the desired tests, in series, in one function.
 
 use rustls::ClientConfig;
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::DefaultCryptoProvider;
 #[cfg(all(feature = "aws-lc-rs", not(feature = "ring")))]
 use rustls::crypto::aws_lc_rs as provider;
 #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
@@ -30,27 +31,24 @@ fn test_process_provider() {
 }
 
 fn test_explicit_choice_required() {
-    assert!(CryptoProvider::get_default().is_none());
-    provider::default_provider()
-        .install_default()
-        .expect("cannot install");
-    CryptoProvider::get_default().expect("provider missing");
-    provider::default_provider()
-        .install_default()
+    assert!(DefaultCryptoProvider::get().is_none());
+    DefaultCryptoProvider::install(Arc::new(provider::default_provider())).expect("cannot install");
+    DefaultCryptoProvider::get().expect("provider missing");
+    DefaultCryptoProvider::install(Arc::new(provider::default_provider()))
         .expect_err("install succeeded a second time");
-    CryptoProvider::get_default().expect("provider missing");
+    DefaultCryptoProvider::get().expect("provider missing");
 
     // does not panic
     ClientConfig::builder().finish(KeyType::Rsa2048);
 }
 
 fn test_ring_used_as_implicit_provider() {
-    assert!(CryptoProvider::get_default().is_none());
+    assert!(DefaultCryptoProvider::get().is_none());
 
     // implicitly installs ring provider
     ClientConfig::builder().finish(KeyType::Rsa2048);
 
-    let default = CryptoProvider::get_default().expect("provider missing");
+    let default = DefaultCryptoProvider::get().expect("provider missing");
     let debug = format!("{default:?}");
     assert!(debug.contains("secure_random: Ring"));
 
@@ -59,12 +57,12 @@ fn test_ring_used_as_implicit_provider() {
 }
 
 fn test_aws_lc_rs_used_as_implicit_provider() {
-    assert!(CryptoProvider::get_default().is_none());
+    assert!(DefaultCryptoProvider::get().is_none());
 
     // implicitly installs aws-lc-rs provider
     ClientConfig::builder().finish(KeyType::Rsa2048);
 
-    let default = CryptoProvider::get_default().expect("provider missing");
+    let default = DefaultCryptoProvider::get().expect("provider missing");
     let debug = format!("{default:?}");
     assert!(debug.contains("secure_random: AwsLcRs"));
 

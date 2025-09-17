@@ -12,7 +12,7 @@ fn main() {
     );
 
     let config =
-        rustls::ClientConfig::builder_with_provider(rustls_provider_example::provider().into())
+        rustls::ClientConfig::builder_with_provider(Arc::new(rustls_provider_example::provider()))
             .with_root_certificates(root_store)
             .with_no_client_auth()
             .unwrap();

@@ -29,7 +29,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::{ConstCryptoProvider, OwnedCryptoProvider};
 use rustls::server::{
     NoServerSessionStorage, ProducesTickets, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,
@@ -802,9 +802,12 @@ impl Parameters {
                 for root in roots {
                     client_auth_roots.add(root).unwrap();
                 }
-                WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), &provider)
-                    .build()
-                    .unwrap()
+                WebPkiClientVerifier::builder_with_provider(
+                    client_auth_roots.into(),
+                    provider.as_ref(),
+                )
+                .build()
+                .unwrap()
             }
             ClientAuth::No => WebPkiClientVerifier::no_client_auth(),
         };
@@ -836,11 +839,10 @@ impl Parameters {
             .add(self.proto.key_type.ca_cert())
             .unwrap();
 
-        let cfg = ClientConfig::builder_with_provider(
+        let cfg = ClientConfig::builder_with_provider(Arc::new(
             self.provider
-                .build_with_cipher_suite(self.proto.ciphersuite)
-                .into(),
-        )
+                .build_with_cipher_suite(self.proto.ciphersuite),
+        ))
         .with_root_certificates(root_store);
 
         let mut cfg = match self.client_auth {
@@ -955,7 +957,7 @@ enum Provider {
 }
 
 impl Provider {
-    fn build(self) -> CryptoProvider {
+    fn build(self) -> ConstCryptoProvider {
         match self {
             #[cfg(feature = "aws-lc-rs")]
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::default_provider(),
@@ -983,8 +985,8 @@ impl Provider {
         }
     }
 
-    fn build_with_cipher_suite(&self, name: CipherSuite) -> CryptoProvider {
-        let mut provider = self.build();
+    fn build_with_cipher_suite(&self, name: CipherSuite) -> OwnedCryptoProvider {
+        let mut provider = self.build().into_owned();
         provider
             .tls12_cipher_suites
             .retain(|cs| cs.common.suite == name);
