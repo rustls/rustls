@@ -3,6 +3,9 @@ use std::cell::RefCell;
 #[macro_use]
 mod macros;
 
+#[path = "../common/mod.rs"]
+mod common;
+
 #[cfg(feature = "ring")]
 #[path = "."]
 mod tests_with_ring {
