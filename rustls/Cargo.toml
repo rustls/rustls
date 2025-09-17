@@ -74,10 +74,6 @@ name = "bogo"
 path = "tests/bogo.rs"
 
 [[test]]
-name = "client_cert_verifier"
-path = "tests/runners/client_cert_verifier.rs"
-
-[[test]]
 name = "key_log_file_env"
 path = "tests/runners/key_log_file_env.rs"
 

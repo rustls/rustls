@@ -10,6 +10,8 @@ mod tests_with_ring {
 
     provider_ring!();
 
+    #[path = "../client_cert_verifier.rs"]
+    mod client_cert_verifier;
     #[path = "../api_ffdhe.rs"]
     mod ffdhe;
     #[path = "../api.rs"]
@@ -23,6 +25,8 @@ mod tests_with_aws_lc_rs {
 
     provider_aws_lc_rs!();
 
+    #[path = "../client_cert_verifier.rs"]
+    mod client_cert_verifier;
     #[path = "../api_ffdhe.rs"]
     mod ffdhe;
     #[path = "../api.rs"]
