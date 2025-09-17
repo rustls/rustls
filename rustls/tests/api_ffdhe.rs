@@ -2,8 +2,6 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
-mod common;
-use common::*;
 use num_bigint::BigUint;
 use rustls::crypto::{
     ActiveKeyExchange, CipherSuiteCommon, CryptoProvider, KeyExchangeAlgorithm, SharedSecret,
@@ -15,6 +13,7 @@ use rustls::{
     ffdhe_groups,
 };
 
+use super::common::*;
 use super::*;
 
 #[test]
