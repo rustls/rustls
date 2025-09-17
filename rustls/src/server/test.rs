@@ -2,6 +2,7 @@ use std::prelude::v1::*;
 use std::vec;
 
 use super::ServerConnectionData;
+use super::hs::ClientHelloInput;
 use crate::common_state::Context;
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::msgs::base::PayloadU16;
@@ -31,7 +32,8 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
             hello,
         ))),
     };
-    super::hs::process_client_hello(
+
+    ClientHelloInput::from_message(
         &m,
         false,
         &mut Context {
