@@ -10,6 +10,8 @@ mod tests_with_ring {
 
     provider_ring!();
 
+    #[path = "../api_ffdhe.rs"]
+    mod ffdhe;
     #[path = "../api.rs"]
     mod tests;
 }
@@ -21,6 +23,8 @@ mod tests_with_aws_lc_rs {
 
     provider_aws_lc_rs!();
 
+    #[path = "../api_ffdhe.rs"]
+    mod ffdhe;
     #[path = "../api.rs"]
     mod tests;
 }
