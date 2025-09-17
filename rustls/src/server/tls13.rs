@@ -55,6 +55,7 @@ mod client_hello {
         ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
         ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
     };
+    use crate::msgs::persist::{ServerSessionValue, Tls13ServerSessionValue};
     use crate::sealed::Sealed;
     use crate::server::hs::{CertificateTypes, ClientHelloInput, ClientHelloState};
     use crate::sign::SigningKey;
@@ -500,21 +501,14 @@ mod client_hello {
     fn attempt_tls13_ticket_decryption(
         ticket: &[u8],
         config: &ServerConfig,
-    ) -> Option<persist::Tls13ServerSessionValue> {
-        let sess = if config.ticketer.enabled() {
-            config
-                .ticketer
-                .decrypt(ticket)
-                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
-        } else {
-            config
-                .session_storage
-                .take(ticket)
-                .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
+    ) -> Option<Tls13ServerSessionValue> {
+        let plain = match config.ticketer.enabled() {
+            true => config.ticketer.decrypt(ticket)?,
+            false => config.session_storage.take(ticket)?,
         };
 
-        match sess {
-            Some(persist::ServerSessionValue::Tls13(tls13)) => Some(tls13),
+        match ServerSessionValue::read_bytes(&plain).ok()? {
+            ServerSessionValue::Tls13(tls13) => Some(tls13),
             _ => None,
         }
     }
@@ -653,7 +647,7 @@ mod client_hello {
     fn decide_if_early_data_allowed(
         cx: &mut ServerContext<'_>,
         client_hello: &ClientHelloPayload,
-        resumedata: Option<&persist::Tls13ServerSessionValue>,
+        resumedata: Option<&Tls13ServerSessionValue>,
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
@@ -714,7 +708,7 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&persist::Tls13ServerSessionValue>,
+        resumedata: Option<&Tls13ServerSessionValue>,
         extra_exts: ServerExtensionsInput<'static>,
         config: &ServerConfig,
     ) -> Result<(CertificateTypes, EarlyDataDecision), Error> {
