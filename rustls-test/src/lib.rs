@@ -30,15 +30,15 @@ use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
-    CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
-    SubjectPublicKeyInfoDer,
+    CertificateDer, CertificateRevocationListDer, DnsName, PrivateKeyDer, PrivatePkcs8KeyDer,
+    ServerName, SubjectPublicKeyInfoDer,
 };
 use rustls::server::danger::{
     ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
 };
 use rustls::server::{
-    AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, UnbufferedServerConnection,
-    WebPkiClientVerifier,
+    AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, ClientHello, ResolvesServerCert,
+    UnbufferedServerConnection, WebPkiClientVerifier,
 };
 use rustls::sign::CertifiedKey;
 use rustls::unbuffered::{
@@ -1497,6 +1497,98 @@ pub fn unsafe_plaintext_crypto_provider(provider: CryptoProvider) -> Arc<CryptoP
         ..provider
     }
     .into()
+}
+
+#[derive(Default, Debug)]
+pub struct ServerCheckCertResolve {
+    pub expected_sni: Option<DnsName<'static>>,
+    pub expected_sigalgs: Option<Vec<SignatureScheme>>,
+    pub expected_alpn: Option<Vec<Vec<u8>>>,
+    pub expected_cipher_suites: Option<Vec<CipherSuite>>,
+    pub expected_server_cert_types: Option<Vec<CertificateType>>,
+    pub expected_client_cert_types: Option<Vec<CertificateType>>,
+    pub expected_named_groups: Option<Vec<NamedGroup>>,
+}
+
+impl ResolvesServerCert for ServerCheckCertResolve {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+        if client_hello
+            .signature_schemes()
+            .is_empty()
+        {
+            panic!("no signature schemes shared by client");
+        }
+
+        if client_hello.cipher_suites().is_empty() {
+            panic!("no cipher suites shared by client");
+        }
+
+        if let Some(expected_sni) = &self.expected_sni {
+            let sni = client_hello
+                .server_name()
+                .expect("sni unexpectedly absent");
+            assert_eq!(expected_sni, sni);
+        }
+
+        if let Some(expected_sigalgs) = &self.expected_sigalgs {
+            assert_eq!(
+                expected_sigalgs,
+                client_hello.signature_schemes(),
+                "unexpected signature schemes"
+            );
+        }
+
+        if let Some(expected_alpn) = &self.expected_alpn {
+            let alpn = client_hello
+                .alpn()
+                .expect("alpn unexpectedly absent")
+                .collect::<Vec<_>>();
+            assert_eq!(alpn.len(), expected_alpn.len());
+
+            for (got, wanted) in alpn.iter().zip(expected_alpn.iter()) {
+                assert_eq!(got, &wanted.as_slice());
+            }
+        }
+
+        if let Some(expected_cipher_suites) = &self.expected_cipher_suites {
+            assert_eq!(
+                expected_cipher_suites,
+                client_hello.cipher_suites(),
+                "unexpected cipher suites"
+            );
+        }
+
+        if let Some(expected_server_cert) = &self.expected_server_cert_types {
+            assert_eq!(
+                expected_server_cert,
+                client_hello
+                    .server_cert_types()
+                    .expect("Server cert types not present"),
+                "unexpected server cert"
+            );
+        }
+
+        if let Some(expected_client_cert) = &self.expected_client_cert_types {
+            assert_eq!(
+                expected_client_cert,
+                client_hello
+                    .client_cert_types()
+                    .expect("Client cert types not present"),
+                "unexpected client cert"
+            );
+        }
+
+        if let Some(expected_named_groups) = &self.expected_named_groups {
+            assert_eq!(
+                expected_named_groups,
+                client_hello
+                    .named_groups()
+                    .expect("Named groups not present"),
+            )
+        }
+
+        None
+    }
 }
 
 mod plaintext {
