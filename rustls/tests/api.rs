@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{fmt, mem};
 
 use pki_types::{CertificateDer, DnsName, IpAddr, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+use provider::cipher_suite;
+use provider::sign::RsaSigningKey;
 use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
@@ -33,12 +35,8 @@ use rustls::{
 };
 use webpki::anchor_from_trusted_cert;
 
+use super::common::*;
 use super::*;
-
-mod common;
-use common::*;
-use provider::cipher_suite;
-use provider::sign::RsaSigningKey;
 
 mod test_raw_keys {
     use super::*;

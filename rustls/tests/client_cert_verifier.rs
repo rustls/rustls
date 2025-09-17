@@ -2,20 +2,18 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
-use super::*;
-
-mod common;
-
-use common::{
-    Arc, ErrorFromPeer, KeyType, MockClientVerifier, all_versions, do_handshake_until_both_error,
-    do_handshake_until_error, make_client_config, make_client_config_with_auth,
-    make_pair_for_arc_configs, server_name,
-};
 use rustls::server::danger::ClientCertVerified;
 use rustls::{
     AlertDescription, ClientConnection, Error, InvalidMessage, PeerMisbehaved, ServerConfig,
     ServerConnection,
 };
+
+use super::common::{
+    Arc, ErrorFromPeer, KeyType, MockClientVerifier, all_versions, do_handshake_until_both_error,
+    do_handshake_until_error, make_client_config, make_client_config_with_auth,
+    make_pair_for_arc_configs, server_name,
+};
+use super::*;
 
 // Client is authorized!
 fn ver_ok() -> Result<ClientCertVerified, Error> {

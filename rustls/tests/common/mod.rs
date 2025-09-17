@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-#![allow(clippy::disallowed_types, clippy::duplicate_mod)]
+#![allow(clippy::disallowed_types)]
 
 pub use std::sync::Arc;
 
