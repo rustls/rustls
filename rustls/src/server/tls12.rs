@@ -169,7 +169,7 @@ mod client_hello {
                 });
 
             if let Some(data) = resume_data {
-                return cch.start_resumption(cx, input, st, data);
+                return start_resumption(cch.suite, cch.using_ems, cx, input, st, data);
             }
 
             // Now we have chosen a ciphersuite, we can make kx decisions.
@@ -273,80 +273,79 @@ mod client_hello {
         pub(in crate::server) send_ticket: bool,
     }
 
-    impl CompleteClientHelloHandling {
-        fn start_resumption(
-            mut self,
-            cx: &mut ServerContext<'_>,
-            input: ClientHelloInput<'_>,
-            mut state: ClientHelloState,
-            resumedata: persist::Tls12ServerSessionValue,
-        ) -> hs::NextStateOrError<'static> {
-            debug!("Resuming connection");
+    fn start_resumption(
+        suite: &'static Tls12CipherSuite,
+        using_ems: bool,
+        cx: &mut ServerContext<'_>,
+        input: ClientHelloInput<'_>,
+        mut state: ClientHelloState,
+        resumedata: persist::Tls12ServerSessionValue,
+    ) -> hs::NextStateOrError<'static> {
+        debug!("Resuming connection");
 
-            if resumedata.extended_ms && !self.using_ems {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::ResumptionAttemptedWithVariedEms,
-                ));
-            }
-
-            self.session_id = input.client_hello.session_id;
-            let mut flight = HandshakeFlightTls12::new(&mut state.transcript);
-            self.send_ticket = emit_server_hello(
-                &mut flight,
-                &state.config,
-                cx,
-                self.session_id,
-                self.suite,
-                self.using_ems,
-                &mut None,
-                input.client_hello,
-                Some(&resumedata),
-                &state.randoms,
-                state.extra_exts,
-            )?;
-            flight.finish(cx.common);
-
-            let secrets =
-                ConnectionSecrets::new_resume(state.randoms, self.suite, &resumedata.master_secret);
-            state.config.key_log.log(
-                "CLIENT_RANDOM",
-                &secrets.randoms.client,
-                secrets.master_secret(),
-            );
-            cx.common
-                .start_encryption_tls12(&secrets, Side::Server);
-            cx.common.peer_identity = resumedata.common.peer_identity;
-            cx.common.handshake_kind = Some(HandshakeKind::Resumed);
-
-            if self.send_ticket {
-                let now = state.config.current_time()?;
-
-                emit_ticket(
-                    &secrets,
-                    &mut state.transcript,
-                    self.using_ems,
-                    cx,
-                    &*state.config.ticketer,
-                    now,
-                )?;
-            }
-            emit_ccs(cx.common);
-            cx.common
-                .record_layer
-                .start_encrypting();
-            emit_finished(&secrets, &mut state.transcript, cx.common);
-
-            Ok(Box::new(ExpectCcs {
-                config: state.config,
-                secrets,
-                transcript: state.transcript,
-                session_id: self.session_id,
-                using_ems: self.using_ems,
-                resuming: true,
-                send_ticket: self.send_ticket,
-            }))
+        if resumedata.extended_ms && !using_ems {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::ResumptionAttemptedWithVariedEms,
+            ));
         }
+
+        let session_id = input.client_hello.session_id;
+        let mut flight = HandshakeFlightTls12::new(&mut state.transcript);
+        let send_ticket = emit_server_hello(
+            &mut flight,
+            &state.config,
+            cx,
+            session_id,
+            suite,
+            using_ems,
+            &mut None,
+            input.client_hello,
+            Some(&resumedata),
+            &state.randoms,
+            state.extra_exts,
+        )?;
+        flight.finish(cx.common);
+
+        let secrets =
+            ConnectionSecrets::new_resume(state.randoms, suite, &resumedata.master_secret);
+        state.config.key_log.log(
+            "CLIENT_RANDOM",
+            &secrets.randoms.client,
+            secrets.master_secret(),
+        );
+        cx.common
+            .start_encryption_tls12(&secrets, Side::Server);
+        cx.common.peer_identity = resumedata.common.peer_identity;
+        cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+
+        if send_ticket {
+            let now = state.config.current_time()?;
+
+            emit_ticket(
+                &secrets,
+                &mut state.transcript,
+                using_ems,
+                cx,
+                &*state.config.ticketer,
+                now,
+            )?;
+        }
+        emit_ccs(cx.common);
+        cx.common
+            .record_layer
+            .start_encrypting();
+        emit_finished(&secrets, &mut state.transcript, cx.common);
+
+        Ok(Box::new(ExpectCcs {
+            config: state.config,
+            secrets,
+            transcript: state.transcript,
+            session_id,
+            using_ems,
+            resuming: true,
+            send_ticket,
+        }))
     }
 
     fn emit_server_hello(
