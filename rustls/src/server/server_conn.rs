@@ -651,7 +651,7 @@ mod connection {
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
-    use crate::server::hs::{self, ClientHelloInput};
+    use crate::server::hs::ClientHelloInput;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
@@ -958,7 +958,7 @@ mod connection {
             };
 
             let mut cx = Context::from(&mut connection);
-            let sig_schemes = match hs::process_client_hello(&message, false, &mut cx) {
+            let sig_schemes = match ClientHelloInput::from_message(&message, false, &mut cx) {
                 Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
                     return Err((err, AcceptedAlert::from(connection)));
