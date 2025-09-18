@@ -47,9 +47,10 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection, ConnectionCommon,
-    ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
-    RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
+    CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection,
+    ConnectionCommon, ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup,
+    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
+    SupportedCipherSuite,
 };
 
 macro_rules! embed_files {
@@ -1776,6 +1777,22 @@ pub fn check_fill_buf(reader: &mut dyn io::BufRead, bytes: &[u8]) {
 pub fn check_fill_buf_err(reader: &mut dyn io::BufRead, err_kind: io::ErrorKind) {
     let err = reader.fill_buf().unwrap_err();
     assert!(matches!(err, err if err.kind() == err_kind))
+}
+
+pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
+    CertificateError::NotValidForNameContext {
+        expected: ServerName::try_from(expected)
+            .unwrap()
+            .to_owned(),
+        presented: vec![
+            // ref. examples/internal/test_ca.rs
+            r#"DnsName("testserver.com")"#.into(),
+            r#"DnsName("second.testserver.com")"#.into(),
+            r#"DnsName("localhost")"#.into(),
+            "IpAddress(198.51.100.1)".into(),
+            "IpAddress(2001:db8::1)".into(),
+        ],
+    }
 }
 
 mod plaintext {
