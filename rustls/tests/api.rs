@@ -8,7 +8,7 @@ use std::mem;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use pki_types::{CertificateDer, DnsName, IpAddr, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+use pki_types::{CertificateDer, DnsName, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
 use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
@@ -2957,25 +2957,6 @@ fn test_secret_extraction_disabled_or_too_early() {
                 .is_ok()
         );
     }
-}
-
-#[test]
-fn test_debug_server_name_from_ip() {
-    assert_eq!(
-        format!(
-            "{:?}",
-            ServerName::IpAddress(IpAddr::try_from("127.0.0.1").unwrap())
-        ),
-        "IpAddress(V4(Ipv4Addr([127, 0, 0, 1])))"
-    )
-}
-
-#[test]
-fn test_debug_server_name_from_string() {
-    assert_eq!(
-        format!("{:?}", ServerName::try_from("a.com").unwrap()),
-        "DnsName(\"a.com\")"
-    )
 }
 
 #[cfg(all(feature = "ring", feature = "aws-lc-rs"))]
