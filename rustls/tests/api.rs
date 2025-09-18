@@ -5680,7 +5680,47 @@ mod test_quic {
             let client_config = make_client_config(kt, &provider);
             let server_config = make_server_config(kt, &provider);
 
-            do_exporter_test(client_config, server_config);
+            let mut server =
+                quic::ServerConnection::new(server_config.into(), quic::Version::V2, vec![])
+                    .unwrap();
+            let mut client = quic::ClientConnection::new(
+                client_config.into(),
+                quic::Version::V2,
+                server_name("localhost"),
+                vec![],
+            )
+            .unwrap();
+
+            assert_eq!(Some(Error::HandshakeNotComplete), client.exporter().err());
+            assert_eq!(Some(Error::HandshakeNotComplete), server.exporter().err());
+
+            do_quic_handshake(&mut client, &mut server);
+
+            let client_exporter = client.exporter().unwrap();
+            let server_exporter = server.exporter().unwrap();
+
+            assert_eq!(
+                client.exporter().err(),
+                Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+            );
+            assert_eq!(
+                server.exporter().err(),
+                Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
+            );
+
+            let mut client_secret = [0u8; 64];
+            let mut server_secret = [0u8; 64];
+            assert!(
+                client_exporter
+                    .derive(b"label", Some(b"context"), &mut client_secret)
+                    .is_ok()
+            );
+            assert!(
+                server_exporter
+                    .derive(b"label", Some(b"context"), &mut server_secret)
+                    .is_ok()
+            );
+            assert_eq!(client_secret, server_secret);
         }
     }
 
