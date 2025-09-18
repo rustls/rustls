@@ -2736,26 +2736,9 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
     assert_eq!(format!("{rc:?}"), "Ok(5)");
 }
 
-fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
-    let kt = KeyType::Rsa2048;
-    let client_provider = CryptoProvider {
-        tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
-        ..provider::default_provider()
-    };
-    let server_config = ServerConfig::builder_with_provider(client_provider.into()).finish(kt);
-
-    let server_provider = CryptoProvider {
-        tls13_cipher_suites: vec![cipher_suite::TLS13_AES_256_GCM_SHA384],
-        ..provider::default_provider()
-    };
-    let client_config = ClientConfig::builder_with_provider(server_provider.into()).finish(kt);
-
-    (client_config, server_config)
-}
-
 #[test]
 fn client_stream_handshake_error() {
-    let (client_config, server_config) = make_disjoint_suite_configs();
+    let (client_config, server_config) = make_disjoint_suite_configs(&provider::default_provider());
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     {
@@ -2778,7 +2761,7 @@ fn client_stream_handshake_error() {
 
 #[test]
 fn client_streamowned_handshake_error() {
-    let (client_config, server_config) = make_disjoint_suite_configs();
+    let (client_config, server_config) = make_disjoint_suite_configs(&provider::default_provider());
     let (client, mut server) = make_pair_for_configs(client_config, server_config);
 
     let pipe = OtherSession::new_fails(&mut server);
@@ -2801,7 +2784,7 @@ fn client_streamowned_handshake_error() {
 
 #[test]
 fn server_stream_handshake_error() {
-    let (client_config, server_config) = make_disjoint_suite_configs();
+    let (client_config, server_config) = make_disjoint_suite_configs(&provider::default_provider());
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     client
@@ -2824,7 +2807,7 @@ fn server_stream_handshake_error() {
 
 #[test]
 fn server_streamowned_handshake_error() {
-    let (client_config, server_config) = make_disjoint_suite_configs();
+    let (client_config, server_config) = make_disjoint_suite_configs(&provider::default_provider());
     let (mut client, server) = make_pair_for_configs(client_config, server_config);
 
     client
@@ -2867,7 +2850,7 @@ fn server_connection_is_debug() {
 
 #[test]
 fn server_complete_io_for_handshake_ending_with_alert() {
-    let (client_config, server_config) = make_disjoint_suite_configs();
+    let (client_config, server_config) = make_disjoint_suite_configs(&provider::default_provider());
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     assert!(server.is_handshaking());
