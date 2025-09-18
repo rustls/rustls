@@ -19,6 +19,8 @@ mod tests_with_ring {
     mod compress;
     #[path = "../ffdhe.rs"]
     mod ffdhe;
+    #[path = "../io.rs"]
+    mod io;
     #[path = "../raw_keys.rs"]
     mod raw_keys;
     #[path = "../server_cert_verifier.rs"]
@@ -42,6 +44,8 @@ mod tests_with_aws_lc_rs {
     mod compress;
     #[path = "../ffdhe.rs"]
     mod ffdhe;
+    #[path = "../io.rs"]
+    mod io;
     #[path = "../raw_keys.rs"]
     mod raw_keys;
     #[path = "../server_cert_verifier.rs"]
