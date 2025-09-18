@@ -14,7 +14,7 @@ use provider::sign::RsaSigningKey;
 use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
-use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
+use rustls::internal::msgs::enums::ExtensionType;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
@@ -898,7 +898,6 @@ fn test_tls13_valid_early_plaintext_alert() {
     //  * The negotiated protocol version is TLS 1.3.
     server
         .read_tls(&mut io::Cursor::new(&encoding::alert(
-            AlertLevel::Fatal,
             AlertDescription::UnknownCa,
             &[],
         )))
@@ -924,7 +923,6 @@ fn test_tls13_too_short_early_plaintext_alert() {
     // because the payload length is too large to be considered an early plaintext alert.
     server
         .read_tls(&mut io::Cursor::new(&encoding::alert(
-            AlertLevel::Fatal,
             AlertDescription::UnknownCa,
             &[0xff],
         )))
@@ -945,7 +943,6 @@ fn test_tls13_late_plaintext_alert() {
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message.
     server
         .read_tls(&mut io::Cursor::new(&encoding::alert(
-            AlertLevel::Fatal,
             AlertDescription::UnknownCa,
             &[],
         )))
@@ -6135,7 +6132,7 @@ fn test_acceptor() {
     assert_eq!(err, Error::InvalidMessage(InvalidMessage::MessageTooLarge));
     let mut alert_content = Vec::new();
     let _ = alert.write(&mut alert_content);
-    let expected = encoding::alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
+    let expected = encoding::alert(AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 
     let mut acceptor = Acceptor::default();
@@ -6175,7 +6172,7 @@ fn test_acceptor() {
     ));
     let mut alert_content = Vec::new();
     let _ = alert.write(&mut alert_content);
-    let expected = encoding::alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
+    let expected = encoding::alert(AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 }
 
@@ -6220,7 +6217,7 @@ fn test_acceptor_rejected_handshake() {
 
     let mut alert_content = Vec::new();
     let _ = alert.write(&mut alert_content);
-    let expected = encoding::alert(AlertLevel::Fatal, AlertDescription::ProtocolVersion, &[]);
+    let expected = encoding::alert(AlertDescription::ProtocolVersion, &[]);
     assert_eq!(alert_content, expected);
 }
 
