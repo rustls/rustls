@@ -14,7 +14,6 @@ use provider::sign::RsaSigningKey;
 use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
-use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
@@ -898,7 +897,7 @@ fn test_tls13_valid_early_plaintext_alert() {
     //  * The payload size is indicative of a plaintext alert message.
     //  * The negotiated protocol version is TLS 1.3.
     server
-        .read_tls(&mut io::Cursor::new(&build_alert(
+        .read_tls(&mut io::Cursor::new(&encoding::alert(
             AlertLevel::Fatal,
             AlertDescription::UnknownCa,
             &[],
@@ -924,7 +923,7 @@ fn test_tls13_too_short_early_plaintext_alert() {
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message
     // because the payload length is too large to be considered an early plaintext alert.
     server
-        .read_tls(&mut io::Cursor::new(&build_alert(
+        .read_tls(&mut io::Cursor::new(&encoding::alert(
             AlertLevel::Fatal,
             AlertDescription::UnknownCa,
             &[0xff],
@@ -945,7 +944,7 @@ fn test_tls13_late_plaintext_alert() {
 
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message.
     server
-        .read_tls(&mut io::Cursor::new(&build_alert(
+        .read_tls(&mut io::Cursor::new(&encoding::alert(
             AlertLevel::Fatal,
             AlertDescription::UnknownCa,
             &[],
@@ -954,16 +953,6 @@ fn test_tls13_late_plaintext_alert() {
 
     // The server should produce a decrypt error, trying to decrypt a plaintext alert.
     assert_eq!(server.process_new_packets(), Err(Error::DecryptError));
-}
-
-fn build_alert(level: AlertLevel, desc: AlertDescription, suffix: &[u8]) -> Vec<u8> {
-    let mut v = vec![ContentType::Alert.into()];
-    ProtocolVersion::TLSv1_2.encode(&mut v);
-    ((2 + suffix.len()) as u16).encode(&mut v);
-    level.encode(&mut v);
-    desc.encode(&mut v);
-    v.extend_from_slice(suffix);
-    v
 }
 
 #[test]
@@ -6146,7 +6135,7 @@ fn test_acceptor() {
     assert_eq!(err, Error::InvalidMessage(InvalidMessage::MessageTooLarge));
     let mut alert_content = Vec::new();
     let _ = alert.write(&mut alert_content);
-    let expected = build_alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
+    let expected = encoding::alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 
     let mut acceptor = Acceptor::default();
@@ -6186,7 +6175,7 @@ fn test_acceptor() {
     ));
     let mut alert_content = Vec::new();
     let _ = alert.write(&mut alert_content);
-    let expected = build_alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
+    let expected = encoding::alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 }
 
@@ -6231,7 +6220,7 @@ fn test_acceptor_rejected_handshake() {
 
     let mut alert_content = Vec::new();
     let _ = alert.write(&mut alert_content);
-    let expected = build_alert(AlertLevel::Fatal, AlertDescription::ProtocolVersion, &[]);
+    let expected = encoding::alert(AlertLevel::Fatal, AlertDescription::ProtocolVersion, &[]);
     assert_eq!(alert_content, expected);
 }
 

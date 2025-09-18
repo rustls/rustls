@@ -1849,9 +1849,10 @@ mod plaintext {
 /// Deeply inefficient, test-only TLS encoding helpers
 pub mod encoding {
     use rustls::internal::msgs::codec::Codec;
-    use rustls::internal::msgs::enums::ExtensionType;
+    use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
     use rustls::{
-        CipherSuite, ContentType, HandshakeType, NamedGroup, ProtocolVersion, SignatureScheme,
+        AlertDescription, CipherSuite, ContentType, HandshakeType, NamedGroup, ProtocolVersion,
+        SignatureScheme,
     };
 
     /// Return a client hello with mandatory extensions added to `extensions`
@@ -1974,6 +1975,17 @@ pub mod encoding {
                 body: len_u16(share),
             }
         }
+    }
+
+    /// Return a full TLS message containing an alert.
+    pub fn alert(level: AlertLevel, desc: AlertDescription, suffix: &[u8]) -> Vec<u8> {
+        let mut v = vec![ContentType::Alert.into()];
+        ProtocolVersion::TLSv1_2.encode(&mut v);
+        ((2 + suffix.len()) as u16).encode(&mut v);
+        level.encode(&mut v);
+        desc.encode(&mut v);
+        v.extend_from_slice(suffix);
+        v
     }
 
     /// Prefix with u8 length
