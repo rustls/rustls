@@ -21,6 +21,8 @@ mod tests_with_ring {
     mod ffdhe;
     #[path = "../io.rs"]
     mod io;
+    #[path = "../kx.rs"]
+    mod kx;
     #[path = "../quic.rs"]
     mod quic;
     #[path = "../raw_keys.rs"]
@@ -50,6 +52,8 @@ mod tests_with_aws_lc_rs {
     mod ffdhe;
     #[path = "../io.rs"]
     mod io;
+    #[path = "../kx.rs"]
+    mod kx;
     #[path = "../quic.rs"]
     mod quic;
     #[path = "../raw_keys.rs"]
