@@ -98,26 +98,6 @@ mod connection {
                 Self::Server(conn) => conn.alert(),
             }
         }
-
-        /// Returns an object that can derive key material from the agreed connection secrets.
-        ///
-        /// See [RFC5705][] for more details on what this is for.
-        ///
-        /// This function can be called at most once per connection.
-        ///
-        /// This function will error:
-        ///
-        /// - if called prior to the handshake completing; (check with
-        ///   [`CommonState::is_handshaking`] first).
-        /// - if called more than once per connection.
-        ///
-        /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
-        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-            match self {
-                Self::Client(conn) => conn.core.exporter(),
-                Self::Server(conn) => conn.core.exporter(),
-            }
-        }
     }
 
     impl Deref for Connection {
@@ -208,6 +188,23 @@ mod connection {
         /// Returns the number of TLS1.3 tickets that have been received.
         pub fn tls13_tickets_received(&self) -> u32 {
             self.inner.tls13_tickets_received
+        }
+
+        /// Returns an object that can derive key material from the agreed connection secrets.
+        ///
+        /// See [RFC5705][] for more details on what this is for.
+        ///
+        /// This function can be called at most once per connection.
+        ///
+        /// This function will error:
+        ///
+        /// - if called prior to the handshake completing; (check with
+        ///   [`CommonState::is_handshaking`] first).
+        /// - if called more than once per connection.
+        ///
+        /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+            self.core.exporter()
         }
     }
 
@@ -327,6 +324,23 @@ mod connection {
                 .data
                 .received_resumption_data
                 .as_deref()
+        }
+
+        /// Returns an object that can derive key material from the agreed connection secrets.
+        ///
+        /// See [RFC5705][] for more details on what this is for.
+        ///
+        /// This function can be called at most once per connection.
+        ///
+        /// This function will error:
+        ///
+        /// - if called prior to the handshake completing; (check with
+        ///   [`CommonState::is_handshaking`] first).
+        /// - if called more than once per connection.
+        ///
+        /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+            self.core.exporter()
         }
     }
 
