@@ -8,10 +8,10 @@ use std::mem;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use pki_types::{CertificateDer, DnsName, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+use pki_types::{CertificateDer, DnsName, ServerName, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
-use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
+use rustls::client::{ResolvesClientCert, Resumption};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::enums::ExtensionType;
@@ -19,10 +19,10 @@ use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
     AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
-    ConnectionTrafficSecrets, ContentType, DistinguishedName, Error, ExtendedKeyPurpose,
-    HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog, KeyingMaterialExporter,
-    NamedGroup, PeerIdentity, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore,
-    ServerConfig, ServerConnection, SignatureScheme, SupportedCipherSuite, sign,
+    ConnectionTrafficSecrets, ContentType, DistinguishedName, Error, HandshakeKind, HandshakeType,
+    InconsistentKeys, InvalidMessage, KeyLog, KeyingMaterialExporter, NamedGroup, PeerIdentity,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
+    SignatureScheme, SupportedCipherSuite, sign,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
@@ -30,7 +30,6 @@ use rustls::{
     crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES,
     pki_types::EchConfigListBytes,
 };
-use webpki::anchor_from_trusted_cert;
 
 use super::common::*;
 use super::*;
@@ -752,348 +751,6 @@ fn client_with_sni_disabled_does_not_send_sni() {
     }
 }
 
-#[test]
-fn client_checks_server_certificate_with_given_name() {
-    let provider = provider::default_provider();
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
-        for version_provider in all_versions(&provider) {
-            let client_config = make_client_config(*kt, &version_provider);
-            let mut client = ClientConnection::new(
-                Arc::new(client_config),
-                server_name("not-the-right-hostname.com"),
-            )
-            .unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-
-            let err = do_handshake_until_error(&mut client, &mut server);
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    certificate_error_expecting_name("not-the-right-hostname.com")
-                )))
-            );
-        }
-    }
-}
-
-#[test]
-fn client_checks_server_certificate_with_given_ip_address() {
-    fn check_server_name(
-        client_config: Arc<ClientConfig>,
-        server_config: Arc<ServerConfig>,
-        name: &'static str,
-    ) -> Result<(), ErrorFromPeer> {
-        let mut client = ClientConnection::new(client_config, server_name(name)).unwrap();
-        let mut server = ServerConnection::new(server_config).unwrap();
-        do_handshake_until_error(&mut client, &mut server)
-    }
-
-    let provider = provider::default_provider();
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
-        for version_provider in all_versions(&provider) {
-            let client_config = Arc::new(make_client_config(*kt, &version_provider));
-
-            // positive ipv4 case
-            assert_eq!(
-                check_server_name(client_config.clone(), server_config.clone(), "198.51.100.1"),
-                Ok(()),
-            );
-
-            // negative ipv4 case
-            assert_eq!(
-                check_server_name(client_config.clone(), server_config.clone(), "198.51.100.2"),
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    certificate_error_expecting_name("198.51.100.2")
-                )))
-            );
-
-            // positive ipv6 case
-            assert_eq!(
-                check_server_name(client_config.clone(), server_config.clone(), "2001:db8::1"),
-                Ok(()),
-            );
-
-            // negative ipv6 case
-            assert_eq!(
-                check_server_name(client_config.clone(), server_config.clone(), "2001:db8::2"),
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    certificate_error_expecting_name("2001:db8::2")
-                )))
-            );
-        }
-    }
-}
-
-#[test]
-fn client_check_server_certificate_ee_revoked() {
-    let provider = provider::default_provider();
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
-        // Setup a server verifier that will check the EE certificate's revocation status.
-        let crls = vec![kt.end_entity_crl()];
-        let builder = webpki_server_verifier_builder(kt.client_root_store(), &provider)
-            .with_crls(crls)
-            .only_check_end_entity_revocation();
-
-        for version_provider in all_versions(&provider) {
-            let client_config =
-                make_client_config_with_verifier(builder.clone(), &version_provider);
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-
-            // We expect the handshake to fail since the server's EE certificate is revoked.
-            let err = do_handshake_until_error(&mut client, &mut server);
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::Revoked
-                )))
-            );
-        }
-    }
-}
-
-#[test]
-fn client_check_server_certificate_ee_unknown_revocation() {
-    let provider = provider::default_provider();
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
-        // Setup a server verifier builder that will check the EE certificate's revocation status, but not
-        // allow unknown revocation status (the default). We'll provide CRLs that are not relevant
-        // to the EE cert to ensure its status is unknown.
-        let unrelated_crls = vec![kt.intermediate_crl()];
-        let forbid_unknown_verifier =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(unrelated_crls.clone())
-                .only_check_end_entity_revocation();
-
-        // Also set up a verifier builder that will allow unknown revocation status.
-        let allow_unknown_verifier =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(unrelated_crls)
-                .only_check_end_entity_revocation()
-                .allow_unknown_revocation_status();
-
-        for version_provider in all_versions(&provider) {
-            let client_config = make_client_config_with_verifier(
-                forbid_unknown_verifier.clone(),
-                &version_provider,
-            );
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-
-            // We expect if we use the forbid_unknown_verifier that the handshake will fail since the
-            // server's EE certificate's revocation status is unknown given the CRLs we've provided.
-            let err = do_handshake_until_error(&mut client, &mut server);
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::UnknownRevocationStatus
-                )))
-            );
-
-            // We expect if we use the allow_unknown_verifier that the handshake will not fail.
-            let client_config =
-                make_client_config_with_verifier(allow_unknown_verifier.clone(), &version_provider);
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-            let res = do_handshake_until_error(&mut client, &mut server);
-            assert!(res.is_ok());
-        }
-    }
-}
-
-#[test]
-fn client_check_server_certificate_intermediate_revoked() {
-    let provider = provider::default_provider();
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
-        // Setup a server verifier builder that will check the full chain revocation status against a CRL
-        // that marks the intermediate certificate as revoked. We allow unknown revocation status
-        // so the EE cert's unknown status doesn't cause an error.
-        let crls = vec![kt.intermediate_crl()];
-        let full_chain_verifier_builder =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(crls.clone())
-                .allow_unknown_revocation_status();
-
-        // Also set up a verifier builder that will use the same CRL, but only check the EE certificate
-        // revocation status.
-        let ee_verifier_builder = webpki_server_verifier_builder(kt.client_root_store(), &provider)
-            .with_crls(crls.clone())
-            .only_check_end_entity_revocation()
-            .allow_unknown_revocation_status();
-
-        for version_provider in all_versions(&provider) {
-            let client_config = make_client_config_with_verifier(
-                full_chain_verifier_builder.clone(),
-                &version_provider,
-            );
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-
-            // We expect the handshake to fail when using the full chain verifier since the intermediate's
-            // EE certificate is revoked.
-            let err = do_handshake_until_error(&mut client, &mut server);
-            assert_eq!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::Revoked
-                )))
-            );
-
-            let client_config =
-                make_client_config_with_verifier(ee_verifier_builder.clone(), &version_provider);
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-            // We expect the handshake to succeed when we use the verifier that only checks the EE certificate
-            // revocation status. The revoked intermediate status should not be checked.
-            let res = do_handshake_until_error(&mut client, &mut server);
-            assert!(res.is_ok())
-        }
-    }
-}
-
-#[test]
-fn client_check_server_certificate_ee_crl_expired() {
-    let provider = provider::default_provider();
-    for kt in KeyType::all_for_provider(&provider) {
-        let server_config = Arc::new(make_server_config(*kt, &provider));
-
-        // Setup a server verifier that will check the EE certificate's revocation status, with CRL expiration enforced.
-        let crls = vec![kt.end_entity_crl_expired()];
-        let enforce_expiration_builder =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(crls)
-                .only_check_end_entity_revocation()
-                .enforce_revocation_expiration();
-
-        // Also setup a server verifier without CRL expiration enforced.
-        let crls = vec![kt.end_entity_crl_expired()];
-        let ignore_expiration_builder =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
-                .with_crls(crls)
-                .only_check_end_entity_revocation();
-
-        for version_provider in all_versions(&provider) {
-            let client_config = make_client_config_with_verifier(
-                enforce_expiration_builder.clone(),
-                &version_provider,
-            );
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-
-            // We expect the handshake to fail since the CRL is expired.
-            let err = do_handshake_until_error(&mut client, &mut server);
-            assert!(matches!(
-                err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::ExpiredRevocationListContext { .. }
-                )))
-            ));
-
-            let client_config = make_client_config_with_verifier(
-                ignore_expiration_builder.clone(),
-                &version_provider,
-            );
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(server_config.clone()).unwrap();
-
-            // We expect the handshake to succeed when CRL expiration is ignored.
-            let res = do_handshake_until_error(&mut client, &mut server);
-            assert!(res.is_ok())
-        }
-    }
-}
-
-/// Simple smoke-test of the webpki verify_server_cert_signed_by_trust_anchor helper API.
-/// This public API is intended to be used by consumers implementing their own verifier and
-/// so isn't used by the other existing verifier tests.
-#[test]
-fn client_check_server_certificate_helper_api() {
-    for kt in KeyType::all_for_provider(&provider::default_provider()) {
-        let chain = kt.chain();
-        let correct_roots = kt.client_root_store();
-        let incorrect_roots = match kt {
-            KeyType::Rsa2048 => KeyType::EcdsaP256,
-            _ => KeyType::Rsa2048,
-        }
-        .client_root_store();
-        // Using the correct trust anchors, we should verify without error.
-        assert!(
-            verify_server_cert_signed_by_trust_anchor(
-                &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
-                &correct_roots,
-                &[chain.get(1).unwrap().clone()],
-                UnixTime::now(),
-                webpki::ALL_VERIFICATION_ALGS,
-            )
-            .is_ok()
-        );
-        // Using the wrong trust anchors, we should get the expected error.
-        assert_eq!(
-            verify_server_cert_signed_by_trust_anchor(
-                &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
-                &incorrect_roots,
-                &[chain.get(1).unwrap().clone()],
-                UnixTime::now(),
-                webpki::ALL_VERIFICATION_ALGS,
-            )
-            .unwrap_err(),
-            Error::InvalidCertificate(CertificateError::UnknownIssuer)
-        );
-    }
-}
-
-#[test]
-fn client_check_server_valid_purpose() {
-    let chain = KeyType::EcdsaP256.client_chain();
-    let trust_anchor = chain.last().unwrap();
-    let roots = RootCertStore {
-        roots: vec![
-            anchor_from_trusted_cert(trust_anchor)
-                .unwrap()
-                .to_owned(),
-        ],
-    };
-
-    let error = verify_server_cert_signed_by_trust_anchor(
-        &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
-        &roots,
-        &[chain.get(1).unwrap().clone()],
-        UnixTime::now(),
-        webpki::ALL_VERIFICATION_ALGS,
-    )
-    .unwrap_err();
-    assert_eq!(
-        error,
-        Error::InvalidCertificate(CertificateError::InvalidPurposeContext {
-            required: ExtendedKeyPurpose::ServerAuth,
-            presented: vec![ExtendedKeyPurpose::ClientAuth],
-        })
-    );
-
-    assert_eq!(
-        format!("{error}"),
-        "invalid peer certificate: certificate does not allow extended key usage for \
-         server authentication, allows client authentication"
-    );
-}
-
 #[derive(Debug)]
 struct ClientCheckCertResolve {
     query_count: AtomicUsize,
@@ -1649,22 +1306,6 @@ fn sni_resolver_rejects_wrong_names() {
             sign::CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match")
         )
     );
-}
-
-fn certificate_error_expecting_name(expected: &str) -> CertificateError {
-    CertificateError::NotValidForNameContext {
-        expected: ServerName::try_from(expected)
-            .unwrap()
-            .to_owned(),
-        presented: vec![
-            // ref. examples/internal/test_ca.rs
-            r#"DnsName("testserver.com")"#.into(),
-            r#"DnsName("second.testserver.com")"#.into(),
-            r#"DnsName("localhost")"#.into(),
-            "IpAddress(198.51.100.1)".into(),
-            "IpAddress(2001:db8::1)".into(),
-        ],
-    }
 }
 
 #[test]
