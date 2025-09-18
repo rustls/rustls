@@ -13,7 +13,8 @@
     unused_qualifications
 )]
 
-use core::ops::DerefMut;
+use core::mem;
+use core::ops::{Deref, DerefMut};
 use std::io;
 use std::sync::{Arc, OnceLock};
 
@@ -1588,6 +1589,129 @@ impl ResolvesServerCert for ServerCheckCertResolve {
         }
 
         None
+    }
+}
+
+pub struct OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    sess: &'a mut C,
+    pub reads: usize,
+    pub writevs: Vec<Vec<usize>>,
+    fail_ok: bool,
+    pub short_writes: bool,
+    pub last_error: Option<Error>,
+    pub buffered: bool,
+    buffer: Vec<Vec<u8>>,
+}
+
+impl<'a, C, S> OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    pub fn new(sess: &'a mut C) -> OtherSession<'a, C, S> {
+        OtherSession {
+            sess,
+            reads: 0,
+            writevs: vec![],
+            fail_ok: false,
+            short_writes: false,
+            last_error: None,
+            buffered: false,
+            buffer: vec![],
+        }
+    }
+
+    pub fn new_buffered(sess: &'a mut C) -> OtherSession<'a, C, S> {
+        let mut os = OtherSession::new(sess);
+        os.buffered = true;
+        os
+    }
+
+    pub fn new_fails(sess: &'a mut C) -> OtherSession<'a, C, S> {
+        let mut os = OtherSession::new(sess);
+        os.fail_ok = true;
+        os
+    }
+
+    fn flush_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        let mut total = 0;
+        let mut lengths = vec![];
+        for bytes in b {
+            let write_len = if self.short_writes {
+                if bytes.len() > 5 {
+                    bytes.len() / 2
+                } else {
+                    bytes.len()
+                }
+            } else {
+                bytes.len()
+            };
+
+            let l = self
+                .sess
+                .read_tls(&mut io::Cursor::new(&bytes[..write_len]))?;
+            lengths.push(l);
+            total += l;
+            if bytes.len() != l {
+                break;
+            }
+        }
+
+        let rc = self.sess.process_new_packets();
+        if !self.fail_ok {
+            rc.unwrap();
+        } else if rc.is_err() {
+            self.last_error = rc.err();
+        }
+
+        self.writevs.push(lengths);
+        Ok(total)
+    }
+}
+
+impl<C, S> io::Read for OtherSession<'_, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
+        self.reads += 1;
+        self.sess.write_tls(&mut b)
+    }
+}
+
+impl<C, S> io::Write for OtherSession<'_, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+        unreachable!()
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if !self.buffer.is_empty() {
+            let buffer = mem::take(&mut self.buffer);
+            let slices = buffer
+                .iter()
+                .map(|b| io::IoSlice::new(b))
+                .collect::<Vec<_>>();
+            self.flush_vectored(&slices)?;
+        }
+        Ok(())
+    }
+
+    fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        if self.buffered {
+            self.buffer
+                .extend(b.iter().map(|s| s.to_vec()));
+            return Ok(b.iter().map(|s| s.len()).sum());
+        }
+        self.flush_vectored(b)
     }
 }
 
