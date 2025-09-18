@@ -224,30 +224,6 @@ fn versions() {
     );
 }
 
-fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
-    let mut buf = vec![0u8; bytes.len() + 1];
-    assert_eq!(bytes.len(), reader.read(&mut buf).unwrap());
-    assert_eq!(bytes, &buf[..bytes.len()]);
-}
-
-fn check_read_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
-    let mut buf = vec![0u8; 1];
-    let err = reader.read(&mut buf).unwrap_err();
-    assert!(matches!(err, err  if err.kind()  == err_kind))
-}
-
-fn check_fill_buf(reader: &mut dyn io::BufRead, bytes: &[u8]) {
-    let b = reader.fill_buf().unwrap();
-    assert_eq!(b, bytes);
-    let len = b.len();
-    reader.consume(len);
-}
-
-fn check_fill_buf_err(reader: &mut dyn io::BufRead, err_kind: io::ErrorKind) {
-    let err = reader.fill_buf().unwrap_err();
-    assert!(matches!(err, err  if err.kind()  == err_kind))
-}
-
 #[test]
 fn config_builder_for_client_rejects_empty_kx_groups() {
     assert_eq!(
@@ -733,11 +709,6 @@ fn server_allow_any_anonymous_or_authenticated_client() {
             assert_eq!(certs.intermediates, &client_chain[1..]);
         }
     }
-}
-
-fn check_read_and_close(reader: &mut dyn io::Read, expect: &[u8]) {
-    check_read(reader, expect);
-    assert!(matches!(reader.read(&mut [0u8; 5]), Ok(0)));
 }
 
 #[test]
