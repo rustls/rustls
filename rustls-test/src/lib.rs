@@ -12,11 +12,12 @@
     unused_extern_crates,
     unused_qualifications
 )]
+#![allow(clippy::new_without_default)]
 
-use core::mem;
 use core::ops::{Deref, DerefMut};
+use core::{fmt, mem};
 use std::io;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use rustls::client::danger::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
@@ -1843,6 +1844,144 @@ mod plaintext {
         ) -> Result<InboundPlainMessage<'a>, Error> {
             Ok(msg.into_plain_message())
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // complete mock, but not 100% used in tests
+pub enum ClientStorageOp {
+    SetKxHint(ServerName<'static>, NamedGroup),
+    GetKxHint(ServerName<'static>, Option<NamedGroup>),
+    SetTls12Session(ServerName<'static>),
+    GetTls12Session(ServerName<'static>, bool),
+    RemoveTls12Session(ServerName<'static>),
+    InsertTls13Ticket(ServerName<'static>),
+    TakeTls13Ticket(ServerName<'static>, bool),
+}
+
+pub struct ClientStorage {
+    storage: Arc<dyn rustls::client::ClientSessionStore>,
+    ops: Mutex<Vec<ClientStorageOp>>,
+    alter_max_early_data_size: Option<(u32, u32)>,
+}
+
+impl ClientStorage {
+    pub fn new() -> Self {
+        Self {
+            storage: Arc::new(rustls::client::ClientSessionMemoryCache::new(1024)),
+            ops: Mutex::new(Vec::new()),
+            alter_max_early_data_size: None,
+        }
+    }
+
+    pub fn alter_max_early_data_size(&mut self, expected: u32, altered: u32) {
+        self.alter_max_early_data_size = Some((expected, altered));
+    }
+
+    pub fn ops(&self) -> Vec<ClientStorageOp> {
+        self.ops.lock().unwrap().clone()
+    }
+
+    pub fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
+        mem::take(&mut self.ops.lock().unwrap())
+    }
+}
+
+impl fmt::Debug for ClientStorage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(ops: {:?})", self.ops.lock().unwrap())
+    }
+}
+
+impl rustls::client::ClientSessionStore for ClientStorage {
+    fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::SetKxHint(server_name.clone(), group));
+        self.storage
+            .set_kx_hint(server_name, group)
+    }
+
+    fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup> {
+        let rc = self.storage.kx_hint(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::GetKxHint(server_name.to_owned(), rc));
+        rc
+    }
+
+    fn set_tls12_session(
+        &self,
+        server_name: ServerName<'static>,
+        value: rustls::client::Tls12ClientSessionValue,
+    ) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::SetTls12Session(server_name.clone()));
+        self.storage
+            .set_tls12_session(server_name, value)
+    }
+
+    fn tls12_session(
+        &self,
+        server_name: &ServerName<'_>,
+    ) -> Option<rustls::client::Tls12ClientSessionValue> {
+        let rc = self.storage.tls12_session(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::GetTls12Session(
+                server_name.to_owned(),
+                rc.is_some(),
+            ));
+        rc
+    }
+
+    fn remove_tls12_session(&self, server_name: &ServerName<'static>) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::RemoveTls12Session(server_name.clone()));
+        self.storage
+            .remove_tls12_session(server_name);
+    }
+
+    fn insert_tls13_ticket(
+        &self,
+        server_name: ServerName<'static>,
+        mut value: rustls::client::Tls13ClientSessionValue,
+    ) {
+        if let Some((expected, desired)) = self.alter_max_early_data_size {
+            assert_eq!(value.max_early_data_size(), expected);
+            value._private_set_max_early_data_size(desired);
+        }
+
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::InsertTls13Ticket(server_name.clone()));
+        self.storage
+            .insert_tls13_ticket(server_name, value);
+    }
+
+    fn take_tls13_ticket(
+        &self,
+        server_name: &ServerName<'static>,
+    ) -> Option<rustls::client::Tls13ClientSessionValue> {
+        let rc = self
+            .storage
+            .take_tls13_ticket(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::TakeTls13Ticket(
+                server_name.clone(),
+                rc.is_some(),
+            ));
+        rc
     }
 }
 
