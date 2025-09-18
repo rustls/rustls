@@ -23,6 +23,8 @@ mod tests_with_ring {
     mod io;
     #[path = "../quic.rs"]
     mod quic;
+    #[path = "../resume.rs"]
+    mod resume;
     #[path = "../rpk.rs"]
     mod rpk;
     #[path = "../server_cert_verifier.rs"]
@@ -50,6 +52,8 @@ mod tests_with_aws_lc_rs {
     mod io;
     #[path = "../quic.rs"]
     mod quic;
+    #[path = "../resume.rs"]
+    mod resume;
     #[path = "../rpk.rs"]
     mod rpk;
     #[path = "../server_cert_verifier.rs"]
