@@ -1978,14 +1978,10 @@ pub mod encoding {
     }
 
     /// Return a full TLS message containing an alert.
-    pub fn alert(level: AlertLevel, desc: AlertDescription, suffix: &[u8]) -> Vec<u8> {
-        let mut v = vec![ContentType::Alert.into()];
-        ProtocolVersion::TLSv1_2.encode(&mut v);
-        ((2 + suffix.len()) as u16).encode(&mut v);
-        level.encode(&mut v);
-        desc.encode(&mut v);
-        v.extend_from_slice(suffix);
-        v
+    pub fn alert(desc: AlertDescription, suffix: &[u8]) -> Vec<u8> {
+        let mut body = vec![AlertLevel::Fatal.into(), desc.into()];
+        body.extend_from_slice(suffix);
+        message_framing(ContentType::Alert, ProtocolVersion::TLSv1_2, body)
     }
 
     /// Prefix with u8 length
