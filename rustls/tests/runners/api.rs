@@ -25,6 +25,8 @@ mod tests_with_ring {
     mod kx;
     #[path = "../quic.rs"]
     mod quic;
+    #[path = "../resolve.rs"]
+    mod resolve;
     #[path = "../resume.rs"]
     mod resume;
     #[path = "../rpk.rs"]
@@ -56,6 +58,8 @@ mod tests_with_aws_lc_rs {
     mod kx;
     #[path = "../quic.rs"]
     mod quic;
+    #[path = "../resolve.rs"]
+    mod resolve;
     #[path = "../resume.rs"]
     mod resume;
     #[path = "../rpk.rs"]
