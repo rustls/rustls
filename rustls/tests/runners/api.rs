@@ -25,6 +25,8 @@ mod tests_with_ring {
     mod quic;
     #[path = "../raw_keys.rs"]
     mod raw_keys;
+    #[path = "../resume.rs"]
+    mod resume;
     #[path = "../server_cert_verifier.rs"]
     mod server_cert_verifier;
     #[path = "../api.rs"]
@@ -52,6 +54,8 @@ mod tests_with_aws_lc_rs {
     mod quic;
     #[path = "../raw_keys.rs"]
     mod raw_keys;
+    #[path = "../resume.rs"]
+    mod resume;
     #[path = "../server_cert_verifier.rs"]
     mod server_cert_verifier;
     #[path = "../api.rs"]
