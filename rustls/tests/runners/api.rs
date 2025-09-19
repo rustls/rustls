@@ -17,6 +17,8 @@ mod tests_with_ring {
     mod client_cert_verifier;
     #[path = "../compress.rs"]
     mod compress;
+    #[path = "../crypto.rs"]
+    mod crypto;
     #[path = "../ffdhe.rs"]
     mod ffdhe;
     #[path = "../io.rs"]
@@ -50,6 +52,8 @@ mod tests_with_aws_lc_rs {
     mod client_cert_verifier;
     #[path = "../compress.rs"]
     mod compress;
+    #[path = "../crypto.rs"]
+    mod crypto;
     #[path = "../ffdhe.rs"]
     mod ffdhe;
     #[path = "../io.rs"]
