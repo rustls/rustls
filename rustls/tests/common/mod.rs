@@ -7,7 +7,6 @@ use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::CryptoProvider;
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 use rustls::{RootCertStore, SupportedCipherSuite};
-pub use rustls_test::*;
 
 pub fn webpki_client_verifier_builder(
     roots: Arc<RootCertStore>,
