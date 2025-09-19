@@ -244,6 +244,9 @@ impl CertifiedKey {
 }
 
 /// Convert a public key and algorithm identifier into [`SubjectPublicKeyInfoDer`].
+///
+/// In the returned encoding, `alg_id` is used as the `algorithm` field, and `public_key` is
+/// wrapped inside an ASN.1 `BIT STRING` and then used as the `subjectPublicKey` field.
 pub fn public_key_to_spki(
     alg_id: &AlgorithmIdentifier,
     public_key: impl AsRef<[u8]>,
