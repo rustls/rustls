@@ -2,23 +2,23 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::sync::Arc;
+
 use rustls::server::danger::ClientCertVerified;
 use rustls::{
     AlertDescription, CertificateError, ClientConnection, Error, InvalidMessage, PeerIdentity,
     PeerMisbehaved, ServerConfig, ServerConnection,
 };
 use rustls_test::{
-    do_handshake, make_server_config_with_client_verifier,
+    ErrorFromPeer, KeyType, MockClientVerifier, do_handshake, do_handshake_until_both_error,
+    do_handshake_until_error, make_client_config, make_client_config_with_auth,
+    make_pair_for_arc_configs, make_server_config_with_client_verifier,
     make_server_config_with_mandatory_client_auth, make_server_config_with_optional_client_auth,
-    webpki_client_verifier_builder,
+    server_name, webpki_client_verifier_builder,
 };
 
-use super::common::{
-    Arc, ErrorFromPeer, KeyType, MockClientVerifier, all_versions, do_handshake_until_both_error,
-    do_handshake_until_error, make_client_config, make_client_config_with_auth,
-    make_pair_for_arc_configs, server_name,
-};
-use super::*;
+use super::common::all_versions;
+use super::provider;
 
 // Client is authorized!
 fn ver_ok() -> Result<ClientCertVerified, Error> {

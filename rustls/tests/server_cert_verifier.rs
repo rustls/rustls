@@ -2,15 +2,8 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
-use super::*;
+use std::sync::Arc;
 
-mod common;
-
-use common::{
-    Arc, ErrorFromPeer, KeyType, MockServerVerifier, all_versions, do_handshake,
-    do_handshake_until_both_error, do_handshake_until_error, make_client_config,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-};
 use pki_types::UnixTime;
 use rustls::client::danger::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
@@ -25,12 +18,17 @@ use rustls::{
     ServerConnection,
 };
 use rustls_test::{
-    certificate_error_expecting_name, make_client_config_with_verifier, server_name,
-    webpki_server_verifier_builder,
+    ErrorFromPeer, KeyType, MockServerVerifier, certificate_error_expecting_name, do_handshake,
+    do_handshake_until_both_error, do_handshake_until_error, make_client_config,
+    make_client_config_with_verifier, make_pair_for_arc_configs, make_pair_for_configs,
+    make_server_config, server_name, webpki_server_verifier_builder,
 };
 use webpki::anchor_from_trusted_cert;
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::X509Name;
+
+use super::common::all_versions;
+use super::provider;
 
 #[test]
 fn client_can_override_certificate_verification() {

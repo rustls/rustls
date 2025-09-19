@@ -1,6 +1,7 @@
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
@@ -13,12 +14,15 @@ use rustls::{
     AlertDescription, CertificateError, ClientConfig, ConnectionTrafficSecrets, Error,
     InvalidMessage, ServerConfig, SideData, SupportedCipherSuite,
 };
+use rustls_test::{
+    ClientConfigExt, KeyType, MockServerVerifier, aes_128_gcm_with_1024_confidentiality_limit,
+    do_unbuffered_handshake, make_client_config, make_server_config, server_name,
+    unsafe_plaintext_crypto_provider,
+};
 
-use super::*;
-
-mod common;
-use common::*;
-use provider::cipher_suite;
+use super::provider::cipher_suite;
+use super::{provider, provider_is_aws_lc_rs, provider_is_fips};
+use crate::common::{all_versions, provider_with_one_suite};
 
 const MAX_ITERATIONS: usize = 100;
 

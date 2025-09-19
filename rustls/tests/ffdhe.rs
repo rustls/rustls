@@ -2,6 +2,8 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::sync::Arc;
+
 use num_bigint::BigUint;
 use rustls::crypto::{
     ActiveKeyExchange, CipherSuiteCommon, CryptoProvider, KeyExchangeAlgorithm, SharedSecret,
@@ -12,9 +14,13 @@ use rustls::{
     CipherSuite, ClientConfig, NamedGroup, ProtocolVersion, SupportedCipherSuite, Tls12CipherSuite,
     ffdhe_groups,
 };
+use rustls_test::{
+    ClientConfigExt, KeyType, ServerConfigExt, do_handshake, do_suite_and_kx_test,
+    make_pair_for_arc_configs, make_pair_for_configs,
+};
 
-use super::common::*;
-use super::*;
+use super::provider;
+use crate::common::provider_with_one_suite;
 
 #[test]
 fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups() {
