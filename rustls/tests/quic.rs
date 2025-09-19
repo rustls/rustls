@@ -11,7 +11,7 @@ use rustls_test::{
     ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
 };
 
-use super::*;
+use super::provider;
 
 // Returns the sender's next secrets to use, or the receiver's error.
 fn step<L: SideData, R: SideData>(

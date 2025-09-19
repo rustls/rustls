@@ -25,14 +25,17 @@
 
 use std::env;
 use std::io::Write;
+use std::sync::Arc;
 
-use super::*;
+use rustls_test::{
+    KeyType, do_handshake, make_client_config, make_pair_for_arc_configs, make_server_config,
+    transfer,
+};
+
+use super::{provider, serialized};
 
 mod common;
-use common::{
-    Arc, KeyType, all_versions, do_handshake, make_client_config, make_pair_for_arc_configs,
-    make_server_config, transfer,
-};
+use common::all_versions;
 
 #[test]
 fn exercise_key_log_file_for_client() {

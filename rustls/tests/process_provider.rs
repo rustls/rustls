@@ -12,9 +12,9 @@ use rustls::crypto::aws_lc_rs as provider;
 use rustls::crypto::ring as provider;
 #[cfg(all(feature = "ring", feature = "aws-lc-rs"))]
 use rustls::crypto::ring as provider;
+use rustls_test::{ClientConfigExt, KeyType};
 
 mod common;
-use crate::common::*;
 
 #[test]
 fn test_process_provider() {
