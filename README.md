@@ -23,6 +23,9 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 [![Chat](https://img.shields.io/discord/976380008299917365?logo=discord)](https://discord.gg/MCSB76RU96)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/9034/badge)](https://www.bestpractices.dev/projects/9034)
 
+The maintainers pronounce "rustls" as rustles (rather than rust-TLS), but we don't feel strongly
+about it.
+
 ## Changelog
 
 The detailed list of changes in each release can be found at
