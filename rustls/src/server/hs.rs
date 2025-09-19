@@ -586,7 +586,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
     where
         Self: 'm,
     {
-        let input = process_client_hello(&m, self.done_retry, cx)?;
+        let input = ClientHelloInput::from_message(&m, self.done_retry, cx)?;
         self.with_certified_key(input, cx)
     }
 
@@ -607,71 +607,73 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
     ) -> NextStateOrError<'static>;
 }
 
-/// Configuration-independent validation of a `ClientHello` message.
-///
-/// This represents the first part of the `ClientHello` handling, where we do all validation that
-/// doesn't depend on a `ServerConfig` being available and extract everything needed to build a
-/// [`ClientHello`] value for a [`ResolvesServerCert`].
-///
-/// [`ResolvesServerCert`]: crate::server::ResolvesServerCert
-pub(super) fn process_client_hello<'m>(
-    message: &'m Message<'m>,
-    done_retry: bool,
-    cx: &mut ServerContext<'_>,
-) -> Result<ClientHelloInput<'m>, Error> {
-    let client_hello = require_handshake_msg!(
-        message,
-        HandshakeType::ClientHello,
-        HandshakePayload::ClientHello
-    )?;
-    trace!("we got a clienthello {client_hello:?}");
-
-    if !client_hello
-        .compression_methods
-        .contains(&Compression::Null)
-    {
-        return Err(cx.common.send_fatal_alert(
-            AlertDescription::IllegalParameter,
-            PeerIncompatible::NullCompressionRequired,
-        ));
-    }
-
-    // No handshake messages should follow this one in this flight.
-    cx.common.check_aligned_handshake()?;
-
-    if done_retry {
-        let ch_sni = client_hello
-            .server_name
-            .as_ref()
-            .and_then(ServerNamePayload::to_dns_name_normalized);
-        if cx.data.sni != ch_sni {
-            return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
-        }
-    } else {
-        assert!(cx.data.sni.is_none())
-    }
-
-    let sig_schemes = client_hello
-        .signature_schemes
-        .as_ref()
-        .ok_or_else(|| {
-            cx.common.send_fatal_alert(
-                AlertDescription::HandshakeFailure,
-                PeerIncompatible::SignatureAlgorithmsExtensionRequired,
-            )
-        })?;
-
-    Ok(ClientHelloInput {
-        message,
-        client_hello,
-        sig_schemes: sig_schemes.to_owned(),
-    })
-}
-
 pub(crate) struct ClientHelloInput<'a> {
     pub(super) message: &'a Message<'a>,
     pub(super) client_hello: &'a ClientHelloPayload,
     pub(super) sig_schemes: Vec<SignatureScheme>,
+}
+
+impl<'a> ClientHelloInput<'a> {
+    /// Configuration-independent validation of a `ClientHello` message.
+    ///
+    /// This represents the first part of the `ClientHello` handling, where we do all validation that
+    /// doesn't depend on a `ServerConfig` being available and extract everything needed to build a
+    /// [`ClientHello`] value for a [`ResolvesServerCert`].
+    ///
+    /// [`ResolvesServerCert`]: crate::server::ResolvesServerCert
+    pub(super) fn from_message(
+        message: &'a Message<'a>,
+        done_retry: bool,
+        cx: &mut ServerContext<'_>,
+    ) -> Result<Self, Error> {
+        let client_hello = require_handshake_msg!(
+            message,
+            HandshakeType::ClientHello,
+            HandshakePayload::ClientHello
+        )?;
+        trace!("we got a clienthello {client_hello:?}");
+
+        if !client_hello
+            .compression_methods
+            .contains(&Compression::Null)
+        {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerIncompatible::NullCompressionRequired,
+            ));
+        }
+
+        // No handshake messages should follow this one in this flight.
+        cx.common.check_aligned_handshake()?;
+
+        if done_retry {
+            let ch_sni = client_hello
+                .server_name
+                .as_ref()
+                .and_then(ServerNamePayload::to_dns_name_normalized);
+            if cx.data.sni != ch_sni {
+                return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
+            }
+        } else {
+            assert!(cx.data.sni.is_none())
+        }
+
+        let sig_schemes = client_hello
+            .signature_schemes
+            .as_ref()
+            .ok_or_else(|| {
+                cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerIncompatible::SignatureAlgorithmsExtensionRequired,
+                )
+            })?;
+
+        Ok(ClientHelloInput {
+            message,
+            client_hello,
+            sig_schemes: sig_schemes.to_owned(),
+        })
+    }
 }
 
 pub(crate) enum HandshakeHashOrBuffer {
