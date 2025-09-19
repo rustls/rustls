@@ -12,7 +12,7 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [features]
-aws-lc-rs-unstable = ["webpki/aws-lc-rs-unstable", "aws-lc-rs/unstable"]
+aws-lc-rs-unstable = ["webpki/aws-lc-rs-unstable", "aws-lc-rs/unstable", "rcgen/aws_lc_rs_unstable"]
 
 [dependencies]
 aws-lc-rs = { workspace = true }
@@ -22,6 +22,8 @@ webpki = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true }
 env_logger = { workspace = true }
+rcgen = { workspace = true }
+rustls-test = { workspace = true }
 webpki-roots = { workspace = true }
 
 [[bench]]
