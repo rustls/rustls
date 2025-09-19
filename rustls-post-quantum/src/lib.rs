@@ -280,3 +280,109 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
         (SignatureScheme::ML_DSA_87, &[webpki_algs::ML_DSA_87]),
     ],
 };
+
+#[cfg(all(test, feature = "aws-lc-rs-unstable"))]
+mod tests {
+    use std::io;
+    use std::ops::DerefMut;
+    use std::sync::Arc;
+
+    use rcgen::{
+        CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
+    };
+    use rustls::pki_types::PrivateKeyDer;
+    use rustls::{
+        ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, ServerConfig,
+        ServerConnection, SideData,
+    };
+
+    #[test]
+    fn ml_dsa() {
+        let ca_key = KeyPair::generate_for(&rcgen::PKCS_ML_DSA_44).unwrap();
+        let mut ca_params = CertificateParams::new(vec!["Test CA".into()]).unwrap();
+        ca_params.is_ca = IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        ca_params.key_usages = vec![
+            KeyUsagePurpose::DigitalSignature,
+            KeyUsagePurpose::KeyCertSign,
+        ];
+        ca_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+        let issuer = CertifiedIssuer::self_signed(ca_params, ca_key).unwrap();
+
+        let ee_key = KeyPair::generate_for(&rcgen::PKCS_ML_DSA_87).unwrap();
+        let ee_params = CertificateParams::new(vec!["localhost".into()]).unwrap();
+        let ee_cert = ee_params
+            .signed_by(&ee_key, &issuer)
+            .unwrap();
+
+        let provider = Arc::new(super::provider());
+        let server_config = ServerConfig::builder_with_provider(provider.clone())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![ee_cert.der().clone()],
+                PrivateKeyDer::try_from(ee_key.serialize_der()).unwrap(),
+            )
+            .unwrap();
+
+        let mut roots = RootCertStore::empty();
+        roots.add(issuer.der().clone()).unwrap();
+        let client_config = ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+
+        let mut client =
+            ClientConnection::new(Arc::new(client_config), "localhost".try_into().unwrap())
+                .unwrap();
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        do_handshake(&mut client, &mut server);
+    }
+
+    // Copied from rustls while rustls-post-quantum depends on an older rustls.
+    fn do_handshake(
+        client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+    ) -> (usize, usize) {
+        let (mut to_client, mut to_server) = (0, 0);
+        while server.is_handshaking() || client.is_handshaking() {
+            to_server += transfer(client, server);
+            server.process_new_packets().unwrap();
+            to_client += transfer(server, client);
+            client.process_new_packets().unwrap();
+        }
+        (to_server, to_client)
+    }
+
+    // Copied from rustls-test while rustls-post-quantum depends on an older rustls.
+    fn transfer(
+        left: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        right: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+    ) -> usize {
+        let mut buf = [0u8; 262144];
+        let mut total = 0;
+
+        while left.wants_write() {
+            let sz = {
+                let into_buf: &mut dyn io::Write = &mut &mut buf[..];
+                left.write_tls(into_buf).unwrap()
+            };
+            total += sz;
+            if sz == 0 {
+                return total;
+            }
+
+            let mut offs = 0;
+            loop {
+                let from_buf: &mut dyn io::Read = &mut &buf[offs..sz];
+                offs += right.read_tls(from_buf).unwrap();
+                if sz == offs {
+                    break;
+                }
+            }
+        }
+
+        total
+    }
+}
