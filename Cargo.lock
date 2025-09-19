@@ -2445,9 +2445,9 @@ dependencies = [
 
 [[package]]
 name = "rcgen"
-version = "0.14.1"
+version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "218a7fbb357f6da42c9fd3610b1a5128d087d460e5386eaa5040705c464611dc"
+checksum = "4c83367ba62b3f1dbd0f086ede4e5ebfb4713fb234dbbc5807772a31245ff46d"
 dependencies = [
  "aws-lc-rs",
  "pem",
@@ -2740,7 +2740,9 @@ dependencies = [
  "aws-lc-rs",
  "criterion",
  "env_logger",
+ "rcgen",
  "rustls 0.23.31",
+ "rustls-test",
  "rustls-webpki",
  "webpki-roots 1.0.0",
 ]
