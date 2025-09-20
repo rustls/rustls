@@ -70,16 +70,8 @@ name = "api"
 path = "tests/runners/api.rs"
 
 [[test]]
-name = "api_ffdhe"
-path = "tests/runners/api_ffdhe.rs"
-
-[[test]]
 name = "bogo"
 path = "tests/bogo.rs"
-
-[[test]]
-name = "client_cert_verifier"
-path = "tests/runners/client_cert_verifier.rs"
 
 [[test]]
 name = "key_log_file_env"
@@ -88,14 +80,6 @@ path = "tests/runners/key_log_file_env.rs"
 [[test]]
 name = "process_provider"
 path = "tests/process_provider.rs"
-
-[[test]]
-name = "server_cert_verifier"
-path = "tests/runners/server_cert_verifier.rs"
-
-[[test]]
-name = "unbuffered"
-path = "tests/runners/unbuffered.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)

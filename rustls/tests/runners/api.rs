@@ -3,6 +3,9 @@ use std::cell::RefCell;
 #[macro_use]
 mod macros;
 
+#[path = "../common/mod.rs"]
+mod common;
+
 #[cfg(feature = "ring")]
 #[path = "."]
 mod tests_with_ring {
@@ -10,8 +13,32 @@ mod tests_with_ring {
 
     provider_ring!();
 
+    #[path = "../client_cert_verifier.rs"]
+    mod client_cert_verifier;
+    #[path = "../compress.rs"]
+    mod compress;
+    #[path = "../crypto.rs"]
+    mod crypto;
+    #[path = "../ffdhe.rs"]
+    mod ffdhe;
+    #[path = "../io.rs"]
+    mod io;
+    #[path = "../kx.rs"]
+    mod kx;
+    #[path = "../quic.rs"]
+    mod quic;
+    #[path = "../resolve.rs"]
+    mod resolve;
+    #[path = "../resume.rs"]
+    mod resume;
+    #[path = "../rpk.rs"]
+    mod rpk;
+    #[path = "../server_cert_verifier.rs"]
+    mod server_cert_verifier;
     #[path = "../api.rs"]
     mod tests;
+    #[path = "../unbuffered.rs"]
+    mod unbuffered;
 }
 
 #[cfg(feature = "aws-lc-rs")]
@@ -21,8 +48,32 @@ mod tests_with_aws_lc_rs {
 
     provider_aws_lc_rs!();
 
+    #[path = "../client_cert_verifier.rs"]
+    mod client_cert_verifier;
+    #[path = "../compress.rs"]
+    mod compress;
+    #[path = "../crypto.rs"]
+    mod crypto;
+    #[path = "../ffdhe.rs"]
+    mod ffdhe;
+    #[path = "../io.rs"]
+    mod io;
+    #[path = "../kx.rs"]
+    mod kx;
+    #[path = "../quic.rs"]
+    mod quic;
+    #[path = "../resolve.rs"]
+    mod resolve;
+    #[path = "../resume.rs"]
+    mod resume;
+    #[path = "../rpk.rs"]
+    mod rpk;
+    #[path = "../server_cert_verifier.rs"]
+    mod server_cert_verifier;
     #[path = "../api.rs"]
     mod tests;
+    #[path = "../unbuffered.rs"]
+    mod unbuffered;
 }
 
 // this must be outside tests_with_*, as we want

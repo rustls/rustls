@@ -12,10 +12,12 @@
     unused_extern_crates,
     unused_qualifications
 )]
+#![allow(clippy::new_without_default)]
 
-use core::ops::DerefMut;
+use core::ops::{Deref, DerefMut};
+use core::{fmt, mem};
 use std::io;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use rustls::client::danger::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
@@ -30,24 +32,25 @@ use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
-    CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
-    SubjectPublicKeyInfoDer,
+    CertificateDer, CertificateRevocationListDer, DnsName, PrivateKeyDer, PrivatePkcs8KeyDer,
+    ServerName, SubjectPublicKeyInfoDer,
 };
 use rustls::server::danger::{
     ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
 };
 use rustls::server::{
-    AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, UnbufferedServerConnection,
-    WebPkiClientVerifier,
+    AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, ClientHello, ResolvesServerCert,
+    UnbufferedServerConnection, WebPkiClientVerifier,
 };
 use rustls::sign::CertifiedKey;
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection, ConnectionCommon,
-    ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
-    RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
+    CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection,
+    ConnectionCommon, ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup,
+    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
+    SupportedCipherSuite,
 };
 
 macro_rules! embed_files {
@@ -704,6 +707,34 @@ pub fn make_pair_for_arc_configs(
         ClientConnection::new(client_config.clone(), server_name("localhost")).unwrap(),
         ServerConnection::new(server_config.clone()).unwrap(),
     )
+}
+
+/// Return a client and server config that don't share a common cipher suite
+pub fn make_disjoint_suite_configs(provider: &CryptoProvider) -> (ClientConfig, ServerConfig) {
+    let kt = KeyType::Rsa2048;
+    let client_provider = CryptoProvider {
+        tls13_cipher_suites: provider
+            .tls13_cipher_suites
+            .iter()
+            .cloned()
+            .filter(|cs| cs.common.suite == CipherSuite::TLS13_AES_128_GCM_SHA256)
+            .collect(),
+        ..provider.clone()
+    };
+    let server_config = ServerConfig::builder_with_provider(client_provider.into()).finish(kt);
+
+    let server_provider = CryptoProvider {
+        tls13_cipher_suites: provider
+            .tls13_cipher_suites
+            .iter()
+            .cloned()
+            .filter(|cs| cs.common.suite == CipherSuite::TLS13_AES_256_GCM_SHA384)
+            .collect(),
+        ..provider.clone()
+    };
+    let client_config = ClientConfig::builder_with_provider(server_provider.into()).finish(kt);
+
+    (client_config, server_config)
 }
 
 pub fn do_handshake(
@@ -1499,6 +1530,271 @@ pub fn unsafe_plaintext_crypto_provider(provider: CryptoProvider) -> Arc<CryptoP
     .into()
 }
 
+#[derive(Default, Debug)]
+pub struct ServerCheckCertResolve {
+    pub expected_sni: Option<DnsName<'static>>,
+    pub expected_sigalgs: Option<Vec<SignatureScheme>>,
+    pub expected_alpn: Option<Vec<Vec<u8>>>,
+    pub expected_cipher_suites: Option<Vec<CipherSuite>>,
+    pub expected_server_cert_types: Option<Vec<CertificateType>>,
+    pub expected_client_cert_types: Option<Vec<CertificateType>>,
+    pub expected_named_groups: Option<Vec<NamedGroup>>,
+}
+
+impl ResolvesServerCert for ServerCheckCertResolve {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+        if client_hello
+            .signature_schemes()
+            .is_empty()
+        {
+            panic!("no signature schemes shared by client");
+        }
+
+        if client_hello.cipher_suites().is_empty() {
+            panic!("no cipher suites shared by client");
+        }
+
+        if let Some(expected_sni) = &self.expected_sni {
+            let sni = client_hello
+                .server_name()
+                .expect("sni unexpectedly absent");
+            assert_eq!(expected_sni, sni);
+        }
+
+        if let Some(expected_sigalgs) = &self.expected_sigalgs {
+            assert_eq!(
+                expected_sigalgs,
+                client_hello.signature_schemes(),
+                "unexpected signature schemes"
+            );
+        }
+
+        if let Some(expected_alpn) = &self.expected_alpn {
+            let alpn = client_hello
+                .alpn()
+                .expect("alpn unexpectedly absent")
+                .collect::<Vec<_>>();
+            assert_eq!(alpn.len(), expected_alpn.len());
+
+            for (got, wanted) in alpn.iter().zip(expected_alpn.iter()) {
+                assert_eq!(got, &wanted.as_slice());
+            }
+        }
+
+        if let Some(expected_cipher_suites) = &self.expected_cipher_suites {
+            assert_eq!(
+                expected_cipher_suites,
+                client_hello.cipher_suites(),
+                "unexpected cipher suites"
+            );
+        }
+
+        if let Some(expected_server_cert) = &self.expected_server_cert_types {
+            assert_eq!(
+                expected_server_cert,
+                client_hello
+                    .server_cert_types()
+                    .expect("Server cert types not present"),
+                "unexpected server cert"
+            );
+        }
+
+        if let Some(expected_client_cert) = &self.expected_client_cert_types {
+            assert_eq!(
+                expected_client_cert,
+                client_hello
+                    .client_cert_types()
+                    .expect("Client cert types not present"),
+                "unexpected client cert"
+            );
+        }
+
+        if let Some(expected_named_groups) = &self.expected_named_groups {
+            assert_eq!(
+                expected_named_groups,
+                client_hello
+                    .named_groups()
+                    .expect("Named groups not present"),
+            )
+        }
+
+        None
+    }
+}
+
+pub struct OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    sess: &'a mut C,
+    pub reads: usize,
+    pub writevs: Vec<Vec<usize>>,
+    fail_ok: bool,
+    pub short_writes: bool,
+    pub last_error: Option<Error>,
+    pub buffered: bool,
+    buffer: Vec<Vec<u8>>,
+}
+
+impl<'a, C, S> OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    pub fn new(sess: &'a mut C) -> Self {
+        OtherSession {
+            sess,
+            reads: 0,
+            writevs: vec![],
+            fail_ok: false,
+            short_writes: false,
+            last_error: None,
+            buffered: false,
+            buffer: vec![],
+        }
+    }
+
+    pub fn new_buffered(sess: &'a mut C) -> Self {
+        let mut os = OtherSession::new(sess);
+        os.buffered = true;
+        os
+    }
+
+    pub fn new_fails(sess: &'a mut C) -> Self {
+        let mut os = OtherSession::new(sess);
+        os.fail_ok = true;
+        os
+    }
+
+    fn flush_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        let mut total = 0;
+        let mut lengths = vec![];
+        for bytes in b {
+            let write_len = if self.short_writes {
+                if bytes.len() > 5 {
+                    bytes.len() / 2
+                } else {
+                    bytes.len()
+                }
+            } else {
+                bytes.len()
+            };
+
+            let l = self
+                .sess
+                .read_tls(&mut io::Cursor::new(&bytes[..write_len]))?;
+            lengths.push(l);
+            total += l;
+            if bytes.len() != l {
+                break;
+            }
+        }
+
+        let rc = self.sess.process_new_packets();
+        if !self.fail_ok {
+            rc.unwrap();
+        } else if rc.is_err() {
+            self.last_error = rc.err();
+        }
+
+        self.writevs.push(lengths);
+        Ok(total)
+    }
+}
+
+impl<C, S> io::Read for OtherSession<'_, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
+        self.reads += 1;
+        self.sess.write_tls(&mut b)
+    }
+}
+
+impl<C, S> io::Write for OtherSession<'_, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+        unreachable!()
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if !self.buffer.is_empty() {
+            let buffer = mem::take(&mut self.buffer);
+            let slices = buffer
+                .iter()
+                .map(|b| io::IoSlice::new(b))
+                .collect::<Vec<_>>();
+            self.flush_vectored(&slices)?;
+        }
+        Ok(())
+    }
+
+    fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        if self.buffered {
+            self.buffer
+                .extend(b.iter().map(|s| s.to_vec()));
+            return Ok(b.iter().map(|s| s.len()).sum());
+        }
+        self.flush_vectored(b)
+    }
+}
+
+/// Check `reader` has available exactly `bytes`
+pub fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
+    let mut buf = vec![0u8; bytes.len() + 1];
+    assert_eq!(bytes.len(), reader.read(&mut buf).unwrap());
+    assert_eq!(bytes, &buf[..bytes.len()]);
+}
+
+/// Check `reader has available exactly `bytes`, followed by EOF
+pub fn check_read_and_close(reader: &mut dyn io::Read, expect: &[u8]) {
+    check_read(reader, expect);
+    assert!(matches!(reader.read(&mut [0u8; 5]), Ok(0)));
+}
+
+/// Check `reader` yields only an error of kind `err_kind`
+pub fn check_read_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
+    let mut buf = vec![0u8; 1];
+    let err = reader.read(&mut buf).unwrap_err();
+    assert!(matches!(err, err  if err.kind()  == err_kind))
+}
+
+/// Check `reader` has available exactly `bytes`
+pub fn check_fill_buf(reader: &mut dyn io::BufRead, bytes: &[u8]) {
+    let b = reader.fill_buf().unwrap();
+    assert_eq!(b, bytes);
+    let len = b.len();
+    reader.consume(len);
+}
+
+/// Check `reader` yields only an error of kind `err_kind`
+pub fn check_fill_buf_err(reader: &mut dyn io::BufRead, err_kind: io::ErrorKind) {
+    let err = reader.fill_buf().unwrap_err();
+    assert!(matches!(err, err if err.kind() == err_kind))
+}
+
+pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
+    CertificateError::NotValidForNameContext {
+        expected: ServerName::try_from(expected)
+            .unwrap()
+            .to_owned(),
+        presented: vec![
+            // ref. examples/internal/test_ca.rs
+            r#"DnsName("testserver.com")"#.into(),
+            r#"DnsName("second.testserver.com")"#.into(),
+            r#"DnsName("localhost")"#.into(),
+            "IpAddress(198.51.100.1)".into(),
+            "IpAddress(2001:db8::1)".into(),
+        ],
+    }
+}
+
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
@@ -1568,12 +1864,151 @@ mod plaintext {
     }
 }
 
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // complete mock, but not 100% used in tests
+pub enum ClientStorageOp {
+    SetKxHint(ServerName<'static>, NamedGroup),
+    GetKxHint(ServerName<'static>, Option<NamedGroup>),
+    SetTls12Session(ServerName<'static>),
+    GetTls12Session(ServerName<'static>, bool),
+    RemoveTls12Session(ServerName<'static>),
+    InsertTls13Ticket(ServerName<'static>),
+    TakeTls13Ticket(ServerName<'static>, bool),
+}
+
+pub struct ClientStorage {
+    storage: Arc<dyn rustls::client::ClientSessionStore>,
+    ops: Mutex<Vec<ClientStorageOp>>,
+    alter_max_early_data_size: Option<(u32, u32)>,
+}
+
+impl ClientStorage {
+    pub fn new() -> Self {
+        Self {
+            storage: Arc::new(rustls::client::ClientSessionMemoryCache::new(1024)),
+            ops: Mutex::new(Vec::new()),
+            alter_max_early_data_size: None,
+        }
+    }
+
+    pub fn alter_max_early_data_size(&mut self, expected: u32, altered: u32) {
+        self.alter_max_early_data_size = Some((expected, altered));
+    }
+
+    pub fn ops(&self) -> Vec<ClientStorageOp> {
+        self.ops.lock().unwrap().clone()
+    }
+
+    pub fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
+        mem::take(&mut self.ops.lock().unwrap())
+    }
+}
+
+impl fmt::Debug for ClientStorage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(ops: {:?})", self.ops.lock().unwrap())
+    }
+}
+
+impl rustls::client::ClientSessionStore for ClientStorage {
+    fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::SetKxHint(server_name.clone(), group));
+        self.storage
+            .set_kx_hint(server_name, group)
+    }
+
+    fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup> {
+        let rc = self.storage.kx_hint(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::GetKxHint(server_name.to_owned(), rc));
+        rc
+    }
+
+    fn set_tls12_session(
+        &self,
+        server_name: ServerName<'static>,
+        value: rustls::client::Tls12ClientSessionValue,
+    ) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::SetTls12Session(server_name.clone()));
+        self.storage
+            .set_tls12_session(server_name, value)
+    }
+
+    fn tls12_session(
+        &self,
+        server_name: &ServerName<'_>,
+    ) -> Option<rustls::client::Tls12ClientSessionValue> {
+        let rc = self.storage.tls12_session(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::GetTls12Session(
+                server_name.to_owned(),
+                rc.is_some(),
+            ));
+        rc
+    }
+
+    fn remove_tls12_session(&self, server_name: &ServerName<'static>) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::RemoveTls12Session(server_name.clone()));
+        self.storage
+            .remove_tls12_session(server_name);
+    }
+
+    fn insert_tls13_ticket(
+        &self,
+        server_name: ServerName<'static>,
+        mut value: rustls::client::Tls13ClientSessionValue,
+    ) {
+        if let Some((expected, desired)) = self.alter_max_early_data_size {
+            assert_eq!(value.max_early_data_size(), expected);
+            value._private_set_max_early_data_size(desired);
+        }
+
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::InsertTls13Ticket(server_name.clone()));
+        self.storage
+            .insert_tls13_ticket(server_name, value);
+    }
+
+    fn take_tls13_ticket(
+        &self,
+        server_name: &ServerName<'static>,
+    ) -> Option<rustls::client::Tls13ClientSessionValue> {
+        let rc = self
+            .storage
+            .take_tls13_ticket(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::TakeTls13Ticket(
+                server_name.clone(),
+                rc.is_some(),
+            ));
+        rc
+    }
+}
+
 /// Deeply inefficient, test-only TLS encoding helpers
 pub mod encoding {
     use rustls::internal::msgs::codec::Codec;
-    use rustls::internal::msgs::enums::ExtensionType;
+    use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
     use rustls::{
-        CipherSuite, ContentType, HandshakeType, NamedGroup, ProtocolVersion, SignatureScheme,
+        AlertDescription, CipherSuite, ContentType, HandshakeType, NamedGroup, ProtocolVersion,
+        SignatureScheme,
     };
 
     /// Return a client hello with mandatory extensions added to `extensions`
@@ -1696,6 +2131,13 @@ pub mod encoding {
                 body: len_u16(share),
             }
         }
+    }
+
+    /// Return a full TLS message containing an alert.
+    pub fn alert(desc: AlertDescription, suffix: &[u8]) -> Vec<u8> {
+        let mut body = vec![AlertLevel::Fatal.into(), desc.into()];
+        body.extend_from_slice(suffix);
+        message_framing(ContentType::Alert, ProtocolVersion::TLSv1_2, body)
     }
 
     /// Prefix with u8 length
