@@ -2,6 +2,7 @@ use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::borrow::Borrow;
 use core::fmt;
 use core::ops::Deref;
 
@@ -16,7 +17,7 @@ use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
-use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
+use crate::crypto::{ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm};
 use crate::enums::{
     AlertDescription, CertificateType, CipherSuite, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -35,8 +36,10 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sealed::Sealed;
-use crate::suites::SupportedCipherSuite;
+use crate::suites::{Suite, SupportedCipherSuite};
 use crate::sync::Arc;
+use crate::tls12::Tls12CipherSuite;
+use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::verify::ServerCertVerifier;
 
@@ -60,62 +63,17 @@ pub(crate) struct ExpectServerHello {
     pub(super) ech_state: Option<EchState>,
 }
 
-impl State<ClientConnectionData> for ExpectServerHello {
-    fn handle<'m>(
-        mut self: Box<Self>,
+impl ExpectServerHello {
+    fn with_version<T: Suite + 'static>(
+        mut self,
+        server_hello: &ServerHelloPayload,
+        message: &Message<'_>,
         cx: &mut ClientContext<'_>,
-        m: Message<'m>,
-    ) -> NextStateOrError<'m>
+    ) -> NextStateOrError<'static>
     where
-        Self: 'm,
+        CryptoProvider: Borrow<[&'static T]>,
+        SupportedCipherSuite: From<&'static T>,
     {
-        let server_hello =
-            require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
-        trace!("We got ServerHello {server_hello:#?}");
-
-        use crate::ProtocolVersion::{TLSv1_2, TLSv1_3};
-        let config = &self.input.config;
-        let tls13_supported = config.supports_version(TLSv1_3);
-
-        let server_version = if server_hello.legacy_version == TLSv1_2 {
-            server_hello
-                .selected_version
-                .unwrap_or(server_hello.legacy_version)
-        } else {
-            server_hello.legacy_version
-        };
-
-        let version = match server_version {
-            TLSv1_3 if tls13_supported => TLSv1_3,
-            TLSv1_2 if config.supports_version(TLSv1_2) => {
-                if cx.data.early_data.is_enabled() && cx.common.early_traffic {
-                    // The client must fail with a dedicated error code if the server
-                    // responds with TLS 1.2 when offering 0-RTT.
-                    return Err(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion.into());
-                }
-
-                if server_hello.selected_version.is_some() {
-                    return Err({
-                        cx.common.send_fatal_alert(
-                            AlertDescription::IllegalParameter,
-                            PeerMisbehaved::SelectedTls12UsingTls13VersionExtension,
-                        )
-                    });
-                }
-
-                TLSv1_2
-            }
-            _ => {
-                let reason = match server_version {
-                    TLSv1_2 | TLSv1_3 => PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig,
-                    _ => PeerIncompatible::ServerDoesNotSupportTls12Or13,
-                };
-                return Err(cx
-                    .common
-                    .send_fatal_alert(AlertDescription::ProtocolVersion, reason));
-            }
-        };
-
         if server_hello.compression_method != Compression::Null {
             return Err({
                 cx.common.send_fatal_alert(
@@ -137,7 +95,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             ));
         }
 
-        cx.common.negotiated_version = Some(version);
+        cx.common.negotiated_version = Some(T::VERSION);
 
         // Extract ALPN protocol
         if !cx.common.is_tls13() {
@@ -162,8 +120,9 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
         }
 
-        let suite = config
-            .find_cipher_suite(server_hello.cipher_suite)
+        let suite = <CryptoProvider as Borrow<[&'static T]>>::borrow(&self.input.config.provider)
+            .iter()
+            .find(|cs| cs.common().suite == server_hello.cipher_suite)
             .ok_or_else(|| {
                 cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
@@ -171,21 +130,8 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 )
             })?;
 
-        match suite {
-            SupportedCipherSuite::Tls13(_) if version == TLSv1_3 => {}
-            SupportedCipherSuite::Tls12(_) if version == TLSv1_2 => {}
-            _ => {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::SelectedUnusableCipherSuiteForVersion,
-                    )
-                });
-            }
-        }
-
         match self.suite {
-            Some(prev_suite) if prev_suite != suite => {
+            Some(prev_suite) if prev_suite.suite() != suite.common().suite => {
                 return Err({
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
@@ -195,22 +141,75 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
             _ => {
                 debug!("Using ciphersuite {suite:?}");
-                self.suite = Some(suite);
-                cx.common.suite = Some(suite);
+                self.suite = Some(SupportedCipherSuite::from(suite));
+                cx.common.suite = Some(SupportedCipherSuite::from(suite));
             }
         }
 
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
-        match suite {
-            SupportedCipherSuite::Tls13(suite) => suite
-                .protocol_version
-                .client
-                .handle_server_hello(suite, server_hello, &m, *self, cx),
-            SupportedCipherSuite::Tls12(suite) => suite
-                .protocol_version
-                .client
-                .handle_server_hello(suite, server_hello, &m, *self, cx),
+        suite
+            .client_handler()
+            .handle_server_hello(suite, server_hello, message, self, cx)
+    }
+}
+
+impl State<ClientConnectionData> for ExpectServerHello {
+    fn handle<'m>(
+        self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        m: Message<'m>,
+    ) -> NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
+        let server_hello =
+            require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
+        trace!("We got ServerHello {server_hello:#?}");
+
+        use crate::ProtocolVersion::{TLSv1_2, TLSv1_3};
+        let config = &self.input.config;
+        let tls13_supported = config.supports_version(TLSv1_3);
+
+        let server_version = if server_hello.legacy_version == TLSv1_2 {
+            server_hello
+                .selected_version
+                .unwrap_or(server_hello.legacy_version)
+        } else {
+            server_hello.legacy_version
+        };
+
+        match server_version {
+            TLSv1_3 if tls13_supported => {
+                self.with_version::<Tls13CipherSuite>(server_hello, &m, cx)
+            }
+            TLSv1_2 if config.supports_version(TLSv1_2) => {
+                if cx.data.early_data.is_enabled() && cx.common.early_traffic {
+                    // The client must fail with a dedicated error code if the server
+                    // responds with TLS 1.2 when offering 0-RTT.
+                    return Err(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion.into());
+                }
+
+                if server_hello.selected_version.is_some() {
+                    return Err({
+                        cx.common.send_fatal_alert(
+                            AlertDescription::IllegalParameter,
+                            PeerMisbehaved::SelectedTls12UsingTls13VersionExtension,
+                        )
+                    });
+                }
+
+                self.with_version::<Tls12CipherSuite>(server_hello, &m, cx)
+            }
+            _ => {
+                let reason = match server_version {
+                    TLSv1_2 | TLSv1_3 => PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig,
+                    _ => PeerIncompatible::ServerDoesNotSupportTls12Or13,
+                };
+                Err(cx
+                    .common
+                    .send_fatal_alert(AlertDescription::ProtocolVersion, reason))
+            }
         }
     }
 

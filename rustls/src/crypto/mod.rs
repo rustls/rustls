@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::borrow::Borrow;
 use core::fmt::Debug;
 
 use pki_types::PrivateKeyDer;
@@ -13,8 +14,8 @@ pub use crate::webpki::{
     WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
 };
 use crate::{
-    ApiMisuse, Error, NamedGroup, ProtocolVersion, SupportedCipherSuite, SupportedProtocolVersion,
-    Tls12CipherSuite, Tls13CipherSuite,
+    ApiMisuse, Error, NamedGroup, ProtocolVersion, SupportedCipherSuite, Tls12CipherSuite,
+    Tls13CipherSuite,
 };
 #[cfg(doc)]
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server, sign};
@@ -412,6 +413,18 @@ See the documentation of the CryptoProvider type for more information.
     }
 }
 
+impl Borrow<[&'static Tls12CipherSuite]> for CryptoProvider {
+    fn borrow(&self) -> &[&'static Tls12CipherSuite] {
+        &self.tls12_cipher_suites
+    }
+}
+
+impl Borrow<[&'static Tls13CipherSuite]> for CryptoProvider {
+    fn borrow(&self) -> &[&'static Tls13CipherSuite] {
+        &self.tls13_cipher_suites
+    }
+}
+
 /// A source of cryptographically secure randomness.
 pub trait SecureRandom: Send + Sync + Debug {
     /// Fill the given buffer with random bytes.
@@ -569,9 +582,9 @@ pub trait ActiveKeyExchange: Send + Sync {
     fn complete_for_tls_version(
         self: Box<Self>,
         peer_pub_key: &[u8],
-        tls_version: &SupportedProtocolVersion,
+        tls_version: ProtocolVersion,
     ) -> Result<SharedSecret, Error> {
-        if tls_version.version() != ProtocolVersion::TLSv1_2 {
+        if tls_version == ProtocolVersion::TLSv1_3 {
             return self.complete(peer_pub_key);
         }
 
