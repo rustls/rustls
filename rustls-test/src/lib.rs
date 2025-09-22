@@ -1612,7 +1612,7 @@ where
     C: DerefMut + Deref<Target = ConnectionCommon<S>>,
     S: SideData,
 {
-    pub fn new(sess: &'a mut C) -> OtherSession<'a, C, S> {
+    pub fn new(sess: &'a mut C) -> Self {
         OtherSession {
             sess,
             reads: 0,
@@ -1625,13 +1625,13 @@ where
         }
     }
 
-    pub fn new_buffered(sess: &'a mut C) -> OtherSession<'a, C, S> {
+    pub fn new_buffered(sess: &'a mut C) -> Self {
         let mut os = OtherSession::new(sess);
         os.buffered = true;
         os
     }
 
-    pub fn new_fails(sess: &'a mut C) -> OtherSession<'a, C, S> {
+    pub fn new_fails(sess: &'a mut C) -> Self {
         let mut os = OtherSession::new(sess);
         os.fail_ok = true;
         os
