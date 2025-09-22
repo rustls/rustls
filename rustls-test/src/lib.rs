@@ -708,7 +708,7 @@ pub fn make_pair_for_arc_configs(
 }
 
 /// Return a client and server config that don't share a common cipher suite
-pub fn make_disjoint_suite_configs(provider: &CryptoProvider) -> (ClientConfig, ServerConfig) {
+pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, ServerConfig) {
     let kt = KeyType::Rsa2048;
     let client_provider = CryptoProvider {
         tls13_cipher_suites: provider
@@ -728,7 +728,7 @@ pub fn make_disjoint_suite_configs(provider: &CryptoProvider) -> (ClientConfig, 
             .cloned()
             .filter(|cs| cs.common.suite == CipherSuite::TLS13_AES_256_GCM_SHA384)
             .collect(),
-        ..provider.clone()
+        ..provider
     };
     let client_config = ClientConfig::builder_with_provider(server_provider.into()).finish(kt);
 
