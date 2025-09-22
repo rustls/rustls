@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use std::{io, mem};
 
-use pki_types::{DnsName, ServerName, SubjectPublicKeyInfoDer};
+use pki_types::{DnsName, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
 use rustls::client::Resumption;
 use rustls::crypto::CryptoProvider;
@@ -1382,11 +1382,7 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
 
         // And a connection made from a client config should retain the fips status of the
         // config w.r.t the HPKE suite.
-        let conn = ClientConnection::new(
-            config.into(),
-            ServerName::DnsName(DnsName::try_from("example.org").unwrap()),
-        )
-        .unwrap();
+        let conn = ClientConnection::new(config.into(), server_name("example.org")).unwrap();
         assert_eq!(conn.fips(), suite.fips());
     }
 }
