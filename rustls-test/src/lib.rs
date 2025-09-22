@@ -1715,6 +1715,40 @@ where
     }
 }
 
+/// Check `reader` has available exactly `bytes`
+pub fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
+    let mut buf = vec![0u8; bytes.len() + 1];
+    assert_eq!(bytes.len(), reader.read(&mut buf).unwrap());
+    assert_eq!(bytes, &buf[..bytes.len()]);
+}
+
+/// Check `reader has available exactly `bytes`, followed by EOF
+pub fn check_read_and_close(reader: &mut dyn io::Read, expect: &[u8]) {
+    check_read(reader, expect);
+    assert!(matches!(reader.read(&mut [0u8; 5]), Ok(0)));
+}
+
+/// Check `reader` yields only an error of kind `err_kind`
+pub fn check_read_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
+    let mut buf = vec![0u8; 1];
+    let err = reader.read(&mut buf).unwrap_err();
+    assert!(matches!(err, err  if err.kind()  == err_kind))
+}
+
+/// Check `reader` has available exactly `bytes`
+pub fn check_fill_buf(reader: &mut dyn io::BufRead, bytes: &[u8]) {
+    let b = reader.fill_buf().unwrap();
+    assert_eq!(b, bytes);
+    let len = b.len();
+    reader.consume(len);
+}
+
+/// Check `reader` yields only an error of kind `err_kind`
+pub fn check_fill_buf_err(reader: &mut dyn io::BufRead, err_kind: io::ErrorKind) {
+    let err = reader.fill_buf().unwrap_err();
+    assert!(matches!(err, err if err.kind() == err_kind))
+}
+
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
