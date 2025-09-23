@@ -2,6 +2,7 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use std::{io, mem};
@@ -232,7 +233,7 @@ fn config_builder_for_client_rejects_empty_kx_groups() {
     assert_eq!(
         ClientConfig::builder_with_provider(
             CryptoProvider {
-                kx_groups: Vec::default(),
+                kx_groups: Cow::Borrowed(&[]),
                 ..provider::default_provider()
             }
             .into()
@@ -249,8 +250,8 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
     assert_eq!(
         ClientConfig::builder_with_provider(
             CryptoProvider {
-                tls12_cipher_suites: Vec::default(),
-                tls13_cipher_suites: Vec::default(),
+                tls12_cipher_suites: Cow::Borrowed(&[]),
+                tls13_cipher_suites: Cow::Borrowed(&[]),
                 ..provider::default_provider()
             }
             .into()
@@ -267,7 +268,7 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
     assert_eq!(
         ServerConfig::builder_with_provider(
             CryptoProvider {
-                kx_groups: Vec::default(),
+                kx_groups: Cow::Borrowed(&[]),
                 ..provider::default_provider()
             }
             .into()
@@ -284,8 +285,8 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
     assert_eq!(
         ServerConfig::builder_with_provider(
             CryptoProvider {
-                tls12_cipher_suites: Vec::default(),
-                tls13_cipher_suites: Vec::default(),
+                tls12_cipher_suites: Cow::Borrowed(&[]),
+                tls13_cipher_suites: Cow::Borrowed(&[]),
                 ..provider::default_provider()
             }
             .into()
@@ -419,8 +420,8 @@ fn test_config_builders_debug() {
 
     let b = ServerConfig::builder_with_provider(
         CryptoProvider {
-            tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
-            kx_groups: vec![provider::kx_group::X25519],
+            tls13_cipher_suites: Cow::Owned(vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]),
+            kx_groups: Cow::Owned(vec![provider::kx_group::X25519]),
             ..provider::default_provider()
         }
         .into(),
@@ -437,8 +438,8 @@ fn test_config_builders_debug() {
 
     let b = ClientConfig::builder_with_provider(
         CryptoProvider {
-            tls13_cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
-            kx_groups: vec![provider::kx_group::X25519],
+            tls13_cipher_suites: Cow::Owned(vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]),
+            kx_groups: Cow::Owned(vec![provider::kx_group::X25519]),
             ..provider::default_provider()
         }
         .into(),

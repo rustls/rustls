@@ -17,8 +17,8 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
-#[cfg(feature = "std")]
 use alloc::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
@@ -34,9 +34,9 @@ mod verify;
 
 pub fn provider() -> CryptoProvider {
     CryptoProvider {
-        tls12_cipher_suites: ALL_TLS12_CIPHER_SUITES.to_vec(),
-        tls13_cipher_suites: ALL_TLS13_CIPHER_SUITES.to_vec(),
-        kx_groups: kx::ALL_KX_GROUPS.to_vec(),
+        tls12_cipher_suites: Cow::Borrowed(ALL_TLS12_CIPHER_SUITES),
+        tls13_cipher_suites: Cow::Borrowed(ALL_TLS13_CIPHER_SUITES),
+        kx_groups: Cow::Borrowed(kx::ALL_KX_GROUPS),
         signature_verification_algorithms: verify::ALGORITHMS,
         secure_random: &Provider,
         key_provider: &Provider,

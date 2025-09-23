@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
@@ -189,7 +190,7 @@ pub struct CryptoProvider {
     ///
     /// A valid `CryptoProvider` must ensure that all cipher suites are accompanied by at least
     /// one matching key exchange group in [`CryptoProvider::kx_groups`].
-    pub tls12_cipher_suites: Vec<&'static Tls12CipherSuite>,
+    pub tls12_cipher_suites: Cow<'static, [&'static Tls12CipherSuite]>,
 
     /// List of supported TLS1.3 cipher suites, in preference order -- the first element
     /// is the highest priority.
@@ -197,7 +198,7 @@ pub struct CryptoProvider {
     /// Note that the protocol version is negotiated before the cipher suite.
     ///
     /// The `Tls13CipherSuite` type carries both configuration and implementation.
-    pub tls13_cipher_suites: Vec<&'static Tls13CipherSuite>,
+    pub tls13_cipher_suites: Cow<'static, [&'static Tls13CipherSuite]>,
 
     /// List of supported key exchange groups, in preference order -- the
     /// first element is the highest priority.
@@ -206,7 +207,7 @@ pub struct CryptoProvider {
     /// and in TLS1.3 a key share for it is sent in the client hello.
     ///
     /// The `SupportedKxGroup` type carries both configuration and implementation.
-    pub kx_groups: Vec<&'static dyn SupportedKxGroup>,
+    pub kx_groups: Cow<'static, [&'static dyn SupportedKxGroup]>,
 
     /// List of signature verification algorithms for use with webpki.
     ///
@@ -235,7 +236,9 @@ impl CryptoProvider {
     pub fn install_default(self) -> Result<(), Arc<Self>> {
         static_default::install_default(self)
     }
+}
 
+impl CryptoProvider {
     /// Returns the default `CryptoProvider` for this process.
     ///
     /// This will be `None` if no default has been set yet.
@@ -338,7 +341,7 @@ See the documentation of the CryptoProvider type for more information.
     /// Return a new `CryptoProvider` that only supports TLS1.3.
     pub fn with_only_tls13(self) -> Self {
         Self {
-            tls12_cipher_suites: Vec::new(),
+            tls12_cipher_suites: Cow::Borrowed(&[]),
             ..self
         }
     }
@@ -346,7 +349,7 @@ See the documentation of the CryptoProvider type for more information.
     /// Return a new `CryptoProvider` that only supports TLS1.2.
     pub fn with_only_tls12(self) -> Self {
         Self {
-            tls13_cipher_suites: Vec::new(),
+            tls13_cipher_suites: Cow::Borrowed(&[]),
             ..self
         }
     }
@@ -374,7 +377,7 @@ See the documentation of the CryptoProvider type for more information.
             }
         }
 
-        for cs in &self.tls12_cipher_suites {
+        for cs in self.tls12_cipher_suites.iter() {
             if supported_kx_algos.contains(&cs.kx) {
                 continue;
             }

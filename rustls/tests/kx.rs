@@ -2,6 +2,7 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use rustls::client::Resumption;
@@ -371,7 +372,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
             ),
             ServerConfig::builder_with_provider(
                 CryptoProvider {
-                    kx_groups: vec![provider::kx_group::SECP384R1],
+                    kx_groups: Cow::Owned(vec![provider::kx_group::SECP384R1]),
                     ..version_provider
                 }
                 .into(),
@@ -398,7 +399,7 @@ fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
     let kt = KeyType::Rsa2048;
     let client_config = ClientConfig::builder_with_provider(
         CryptoProvider {
-            kx_groups: vec![&FakeHybrid, provider::kx_group::SECP384R1],
+            kx_groups: Cow::Owned(vec![&FakeHybrid, provider::kx_group::SECP384R1]),
             ..provider::default_provider()
         }
         .into(),

@@ -988,9 +988,11 @@ impl Provider {
         let mut provider = self.build();
         provider
             .tls12_cipher_suites
+            .to_mut()
             .retain(|cs| cs.common.suite == name);
         provider
             .tls13_cipher_suites
+            .to_mut()
             .retain(|cs| cs.common.suite == name);
         provider
     }
