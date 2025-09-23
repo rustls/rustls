@@ -1972,60 +1972,58 @@ pub fn main() {
     }
 
     let key_log = Arc::new(KeyLogMemo::default());
-
-    let (mut client_cfg, mut server_cfg) = match opts.side {
-        Side::Client => (Some(make_client_cfg(&opts, &key_log)), None),
-        Side::Server => (None, Some(make_server_cfg(&opts, &key_log))),
+    let mut config = match opts.side {
+        Side::Client => SideConfig::Client(make_client_cfg(&opts, &key_log)),
+        Side::Server => SideConfig::Server(make_server_cfg(&opts, &key_log)),
     };
 
-    fn make_session(
-        opts: &Options,
-        scfg: &Option<Arc<ServerConfig>>,
-        ccfg: &Option<Arc<ClientConfig>>,
-    ) -> Connection {
+    for i in 0..opts.resumes + 1 {
         assert!(opts.quic_transport_params.is_empty());
         assert!(
             opts.expect_quic_transport_params
                 .is_empty()
         );
 
-        if opts.side == Side::Server {
-            let scfg = scfg.as_ref().cloned().unwrap();
-            ServerConnection::new(scfg)
-                .unwrap()
-                .into()
-        } else {
-            let server_name = ServerName::try_from(opts.host_name.as_str())
-                .unwrap()
-                .to_owned();
-            let ccfg = ccfg.as_ref().cloned().unwrap();
-
-            ClientConnection::new(ccfg, server_name)
-                .unwrap()
-                .into()
+        match &config {
+            SideConfig::Client(config) => {
+                let server_name = ServerName::try_from(opts.host_name.as_str())
+                    .unwrap()
+                    .to_owned();
+                let sess = ClientConnection::new(config.clone(), server_name).unwrap();
+                exec(&opts, Connection::Client(sess), &key_log, i);
+            }
+            SideConfig::Server(config) => {
+                let sess = ServerConnection::new(config.clone()).unwrap();
+                exec(&opts, Connection::Server(sess), &key_log, i);
+            }
         }
-    }
 
-    for i in 0..opts.resumes + 1 {
-        let sess = make_session(&opts, &server_cfg, &client_cfg);
-        exec(&opts, sess, &key_log, i);
         if opts.resume_with_tickets_disabled {
             opts.tickets = false;
 
-            match opts.side {
-                Side::Server => server_cfg = Some(make_server_cfg(&opts, &key_log)),
-                Side::Client => client_cfg = Some(make_client_cfg(&opts, &key_log)),
+            match &mut config {
+                SideConfig::Server(server) => *server = make_server_cfg(&opts, &key_log),
+                SideConfig::Client(client) => *client = make_client_cfg(&opts, &key_log),
             };
         }
+
         if opts.on_resume_ech_config_list.is_some() {
             opts.ech_config_list
                 .clone_from(&opts.on_resume_ech_config_list);
             opts.expect_ech_accept = opts.on_resume_expect_ech_accept;
-            client_cfg = Some(make_client_cfg(&opts, &key_log));
+            if let SideConfig::Client(client_cfg) = &mut config {
+                *client_cfg = make_client_cfg(&opts, &key_log);
+            }
         }
+
         opts.expect_handshake_kind
             .clone_from(&opts.expect_handshake_kind_resumed);
     }
+}
+
+enum SideConfig {
+    Client(Arc<ClientConfig>),
+    Server(Arc<ServerConfig>),
 }
 
 #[derive(Debug, Default)]
