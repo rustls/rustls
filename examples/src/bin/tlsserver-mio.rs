@@ -510,13 +510,17 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
 
     for s in suites {
         if !known_suites.contains(&s.to_lowercase()) {
-            panic!("cannot look up ciphersuite '{s}'. should be one of {known_suites:?}");
+            panic!(
+                "unsupported ciphersuite '{s}'; should be one of {known_suites}",
+                known_suites = known_suites.join(", ")
+            );
         }
     }
 
     // now discard non-named suites
     provider
         .tls12_cipher_suites
+        .to_mut()
         .retain(|cs| {
             let name = format!("{:?}", cs.common.suite).to_lowercase();
             suites
@@ -525,6 +529,7 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
         });
     provider
         .tls13_cipher_suites
+        .to_mut()
         .retain(|cs| {
             let name = format!("{:?}", cs.common.suite).to_lowercase();
             suites

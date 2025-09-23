@@ -19,6 +19,7 @@
 //!
 //! [mio]: https://docs.rs/mio/latest/mio/
 
+use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
@@ -277,11 +278,13 @@ struct Args {
 impl Args {
     fn provider(&self) -> CryptoProvider {
         let kx_groups = match self.key_exchange.as_slice() {
-            [] => provider::DEFAULT_KX_GROUPS.to_vec(),
-            items => items
-                .iter()
-                .map(|kx| find_key_exchange(kx))
-                .collect::<Vec<&'static dyn SupportedKxGroup>>(),
+            [] => Cow::Borrowed(provider::DEFAULT_KX_GROUPS),
+            items => Cow::Owned(
+                items
+                    .iter()
+                    .map(|kx| find_key_exchange(kx))
+                    .collect::<Vec<&'static dyn SupportedKxGroup>>(),
+            ),
         };
 
         let provider = CryptoProvider {
@@ -343,6 +346,7 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
     // now discard non-named suites
     provider
         .tls12_cipher_suites
+        .to_mut()
         .retain(|cs| {
             let name = format!("{:?}", cs.common.suite).to_lowercase();
             suites
@@ -351,6 +355,7 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
         });
     provider
         .tls13_cipher_suites
+        .to_mut()
         .retain(|cs| {
             let name = format!("{:?}", cs.common.suite).to_lowercase();
             suites

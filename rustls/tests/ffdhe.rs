@@ -2,6 +2,7 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use num_bigint::BigUint;
@@ -25,11 +26,11 @@ use crate::common::provider_with_one_suite;
 #[test]
 fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups() {
     let bad_crypto_provider = CryptoProvider {
-        kx_groups: vec![&FFDHE2048_KX_GROUP],
-        tls12_cipher_suites: vec![
+        kx_groups: Cow::Owned(vec![&FFDHE2048_KX_GROUP as &dyn SupportedKxGroup]),
+        tls12_cipher_suites: Cow::Owned(vec![
             provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-        ],
+        ]),
         ..provider::default_provider()
     };
 
@@ -87,12 +88,12 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
 
     let client_config = rustls::ClientConfig::builder_with_provider(
         CryptoProvider {
-            tls12_cipher_suites: vec![
+            tls12_cipher_suites: Cow::Owned(vec![
                 &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-            ],
-            tls13_cipher_suites: vec![],
-            kx_groups: vec![&FFDHE4096_KX_GROUP, provider::kx_group::SECP256R1],
+            ]),
+            tls13_cipher_suites: Cow::Owned(vec![]),
+            kx_groups: Cow::Owned(vec![&FFDHE4096_KX_GROUP, provider::kx_group::SECP256R1]),
             ..provider::default_provider()
         }
         .into(),
@@ -101,11 +102,11 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
 
     let server_config = rustls::ServerConfig::builder_with_provider(
         CryptoProvider {
-            tls12_cipher_suites: vec![
+            tls12_cipher_suites: Cow::Owned(vec![
                 &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-            ],
-            kx_groups: vec![&FFDHE2048_KX_GROUP, provider::kx_group::SECP256R1],
+            ]),
+            kx_groups: Cow::Owned(vec![&FFDHE2048_KX_GROUP, provider::kx_group::SECP256R1]),
             ..provider::default_provider()
         }
         .into(),
@@ -134,12 +135,12 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
 fn server_avoids_cipher_suite_with_no_common_kx_groups() {
     let server_config = rustls::ServerConfig::builder_with_provider(
         CryptoProvider {
-            tls12_cipher_suites: vec![
+            tls12_cipher_suites: Cow::Owned(vec![
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                 &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-            ],
-            tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
-            kx_groups: vec![provider::kx_group::SECP256R1, &FFDHE2048_KX_GROUP],
+            ]),
+            tls13_cipher_suites: Cow::Owned(vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256]),
+            kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1, &FFDHE2048_KX_GROUP]),
             ..provider::default_provider()
         }
         .into(),
@@ -214,12 +215,12 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
 
     for (client_kx_groups, protocol_version, expected_cipher_suite, expected_group) in test_cases {
         let provider = CryptoProvider {
-            tls12_cipher_suites: vec![
+            tls12_cipher_suites: Cow::Owned(vec![
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                 &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-            ],
-            tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
-            kx_groups: client_kx_groups,
+            ]),
+            tls13_cipher_suites: Cow::Owned(vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256]),
+            kx_groups: Cow::Owned(client_kx_groups),
             ..provider::default_provider()
         };
         let provider = match protocol_version {
@@ -261,9 +262,11 @@ fn non_ffdhe_kx_does_not_have_ffdhe_group() {
 /// A test-only `CryptoProvider`, only supporting FFDHE key exchange
 pub fn ffdhe_provider() -> CryptoProvider {
     CryptoProvider {
-        tls12_cipher_suites: vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
-        tls13_cipher_suites: vec![provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
-        kx_groups: FFDHE_KX_GROUPS.to_vec(),
+        tls12_cipher_suites: Cow::Owned(vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256]),
+        tls13_cipher_suites: Cow::Owned(vec![
+            provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        ]),
+        kx_groups: Cow::Owned(FFDHE_KX_GROUPS.to_vec()),
         ..provider::default_provider()
     }
 }

@@ -47,6 +47,8 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
 
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
+    use alloc::borrow::Cow;
+
     use super::super::*;
     use crate::common_state::KxState;
     use crate::crypto::{
@@ -233,7 +235,7 @@ mod tests {
 
     fn server_config_for_rpk() -> ServerConfig {
         let x25519_provider = CryptoProvider {
-            kx_groups: vec![super::provider::kx_group::X25519],
+            kx_groups: Cow::Owned(vec![super::provider::kx_group::X25519]),
             ..super::provider::default_provider()
         };
         ServerConfig::builder_with_provider(x25519_provider.with_only_tls12().into())
@@ -274,8 +276,8 @@ mod tests {
 
     fn ffdhe_provider() -> CryptoProvider {
         CryptoProvider {
-            kx_groups: vec![FAKE_FFDHE_GROUP],
-            tls12_cipher_suites: vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
+            kx_groups: Cow::Owned(vec![FAKE_FFDHE_GROUP]),
+            tls12_cipher_suites: Cow::Owned(vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256]),
             ..super::provider::default_provider()
         }
     }

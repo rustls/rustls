@@ -15,6 +15,7 @@
 
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
+use std::borrow::Cow;
 use std::io;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -518,7 +519,7 @@ pub fn make_server_config_with_kx_groups(
 ) -> ServerConfig {
     ServerConfig::builder_with_provider(
         CryptoProvider {
-            kx_groups,
+            kx_groups: Cow::Owned(kx_groups),
             ..provider.clone()
         }
         .into(),
@@ -650,7 +651,7 @@ pub fn make_client_config_with_kx_groups(
 ) -> ClientConfig {
     ClientConfig::builder_with_provider(
         CryptoProvider {
-            kx_groups,
+            kx_groups: Cow::Owned(kx_groups),
             ..provider.clone()
         }
         .into(),
@@ -1492,8 +1493,8 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit(
     });
 
     CryptoProvider {
-        tls12_cipher_suites: vec![tls12_limited],
-        tls13_cipher_suites: vec![tls13_limited],
+        tls12_cipher_suites: Cow::Owned(vec![tls12_limited]),
+        tls13_cipher_suites: Cow::Owned(vec![tls13_limited]),
         ..provider
     }
     .into()
@@ -1517,7 +1518,7 @@ pub fn unsafe_plaintext_crypto_provider(provider: CryptoProvider) -> Arc<CryptoP
     });
 
     CryptoProvider {
-        tls13_cipher_suites: vec![tls13],
+        tls13_cipher_suites: Cow::Owned(vec![tls13]),
         ..provider
     }
     .into()

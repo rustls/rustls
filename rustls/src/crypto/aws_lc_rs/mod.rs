@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
 // aws-lc-rs has a -- roughly -- ring-compatible API, so we just reuse all that
@@ -40,9 +41,9 @@ pub(crate) mod tls13;
 /// A `CryptoProvider` backed by aws-lc-rs.
 pub fn default_provider() -> CryptoProvider {
     CryptoProvider {
-        tls12_cipher_suites: DEFAULT_TLS12_CIPHER_SUITES.to_vec(),
-        tls13_cipher_suites: DEFAULT_TLS13_CIPHER_SUITES.to_vec(),
-        kx_groups: DEFAULT_KX_GROUPS.to_vec(),
+        tls12_cipher_suites: Cow::Borrowed(DEFAULT_TLS12_CIPHER_SUITES),
+        tls13_cipher_suites: Cow::Borrowed(DEFAULT_TLS13_CIPHER_SUITES),
+        kx_groups: Cow::Borrowed(DEFAULT_KX_GROUPS),
         signature_verification_algorithms: SUPPORTED_SIG_ALGS,
         secure_random: &AwsLcRs,
         key_provider: &AwsLcRs,

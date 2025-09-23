@@ -442,7 +442,8 @@ impl ExpectClientHello {
         let mut ecdhe_possible = false;
         let mut ffdhe_possible = false;
         let mut ffdhe_offered = false;
-        let mut supported_groups = Vec::with_capacity(client_groups.len());
+        let mut supported_groups: Vec<&'static dyn SupportedKxGroup> =
+            Vec::with_capacity(client_groups.len());
 
         for offered_group in client_groups {
             let supported = self

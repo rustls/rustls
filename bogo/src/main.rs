@@ -19,6 +19,7 @@
 )]
 
 use core::fmt::{Debug, Formatter};
+use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
 use std::{env, net, process, thread, time};
@@ -223,6 +224,7 @@ impl Options {
         if let Some(groups) = &self.groups {
             provider
                 .kx_groups
+                .to_mut()
                 .retain(|kxg| groups.contains(&kxg.name()));
         }
 
@@ -312,9 +314,9 @@ impl SelectedProvider {
                 // this includes rustls-post-quantum, which just returns an altered
                 // version of `aws_lc_rs::default_provider()`
                 CryptoProvider {
-                    kx_groups: aws_lc_rs::ALL_KX_GROUPS.to_vec(),
-                    tls12_cipher_suites: aws_lc_rs::ALL_TLS12_CIPHER_SUITES.to_vec(),
-                    tls13_cipher_suites: aws_lc_rs::ALL_TLS13_CIPHER_SUITES.to_vec(),
+                    kx_groups: Cow::Borrowed(aws_lc_rs::ALL_KX_GROUPS),
+                    tls12_cipher_suites: Cow::Borrowed(aws_lc_rs::ALL_TLS12_CIPHER_SUITES),
+                    tls13_cipher_suites: Cow::Borrowed(aws_lc_rs::ALL_TLS13_CIPHER_SUITES),
                     ..aws_lc_rs::default_provider()
                 }
             }

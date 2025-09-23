@@ -404,9 +404,11 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 fn select_suite(mut provider: CryptoProvider, name: CipherSuite) -> Arc<CryptoProvider> {
     provider
         .tls12_cipher_suites
+        .to_mut()
         .retain(|suite| suite.common.suite == name);
     provider
         .tls13_cipher_suites
+        .to_mut()
         .retain(|suite| suite.common.suite == name);
     provider.into()
 }
