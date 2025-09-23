@@ -30,9 +30,9 @@ mod connection {
     use core::ops::Deref;
     use std::io::{self, BufRead, Read};
 
-    use crate::{Connection, SideData};
     use crate::msgs::message::OutboundChunks;
     use crate::vecbuf::ChunkVecBuffer;
+    use crate::{Connection, SideData};
 
     /// A structure that implements [`std::io::Read`] for reading plaintext.
     pub struct Reader<'a> {
@@ -299,7 +299,23 @@ impl ConnectionRandoms {
     }
 }
 
-/// Interface shared by client and server connections.
+/// A TLS connection, parametrized by the side ([`Client`] or [`Server`]).
+///
+/// This is one of the core abstractions of the rutls API. It represents a single connection
+/// to a peer, and holds all the state associated with that connection. Note that it does
+/// not hold any IO objects: the application is responsible for reading and writing TLS records.
+/// If you want an object that does hold IO objects, see [`Stream`] and [`StreamOwned`].
+///
+/// This object is generic over the `Side` type parameter, which must be either [`Client`]
+/// or [`Server`]. While most of the API for a connection is shared between both types, some
+/// API is asymmetric, which is reflected by the type parameter. As such, some methods
+/// (including constructors) are specific on the `Side` type. See the implementations
+/// for [`Client`](#impl-Connection<Client>) and [`Server`](#impl-Connection<Server>) below.
+///
+/// [`Client`]: crate::client::Client
+/// [`Server`]: crate::server::Server
+/// [`Stream`]: crate::Stream
+/// [`StreamOwned`]: crate::StreamOwned
 pub struct Connection<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
     deframer_buffer: DeframerVecBuffer,
