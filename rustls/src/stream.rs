@@ -11,7 +11,7 @@ use crate::conn::{Connection, SideData};
 /// This allows you to use a rustls Connection like a normal stream.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct Stream<'a, S, T: 'a + Read + Write + ?Sized>
+pub struct Stream<'a, S: SideData, T: 'a + Read + Write + ?Sized>
 where
     Connection<S>: fmt::Debug,
 {
@@ -160,7 +160,7 @@ where
 /// This allows you to use a rustls Connection like a normal stream.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct StreamOwned<S, T: Read + Write + Sized>
+pub struct StreamOwned<S: SideData, T: Read + Write + Sized>
 where
     Connection<S>: fmt::Debug,
 {

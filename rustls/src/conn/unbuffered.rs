@@ -7,10 +7,10 @@ use core::{fmt, mem};
 use std::error::Error as StdError;
 
 use super::UnbufferedConnectionCommon;
-use crate::Error;
 use crate::client::Client;
 use crate::msgs::deframer::buffers::DeframerSliceBuffer;
 use crate::server::Server;
+use crate::{Error, SideData};
 
 impl UnbufferedConnectionCommon<Client> {
     /// Processes the TLS records in `incoming_tls` buffer until a new [`UnbufferedStatus`] is
@@ -38,7 +38,7 @@ impl UnbufferedConnectionCommon<Server> {
     }
 }
 
-impl<Side> UnbufferedConnectionCommon<Side> {
+impl<Side: SideData> UnbufferedConnectionCommon<Side> {
     fn process_tls_records_common<'c, 'i>(
         &'c mut self,
         incoming_tls: &'i mut [u8],
@@ -180,7 +180,7 @@ impl<Side> UnbufferedConnectionCommon<Side> {
 #[non_exhaustive]
 #[must_use]
 #[derive(Debug)]
-pub struct UnbufferedStatus<'c, 'i, Data> {
+pub struct UnbufferedStatus<'c, 'i, Data: SideData> {
     /// Number of bytes to discard
     ///
     /// After the `state` field of this object has been handled, `discard` bytes must be
@@ -201,7 +201,7 @@ pub struct UnbufferedStatus<'c, 'i, Data> {
 
 /// The state of the [`UnbufferedConnectionCommon`] object
 #[non_exhaustive] // for forwards compatibility; to support caller-side certificate verification
-pub enum ConnectionState<'c, 'i, Side> {
+pub enum ConnectionState<'c, 'i, Side: SideData> {
     /// One, or more, application data records are available
     ///
     /// See [`ReadTraffic`] for more details on how to use the enclosed object to access
@@ -275,31 +275,31 @@ pub enum ConnectionState<'c, 'i, Side> {
     WriteTraffic(WriteTraffic<'c, Side>),
 }
 
-impl<'c, 'i, Data> From<ReadTraffic<'c, 'i, Data>> for ConnectionState<'c, 'i, Data> {
+impl<'c, 'i, Data: SideData> From<ReadTraffic<'c, 'i, Data>> for ConnectionState<'c, 'i, Data> {
     fn from(v: ReadTraffic<'c, 'i, Data>) -> Self {
         Self::ReadTraffic(v)
     }
 }
 
-impl<'c, 'i, Data> From<ReadEarlyData<'c, 'i, Data>> for ConnectionState<'c, 'i, Data> {
+impl<'c, 'i, Data: SideData> From<ReadEarlyData<'c, 'i, Data>> for ConnectionState<'c, 'i, Data> {
     fn from(v: ReadEarlyData<'c, 'i, Data>) -> Self {
         Self::ReadEarlyData(v)
     }
 }
 
-impl<'c, Data> From<EncodeTlsData<'c, Data>> for ConnectionState<'c, '_, Data> {
+impl<'c, Data: SideData> From<EncodeTlsData<'c, Data>> for ConnectionState<'c, '_, Data> {
     fn from(v: EncodeTlsData<'c, Data>) -> Self {
         Self::EncodeTlsData(v)
     }
 }
 
-impl<'c, Data> From<TransmitTlsData<'c, Data>> for ConnectionState<'c, '_, Data> {
+impl<'c, Data: SideData> From<TransmitTlsData<'c, Data>> for ConnectionState<'c, '_, Data> {
     fn from(v: TransmitTlsData<'c, Data>) -> Self {
         Self::TransmitTlsData(v)
     }
 }
 
-impl<Side> fmt::Debug for ConnectionState<'_, '_, Side> {
+impl<Side: SideData> fmt::Debug for ConnectionState<'_, '_, Side> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ReadTraffic(..) => f.debug_tuple("ReadTraffic").finish(),
@@ -326,7 +326,7 @@ impl<Side> fmt::Debug for ConnectionState<'_, '_, Side> {
 }
 
 /// Application data is available
-pub struct ReadTraffic<'c, 'i, Side> {
+pub struct ReadTraffic<'c, 'i, Side: SideData> {
     conn: &'c mut UnbufferedConnectionCommon<Side>,
     // for forwards compatibility; to support in-place decryption in the future
     _incoming_tls: &'i mut [u8],
@@ -336,7 +336,7 @@ pub struct ReadTraffic<'c, 'i, Side> {
     chunk: Option<Vec<u8>>,
 }
 
-impl<'c, 'i, Side> ReadTraffic<'c, 'i, Side> {
+impl<'c, 'i, Side: SideData> ReadTraffic<'c, 'i, Side> {
     fn new(conn: &'c mut UnbufferedConnectionCommon<Side>, _incoming_tls: &'i mut [u8]) -> Self {
         Self {
             conn,
@@ -376,7 +376,7 @@ impl<'c, 'i, Side> ReadTraffic<'c, 'i, Side> {
 }
 
 /// Early application-data is available.
-pub struct ReadEarlyData<'c, 'i, Side> {
+pub struct ReadEarlyData<'c, 'i, Side: SideData> {
     conn: &'c mut UnbufferedConnectionCommon<Side>,
 
     // for forwards compatibility; to support in-place decryption in the future
@@ -432,11 +432,11 @@ pub struct AppDataRecord<'i> {
 }
 
 /// Allows encrypting app-data
-pub struct WriteTraffic<'c, Side> {
+pub struct WriteTraffic<'c, Side: SideData> {
     conn: &'c mut UnbufferedConnectionCommon<Side>,
 }
 
-impl<Side> WriteTraffic<'_, Side> {
+impl<Side: SideData> WriteTraffic<'_, Side> {
     /// Encrypts `application_data` into the `outgoing_tls` buffer
     ///
     /// Returns the number of bytes that were written into `outgoing_tls`, or an error if
@@ -483,12 +483,12 @@ impl<Side> WriteTraffic<'_, Side> {
 }
 
 /// A handshake record must be encoded
-pub struct EncodeTlsData<'c, Side> {
+pub struct EncodeTlsData<'c, Side: SideData> {
     conn: &'c mut UnbufferedConnectionCommon<Side>,
     chunk: Option<Vec<u8>>,
 }
 
-impl<'c, Side> EncodeTlsData<'c, Side> {
+impl<'c, Side: SideData> EncodeTlsData<'c, Side> {
     fn new(conn: &'c mut UnbufferedConnectionCommon<Side>, chunk: Vec<u8>) -> Self {
         Self {
             conn,
@@ -522,11 +522,11 @@ impl<'c, Side> EncodeTlsData<'c, Side> {
 }
 
 /// Previously encoded TLS data must be transmitted
-pub struct TransmitTlsData<'c, Side> {
+pub struct TransmitTlsData<'c, Side: SideData> {
     pub(crate) conn: &'c mut UnbufferedConnectionCommon<Side>,
 }
 
-impl<Side> TransmitTlsData<'_, Side> {
+impl<Side: SideData> TransmitTlsData<'_, Side> {
     /// Signals that the previously encoded TLS data has been transmitted
     pub fn done(self) {
         self.conn.wants_write = false;
