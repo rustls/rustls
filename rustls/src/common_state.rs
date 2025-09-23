@@ -832,12 +832,12 @@ impl IoState {
     }
 }
 
-pub(crate) trait State<Data>: Send + Sync {
+pub(crate) trait State<Side>: Send + Sync {
     fn handle<'m>(
         self: Box<Self>,
-        cx: &mut Context<'_, Data>,
+        cx: &mut Context<'_, Side>,
         message: Message<'m>,
-    ) -> Result<Box<dyn State<Data> + 'm>, Error>
+    ) -> Result<Box<dyn State<Side> + 'm>, Error>
     where
         Self: 'm;
 
@@ -853,7 +853,7 @@ pub(crate) trait State<Data>: Send + Sync {
         Err(Error::HandshakeNotComplete)
     }
 
-    fn into_owned(self: Box<Self>) -> Box<dyn State<Data> + 'static>;
+    fn into_owned(self: Box<Self>) -> Box<dyn State<Side> + 'static>;
 }
 
 pub(crate) struct Context<'a, Data> {
