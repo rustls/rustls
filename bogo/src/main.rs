@@ -21,7 +21,6 @@
 
 use core::fmt::{Debug, Formatter};
 use std::io::{self, Read, Write};
-use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::{env, net, process, thread, time};
 
@@ -34,7 +33,7 @@ use rustls::client::danger::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
 };
 use rustls::client::{
-    ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
+    ClientConfig, ClientConnectionData, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
     Tls12Resumption, WebPkiServerVerifier, WriteEarlyData,
 };
 use rustls::crypto::aws_lc_rs::hpke;
@@ -50,7 +49,7 @@ use rustls::server::danger::{
     ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
 };
 use rustls::server::{
-    ClientHello, ProducesTickets, ReadEarlyData, ServerConfig, ServerConnection,
+    ClientHello, ProducesTickets, ReadEarlyData, ServerConfig, ServerConnectionData,
     WebPkiClientVerifier,
 };
 use rustls::{
@@ -1193,10 +1192,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
     }
 }
 
-fn flush(
-    sess: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-    conn: &mut net::TcpStream,
-) {
+fn flush(sess: &mut ConnectionCommon<impl SideData>, conn: &mut net::TcpStream) {
     while sess.wants_write() {
         if let Err(err) = sess.write_tls(conn) {
             println!("IO error: {err:?}");
@@ -1210,7 +1206,7 @@ const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
 
 fn after_read(
     opts: &Options,
-    sess: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+    sess: &mut ConnectionCommon<impl SideData>,
     conn: &mut net::TcpStream,
 ) {
     if let Err(err) = sess.process_new_packets() {
@@ -1236,7 +1232,7 @@ fn orderly_close(conn: &mut net::TcpStream) {
 
 fn read_n_bytes(
     opts: &Options,
-    sess: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+    sess: &mut ConnectionCommon<impl SideData>,
     conn: &mut net::TcpStream,
     n: usize,
 ) {
@@ -1256,7 +1252,7 @@ fn read_n_bytes(
 
 fn read_all_bytes(
     opts: &Options,
-    sess: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+    sess: &mut ConnectionCommon<impl SideData>,
     conn: &mut net::TcpStream,
 ) {
     match sess.read_tls(conn) {
@@ -1268,12 +1264,11 @@ fn read_all_bytes(
     after_read(opts, sess, conn);
 }
 
-fn exec(
-    opts: &Options,
-    mut sess: impl DerefMut<Target = ConnectionCommon<impl SideData>> + ConnectionExt,
-    key_log: &KeyLogMemo,
-    count: usize,
-) {
+fn exec<S>(opts: &Options, mut sess: ConnectionCommon<S>, key_log: &KeyLogMemo, count: usize)
+where
+    S: SideData,
+    ConnectionCommon<S>: ConnectionExt,
+{
     let mut sent_message = false;
 
     let addrs = [
@@ -1532,7 +1527,7 @@ fn exec(
     }
 }
 
-impl ConnectionExt for ClientConnection {
+impl ConnectionExt for ConnectionCommon<ClientConnectionData> {
     fn write_early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         self.early_data()
     }
@@ -1550,7 +1545,7 @@ impl ConnectionExt for ClientConnection {
     }
 }
 
-impl ConnectionExt for ServerConnection {
+impl ConnectionExt for ConnectionCommon<ServerConnectionData> {
     fn write_early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         None
     }
@@ -2050,11 +2045,13 @@ pub fn main() {
                 let server_name = ServerName::try_from(opts.host_name.as_str())
                     .unwrap()
                     .to_owned();
-                let sess = ClientConnection::new(config.clone(), server_name).unwrap();
+                let sess =
+                    ConnectionCommon::<ClientConnectionData>::new(config.clone(), server_name)
+                        .unwrap();
                 exec(&opts, sess, &key_log, i);
             }
             SideConfig::Server(config) => {
-                let sess = ServerConnection::new(config.clone()).unwrap();
+                let sess = ConnectionCommon::<ServerConnectionData>::new(config.clone()).unwrap();
                 exec(&opts, sess, &key_log, i);
             }
         }

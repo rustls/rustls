@@ -19,7 +19,6 @@
 
 use core::mem;
 use core::num::NonZeroUsize;
-use core::ops::{Deref, DerefMut};
 use core::time::Duration;
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -28,16 +27,16 @@ use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
-use rustls::client::{Resumption, UnbufferedClientConnection};
+use rustls::client::{ClientConnectionData, Resumption, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
 use rustls::server::{
-    NoServerSessionStorage, ProducesTickets, ServerSessionMemoryCache, UnbufferedServerConnection,
-    WebPkiClientVerifier,
+    NoServerSessionStorage, ProducesTickets, ServerConnectionData, ServerSessionMemoryCache,
+    UnbufferedServerConnection, WebPkiClientVerifier,
 };
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
 use rustls::{
-    CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind,
-    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData,
+    CipherSuite, ClientConfig, ConnectionCommon, Error, HandshakeKind, ProtocolVersion,
+    RootCertStore, ServerConfig, SideData,
 };
 use rustls_test::KeyType;
 
@@ -329,10 +328,11 @@ fn bench_handshake_buffered(
 
         let mut client = time(&mut client_time, || {
             let server_name = "localhost".try_into().unwrap();
-            ClientConnection::new(client_config.clone(), server_name).unwrap()
+            ConnectionCommon::<ClientConnectionData>::new(client_config.clone(), server_name)
+                .unwrap()
         });
         let mut server = time(&mut server_time, || {
-            ServerConnection::new(server_config.clone()).unwrap()
+            ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap()
         });
 
         time(&mut server_time, || {
@@ -579,9 +579,10 @@ fn bench_bulk_buffered(
     rounds: u64,
 ) -> Timings {
     let server_name = "localhost".try_into().unwrap();
-    let mut client = ClientConnection::new(client_config, server_name).unwrap();
+    let mut client =
+        ConnectionCommon::<ClientConnectionData>::new(client_config, server_name).unwrap();
     client.set_buffer_limit(None);
-    let mut server = ServerConnection::new(server_config).unwrap();
+    let mut server = ConnectionCommon::<ServerConnectionData>::new(server_config).unwrap();
     server.set_buffer_limit(None);
 
     let mut timings = Timings::default();
@@ -668,9 +669,12 @@ fn bench_memory(
     let mut buffers = TempBuffers::new();
 
     for _i in 0..conn_count {
-        servers.push(ServerConnection::new(server_config.clone()).unwrap());
+        servers.push(ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap());
         let server_name = "localhost".try_into().unwrap();
-        clients.push(ClientConnection::new(client_config.clone(), server_name).unwrap());
+        clients.push(
+            ConnectionCommon::<ClientConnectionData>::new(client_config.clone(), server_name)
+                .unwrap(),
+        );
     }
 
     for _step in 0..5 {
@@ -1316,8 +1320,8 @@ impl UnbufferedConnection {
 
 fn do_handshake_step(
     buffers: &mut TempBuffers,
-    client: &mut ClientConnection,
-    server: &mut ServerConnection,
+    client: &mut ConnectionCommon<ClientConnectionData>,
+    server: &mut ConnectionCommon<ServerConnectionData>,
 ) -> bool {
     if server.is_handshaking() || client.is_handshaking() {
         transfer(buffers, client, server, None);
@@ -1330,8 +1334,8 @@ fn do_handshake_step(
 
 fn do_handshake(
     buffers: &mut TempBuffers,
-    client: &mut ClientConnection,
-    server: &mut ServerConnection,
+    client: &mut ConnectionCommon<ClientConnectionData>,
+    server: &mut ConnectionCommon<ServerConnectionData>,
 ) {
     while do_handshake_step(buffers, client, server) {}
 }
@@ -1347,18 +1351,12 @@ where
     r
 }
 
-fn transfer<L, R, LS, RS>(
+fn transfer(
     buffers: &mut TempBuffers,
-    left: &mut L,
-    right: &mut R,
+    left: &mut ConnectionCommon<impl SideData>,
+    right: &mut ConnectionCommon<impl SideData>,
     expect_data: Option<usize>,
-) -> f64
-where
-    L: DerefMut + Deref<Target = ConnectionCommon<LS>>,
-    R: DerefMut + Deref<Target = ConnectionCommon<RS>>,
-    LS: SideData,
-    RS: SideData,
-{
+) -> f64 {
     let mut read_time = 0f64;
     let mut data_left = expect_data;
 

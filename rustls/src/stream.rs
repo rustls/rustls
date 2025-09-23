@@ -1,4 +1,4 @@
-use core::ops::{Deref, DerefMut};
+use core::fmt;
 use std::io::{BufRead, IoSlice, Read, Result, Write};
 
 use crate::conn::{ConnectionCommon, SideData};
@@ -11,23 +11,26 @@ use crate::conn::{ConnectionCommon, SideData};
 /// This allows you to use a rustls Connection like a normal stream.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
+pub struct Stream<'a, S, T: 'a + Read + Write + ?Sized>
+where
+    ConnectionCommon<S>: fmt::Debug,
+{
     /// Our TLS connection
-    pub conn: &'a mut C,
+    pub conn: &'a mut ConnectionCommon<S>,
 
     /// The underlying transport, like a socket
     pub sock: &'a mut T,
 }
 
-impl<'a, C, T, S> Stream<'a, C, T>
+impl<'a, S, T> Stream<'a, S, T>
 where
-    C: 'a + DerefMut + Deref<Target = ConnectionCommon<S>>,
+    ConnectionCommon<S>: fmt::Debug,
     T: 'a + Read + Write,
     S: SideData,
 {
     /// Make a new Stream using the Connection `conn` and socket-like object
     /// `sock`.  This does not fail and does no IO.
-    pub fn new(conn: &'a mut C, sock: &'a mut T) -> Self {
+    pub fn new(conn: &'a mut ConnectionCommon<S>, sock: &'a mut T) -> Self {
         Self { conn, sock }
     }
 
@@ -71,9 +74,9 @@ where
     }
 }
 
-impl<'a, C, T, S> Read for Stream<'a, C, T>
+impl<'a, S, T> Read for Stream<'a, S, T>
 where
-    C: 'a + DerefMut + Deref<Target = ConnectionCommon<S>>,
+    ConnectionCommon<S>: fmt::Debug,
     T: 'a + Read + Write,
     S: SideData,
 {
@@ -83,9 +86,9 @@ where
     }
 }
 
-impl<'a, C, T, S> BufRead for Stream<'a, C, T>
+impl<'a, S, T> BufRead for Stream<'a, S, T>
 where
-    C: 'a + DerefMut + Deref<Target = ConnectionCommon<S>>,
+    ConnectionCommon<S>: fmt::Debug,
     T: 'a + Read + Write,
     S: 'a + SideData,
 {
@@ -103,9 +106,9 @@ where
     }
 }
 
-impl<'a, C, T, S> Write for Stream<'a, C, T>
+impl<'a, S, T> Write for Stream<'a, S, T>
 where
-    C: 'a + DerefMut + Deref<Target = ConnectionCommon<S>>,
+    ConnectionCommon<S>: fmt::Debug,
     T: 'a + Read + Write,
     S: SideData,
 {
@@ -157,17 +160,20 @@ where
 /// This allows you to use a rustls Connection like a normal stream.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
+pub struct StreamOwned<S, T: Read + Write + Sized>
+where
+    ConnectionCommon<S>: fmt::Debug,
+{
     /// Our connection
-    pub conn: C,
+    pub conn: ConnectionCommon<S>,
 
     /// The underlying transport, like a socket
     pub sock: T,
 }
 
-impl<C, T, S> StreamOwned<C, T>
+impl<S, T> StreamOwned<S, T>
 where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    ConnectionCommon<S>: fmt::Debug,
     T: Read + Write,
     S: SideData,
 {
@@ -176,7 +182,7 @@ where
     ///
     /// This is the same as `Stream::new` except `conn` and `sock` are
     /// moved into the StreamOwned.
-    pub fn new(conn: C, sock: T) -> Self {
+    pub fn new(conn: ConnectionCommon<S>, sock: T) -> Self {
         Self { conn, sock }
     }
 
@@ -191,18 +197,18 @@ where
     }
 
     /// Extract the `conn` and `sock` parts from the `StreamOwned`
-    pub fn into_parts(self) -> (C, T) {
+    pub fn into_parts(self) -> (ConnectionCommon<S>, T) {
         (self.conn, self.sock)
     }
 }
 
-impl<'a, C, T, S> StreamOwned<C, T>
+impl<'a, S, T> StreamOwned<S, T>
 where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    ConnectionCommon<S>: fmt::Debug,
     T: Read + Write,
     S: SideData,
 {
-    fn as_stream(&'a mut self) -> Stream<'a, C, T> {
+    fn as_stream(&'a mut self) -> Stream<'a, S, T> {
         Stream {
             conn: &mut self.conn,
             sock: &mut self.sock,
@@ -210,9 +216,9 @@ where
     }
 }
 
-impl<C, T, S> Read for StreamOwned<C, T>
+impl<S, T> Read for StreamOwned<S, T>
 where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    ConnectionCommon<S>: fmt::Debug,
     T: Read + Write,
     S: SideData,
 {
@@ -221,9 +227,9 @@ where
     }
 }
 
-impl<C, T, S> BufRead for StreamOwned<C, T>
+impl<S, T> BufRead for StreamOwned<S, T>
 where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    ConnectionCommon<S>: fmt::Debug,
     T: Read + Write,
     S: 'static + SideData,
 {
@@ -236,9 +242,9 @@ where
     }
 }
 
-impl<C, T, S> Write for StreamOwned<C, T>
+impl<S, T> Write for StreamOwned<S, T>
 where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    ConnectionCommon<S>: fmt::Debug,
     T: Read + Write,
     S: SideData,
 {
@@ -256,21 +262,22 @@ mod tests {
     use std::net::TcpStream;
 
     use super::{Stream, StreamOwned};
-    use crate::client::ClientConnection;
-    use crate::server::ServerConnection;
+    use crate::ConnectionCommon;
+    use crate::client::ClientConnectionData;
+    use crate::server::ServerConnectionData;
 
     #[test]
     fn stream_can_be_created_for_connection_and_tcpstream() {
-        type _Test<'a> = Stream<'a, ClientConnection, TcpStream>;
+        type _Test<'a> = Stream<'a, ConnectionCommon<ClientConnectionData>, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_client_and_tcpstream() {
-        type _Test = StreamOwned<ClientConnection, TcpStream>;
+        type _Test = StreamOwned<ConnectionCommon<ClientConnectionData>, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_server_and_tcpstream() {
-        type _Test = StreamOwned<ServerConnection, TcpStream>;
+        type _Test = StreamOwned<ConnectionCommon<ServerConnectionData>, TcpStream>;
     }
 }

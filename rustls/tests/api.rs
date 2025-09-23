@@ -8,16 +8,16 @@ use std::{io, mem};
 
 use pki_types::{DnsName, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
-use rustls::client::Resumption;
+use rustls::client::{ClientConnectionData, Resumption};
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
-use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert, ServerConnectionData};
 use rustls::{
-    AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
+    AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ConnectionCommon,
     ContentType, Error, HandshakeKind, HandshakeType, InconsistentKeys, KeyingMaterialExporter,
-    NamedGroup, PeerIdentity, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
-    SignatureScheme, SupportedCipherSuite, sign,
+    NamedGroup, PeerIdentity, PeerMisbehaved, ProtocolVersion, ServerConfig, SignatureScheme,
+    SupportedCipherSuite, sign,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
@@ -121,20 +121,23 @@ fn connection_level_alpn_protocols() {
     let client_config = Arc::new(client_config);
 
     // Client relies on config-specified `h2`, server agrees
-    let mut client =
-        ClientConnection::new(client_config.clone(), server_name("localhost")).unwrap();
-    let mut server = ServerConnection::new(server_config.clone()).unwrap();
+    let mut client = ConnectionCommon::<ClientConnectionData>::new(
+        client_config.clone(),
+        server_name("localhost"),
+    )
+    .unwrap();
+    let mut server = ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap();
     do_handshake_until_error(&mut client, &mut server).unwrap();
     assert_eq!(client.alpn_protocol(), Some(&b"h2"[..]));
 
     // Specify `http/1.1` for the connection, server agrees
-    let mut client = ClientConnection::new_with_alpn(
+    let mut client = ConnectionCommon::<ClientConnectionData>::new_with_alpn(
         client_config,
         server_name("localhost"),
         vec![b"http/1.1".to_vec()],
     )
     .unwrap();
-    let mut server = ServerConnection::new(server_config).unwrap();
+    let mut server = ConnectionCommon::<ServerConnectionData>::new(server_config).unwrap();
     do_handshake_until_error(&mut client, &mut server).unwrap();
     assert_eq!(client.alpn_protocol(), Some(&b"http/1.1"[..]));
 }
@@ -589,13 +592,15 @@ fn server_exposes_offered_sni() {
     let provider = provider::default_provider();
     for version_provider in all_versions(&provider) {
         let client_config = make_client_config(kt, &version_provider);
-        let mut client = ClientConnection::new(
+        let mut client = ConnectionCommon::<ClientConnectionData>::new(
             Arc::new(client_config),
             server_name("second.testserver.com"),
         )
         .unwrap();
-        let mut server =
-            ServerConnection::new(Arc::new(make_server_config(kt, &provider))).unwrap();
+        let mut server = ConnectionCommon::<ServerConnectionData>::new(Arc::new(
+            make_server_config(kt, &provider),
+        ))
+        .unwrap();
 
         assert_eq!(None, server.server_name());
         do_handshake(&mut client, &mut server);
@@ -613,13 +618,15 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
     let provider = provider::default_provider();
     for version_provider in all_versions(&provider) {
         let client_config = make_client_config(kt, &version_provider);
-        let mut client = ClientConnection::new(
+        let mut client = ConnectionCommon::<ClientConnectionData>::new(
             Arc::new(client_config),
             server_name("SECOND.TESTServer.com"),
         )
         .unwrap();
-        let mut server =
-            ServerConnection::new(Arc::new(make_server_config(kt, &provider))).unwrap();
+        let mut server = ConnectionCommon::<ServerConnectionData>::new(Arc::new(
+            make_server_config(kt, &provider),
+        ))
+        .unwrap();
 
         assert_eq!(None, server.server_name());
         do_handshake(&mut client, &mut server);
@@ -1037,8 +1044,14 @@ fn assert_lt(left: usize, right: usize) {
 #[test]
 fn connection_types_are_not_huge() {
     // Arbitrary sizes
-    assert_lt(mem::size_of::<ServerConnection>(), 1600);
-    assert_lt(mem::size_of::<ClientConnection>(), 1600);
+    assert_lt(
+        mem::size_of::<ConnectionCommon<ServerConnectionData>>(),
+        1600,
+    );
+    assert_lt(
+        mem::size_of::<ConnectionCommon<ClientConnectionData>>(),
+        1600,
+    );
     assert_lt(
         mem::size_of::<rustls::server::UnbufferedServerConnection>(),
         1600,
@@ -1172,7 +1185,11 @@ fn test_client_construction_fails_if_random_source_fails_in_first_request() {
     .finish(KeyType::Rsa2048);
 
     assert_eq!(
-        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
+        ConnectionCommon::<ClientConnectionData>::new(
+            Arc::new(client_config),
+            server_name("localhost")
+        )
+        .unwrap_err(),
         Error::FailedToGetRandomBytes
     );
 }
@@ -1193,7 +1210,11 @@ fn test_client_construction_fails_if_random_source_fails_in_second_request() {
     .finish(KeyType::Rsa2048);
 
     assert_eq!(
-        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
+        ConnectionCommon::<ClientConnectionData>::new(
+            Arc::new(client_config),
+            server_name("localhost")
+        )
+        .unwrap_err(),
         Error::FailedToGetRandomBytes
     );
 }
@@ -1216,8 +1237,11 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
     )
     .finish(KeyType::Rsa2048);
 
-    ClientConnection::new(Arc::new(client_config), server_name("localhost"))
-        .expect("check how much random material ClientConnection::new consumes");
+    ConnectionCommon::<ClientConnectionData>::new(
+        Arc::new(client_config),
+        server_name("localhost"),
+    )
+    .expect("check how much random material ClientConnection::new consumes");
 }
 
 #[test]
@@ -1375,7 +1399,11 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
 
         // And a connection made from a client config should retain the fips status of the
         // config w.r.t the HPKE suite.
-        let conn = ClientConnection::new(config.into(), server_name("example.org")).unwrap();
+        let conn = ConnectionCommon::<ClientConnectionData>::new(
+            config.into(),
+            server_name("example.org"),
+        )
+        .unwrap();
         assert_eq!(conn.fips(), suite.fips());
     }
 }
@@ -1527,8 +1555,11 @@ fn tls13_packed_handshake() {
     .with_no_client_auth()
     .unwrap();
 
-    let mut client =
-        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+    let mut client = ConnectionCommon::<ClientConnectionData>::new(
+        Arc::new(client_config),
+        server_name("localhost"),
+    )
+    .unwrap();
 
     let mut hello = Vec::new();
     client
@@ -1644,9 +1675,13 @@ fn server_invalid_sni_policy() {
         });
         server_config.invalid_sni_policy = policy;
 
-        let mut client =
-            ClientConnection::new(Arc::new(client_config), server_name(SERVER_NAME_GOOD)).unwrap();
-        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        let mut client = ConnectionCommon::<ClientConnectionData>::new(
+            Arc::new(client_config),
+            server_name(SERVER_NAME_GOOD),
+        )
+        .unwrap();
+        let mut server =
+            ConnectionCommon::<ServerConnectionData>::new(Arc::new(server_config)).unwrap();
 
         transfer_altered(&mut client, replace_sni(sni), &mut server);
         assert_eq!(

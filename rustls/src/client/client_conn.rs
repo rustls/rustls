@@ -190,13 +190,12 @@ pub struct ClientConfig {
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
     ///
     /// rustls enforces an arbitrary minimum of 32 bytes for this field.
-    /// Out of range values are reported as errors from [ClientConnection::new].
+    /// Out of range values are reported as errors on connection construction.
     ///
     /// Setting this value to a little less than the TCP MSS may improve latency
     /// for stream-y workloads.
     ///
     /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
-    /// [ClientConnection::new]: crate::client::ClientConnection::new
     pub max_fragment_size: Option<usize>,
 
     /// How to decide what client auth certificate/keys to use.
@@ -575,7 +574,6 @@ impl EarlyData {
 mod connection {
     use alloc::vec::Vec;
     use core::fmt;
-    use core::ops::{Deref, DerefMut};
     use std::io;
 
     use pki_types::ServerName;
@@ -585,7 +583,6 @@ mod connection {
     use crate::common_state::Protocol;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
-    use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::{ClientConfig, KeyingMaterialExporter};
 
@@ -595,11 +592,11 @@ mod connection {
     ///
     /// This type implements [`io::Write`].
     pub struct WriteEarlyData<'a> {
-        sess: &'a mut ClientConnection,
+        sess: &'a mut ConnectionCommon<ClientConnectionData>,
     }
 
     impl<'a> WriteEarlyData<'a> {
-        fn new(sess: &'a mut ClientConnection) -> Self {
+        fn new(sess: &'a mut ConnectionCommon<ClientConnectionData>) -> Self {
             WriteEarlyData { sess }
         }
 
@@ -607,7 +604,6 @@ mod connection {
         /// once this reaches zero.
         pub fn bytes_left(&self) -> usize {
             self.sess
-                .inner
                 .core
                 .data
                 .early_data
@@ -659,19 +655,7 @@ mod connection {
         }
     }
 
-    /// This represents a single TLS client connection.
-    pub struct ClientConnection {
-        inner: ConnectionCommon<ClientConnectionData>,
-    }
-
-    impl fmt::Debug for ClientConnection {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.debug_struct("ClientConnection")
-                .finish()
-        }
-    }
-
-    impl ClientConnection {
+    impl ConnectionCommon<ClientConnectionData> {
         /// Make a new ClientConnection.  `config` controls how
         /// we behave in the TLS protocol, `name` is the
         /// name of the server we want to talk to.
@@ -685,14 +669,12 @@ mod connection {
             name: ServerName<'static>,
             alpn_protocols: Vec<Vec<u8>>,
         ) -> Result<Self, Error> {
-            Ok(Self {
-                inner: ConnectionCommon::from(ConnectionCore::for_client(
-                    config,
-                    name,
-                    ClientExtensionsInput::from_alpn(alpn_protocols),
-                    Protocol::Tcp,
-                )?),
-            })
+            Ok(Self::from(ConnectionCore::for_client(
+                config,
+                name,
+                ClientExtensionsInput::from_alpn(alpn_protocols),
+                Protocol::Tcp,
+            )?))
         }
 
         /// Returns an `io::Write` implementer you can write bytes to
@@ -714,13 +696,7 @@ mod connection {
         /// in this case the data is lost but the connection continues.  You
         /// can tell this happened using `is_early_data_accepted`.
         pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-            if self
-                .inner
-                .core
-                .data
-                .early_data
-                .is_enabled()
-            {
+            if self.core.data.early_data.is_enabled() {
                 Some(WriteEarlyData::new(self))
             } else {
                 None
@@ -733,23 +709,17 @@ mod connection {
         /// handshake then the server will not process the data.  This
         /// is not an error, but you may wish to resend the data.
         pub fn is_early_data_accepted(&self) -> bool {
-            self.inner.core.is_early_data_accepted()
-        }
-
-        /// Extract secrets, so they can be used when configuring kTLS, for example.
-        /// Should be used with care as it exposes secret key material.
-        pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-            self.inner.dangerous_extract_secrets()
+            self.core.is_early_data_accepted()
         }
 
         /// Return the connection's Encrypted Client Hello (ECH) status.
         pub fn ech_status(&self) -> EchStatus {
-            self.inner.core.data.ech_status
+            self.core.data.ech_status
         }
 
         /// Returns the number of TLS1.3 tickets that have been received.
         pub fn tls13_tickets_received(&self) -> u32 {
-            self.inner.tls13_tickets_received
+            self.tls13_tickets_received
         }
 
         /// Return true if the connection was made with a `ClientConfig` that is FIPS compatible.
@@ -758,38 +728,28 @@ mod connection {
         /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
         /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
         pub fn fips(&self) -> bool {
-            self.inner.core.common_state.fips
+            self.core.common_state.fips
         }
 
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-            self.inner
-                .core
+            self.core
                 .data
                 .early_data
                 .check_write(data.len())
-                .map(|sz| {
-                    self.inner
-                        .send_early_plaintext(&data[..sz])
-                })
+                .map(|sz| self.send_early_plaintext(&data[..sz]))
         }
     }
 
-    impl Deref for ClientConnection {
-        type Target = ConnectionCommon<ClientConnectionData>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.inner
-        }
-    }
-
-    impl DerefMut for ClientConnection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
+    impl fmt::Debug for ConnectionCommon<ClientConnectionData> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("ConnectionCommon<ClientConnectionData>")
+                .finish()
         }
     }
 }
+
 #[cfg(feature = "std")]
-pub use connection::{ClientConnection, WriteEarlyData};
+pub use connection::WriteEarlyData;
 
 impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(

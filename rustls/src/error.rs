@@ -1199,8 +1199,7 @@ pub enum ApiMisuse {
     ///
     /// This is possible from:
     ///
-    /// - [`ClientConnection::dangerous_extract_secrets()`][crate::client::ClientConnection::dangerous_extract_secrets]
-    /// - [`ServerConnection::dangerous_extract_secrets()`][crate::server::ServerConnection::dangerous_extract_secrets]
+    /// - [`ConnectionCommon::dangerous_extract_secrets()`][crate::ConnectionCommon::dangerous_extract_secrets]
     /// - [`ClientConnection::dangerous_into_kernel_connection()`][crate::client::UnbufferedClientConnection::dangerous_into_kernel_connection]
     /// - [`ServerConnection::dangerous_into_kernel_connection()`][crate::server::UnbufferedServerConnection::dangerous_into_kernel_connection]
     ///

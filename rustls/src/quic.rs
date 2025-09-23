@@ -128,7 +128,7 @@ mod connection {
     impl ClientConnection {
         /// Make a new QUIC ClientConnection.
         ///
-        /// This differs from `ClientConnection::new()` in that it takes an extra `params` argument,
+        /// This differs from `ConnectionCommon::<ClientConnectionData>::new()` in that it takes an extra `params` argument,
         /// which contains the TLS-encoded transport parameters to send.
         pub fn new(
             config: Arc<ClientConfig>,
@@ -247,7 +247,7 @@ mod connection {
     impl ServerConnection {
         /// Make a new QUIC ServerConnection.
         ///
-        /// This differs from `ServerConnection::new()` in that it takes an extra `params` argument,
+        /// This differs from `ConnectionCommon::<ServerConnectionData>::new()` in that it takes an extra `params` argument,
         /// which contains the TLS-encoded transport parameters to send.
         pub fn new(
             config: Arc<ServerConfig>,

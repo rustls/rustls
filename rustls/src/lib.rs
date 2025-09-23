@@ -114,9 +114,9 @@
 //! [`tokio-rustls`]: https://github.com/rustls/tokio-rustls
 //!
 //! ### Rustls provides encrypted pipes
-//! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
-//! on the left (via the [`read_tls()`] and [`write_tls()`] methods) and then read/write the
-//! plaintext on the right:
+//! This is the [`ConnectionCommon`] type and its two specializations.
+//! You supply raw TLS traffic on the left (via the [`read_tls()`] and [`write_tls()`] methods)
+//! and then read/write the plaintext on the right:
 //!
 //! [`read_tls()`]: ConnectionCommon::read_tls
 //! [`write_tls()`]: ConnectionCommon::read_tls
@@ -189,7 +189,7 @@
 //! #     .unwrap();
 //! let rc_config = Arc::new(config);
 //! let example_com = "example.com".try_into().unwrap();
-//! let mut client = rustls::ClientConnection::new(rc_config, example_com);
+//! let mut client = rustls::ConnectionCommon::<ClientConnectionData>::new(rc_config, example_com);
 //! # }
 //! ```
 //!
@@ -218,7 +218,7 @@
 //!
 //! ```rust,no_run
 //! # #[cfg(feature = "aws-lc-rs")] {
-//! # let mut client = rustls::ClientConnection::new(panic!(), panic!()).unwrap();
+//! # let mut client = rustls::ConnectionCommon::<ClientConnectionData>::new(panic!(), panic!()).unwrap();
 //! # struct Socket { }
 //! # impl Socket {
 //! #   fn ready_for_write(&self) -> bool { false }
@@ -566,13 +566,13 @@ pub mod client {
     mod tls13;
 
     pub use builder::WantsClientCert;
+    #[cfg(feature = "std")]
+    pub use client_conn::WriteEarlyData;
     pub use client_conn::{
         ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError,
         MayEncryptEarlyData, ResolvesClientCert, Resumption, Tls12Resumption,
         UnbufferedClientConnection,
     };
-    #[cfg(feature = "std")]
-    pub use client_conn::{ClientConnection, WriteEarlyData};
     pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
     pub use handy::AlwaysResolvesClientRawPublicKeys;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
@@ -600,8 +600,6 @@ pub mod client {
 }
 
 pub use client::ClientConfig;
-#[cfg(feature = "std")]
-pub use client::ClientConnection;
 
 /// Items for use in a server.
 pub mod server {
@@ -621,7 +619,7 @@ pub mod server {
     pub use handy::ServerSessionMemoryCache;
     pub use handy::{AlwaysResolvesServerRawPublicKeys, NoServerSessionStorage};
     #[cfg(feature = "std")]
-    pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
+    pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData};
     pub use server_conn::{
         ClientHello, InvalidSniPolicy, ProducesTickets, ResolvesServerCert, ServerConfig,
         ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
@@ -645,8 +643,6 @@ pub mod server {
 }
 
 pub use server::ServerConfig;
-#[cfg(feature = "std")]
-pub use server::ServerConnection;
 
 /// All defined protocol versions appear in this module.
 ///

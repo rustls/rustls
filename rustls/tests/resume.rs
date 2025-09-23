@@ -7,10 +7,11 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use rustls::client::Resumption;
+use rustls::client::{ClientConnectionData, Resumption};
+use rustls::server::ServerConnectionData;
 use rustls::{
-    ApiMisuse, CertificateIdentity, ClientConfig, ClientConnection, Error, HandshakeKind,
-    NamedGroup, PeerIdentity, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
+    ApiMisuse, CertificateIdentity, ClientConfig, ConnectionCommon, Error, HandshakeKind,
+    NamedGroup, PeerIdentity, PeerMisbehaved, ProtocolVersion, ServerConfig,
 };
 use rustls_test::{
     ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt, do_handshake,
@@ -195,9 +196,12 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
 
     dbg!("handshake 1");
-    let mut client_1 =
-        ClientConnection::new(client_config.clone(), "localhost".try_into().unwrap()).unwrap();
-    let mut server_1 = ServerConnection::new(server_config_1).unwrap();
+    let mut client_1 = ConnectionCommon::<ClientConnectionData>::new(
+        client_config.clone(),
+        "localhost".try_into().unwrap(),
+    )
+    .unwrap();
+    let mut server_1 = ConnectionCommon::<ServerConnectionData>::new(server_config_1).unwrap();
     do_handshake(&mut client_1, &mut server_1);
 
     assert_eq!(client_storage.ops().len(), 7);
@@ -216,9 +220,13 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     ));
 
     dbg!("handshake 2");
-    let mut client_2 =
-        ClientConnection::new(client_config, "localhost".try_into().unwrap()).unwrap();
-    let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
+    let mut client_2 = ConnectionCommon::<ClientConnectionData>::new(
+        client_config,
+        "localhost".try_into().unwrap(),
+    )
+    .unwrap();
+    let mut server_2 =
+        ConnectionCommon::<ServerConnectionData>::new(Arc::new(server_config_2)).unwrap();
     do_handshake(&mut client_2, &mut server_2);
     println!("hs2 storage ops: {:#?}", client_storage.ops());
     assert_eq!(client_storage.ops().len(), 9);
@@ -537,7 +545,7 @@ fn early_data_is_available_on_resumption() {
 
 #[test]
 fn early_data_not_available_on_server_before_client_hello() {
-    let mut server = ServerConnection::new(Arc::new(make_server_config(
+    let mut server = ConnectionCommon::<ServerConnectionData>::new(Arc::new(make_server_config(
         KeyType::Rsa2048,
         &provider::default_provider(),
     )))

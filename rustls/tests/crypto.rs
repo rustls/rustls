@@ -5,11 +5,13 @@
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
+use rustls::client::ClientConnectionData;
 use rustls::crypto::CryptoProvider;
+use rustls::server::ServerConnectionData;
 use rustls::sign::CertifiedKey;
 use rustls::{
-    ClientConfig, ClientConnection, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
-    ServerConnection, SupportedCipherSuite,
+    ClientConfig, ConnectionCommon, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
+    SupportedCipherSuite,
 };
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, aes_128_gcm_with_1024_confidentiality_limit,
@@ -391,7 +393,10 @@ fn test_refresh_traffic_keys() {
     let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::default_provider());
     do_handshake(&mut client, &mut server);
 
-    fn check_both_directions(client: &mut ClientConnection, server: &mut ServerConnection) {
+    fn check_both_directions(
+        client: &mut ConnectionCommon<ClientConnectionData>,
+        server: &mut ConnectionCommon<ServerConnectionData>,
+    ) {
         client
             .writer()
             .write_all(b"to-server-1")

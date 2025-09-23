@@ -7,11 +7,11 @@ use std::io::{self, BufRead, IoSlice, Read, Write};
 use std::sync::Arc;
 
 use pki_types::DnsName;
+use rustls::client::ClientConnectionData;
 use rustls::crypto::CryptoProvider;
+use rustls::server::ServerConnectionData;
 use rustls::{
-    AlertDescription, ApiMisuse, ClientConfig, ClientConnection, ContentType, Error, HandshakeType,
-    InvalidMessage, NamedGroup, PeerIncompatible, ProtocolVersion, ServerConfig, ServerConnection,
-    Stream, StreamOwned,
+    AlertDescription, ApiMisuse, ClientConfig, ConnectionCommon, ContentType, Error, HandshakeType, InvalidMessage, NamedGroup, PeerIncompatible, ProtocolVersion, ServerConfig, Stream, StreamOwned
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo,
@@ -1300,7 +1300,7 @@ fn test_client_mtu_reduction() {
         }
     }
 
-    fn collect_write_lengths(client: &mut ClientConnection) -> Vec<usize> {
+    fn collect_write_lengths(client: &mut ConnectionCommon<ClientConnectionData>) -> Vec<usize> {
         let mut collector = CollectWrites { writevs: vec![] };
 
         client
@@ -1314,8 +1314,11 @@ fn test_client_mtu_reduction() {
     for kt in KeyType::all_for_provider(&provider) {
         let mut client_config = make_client_config(*kt, &provider);
         client_config.max_fragment_size = Some(64);
-        let mut client =
-            ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+        let mut client = ConnectionCommon::<ClientConnectionData>::new(
+            Arc::new(client_config),
+            server_name("localhost"),
+        )
+        .unwrap();
         let writes = collect_write_lengths(&mut client);
         println!("writes at mtu=64: {writes:?}");
         assert!(writes.iter().all(|x| *x <= 64));
@@ -1378,7 +1381,8 @@ fn check_client_max_fragment_size(size: usize) -> Option<Error> {
     let provider = provider::default_provider();
     let mut client_config = make_client_config(KeyType::Ed25519, &provider);
     client_config.max_fragment_size = Some(size);
-    ClientConnection::new(Arc::new(client_config), server_name("localhost")).err()
+    ConnectionCommon::<ClientConnectionData>::new(Arc::new(client_config), server_name("localhost"))
+        .err()
 }
 
 #[test]
@@ -1442,7 +1446,9 @@ fn test_acceptor() {
 
     let provider = provider::default_provider();
     let client_config = Arc::new(make_client_config(KeyType::Ed25519, &provider));
-    let mut client = ClientConnection::new(client_config, server_name("localhost")).unwrap();
+    let mut client =
+        ConnectionCommon::<ClientConnectionData>::new(client_config, server_name("localhost"))
+            .unwrap();
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
 
@@ -1553,7 +1559,11 @@ fn test_acceptor_rejected_handshake() {
             .into(),
     )
     .finish(KeyType::Ed25519);
-    let mut client = ClientConnection::new(client_config.into(), server_name("localhost")).unwrap();
+    let mut client = ConnectionCommon::<ClientConnectionData>::new(
+        client_config.into(),
+        server_name("localhost"),
+    )
+    .unwrap();
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
 
@@ -1876,7 +1886,7 @@ fn client_closes_uncleanly() {
 
 #[test]
 fn test_complete_io_errors_if_close_notify_received_too_early() {
-    let mut server = ServerConnection::new(Arc::new(make_server_config(
+    let mut server = ConnectionCommon::<ServerConnectionData>::new(Arc::new(make_server_config(
         KeyType::Rsa2048,
         &provider::default_provider(),
     )))
