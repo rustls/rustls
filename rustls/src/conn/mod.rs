@@ -822,8 +822,8 @@ impl<Side> ConnectionCommon<Side> {
     }
 }
 
-impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {
-    fn from(conn: &'a mut ConnectionCommon<Data>) -> Self {
+impl<'a, Side> From<&'a mut ConnectionCommon<Side>> for Context<'a, Side> {
+    fn from(conn: &'a mut ConnectionCommon<Side>) -> Self {
         Self {
             common: &mut conn.core.common_state,
             data: &mut conn.core.data,
@@ -857,14 +857,14 @@ impl<Side> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
 }
 
 /// Interface shared by unbuffered client and server connections.
-pub struct UnbufferedConnectionCommon<Data> {
-    pub(crate) core: ConnectionCore<Data>,
+pub struct UnbufferedConnectionCommon<Side> {
+    pub(crate) core: ConnectionCore<Side>,
     wants_write: bool,
     emitted_peer_closed_state: bool,
 }
 
-impl<Data> From<ConnectionCore<Data>> for UnbufferedConnectionCommon<Data> {
-    fn from(core: ConnectionCore<Data>) -> Self {
+impl<Side> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<Side> {
+    fn from(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
             wants_write: false,
@@ -873,7 +873,7 @@ impl<Data> From<ConnectionCore<Data>> for UnbufferedConnectionCommon<Data> {
     }
 }
 
-impl<Data> UnbufferedConnectionCommon<Data> {
+impl<Side> UnbufferedConnectionCommon<Side> {
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     /// Should be used with care as it exposes secret key material.
     pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
