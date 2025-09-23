@@ -53,7 +53,7 @@ mod connection {
     impl Connection {
         /// Return the TLS-encoded transport parameters for the session's peer.
         ///
-        /// See [`ConnectionCommon::quic_transport_parameters()`] for more details.
+        /// See [`Connection::quic_transport_parameters()`] for more details.
         pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
             match self {
                 Self::Client(conn) => conn.quic_transport_parameters(),
@@ -128,7 +128,7 @@ mod connection {
     impl ClientConnection {
         /// Make a new QUIC ClientConnection.
         ///
-        /// This differs from `ConnectionCommon::<ClientConnectionData>::new()` in that it takes an extra `params` argument,
+        /// This differs from `ClientConnection::new()` in that it takes an extra `params` argument,
         /// which contains the TLS-encoded transport parameters to send.
         pub fn new(
             config: Arc<ClientConfig>,
@@ -247,7 +247,7 @@ mod connection {
     impl ServerConnection {
         /// Make a new QUIC ServerConnection.
         ///
-        /// This differs from `ConnectionCommon::<ServerConnectionData>::new()` in that it takes an extra `params` argument,
+        /// This differs from `ServerConnection::new()` in that it takes an extra `params` argument,
         /// which contains the TLS-encoded transport parameters to send.
         pub fn new(
             config: Arc<ServerConfig>,
@@ -949,10 +949,10 @@ impl Keys {
 /// QUIC uses 4 different sets of keys (and progressive key updates for long-running connections):
 ///
 /// * Initial: these can be created from [`Keys::initial()`]
-/// * 0-RTT keys: can be retrieved from [`ConnectionCommon::zero_rtt_keys()`]
-/// * Handshake: these are returned from [`ConnectionCommon::write_hs()`] after `ClientHello` and
+/// * 0-RTT keys: can be retrieved from [`Connection::zero_rtt_keys()`]
+/// * Handshake: these are returned from [`Connection::write_hs()`] after `ClientHello` and
 ///   `ServerHello` messages have been exchanged
-/// * 1-RTT keys: these are returned from [`ConnectionCommon::write_hs()`] after the handshake is done
+/// * 1-RTT keys: these are returned from [`Connection::write_hs()`] after the handshake is done
 ///
 /// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
 /// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that

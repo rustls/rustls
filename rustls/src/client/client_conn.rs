@@ -581,7 +581,7 @@ mod connection {
     use super::{ClientConnectionData, ClientExtensionsInput};
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
-    use crate::conn::{ConnectionCommon, ConnectionCore};
+    use crate::conn::{Connection, ConnectionCore};
     use crate::error::Error;
     use crate::sync::Arc;
     use crate::{ClientConfig, KeyingMaterialExporter};
@@ -592,11 +592,11 @@ mod connection {
     ///
     /// This type implements [`io::Write`].
     pub struct WriteEarlyData<'a> {
-        sess: &'a mut ConnectionCommon<ClientConnectionData>,
+        sess: &'a mut Connection<ClientConnectionData>,
     }
 
     impl<'a> WriteEarlyData<'a> {
-        fn new(sess: &'a mut ConnectionCommon<ClientConnectionData>) -> Self {
+        fn new(sess: &'a mut Connection<ClientConnectionData>) -> Self {
             WriteEarlyData { sess }
         }
 
@@ -623,12 +623,12 @@ mod connection {
         /// if called more than once per connection.
         ///
         /// If you are looking for the normal exporter, this is available from
-        /// [`ConnectionCommon::exporter()`].
+        /// [`Connection::exporter()`].
         ///
         /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
         /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
         /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
-        /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
+        /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
         pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
             self.sess.core.early_exporter()
         }
@@ -655,7 +655,7 @@ mod connection {
         }
     }
 
-    impl ConnectionCommon<ClientConnectionData> {
+    impl Connection<ClientConnectionData> {
         /// Make a new ClientConnection.  `config` controls how
         /// we behave in the TLS protocol, `name` is the
         /// name of the server we want to talk to.
@@ -740,9 +740,9 @@ mod connection {
         }
     }
 
-    impl fmt::Debug for ConnectionCommon<ClientConnectionData> {
+    impl fmt::Debug for Connection<ClientConnectionData> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.debug_struct("ConnectionCommon<ClientConnectionData>")
+            f.debug_struct("Connection<ClientConnectionData>")
                 .finish()
         }
     }

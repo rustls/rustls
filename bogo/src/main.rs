@@ -53,7 +53,7 @@ use rustls::server::{
     WebPkiClientVerifier,
 };
 use rustls::{
-    AlertDescription, CertificateCompressionAlgorithm, CertificateError, ConnectionCommon,
+    AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
     DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIncompatible,
     PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SideData, SignatureAlgorithm,
     SignatureScheme, client, compress, server, sign,
@@ -1192,7 +1192,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
     }
 }
 
-fn flush(sess: &mut ConnectionCommon<impl SideData>, conn: &mut net::TcpStream) {
+fn flush(sess: &mut Connection<impl SideData>, conn: &mut net::TcpStream) {
     while sess.wants_write() {
         if let Err(err) = sess.write_tls(conn) {
             println!("IO error: {err:?}");
@@ -1204,11 +1204,7 @@ fn flush(sess: &mut ConnectionCommon<impl SideData>, conn: &mut net::TcpStream) 
 
 const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
 
-fn after_read(
-    opts: &Options,
-    sess: &mut ConnectionCommon<impl SideData>,
-    conn: &mut net::TcpStream,
-) {
+fn after_read(opts: &Options, sess: &mut Connection<impl SideData>, conn: &mut net::TcpStream) {
     if let Err(err) = sess.process_new_packets() {
         flush(sess, conn); /* send any alerts before exiting */
         orderly_close(conn);
@@ -1232,7 +1228,7 @@ fn orderly_close(conn: &mut net::TcpStream) {
 
 fn read_n_bytes(
     opts: &Options,
-    sess: &mut ConnectionCommon<impl SideData>,
+    sess: &mut Connection<impl SideData>,
     conn: &mut net::TcpStream,
     n: usize,
 ) {
@@ -1250,11 +1246,7 @@ fn read_n_bytes(
     after_read(opts, sess, conn);
 }
 
-fn read_all_bytes(
-    opts: &Options,
-    sess: &mut ConnectionCommon<impl SideData>,
-    conn: &mut net::TcpStream,
-) {
+fn read_all_bytes(opts: &Options, sess: &mut Connection<impl SideData>, conn: &mut net::TcpStream) {
     match sess.read_tls(conn) {
         Ok(_) => {}
         Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
@@ -1264,10 +1256,10 @@ fn read_all_bytes(
     after_read(opts, sess, conn);
 }
 
-fn exec<S>(opts: &Options, mut sess: ConnectionCommon<S>, key_log: &KeyLogMemo, count: usize)
+fn exec<S>(opts: &Options, mut sess: Connection<S>, key_log: &KeyLogMemo, count: usize)
 where
     S: SideData,
-    ConnectionCommon<S>: ConnectionExt,
+    Connection<S>: ConnectionExt,
 {
     let mut sent_message = false;
 
@@ -1527,7 +1519,7 @@ where
     }
 }
 
-impl ConnectionExt for ConnectionCommon<ClientConnectionData> {
+impl ConnectionExt for Connection<ClientConnectionData> {
     fn write_early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         self.early_data()
     }
@@ -1545,7 +1537,7 @@ impl ConnectionExt for ConnectionCommon<ClientConnectionData> {
     }
 }
 
-impl ConnectionExt for ConnectionCommon<ServerConnectionData> {
+impl ConnectionExt for Connection<ServerConnectionData> {
     fn write_early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         None
     }
@@ -2046,12 +2038,11 @@ pub fn main() {
                     .unwrap()
                     .to_owned();
                 let sess =
-                    ConnectionCommon::<ClientConnectionData>::new(config.clone(), server_name)
-                        .unwrap();
+                    Connection::<ClientConnectionData>::new(config.clone(), server_name).unwrap();
                 exec(&opts, sess, &key_log, i);
             }
             SideConfig::Server(config) => {
-                let sess = ConnectionCommon::<ServerConnectionData>::new(config.clone()).unwrap();
+                let sess = Connection::<ServerConnectionData>::new(config.clone()).unwrap();
                 exec(&opts, sess, &key_log, i);
             }
         }

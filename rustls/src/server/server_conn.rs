@@ -16,7 +16,7 @@ use crate::builder::ConfigBuilder;
 use crate::common_state::State;
 use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
-use crate::conn::ConnectionCommon;
+use crate::conn::Connection;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -393,7 +393,7 @@ pub struct ServerConfig {
     /// this config.  Specify 0 to disable early data.  The
     /// default is 0.
     ///
-    /// Read the early data via [`ConnectionCommon::early_data`].
+    /// Read the early data via [`Connection::early_data`].
     ///
     /// The units for this are _both_ plaintext bytes, _and_ ciphertext
     /// bytes, depending on whether the server accepts a client's early_data
@@ -640,7 +640,7 @@ mod connection {
 
     use super::{Accepted, Accepting, ServerConfig, ServerConnectionData, ServerExtensionsInput};
     use crate::common_state::{CommonState, Context, Side};
-    use crate::conn::{ConnectionCommon, ConnectionCore};
+    use crate::conn::{Connection, ConnectionCore};
     use crate::error::Error;
     use crate::server::hs::ClientHelloInput;
     use crate::sync::Arc;
@@ -653,11 +653,11 @@ mod connection {
     ///
     /// This type implements [`io::Read`].
     pub struct ReadEarlyData<'a> {
-        common: &'a mut ConnectionCommon<ServerConnectionData>,
+        common: &'a mut Connection<ServerConnectionData>,
     }
 
     impl<'a> ReadEarlyData<'a> {
-        fn new(common: &'a mut ConnectionCommon<ServerConnectionData>) -> Self {
+        fn new(common: &'a mut Connection<ServerConnectionData>) -> Self {
             ReadEarlyData { common }
         }
 
@@ -674,12 +674,12 @@ mod connection {
         /// if called more than once per connection.
         ///
         /// If you are looking for the normal exporter, this is available from
-        /// [`ConnectionCommon::exporter()`].
+        /// [`Connection::exporter()`].
         ///
         /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
         /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
         /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
-        /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
+        /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
         pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
             self.common.core.early_exporter()
         }
@@ -695,7 +695,7 @@ mod connection {
         }
     }
 
-    impl ConnectionCommon<ServerConnectionData> {
+    impl Connection<ServerConnectionData> {
         /// Make a new ServerConnection.  `config` controls how
         /// we behave in the TLS protocol.
         pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
@@ -787,9 +787,9 @@ mod connection {
         }
     }
 
-    impl Debug for ConnectionCommon<ServerConnectionData> {
+    impl Debug for Connection<ServerConnectionData> {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            f.debug_struct("ConnectionCommon<ServerConnectionData>")
+            f.debug_struct("Connection<ServerConnectionData>")
                 .finish()
         }
     }
@@ -841,7 +841,7 @@ mod connection {
     /// # }
     /// ```
     pub struct Acceptor {
-        inner: Option<ConnectionCommon<ServerConnectionData>>,
+        inner: Option<Connection<ServerConnectionData>>,
     }
 
     impl Default for Acceptor {
@@ -866,7 +866,7 @@ mod connection {
         /// Returns an error if this `Acceptor` has already yielded an [`Accepted`]. For more details,
         /// refer to [`Connection::read_tls()`].
         ///
-        /// [`Connection::read_tls()`]: crate::ConnectionCommon::read_tls
+        /// [`Connection::read_tls()`]: crate::Connection::read_tls
         pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
             match &mut self.inner {
                 Some(conn) => conn.read_tls(rd),
@@ -948,8 +948,8 @@ mod connection {
         }
     }
 
-    impl From<ConnectionCommon<ServerConnectionData>> for AcceptedAlert {
-        fn from(conn: ConnectionCommon<ServerConnectionData>) -> Self {
+    impl From<Connection<ServerConnectionData>> for AcceptedAlert {
+        fn from(conn: Connection<ServerConnectionData>) -> Self {
             Self(conn.core.common_state.sendable_tls)
         }
     }
@@ -1037,7 +1037,7 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
 #[cfg(feature = "std")]
 pub struct Accepted {
-    connection: ConnectionCommon<ServerConnectionData>,
+    connection: Connection<ServerConnectionData>,
     message: Message<'static>,
     sig_schemes: Vec<SignatureScheme>,
 }
@@ -1073,7 +1073,7 @@ impl Accepted {
         ch
     }
 
-    /// Convert the [`Accepted`] into a [`ConnectionCommon`].
+    /// Convert the [`Accepted`] into a [`Connection`].
     ///
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
     /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
@@ -1081,7 +1081,7 @@ impl Accepted {
     pub fn into_connection(
         mut self,
         config: Arc<ServerConfig>,
-    ) -> Result<ConnectionCommon<ServerConnectionData>, (Error, AcceptedAlert)> {
+    ) -> Result<Connection<ServerConnectionData>, (Error, AcceptedAlert)> {
         if let Err(err) = self
             .connection
             .set_max_fragment_size(config.max_fragment_size)

@@ -36,7 +36,7 @@ use rustls::server::{
     NoServerSessionStorage, ServerConnectionData, ServerSessionMemoryCache, WebPkiClientVerifier,
 };
 use rustls::{
-    CipherSuite, ClientConfig, ConnectionCommon, HandshakeKind, ProtocolVersion, RootCertStore,
+    CipherSuite, ClientConfig, Connection, HandshakeKind, ProtocolVersion, RootCertStore,
     ServerConfig,
 };
 use rustls_test::KeyType;
@@ -574,13 +574,12 @@ impl ClientSideStepper<'_> {
 
 #[async_trait(?Send)]
 impl BenchStepper for ClientSideStepper<'_> {
-    type Endpoint = ConnectionCommon<ClientConnectionData>;
+    type Endpoint = Connection<ClientConnectionData>;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
         let server_name = "localhost".try_into().unwrap();
         let mut client =
-            ConnectionCommon::<ClientConnectionData>::new(self.config.clone(), server_name)
-                .unwrap();
+            Connection::<ClientConnectionData>::new(self.config.clone(), server_name).unwrap();
         client.set_buffer_limit(None);
 
         loop {
@@ -658,11 +657,10 @@ impl ServerSideStepper<'_> {
 
 #[async_trait(?Send)]
 impl BenchStepper for ServerSideStepper<'_> {
-    type Endpoint = ConnectionCommon<ServerConnectionData>;
+    type Endpoint = Connection<ServerConnectionData>;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
-        let mut server =
-            ConnectionCommon::<ServerConnectionData>::new(self.config.clone()).unwrap();
+        let mut server = Connection::<ServerConnectionData>::new(self.config.clone()).unwrap();
         server.set_buffer_limit(None);
 
         while server.is_handshaking() {

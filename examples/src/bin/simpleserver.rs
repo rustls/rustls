@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
 
     let listener = TcpListener::bind(format!("[::]:{}", 4443)).unwrap();
     let (mut tcp_stream, _) = listener.accept()?;
-    let mut conn = rustls::ConnectionCommon::<ServerConnectionData>::new(Arc::new(config))?;
+    let mut conn = rustls::Connection::<ServerConnectionData>::new(Arc::new(config))?;
     let mut tls_stream = rustls::Stream::new(&mut conn, &mut tcp_stream);
 
     tls_stream.write_all(b"Hello from the server")?;

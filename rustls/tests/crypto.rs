@@ -10,7 +10,7 @@ use rustls::crypto::CryptoProvider;
 use rustls::server::ServerConnectionData;
 use rustls::sign::CertifiedKey;
 use rustls::{
-    ClientConfig, ConnectionCommon, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
+    ClientConfig, Connection, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
     SupportedCipherSuite,
 };
 use rustls_test::{
@@ -394,8 +394,8 @@ fn test_refresh_traffic_keys() {
     do_handshake(&mut client, &mut server);
 
     fn check_both_directions(
-        client: &mut ConnectionCommon<ClientConnectionData>,
-        server: &mut ConnectionCommon<ServerConnectionData>,
+        client: &mut Connection<ClientConnectionData>,
+        server: &mut Connection<ServerConnectionData>,
     ) {
         client
             .writer()

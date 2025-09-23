@@ -1,22 +1,22 @@
 use core::fmt;
 use std::io::{BufRead, IoSlice, Read, Result, Write};
 
-use crate::conn::{ConnectionCommon, SideData};
+use crate::conn::{Connection, SideData};
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
 /// a Connection `C` and an underlying transport `T`, such as a socket.
 ///
-/// Relies on [`ConnectionCommon::complete_io()`] to perform the necessary I/O.
+/// Relies on [`Connection::complete_io()`] to perform the necessary I/O.
 ///
 /// This allows you to use a rustls Connection like a normal stream.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct Stream<'a, S, T: 'a + Read + Write + ?Sized>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
 {
     /// Our TLS connection
-    pub conn: &'a mut ConnectionCommon<S>,
+    pub conn: &'a mut Connection<S>,
 
     /// The underlying transport, like a socket
     pub sock: &'a mut T,
@@ -24,13 +24,13 @@ where
 
 impl<'a, S, T> Stream<'a, S, T>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
     T: 'a + Read + Write,
     S: SideData,
 {
     /// Make a new Stream using the Connection `conn` and socket-like object
     /// `sock`.  This does not fail and does no IO.
-    pub fn new(conn: &'a mut ConnectionCommon<S>, sock: &'a mut T) -> Self {
+    pub fn new(conn: &'a mut Connection<S>, sock: &'a mut T) -> Self {
         Self { conn, sock }
     }
 
@@ -76,7 +76,7 @@ where
 
 impl<'a, S, T> Read for Stream<'a, S, T>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
     T: 'a + Read + Write,
     S: SideData,
 {
@@ -88,7 +88,7 @@ where
 
 impl<'a, S, T> BufRead for Stream<'a, S, T>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
     T: 'a + Read + Write,
     S: 'a + SideData,
 {
@@ -108,7 +108,7 @@ where
 
 impl<'a, S, T> Write for Stream<'a, S, T>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
     T: 'a + Read + Write,
     S: SideData,
 {
@@ -155,17 +155,17 @@ where
 /// This type implements `io::Read` and `io::Write`, encapsulating
 /// and owning a Connection `C` and an underlying transport `T`, such as a socket.
 ///
-/// Relies on [`ConnectionCommon::complete_io()`] to perform the necessary I/O.
+/// Relies on [`Connection::complete_io()`] to perform the necessary I/O.
 ///
 /// This allows you to use a rustls Connection like a normal stream.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct StreamOwned<S, T: Read + Write + Sized>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
 {
     /// Our connection
-    pub conn: ConnectionCommon<S>,
+    pub conn: Connection<S>,
 
     /// The underlying transport, like a socket
     pub sock: T,
@@ -173,7 +173,7 @@ where
 
 impl<S, T> StreamOwned<S, T>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
     T: Read + Write,
     S: SideData,
 {
@@ -182,7 +182,7 @@ where
     ///
     /// This is the same as `Stream::new` except `conn` and `sock` are
     /// moved into the StreamOwned.
-    pub fn new(conn: ConnectionCommon<S>, sock: T) -> Self {
+    pub fn new(conn: Connection<S>, sock: T) -> Self {
         Self { conn, sock }
     }
 
@@ -197,14 +197,14 @@ where
     }
 
     /// Extract the `conn` and `sock` parts from the `StreamOwned`
-    pub fn into_parts(self) -> (ConnectionCommon<S>, T) {
+    pub fn into_parts(self) -> (Connection<S>, T) {
         (self.conn, self.sock)
     }
 }
 
 impl<'a, S, T> StreamOwned<S, T>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
     T: Read + Write,
     S: SideData,
 {
@@ -218,7 +218,7 @@ where
 
 impl<S, T> Read for StreamOwned<S, T>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
     T: Read + Write,
     S: SideData,
 {
@@ -229,7 +229,7 @@ where
 
 impl<S, T> BufRead for StreamOwned<S, T>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
     T: Read + Write,
     S: 'static + SideData,
 {
@@ -244,7 +244,7 @@ where
 
 impl<S, T> Write for StreamOwned<S, T>
 where
-    ConnectionCommon<S>: fmt::Debug,
+    Connection<S>: fmt::Debug,
     T: Read + Write,
     S: SideData,
 {
@@ -262,22 +262,22 @@ mod tests {
     use std::net::TcpStream;
 
     use super::{Stream, StreamOwned};
-    use crate::ConnectionCommon;
+    use crate::Connection;
     use crate::client::ClientConnectionData;
     use crate::server::ServerConnectionData;
 
     #[test]
     fn stream_can_be_created_for_connection_and_tcpstream() {
-        type _Test<'a> = Stream<'a, ConnectionCommon<ClientConnectionData>, TcpStream>;
+        type _Test<'a> = Stream<'a, Connection<ClientConnectionData>, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_client_and_tcpstream() {
-        type _Test = StreamOwned<ConnectionCommon<ClientConnectionData>, TcpStream>;
+        type _Test = StreamOwned<Connection<ClientConnectionData>, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_server_and_tcpstream() {
-        type _Test = StreamOwned<ConnectionCommon<ServerConnectionData>, TcpStream>;
+        type _Test = StreamOwned<Connection<ServerConnectionData>, TcpStream>;
     }
 }

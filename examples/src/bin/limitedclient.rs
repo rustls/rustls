@@ -31,7 +31,7 @@ fn main() {
     .unwrap();
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
-    let mut conn = rustls::ConnectionCommon::<rustls::client::ClientConnectionData>::new(
+    let mut conn = rustls::Connection::<rustls::client::ClientConnectionData>::new(
         Arc::new(config),
         server_name,
     )

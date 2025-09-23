@@ -46,7 +46,7 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    CertificateError, CertificateType, CipherSuite, ClientConfig, ConnectionCommon, ContentType,
+    CertificateError, CertificateType, CipherSuite, ClientConfig, Connection, ContentType,
     DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion, RootCertStore,
     ServerConfig, SideData, SignatureScheme, SupportedCipherSuite,
 };
@@ -216,8 +216,8 @@ embed_files! {
 }
 
 pub fn transfer(
-    left: &mut ConnectionCommon<impl SideData>,
-    right: &mut ConnectionCommon<impl SideData>,
+    left: &mut Connection<impl SideData>,
+    right: &mut Connection<impl SideData>,
 ) -> usize {
     let mut buf = [0u8; 262144];
     let mut total = 0;
@@ -245,7 +245,7 @@ pub fn transfer(
     total
 }
 
-pub fn transfer_eof(conn: &mut ConnectionCommon<impl SideData>) {
+pub fn transfer_eof(conn: &mut Connection<impl SideData>) {
     let empty_buf = [0u8; 0];
     let empty_cursor: &mut dyn io::Read = &mut &empty_buf[..];
     let sz = conn.read_tls(empty_cursor).unwrap();
@@ -260,9 +260,9 @@ pub enum Altered {
 }
 
 pub fn transfer_altered<F>(
-    left: &mut ConnectionCommon<impl SideData>,
+    left: &mut Connection<impl SideData>,
     filter: F,
-    right: &mut ConnectionCommon<impl SideData>,
+    right: &mut Connection<impl SideData>,
 ) -> usize
 where
     F: Fn(&mut Message<'_>) -> Altered,
@@ -691,8 +691,8 @@ pub fn make_pair(
     kt: KeyType,
     provider: &CryptoProvider,
 ) -> (
-    ConnectionCommon<ClientConnectionData>,
-    ConnectionCommon<ServerConnectionData>,
+    Connection<ClientConnectionData>,
+    Connection<ServerConnectionData>,
 ) {
     make_pair_for_configs(
         make_client_config(kt, provider),
@@ -704,8 +704,8 @@ pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
 ) -> (
-    ConnectionCommon<ClientConnectionData>,
-    ConnectionCommon<ServerConnectionData>,
+    Connection<ClientConnectionData>,
+    Connection<ServerConnectionData>,
 ) {
     make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
 }
@@ -714,16 +714,13 @@ pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
 ) -> (
-    ConnectionCommon<ClientConnectionData>,
-    ConnectionCommon<ServerConnectionData>,
+    Connection<ClientConnectionData>,
+    Connection<ServerConnectionData>,
 ) {
     (
-        ConnectionCommon::<ClientConnectionData>::new(
-            client_config.clone(),
-            server_name("localhost"),
-        )
-        .unwrap(),
-        ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap(),
+        Connection::<ClientConnectionData>::new(client_config.clone(), server_name("localhost"))
+            .unwrap(),
+        Connection::<ServerConnectionData>::new(server_config.clone()).unwrap(),
     )
 }
 
@@ -756,8 +753,8 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
 }
 
 pub fn do_handshake(
-    client: &mut ConnectionCommon<impl SideData>,
-    server: &mut ConnectionCommon<impl SideData>,
+    client: &mut Connection<impl SideData>,
+    server: &mut Connection<impl SideData>,
 ) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
@@ -859,8 +856,8 @@ pub enum ErrorFromPeer {
 }
 
 pub fn do_handshake_until_error(
-    client: &mut ConnectionCommon<ClientConnectionData>,
-    server: &mut ConnectionCommon<ServerConnectionData>,
+    client: &mut Connection<ClientConnectionData>,
+    server: &mut Connection<ServerConnectionData>,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
@@ -877,10 +874,10 @@ pub fn do_handshake_until_error(
 }
 
 pub fn do_handshake_altered(
-    mut client: ConnectionCommon<ClientConnectionData>,
+    mut client: Connection<ClientConnectionData>,
     alter_server_message: impl Fn(&mut Message<'_>) -> Altered,
     alter_client_message: impl Fn(&mut Message<'_>) -> Altered,
-    mut server: ConnectionCommon<ServerConnectionData>,
+    mut server: Connection<ServerConnectionData>,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer_altered(&mut client, &alter_client_message, &mut server);
@@ -900,8 +897,8 @@ pub fn do_handshake_altered(
 }
 
 pub fn do_handshake_until_both_error(
-    client: &mut ConnectionCommon<ClientConnectionData>,
-    server: &mut ConnectionCommon<ServerConnectionData>,
+    client: &mut Connection<ClientConnectionData>,
+    server: &mut Connection<ServerConnectionData>,
 ) -> Result<(), Vec<ErrorFromPeer>> {
     match do_handshake_until_error(client, server) {
         Err(server_err @ ErrorFromPeer::Server(_)) => {
@@ -1362,7 +1359,7 @@ pub struct RawTls {
 
 impl RawTls {
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_client(conn: ConnectionCommon<ClientConnectionData>) -> Self {
+    pub fn new_client(conn: Connection<ClientConnectionData>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,
@@ -1372,7 +1369,7 @@ impl RawTls {
     }
 
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_server(conn: ConnectionCommon<ServerConnectionData>) -> Self {
+    pub fn new_server(conn: Connection<ServerConnectionData>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,
@@ -1427,11 +1424,7 @@ impl RawTls {
         }
     }
 
-    pub fn encrypt_and_send(
-        &mut self,
-        msg: &PlainMessage,
-        peer: &mut ConnectionCommon<impl SideData>,
-    ) {
+    pub fn encrypt_and_send(&mut self, msg: &PlainMessage, peer: &mut Connection<impl SideData>) {
         let data = self
             .encrypter
             .encrypt(msg.borrow_outbound(), self.enc_seq)
@@ -1444,7 +1437,7 @@ impl RawTls {
 
     pub fn receive_and_decrypt(
         &mut self,
-        peer: &mut ConnectionCommon<impl SideData>,
+        peer: &mut Connection<impl SideData>,
         f: impl Fn(Message<'_>),
     ) {
         let mut data = vec![];
@@ -1638,7 +1631,7 @@ impl ResolvesServerCert for ServerCheckCertResolve {
 }
 
 pub struct OtherSession<'a, S> {
-    sess: &'a mut ConnectionCommon<S>,
+    sess: &'a mut Connection<S>,
     pub reads: usize,
     pub writevs: Vec<Vec<usize>>,
     fail_ok: bool,
@@ -1649,7 +1642,7 @@ pub struct OtherSession<'a, S> {
 }
 
 impl<'a, S: SideData> OtherSession<'a, S> {
-    pub fn new(sess: &'a mut ConnectionCommon<S>) -> Self {
+    pub fn new(sess: &'a mut Connection<S>) -> Self {
         OtherSession {
             sess,
             reads: 0,
@@ -1662,13 +1655,13 @@ impl<'a, S: SideData> OtherSession<'a, S> {
         }
     }
 
-    pub fn new_buffered(sess: &'a mut ConnectionCommon<S>) -> Self {
+    pub fn new_buffered(sess: &'a mut Connection<S>) -> Self {
         let mut os = OtherSession::new(sess);
         os.buffered = true;
         os
     }
 
-    pub fn new_fails(sess: &'a mut ConnectionCommon<S>) -> Self {
+    pub fn new_fails(sess: &'a mut Connection<S>) -> Self {
         let mut os = OtherSession::new(sess);
         os.fail_ok = true;
         os

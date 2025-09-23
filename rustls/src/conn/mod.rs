@@ -30,7 +30,7 @@ mod connection {
     use core::ops::Deref;
     use std::io::{self, BufRead, Read};
 
-    use crate::ConnectionCommon;
+    use crate::Connection;
     use crate::msgs::message::OutboundChunks;
     use crate::vecbuf::ChunkVecBuffer;
 
@@ -61,7 +61,7 @@ mod connection {
         /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
         ///
         /// This method consumes `self` so that it can return a slice whose lifetime is bounded by
-        /// the [`ConnectionCommon`] that created this `Reader`.
+        /// the [`Connection`] that created this `Reader`.
         pub fn into_first_chunk(self) -> io::Result<&'a [u8]> {
             match self.received_plaintext.chunk() {
                 Some(chunk) => Ok(chunk),
@@ -93,7 +93,7 @@ mod connection {
         /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
         ///
         /// You may learn the number of bytes available at any time by inspecting
-        /// the return of [`ConnectionCommon::process_new_packets`].
+        /// the return of [`Connection::process_new_packets`].
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             let len = self.received_plaintext.read(buf)?;
             if len > 0 || buf.is_empty() {
@@ -141,7 +141,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         /// Create a new Writer.
         ///
         /// This is not an external interface.  Get one of these objects
-        /// from [`ConnectionCommon::writer`].
+        /// from [`Connection::writer`].
         pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Self {
             Writer { sink }
         }
@@ -150,12 +150,12 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     impl io::Write for Writer<'_> {
         /// Send the plaintext `buf` to the peer, encrypting
         /// and authenticating it.  Once this function succeeds
-        /// you should call [`ConnectionCommon::write_tls`] which will output the
+        /// you should call [`Connection::write_tls`] which will output the
         /// corresponding TLS records.
         ///
         /// This function buffers plaintext sent before the
         /// TLS handshake completes, and sends it as soon
-        /// as it can.  See [`ConnectionCommon::set_buffer_limit`] to control
+        /// as it can.  See [`Connection::set_buffer_limit`] to control
         /// the size of this buffer.
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             self.sink.write(buf)
@@ -170,7 +170,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         }
     }
 
-    /// Internal trait implemented by [`ConnectionCommon`]
+    /// Internal trait implemented by [`Connection`]
     /// allowing it to be the subject of a [`Writer`].
     pub(crate) trait PlaintextSink {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
@@ -178,7 +178,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         fn flush(&mut self) -> io::Result<()>;
     }
 
-    impl<T> PlaintextSink for ConnectionCommon<T> {
+    impl<T> PlaintextSink for Connection<T> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             let len = self
                 .core
@@ -300,15 +300,15 @@ impl ConnectionRandoms {
 }
 
 /// Interface shared by client and server connections.
-pub struct ConnectionCommon<Data> {
+pub struct Connection<Data> {
     pub(crate) core: ConnectionCore<Data>,
     deframer_buffer: DeframerVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
 }
 
-impl<Data> ConnectionCommon<Data> {
+impl<Data> Connection<Data> {
     /// Processes any new packets read by a previous call to
-    /// [`ConnectionCommon::read_tls`].
+    /// [`Connection::read_tls`].
     ///
     /// Errors from this function relate to TLS protocol errors, and
     /// are fatal to the connection.  Future calls after an error will do
@@ -323,8 +323,8 @@ impl<Data> ConnectionCommon<Data> {
     /// Success from this function comes with some sundry state data
     /// about the connection.
     ///
-    /// [`read_tls`]: ConnectionCommon::read_tls
-    /// [`process_new_packets`]: ConnectionCommon::process_new_packets
+    /// [`read_tls`]: Connection::read_tls
+    /// [`process_new_packets`]: Connection::process_new_packets
     #[inline]
     pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
         self.core
@@ -394,9 +394,9 @@ impl<Data> ConnectionCommon<Data> {
     ///
     /// This buffer is emptied by [`Connection::write_tls`].
     ///
-    /// [`Connection::writer`]: crate::ConnectionCommon::writer
-    /// [`Connection::write_tls`]: crate::ConnectionCommon::write_tls
-    /// [`Connection::process_new_packets`]: crate::ConnectionCommon::process_new_packets
+    /// [`Connection::writer`]: crate::Connection::writer
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
     pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
         self.sendable_plaintext.set_limit(limit);
         self.sendable_tls.set_limit(limit);
@@ -444,7 +444,7 @@ impl<Data> ConnectionCommon<Data> {
 }
 
 #[cfg(feature = "std")]
-impl<Data> ConnectionCommon<Data> {
+impl<Data> Connection<Data> {
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader<'_> {
         let common = &mut self.core.common_state;
@@ -487,9 +487,9 @@ impl<Data> ConnectionCommon<Data> {
     /// [`is_handshaking`]: CommonState::is_handshaking
     /// [`wants_read`]: CommonState::wants_read
     /// [`wants_write`]: CommonState::wants_write
-    /// [`write_tls`]: ConnectionCommon::write_tls
-    /// [`read_tls`]: ConnectionCommon::read_tls
-    /// [`process_new_packets`]: ConnectionCommon::process_new_packets
+    /// [`write_tls`]: Connection::write_tls
+    /// [`read_tls`]: Connection::read_tls
+    /// [`process_new_packets`]: Connection::process_new_packets
     pub fn complete_io(
         &mut self,
         io: &mut (impl io::Read + io::Write),
@@ -645,8 +645,8 @@ impl<Data> ConnectionCommon<Data> {
     /// This function also returns `Ok(0)` once a `close_notify` alert has been successfully
     /// received.  No additional data is ever read in this state.
     ///
-    /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
-    /// [`reader()`]: ConnectionCommon::reader
+    /// [`process_new_packets()`]: Connection::process_new_packets
+    /// [`reader()`]: Connection::reader
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
         if self.received_plaintext.is_full() {
             return Err(io::Error::other("received plaintext buffer full"));
@@ -677,8 +677,8 @@ impl<Data> ConnectionCommon<Data> {
     }
 }
 
-impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {
-    fn from(conn: &'a mut ConnectionCommon<Data>) -> Self {
+impl<'a, Data> From<&'a mut Connection<Data>> for Context<'a, Data> {
+    fn from(conn: &'a mut Connection<Data>) -> Self {
         Self {
             common: &mut conn.core.common_state,
             data: &mut conn.core.data,
@@ -687,7 +687,7 @@ impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {
     }
 }
 
-impl<T> Deref for ConnectionCommon<T> {
+impl<T> Deref for Connection<T> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
@@ -695,13 +695,13 @@ impl<T> Deref for ConnectionCommon<T> {
     }
 }
 
-impl<T> DerefMut for ConnectionCommon<T> {
+impl<T> DerefMut for Connection<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.core.common_state
     }
 }
 
-impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
+impl<Data> From<ConnectionCore<Data>> for Connection<Data> {
     fn from(core: ConnectionCore<Data>) -> Self {
         Self {
             core,

@@ -12,8 +12,8 @@ use rustls::server::{
 };
 use rustls::sign::{CertifiedKey, SigningKey};
 use rustls::{
-    ApiMisuse, CertificateError, CipherSuite, ClientConfig, ConnectionCommon, DistinguishedName,
-    Error, PeerMisbehaved, ProtocolVersion, ServerConfig, SignatureScheme, SupportedCipherSuite,
+    ApiMisuse, CertificateError, CipherSuite, ClientConfig, Connection, DistinguishedName, Error,
+    PeerMisbehaved, ProtocolVersion, ServerConfig, SignatureScheme, SupportedCipherSuite,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, ServerCheckCertResolve,
@@ -39,13 +39,12 @@ fn server_cert_resolve_with_sni() {
             ..Default::default()
         });
 
-        let mut client = ConnectionCommon::<ClientConnectionData>::new(
+        let mut client = Connection::<ClientConnectionData>::new(
             Arc::new(client_config),
             server_name("the.value.from.sni"),
         )
         .unwrap();
-        let mut server =
-            ConnectionCommon::<ServerConnectionData>::new(Arc::new(server_config)).unwrap();
+        let mut server = Connection::<ServerConnectionData>::new(Arc::new(server_config)).unwrap();
 
         let err = do_handshake_until_error(&mut client, &mut server);
         assert!(err.is_err());
@@ -65,13 +64,12 @@ fn server_cert_resolve_with_alpn() {
             ..Default::default()
         });
 
-        let mut client = ConnectionCommon::<ClientConnectionData>::new(
+        let mut client = Connection::<ClientConnectionData>::new(
             Arc::new(client_config),
             server_name("sni-value"),
         )
         .unwrap();
-        let mut server =
-            ConnectionCommon::<ServerConnectionData>::new(Arc::new(server_config)).unwrap();
+        let mut server = Connection::<ServerConnectionData>::new(Arc::new(server_config)).unwrap();
 
         let err = do_handshake_until_error(&mut client, &mut server);
         assert!(err.is_err());
@@ -114,13 +112,12 @@ fn client_trims_terminating_dot() {
             ..Default::default()
         });
 
-        let mut client = ConnectionCommon::<ClientConnectionData>::new(
+        let mut client = Connection::<ClientConnectionData>::new(
             Arc::new(client_config),
             server_name("some-host.com."),
         )
         .unwrap();
-        let mut server =
-            ConnectionCommon::<ServerConnectionData>::new(Arc::new(server_config)).unwrap();
+        let mut server = Connection::<ServerConnectionData>::new(Arc::new(server_config)).unwrap();
 
         let err = do_handshake_until_error(&mut client, &mut server);
         assert!(err.is_err());
@@ -145,13 +142,10 @@ fn check_sigalgs_reduced_by_ciphersuite(
         ..Default::default()
     });
 
-    let mut client = ConnectionCommon::<ClientConnectionData>::new(
-        Arc::new(client_config),
-        server_name("localhost"),
-    )
-    .unwrap();
-    let mut server =
-        ConnectionCommon::<ServerConnectionData>::new(Arc::new(server_config)).unwrap();
+    let mut client =
+        Connection::<ClientConnectionData>::new(Arc::new(client_config), server_name("localhost"))
+            .unwrap();
+    let mut server = Connection::<ServerConnectionData>::new(Arc::new(server_config)).unwrap();
 
     let err = do_handshake_until_error(&mut client, &mut server);
     assert!(err.is_err());
@@ -225,13 +219,13 @@ fn client_with_sni_disabled_does_not_send_sni() {
             let mut client_config = make_client_config(*kt, &version_provider);
             client_config.enable_sni = false;
 
-            let mut client = ConnectionCommon::<ClientConnectionData>::new(
+            let mut client = Connection::<ClientConnectionData>::new(
                 Arc::new(client_config),
                 server_name("value-not-sent"),
             )
             .unwrap();
             let mut server =
-                ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap();
+                Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
 
             let err = do_handshake_until_error(&mut client, &mut server);
             dbg!(&err);
@@ -442,9 +436,8 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
 
     for version_provider in all_versions(&provider) {
         let client_config = make_client_config(kt, &version_provider);
-        let mut server =
-            ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap();
-        let mut client = ConnectionCommon::<ClientConnectionData>::new(
+        let mut server = Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
+        let mut client = Connection::<ClientConnectionData>::new(
             Arc::new(client_config),
             server_name("thisdoesNOTexist.com"),
         )
@@ -483,8 +476,8 @@ fn sni_resolver_works() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap();
-    let mut client1 = ConnectionCommon::<ClientConnectionData>::new(
+    let mut server1 = Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
+    let mut client1 = Connection::<ClientConnectionData>::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("localhost"),
     )
@@ -492,8 +485,8 @@ fn sni_resolver_works() {
     let err = do_handshake_until_error(&mut client1, &mut server1);
     assert_eq!(err, Ok(()));
 
-    let mut server2 = ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap();
-    let mut client2 = ConnectionCommon::<ClientConnectionData>::new(
+    let mut server2 = Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
+    let mut client2 = Connection::<ClientConnectionData>::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("notlocalhost"),
     )
@@ -552,8 +545,8 @@ fn sni_resolver_lower_cases_configured_names() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap();
-    let mut client1 = ConnectionCommon::<ClientConnectionData>::new(
+    let mut server1 = Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
+    let mut client1 = Connection::<ClientConnectionData>::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("localhost"),
     )
@@ -583,8 +576,8 @@ fn sni_resolver_lower_cases_queried_names() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap();
-    let mut client1 = ConnectionCommon::<ClientConnectionData>::new(
+    let mut server1 = Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
+    let mut client1 = Connection::<ClientConnectionData>::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("LOCALHOST"),
     )

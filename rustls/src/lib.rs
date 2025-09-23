@@ -114,12 +114,12 @@
 //! [`tokio-rustls`]: https://github.com/rustls/tokio-rustls
 //!
 //! ### Rustls provides encrypted pipes
-//! This is the [`ConnectionCommon`] type and its two specializations.
+//! This is the [`Connection`] type and its two specializations.
 //! You supply raw TLS traffic on the left (via the [`read_tls()`] and [`write_tls()`] methods)
 //! and then read/write the plaintext on the right:
 //!
-//! [`read_tls()`]: ConnectionCommon::read_tls
-//! [`write_tls()`]: ConnectionCommon::read_tls
+//! [`read_tls()`]: Connection::read_tls
+//! [`write_tls()`]: Connection::read_tls
 //!
 //! ```text
 //!          TLS                                   Plaintext
@@ -189,7 +189,7 @@
 //! #     .unwrap();
 //! let rc_config = Arc::new(config);
 //! let example_com = "example.com".try_into().unwrap();
-//! let mut client = rustls::ConnectionCommon::<ClientConnectionData>::new(rc_config, example_com);
+//! let mut client = rustls::Connection::<ClientConnectionData>::new(rc_config, example_com);
 //! # }
 //! ```
 //!
@@ -218,7 +218,7 @@
 //!
 //! ```rust,no_run
 //! # #[cfg(feature = "aws-lc-rs")] {
-//! # let mut client = rustls::ConnectionCommon::<ClientConnectionData>::new(panic!(), panic!()).unwrap();
+//! # let mut client = rustls::Connection::<ClientConnectionData>::new(panic!(), panic!()).unwrap();
 //! # struct Socket { }
 //! # impl Socket {
 //! #   fn ready_for_write(&self) -> bool { false }
@@ -483,16 +483,16 @@ pub mod internal {
 
 /// Unbuffered connection API
 ///
-/// This is an alternative to the [`crate::ConnectionCommon`] API that does not internally buffer
+/// This is an alternative to the [`crate::Connection`] API that does not internally buffer
 /// TLS nor plaintext data. Instead those buffers are managed by the API user so they have
 /// control over when and how to allocate, resize and dispose of them.
 ///
-/// This API is lower level than the `ConnectionCommon` API and is built around a state machine
+/// This API is lower level than the `Connection` API and is built around a state machine
 /// interface where the API user must handle each state to advance and complete the
 /// handshake process.
 ///
-/// Like the `ConnectionCommon` API, no IO happens internally so all IO must be handled by the API
-/// user. Unlike the `ConnectionCommon` API, this API does not make use of the [`std::io::Read`] and
+/// Like the `Connection` API, no IO happens internally so all IO must be handled by the API
+/// user. Unlike the `Connection` API, this API does not make use of the [`std::io::Read`] and
 /// [`std::io::Write`] traits so it's usable in no-std context.
 ///
 /// The entry points into this API are [`crate::client::UnbufferedClientConnection::new`],
@@ -519,7 +519,7 @@ pub mod unbuffered {
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
-pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
+pub use crate::conn::{Connection, KeyingMaterialExporter, SideData, kernel};
 #[cfg(feature = "std")]
 pub use crate::conn::{Reader, Writer};
 pub use crate::enums::{

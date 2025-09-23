@@ -476,10 +476,10 @@ impl<Data> WriteTraffic<'_, Data> {
     /// return a `ConnectionState::EncodeTlsData` that emits the `key_update`
     /// message.
     ///
-    /// See [`ConnectionCommon::refresh_traffic_keys()`] for full documentation,
+    /// See [`Connection::refresh_traffic_keys()`] for full documentation,
     /// including why you might call this and in what circumstances it will fail.
     ///
-    /// [`ConnectionCommon::refresh_traffic_keys()`]: crate::ConnectionCommon::refresh_traffic_keys
+    /// [`Connection::refresh_traffic_keys()`]: crate::Connection::refresh_traffic_keys
     pub fn refresh_traffic_keys(self) -> Result<(), Error> {
         self.conn.core.refresh_traffic_keys()
     }

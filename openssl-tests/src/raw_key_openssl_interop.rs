@@ -21,7 +21,7 @@ mod client {
     use rustls::server::danger::SignatureVerificationInput;
     use rustls::sign::CertifiedKey;
     use rustls::{
-        ApiMisuse, CertificateError, CertificateType, ClientConfig, ConnectionCommon, Error,
+        ApiMisuse, CertificateError, CertificateType, ClientConfig, Connection, Error,
         InconsistentKeys, PeerIdentity, PeerIncompatible, SignatureScheme, Stream,
     };
 
@@ -65,7 +65,7 @@ mod client {
     pub(super) fn run_client(config: ClientConfig, port: u16) -> Result<String, io::Error> {
         let server_name = "0.0.0.0".try_into().unwrap();
         let mut conn =
-            ConnectionCommon::<ClientConnectionData>::new(Arc::new(config), server_name).unwrap();
+            Connection::<ClientConnectionData>::new(Arc::new(config), server_name).unwrap();
         let mut sock = TcpStream::connect(format!("[::]:{port}")).unwrap();
         let mut tls = Stream::new(&mut conn, &mut sock);
 
@@ -159,7 +159,7 @@ mod server {
     use rustls::server::{AlwaysResolvesServerRawPublicKeys, ServerConnectionData};
     use rustls::sign::CertifiedKey;
     use rustls::{
-        ApiMisuse, CertificateError, CertificateType, ConnectionCommon, DistinguishedName, Error,
+        ApiMisuse, CertificateError, CertificateType, Connection, DistinguishedName, Error,
         InconsistentKeys, PeerIdentity, PeerIncompatible, ServerConfig, SignatureScheme,
     };
 
@@ -205,7 +205,7 @@ mod server {
     ) -> Result<String, io::Error> {
         let (mut stream, _) = listener.accept()?;
 
-        let mut conn = ConnectionCommon::<ServerConnectionData>::new(Arc::new(config)).unwrap();
+        let mut conn = Connection::<ServerConnectionData>::new(Arc::new(config)).unwrap();
         conn.complete_io(&mut stream)?;
 
         conn.writer()

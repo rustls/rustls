@@ -8,7 +8,7 @@ use rustls::client::ClientConnectionData;
 use rustls::server::ServerConnectionData;
 use rustls::server::danger::ClientCertVerified;
 use rustls::{
-    AlertDescription, CertificateError, ConnectionCommon, Error, InvalidMessage, PeerIdentity,
+    AlertDescription, CertificateError, Connection, Error, InvalidMessage, PeerIdentity,
     PeerMisbehaved, ServerConfig,
 };
 use rustls_test::{
@@ -104,8 +104,8 @@ fn client_verifier_no_auth_yes_root() {
         for version_provider in all_versions(&provider) {
             let client_config = make_client_config(*kt, &version_provider);
             let mut server =
-                ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap();
-            let mut client = ConnectionCommon::<ClientConnectionData>::new(
+                Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
+            let mut client = Connection::<ClientConnectionData>::new(
                 Arc::new(client_config),
                 server_name("localhost"),
             )
@@ -138,8 +138,8 @@ fn client_verifier_fails_properly() {
         for version_provider in all_versions(&provider) {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let mut server =
-                ConnectionCommon::<ServerConnectionData>::new(server_config.clone()).unwrap();
-            let mut client = ConnectionCommon::<ClientConnectionData>::new(
+                Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
+            let mut client = Connection::<ClientConnectionData>::new(
                 Arc::new(client_config),
                 server_name("localhost"),
             )

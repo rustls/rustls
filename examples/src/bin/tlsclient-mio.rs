@@ -30,7 +30,7 @@ use rustls::client::ClientConnectionData;
 use rustls::crypto::{CryptoProvider, SupportedKxGroup, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ConnectionCommon, ProtocolVersion, RootCertStore};
+use rustls::{Connection, ProtocolVersion, RootCertStore};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -40,7 +40,7 @@ struct TlsClient {
     socket: TcpStream,
     closing: bool,
     clean_closure: bool,
-    tls_conn: ConnectionCommon<ClientConnectionData>,
+    tls_conn: Connection<ClientConnectionData>,
 }
 
 impl TlsClient {
@@ -53,7 +53,7 @@ impl TlsClient {
             socket: sock,
             closing: false,
             clean_closure: false,
-            tls_conn: ConnectionCommon::<ClientConnectionData>::new(cfg, server_name).unwrap(),
+            tls_conn: Connection::<ClientConnectionData>::new(cfg, server_name).unwrap(),
         }
     }
 

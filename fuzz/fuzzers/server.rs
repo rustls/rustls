@@ -7,7 +7,7 @@ use std::io;
 use std::sync::Arc;
 
 use rustls::server::{Accepted, Acceptor, ServerConnectionData};
-use rustls::{ConnectionCommon, ServerConfig};
+use rustls::{Connection, ServerConfig};
 
 fuzz_target!(|data: &[u8]| {
     let _ = env_logger::try_init();
@@ -26,7 +26,7 @@ fn fuzz_buffered_api(data: &[u8]) {
             .unwrap(),
     );
     let mut stream = io::Cursor::new(data);
-    let mut server = ConnectionCommon::<ServerConnectionData>::new(config).unwrap();
+    let mut server = Connection::<ServerConnectionData>::new(config).unwrap();
 
     service_connection(&mut stream, &mut server);
 }
@@ -69,10 +69,7 @@ fn fuzz_accepted(stream: &mut dyn io::Read, accepted: Accepted) {
     }
 }
 
-fn service_connection(
-    stream: &mut dyn io::Read,
-    server: &mut ConnectionCommon<ServerConnectionData>,
-) {
+fn service_connection(stream: &mut dyn io::Read, server: &mut Connection<ServerConnectionData>) {
     loop {
         let rd = server.read_tls(stream);
         if server.process_new_packets().is_err() {
