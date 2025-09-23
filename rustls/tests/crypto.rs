@@ -5,9 +5,9 @@
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
-use rustls::client::ClientConnectionData;
+use rustls::client::Client;
 use rustls::crypto::CryptoProvider;
-use rustls::server::ServerConnectionData;
+use rustls::server::Server;
 use rustls::sign::CertifiedKey;
 use rustls::{
     ClientConfig, Connection, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
@@ -393,10 +393,7 @@ fn test_refresh_traffic_keys() {
     let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::default_provider());
     do_handshake(&mut client, &mut server);
 
-    fn check_both_directions(
-        client: &mut Connection<ClientConnectionData>,
-        server: &mut Connection<ServerConnectionData>,
-    ) {
+    fn check_both_directions(client: &mut Connection<Client>, server: &mut Connection<Server>) {
         client
             .writer()
             .write_all(b"to-server-1")

@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::server::ServerConnectionData;
+use rustls::server::Server;
 
 fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
 
     let listener = TcpListener::bind(format!("[::]:{}", 4443)).unwrap();
     let (mut tcp_stream, _) = listener.accept()?;
-    let mut conn = rustls::Connection::<ServerConnectionData>::new(Arc::new(config))?;
+    let mut conn = rustls::Connection::<Server>::new(Arc::new(config))?;
     let mut tls_stream = rustls::Stream::new(&mut conn, &mut tcp_stream);
 
     tls_stream.write_all(b"Hello from the server")?;

@@ -12,7 +12,7 @@ use super::{ResolvesClientCert, Tls12Resumption};
 #[cfg(feature = "log")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
-use crate::client::client_conn::ClientConnectionData;
+use crate::client::client_conn::Client;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
@@ -43,9 +43,9 @@ use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::verify::ServerCertVerifier;
 
-pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
+pub(super) type NextState<'a> = Box<dyn State<Client> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
-pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
+pub(super) type ClientContext<'a> = crate::common_state::Context<'a, Client>;
 
 pub(crate) struct ExpectServerHello {
     pub(super) input: ClientHelloInput,
@@ -154,7 +154,7 @@ impl ExpectServerHello {
     }
 }
 
-impl State<ClientConnectionData> for ExpectServerHello {
+impl State<Client> for ExpectServerHello {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -413,7 +413,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
+impl State<Client> for ExpectServerHelloOrHelloRetryRequest {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,

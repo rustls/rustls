@@ -6,7 +6,7 @@ extern crate rustls;
 use std::io;
 use std::sync::Arc;
 
-use rustls::client::ClientConnectionData;
+use rustls::client::Client;
 use rustls::{ClientConfig, Connection};
 
 fuzz_target!(|data: &[u8]| {
@@ -19,7 +19,7 @@ fuzz_target!(|data: &[u8]| {
             .unwrap(),
     );
     let hostname = "localhost".try_into().unwrap();
-    let mut client = Connection::<ClientConnectionData>::new(config, hostname).unwrap();
+    let mut client = Connection::<Client>::new(config, hostname).unwrap();
 
     let mut stream = io::Cursor::new(data);
     loop {

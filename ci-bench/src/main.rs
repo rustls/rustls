@@ -30,10 +30,10 @@ use itertools::Itertools;
 use rayon::iter::Either;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
-use rustls::client::{ClientConnectionData, Resumption};
+use rustls::client::{Client, Resumption};
 use rustls::crypto::{CryptoProvider, GetRandomFailed, SecureRandom, aws_lc_rs, ring};
 use rustls::server::{
-    NoServerSessionStorage, ServerConnectionData, ServerSessionMemoryCache, WebPkiClientVerifier,
+    NoServerSessionStorage, Server, ServerSessionMemoryCache, WebPkiClientVerifier,
 };
 use rustls::{
     CipherSuite, ClientConfig, Connection, HandshakeKind, ProtocolVersion, RootCertStore,
@@ -574,12 +574,11 @@ impl ClientSideStepper<'_> {
 
 #[async_trait(?Send)]
 impl BenchStepper for ClientSideStepper<'_> {
-    type Endpoint = Connection<ClientConnectionData>;
+    type Endpoint = Connection<Client>;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
         let server_name = "localhost".try_into().unwrap();
-        let mut client =
-            Connection::<ClientConnectionData>::new(self.config.clone(), server_name).unwrap();
+        let mut client = Connection::<Client>::new(self.config.clone(), server_name).unwrap();
         client.set_buffer_limit(None);
 
         loop {
@@ -657,10 +656,10 @@ impl ServerSideStepper<'_> {
 
 #[async_trait(?Send)]
 impl BenchStepper for ServerSideStepper<'_> {
-    type Endpoint = Connection<ServerConnectionData>;
+    type Endpoint = Connection<Server>;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
-        let mut server = Connection::<ServerConnectionData>::new(self.config.clone()).unwrap();
+        let mut server = Connection::<Server>::new(self.config.clone()).unwrap();
         server.set_buffer_limit(None);
 
         while server.is_handshaking() {

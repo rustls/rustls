@@ -41,7 +41,7 @@ use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
 use hickory_resolver::{ResolveError, Resolver, TokioResolver};
 use log::trace;
-use rustls::client::{ClientConnectionData, EchConfig, EchGreaseConfig, EchMode, EchStatus};
+use rustls::client::{Client, EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls::crypto::hpke::Hpke;
@@ -132,8 +132,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     for i in 0..args.num_reqs {
         trace!("\nRequest {} of {}", i + 1, args.num_reqs);
-        let mut conn =
-            Connection::<ClientConnectionData>::new(config.clone(), server_name.clone())?;
+        let mut conn = Connection::<Client>::new(config.clone(), server_name.clone())?;
         // The "outer" server that we're connecting to.
         let sock_addr = (args.outer_hostname.as_str(), args.port)
             .to_socket_addrs()?

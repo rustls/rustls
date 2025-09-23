@@ -26,7 +26,7 @@ use std::{process, str};
 
 use clap::Parser;
 use mio::net::TcpStream;
-use rustls::client::ClientConnectionData;
+use rustls::client::Client;
 use rustls::crypto::{CryptoProvider, SupportedKxGroup, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
@@ -40,7 +40,7 @@ struct TlsClient {
     socket: TcpStream,
     closing: bool,
     clean_closure: bool,
-    tls_conn: Connection<ClientConnectionData>,
+    tls_conn: Connection<Client>,
 }
 
 impl TlsClient {
@@ -53,7 +53,7 @@ impl TlsClient {
             socket: sock,
             closing: false,
             clean_closure: false,
-            tls_conn: Connection::<ClientConnectionData>::new(cfg, server_name).unwrap(),
+            tls_conn: Connection::<Client>::new(cfg, server_name).unwrap(),
         }
     }
 

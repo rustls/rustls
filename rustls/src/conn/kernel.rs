@@ -56,7 +56,7 @@
 use alloc::boxed::Box;
 use core::marker::PhantomData;
 
-use crate::client::ClientConnectionData;
+use crate::client::Client;
 use crate::common_state::Protocol;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::NewSessionTicketPayloadTls13;
@@ -150,7 +150,7 @@ impl<Data> KernelConnection<Data> {
     }
 }
 
-impl KernelConnection<ClientConnectionData> {
+impl KernelConnection<Client> {
     /// Handle a `new_session_ticket` message from the peer.
     ///
     /// This will register the session ticket within with rustls so that it can
@@ -168,10 +168,10 @@ impl KernelConnection<ClientConnectionData> {
     /// ```no_run
     /// use rustls::{ContentType, HandshakeType};
     /// use rustls::kernel::KernelConnection;
-    /// use rustls::client::ClientConnectionData;
+    /// use rustls::client::Client;
     ///
-    /// # fn doctest(conn: &mut KernelConnection<ClientConnectionData>, typ: ContentType, message: &[u8]) -> Result<(), rustls::Error> {
-    /// let conn: &mut KernelConnection<ClientConnectionData> = // ...
+    /// # fn doctest(conn: &mut KernelConnection<Client>, typ: ContentType, message: &[u8]) -> Result<(), rustls::Error> {
+    /// let conn: &mut KernelConnection<Client> = // ...
     /// #   conn;
     /// let typ: ContentType = // ...
     /// #   typ;

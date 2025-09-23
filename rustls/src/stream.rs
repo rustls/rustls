@@ -263,21 +263,21 @@ mod tests {
 
     use super::{Stream, StreamOwned};
     use crate::Connection;
-    use crate::client::ClientConnectionData;
-    use crate::server::ServerConnectionData;
+    use crate::client::Client;
+    use crate::server::Server;
 
     #[test]
     fn stream_can_be_created_for_connection_and_tcpstream() {
-        type _Test<'a> = Stream<'a, Connection<ClientConnectionData>, TcpStream>;
+        type _Test<'a> = Stream<'a, Connection<Client>, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_client_and_tcpstream() {
-        type _Test = StreamOwned<Connection<ClientConnectionData>, TcpStream>;
+        type _Test = StreamOwned<Connection<Client>, TcpStream>;
     }
 
     #[test]
     fn streamowned_can_be_created_for_server_and_tcpstream() {
-        type _Test = StreamOwned<Connection<ServerConnectionData>, TcpStream>;
+        type _Test = StreamOwned<Connection<Server>, TcpStream>;
     }
 }

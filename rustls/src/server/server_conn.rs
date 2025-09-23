@@ -638,7 +638,7 @@ mod connection {
 
     use pki_types::DnsName;
 
-    use super::{Accepted, Accepting, ServerConfig, ServerConnectionData, ServerExtensionsInput};
+    use super::{Accepted, Accepting, Server, ServerConfig, ServerExtensionsInput};
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{Connection, ConnectionCore};
     use crate::error::Error;
@@ -653,11 +653,11 @@ mod connection {
     ///
     /// This type implements [`io::Read`].
     pub struct ReadEarlyData<'a> {
-        common: &'a mut Connection<ServerConnectionData>,
+        common: &'a mut Connection<Server>,
     }
 
     impl<'a> ReadEarlyData<'a> {
-        fn new(common: &'a mut Connection<ServerConnectionData>) -> Self {
+        fn new(common: &'a mut Connection<Server>) -> Self {
             ReadEarlyData { common }
         }
 
@@ -695,7 +695,7 @@ mod connection {
         }
     }
 
-    impl Connection<ServerConnectionData> {
+    impl Connection<Server> {
         /// Make a new ServerConnection.  `config` controls how
         /// we behave in the TLS protocol.
         pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
@@ -787,7 +787,7 @@ mod connection {
         }
     }
 
-    impl Debug for Connection<ServerConnectionData> {
+    impl Debug for Connection<Server> {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             f.debug_struct("Connection<ServerConnectionData>")
                 .finish()
@@ -841,7 +841,7 @@ mod connection {
     /// # }
     /// ```
     pub struct Acceptor {
-        inner: Option<Connection<ServerConnectionData>>,
+        inner: Option<Connection<Server>>,
     }
 
     impl Default for Acceptor {
@@ -851,7 +851,7 @@ mod connection {
                 inner: Some(
                     ConnectionCore::new(
                         Box::new(Accepting),
-                        ServerConnectionData::default(),
+                        Server::default(),
                         CommonState::new(Side::Server),
                     )
                     .into(),
@@ -948,8 +948,8 @@ mod connection {
         }
     }
 
-    impl From<Connection<ServerConnectionData>> for AcceptedAlert {
-        fn from(conn: Connection<ServerConnectionData>) -> Self {
+    impl From<Connection<Server>> for AcceptedAlert {
+        fn from(conn: Connection<Server>) -> Self {
             Self(conn.core.common_state.sendable_tls)
         }
     }
@@ -968,7 +968,7 @@ pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData};
 ///
 /// See the [`crate::unbuffered`] module docs for more details
 pub struct UnbufferedServerConnection {
-    inner: UnbufferedConnectionCommon<ServerConnectionData>,
+    inner: UnbufferedConnectionCommon<Server>,
 }
 
 impl UnbufferedServerConnection {
@@ -1001,7 +1001,7 @@ impl UnbufferedServerConnection {
     /// for calling this method.
     pub fn dangerous_into_kernel_connection(
         self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<ServerConnectionData>), Error> {
+    ) -> Result<(ExtractedSecrets, KernelConnection<Server>), Error> {
         self.inner
             .core
             .dangerous_into_kernel_connection()
@@ -1009,7 +1009,7 @@ impl UnbufferedServerConnection {
 }
 
 impl Deref for UnbufferedServerConnection {
-    type Target = UnbufferedConnectionCommon<ServerConnectionData>;
+    type Target = UnbufferedConnectionCommon<Server>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -1022,7 +1022,7 @@ impl DerefMut for UnbufferedServerConnection {
     }
 }
 
-impl UnbufferedConnectionCommon<ServerConnectionData> {
+impl UnbufferedConnectionCommon<Server> {
     pub(crate) fn pop_early_data(&mut self) -> Option<Vec<u8>> {
         self.core.data.early_data.pop()
     }
@@ -1037,7 +1037,7 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
 #[cfg(feature = "std")]
 pub struct Accepted {
-    connection: Connection<ServerConnectionData>,
+    connection: Connection<Server>,
     message: Message<'static>,
     sig_schemes: Vec<SignatureScheme>,
 }
@@ -1081,7 +1081,7 @@ impl Accepted {
     pub fn into_connection(
         mut self,
         config: Arc<ServerConfig>,
-    ) -> Result<Connection<ServerConnectionData>, (Error, AcceptedAlert)> {
+    ) -> Result<Connection<Server>, (Error, AcceptedAlert)> {
         if let Err(err) = self
             .connection
             .set_max_fragment_size(config.max_fragment_size)
@@ -1133,13 +1133,13 @@ impl Debug for Accepted {
 struct Accepting;
 
 #[cfg(feature = "std")]
-impl State<ServerConnectionData> for Accepting {
+impl State<Server> for Accepting {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle<'m>(
         self: Box<Self>,
         _cx: &mut hs::ServerContext<'_>,
         _m: Message<'m>,
-    ) -> Result<Box<dyn State<ServerConnectionData> + 'm>, Error>
+    ) -> Result<Box<dyn State<Server> + 'm>, Error>
     where
         Self: 'm,
     {
@@ -1240,7 +1240,7 @@ impl Debug for EarlyDataState {
     }
 }
 
-impl ConnectionCore<ServerConnectionData> {
+impl ConnectionCore<Server> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput<'static>,
@@ -1251,7 +1251,7 @@ impl ConnectionCore<ServerConnectionData> {
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts)),
-            ServerConnectionData::default(),
+            Server::default(),
             common,
         ))
     }
@@ -1268,14 +1268,14 @@ impl ConnectionCore<ServerConnectionData> {
 
 /// State associated with a server connection.
 #[derive(Default, Debug)]
-pub struct ServerConnectionData {
+pub struct Server {
     pub(crate) sni: Option<DnsName<'static>>,
     pub(crate) received_resumption_data: Option<Vec<u8>>,
     pub(crate) resumption_data: Vec<u8>,
     pub(super) early_data: EarlyDataState,
 }
 
-impl crate::conn::SideData for ServerConnectionData {}
+impl crate::conn::SideData for Server {}
 
 #[cfg(feature = "std")]
 #[cfg(test)]

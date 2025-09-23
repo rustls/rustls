@@ -22,7 +22,7 @@ use rustls::client::danger::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
 };
 use rustls::client::{
-    AlwaysResolvesClientRawPublicKeys, ClientConnectionData, ServerCertVerifierBuilder,
+    AlwaysResolvesClientRawPublicKeys, Client, ServerCertVerifierBuilder,
     UnbufferedClientConnection, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
@@ -39,7 +39,7 @@ use rustls::server::danger::{
 };
 use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, ClientHello, ResolvesServerCert,
-    ServerConnectionData, UnbufferedServerConnection, WebPkiClientVerifier,
+    Server, UnbufferedServerConnection, WebPkiClientVerifier,
 };
 use rustls::sign::CertifiedKey;
 use rustls::unbuffered::{
@@ -690,10 +690,7 @@ pub fn webpki_server_verifier_builder(
 pub fn make_pair(
     kt: KeyType,
     provider: &CryptoProvider,
-) -> (
-    Connection<ClientConnectionData>,
-    Connection<ServerConnectionData>,
-) {
+) -> (Connection<Client>, Connection<Server>) {
     make_pair_for_configs(
         make_client_config(kt, provider),
         make_server_config(kt, provider),
@@ -703,24 +700,17 @@ pub fn make_pair(
 pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
-) -> (
-    Connection<ClientConnectionData>,
-    Connection<ServerConnectionData>,
-) {
+) -> (Connection<Client>, Connection<Server>) {
     make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
 }
 
 pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
-) -> (
-    Connection<ClientConnectionData>,
-    Connection<ServerConnectionData>,
-) {
+) -> (Connection<Client>, Connection<Server>) {
     (
-        Connection::<ClientConnectionData>::new(client_config.clone(), server_name("localhost"))
-            .unwrap(),
-        Connection::<ServerConnectionData>::new(server_config.clone()).unwrap(),
+        Connection::<Client>::new(client_config.clone(), server_name("localhost")).unwrap(),
+        Connection::<Server>::new(server_config.clone()).unwrap(),
     )
 }
 
@@ -856,8 +846,8 @@ pub enum ErrorFromPeer {
 }
 
 pub fn do_handshake_until_error(
-    client: &mut Connection<ClientConnectionData>,
-    server: &mut Connection<ServerConnectionData>,
+    client: &mut Connection<Client>,
+    server: &mut Connection<Server>,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
@@ -874,10 +864,10 @@ pub fn do_handshake_until_error(
 }
 
 pub fn do_handshake_altered(
-    mut client: Connection<ClientConnectionData>,
+    mut client: Connection<Client>,
     alter_server_message: impl Fn(&mut Message<'_>) -> Altered,
     alter_client_message: impl Fn(&mut Message<'_>) -> Altered,
-    mut server: Connection<ServerConnectionData>,
+    mut server: Connection<Server>,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer_altered(&mut client, &alter_client_message, &mut server);
@@ -897,8 +887,8 @@ pub fn do_handshake_altered(
 }
 
 pub fn do_handshake_until_both_error(
-    client: &mut Connection<ClientConnectionData>,
-    server: &mut Connection<ServerConnectionData>,
+    client: &mut Connection<Client>,
+    server: &mut Connection<Server>,
 ) -> Result<(), Vec<ErrorFromPeer>> {
     match do_handshake_until_error(client, server) {
         Err(server_err @ ErrorFromPeer::Server(_)) => {
@@ -1359,7 +1349,7 @@ pub struct RawTls {
 
 impl RawTls {
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_client(conn: Connection<ClientConnectionData>) -> Self {
+    pub fn new_client(conn: Connection<Client>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,
@@ -1369,7 +1359,7 @@ impl RawTls {
     }
 
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_server(conn: Connection<ServerConnectionData>) -> Self {
+    pub fn new_server(conn: Connection<Server>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,

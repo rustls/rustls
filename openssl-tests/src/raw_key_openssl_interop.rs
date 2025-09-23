@@ -12,7 +12,7 @@ mod client {
     use rustls::client::danger::{
         HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
     };
-    use rustls::client::{AlwaysResolvesClientRawPublicKeys, ClientConnectionData};
+    use rustls::client::{AlwaysResolvesClientRawPublicKeys, Client};
     use rustls::crypto::{
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
     };
@@ -64,8 +64,7 @@ mod client {
     /// This client reads a message and then writes 'Hello from the client' to the server.
     pub(super) fn run_client(config: ClientConfig, port: u16) -> Result<String, io::Error> {
         let server_name = "0.0.0.0".try_into().unwrap();
-        let mut conn =
-            Connection::<ClientConnectionData>::new(Arc::new(config), server_name).unwrap();
+        let mut conn = Connection::<Client>::new(Arc::new(config), server_name).unwrap();
         let mut sock = TcpStream::connect(format!("[::]:{port}")).unwrap();
         let mut tls = Stream::new(&mut conn, &mut sock);
 
@@ -156,7 +155,7 @@ mod server {
     use rustls::server::danger::{
         ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
     };
-    use rustls::server::{AlwaysResolvesServerRawPublicKeys, ServerConnectionData};
+    use rustls::server::{AlwaysResolvesServerRawPublicKeys, Server};
     use rustls::sign::CertifiedKey;
     use rustls::{
         ApiMisuse, CertificateError, CertificateType, Connection, DistinguishedName, Error,
@@ -205,7 +204,7 @@ mod server {
     ) -> Result<String, io::Error> {
         let (mut stream, _) = listener.accept()?;
 
-        let mut conn = Connection::<ServerConnectionData>::new(Arc::new(config)).unwrap();
+        let mut conn = Connection::<Server>::new(Arc::new(config)).unwrap();
         conn.complete_io(&mut stream)?;
 
         conn.writer()

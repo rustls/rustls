@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use pki_types::ServerName;
 use subtle::ConstantTimeEq;
 
-use super::client_conn::ClientConnectionData;
+use super::client_conn::Client;
 use super::hs::{ClientContext, ClientHelloInput, ClientSessionValue};
 use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
@@ -503,7 +503,7 @@ struct ExpectEncryptedExtensions {
     hello: ClientHelloDetails,
 }
 
-impl State<ClientConnectionData> for ExpectEncryptedExtensions {
+impl State<Client> for ExpectEncryptedExtensions {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -687,7 +687,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
+impl State<Client> for ExpectCertificateOrCompressedCertificateOrCertReq {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -772,7 +772,7 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
+impl State<Client> for ExpectCertificateOrCompressedCertificate {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -840,7 +840,7 @@ struct ExpectCertificateOrCertReq {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
+impl State<Client> for ExpectCertificateOrCertReq {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -912,7 +912,7 @@ struct ExpectCertificateRequest {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateRequest {
+impl State<Client> for ExpectCertificateRequest {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1028,7 +1028,7 @@ struct ExpectCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCompressedCertificate {
+impl State<Client> for ExpectCompressedCertificate {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1134,7 +1134,7 @@ struct ExpectCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificate {
+impl State<Client> for ExpectCertificate {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1201,7 +1201,7 @@ struct ExpectCertificateVerify<'a> {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
+impl State<Client> for ExpectCertificateVerify<'_> {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1387,7 +1387,7 @@ struct ExpectFinished {
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
-impl State<ClientConnectionData> for ExpectFinished {
+impl State<Client> for ExpectFinished {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1632,7 +1632,7 @@ impl ExpectTraffic {
     }
 }
 
-impl State<ClientConnectionData> for ExpectTraffic {
+impl State<Client> for ExpectTraffic {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1705,7 +1705,7 @@ impl KernelState for ExpectTraffic {
 
 struct ExpectQuicTraffic(ExpectTraffic);
 
-impl State<ClientConnectionData> for ExpectQuicTraffic {
+impl State<Client> for ExpectQuicTraffic {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,

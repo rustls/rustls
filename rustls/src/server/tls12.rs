@@ -8,7 +8,7 @@ use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
 use super::hs::{self, ServerContext};
-use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
+use super::server_conn::{ProducesTickets, Server, ServerConfig};
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
@@ -476,7 +476,7 @@ struct ExpectCertificate {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCertificate {
+impl State<Server> for ExpectCertificate {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -559,7 +559,7 @@ struct ExpectClientKx {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectClientKx {
+impl State<Server> for ExpectClientKx {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -654,7 +654,7 @@ struct ExpectCertificateVerify {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateVerify {
+impl State<Server> for ExpectCertificateVerify {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -738,7 +738,7 @@ struct ExpectCcs {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCcs {
+impl State<Server> for ExpectCcs {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -873,7 +873,7 @@ struct ExpectFinished {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectFinished {
+impl State<Server> for ExpectFinished {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -972,7 +972,7 @@ struct ExpectTraffic {
 
 impl ExpectTraffic {}
 
-impl State<ServerConnectionData> for ExpectTraffic {
+impl State<Server> for ExpectTraffic {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ServerContext<'_>,

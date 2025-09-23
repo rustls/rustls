@@ -1,9 +1,9 @@
 use std::fs;
 use std::io::Write;
 
-use rustls::client::ClientConnectionData;
+use rustls::client::Client;
 use rustls::crypto::CryptoProvider;
-use rustls::server::ServerConnectionData;
+use rustls::server::Server;
 use rustls::{ClientConfig, Connection, ServerConfig};
 
 // These tests exercise rustls_fuzzing_provider and makes sure it can
@@ -80,7 +80,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
         .with_no_client_auth()
         .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver())
         .unwrap();
-    let mut server = Connection::<ServerConnectionData>::new(server_config.into()).unwrap();
+    let mut server = Connection::<Server>::new(server_config.into()).unwrap();
 
     let client_config = ClientConfig::builder_with_provider(provider.into())
         .dangerous()
@@ -88,8 +88,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
         .with_no_client_auth()
         .unwrap();
     let hostname = "localhost".try_into().unwrap();
-    let mut client =
-        Connection::<ClientConnectionData>::new(client_config.into(), hostname).unwrap();
+    let mut client = Connection::<Client>::new(client_config.into(), hostname).unwrap();
     server
         .writer()
         .write_all(b"hello from server")

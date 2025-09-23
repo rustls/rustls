@@ -4,8 +4,8 @@
 
 use std::sync::Arc;
 
-use rustls::client::ClientConnectionData;
-use rustls::server::ServerConnectionData;
+use rustls::client::Client;
+use rustls::server::Server;
 use rustls::server::danger::ClientCertVerified;
 use rustls::{
     AlertDescription, CertificateError, Connection, Error, InvalidMessage, PeerIdentity,
@@ -103,13 +103,10 @@ fn client_verifier_no_auth_yes_root() {
 
         for version_provider in all_versions(&provider) {
             let client_config = make_client_config(*kt, &version_provider);
-            let mut server =
-                Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
-            let mut client = Connection::<ClientConnectionData>::new(
-                Arc::new(client_config),
-                server_name("localhost"),
-            )
-            .unwrap();
+            let mut server = Connection::<Server>::new(server_config.clone()).unwrap();
+            let mut client =
+                Connection::<Client>::new(Arc::new(client_config), server_name("localhost"))
+                    .unwrap();
             let errs = do_handshake_until_both_error(&mut client, &mut server);
             assert_eq!(
                 errs,
@@ -137,13 +134,10 @@ fn client_verifier_fails_properly() {
 
         for version_provider in all_versions(&provider) {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
-            let mut server =
-                Connection::<ServerConnectionData>::new(server_config.clone()).unwrap();
-            let mut client = Connection::<ClientConnectionData>::new(
-                Arc::new(client_config),
-                server_name("localhost"),
-            )
-            .unwrap();
+            let mut server = Connection::<Server>::new(server_config.clone()).unwrap();
+            let mut client =
+                Connection::<Client>::new(Arc::new(client_config), server_name("localhost"))
+                    .unwrap();
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
                 err,

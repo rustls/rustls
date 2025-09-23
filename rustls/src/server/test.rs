@@ -1,7 +1,7 @@
 use std::prelude::v1::*;
 use std::vec;
 
-use super::ServerConnectionData;
+use super::Server;
 use super::hs::ClientHelloInput;
 use crate::common_state::Context;
 use crate::enums::{CipherSuite, SignatureScheme};
@@ -38,7 +38,7 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
         false,
         &mut Context {
             common: &mut CommonState::new(Side::Server),
-            data: &mut ServerConnectionData::default(),
+            data: &mut Server::default(),
             sendable_plaintext: None,
         },
     )
@@ -74,7 +74,7 @@ mod tests {
         } else {
             config.require_ems = true;
         }
-        let mut conn = Connection::<ServerConnectionData>::new(config.into()).unwrap();
+        let mut conn = Connection::<Server>::new(config.into()).unwrap();
 
         let mut ch = minimal_client_hello();
         ch.extensions
@@ -116,7 +116,7 @@ mod tests {
         );
 
         server_chooses_ffdhe_group_for_client_hello(
-            Connection::<ServerConnectionData>::new(config.into()).unwrap(),
+            Connection::<Server>::new(config.into()).unwrap(),
             ch,
         );
     }
@@ -141,7 +141,7 @@ mod tests {
         ch.extensions.named_groups.take();
 
         server_chooses_ffdhe_group_for_client_hello(
-            Connection::<ServerConnectionData>::new(config.into()).unwrap(),
+            Connection::<Server>::new(config.into()).unwrap(),
             ch,
         );
     }
@@ -166,13 +166,13 @@ mod tests {
         ch.extensions.ec_point_formats.take();
 
         server_chooses_ffdhe_group_for_client_hello(
-            Connection::<ServerConnectionData>::new(config.into()).unwrap(),
+            Connection::<Server>::new(config.into()).unwrap(),
             ch,
         );
     }
 
     fn server_chooses_ffdhe_group_for_client_hello(
-        mut conn: Connection<ServerConnectionData>,
+        mut conn: Connection<Server>,
         client_hello: ClientHelloPayload,
     ) {
         let ch = Message {
@@ -202,8 +202,7 @@ mod tests {
             )),
         };
 
-        let mut conn =
-            Connection::<ServerConnectionData>::new(server_config_for_rpk().into()).unwrap();
+        let mut conn = Connection::<Server>::new(server_config_for_rpk().into()).unwrap();
         conn.read_tls(&mut ch.into_wire_bytes().as_slice())
             .unwrap();
         assert_eq!(
@@ -223,8 +222,7 @@ mod tests {
             )),
         };
 
-        let mut conn =
-            Connection::<ServerConnectionData>::new(server_config_for_rpk().into()).unwrap();
+        let mut conn = Connection::<Server>::new(server_config_for_rpk().into()).unwrap();
         conn.read_tls(&mut ch.into_wire_bytes().as_slice())
             .unwrap();
         assert_eq!(

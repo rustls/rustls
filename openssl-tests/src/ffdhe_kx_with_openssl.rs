@@ -4,11 +4,11 @@ use std::sync::Arc;
 use std::{fs, str, thread};
 
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use rustls::client::ClientConnectionData;
+use rustls::client::Client;
 use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::server::ServerConnectionData;
+use rustls::server::Server;
 use rustls::{ClientConfig, Connection, RootCertStore, ServerConfig};
 
 use crate::ffdhe::{self, FfdheKxGroup};
@@ -35,7 +35,7 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
     let server_thread = thread::spawn(move || {
         let config = Arc::new(server_config_with_ffdhe_kx(provider));
         for _ in 0..iters {
-            let mut server = Connection::<ServerConnectionData>::new(config.clone()).unwrap();
+            let mut server = Connection::<Server>::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
             server
                 .writer()
@@ -122,7 +122,7 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
     // client:
     for _ in 0..iters {
         let mut tcp_stream = TcpStream::connect(("localhost", port)).unwrap();
-        let mut client = Connection::<ClientConnectionData>::new(
+        let mut client = Connection::<Client>::new(
             client_config_with_ffdhe_kx().into(),
             "localhost".try_into().unwrap(),
         )

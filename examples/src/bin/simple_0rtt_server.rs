@@ -20,7 +20,7 @@ use std::{env, io};
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::server::ServerConnectionData;
+use rustls::server::Server;
 
 fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();
@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
 
         println!("Accepting connection");
 
-        let mut conn = rustls::Connection::<ServerConnectionData>::new(Arc::new(config.clone()))?;
+        let mut conn = rustls::Connection::<Server>::new(Arc::new(config.clone()))?;
 
         let mut buf = Vec::new();
         let mut did_early_data = false;

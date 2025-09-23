@@ -189,7 +189,7 @@
 //! #     .unwrap();
 //! let rc_config = Arc::new(config);
 //! let example_com = "example.com".try_into().unwrap();
-//! let mut client = rustls::Connection::<ClientConnectionData>::new(rc_config, example_com);
+//! let mut client = rustls::Connection::<rustls::client::Client>::new(rc_config, example_com);
 //! # }
 //! ```
 //!
@@ -218,7 +218,7 @@
 //!
 //! ```rust,no_run
 //! # #[cfg(feature = "aws-lc-rs")] {
-//! # let mut client = rustls::Connection::<ClientConnectionData>::new(panic!(), panic!()).unwrap();
+//! # let mut client = rustls::Connection::<rustls::client::Client>::new(panic!(), panic!()).unwrap();
 //! # struct Socket { }
 //! # impl Socket {
 //! #   fn ready_for_write(&self) -> bool { false }
@@ -569,9 +569,8 @@ pub mod client {
     #[cfg(feature = "std")]
     pub use client_conn::WriteEarlyData;
     pub use client_conn::{
-        ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError,
-        MayEncryptEarlyData, ResolvesClientCert, Resumption, Tls12Resumption,
-        UnbufferedClientConnection,
+        Client, ClientConfig, ClientSessionStore, EarlyDataError, MayEncryptEarlyData,
+        ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
     };
     pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
     pub use handy::AlwaysResolvesClientRawPublicKeys;
@@ -621,8 +620,8 @@ pub mod server {
     #[cfg(feature = "std")]
     pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData};
     pub use server_conn::{
-        ClientHello, InvalidSniPolicy, ProducesTickets, ResolvesServerCert, ServerConfig,
-        ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
+        ClientHello, InvalidSniPolicy, ProducesTickets, ResolvesServerCert, Server, ServerConfig,
+        StoresServerSessions, UnbufferedServerConnection,
     };
 
     pub use crate::verify::NoClientAuth;

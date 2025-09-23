@@ -27,10 +27,10 @@ use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
-use rustls::client::{ClientConnectionData, Resumption, UnbufferedClientConnection};
+use rustls::client::{Client, Resumption, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
 use rustls::server::{
-    NoServerSessionStorage, ProducesTickets, ServerConnectionData, ServerSessionMemoryCache,
+    NoServerSessionStorage, ProducesTickets, Server, ServerSessionMemoryCache,
     UnbufferedServerConnection, WebPkiClientVerifier,
 };
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
@@ -328,10 +328,10 @@ fn bench_handshake_buffered(
 
         let mut client = time(&mut client_time, || {
             let server_name = "localhost".try_into().unwrap();
-            Connection::<ClientConnectionData>::new(client_config.clone(), server_name).unwrap()
+            Connection::<Client>::new(client_config.clone(), server_name).unwrap()
         });
         let mut server = time(&mut server_time, || {
-            Connection::<ServerConnectionData>::new(server_config.clone()).unwrap()
+            Connection::<Server>::new(server_config.clone()).unwrap()
         });
 
         time(&mut server_time, || {
@@ -578,9 +578,9 @@ fn bench_bulk_buffered(
     rounds: u64,
 ) -> Timings {
     let server_name = "localhost".try_into().unwrap();
-    let mut client = Connection::<ClientConnectionData>::new(client_config, server_name).unwrap();
+    let mut client = Connection::<Client>::new(client_config, server_name).unwrap();
     client.set_buffer_limit(None);
-    let mut server = Connection::<ServerConnectionData>::new(server_config).unwrap();
+    let mut server = Connection::<Server>::new(server_config).unwrap();
     server.set_buffer_limit(None);
 
     let mut timings = Timings::default();
@@ -667,11 +667,9 @@ fn bench_memory(
     let mut buffers = TempBuffers::new();
 
     for _i in 0..conn_count {
-        servers.push(Connection::<ServerConnectionData>::new(server_config.clone()).unwrap());
+        servers.push(Connection::<Server>::new(server_config.clone()).unwrap());
         let server_name = "localhost".try_into().unwrap();
-        clients.push(
-            Connection::<ClientConnectionData>::new(client_config.clone(), server_name).unwrap(),
-        );
+        clients.push(Connection::<Client>::new(client_config.clone(), server_name).unwrap());
     }
 
     for _step in 0..5 {
@@ -1317,8 +1315,8 @@ impl UnbufferedConnection {
 
 fn do_handshake_step(
     buffers: &mut TempBuffers,
-    client: &mut Connection<ClientConnectionData>,
-    server: &mut Connection<ServerConnectionData>,
+    client: &mut Connection<Client>,
+    server: &mut Connection<Server>,
 ) -> bool {
     if server.is_handshaking() || client.is_handshaking() {
         transfer(buffers, client, server, None);
@@ -1331,8 +1329,8 @@ fn do_handshake_step(
 
 fn do_handshake(
     buffers: &mut TempBuffers,
-    client: &mut Connection<ClientConnectionData>,
-    server: &mut Connection<ServerConnectionData>,
+    client: &mut Connection<Client>,
+    server: &mut Connection<Server>,
 ) {
     while do_handshake_step(buffers, client, server) {}
 }

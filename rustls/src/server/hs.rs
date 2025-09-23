@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::fmt;
 
-use super::server_conn::ServerConnectionData;
+use super::server_conn::Server;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, Protocol, State};
@@ -33,9 +33,9 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
-pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
+pub(super) type NextState<'a> = Box<dyn State<Server> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
-pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
+pub(super) type ServerContext<'a> = crate::common_state::Context<'a, Server>;
 
 #[derive(Default)]
 pub(super) struct ExtensionProcessing {
@@ -557,7 +557,7 @@ impl ExpectClientHello {
     }
 }
 
-impl State<ServerConnectionData> for ExpectClientHello {
+impl State<Server> for ExpectClientHello {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ServerContext<'_>,

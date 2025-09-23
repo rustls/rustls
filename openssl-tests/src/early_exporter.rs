@@ -7,7 +7,7 @@ use openssl::ssl::{SslConnector, SslMethod, SslSession, SslStream};
 use rustls::crypto::aws_lc_rs as provider;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::server::ServerConnectionData;
+use rustls::server::Server;
 use rustls::{Connection, ServerConfig};
 
 use crate::utils::verify_openssl3_available;
@@ -31,7 +31,7 @@ fn test_early_exporter() {
         let config = Arc::new(config);
 
         for _ in 0..ITERS {
-            let mut server = Connection::<ServerConnectionData>::new(config.clone()).unwrap();
+            let mut server = Connection::<Server>::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
 
             // read clienthello and then inspect early_data status

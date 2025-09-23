@@ -578,7 +578,7 @@ mod connection {
 
     use pki_types::ServerName;
 
-    use super::{ClientConnectionData, ClientExtensionsInput};
+    use super::{Client, ClientExtensionsInput};
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
     use crate::conn::{Connection, ConnectionCore};
@@ -592,11 +592,11 @@ mod connection {
     ///
     /// This type implements [`io::Write`].
     pub struct WriteEarlyData<'a> {
-        sess: &'a mut Connection<ClientConnectionData>,
+        sess: &'a mut Connection<Client>,
     }
 
     impl<'a> WriteEarlyData<'a> {
-        fn new(sess: &'a mut Connection<ClientConnectionData>) -> Self {
+        fn new(sess: &'a mut Connection<Client>) -> Self {
             WriteEarlyData { sess }
         }
 
@@ -655,7 +655,7 @@ mod connection {
         }
     }
 
-    impl Connection<ClientConnectionData> {
+    impl Connection<Client> {
         /// Make a new ClientConnection.  `config` controls how
         /// we behave in the TLS protocol, `name` is the
         /// name of the server we want to talk to.
@@ -740,7 +740,7 @@ mod connection {
         }
     }
 
-    impl fmt::Debug for Connection<ClientConnectionData> {
+    impl fmt::Debug for Connection<Client> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("Connection<ClientConnectionData>")
                 .finish()
@@ -751,7 +751,7 @@ mod connection {
 #[cfg(feature = "std")]
 pub use connection::WriteEarlyData;
 
-impl ConnectionCore<ClientConnectionData> {
+impl ConnectionCore<Client> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
@@ -763,7 +763,7 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
         common_state.fips = config.fips();
-        let mut data = ClientConnectionData::new();
+        let mut data = Client::new();
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
@@ -787,7 +787,7 @@ impl ConnectionCore<ClientConnectionData> {
 ///
 /// See the [`crate::unbuffered`] module docs for more details
 pub struct UnbufferedClientConnection {
-    inner: UnbufferedConnectionCommon<ClientConnectionData>,
+    inner: UnbufferedConnectionCommon<Client>,
 }
 
 impl UnbufferedClientConnection {
@@ -848,7 +848,7 @@ impl UnbufferedClientConnection {
     /// for calling this method.
     pub fn dangerous_into_kernel_connection(
         self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<ClientConnectionData>), Error> {
+    ) -> Result<(ExtractedSecrets, KernelConnection<Client>), Error> {
         self.inner
             .core
             .dangerous_into_kernel_connection()
@@ -861,7 +861,7 @@ impl UnbufferedClientConnection {
 }
 
 impl Deref for UnbufferedClientConnection {
-    type Target = UnbufferedConnectionCommon<ClientConnectionData>;
+    type Target = UnbufferedConnectionCommon<Client>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -874,7 +874,7 @@ impl DerefMut for UnbufferedClientConnection {
     }
 }
 
-impl TransmitTlsData<'_, ClientConnectionData> {
+impl TransmitTlsData<'_, Client> {
     /// returns an adapter that allows encrypting early (RTT-0) data before transmitting the
     /// already encoded TLS data
     ///
@@ -896,7 +896,7 @@ impl TransmitTlsData<'_, ClientConnectionData> {
 
 /// Allows encrypting early (RTT-0) data
 pub struct MayEncryptEarlyData<'c> {
-    conn: &'c mut UnbufferedConnectionCommon<ClientConnectionData>,
+    conn: &'c mut UnbufferedConnectionCommon<Client>,
 }
 
 impl MayEncryptEarlyData<'_> {
@@ -957,12 +957,12 @@ impl std::error::Error for EarlyDataError {}
 
 /// State associated with a client connection.
 #[derive(Debug)]
-pub struct ClientConnectionData {
+pub struct Client {
     pub(super) early_data: EarlyData,
     pub(super) ech_status: EchStatus,
 }
 
-impl ClientConnectionData {
+impl Client {
     fn new() -> Self {
         Self {
             early_data: EarlyData::new(),
@@ -971,4 +971,4 @@ impl ClientConnectionData {
     }
 }
 
-impl crate::conn::SideData for ClientConnectionData {}
+impl crate::conn::SideData for Client {}

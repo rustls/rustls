@@ -33,7 +33,7 @@ use rustls::client::danger::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
 };
 use rustls::client::{
-    ClientConfig, ClientConnectionData, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
+    Client, ClientConfig, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
     Tls12Resumption, WebPkiServerVerifier, WriteEarlyData,
 };
 use rustls::crypto::aws_lc_rs::hpke;
@@ -49,8 +49,7 @@ use rustls::server::danger::{
     ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
 };
 use rustls::server::{
-    ClientHello, ProducesTickets, ReadEarlyData, ServerConfig, ServerConnectionData,
-    WebPkiClientVerifier,
+    ClientHello, ProducesTickets, ReadEarlyData, Server, ServerConfig, WebPkiClientVerifier,
 };
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
@@ -1519,7 +1518,7 @@ where
     }
 }
 
-impl ConnectionExt for Connection<ClientConnectionData> {
+impl ConnectionExt for Connection<Client> {
     fn write_early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         self.early_data()
     }
@@ -1537,7 +1536,7 @@ impl ConnectionExt for Connection<ClientConnectionData> {
     }
 }
 
-impl ConnectionExt for Connection<ServerConnectionData> {
+impl ConnectionExt for Connection<Server> {
     fn write_early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         None
     }
@@ -2037,12 +2036,11 @@ pub fn main() {
                 let server_name = ServerName::try_from(opts.host_name.as_str())
                     .unwrap()
                     .to_owned();
-                let sess =
-                    Connection::<ClientConnectionData>::new(config.clone(), server_name).unwrap();
+                let sess = Connection::<Client>::new(config.clone(), server_name).unwrap();
                 exec(&opts, sess, &key_log, i);
             }
             SideConfig::Server(config) => {
-                let sess = Connection::<ServerConnectionData>::new(config.clone()).unwrap();
+                let sess = Connection::<Server>::new(config.clone()).unwrap();
                 exec(&opts, sess, &key_log, i);
             }
         }
