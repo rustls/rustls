@@ -1223,8 +1223,8 @@ fn advance_server(
     state
 }
 
-fn handle_state<Data>(
-    state: ConnectionState<'_, '_, Data>,
+fn handle_state<Side>(
+    state: ConnectionState<'_, '_, Side>,
     outgoing: &mut Buffer,
     actions: Actions,
 ) -> State {
@@ -1321,7 +1321,7 @@ fn handle_state<Data>(
     }
 }
 
-fn queue_close_notify<Data>(state: &mut WriteTraffic<'_, Data>, outgoing: &mut Buffer) {
+fn queue_close_notify<Side>(state: &mut WriteTraffic<'_, Side>, outgoing: &mut Buffer) {
     write_with_buffer_size_checks(
         |out_buf| state.queue_close_notify(out_buf),
         map_encrypt_error,
@@ -1329,7 +1329,7 @@ fn queue_close_notify<Data>(state: &mut WriteTraffic<'_, Data>, outgoing: &mut B
     );
 }
 
-fn encrypt<Data>(state: &mut WriteTraffic<'_, Data>, app_data: &[u8], outgoing: &mut Buffer) {
+fn encrypt<Side>(state: &mut WriteTraffic<'_, Side>, app_data: &[u8], outgoing: &mut Buffer) {
     write_with_buffer_size_checks(
         |out_buf| state.encrypt(app_data, out_buf),
         map_encrypt_error,
