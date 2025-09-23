@@ -31,9 +31,8 @@ mod connection {
     use core::ops::{Deref, DerefMut};
     use std::io::{self, BufRead, Read};
 
-    use crate::ConnectionCommon;
     use crate::common_state::{CommonState, IoState};
-    use crate::conn::KeyingMaterialExporter;
+    use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData};
     use crate::error::Error;
     use crate::msgs::message::OutboundChunks;
     use crate::suites::ExtractedSecrets;
@@ -323,7 +322,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         fn flush(&mut self) -> io::Result<()>;
     }
 
-    impl<T> PlaintextSink for ConnectionCommon<T> {
+    impl<Side: SideData> PlaintextSink for ConnectionCommon<Side> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             let len = self
                 .core
@@ -445,13 +444,13 @@ impl ConnectionRandoms {
 }
 
 /// Interface shared by client and server connections.
-pub struct ConnectionCommon<Side> {
+pub struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
     deframer_buffer: DeframerVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
 }
 
-impl<Side> ConnectionCommon<Side> {
+impl<Side: SideData> ConnectionCommon<Side> {
     /// Processes any new packets read by a previous call to
     /// [`Connection::read_tls`].
     ///
@@ -589,7 +588,7 @@ impl<Side> ConnectionCommon<Side> {
 }
 
 #[cfg(feature = "std")]
-impl<Side> ConnectionCommon<Side> {
+impl<Side: SideData> ConnectionCommon<Side> {
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader<'_> {
         let common = &mut self.core.common_state;
@@ -822,7 +821,7 @@ impl<Side> ConnectionCommon<Side> {
     }
 }
 
-impl<'a, Side> From<&'a mut ConnectionCommon<Side>> for Context<'a, Side> {
+impl<'a, Side: SideData> From<&'a mut ConnectionCommon<Side>> for Context<'a, Side> {
     fn from(conn: &'a mut ConnectionCommon<Side>) -> Self {
         Self {
             common: &mut conn.core.common_state,
@@ -832,7 +831,7 @@ impl<'a, Side> From<&'a mut ConnectionCommon<Side>> for Context<'a, Side> {
     }
 }
 
-impl<T> Deref for ConnectionCommon<T> {
+impl<Side: SideData> Deref for ConnectionCommon<Side> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
@@ -840,13 +839,13 @@ impl<T> Deref for ConnectionCommon<T> {
     }
 }
 
-impl<T> DerefMut for ConnectionCommon<T> {
+impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.core.common_state
     }
 }
 
-impl<Side> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
+impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
     fn from(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
@@ -857,13 +856,13 @@ impl<Side> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
 }
 
 /// Interface shared by unbuffered client and server connections.
-pub struct UnbufferedConnectionCommon<Side> {
+pub struct UnbufferedConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
     wants_write: bool,
     emitted_peer_closed_state: bool,
 }
 
-impl<Side> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<Side> {
+impl<Side: SideData> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<Side> {
     fn from(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
@@ -873,7 +872,7 @@ impl<Side> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<Side> {
     }
 }
 
-impl<Side> UnbufferedConnectionCommon<Side> {
+impl<Side: SideData> UnbufferedConnectionCommon<Side> {
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     /// Should be used with care as it exposes secret key material.
     pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
@@ -881,7 +880,7 @@ impl<Side> UnbufferedConnectionCommon<Side> {
     }
 }
 
-impl<T> Deref for UnbufferedConnectionCommon<T> {
+impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
@@ -889,7 +888,7 @@ impl<T> Deref for UnbufferedConnectionCommon<T> {
     }
 }
 
-pub(crate) struct ConnectionCore<Side> {
+pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Box<dyn State<Side>>, Error>,
     pub(crate) data: Side,
     pub(crate) common_state: CommonState,
@@ -900,7 +899,7 @@ pub(crate) struct ConnectionCore<Side> {
     seen_consecutive_empty_fragments: u8,
 }
 
-impl<Side> ConnectionCore<Side> {
+impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn new(state: Box<dyn State<Side>>, data: Side, common_state: CommonState) -> Self {
         Self {
             state: Ok(state),

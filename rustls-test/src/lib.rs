@@ -763,7 +763,7 @@ pub fn do_unbuffered_handshake(
     client: &mut UnbufferedClientConnection,
     server: &mut UnbufferedServerConnection,
 ) {
-    fn is_idle<Data>(conn: &UnbufferedConnectionCommon<Data>, data: &[u8]) -> bool {
+    fn is_idle<Side: SideData>(conn: &UnbufferedConnectionCommon<Side>, data: &[u8]) -> bool {
         !conn.is_handshaking() && !conn.wants_write() && data.is_empty()
     }
 

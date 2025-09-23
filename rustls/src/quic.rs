@@ -380,7 +380,7 @@ mod connection {
     }
 
     /// A shared interface for QUIC connections.
-    pub struct ConnectionCommon<Side> {
+    pub struct ConnectionCommon<Side: SideData> {
         core: ConnectionCore<Side>,
         deframer_buffer: DeframerVecBuffer,
         sendable_plaintext: ChunkVecBuffer,
@@ -469,7 +469,7 @@ mod connection {
         }
     }
 
-    impl<Side> Deref for ConnectionCommon<Side> {
+    impl<Side: SideData> Deref for ConnectionCommon<Side> {
         type Target = CommonState;
 
         fn deref(&self) -> &Self::Target {
@@ -477,13 +477,13 @@ mod connection {
         }
     }
 
-    impl<Side> DerefMut for ConnectionCommon<Side> {
+    impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.core.common_state
         }
     }
 
-    impl<Side> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
+    impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
         fn from(core: ConnectionCore<Side>) -> Self {
             Self {
                 core,
