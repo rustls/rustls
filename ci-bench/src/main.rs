@@ -405,12 +405,17 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     all
 }
 
-fn select_suite(mut provider: CryptoProvider, name: CipherSuite) -> Arc<CryptoProvider> {
+fn select_suite(
+    mut provider: CryptoProvider<'static>,
+    name: CipherSuite,
+) -> Arc<CryptoProvider<'static>> {
     provider
         .tls12_cipher_suites
+        .to_mut()
         .retain(|suite| suite.common.suite == name);
     provider
         .tls13_cipher_suites
+        .to_mut()
         .retain(|suite| suite.common.suite == name);
     provider.into()
 }
@@ -423,7 +428,7 @@ fn aws_lc_rs_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
     aws_lc_rs::Ticketer::new().unwrap()
 }
 
-fn derandomize(base: CryptoProvider) -> CryptoProvider {
+fn derandomize(base: CryptoProvider<'static>) -> CryptoProvider<'static> {
     CryptoProvider {
         secure_random: &NotRandom,
         ..base

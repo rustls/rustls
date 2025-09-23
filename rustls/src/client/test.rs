@@ -1,4 +1,5 @@
 #![cfg(any(feature = "ring", feature = "aws-lc-rs"))]
+use alloc::borrow::Cow;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::prelude::v1::*;
 use std::vec;
@@ -484,11 +485,11 @@ mod tests {
         .unwrap()
     }
 
-    fn x25519_provider() -> CryptoProvider {
+    fn x25519_provider() -> CryptoProvider<'static> {
         // ensures X25519 is offered irrespective of cfg(feature = "fips"), which eases
         // creation of fake server messages.
         CryptoProvider {
-            kx_groups: vec![super::provider::kx_group::X25519],
+            kx_groups: Cow::Owned(vec![super::provider::kx_group::X25519]),
             ..super::provider::default_provider()
         }
     }
@@ -648,7 +649,7 @@ fn hybrid_kx_component_share_offered_if_supported_separately() {
 fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
     use crate::crypto::aws_lc_rs;
     let provider = CryptoProvider {
-        kx_groups: vec![aws_lc_rs::kx_group::X25519MLKEM768],
+        kx_groups: Cow::Owned(vec![aws_lc_rs::kx_group::X25519MLKEM768]),
         ..aws_lc_rs::default_provider()
     };
     let ch = client_hello_sent_for_config(

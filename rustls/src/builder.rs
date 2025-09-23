@@ -143,14 +143,14 @@ use crate::{ClientConfig, ServerConfig};
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) state: State,
-    pub(crate) provider: Arc<CryptoProvider>,
+    pub(crate) provider: Arc<CryptoProvider<'static>>,
     pub(crate) time_provider: Arc<dyn TimeProvider>,
     pub(crate) side: PhantomData<Side>,
 }
 
 impl<Side: ConfigSide, State> ConfigBuilder<Side, State> {
     /// Return the crypto provider used to construct this builder.
-    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+    pub fn crypto_provider(&self) -> &Arc<CryptoProvider<'static>> {
         &self.provider
     }
 }

@@ -955,7 +955,7 @@ enum Provider {
 }
 
 impl Provider {
-    fn build(self) -> CryptoProvider {
+    fn build(self) -> CryptoProvider<'static> {
         match self {
             #[cfg(feature = "aws-lc-rs")]
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::default_provider(),
@@ -983,13 +983,15 @@ impl Provider {
         }
     }
 
-    fn build_with_cipher_suite(&self, name: CipherSuite) -> CryptoProvider {
+    fn build_with_cipher_suite(&self, name: CipherSuite) -> CryptoProvider<'static> {
         let mut provider = self.build();
         provider
             .tls12_cipher_suites
+            .to_mut()
             .retain(|cs| cs.common.suite == name);
         provider
             .tls13_cipher_suites
+            .to_mut()
             .retain(|cs| cs.common.suite == name);
         provider
     }

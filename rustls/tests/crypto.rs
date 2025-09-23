@@ -2,6 +2,7 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::borrow::Cow;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
@@ -318,7 +319,7 @@ fn test_secret_extract_produces_correct_variant() {
 fn test_secret_extraction_disabled_or_too_early() {
     let kt = KeyType::Rsa2048;
     let provider = Arc::new(CryptoProvider {
-        tls13_cipher_suites: vec![cipher_suite::TLS13_AES_128_GCM_SHA256],
+        tls13_cipher_suites: Cow::Owned(vec![cipher_suite::TLS13_AES_128_GCM_SHA256]),
         ..provider::default_provider()
     });
 

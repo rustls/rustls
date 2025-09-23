@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
@@ -125,7 +126,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// # mod fictitious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 /// use rustls::crypto::aws_lc_rs;
 ///
-/// pub fn provider() -> rustls::crypto::CryptoProvider {
+/// pub fn provider() -> rustls::crypto::CryptoProvider<'static> {
 ///   rustls::crypto::CryptoProvider{
 ///     key_provider: &HsmKeyLoader,
 ///     ..aws_lc_rs::default_provider()
@@ -179,7 +180,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// [`ServerConfig::fips()`]/[`ClientConfig::fips()`] return `true`.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug, Clone)]
-pub struct CryptoProvider {
+pub struct CryptoProvider<'a> {
     /// List of supported TLS1.2 cipher suites, in preference order -- the first element
     /// is the highest priority.
     ///
@@ -189,7 +190,7 @@ pub struct CryptoProvider {
     ///
     /// A valid `CryptoProvider` must ensure that all cipher suites are accompanied by at least
     /// one matching key exchange group in [`CryptoProvider::kx_groups`].
-    pub tls12_cipher_suites: Vec<&'static Tls12CipherSuite>,
+    pub tls12_cipher_suites: Cow<'a, [&'static Tls12CipherSuite]>,
 
     /// List of supported TLS1.3 cipher suites, in preference order -- the first element
     /// is the highest priority.
@@ -197,7 +198,7 @@ pub struct CryptoProvider {
     /// Note that the protocol version is negotiated before the cipher suite.
     ///
     /// The `Tls13CipherSuite` type carries both configuration and implementation.
-    pub tls13_cipher_suites: Vec<&'static Tls13CipherSuite>,
+    pub tls13_cipher_suites: Cow<'a, [&'static Tls13CipherSuite]>,
 
     /// List of supported key exchange groups, in preference order -- the
     /// first element is the highest priority.
@@ -206,7 +207,7 @@ pub struct CryptoProvider {
     /// and in TLS1.3 a key share for it is sent in the client hello.
     ///
     /// The `SupportedKxGroup` type carries both configuration and implementation.
-    pub kx_groups: Vec<&'static dyn SupportedKxGroup>,
+    pub kx_groups: Cow<'a, [&'static dyn SupportedKxGroup]>,
 
     /// List of signature verification algorithms for use with webpki.
     ///
@@ -224,7 +225,7 @@ pub struct CryptoProvider {
     pub key_provider: &'static dyn KeyProvider,
 }
 
-impl CryptoProvider {
+impl CryptoProvider<'static> {
     /// Sets this `CryptoProvider` as the default for this process.
     ///
     /// This can be called successfully at most once in any process execution.
@@ -235,7 +236,9 @@ impl CryptoProvider {
     pub fn install_default(self) -> Result<(), Arc<Self>> {
         static_default::install_default(self)
     }
+}
 
+impl CryptoProvider<'_> {
     /// Returns the default `CryptoProvider` for this process.
     ///
     /// This will be `None` if no default has been set yet.
@@ -338,7 +341,7 @@ See the documentation of the CryptoProvider type for more information.
     /// Return a new `CryptoProvider` that only supports TLS1.3.
     pub fn with_only_tls13(self) -> Self {
         Self {
-            tls12_cipher_suites: Vec::new(),
+            tls12_cipher_suites: Cow::Borrowed(&[]),
             ..self
         }
     }
@@ -346,7 +349,7 @@ See the documentation of the CryptoProvider type for more information.
     /// Return a new `CryptoProvider` that only supports TLS1.2.
     pub fn with_only_tls12(self) -> Self {
         Self {
-            tls13_cipher_suites: Vec::new(),
+            tls13_cipher_suites: Cow::Borrowed(&[]),
             ..self
         }
     }
@@ -374,7 +377,7 @@ See the documentation of the CryptoProvider type for more information.
             }
         }
 
-        for cs in &self.tls12_cipher_suites {
+        for cs in self.tls12_cipher_suites.iter() {
             if supported_kx_algos.contains(&cs.kx) {
                 continue;
             }
@@ -413,13 +416,13 @@ See the documentation of the CryptoProvider type for more information.
     }
 }
 
-impl Borrow<[&'static Tls12CipherSuite]> for CryptoProvider {
+impl Borrow<[&'static Tls12CipherSuite]> for CryptoProvider<'_> {
     fn borrow(&self) -> &[&'static Tls12CipherSuite] {
         &self.tls12_cipher_suites
     }
 }
 
-impl Borrow<[&'static Tls13CipherSuite]> for CryptoProvider {
+impl Borrow<[&'static Tls13CipherSuite]> for CryptoProvider<'_> {
     fn borrow(&self) -> &[&'static Tls13CipherSuite] {
         &self.tls13_cipher_suites
     }
@@ -797,7 +800,7 @@ impl From<Vec<u8>> for SharedSecret {
 /// ```
 #[cfg(all(feature = "aws-lc-rs", any(feature = "fips", docsrs)))]
 #[cfg_attr(docsrs, doc(cfg(feature = "fips")))]
-pub fn default_fips_provider() -> CryptoProvider {
+pub fn default_fips_provider() -> CryptoProvider<'static> {
     aws_lc_rs::default_provider()
 }
 
@@ -815,28 +818,28 @@ mod static_default {
 
     #[cfg(feature = "std")]
     pub(crate) fn install_default(
-        default_provider: CryptoProvider,
-    ) -> Result<(), Arc<CryptoProvider>> {
+        default_provider: CryptoProvider<'static>,
+    ) -> Result<(), Arc<CryptoProvider<'static>>> {
         PROCESS_DEFAULT_PROVIDER.set(Arc::new(default_provider))
     }
 
     #[cfg(not(feature = "std"))]
     pub(crate) fn install_default(
-        default_provider: CryptoProvider,
-    ) -> Result<(), Arc<CryptoProvider>> {
+        default_provider: CryptoProvider<'static>,
+    ) -> Result<(), Arc<CryptoProvider<'static>>> {
         PROCESS_DEFAULT_PROVIDER
             .set(Box::new(Arc::new(default_provider)))
             .map_err(|e| *e)
     }
 
-    pub(crate) fn get_default() -> Option<&'static Arc<CryptoProvider>> {
+    pub(crate) fn get_default() -> Option<&'static Arc<CryptoProvider<'static>>> {
         PROCESS_DEFAULT_PROVIDER.get()
     }
 
     #[cfg(feature = "std")]
-    static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
+    static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<CryptoProvider<'static>>> = OnceLock::new();
     #[cfg(not(feature = "std"))]
-    static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
+    static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider<'static>>> = OnceBox::new();
 }
 
 #[cfg(test)]

@@ -472,7 +472,7 @@ struct Args {
 }
 
 impl Args {
-    fn provider(&self) -> (Vec<ProtocolVersion>, CryptoProvider) {
+    fn provider(&self) -> (Vec<ProtocolVersion>, CryptoProvider<'static>) {
         let provider = provider::default_provider();
 
         let provider = match self.suite.as_slice() {
@@ -493,7 +493,10 @@ impl Args {
 }
 
 /// Alter `provider` to reduce the set of ciphersuites to just `suites`
-fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvider {
+fn filter_suites(
+    mut provider: CryptoProvider<'static>,
+    suites: &[String],
+) -> CryptoProvider<'static> {
     // first, check `suites` all name known suites, and will have some effect
     let known_suites = provider
         .tls12_cipher_suites
@@ -510,13 +513,17 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
 
     for s in suites {
         if !known_suites.contains(&s.to_lowercase()) {
-            panic!("cannot look up ciphersuite '{s}'. should be one of {known_suites:?}");
+            panic!(
+                "unsupported ciphersuite '{s}'; should be one of {known_suites}",
+                known_suites = known_suites.join(", ")
+            );
         }
     }
 
     // now discard non-named suites
     provider
         .tls12_cipher_suites
+        .to_mut()
         .retain(|cs| {
             let name = format!("{:?}", cs.common.suite).to_lowercase();
             suites
@@ -525,6 +532,7 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
         });
     provider
         .tls13_cipher_suites
+        .to_mut()
         .retain(|cs| {
             let name = format!("{:?}", cs.common.suite).to_lowercase();
             suites

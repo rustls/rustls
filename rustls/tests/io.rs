@@ -2,6 +2,7 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::io::{self, BufRead, IoSlice, Read, Write};
 use std::sync::Arc;
@@ -1599,7 +1600,9 @@ fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
     let server_config = Arc::new(
         ServerConfig::builder_with_provider(
             CryptoProvider {
-                tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
+                tls13_cipher_suites: Cow::Owned(vec![
+                    provider::cipher_suite::TLS13_AES_128_GCM_SHA256,
+                ]),
                 ..provider.clone()
             }
             .into(),

@@ -240,7 +240,7 @@ pub struct ClientConfig {
     pub time_provider: Arc<dyn TimeProvider>,
 
     /// Source of randomness and other crypto.
-    pub(crate) provider: Arc<CryptoProvider>,
+    pub(crate) provider: Arc<CryptoProvider<'static>>,
 
     /// How to verify the server certificate chain.
     pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
@@ -298,7 +298,7 @@ impl ClientConfig {
     /// For more information, see the [`ConfigBuilder`] documentation.
     #[cfg(feature = "std")]
     pub fn builder_with_provider(
-        provider: Arc<CryptoProvider>,
+        provider: Arc<CryptoProvider<'static>>,
     ) -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
@@ -312,7 +312,7 @@ impl ClientConfig {
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_details(
-        provider: Arc<CryptoProvider>,
+        provider: Arc<CryptoProvider<'static>>,
         time_provider: Arc<dyn TimeProvider>,
     ) -> ConfigBuilder<Self, WantsVerifier> {
         ConfigBuilder {
@@ -342,7 +342,7 @@ impl ClientConfig {
     }
 
     /// Return the crypto provider used to construct this client configuration.
-    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+    pub fn crypto_provider(&self) -> &Arc<CryptoProvider<'static>> {
         &self.provider
     }
 

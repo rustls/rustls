@@ -2,6 +2,7 @@
 //! so that unused cryptography in rustls can be discarded by the linker.  You can
 //! observe using `nm` that the binary of this program does not contain any AES code.
 
+use std::borrow::Cow;
 use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
@@ -17,9 +18,11 @@ fn main() {
 
     let config = rustls::ClientConfig::builder_with_provider(
         CryptoProvider {
-            tls12_cipher_suites: vec![],
-            tls13_cipher_suites: vec![provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
-            kx_groups: vec![provider::kx_group::X25519],
+            tls12_cipher_suites: Cow::Borrowed(&[]),
+            tls13_cipher_suites: Cow::Owned(vec![
+                provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+            ]),
+            kx_groups: Cow::Owned(vec![provider::kx_group::X25519]),
             signature_verification_algorithms: provider::SUPPORTED_SIG_ALGS,
             secure_random: provider::DEFAULT_SECURE_RANDOM,
             key_provider: provider::DEFAULT_KEY_PROVIDER,

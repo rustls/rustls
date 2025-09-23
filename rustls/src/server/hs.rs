@@ -363,7 +363,7 @@ impl ExpectClientHello {
         cx: &mut ServerContext<'_>,
     ) -> NextStateOrError<'static>
     where
-        CryptoProvider: Borrow<[&'static T]>,
+        CryptoProvider<'static>: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
     {
         cx.common.negotiated_version = Some(T::VERSION);
@@ -373,7 +373,8 @@ impl ExpectClientHello {
         // orthogonally to offered ciphersuites (even though, in TLS1.2 it is not).
         // So: reduce the offered sigschemes to those compatible with the
         // intersection of ciphersuites.
-        let suites = <CryptoProvider as Borrow<[&'static T]>>::borrow(&self.config.provider);
+        let suites =
+            <CryptoProvider<'static> as Borrow<[&'static T]>>::borrow(&self.config.provider);
         let client_suites = suites
             .iter()
             .filter(|&&scs| {
@@ -441,7 +442,8 @@ impl ExpectClientHello {
         let mut ecdhe_possible = false;
         let mut ffdhe_possible = false;
         let mut ffdhe_offered = false;
-        let mut supported_groups = Vec::with_capacity(client_groups.len());
+        let mut supported_groups: Vec<&'static dyn SupportedKxGroup> =
+            Vec::with_capacity(client_groups.len());
 
         for offered_group in client_groups {
             let supported = self

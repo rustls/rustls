@@ -111,12 +111,12 @@ fn tls13_handshake_fragmented() {
     );
 }
 
-fn handshake(provider: CryptoProvider) -> Outcome {
+fn handshake(provider: CryptoProvider<'static>) -> Outcome {
     handshake_config(provider, |_, _| ())
 }
 
 fn handshake_config(
-    provider: CryptoProvider,
+    provider: CryptoProvider<'static>,
     editor: impl Fn(&mut ClientConfig, &mut ServerConfig),
 ) -> Outcome {
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
@@ -1440,7 +1440,7 @@ impl Buffer {
 }
 
 fn make_connection_pair(
-    provider: CryptoProvider,
+    provider: CryptoProvider<'static>,
 ) -> (UnbufferedClientConnection, UnbufferedServerConnection) {
     let server_config = make_server_config(KeyType::Rsa2048, &provider);
     let client_config = make_client_config(KeyType::Rsa2048, &provider);

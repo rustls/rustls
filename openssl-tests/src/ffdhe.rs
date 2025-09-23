@@ -6,6 +6,9 @@ use rustls::crypto::{
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{CipherSuite, NamedGroup, Tls12CipherSuite};
 
+pub(crate) const FFDHE2048_GROUP: &dyn SupportedKxGroup =
+    &FfdheKxGroup(NamedGroup::FFDHE2048, rustls::ffdhe_groups::FFDHE2048);
+
 #[derive(Debug)]
 pub(crate) struct FfdheKxGroup(pub NamedGroup, pub FfdheGroup<'static>);
 
