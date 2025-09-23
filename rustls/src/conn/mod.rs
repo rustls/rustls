@@ -443,7 +443,18 @@ impl ConnectionRandoms {
     }
 }
 
-/// Interface shared by client and server connections.
+/// TLS connection state with side-specific data (`Side`).
+///
+/// This is one of the core abstractions of the rustls API. It represents a single connection
+/// to a peer, and holds all the state associated with that connection. Note that it does
+/// not hold any IO objects: the application is responsible for reading and writing TLS records.
+/// If you want an object that does hold IO objects, see [`Stream`] and [`StreamOwned`].
+///
+/// This object is generic over the `Side` type parameter, which must implement the marker trait
+/// [`SideData`]. This is used to store side-specific data.
+///
+/// [`Stream`]: crate::Stream
+/// [`StreamOwned`]: crate::StreamOwned
 pub struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
     deframer_buffer: DeframerVecBuffer,
