@@ -300,13 +300,13 @@ impl ConnectionRandoms {
 }
 
 /// Interface shared by client and server connections.
-pub struct Connection<Data> {
-    pub(crate) core: ConnectionCore<Data>,
+pub struct Connection<Side> {
+    pub(crate) core: ConnectionCore<Side>,
     deframer_buffer: DeframerVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
 }
 
-impl<Data> Connection<Data> {
+impl<Side> Connection<Side> {
     /// Processes any new packets read by a previous call to
     /// [`Connection::read_tls`].
     ///
@@ -444,7 +444,7 @@ impl<Data> Connection<Data> {
 }
 
 #[cfg(feature = "std")]
-impl<Data> Connection<Data> {
+impl<Side> Connection<Side> {
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader<'_> {
         let common = &mut self.core.common_state;
@@ -621,7 +621,7 @@ impl<Data> Connection<Data> {
         }
     }
 
-    pub(crate) fn replace_state(&mut self, new: Box<dyn State<Data>>) {
+    pub(crate) fn replace_state(&mut self, new: Box<dyn State<Side>>) {
         self.core.state = Ok(new);
     }
 
@@ -701,8 +701,8 @@ impl<T> DerefMut for Connection<T> {
     }
 }
 
-impl<Data> From<ConnectionCore<Data>> for Connection<Data> {
-    fn from(core: ConnectionCore<Data>) -> Self {
+impl<Side> From<ConnectionCore<Side>> for Connection<Side> {
+    fn from(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
             deframer_buffer: DeframerVecBuffer::default(),
@@ -744,9 +744,9 @@ impl<T> Deref for UnbufferedConnectionCommon<T> {
     }
 }
 
-pub(crate) struct ConnectionCore<Data> {
-    pub(crate) state: Result<Box<dyn State<Data>>, Error>,
-    pub(crate) data: Data,
+pub(crate) struct ConnectionCore<Side> {
+    pub(crate) state: Result<Box<dyn State<Side>>, Error>,
+    pub(crate) data: Side,
     pub(crate) common_state: CommonState,
     pub(crate) hs_deframer: HandshakeDeframer,
 
@@ -755,8 +755,8 @@ pub(crate) struct ConnectionCore<Data> {
     seen_consecutive_empty_fragments: u8,
 }
 
-impl<Data> ConnectionCore<Data> {
-    pub(crate) fn new(state: Box<dyn State<Data>>, data: Data, common_state: CommonState) -> Self {
+impl<Side> ConnectionCore<Side> {
+    pub(crate) fn new(state: Box<dyn State<Side>>, data: Side, common_state: CommonState) -> Self {
         Self {
             state: Ok(state),
             data,
@@ -832,7 +832,7 @@ impl<Data> ConnectionCore<Data> {
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
     fn deframe<'b>(
         &mut self,
-        state: Option<&dyn State<Data>>,
+        state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
@@ -860,7 +860,7 @@ impl<Data> ConnectionCore<Data> {
 
     fn process_more_input<'b>(
         &mut self,
-        state: Option<&dyn State<Data>>,
+        state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
@@ -998,7 +998,7 @@ impl<Data> ConnectionCore<Data> {
         }
     }
 
-    fn handle_deframe_error(&mut self, error: Error, state: Option<&dyn State<Data>>) -> Error {
+    fn handle_deframe_error(&mut self, error: Error, state: Option<&dyn State<Side>>) -> Error {
         match error {
             error @ Error::InvalidMessage(_) => {
                 if self.common_state.is_quic() {
@@ -1027,9 +1027,9 @@ impl<Data> ConnectionCore<Data> {
     fn process_msg(
         &mut self,
         msg: InboundPlainMessage<'_>,
-        state: Box<dyn State<Data>>,
+        state: Box<dyn State<Side>>,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
-    ) -> Result<Box<dyn State<Data>>, Error> {
+    ) -> Result<Box<dyn State<Side>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec
             && !self
@@ -1081,7 +1081,7 @@ impl<Data> ConnectionCore<Data> {
 
     pub(crate) fn dangerous_into_kernel_connection(
         self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<Data>), Error> {
+    ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
         if !self
             .common_state
             .enable_secret_extraction
