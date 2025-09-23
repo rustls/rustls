@@ -102,7 +102,7 @@ impl CommonState {
 
     /// Returns true if the caller should call [`Connection::write_tls`] as soon as possible.
     ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    /// [`Connection::write_tls`]: crate::ConnectionCommon::write_tls
     pub fn wants_write(&self) -> bool {
         !self.sendable_tls.is_empty()
     }
@@ -113,7 +113,7 @@ impl CommonState {
     /// [`Connection::process_new_packets()`] has been called, this might start to return `false`
     /// while the final handshake packets still need to be extracted from the connection's buffers.
     ///
-    /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
+    /// [`Connection::process_new_packets()`]: crate::ConnectionCommon::process_new_packets
     pub fn is_handshaking(&self) -> bool {
         !(self.may_send_application_data && self.may_receive_application_data)
     }
@@ -565,7 +565,7 @@ impl CommonState {
     ///
     /// Does nothing if any `close_notify` or fatal alert was already sent.
     ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    /// [`Connection::write_tls`]: crate::ConnectionCommon::write_tls
     pub fn send_close_notify(&mut self) {
         if self.sent_fatal_alert {
             return;
@@ -657,8 +657,8 @@ impl CommonState {
     /// this returns false.  If your application respects this mechanism,
     /// only one full TLS message will be buffered by rustls.
     ///
-    /// [`Connection::reader`]: crate::Connection::reader
-    /// [`Connection::read_tls`]: crate::Connection::read_tls
+    /// [`Connection::reader`]: crate::ConnectionCommon::reader
+    /// [`Connection::read_tls`]: crate::ConnectionCommon::read_tls
     pub fn wants_read(&self) -> bool {
         // We want to read more data all the time, except when we have unprocessed plaintext.
         // This provides back-pressure to the TCP buffers. We also don't want to read more after
@@ -796,7 +796,7 @@ pub enum HandshakeKind {
 /// Values of this structure are returned from [`Connection::process_new_packets`]
 /// and tell the caller the current I/O state of the TLS connection.
 ///
-/// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
+/// [`Connection::process_new_packets`]: crate::ConnectionCommon::process_new_packets
 #[derive(Debug, Eq, PartialEq)]
 pub struct IoState {
     tls_bytes_to_write: usize,
@@ -808,7 +808,7 @@ impl IoState {
     /// How many bytes could be written by [`Connection::write_tls`] if called
     /// right now.  A non-zero value implies [`CommonState::wants_write`].
     ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    /// [`Connection::write_tls`]: crate::ConnectionCommon::write_tls
     pub fn tls_bytes_to_write(&self) -> usize {
         self.tls_bytes_to_write
     }

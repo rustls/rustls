@@ -47,7 +47,7 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection,
+    CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup,
     ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
     SupportedCipherSuite,
@@ -261,8 +261,12 @@ pub enum Altered {
     Raw(Vec<u8>),
 }
 
-pub fn transfer_altered<F>(left: &mut Connection, filter: F, right: &mut Connection) -> usize
+pub fn transfer_altered<F, L, LS, R, RS>(left: &mut L, filter: F, right: &mut R) -> usize
 where
+    L: DerefMut<Target = ConnectionCommon<LS>>,
+    LS: SideData,
+    R: DerefMut<Target = ConnectionCommon<RS>>,
+    RS: SideData,
     F: Fn(&mut Message<'_>) -> Altered,
 {
     let mut buf = [0u8; 262144];
@@ -859,14 +863,11 @@ pub fn do_handshake_until_error(
 }
 
 pub fn do_handshake_altered(
-    client: ClientConnection,
+    mut client: ClientConnection,
     alter_server_message: impl Fn(&mut Message<'_>) -> Altered,
     alter_client_message: impl Fn(&mut Message<'_>) -> Altered,
-    server: ServerConnection,
+    mut server: ServerConnection,
 ) -> Result<(), ErrorFromPeer> {
-    let mut client: Connection = Connection::Client(client);
-    let mut server: Connection = Connection::Server(server);
-
     while server.is_handshaking() || client.is_handshaking() {
         transfer_altered(&mut client, &alter_client_message, &mut server);
 

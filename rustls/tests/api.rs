@@ -1067,8 +1067,6 @@ fn test_client_rejects_illegal_tls13_ccs() {
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
 
-    let (mut server, mut client) = (server.into(), client.into());
-
     transfer_altered(&mut server, corrupt_ccs, &mut client);
     assert_eq!(
         client.process_new_packets(),
@@ -1263,12 +1261,7 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
-    let mut client = client.into();
-    transfer_altered(
-        &mut server.into(),
-        inject_corrupt_finished_message,
-        &mut client,
-    );
+    transfer_altered(&mut server, inject_corrupt_finished_message, &mut client);
 
     // discard storage operations up to this point, to observe the one we want to test for.
     storage.ops_and_reset();
@@ -1651,10 +1644,9 @@ fn server_invalid_sni_policy() {
         });
         server_config.invalid_sni_policy = policy;
 
-        let client =
+        let mut client =
             ClientConnection::new(Arc::new(client_config), server_name(SERVER_NAME_GOOD)).unwrap();
-        let server = ServerConnection::new(Arc::new(server_config)).unwrap();
-        let (mut client, mut server) = (client.into(), server.into());
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
         transfer_altered(&mut client, replace_sni(sni), &mut server);
         assert_eq!(

@@ -118,8 +118,8 @@
 //! on the left (via the [`read_tls()`] and [`write_tls()`] methods) and then read/write the
 //! plaintext on the right:
 //!
-//! [`read_tls()`]: Connection::read_tls
-//! [`write_tls()`]: Connection::read_tls
+//! [`read_tls()`]: ConnectionCommon::read_tls
+//! [`write_tls()`]: ConnectionCommon::read_tls
 //!
 //! ```text
 //!          TLS                                   Plaintext
@@ -519,9 +519,9 @@ pub mod unbuffered {
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
-#[cfg(feature = "std")]
-pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
+#[cfg(feature = "std")]
+pub use crate::conn::{Reader, Writer};
 pub use crate::enums::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateType, CipherSuite, ContentType,
     EchClientHelloType, HandshakeType, ProtocolVersion, SignatureAlgorithm, SignatureScheme,

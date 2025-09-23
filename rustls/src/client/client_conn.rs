@@ -787,25 +787,6 @@ mod connection {
             &mut self.inner
         }
     }
-
-    #[doc(hidden)]
-    impl<'a> TryFrom<&'a mut crate::Connection> for &'a mut ClientConnection {
-        type Error = ();
-
-        fn try_from(value: &'a mut crate::Connection) -> Result<Self, Self::Error> {
-            use crate::Connection::*;
-            match value {
-                Client(conn) => Ok(conn),
-                Server(_) => Err(()),
-            }
-        }
-    }
-
-    impl From<ClientConnection> for crate::Connection {
-        fn from(conn: ClientConnection) -> Self {
-            Self::Client(conn)
-        }
-    }
 }
 #[cfg(feature = "std")]
 pub use connection::{ClientConnection, WriteEarlyData};

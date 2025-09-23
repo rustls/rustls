@@ -834,12 +834,6 @@ mod connection {
         }
     }
 
-    impl From<ServerConnection> for crate::Connection {
-        fn from(conn: ServerConnection) -> Self {
-            Self::Server(conn)
-        }
-    }
-
     /// Handle a server-side connection before configuration is available.
     ///
     /// `Acceptor` allows the caller to choose a [`ServerConfig`] after reading
@@ -912,7 +906,7 @@ mod connection {
         /// Returns an error if this `Acceptor` has already yielded an [`Accepted`]. For more details,
         /// refer to [`Connection::read_tls()`].
         ///
-        /// [`Connection::read_tls()`]: crate::Connection::read_tls
+        /// [`Connection::read_tls()`]: crate::ConnectionCommon::read_tls
         pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
             match &mut self.inner {
                 Some(conn) => conn.read_tls(rd),
