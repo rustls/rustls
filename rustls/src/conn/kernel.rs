@@ -71,7 +71,7 @@ use crate::{CommonState, ConnectionTrafficSecrets, Error, ProtocolVersion, Suppo
 /// top of kTLS.
 ///
 /// See the [`crate::kernel`] module docs for more details.
-pub struct KernelConnection<Data> {
+pub struct KernelConnection<Side> {
     state: Box<dyn KernelState>,
 
     peer_identity: Option<PeerIdentity>,
@@ -81,10 +81,10 @@ pub struct KernelConnection<Data> {
     protocol: Protocol,
     suite: SupportedCipherSuite,
 
-    _data: PhantomData<Data>,
+    _data: PhantomData<Side>,
 }
 
-impl<Data> KernelConnection<Data> {
+impl<Side> KernelConnection<Side> {
     pub(crate) fn new(state: Box<dyn KernelState>, common: CommonState) -> Result<Self, Error> {
         Ok(Self {
             state,

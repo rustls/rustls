@@ -380,13 +380,13 @@ mod connection {
     }
 
     /// A shared interface for QUIC connections.
-    pub struct ConnectionCommon<Data> {
-        core: ConnectionCore<Data>,
+    pub struct ConnectionCommon<Side> {
+        core: ConnectionCore<Side>,
         deframer_buffer: DeframerVecBuffer,
         sendable_plaintext: ChunkVecBuffer,
     }
 
-    impl<Data: SideData> ConnectionCommon<Data> {
+    impl<Side: SideData> ConnectionCommon<Side> {
         /// Return the TLS-encoded transport parameters for the session's peer.
         ///
         /// While the transport parameters are technically available prior to the
@@ -469,7 +469,7 @@ mod connection {
         }
     }
 
-    impl<Data> Deref for ConnectionCommon<Data> {
+    impl<Side> Deref for ConnectionCommon<Side> {
         type Target = CommonState;
 
         fn deref(&self) -> &Self::Target {
@@ -477,14 +477,14 @@ mod connection {
         }
     }
 
-    impl<Data> DerefMut for ConnectionCommon<Data> {
+    impl<Side> DerefMut for ConnectionCommon<Side> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.core.common_state
         }
     }
 
-    impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
-        fn from(core: ConnectionCore<Data>) -> Self {
+    impl<Side> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
+        fn from(core: ConnectionCore<Side>) -> Self {
             Self {
                 core,
                 deframer_buffer: DeframerVecBuffer::default(),
