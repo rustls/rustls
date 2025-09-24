@@ -135,7 +135,7 @@ fn root_cert_store_debug() {
         subject_public_key_info: Der::from_slice(&[]),
         name_constraints: None,
     };
-    let store = RootCertStore::from_iter(iter::repeat(ta).take(138));
+    let store = RootCertStore::from_iter(iter::repeat_n(ta, 138));
 
     assert_eq!(
         format!("{store:?}"),

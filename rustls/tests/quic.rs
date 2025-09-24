@@ -619,7 +619,7 @@ fn packet_key_api() {
     let header_len = PLAIN_HEADER.len();
     let tag_len = client_keys.local.packet.tag_len();
     let padding_len = 1200 - header_len - PAYLOAD.len() - tag_len;
-    buf.extend(std::iter::repeat(0).take(padding_len));
+    buf.extend(std::iter::repeat_n(0, padding_len));
     let (header, payload) = buf.split_at_mut(header_len);
     let tag = client_keys
         .local
