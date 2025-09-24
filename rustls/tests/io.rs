@@ -874,9 +874,7 @@ fn test_client_write_and_vectored_write_equivalence() {
 
     const N: usize = 1000;
 
-    let data_chunked: Vec<IoSlice> = std::iter::repeat(IoSlice::new(b"A"))
-        .take(N)
-        .collect();
+    let data_chunked: Vec<IoSlice> = std::iter::repeat_n(IoSlice::new(b"A"), N).collect();
     let bytes_written_chunked = client
         .writer()
         .write_vectored(&data_chunked)
