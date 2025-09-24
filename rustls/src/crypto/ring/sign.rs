@@ -189,8 +189,8 @@ impl EcdsaSigningKey {
         rng: &dyn SecureRandom,
     ) -> Result<EcdsaKeyPair, ()> {
         let pkcs8_prefix = match scheme {
-            SignatureScheme::ECDSA_NISTP256_SHA256 => &PKCS8_PREFIX_ECDSA_NISTP256,
-            SignatureScheme::ECDSA_NISTP384_SHA384 => &PKCS8_PREFIX_ECDSA_NISTP384,
+            SignatureScheme::ECDSA_NISTP256_SHA256 => &Self::PKCS8_PREFIX_ECDSA_NISTP256,
+            SignatureScheme::ECDSA_NISTP384_SHA384 => &Self::PKCS8_PREFIX_ECDSA_NISTP384,
             _ => unreachable!(), // all callers are in this file
         };
 
@@ -199,27 +199,27 @@ impl EcdsaSigningKey {
 
         EcdsaKeyPair::from_pkcs8(sigalg, &pkcs8, rng).map_err(|_| ())
     }
-}
 
-// This is (line-by-line):
-// - INTEGER Version = 0
-// - SEQUENCE (privateKeyAlgorithm)
-//   - id-ecPublicKey OID
-//   - prime256v1 OID
-const PKCS8_PREFIX_ECDSA_NISTP256: &[u8] = b"\x02\x01\x00\
+    // This is (line-by-line):
+    // - INTEGER Version = 0
+    // - SEQUENCE (privateKeyAlgorithm)
+    //   - id-ecPublicKey OID
+    //   - prime256v1 OID
+    const PKCS8_PREFIX_ECDSA_NISTP256: &[u8] = b"\x02\x01\x00\
       \x30\x13\
       \x06\x07\x2a\x86\x48\xce\x3d\x02\x01\
       \x06\x08\x2a\x86\x48\xce\x3d\x03\x01\x07";
 
-// This is (line-by-line):
-// - INTEGER Version = 0
-// - SEQUENCE (privateKeyAlgorithm)
-//   - id-ecPublicKey OID
-//   - secp384r1 OID
-const PKCS8_PREFIX_ECDSA_NISTP384: &[u8] = b"\x02\x01\x00\
+    // This is (line-by-line):
+    // - INTEGER Version = 0
+    // - SEQUENCE (privateKeyAlgorithm)
+    //   - id-ecPublicKey OID
+    //   - secp384r1 OID
+    const PKCS8_PREFIX_ECDSA_NISTP384: &[u8] = b"\x02\x01\x00\
      \x30\x10\
      \x06\x07\x2a\x86\x48\xce\x3d\x02\x01\
      \x06\x05\x2b\x81\x04\x00\x22";
+}
 
 impl SigningKey for EcdsaSigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
