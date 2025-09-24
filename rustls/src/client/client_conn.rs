@@ -1012,7 +1012,7 @@ impl fmt::Display for EarlyDataError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for EarlyDataError {}
+impl core::error::Error for EarlyDataError {}
 
 /// State associated with a client connection.
 #[derive(Debug)]
