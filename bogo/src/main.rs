@@ -33,8 +33,8 @@ use rustls::client::danger::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
 };
 use rustls::client::{
-    ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
-    Tls12Resumption, WebPkiServerVerifier,
+    Client, ClientConfig, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
+    Tls12Resumption, WebPkiServerVerifier, WriteEarlyData,
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
@@ -49,13 +49,13 @@ use rustls::server::danger::{
     ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
 };
 use rustls::server::{
-    ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
+    ClientHello, ProducesTickets, ReadEarlyData, Server, ServerConfig, WebPkiClientVerifier,
 };
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
     DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIncompatible,
-    PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm, SignatureScheme,
-    client, compress, server, sign,
+    PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SideData, SignatureAlgorithm,
+    SignatureScheme, client, compress, server, sign,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -1191,7 +1191,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
     }
 }
 
-fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
+fn flush(sess: &mut Connection<impl SideData>, conn: &mut net::TcpStream) {
     while sess.wants_write() {
         if let Err(err) = sess.write_tls(conn) {
             println!("IO error: {err:?}");
@@ -1201,20 +1201,9 @@ fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
     conn.flush().unwrap();
 }
 
-fn client(conn: &mut Connection) -> &mut ClientConnection {
-    conn.try_into().unwrap()
-}
-
-fn server(conn: &mut Connection) -> &mut ServerConnection {
-    match conn {
-        Connection::Server(s) => s,
-        _ => panic!("Connection is not a ServerConnection"),
-    }
-}
-
 const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
 
-fn after_read(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) {
+fn after_read(opts: &Options, sess: &mut Connection<impl SideData>, conn: &mut net::TcpStream) {
     if let Err(err) = sess.process_new_packets() {
         flush(sess, conn); /* send any alerts before exiting */
         orderly_close(conn);
@@ -1236,7 +1225,12 @@ fn orderly_close(conn: &mut net::TcpStream) {
     let _ = conn.shutdown(net::Shutdown::Read);
 }
 
-fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream, n: usize) {
+fn read_n_bytes(
+    opts: &Options,
+    sess: &mut Connection<impl SideData>,
+    conn: &mut net::TcpStream,
+    n: usize,
+) {
     let mut bytes = [0u8; MAX_MESSAGE_SIZE];
     match conn.read(&mut bytes[..n]) {
         Ok(count) => {
@@ -1251,7 +1245,7 @@ fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream
     after_read(opts, sess, conn);
 }
 
-fn read_all_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) {
+fn read_all_bytes(opts: &Options, sess: &mut Connection<impl SideData>, conn: &mut net::TcpStream) {
     match sess.read_tls(conn) {
         Ok(_) => {}
         Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
@@ -1261,7 +1255,11 @@ fn read_all_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStre
     after_read(opts, sess, conn);
 }
 
-fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize) {
+fn exec<S>(opts: &Options, mut sess: Connection<S>, key_log: &KeyLogMemo, count: usize)
+where
+    S: SideData,
+    Connection<S>: ConnectionExt,
+{
     let mut sent_message = false;
 
     let addrs = [
@@ -1291,8 +1289,8 @@ fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize
             }
 
             if count > 0 && opts.enable_early_data {
-                let len = client(&mut sess)
-                    .early_data()
+                let len = sess
+                    .write_early_data()
                     .expect("0rtt not available")
                     .write(b"hello")
                     .expect("0rtt write failed");
@@ -1315,7 +1313,7 @@ fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize
         }
 
         if opts.side == Side::Server && opts.enable_early_data {
-            if let Some(ed) = &mut server(&mut sess).early_data() {
+            if let Some(mut ed) = sess.read_early_data() {
                 let mut data = Vec::new();
                 let data_len = ed
                     .read_to_end(&mut data)
@@ -1401,9 +1399,9 @@ fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize
             && !sess.is_handshaking()
             && count > 0
         {
-            if opts.expect_accept_early_data && !client(&mut sess).is_early_data_accepted() {
+            if opts.expect_accept_early_data && !sess.is_early_data_accepted() {
                 quit_err("Early data was not accepted, but we expect the opposite");
-            } else if opts.expect_reject_early_data && client(&mut sess).is_early_data_accepted() {
+            } else if opts.expect_reject_early_data && sess.is_early_data_accepted() {
                 quit_err("Early data was accepted, but we expect the opposite");
             }
             if opts.expect_version == 0x0304 {
@@ -1469,7 +1467,8 @@ fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize
                 (count == 0 && opts.on_initial_expect_ech_accept) || opts.expect_ech_accept;
             if ech_accept_required
                 && !sess.is_handshaking()
-                && client(&mut sess).ech_status() != EchStatus::Accepted
+                && sess.ech_status().is_some()
+                && sess.ech_status() != Some(EchStatus::Accepted)
             {
                 quit_err("ECH was not accepted, but we expect the opposite");
             }
@@ -1517,6 +1516,54 @@ fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize
             .write_all(&buf[..len])
             .unwrap();
     }
+}
+
+impl ConnectionExt for Connection<Client> {
+    fn write_early_data(&mut self) -> Option<WriteEarlyData<'_>> {
+        self.early_data()
+    }
+
+    fn read_early_data(&mut self) -> Option<ReadEarlyData<'_>> {
+        None
+    }
+
+    fn is_early_data_accepted(&self) -> bool {
+        self.is_early_data_accepted()
+    }
+
+    fn ech_status(&self) -> Option<EchStatus> {
+        Some(self.ech_status())
+    }
+}
+
+impl ConnectionExt for Connection<Server> {
+    fn write_early_data(&mut self) -> Option<WriteEarlyData<'_>> {
+        None
+    }
+
+    fn read_early_data(&mut self) -> Option<ReadEarlyData<'_>> {
+        self.early_data()
+    }
+
+    fn is_early_data_accepted(&self) -> bool {
+        false
+    }
+
+    fn ech_status(&self) -> Option<EchStatus> {
+        None
+    }
+}
+
+trait ConnectionExt {
+    // Client only
+    fn write_early_data(&mut self) -> Option<WriteEarlyData<'_>>;
+
+    // Server only
+    fn read_early_data(&mut self) -> Option<ReadEarlyData<'_>>;
+
+    fn is_early_data_accepted(&self) -> bool;
+
+    fn ech_status(&self) -> Option<EchStatus>;
 }
 
 pub fn main() {
@@ -1989,12 +2036,12 @@ pub fn main() {
                 let server_name = ServerName::try_from(opts.host_name.as_str())
                     .unwrap()
                     .to_owned();
-                let sess = ClientConnection::new(config.clone(), server_name).unwrap();
-                exec(&opts, Connection::Client(sess), &key_log, i);
+                let sess = Connection::<Client>::new(config.clone(), server_name).unwrap();
+                exec(&opts, sess, &key_log, i);
             }
             SideConfig::Server(config) => {
-                let sess = ServerConnection::new(config.clone()).unwrap();
-                exec(&opts, Connection::Server(sess), &key_log, i);
+                let sess = Connection::<Server>::new(config.clone()).unwrap();
+                exec(&opts, sess, &key_log, i);
             }
         }
 

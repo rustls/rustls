@@ -5,7 +5,7 @@ use std::vec;
 
 use pki_types::{CertificateDer, ServerName};
 
-use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
+use crate::client::{Client, ClientConfig, Resumption, Tls12Resumption};
 use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::msgs::base::PayloadU16;
@@ -17,14 +17,14 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage};
 use crate::sync::Arc;
-use crate::{Error, PeerIncompatible, PeerMisbehaved, RootCertStore};
+use crate::{Connection, Error, PeerIncompatible, PeerMisbehaved, RootCertStore};
 
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
     use std::sync::OnceLock;
 
     use super::super::*;
-    use crate::client::AlwaysResolvesClientRawPublicKeys;
+    use crate::client::{AlwaysResolvesClientRawPublicKeys, Client};
     use crate::crypto::cipher::MessageEncrypter;
     use crate::crypto::tls13::OkmBlock;
     use crate::enums::CertificateType;
@@ -44,7 +44,7 @@ mod tests {
         HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
         SignatureVerificationInput,
     };
-    use crate::{DigitallySignedStruct, DistinguishedName, KeyLog};
+    use crate::{Connection, DigitallySignedStruct, DistinguishedName, KeyLog};
 
     /// Tests that session_ticket(35) extension
     /// is not sent if the client does not support TLS 1.2.
@@ -113,7 +113,7 @@ mod tests {
                 .with_no_client_auth()
                 .unwrap();
         let mut conn =
-            ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())
+            Connection::<Client>::new(config.into(), ServerName::try_from("localhost").unwrap())
                 .unwrap();
         let mut sent = Vec::new();
         conn.write_tls(&mut sent).unwrap();
@@ -157,7 +157,7 @@ mod tests {
 
         let config = Arc::new(config);
         let mut conn =
-            ClientConnection::new(config.clone(), ServerName::try_from("localhost").unwrap())
+            Connection::<Client>::new(config.clone(), ServerName::try_from("localhost").unwrap())
                 .unwrap();
         let mut sent = Vec::new();
         conn.write_tls(&mut sent).unwrap();
@@ -224,7 +224,7 @@ mod tests {
             .unwrap();
 
         let mut conn =
-            ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())
+            Connection::<Client>::new(config.into(), ServerName::try_from("localhost").unwrap())
                 .unwrap();
         let mut sent = Vec::new();
         conn.write_tls(&mut sent).unwrap();
@@ -400,7 +400,7 @@ mod tests {
         encrypted_extensions: ServerExtensions<'_>,
     ) -> Result<(), Error> {
         let fake_server_crypto = Arc::new(FakeServerCrypto::new());
-        let mut conn = ClientConnection::new(
+        let mut conn = Connection::<Client>::new(
             client_config_for_rpk(fake_server_crypto.clone()).into(),
             ServerName::try_from("localhost").unwrap(),
         )
@@ -670,7 +670,7 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
 
 fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPayload, Error> {
     let mut conn =
-        ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())?;
+        Connection::<Client>::new(config.into(), ServerName::try_from("localhost").unwrap())?;
     let mut bytes = Vec::new();
     conn.write_tls(&mut bytes).unwrap();
 

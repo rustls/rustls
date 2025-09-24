@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
+use rustls::client::{Client, EarlyDataError, UnbufferedClientConnection};
 use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus, WriteTraffic,
@@ -255,7 +255,7 @@ fn send_tls(
 
 fn encrypt_http_request(
     sent_request: &mut bool,
-    may_encrypt: &mut WriteTraffic<'_, ClientConnectionData>,
+    may_encrypt: &mut WriteTraffic<'_, Client>,
     outgoing_tls: &mut [u8],
     outgoing_used: &mut usize,
 ) -> bool {

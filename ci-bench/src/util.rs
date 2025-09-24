@@ -365,7 +365,9 @@ pub(crate) mod transport {
     use std::io::{Cursor, Read, Write};
 
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-    use rustls::{ClientConnection, ConnectionCommon, ServerConnection, SideData};
+    use rustls::client::Client;
+    use rustls::server::Server;
+    use rustls::{Connection, SideData};
 
     use super::async_io::{AsyncRead, AsyncWrite};
 
@@ -377,7 +379,7 @@ pub(crate) mod transport {
     ///
     /// The receiving end should use [`read_handshake_message`] to process the transmission.
     pub(crate) async fn send_handshake_message<T: SideData>(
-        conn: &mut ConnectionCommon<T>,
+        conn: &mut Connection<T>,
         writer: &mut dyn AsyncWrite,
         buf: &mut [u8],
     ) -> anyhow::Result<()> {
@@ -415,7 +417,7 @@ pub(crate) mod transport {
     /// Used in combination with [`send_handshake_message`] (see that function's documentation for
     /// more details).
     pub(crate) async fn read_handshake_message<T: SideData>(
-        conn: &mut ConnectionCommon<T>,
+        conn: &mut Connection<T>,
         reader: &mut dyn AsyncRead,
         buf: &mut [u8],
     ) -> anyhow::Result<usize> {
@@ -451,7 +453,7 @@ pub(crate) mod transport {
     ///
     /// Returns the amount of plaintext bytes received.
     pub(crate) async fn read_plaintext_to_end_bounded(
-        client: &mut ClientConnection,
+        client: &mut Connection<Client>,
         reader: &mut dyn AsyncRead,
     ) -> anyhow::Result<usize> {
         let mut chunk_buf = [0u8; 262_144];
@@ -503,7 +505,7 @@ pub(crate) mod transport {
 
     /// Writes a plaintext of size `plaintext_size`, using a bounded amount of memory
     pub(crate) async fn write_all_plaintext_bounded(
-        server: &mut ServerConnection,
+        server: &mut Connection<Server>,
         writer: &mut dyn AsyncWrite,
         plaintext_size: usize,
     ) -> anyhow::Result<()> {

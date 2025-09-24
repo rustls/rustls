@@ -3,9 +3,9 @@
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
-use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
+use rustls::client::{Client, EarlyDataError, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
-use rustls::server::{ServerConnectionData, UnbufferedServerConnection};
+use rustls::server::{Server, UnbufferedServerConnection};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, ReadTraffic,
     UnbufferedConnectionCommon, UnbufferedStatus, WriteTraffic,
@@ -1142,7 +1142,7 @@ struct Outcome {
 }
 
 fn advance_client(
-    conn: &mut UnbufferedConnectionCommon<ClientConnectionData>,
+    conn: &mut UnbufferedConnectionCommon<Client>,
     buffers: &mut Buffers,
     actions: Actions,
     transcript: &mut Vec<String>,
@@ -1188,7 +1188,7 @@ fn advance_client(
 }
 
 fn advance_server(
-    conn: &mut UnbufferedConnectionCommon<ServerConnectionData>,
+    conn: &mut UnbufferedConnectionCommon<Server>,
     buffers: &mut Buffers,
     actions: Actions,
     transcript: &mut Vec<String>,
@@ -1223,8 +1223,8 @@ fn advance_server(
     state
 }
 
-fn handle_state<Data>(
-    state: ConnectionState<'_, '_, Data>,
+fn handle_state<Side: SideData>(
+    state: ConnectionState<'_, '_, Side>,
     outgoing: &mut Buffer,
     actions: Actions,
 ) -> State {
@@ -1321,7 +1321,7 @@ fn handle_state<Data>(
     }
 }
 
-fn queue_close_notify<Data>(state: &mut WriteTraffic<'_, Data>, outgoing: &mut Buffer) {
+fn queue_close_notify<Side: SideData>(state: &mut WriteTraffic<'_, Side>, outgoing: &mut Buffer) {
     write_with_buffer_size_checks(
         |out_buf| state.queue_close_notify(out_buf),
         map_encrypt_error,
@@ -1329,7 +1329,11 @@ fn queue_close_notify<Data>(state: &mut WriteTraffic<'_, Data>, outgoing: &mut B
     );
 }
 
-fn encrypt<Data>(state: &mut WriteTraffic<'_, Data>, app_data: &[u8], outgoing: &mut Buffer) {
+fn encrypt<Side: SideData>(
+    state: &mut WriteTraffic<'_, Side>,
+    app_data: &[u8],
+    outgoing: &mut Buffer,
+) {
     write_with_buffer_size_checks(
         |out_buf| state.encrypt(app_data, out_buf),
         map_encrypt_error,

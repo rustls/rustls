@@ -7,10 +7,11 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use rustls::client::Resumption;
+use rustls::client::{Client, Resumption};
+use rustls::server::Server;
 use rustls::{
-    ApiMisuse, CertificateIdentity, ClientConfig, ClientConnection, Error, HandshakeKind,
-    NamedGroup, PeerIdentity, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
+    ApiMisuse, CertificateIdentity, ClientConfig, Connection, Error, HandshakeKind, NamedGroup,
+    PeerIdentity, PeerMisbehaved, ProtocolVersion, ServerConfig,
 };
 use rustls_test::{
     ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt, do_handshake,
@@ -196,8 +197,8 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
 
     dbg!("handshake 1");
     let mut client_1 =
-        ClientConnection::new(client_config.clone(), "localhost".try_into().unwrap()).unwrap();
-    let mut server_1 = ServerConnection::new(server_config_1).unwrap();
+        Connection::<Client>::new(client_config.clone(), "localhost".try_into().unwrap()).unwrap();
+    let mut server_1 = Connection::<Server>::new(server_config_1).unwrap();
     do_handshake(&mut client_1, &mut server_1);
 
     assert_eq!(client_storage.ops().len(), 7);
@@ -217,8 +218,8 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
 
     dbg!("handshake 2");
     let mut client_2 =
-        ClientConnection::new(client_config, "localhost".try_into().unwrap()).unwrap();
-    let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
+        Connection::<Client>::new(client_config, "localhost".try_into().unwrap()).unwrap();
+    let mut server_2 = Connection::<Server>::new(Arc::new(server_config_2)).unwrap();
     do_handshake(&mut client_2, &mut server_2);
     println!("hs2 storage ops: {:#?}", client_storage.ops());
     assert_eq!(client_storage.ops().len(), 9);
@@ -537,7 +538,7 @@ fn early_data_is_available_on_resumption() {
 
 #[test]
 fn early_data_not_available_on_server_before_client_hello() {
-    let mut server = ServerConnection::new(Arc::new(make_server_config(
+    let mut server = Connection::<Server>::new(Arc::new(make_server_config(
         KeyType::Rsa2048,
         &provider::default_provider(),
     )))

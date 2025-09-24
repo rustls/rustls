@@ -24,7 +24,7 @@ mod connection {
     use pki_types::{DnsName, ServerName};
 
     use super::{DirectionalKeys, KeyChange, Version};
-    use crate::client::{ClientConfig, ClientConnectionData};
+    use crate::client::{Client, ClientConfig};
     use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
@@ -35,7 +35,7 @@ mod connection {
         ClientExtensionsInput, ServerExtensionsInput, TransportParameters,
     };
     use crate::msgs::message::InboundPlainMessage;
-    use crate::server::{ServerConfig, ServerConnectionData};
+    use crate::server::{Server, ServerConfig};
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
@@ -53,7 +53,7 @@ mod connection {
     impl Connection {
         /// Return the TLS-encoded transport parameters for the session's peer.
         ///
-        /// See [`ConnectionCommon::quic_transport_parameters()`] for more details.
+        /// See [`Connection::quic_transport_parameters()`] for more details.
         pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
             match self {
                 Self::Client(conn) => conn.quic_transport_parameters(),
@@ -122,7 +122,7 @@ mod connection {
 
     /// A QUIC client connection.
     pub struct ClientConnection {
-        inner: ConnectionCommon<ClientConnectionData>,
+        inner: ConnectionCommon<Client>,
     }
 
     impl ClientConnection {
@@ -213,7 +213,7 @@ mod connection {
     }
 
     impl Deref for ClientConnection {
-        type Target = ConnectionCommon<ClientConnectionData>;
+        type Target = ConnectionCommon<Client>;
 
         fn deref(&self) -> &Self::Target {
             &self.inner
@@ -241,7 +241,7 @@ mod connection {
 
     /// A QUIC server connection.
     pub struct ServerConnection {
-        inner: ConnectionCommon<ServerConnectionData>,
+        inner: ConnectionCommon<Server>,
     }
 
     impl ServerConnection {
@@ -353,7 +353,7 @@ mod connection {
     }
 
     impl Deref for ServerConnection {
-        type Target = ConnectionCommon<ServerConnectionData>;
+        type Target = ConnectionCommon<Server>;
 
         fn deref(&self) -> &Self::Target {
             &self.inner
@@ -380,13 +380,13 @@ mod connection {
     }
 
     /// A shared interface for QUIC connections.
-    pub struct ConnectionCommon<Data> {
-        core: ConnectionCore<Data>,
+    pub struct ConnectionCommon<Side: SideData> {
+        core: ConnectionCore<Side>,
         deframer_buffer: DeframerVecBuffer,
         sendable_plaintext: ChunkVecBuffer,
     }
 
-    impl<Data: SideData> ConnectionCommon<Data> {
+    impl<Side: SideData> ConnectionCommon<Side> {
         /// Return the TLS-encoded transport parameters for the session's peer.
         ///
         /// While the transport parameters are technically available prior to the
@@ -469,7 +469,7 @@ mod connection {
         }
     }
 
-    impl<Data> Deref for ConnectionCommon<Data> {
+    impl<Side: SideData> Deref for ConnectionCommon<Side> {
         type Target = CommonState;
 
         fn deref(&self) -> &Self::Target {
@@ -477,14 +477,14 @@ mod connection {
         }
     }
 
-    impl<Data> DerefMut for ConnectionCommon<Data> {
+    impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.core.common_state
         }
     }
 
-    impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
-        fn from(core: ConnectionCore<Data>) -> Self {
+    impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
+        fn from(core: ConnectionCore<Side>) -> Self {
             Self {
                 core,
                 deframer_buffer: DeframerVecBuffer::default(),
@@ -949,10 +949,10 @@ impl Keys {
 /// QUIC uses 4 different sets of keys (and progressive key updates for long-running connections):
 ///
 /// * Initial: these can be created from [`Keys::initial()`]
-/// * 0-RTT keys: can be retrieved from [`ConnectionCommon::zero_rtt_keys()`]
-/// * Handshake: these are returned from [`ConnectionCommon::write_hs()`] after `ClientHello` and
+/// * 0-RTT keys: can be retrieved from [`Connection::zero_rtt_keys()`]
+/// * Handshake: these are returned from [`Connection::write_hs()`] after `ClientHello` and
 ///   `ServerHello` messages have been exchanged
-/// * 1-RTT keys: these are returned from [`ConnectionCommon::write_hs()`] after the handshake is done
+/// * 1-RTT keys: these are returned from [`Connection::write_hs()`] after the handshake is done
 ///
 /// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
 /// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that

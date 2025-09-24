@@ -14,7 +14,6 @@
 )]
 #![allow(clippy::new_without_default)]
 
-use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 use std::io;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -23,8 +22,8 @@ use rustls::client::danger::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
 };
 use rustls::client::{
-    AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, UnbufferedClientConnection,
-    WebPkiServerVerifier,
+    AlwaysResolvesClientRawPublicKeys, Client, ServerCertVerifierBuilder,
+    UnbufferedClientConnection, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use rustls::crypto::{CryptoProvider, WebPkiSupportedAlgorithms, verify_tls13_signature};
@@ -40,17 +39,16 @@ use rustls::server::danger::{
 };
 use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, ClientHello, ResolvesServerCert,
-    UnbufferedServerConnection, WebPkiClientVerifier,
+    Server, UnbufferedServerConnection, WebPkiClientVerifier,
 };
 use rustls::sign::CertifiedKey;
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection,
-    ConnectionCommon, ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup,
-    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
-    SupportedCipherSuite,
+    CertificateError, CertificateType, CipherSuite, ClientConfig, Connection, ContentType,
+    DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion, RootCertStore,
+    ServerConfig, SideData, SignatureScheme, SupportedCipherSuite,
 };
 
 macro_rules! embed_files {
@@ -218,8 +216,8 @@ embed_files! {
 }
 
 pub fn transfer(
-    left: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-    right: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+    left: &mut Connection<impl SideData>,
+    right: &mut Connection<impl SideData>,
 ) -> usize {
     let mut buf = [0u8; 262144];
     let mut total = 0;
@@ -247,7 +245,7 @@ pub fn transfer(
     total
 }
 
-pub fn transfer_eof(conn: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>) {
+pub fn transfer_eof(conn: &mut Connection<impl SideData>) {
     let empty_buf = [0u8; 0];
     let empty_cursor: &mut dyn io::Read = &mut &empty_buf[..];
     let sz = conn.read_tls(empty_cursor).unwrap();
@@ -261,7 +259,11 @@ pub enum Altered {
     Raw(Vec<u8>),
 }
 
-pub fn transfer_altered<F>(left: &mut Connection, filter: F, right: &mut Connection) -> usize
+pub fn transfer_altered<F>(
+    left: &mut Connection<impl SideData>,
+    filter: F,
+    right: &mut Connection<impl SideData>,
+) -> usize
 where
     F: Fn(&mut Message<'_>) -> Altered,
 {
@@ -685,7 +687,10 @@ pub fn webpki_server_verifier_builder(
     WebPkiServerVerifier::builder_with_provider(roots, provider)
 }
 
-pub fn make_pair(kt: KeyType, provider: &CryptoProvider) -> (ClientConnection, ServerConnection) {
+pub fn make_pair(
+    kt: KeyType,
+    provider: &CryptoProvider,
+) -> (Connection<Client>, Connection<Server>) {
     make_pair_for_configs(
         make_client_config(kt, provider),
         make_server_config(kt, provider),
@@ -695,17 +700,17 @@ pub fn make_pair(kt: KeyType, provider: &CryptoProvider) -> (ClientConnection, S
 pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
-) -> (ClientConnection, ServerConnection) {
+) -> (Connection<Client>, Connection<Server>) {
     make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
 }
 
 pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
-) -> (ClientConnection, ServerConnection) {
+) -> (Connection<Client>, Connection<Server>) {
     (
-        ClientConnection::new(client_config.clone(), server_name("localhost")).unwrap(),
-        ServerConnection::new(server_config.clone()).unwrap(),
+        Connection::<Client>::new(client_config.clone(), server_name("localhost")).unwrap(),
+        Connection::<Server>::new(server_config.clone()).unwrap(),
     )
 }
 
@@ -738,8 +743,8 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
 }
 
 pub fn do_handshake(
-    client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-    server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+    client: &mut Connection<impl SideData>,
+    server: &mut Connection<impl SideData>,
 ) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
@@ -761,7 +766,7 @@ pub fn do_unbuffered_handshake(
     client: &mut UnbufferedClientConnection,
     server: &mut UnbufferedServerConnection,
 ) {
-    fn is_idle<Data>(conn: &UnbufferedConnectionCommon<Data>, data: &[u8]) -> bool {
+    fn is_idle<Side: SideData>(conn: &UnbufferedConnectionCommon<Side>, data: &[u8]) -> bool {
         !conn.is_handshaking() && !conn.wants_write() && data.is_empty()
     }
 
@@ -841,8 +846,8 @@ pub enum ErrorFromPeer {
 }
 
 pub fn do_handshake_until_error(
-    client: &mut ClientConnection,
-    server: &mut ServerConnection,
+    client: &mut Connection<Client>,
+    server: &mut Connection<Server>,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
@@ -859,14 +864,11 @@ pub fn do_handshake_until_error(
 }
 
 pub fn do_handshake_altered(
-    client: ClientConnection,
+    mut client: Connection<Client>,
     alter_server_message: impl Fn(&mut Message<'_>) -> Altered,
     alter_client_message: impl Fn(&mut Message<'_>) -> Altered,
-    server: ServerConnection,
+    mut server: Connection<Server>,
 ) -> Result<(), ErrorFromPeer> {
-    let mut client: Connection = Connection::Client(client);
-    let mut server: Connection = Connection::Server(server);
-
     while server.is_handshaking() || client.is_handshaking() {
         transfer_altered(&mut client, &alter_client_message, &mut server);
 
@@ -885,8 +887,8 @@ pub fn do_handshake_altered(
 }
 
 pub fn do_handshake_until_both_error(
-    client: &mut ClientConnection,
-    server: &mut ServerConnection,
+    client: &mut Connection<Client>,
+    server: &mut Connection<Server>,
 ) -> Result<(), Vec<ErrorFromPeer>> {
     match do_handshake_until_error(client, server) {
         Err(server_err @ ErrorFromPeer::Server(_)) => {
@@ -1344,7 +1346,7 @@ pub struct RawTls {
 
 impl RawTls {
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_client(conn: ClientConnection) -> Self {
+    pub fn new_client(conn: Connection<Client>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,
@@ -1354,7 +1356,7 @@ impl RawTls {
     }
 
     /// conn must be post-handshake, and must have been created with `enable_secret_extraction`
-    pub fn new_server(conn: ServerConnection) -> Self {
+    pub fn new_server(conn: Connection<Server>) -> Self {
         let suite = conn.negotiated_cipher_suite().unwrap();
         Self::new(
             suite,
@@ -1409,11 +1411,7 @@ impl RawTls {
         }
     }
 
-    pub fn encrypt_and_send(
-        &mut self,
-        msg: &PlainMessage,
-        peer: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-    ) {
+    pub fn encrypt_and_send(&mut self, msg: &PlainMessage, peer: &mut Connection<impl SideData>) {
         let data = self
             .encrypter
             .encrypt(msg.borrow_outbound(), self.enc_seq)
@@ -1426,7 +1424,7 @@ impl RawTls {
 
     pub fn receive_and_decrypt(
         &mut self,
-        peer: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        peer: &mut Connection<impl SideData>,
         f: impl Fn(Message<'_>),
     ) {
         let mut data = vec![];
@@ -1619,12 +1617,8 @@ impl ResolvesServerCert for ServerCheckCertResolve {
     }
 }
 
-pub struct OtherSession<'a, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
-    sess: &'a mut C,
+pub struct OtherSession<'a, Side: SideData> {
+    sess: &'a mut Connection<Side>,
     pub reads: usize,
     pub writevs: Vec<Vec<usize>>,
     fail_ok: bool,
@@ -1634,12 +1628,8 @@ where
     buffer: Vec<Vec<u8>>,
 }
 
-impl<'a, C, S> OtherSession<'a, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
-    pub fn new(sess: &'a mut C) -> Self {
+impl<'a, S: SideData> OtherSession<'a, S> {
+    pub fn new(sess: &'a mut Connection<S>) -> Self {
         OtherSession {
             sess,
             reads: 0,
@@ -1652,13 +1642,13 @@ where
         }
     }
 
-    pub fn new_buffered(sess: &'a mut C) -> Self {
+    pub fn new_buffered(sess: &'a mut Connection<S>) -> Self {
         let mut os = OtherSession::new(sess);
         os.buffered = true;
         os
     }
 
-    pub fn new_fails(sess: &'a mut C) -> Self {
+    pub fn new_fails(sess: &'a mut Connection<S>) -> Self {
         let mut os = OtherSession::new(sess);
         os.fail_ok = true;
         os
@@ -1700,22 +1690,14 @@ where
     }
 }
 
-impl<C, S> io::Read for OtherSession<'_, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
+impl<S: SideData> io::Read for OtherSession<'_, S> {
     fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
         self.reads += 1;
         self.sess.write_tls(&mut b)
     }
 }
 
-impl<C, S> io::Write for OtherSession<'_, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
+impl<S: SideData> io::Write for OtherSession<'_, S> {
     fn write(&mut self, _: &[u8]) -> io::Result<usize> {
         unreachable!()
     }

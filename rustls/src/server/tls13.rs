@@ -6,7 +6,7 @@ use pki_types::{CertificateDer, UnixTime};
 use subtle::ConstantTimeEq;
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
-use super::server_conn::ServerConnectionData;
+use super::server_conn::Server;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, Protocol, Side, State,
@@ -863,7 +863,7 @@ struct ExpectAndSkipRejectedEarlyData {
     next: Box<hs::ExpectClientHello>,
 }
 
-impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
+impl State<Server> for ExpectAndSkipRejectedEarlyData {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -900,7 +900,7 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
+impl State<Server> for ExpectCertificateOrCompressedCertificate {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -962,7 +962,7 @@ struct ExpectCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ServerConnectionData> for ExpectCompressedCertificate {
+impl State<Server> for ExpectCompressedCertificate {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -1062,7 +1062,7 @@ struct ExpectCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ServerConnectionData> for ExpectCertificate {
+impl State<Server> for ExpectCertificate {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -1157,7 +1157,7 @@ struct ExpectCertificateVerify {
     send_tickets: usize,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateVerify {
+impl State<Server> for ExpectCertificateVerify {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -1219,7 +1219,7 @@ struct ExpectEarlyData {
     send_tickets: usize,
 }
 
-impl State<ServerConnectionData> for ExpectEarlyData {
+impl State<Server> for ExpectEarlyData {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -1360,7 +1360,7 @@ impl ExpectFinished {
     }
 }
 
-impl State<ServerConnectionData> for ExpectFinished {
+impl State<Server> for ExpectFinished {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -1454,7 +1454,7 @@ impl ExpectTraffic {
     }
 }
 
-impl State<ServerConnectionData> for ExpectTraffic {
+impl State<Server> for ExpectTraffic {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -1527,7 +1527,7 @@ struct ExpectQuicTraffic {
     _fin_verified: verify::FinishedMessageVerified,
 }
 
-impl State<ServerConnectionData> for ExpectQuicTraffic {
+impl State<Server> for ExpectQuicTraffic {
     fn handle<'m>(
         self: Box<Self>,
         _cx: &mut ServerContext<'_>,

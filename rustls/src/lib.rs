@@ -114,9 +114,9 @@
 //! [`tokio-rustls`]: https://github.com/rustls/tokio-rustls
 //!
 //! ### Rustls provides encrypted pipes
-//! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
-//! on the left (via the [`read_tls()`] and [`write_tls()`] methods) and then read/write the
-//! plaintext on the right:
+//! This is the [`Connection`] type and its two specializations.
+//! You supply raw TLS traffic on the left (via the [`read_tls()`] and [`write_tls()`] methods)
+//! and then read/write the plaintext on the right:
 //!
 //! [`read_tls()`]: Connection::read_tls
 //! [`write_tls()`]: Connection::read_tls
@@ -189,7 +189,7 @@
 //! #     .unwrap();
 //! let rc_config = Arc::new(config);
 //! let example_com = "example.com".try_into().unwrap();
-//! let mut client = rustls::ClientConnection::new(rc_config, example_com);
+//! let mut client = rustls::Connection::<rustls::client::Client>::new(rc_config, example_com);
 //! # }
 //! ```
 //!
@@ -218,7 +218,7 @@
 //!
 //! ```rust,no_run
 //! # #[cfg(feature = "aws-lc-rs")] {
-//! # let mut client = rustls::ClientConnection::new(panic!(), panic!()).unwrap();
+//! # let mut client = rustls::Connection::<rustls::client::Client>::new(panic!(), panic!()).unwrap();
 //! # struct Socket { }
 //! # impl Socket {
 //! #   fn ready_for_write(&self) -> bool { false }
@@ -483,16 +483,16 @@ pub mod internal {
 
 /// Unbuffered connection API
 ///
-/// This is an alternative to the [`crate::ConnectionCommon`] API that does not internally buffer
+/// This is an alternative to the [`crate::Connection`] API that does not internally buffer
 /// TLS nor plaintext data. Instead those buffers are managed by the API user so they have
 /// control over when and how to allocate, resize and dispose of them.
 ///
-/// This API is lower level than the `ConnectionCommon` API and is built around a state machine
+/// This API is lower level than the `Connection` API and is built around a state machine
 /// interface where the API user must handle each state to advance and complete the
 /// handshake process.
 ///
-/// Like the `ConnectionCommon` API, no IO happens internally so all IO must be handled by the API
-/// user. Unlike the `ConnectionCommon` API, this API does not make use of the [`std::io::Read`] and
+/// Like the `Connection` API, no IO happens internally so all IO must be handled by the API
+/// user. Unlike the `Connection` API, this API does not make use of the [`std::io::Read`] and
 /// [`std::io::Write`] traits so it's usable in no-std context.
 ///
 /// The entry points into this API are [`crate::client::UnbufferedClientConnection::new`],
@@ -519,9 +519,9 @@ pub mod unbuffered {
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
+pub use crate::conn::{Connection, KeyingMaterialExporter, SideData, kernel};
 #[cfg(feature = "std")]
-pub use crate::conn::{Connection, Reader, Writer};
-pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
+pub use crate::conn::{Reader, Writer};
 pub use crate::enums::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateType, CipherSuite, ContentType,
     EchClientHelloType, HandshakeType, ProtocolVersion, SignatureAlgorithm, SignatureScheme,
@@ -566,13 +566,12 @@ pub mod client {
     mod tls13;
 
     pub use builder::WantsClientCert;
-    pub use client_conn::{
-        ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError,
-        MayEncryptEarlyData, ResolvesClientCert, Resumption, Tls12Resumption,
-        UnbufferedClientConnection,
-    };
     #[cfg(feature = "std")]
-    pub use client_conn::{ClientConnection, WriteEarlyData};
+    pub use client_conn::WriteEarlyData;
+    pub use client_conn::{
+        Client, ClientConfig, ClientSessionStore, EarlyDataError, MayEncryptEarlyData,
+        ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
+    };
     pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
     pub use handy::AlwaysResolvesClientRawPublicKeys;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
@@ -600,8 +599,6 @@ pub mod client {
 }
 
 pub use client::ClientConfig;
-#[cfg(feature = "std")]
-pub use client::ClientConnection;
 
 /// Items for use in a server.
 pub mod server {
@@ -621,10 +618,10 @@ pub mod server {
     pub use handy::ServerSessionMemoryCache;
     pub use handy::{AlwaysResolvesServerRawPublicKeys, NoServerSessionStorage};
     #[cfg(feature = "std")]
-    pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
+    pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData};
     pub use server_conn::{
-        ClientHello, InvalidSniPolicy, ProducesTickets, ResolvesServerCert, ServerConfig,
-        ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
+        ClientHello, InvalidSniPolicy, ProducesTickets, ResolvesServerCert, Server, ServerConfig,
+        StoresServerSessions, UnbufferedServerConnection,
     };
 
     pub use crate::verify::NoClientAuth;
@@ -645,8 +642,6 @@ pub mod server {
 }
 
 pub use server::ServerConfig;
-#[cfg(feature = "std")]
-pub use server::ServerConnection;
 
 /// All defined protocol versions appear in this module.
 ///

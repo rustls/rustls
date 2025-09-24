@@ -1119,11 +1119,11 @@ impl From<rand::GetRandomFailed> for Error {
 pub enum ApiMisuse {
     /// The [`KeyingMaterialExporter`][] was already consumed.
     ///
-    /// Methods that obtain an exporter (eg, [`ConnectionCommon::exporter()`][]) can only
+    /// Methods that obtain an exporter (eg, [`Connection::exporter()`][]) can only
     /// be used once.  This error is returned on subsequent calls.
     ///
     /// [`KeyingMaterialExporter`]: crate::KeyingMaterialExporter
-    /// [`ConnectionCommon::exporter()`]: crate::ConnectionCommon::exporter()
+    /// [`Connection::exporter()`]: crate::Connection::exporter()
     ExporterAlreadyUsed,
 
     /// The `context` parameter to [`KeyingMaterialExporter::derive()`][] was too long.
@@ -1199,8 +1199,7 @@ pub enum ApiMisuse {
     ///
     /// This is possible from:
     ///
-    /// - [`ClientConnection::dangerous_extract_secrets()`][crate::client::ClientConnection::dangerous_extract_secrets]
-    /// - [`ServerConnection::dangerous_extract_secrets()`][crate::server::ServerConnection::dangerous_extract_secrets]
+    /// - [`Connection::dangerous_extract_secrets()`][crate::Connection::dangerous_extract_secrets]
     /// - [`ClientConnection::dangerous_into_kernel_connection()`][crate::client::UnbufferedClientConnection::dangerous_into_kernel_connection]
     /// - [`ServerConnection::dangerous_into_kernel_connection()`][crate::server::UnbufferedServerConnection::dangerous_into_kernel_connection]
     ///

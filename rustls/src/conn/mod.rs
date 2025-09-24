@@ -27,154 +27,12 @@ pub(crate) mod unbuffered;
 #[cfg(feature = "std")]
 mod connection {
     use alloc::vec::Vec;
-    use core::fmt::Debug;
-    use core::ops::{Deref, DerefMut};
+    use core::ops::Deref;
     use std::io::{self, BufRead, Read};
 
-    use crate::ConnectionCommon;
-    use crate::common_state::{CommonState, IoState};
-    use crate::conn::KeyingMaterialExporter;
-    use crate::error::Error;
     use crate::msgs::message::OutboundChunks;
-    use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
-
-    /// A client or server connection.
-    #[allow(clippy::exhaustive_enums)]
-    #[derive(Debug)]
-    pub enum Connection {
-        /// A client connection
-        Client(crate::client::ClientConnection),
-        /// A server connection
-        Server(crate::server::ServerConnection),
-    }
-
-    impl Connection {
-        /// Read TLS content from `rd`.
-        ///
-        /// See [`ConnectionCommon::read_tls()`] for more information.
-        pub fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error> {
-            match self {
-                Self::Client(conn) => conn.read_tls(rd),
-                Self::Server(conn) => conn.read_tls(rd),
-            }
-        }
-
-        /// Writes TLS messages to `wr`.
-        ///
-        /// See [`ConnectionCommon::write_tls()`] for more information.
-        pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-            self.sendable_tls.write_to(wr)
-        }
-
-        /// Returns an object that allows reading plaintext.
-        pub fn reader(&mut self) -> Reader<'_> {
-            match self {
-                Self::Client(conn) => conn.reader(),
-                Self::Server(conn) => conn.reader(),
-            }
-        }
-
-        /// Returns an object that allows writing plaintext.
-        pub fn writer(&mut self) -> Writer<'_> {
-            match self {
-                Self::Client(conn) => Writer::new(&mut **conn),
-                Self::Server(conn) => Writer::new(&mut **conn),
-            }
-        }
-
-        /// Processes any new packets read by a previous call to [`Connection::read_tls`].
-        ///
-        /// See [`ConnectionCommon::process_new_packets()`] for more information.
-        pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
-            match self {
-                Self::Client(conn) => conn.process_new_packets(),
-                Self::Server(conn) => conn.process_new_packets(),
-            }
-        }
-
-        /// Returns an object that can derive key material from the agreed connection secrets.
-        ///
-        /// See [`ConnectionCommon::exporter()`] for more information.
-        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-            match self {
-                Self::Client(conn) => conn.exporter(),
-                Self::Server(conn) => conn.exporter(),
-            }
-        }
-
-        /// This function uses `io` to complete any outstanding IO for this connection.
-        ///
-        /// See [`ConnectionCommon::complete_io()`] for more information.
-        pub fn complete_io(
-            &mut self,
-            io: &mut (impl Read + io::Write),
-        ) -> Result<(usize, usize), io::Error> {
-            match self {
-                Self::Client(conn) => conn.complete_io(io),
-                Self::Server(conn) => conn.complete_io(io),
-            }
-        }
-
-        /// Extract secrets, so they can be used when configuring kTLS, for example.
-        /// Should be used with care as it exposes secret key material.
-        pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-            match self {
-                Self::Client(client) => client.dangerous_extract_secrets(),
-                Self::Server(server) => server.dangerous_extract_secrets(),
-            }
-        }
-
-        /// Sets a limit on the internal buffers
-        ///
-        /// See [`ConnectionCommon::set_buffer_limit()`] for more information.
-        pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
-            match self {
-                Self::Client(client) => client.set_buffer_limit(limit),
-                Self::Server(server) => server.set_buffer_limit(limit),
-            }
-        }
-
-        /// Sets a limit on the internal plaintext buffer.
-        ///
-        /// See [`ConnectionCommon::set_plaintext_buffer_limit()`] for more information.
-        pub fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
-            match self {
-                Self::Client(client) => client.set_plaintext_buffer_limit(limit),
-                Self::Server(server) => server.set_plaintext_buffer_limit(limit),
-            }
-        }
-
-        /// Sends a TLS1.3 `key_update` message to refresh a connection's keys
-        ///
-        /// See [`ConnectionCommon::refresh_traffic_keys()`] for more information.
-        pub fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-            match self {
-                Self::Client(client) => client.refresh_traffic_keys(),
-                Self::Server(server) => server.refresh_traffic_keys(),
-            }
-        }
-    }
-
-    impl Deref for Connection {
-        type Target = CommonState;
-
-        fn deref(&self) -> &Self::Target {
-            match self {
-                Self::Client(conn) => &conn.core.common_state,
-                Self::Server(conn) => &conn.core.common_state,
-            }
-        }
-    }
-
-    impl DerefMut for Connection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            match self {
-                Self::Client(conn) => &mut conn.core.common_state,
-                Self::Server(conn) => &mut conn.core.common_state,
-            }
-        }
-    }
+    use crate::{Connection, SideData};
 
     /// A structure that implements [`std::io::Read`] for reading plaintext.
     pub struct Reader<'a> {
@@ -203,7 +61,7 @@ mod connection {
         /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
         ///
         /// This method consumes `self` so that it can return a slice whose lifetime is bounded by
-        /// the [`ConnectionCommon`] that created this `Reader`.
+        /// the [`Connection`] that created this `Reader`.
         pub fn into_first_chunk(self) -> io::Result<&'a [u8]> {
             match self.received_plaintext.chunk() {
                 Some(chunk) => Ok(chunk),
@@ -297,7 +155,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         ///
         /// This function buffers plaintext sent before the
         /// TLS handshake completes, and sends it as soon
-        /// as it can.  See [`ConnectionCommon::set_buffer_limit`] to control
+        /// as it can.  See [`Connection::set_buffer_limit`] to control
         /// the size of this buffer.
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             self.sink.write(buf)
@@ -312,18 +170,15 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         }
     }
 
-    /// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
-    /// allowing them to be the subject of a [`Writer`].
-    ///
-    /// [`ServerConnection`]: crate::ServerConnection
-    /// [`ClientConnection`]: crate::ClientConnection
+    /// Internal trait implemented by [`Connection`]
+    /// allowing it to be the subject of a [`Writer`].
     pub(crate) trait PlaintextSink {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
         fn flush(&mut self) -> io::Result<()>;
     }
 
-    impl<T> PlaintextSink for ConnectionCommon<T> {
+    impl<Side: SideData> PlaintextSink for Connection<Side> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             let len = self
                 .core
@@ -362,7 +217,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
 }
 
 #[cfg(feature = "std")]
-pub use connection::{Connection, Reader, Writer};
+pub use connection::{Reader, Writer};
 
 /// An object of this type can export keying material.
 pub struct KeyingMaterialExporter {
@@ -444,14 +299,30 @@ impl ConnectionRandoms {
     }
 }
 
-/// Interface shared by client and server connections.
-pub struct ConnectionCommon<Data> {
-    pub(crate) core: ConnectionCore<Data>,
+/// A TLS connection, parametrized by the side ([`Client`] or [`Server`]).
+///
+/// This is one of the core abstractions of the rutls API. It represents a single connection
+/// to a peer, and holds all the state associated with that connection. Note that it does
+/// not hold any IO objects: the application is responsible for reading and writing TLS records.
+/// If you want an object that does hold IO objects, see [`Stream`] and [`StreamOwned`].
+///
+/// This object is generic over the `Side` type parameter, which must be either [`Client`]
+/// or [`Server`]. While most of the API for a connection is shared between both types, some
+/// API is asymmetric, which is reflected by the type parameter. As such, some methods
+/// (including constructors) are specific on the `Side` type. See the implementations
+/// for [`Client`](#impl-Connection<Client>) and [`Server`](#impl-Connection<Server>) below.
+///
+/// [`Client`]: crate::client::Client
+/// [`Server`]: crate::server::Server
+/// [`Stream`]: crate::Stream
+/// [`StreamOwned`]: crate::StreamOwned
+pub struct Connection<Side: SideData> {
+    pub(crate) core: ConnectionCore<Side>,
     deframer_buffer: DeframerVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
 }
 
-impl<Data> ConnectionCommon<Data> {
+impl<Side: SideData> Connection<Side> {
     /// Processes any new packets read by a previous call to
     /// [`Connection::read_tls`].
     ///
@@ -589,7 +460,7 @@ impl<Data> ConnectionCommon<Data> {
 }
 
 #[cfg(feature = "std")]
-impl<Data> ConnectionCommon<Data> {
+impl<Side: SideData> Connection<Side> {
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader<'_> {
         let common = &mut self.core.common_state;
@@ -632,9 +503,9 @@ impl<Data> ConnectionCommon<Data> {
     /// [`is_handshaking`]: CommonState::is_handshaking
     /// [`wants_read`]: CommonState::wants_read
     /// [`wants_write`]: CommonState::wants_write
-    /// [`write_tls`]: ConnectionCommon::write_tls
-    /// [`read_tls`]: ConnectionCommon::read_tls
-    /// [`process_new_packets`]: ConnectionCommon::process_new_packets
+    /// [`write_tls`]: Connection::write_tls
+    /// [`read_tls`]: Connection::read_tls
+    /// [`process_new_packets`]: Connection::process_new_packets
     pub fn complete_io(
         &mut self,
         io: &mut (impl io::Read + io::Write),
@@ -766,7 +637,7 @@ impl<Data> ConnectionCommon<Data> {
         }
     }
 
-    pub(crate) fn replace_state(&mut self, new: Box<dyn State<Data>>) {
+    pub(crate) fn replace_state(&mut self, new: Box<dyn State<Side>>) {
         self.core.state = Ok(new);
     }
 
@@ -790,8 +661,8 @@ impl<Data> ConnectionCommon<Data> {
     /// This function also returns `Ok(0)` once a `close_notify` alert has been successfully
     /// received.  No additional data is ever read in this state.
     ///
-    /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
-    /// [`reader()`]: ConnectionCommon::reader
+    /// [`process_new_packets()`]: Connection::process_new_packets
+    /// [`reader()`]: Connection::reader
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
         if self.received_plaintext.is_full() {
             return Err(io::Error::other("received plaintext buffer full"));
@@ -822,8 +693,8 @@ impl<Data> ConnectionCommon<Data> {
     }
 }
 
-impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {
-    fn from(conn: &'a mut ConnectionCommon<Data>) -> Self {
+impl<'a, Side: SideData> From<&'a mut Connection<Side>> for Context<'a, Side> {
+    fn from(conn: &'a mut Connection<Side>) -> Self {
         Self {
             common: &mut conn.core.common_state,
             data: &mut conn.core.data,
@@ -832,7 +703,7 @@ impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {
     }
 }
 
-impl<T> Deref for ConnectionCommon<T> {
+impl<Side: SideData> Deref for Connection<Side> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
@@ -840,14 +711,14 @@ impl<T> Deref for ConnectionCommon<T> {
     }
 }
 
-impl<T> DerefMut for ConnectionCommon<T> {
+impl<Side: SideData> DerefMut for Connection<Side> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.core.common_state
     }
 }
 
-impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
-    fn from(core: ConnectionCore<Data>) -> Self {
+impl<Side: SideData> From<ConnectionCore<Side>> for Connection<Side> {
+    fn from(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
             deframer_buffer: DeframerVecBuffer::default(),
@@ -857,14 +728,14 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
 }
 
 /// Interface shared by unbuffered client and server connections.
-pub struct UnbufferedConnectionCommon<Data> {
-    pub(crate) core: ConnectionCore<Data>,
+pub struct UnbufferedConnectionCommon<Side: SideData> {
+    pub(crate) core: ConnectionCore<Side>,
     wants_write: bool,
     emitted_peer_closed_state: bool,
 }
 
-impl<Data> From<ConnectionCore<Data>> for UnbufferedConnectionCommon<Data> {
-    fn from(core: ConnectionCore<Data>) -> Self {
+impl<Side: SideData> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<Side> {
+    fn from(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
             wants_write: false,
@@ -873,7 +744,7 @@ impl<Data> From<ConnectionCore<Data>> for UnbufferedConnectionCommon<Data> {
     }
 }
 
-impl<Data> UnbufferedConnectionCommon<Data> {
+impl<Side: SideData> UnbufferedConnectionCommon<Side> {
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     /// Should be used with care as it exposes secret key material.
     pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
@@ -881,7 +752,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
     }
 }
 
-impl<T> Deref for UnbufferedConnectionCommon<T> {
+impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
@@ -889,9 +760,9 @@ impl<T> Deref for UnbufferedConnectionCommon<T> {
     }
 }
 
-pub(crate) struct ConnectionCore<Data> {
-    pub(crate) state: Result<Box<dyn State<Data>>, Error>,
-    pub(crate) data: Data,
+pub(crate) struct ConnectionCore<Side: SideData> {
+    pub(crate) state: Result<Box<dyn State<Side>>, Error>,
+    pub(crate) data: Side,
     pub(crate) common_state: CommonState,
     pub(crate) hs_deframer: HandshakeDeframer,
 
@@ -900,8 +771,8 @@ pub(crate) struct ConnectionCore<Data> {
     seen_consecutive_empty_fragments: u8,
 }
 
-impl<Data> ConnectionCore<Data> {
-    pub(crate) fn new(state: Box<dyn State<Data>>, data: Data, common_state: CommonState) -> Self {
+impl<Side: SideData> ConnectionCore<Side> {
+    pub(crate) fn new(state: Box<dyn State<Side>>, data: Side, common_state: CommonState) -> Self {
         Self {
             state: Ok(state),
             data,
@@ -977,7 +848,7 @@ impl<Data> ConnectionCore<Data> {
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
     fn deframe<'b>(
         &mut self,
-        state: Option<&dyn State<Data>>,
+        state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
@@ -1005,7 +876,7 @@ impl<Data> ConnectionCore<Data> {
 
     fn process_more_input<'b>(
         &mut self,
-        state: Option<&dyn State<Data>>,
+        state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
@@ -1143,7 +1014,7 @@ impl<Data> ConnectionCore<Data> {
         }
     }
 
-    fn handle_deframe_error(&mut self, error: Error, state: Option<&dyn State<Data>>) -> Error {
+    fn handle_deframe_error(&mut self, error: Error, state: Option<&dyn State<Side>>) -> Error {
         match error {
             error @ Error::InvalidMessage(_) => {
                 if self.common_state.is_quic() {
@@ -1172,9 +1043,9 @@ impl<Data> ConnectionCore<Data> {
     fn process_msg(
         &mut self,
         msg: InboundPlainMessage<'_>,
-        state: Box<dyn State<Data>>,
+        state: Box<dyn State<Side>>,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
-    ) -> Result<Box<dyn State<Data>>, Error> {
+    ) -> Result<Box<dyn State<Side>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec
             && !self
@@ -1226,7 +1097,7 @@ impl<Data> ConnectionCore<Data> {
 
     pub(crate) fn dangerous_into_kernel_connection(
         self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<Data>), Error> {
+    ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
         if !self
             .common_state
             .enable_secret_extraction

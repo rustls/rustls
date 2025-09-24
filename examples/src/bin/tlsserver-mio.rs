@@ -31,8 +31,8 @@ use mio::net::{TcpListener, TcpStream};
 use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
-use rustls::server::WebPkiClientVerifier;
-use rustls::{ProtocolVersion, RootCertStore};
+use rustls::server::{Server, WebPkiClientVerifier};
+use rustls::{Connection, ProtocolVersion, RootCertStore};
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
@@ -78,7 +78,7 @@ impl TlsServer {
                 Ok((socket, addr)) => {
                     debug!("Accepting new connection from {addr:?}");
 
-                    let tls_conn = rustls::ServerConnection::new(self.tls_config.clone()).unwrap();
+                    let tls_conn = Connection::<Server>::new(self.tls_config.clone()).unwrap();
                     let mode = self.mode.clone();
 
                     let token = mio::Token(self.next_id);
@@ -125,7 +125,7 @@ struct OpenConnection {
     closing: bool,
     closed: bool,
     mode: ServerMode,
-    tls_conn: rustls::ServerConnection,
+    tls_conn: Connection<Server>,
     back: Option<TcpStream>,
     sent_http_response: bool,
 }
@@ -162,7 +162,7 @@ impl OpenConnection {
         socket: TcpStream,
         token: mio::Token,
         mode: ServerMode,
-        tls_conn: rustls::ServerConnection,
+        tls_conn: Connection<Server>,
     ) -> Self {
         let back = open_back(&mode);
         Self {

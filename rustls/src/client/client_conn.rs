@@ -190,13 +190,12 @@ pub struct ClientConfig {
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
     ///
     /// rustls enforces an arbitrary minimum of 32 bytes for this field.
-    /// Out of range values are reported as errors from [ClientConnection::new].
+    /// Out of range values are reported as errors on connection construction.
     ///
     /// Setting this value to a little less than the TCP MSS may improve latency
     /// for stream-y workloads.
     ///
     /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
-    /// [ClientConnection::new]: crate::client::ClientConnection::new
     pub max_fragment_size: Option<usize>,
 
     /// How to decide what client auth certificate/keys to use.
@@ -575,17 +574,15 @@ impl EarlyData {
 mod connection {
     use alloc::vec::Vec;
     use core::fmt;
-    use core::ops::{Deref, DerefMut};
     use std::io;
 
     use pki_types::ServerName;
 
-    use super::{ClientConnectionData, ClientExtensionsInput};
+    use super::{Client, ClientExtensionsInput};
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
-    use crate::conn::{ConnectionCommon, ConnectionCore};
+    use crate::conn::{Connection, ConnectionCore};
     use crate::error::Error;
-    use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::{ClientConfig, KeyingMaterialExporter};
 
@@ -595,11 +592,11 @@ mod connection {
     ///
     /// This type implements [`io::Write`].
     pub struct WriteEarlyData<'a> {
-        sess: &'a mut ClientConnection,
+        sess: &'a mut Connection<Client>,
     }
 
     impl<'a> WriteEarlyData<'a> {
-        fn new(sess: &'a mut ClientConnection) -> Self {
+        fn new(sess: &'a mut Connection<Client>) -> Self {
             WriteEarlyData { sess }
         }
 
@@ -607,7 +604,6 @@ mod connection {
         /// once this reaches zero.
         pub fn bytes_left(&self) -> usize {
             self.sess
-                .inner
                 .core
                 .data
                 .early_data
@@ -627,12 +623,12 @@ mod connection {
         /// if called more than once per connection.
         ///
         /// If you are looking for the normal exporter, this is available from
-        /// [`ConnectionCommon::exporter()`].
+        /// [`Connection::exporter()`].
         ///
         /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
         /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
         /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
-        /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
+        /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
         pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
             self.sess.core.early_exporter()
         }
@@ -659,19 +655,7 @@ mod connection {
         }
     }
 
-    /// This represents a single TLS client connection.
-    pub struct ClientConnection {
-        inner: ConnectionCommon<ClientConnectionData>,
-    }
-
-    impl fmt::Debug for ClientConnection {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.debug_struct("ClientConnection")
-                .finish()
-        }
-    }
-
-    impl ClientConnection {
+    impl Connection<Client> {
         /// Make a new ClientConnection.  `config` controls how
         /// we behave in the TLS protocol, `name` is the
         /// name of the server we want to talk to.
@@ -685,14 +669,12 @@ mod connection {
             name: ServerName<'static>,
             alpn_protocols: Vec<Vec<u8>>,
         ) -> Result<Self, Error> {
-            Ok(Self {
-                inner: ConnectionCommon::from(ConnectionCore::for_client(
-                    config,
-                    name,
-                    ClientExtensionsInput::from_alpn(alpn_protocols),
-                    Protocol::Tcp,
-                )?),
-            })
+            Ok(Self::from(ConnectionCore::for_client(
+                config,
+                name,
+                ClientExtensionsInput::from_alpn(alpn_protocols),
+                Protocol::Tcp,
+            )?))
         }
 
         /// Returns an `io::Write` implementer you can write bytes to
@@ -714,13 +696,7 @@ mod connection {
         /// in this case the data is lost but the connection continues.  You
         /// can tell this happened using `is_early_data_accepted`.
         pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-            if self
-                .inner
-                .core
-                .data
-                .early_data
-                .is_enabled()
-            {
+            if self.core.data.early_data.is_enabled() {
                 Some(WriteEarlyData::new(self))
             } else {
                 None
@@ -733,23 +709,17 @@ mod connection {
         /// handshake then the server will not process the data.  This
         /// is not an error, but you may wish to resend the data.
         pub fn is_early_data_accepted(&self) -> bool {
-            self.inner.core.is_early_data_accepted()
-        }
-
-        /// Extract secrets, so they can be used when configuring kTLS, for example.
-        /// Should be used with care as it exposes secret key material.
-        pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-            self.inner.dangerous_extract_secrets()
+            self.core.is_early_data_accepted()
         }
 
         /// Return the connection's Encrypted Client Hello (ECH) status.
         pub fn ech_status(&self) -> EchStatus {
-            self.inner.core.data.ech_status
+            self.core.data.ech_status
         }
 
         /// Returns the number of TLS1.3 tickets that have been received.
         pub fn tls13_tickets_received(&self) -> u32 {
-            self.inner.tls13_tickets_received
+            self.tls13_tickets_received
         }
 
         /// Return true if the connection was made with a `ClientConfig` that is FIPS compatible.
@@ -758,59 +728,30 @@ mod connection {
         /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
         /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
         pub fn fips(&self) -> bool {
-            self.inner.core.common_state.fips
+            self.core.common_state.fips
         }
 
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-            self.inner
-                .core
+            self.core
                 .data
                 .early_data
                 .check_write(data.len())
-                .map(|sz| {
-                    self.inner
-                        .send_early_plaintext(&data[..sz])
-                })
+                .map(|sz| self.send_early_plaintext(&data[..sz]))
         }
     }
 
-    impl Deref for ClientConnection {
-        type Target = ConnectionCommon<ClientConnectionData>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.inner
-        }
-    }
-
-    impl DerefMut for ClientConnection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
-        }
-    }
-
-    #[doc(hidden)]
-    impl<'a> TryFrom<&'a mut crate::Connection> for &'a mut ClientConnection {
-        type Error = ();
-
-        fn try_from(value: &'a mut crate::Connection) -> Result<Self, Self::Error> {
-            use crate::Connection::*;
-            match value {
-                Client(conn) => Ok(conn),
-                Server(_) => Err(()),
-            }
-        }
-    }
-
-    impl From<ClientConnection> for crate::Connection {
-        fn from(conn: ClientConnection) -> Self {
-            Self::Client(conn)
+    impl fmt::Debug for Connection<Client> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("Connection<ClientConnectionData>")
+                .finish()
         }
     }
 }
-#[cfg(feature = "std")]
-pub use connection::{ClientConnection, WriteEarlyData};
 
-impl ConnectionCore<ClientConnectionData> {
+#[cfg(feature = "std")]
+pub use connection::WriteEarlyData;
+
+impl ConnectionCore<Client> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
@@ -822,7 +763,7 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
         common_state.fips = config.fips();
-        let mut data = ClientConnectionData::new();
+        let mut data = Client::new();
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
@@ -846,7 +787,7 @@ impl ConnectionCore<ClientConnectionData> {
 ///
 /// See the [`crate::unbuffered`] module docs for more details
 pub struct UnbufferedClientConnection {
-    inner: UnbufferedConnectionCommon<ClientConnectionData>,
+    inner: UnbufferedConnectionCommon<Client>,
 }
 
 impl UnbufferedClientConnection {
@@ -907,7 +848,7 @@ impl UnbufferedClientConnection {
     /// for calling this method.
     pub fn dangerous_into_kernel_connection(
         self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<ClientConnectionData>), Error> {
+    ) -> Result<(ExtractedSecrets, KernelConnection<Client>), Error> {
         self.inner
             .core
             .dangerous_into_kernel_connection()
@@ -920,7 +861,7 @@ impl UnbufferedClientConnection {
 }
 
 impl Deref for UnbufferedClientConnection {
-    type Target = UnbufferedConnectionCommon<ClientConnectionData>;
+    type Target = UnbufferedConnectionCommon<Client>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -933,7 +874,7 @@ impl DerefMut for UnbufferedClientConnection {
     }
 }
 
-impl TransmitTlsData<'_, ClientConnectionData> {
+impl TransmitTlsData<'_, Client> {
     /// returns an adapter that allows encrypting early (RTT-0) data before transmitting the
     /// already encoded TLS data
     ///
@@ -955,7 +896,7 @@ impl TransmitTlsData<'_, ClientConnectionData> {
 
 /// Allows encrypting early (RTT-0) data
 pub struct MayEncryptEarlyData<'c> {
-    conn: &'c mut UnbufferedConnectionCommon<ClientConnectionData>,
+    conn: &'c mut UnbufferedConnectionCommon<Client>,
 }
 
 impl MayEncryptEarlyData<'_> {
@@ -1016,12 +957,12 @@ impl core::error::Error for EarlyDataError {}
 
 /// State associated with a client connection.
 #[derive(Debug)]
-pub struct ClientConnectionData {
+pub struct Client {
     pub(super) early_data: EarlyData,
     pub(super) ech_status: EchStatus,
 }
 
-impl ClientConnectionData {
+impl Client {
     fn new() -> Self {
         Self {
             early_data: EarlyData::new(),
@@ -1030,4 +971,4 @@ impl ClientConnectionData {
     }
 }
 
-impl crate::conn::SideData for ClientConnectionData {}
+impl crate::conn::SideData for Client {}

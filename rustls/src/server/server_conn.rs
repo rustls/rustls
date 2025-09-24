@@ -16,7 +16,7 @@ use crate::builder::ConfigBuilder;
 use crate::common_state::State;
 use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
-use crate::conn::ConnectionCommon;
+use crate::conn::Connection;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -349,13 +349,12 @@ pub struct ServerConfig {
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
     ///
     /// rustls enforces an arbitrary minimum of 32 bytes for this field.
-    /// Out of range values are reported as errors from [ServerConnection::new].
+    /// Out of range values are reported as errors on connection construction.
     ///
     /// Setting this value to a little less than the TCP MSS may improve latency
     /// for stream-y workloads.
     ///
     /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
-    /// [ServerConnection::new]: crate::server::ServerConnection::new
     pub max_fragment_size: Option<usize>,
 
     /// How to store client sessions.
@@ -394,7 +393,7 @@ pub struct ServerConfig {
     /// this config.  Specify 0 to disable early data.  The
     /// default is 0.
     ///
-    /// Read the early data via [`ServerConnection::early_data`].
+    /// Read the early data via [`Connection::early_data`].
     ///
     /// The units for this are _both_ plaintext bytes, _and_ ciphertext
     /// bytes, depending on whether the server accepts a client's early_data
@@ -635,17 +634,15 @@ mod connection {
     use alloc::boxed::Box;
     use core::fmt;
     use core::fmt::{Debug, Formatter};
-    use core::ops::{Deref, DerefMut};
     use std::io;
 
     use pki_types::DnsName;
 
-    use super::{Accepted, Accepting, ServerConfig, ServerConnectionData, ServerExtensionsInput};
+    use super::{Accepted, Accepting, Server, ServerConfig, ServerExtensionsInput};
     use crate::common_state::{CommonState, Context, Side};
-    use crate::conn::{ConnectionCommon, ConnectionCore};
+    use crate::conn::{Connection, ConnectionCore};
     use crate::error::Error;
     use crate::server::hs::ClientHelloInput;
-    use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
     use crate::{ApiMisuse, KeyingMaterialExporter};
@@ -656,11 +653,11 @@ mod connection {
     ///
     /// This type implements [`io::Read`].
     pub struct ReadEarlyData<'a> {
-        common: &'a mut ConnectionCommon<ServerConnectionData>,
+        common: &'a mut Connection<Server>,
     }
 
     impl<'a> ReadEarlyData<'a> {
-        fn new(common: &'a mut ConnectionCommon<ServerConnectionData>) -> Self {
+        fn new(common: &'a mut Connection<Server>) -> Self {
             ReadEarlyData { common }
         }
 
@@ -677,12 +674,12 @@ mod connection {
         /// if called more than once per connection.
         ///
         /// If you are looking for the normal exporter, this is available from
-        /// [`ConnectionCommon::exporter()`].
+        /// [`Connection::exporter()`].
         ///
         /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
         /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
         /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
-        /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
+        /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
         pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
             self.common.core.early_exporter()
         }
@@ -698,24 +695,14 @@ mod connection {
         }
     }
 
-    /// This represents a single TLS server connection.
-    ///
-    /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
-    /// Read data from the peer using the `io::Read` trait implementation.
-    pub struct ServerConnection {
-        pub(super) inner: ConnectionCommon<ServerConnectionData>,
-    }
-
-    impl ServerConnection {
+    impl Connection<Server> {
         /// Make a new ServerConnection.  `config` controls how
         /// we behave in the TLS protocol.
         pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
-            Ok(Self {
-                inner: ConnectionCommon::from(ConnectionCore::for_server(
-                    config,
-                    ServerExtensionsInput::default(),
-                )?),
-            })
+            Ok(Self::from(ConnectionCore::for_server(
+                config,
+                ServerExtensionsInput::default(),
+            )?))
         }
 
         /// Retrieves the server name, if any, used to select the certificate and
@@ -734,7 +721,7 @@ mod connection {
         ///
         /// The server name is also used to match sessions during session resumption.
         pub fn server_name(&self) -> Option<&DnsName<'_>> {
-            self.inner.core.data.sni.as_ref()
+            self.core.data.sni.as_ref()
         }
 
         /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -743,8 +730,7 @@ mod connection {
         ///
         /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
         pub fn received_resumption_data(&self) -> Option<&[u8]> {
-            self.inner
-                .core
+            self.core
                 .data
                 .received_resumption_data
                 .as_ref()
@@ -761,7 +747,7 @@ mod connection {
         /// from the client is desired, encrypt the data separately.
         pub fn set_resumption_data(&mut self, data: &[u8]) {
             assert!(data.len() < 2usize.pow(15));
-            self.inner.core.data.resumption_data = data.into();
+            self.core.data.resumption_data = data.into();
         }
 
         /// Explicitly discard early data, notifying the client
@@ -770,7 +756,7 @@ mod connection {
         ///
         /// Must be called while `is_handshaking` is true.
         pub fn reject_early_data(&mut self) {
-            self.inner.core.reject_early_data()
+            self.core.reject_early_data()
         }
 
         /// Returns an `io::Read` implementer you can read bytes from that are
@@ -784,14 +770,8 @@ mod connection {
         /// - The connection doesn't resume an existing session.
         /// - The client hasn't sent a full ClientHello yet.
         pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
-            if self
-                .inner
-                .core
-                .data
-                .early_data
-                .was_accepted()
-            {
-                Some(ReadEarlyData::new(&mut self.inner))
+            if self.core.data.early_data.was_accepted() {
+                Some(ReadEarlyData::new(self))
             } else {
                 None
             }
@@ -803,40 +783,14 @@ mod connection {
         /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
         /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
         pub fn fips(&self) -> bool {
-            self.inner.core.common_state.fips
-        }
-
-        /// Extract secrets, so they can be used when configuring kTLS, for example.
-        /// Should be used with care as it exposes secret key material.
-        pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-            self.inner.dangerous_extract_secrets()
+            self.core.common_state.fips
         }
     }
 
-    impl Debug for ServerConnection {
+    impl Debug for Connection<Server> {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            f.debug_struct("ServerConnection")
+            f.debug_struct("Connection<ServerConnectionData>")
                 .finish()
-        }
-    }
-
-    impl Deref for ServerConnection {
-        type Target = ConnectionCommon<ServerConnectionData>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.inner
-        }
-    }
-
-    impl DerefMut for ServerConnection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
-        }
-    }
-
-    impl From<ServerConnection> for crate::Connection {
-        fn from(conn: ServerConnection) -> Self {
-            Self::Server(conn)
         }
     }
 
@@ -887,7 +841,7 @@ mod connection {
     /// # }
     /// ```
     pub struct Acceptor {
-        inner: Option<ConnectionCommon<ServerConnectionData>>,
+        inner: Option<Connection<Server>>,
     }
 
     impl Default for Acceptor {
@@ -897,7 +851,7 @@ mod connection {
                 inner: Some(
                     ConnectionCore::new(
                         Box::new(Accepting),
-                        ServerConnectionData::default(),
+                        Server::default(),
                         CommonState::new(Side::Server),
                     )
                     .into(),
@@ -994,8 +948,8 @@ mod connection {
         }
     }
 
-    impl From<ConnectionCommon<ServerConnectionData>> for AcceptedAlert {
-        fn from(conn: ConnectionCommon<ServerConnectionData>) -> Self {
+    impl From<Connection<Server>> for AcceptedAlert {
+        fn from(conn: Connection<Server>) -> Self {
             Self(conn.core.common_state.sendable_tls)
         }
     }
@@ -1008,13 +962,13 @@ mod connection {
 }
 
 #[cfg(feature = "std")]
-pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
+pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData};
 
 /// Unbuffered version of `ServerConnection`
 ///
 /// See the [`crate::unbuffered`] module docs for more details
 pub struct UnbufferedServerConnection {
-    inner: UnbufferedConnectionCommon<ServerConnectionData>,
+    inner: UnbufferedConnectionCommon<Server>,
 }
 
 impl UnbufferedServerConnection {
@@ -1047,7 +1001,7 @@ impl UnbufferedServerConnection {
     /// for calling this method.
     pub fn dangerous_into_kernel_connection(
         self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<ServerConnectionData>), Error> {
+    ) -> Result<(ExtractedSecrets, KernelConnection<Server>), Error> {
         self.inner
             .core
             .dangerous_into_kernel_connection()
@@ -1055,7 +1009,7 @@ impl UnbufferedServerConnection {
 }
 
 impl Deref for UnbufferedServerConnection {
-    type Target = UnbufferedConnectionCommon<ServerConnectionData>;
+    type Target = UnbufferedConnectionCommon<Server>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -1068,7 +1022,7 @@ impl DerefMut for UnbufferedServerConnection {
     }
 }
 
-impl UnbufferedConnectionCommon<ServerConnectionData> {
+impl UnbufferedConnectionCommon<Server> {
     pub(crate) fn pop_early_data(&mut self) -> Option<Vec<u8>> {
         self.core.data.early_data.pop()
     }
@@ -1083,7 +1037,7 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
 #[cfg(feature = "std")]
 pub struct Accepted {
-    connection: ConnectionCommon<ServerConnectionData>,
+    connection: Connection<Server>,
     message: Message<'static>,
     sig_schemes: Vec<SignatureScheme>,
 }
@@ -1119,7 +1073,7 @@ impl Accepted {
         ch
     }
 
-    /// Convert the [`Accepted`] into a [`ServerConnection`].
+    /// Convert the [`Accepted`] into a [`Connection`].
     ///
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
     /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
@@ -1127,7 +1081,7 @@ impl Accepted {
     pub fn into_connection(
         mut self,
         config: Arc<ServerConfig>,
-    ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
+    ) -> Result<Connection<Server>, (Error, AcceptedAlert)> {
         if let Err(err) = self
             .connection
             .set_max_fragment_size(config.max_fragment_size)
@@ -1154,9 +1108,7 @@ impl Accepted {
         };
 
         self.connection.replace_state(new);
-        Ok(ServerConnection {
-            inner: self.connection,
-        })
+        Ok(self.connection)
     }
 
     fn client_hello_payload<'a>(message: &'a Message<'_>) -> &'a ClientHelloPayload {
@@ -1181,13 +1133,13 @@ impl Debug for Accepted {
 struct Accepting;
 
 #[cfg(feature = "std")]
-impl State<ServerConnectionData> for Accepting {
+impl State<Server> for Accepting {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle<'m>(
         self: Box<Self>,
         _cx: &mut hs::ServerContext<'_>,
         _m: Message<'m>,
-    ) -> Result<Box<dyn State<ServerConnectionData> + 'm>, Error>
+    ) -> Result<Box<dyn State<Server> + 'm>, Error>
     where
         Self: 'm,
     {
@@ -1288,7 +1240,7 @@ impl Debug for EarlyDataState {
     }
 }
 
-impl ConnectionCore<ServerConnectionData> {
+impl ConnectionCore<Server> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput<'static>,
@@ -1299,7 +1251,7 @@ impl ConnectionCore<ServerConnectionData> {
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts)),
-            ServerConnectionData::default(),
+            Server::default(),
             common,
         ))
     }
@@ -1316,14 +1268,14 @@ impl ConnectionCore<ServerConnectionData> {
 
 /// State associated with a server connection.
 #[derive(Default, Debug)]
-pub struct ServerConnectionData {
+pub struct Server {
     pub(crate) sni: Option<DnsName<'static>>,
     pub(crate) received_resumption_data: Option<Vec<u8>>,
     pub(crate) resumption_data: Vec<u8>,
     pub(super) early_data: EarlyDataState,
 }
 
-impl crate::conn::SideData for ServerConnectionData {}
+impl crate::conn::SideData for Server {}
 
 #[cfg(feature = "std")]
 #[cfg(test)]

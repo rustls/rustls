@@ -7,7 +7,7 @@ use pki_types::ServerName;
 pub(crate) use server_hello::TLS12_HANDLER;
 use subtle::ConstantTimeEq;
 
-use super::client_conn::ClientConnectionData;
+use super::client_conn::Client;
 use super::hs::ClientContext;
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
@@ -250,7 +250,7 @@ struct ExpectCertificate {
     must_issue_new_ticket: bool,
 }
 
-impl State<ClientConnectionData> for ExpectCertificate {
+impl State<Client> for ExpectCertificate {
     fn handle<'m>(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
@@ -315,7 +315,7 @@ struct ExpectCertificateStatusOrServerKx<'m> {
     must_issue_new_ticket: bool,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
+impl State<Client> for ExpectCertificateStatusOrServerKx<'_> {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -397,7 +397,7 @@ struct ExpectCertificateStatus<'a> {
     must_issue_new_ticket: bool,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateStatus<'_> {
+impl State<Client> for ExpectCertificateStatus<'_> {
     fn handle<'m>(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
@@ -464,7 +464,7 @@ struct ExpectServerKx<'a> {
     must_issue_new_ticket: bool,
 }
 
-impl State<ClientConnectionData> for ExpectServerKx<'_> {
+impl State<Client> for ExpectServerKx<'_> {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -667,7 +667,7 @@ struct ExpectServerDoneOrCertReq<'a> {
     must_issue_new_ticket: bool,
 }
 
-impl State<ClientConnectionData> for ExpectServerDoneOrCertReq<'_> {
+impl State<Client> for ExpectServerDoneOrCertReq<'_> {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -749,7 +749,7 @@ struct ExpectCertificateRequest<'a> {
     must_issue_new_ticket: bool,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
+impl State<Client> for ExpectCertificateRequest<'_> {
     fn handle<'m>(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
@@ -832,7 +832,7 @@ struct ExpectServerDone<'a> {
     must_issue_new_ticket: bool,
 }
 
-impl State<ClientConnectionData> for ExpectServerDone<'_> {
+impl State<Client> for ExpectServerDone<'_> {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1087,7 +1087,7 @@ struct ExpectNewTicket {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl State<ClientConnectionData> for ExpectNewTicket {
+impl State<Client> for ExpectNewTicket {
     fn handle<'m>(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
@@ -1139,7 +1139,7 @@ struct ExpectCcs {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl State<ClientConnectionData> for ExpectCcs {
+impl State<Client> for ExpectCcs {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1250,7 +1250,7 @@ impl ExpectFinished {
     }
 }
 
-impl State<ClientConnectionData> for ExpectFinished {
+impl State<Client> for ExpectFinished {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1338,7 +1338,7 @@ struct ExpectTraffic {
     _fin_verified: verify::FinishedMessageVerified,
 }
 
-impl State<ClientConnectionData> for ExpectTraffic {
+impl State<Client> for ExpectTraffic {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,

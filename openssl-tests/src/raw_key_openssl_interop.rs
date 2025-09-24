@@ -9,10 +9,10 @@ mod client {
     use std::net::TcpStream;
     use std::sync::Arc;
 
-    use rustls::client::AlwaysResolvesClientRawPublicKeys;
     use rustls::client::danger::{
         HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
     };
+    use rustls::client::{AlwaysResolvesClientRawPublicKeys, Client};
     use rustls::crypto::{
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
     };
@@ -21,7 +21,7 @@ mod client {
     use rustls::server::danger::SignatureVerificationInput;
     use rustls::sign::CertifiedKey;
     use rustls::{
-        ApiMisuse, CertificateError, CertificateType, ClientConfig, ClientConnection, Error,
+        ApiMisuse, CertificateError, CertificateType, ClientConfig, Connection, Error,
         InconsistentKeys, PeerIdentity, PeerIncompatible, SignatureScheme, Stream,
     };
 
@@ -64,7 +64,7 @@ mod client {
     /// This client reads a message and then writes 'Hello from the client' to the server.
     pub(super) fn run_client(config: ClientConfig, port: u16) -> Result<String, io::Error> {
         let server_name = "0.0.0.0".try_into().unwrap();
-        let mut conn = ClientConnection::new(Arc::new(config), server_name).unwrap();
+        let mut conn = Connection::<Client>::new(Arc::new(config), server_name).unwrap();
         let mut sock = TcpStream::connect(format!("[::]:{port}")).unwrap();
         let mut tls = Stream::new(&mut conn, &mut sock);
 
@@ -152,14 +152,14 @@ mod server {
     };
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
-    use rustls::server::AlwaysResolvesServerRawPublicKeys;
     use rustls::server::danger::{
         ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
     };
+    use rustls::server::{AlwaysResolvesServerRawPublicKeys, Server};
     use rustls::sign::CertifiedKey;
     use rustls::{
-        ApiMisuse, CertificateError, CertificateType, DistinguishedName, Error, InconsistentKeys,
-        PeerIdentity, PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
+        ApiMisuse, CertificateError, CertificateType, Connection, DistinguishedName, Error,
+        InconsistentKeys, PeerIdentity, PeerIncompatible, ServerConfig, SignatureScheme,
     };
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
@@ -204,7 +204,7 @@ mod server {
     ) -> Result<String, io::Error> {
         let (mut stream, _) = listener.accept()?;
 
-        let mut conn = ServerConnection::new(Arc::new(config)).unwrap();
+        let mut conn = Connection::<Server>::new(Arc::new(config)).unwrap();
         conn.complete_io(&mut stream)?;
 
         conn.writer()
