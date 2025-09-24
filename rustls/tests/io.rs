@@ -24,14 +24,16 @@ use rustls_test::{
 };
 
 use super::provider;
-use crate::common::all_versions;
 
 #[test]
 fn buffered_client_data_sent() {
     let provider = provider::default_provider();
     let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -51,7 +53,10 @@ fn buffered_server_data_sent() {
     let provider = provider::default_provider();
     let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -71,7 +76,10 @@ fn buffered_both_data_sent() {
     let provider = provider::default_provider();
     let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -1406,7 +1414,10 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
     // general exercising of msgs::fragmenter and msgs::deframer
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider) {
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             // no hidden significance to these numbers
             for frag_size in [37, 61, 101, 257] {
                 println!("test kt={kt:?} version={version_provider:?} frag={frag_size:?}");
@@ -1703,7 +1714,10 @@ fn server_close_notify() {
     let kt = KeyType::Rsa2048;
     let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt, &provider));
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config_with_auth(kt, &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -1743,7 +1757,10 @@ fn client_close_notify() {
     let kt = KeyType::Rsa2048;
     let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt, &provider));
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config_with_auth(kt, &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -1783,7 +1800,10 @@ fn server_closes_uncleanly() {
     let kt = KeyType::Rsa2048;
     let server_config = Arc::new(make_server_config(kt, &provider));
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config(kt, &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -1829,7 +1849,10 @@ fn client_closes_uncleanly() {
     let kt = KeyType::Rsa2048;
     let server_config = Arc::new(make_server_config(kt, &provider));
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config(kt, &version_provider);
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);

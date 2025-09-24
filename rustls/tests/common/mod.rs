@@ -38,16 +38,6 @@ fn exactly_one_provider() -> bool {
     ))
 }
 
-pub fn all_versions(
-    provider: &CryptoProvider<'static>,
-) -> impl Iterator<Item = CryptoProvider<'static>> {
-    vec![
-        provider.clone().with_only_tls12(),
-        provider.clone().with_only_tls13(),
-    ]
-    .into_iter()
-}
-
 pub fn provider_with_one_suite(
     provider: &CryptoProvider<'static>,
     suite: SupportedCipherSuite,

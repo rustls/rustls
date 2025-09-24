@@ -35,7 +35,7 @@ use rustls_test::{
     unsafe_plaintext_crypto_provider,
 };
 
-use super::common::{all_versions, provider_with_one_suite, provider_with_suites};
+use super::common::{provider_with_one_suite, provider_with_suites};
 use super::{
     COUNTS, CountingLogger, provider, provider_is_aws_lc_rs, provider_is_fips, provider_is_ring,
 };
@@ -52,7 +52,10 @@ fn alpn_test_error(
 
     let server_config = Arc::new(server_config);
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let mut client_config = make_client_config(KeyType::Rsa2048, &version_provider);
         client_config
             .alpn_protocols
@@ -320,7 +323,10 @@ fn config_builder_for_server_with_time() {
 fn client_can_get_server_cert() {
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider) {
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_configs(client_config, make_server_config(*kt, &provider));
@@ -342,7 +348,10 @@ fn client_can_get_server_cert_after_resumption() {
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = make_server_config(*kt, &provider);
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
@@ -371,7 +380,10 @@ fn server_can_get_client_cert() {
             *kt, &provider,
         ));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -397,7 +409,10 @@ fn server_can_get_client_cert_after_resumption() {
             *kt, &provider,
         ));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let client_config = Arc::new(client_config);
             let (mut client, mut server) =
@@ -583,7 +598,10 @@ fn server_connection_is_debug() {
 fn server_exposes_offered_sni() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config(kt, &version_provider);
         let mut client = ClientConnection::new(
             Arc::new(client_config),
@@ -607,7 +625,10 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
     // webpki actually does this for us in its DnsName type
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config(kt, &version_provider);
         let mut client = ClientConnection::new(
             Arc::new(client_config),
@@ -1081,7 +1102,10 @@ fn test_no_warning_logging_during_successful_sessions() {
 
     let provider = provider::default_provider();
     for kt in KeyType::all_for_provider(&provider) {
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_configs(client_config, make_server_config(*kt, &provider));

@@ -27,7 +27,6 @@ use webpki::anchor_from_trusted_cert;
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::X509Name;
 
-use super::common::all_versions;
 use super::provider;
 
 #[test]
@@ -38,7 +37,10 @@ fn client_can_override_certificate_verification() {
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let mut client_config = make_client_config(*kt, &version_provider);
             client_config
                 .dangerous()
@@ -61,7 +63,10 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let mut client_config = make_client_config(*kt, &version_provider);
             client_config
                 .dangerous()
@@ -151,7 +156,10 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let mut client_config = make_client_config(*kt, &version_provider);
             client_config
                 .dangerous()
@@ -179,7 +187,10 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     let kt = KeyType::EcdsaP256;
     let provider = provider::default_provider();
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let server_config = ServerConfig::builder_with_provider(provider.clone().into())
             .with_no_client_auth()
             .with_single_cert_with_ocsp(kt.chain(), kt.key(), ocsp_response.to_vec())
@@ -303,7 +314,10 @@ fn client_checks_server_certificate_with_given_ip_address() {
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = Arc::new(make_client_config(*kt, &version_provider));
 
             // positive ipv4 case
@@ -343,7 +357,10 @@ fn client_checks_server_certificate_with_given_name() {
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config(*kt, &version_provider);
             let mut client = ClientConnection::new(
                 Arc::new(client_config),
@@ -375,7 +392,10 @@ fn client_check_server_certificate_ee_revoked() {
             .with_crls(crls)
             .only_check_end_entity_revocation();
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config =
                 make_client_config_with_verifier(builder.clone(), &version_provider);
             let mut client =
@@ -416,7 +436,10 @@ fn client_check_server_certificate_ee_unknown_revocation() {
                 .only_check_end_entity_revocation()
                 .allow_unknown_revocation_status();
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config_with_verifier(
                 forbid_unknown_verifier.clone(),
                 &version_provider,
@@ -469,7 +492,10 @@ fn client_check_server_certificate_intermediate_revoked() {
             .only_check_end_entity_revocation()
             .allow_unknown_revocation_status();
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config_with_verifier(
                 full_chain_verifier_builder.clone(),
                 &version_provider,
@@ -522,7 +548,10 @@ fn client_check_server_certificate_ee_crl_expired() {
                 .with_crls(crls)
                 .only_check_end_entity_revocation();
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config_with_verifier(
                 enforce_expiration_builder.clone(),
                 &version_provider,

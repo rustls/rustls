@@ -24,7 +24,7 @@ use rustls_test::{
 
 use super::provider::sign::RsaSigningKey;
 use super::{provider, provider_is_aws_lc_rs};
-use crate::common::{all_versions, provider_with_one_suite};
+use crate::common::provider_with_one_suite;
 
 #[test]
 fn server_cert_resolve_with_sni() {
@@ -205,7 +205,10 @@ fn client_with_sni_disabled_does_not_send_sni() {
         server_config.cert_resolver = Arc::new(ServerCheckNoSni {});
         let server_config = Arc::new(server_config);
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let mut client_config = make_client_config(*kt, &version_provider);
             client_config.enable_sni = false;
 
@@ -414,7 +417,10 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    for version_provider in all_versions(&provider) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let client_config = make_client_config(kt, &version_provider);
         let mut server = ServerConnection::new(server_config.clone()).unwrap();
         let mut client =
