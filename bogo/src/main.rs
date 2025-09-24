@@ -50,7 +50,7 @@ use rustls::server::danger::{
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
-use rustls::sign::CertifiedSigner;
+use rustls::sign::{CertifiedSigner, SingleCertAndKey};
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
     DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIncompatible,
@@ -543,18 +543,21 @@ impl sign::SigningKey for FixedSignatureSchemeSigningKey {
 
 #[derive(Debug)]
 struct FixedSignatureSchemeServerCertResolver {
-    resolver: Arc<dyn server::ResolvesServerCert>,
+    cert_key: sign::CertifiedKey,
     scheme: SignatureScheme,
 }
 
 impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-        let mut certkey = self.resolver.resolve(client_hello)?;
-        Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
-            key: certkey.key.clone(),
-            scheme: self.scheme,
-        });
-        Some(certkey)
+    fn resolve(&self, _client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
+        let mut new = sign::CertifiedKey::new_unchecked(
+            self.cert_key.cert_chain.clone(),
+            Arc::new(FixedSignatureSchemeSigningKey {
+                key: self.cert_key.key.clone(),
+                scheme: self.scheme,
+            }),
+        );
+        new.ocsp = self.cert_key.ocsp.clone();
+        Some(Arc::new(new))
     }
 }
 
@@ -760,10 +763,21 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     );
     let cred = &opts.credentials.default;
     let (certs, key) = cred.load_from_file();
+    let provider = opts.provider();
+    let mut cert_key = sign::CertifiedKey::from_der(Arc::from(certs), key, &provider).unwrap();
+    cert_key.ocsp = Some(opts.server_ocsp_response.clone());
 
-    let mut cfg = ServerConfig::builder_with_provider(opts.provider().into())
+    let cert_resolver = match cred.use_signing_scheme {
+        Some(scheme) => Arc::new(FixedSignatureSchemeServerCertResolver {
+            cert_key,
+            scheme: lookup_scheme(scheme),
+        }) as Arc<dyn server::ResolvesServerCert>,
+        None => Arc::new(SingleCertAndKey::from(cert_key)),
+    };
+
+    let mut cfg = ServerConfig::builder_with_provider(Arc::new(provider))
         .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(Arc::from(certs), key, opts.server_ocsp_response.clone())
+        .with_cert_resolver(cert_resolver)
         .unwrap();
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
@@ -773,14 +787,6 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     cfg.ignore_client_order = opts.server_preference;
     if opts.export_traffic_secrets {
         cfg.key_log = key_log.clone();
-    }
-
-    if let Some(scheme) = cred.use_signing_scheme {
-        let scheme = lookup_scheme(scheme);
-        cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
-            resolver: cfg.cert_resolver.clone(),
-            scheme,
-        });
     }
 
     if opts.tickets {
