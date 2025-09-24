@@ -29,8 +29,8 @@ in the course of normal development, subject to these constraints:
 - Our MSRV will be no more recent than 9 versions old, or approximately 12 months.
 
 > [!TIP]
-> At the time of writing, the most recent Rust release is 1.88.  That means
-> our MSRV could be as recent as 1.79. As it happens, it is 1.79.
+> At the time of writing, the most recent Rust release is 1.90.  That means
+> our MSRV could be as recent as 1.81. As it happens, it is 1.83.
 
 - Our MSRV policy only covers the core library crate: it does not cover tests
   or example code, and is not binding on our dependencies.
