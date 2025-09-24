@@ -3,7 +3,6 @@ use pki_types::ServerName;
 use crate::enums::{CertificateType, SignatureScheme};
 use crate::msgs::persist;
 use crate::sign::CertifiedSigner;
-use crate::sync::Arc;
 use crate::{NamedGroup, client, sign};
 
 /// An implementer of `ClientSessionStore` which does nothing.
@@ -206,12 +205,12 @@ impl client::ResolvesClientCert for FailResolveClientCert {
 /// [RFC 7250] raw public key.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
-#[derive(Clone, Debug)]
-pub struct AlwaysResolvesClientRawPublicKeys(Arc<sign::CertifiedKey>);
+#[derive(Debug)]
+pub struct AlwaysResolvesClientRawPublicKeys(sign::CertifiedKey);
 
 impl AlwaysResolvesClientRawPublicKeys {
     /// Create a new `AlwaysResolvesClientRawPublicKeys` instance.
-    pub fn new(certified_key: Arc<sign::CertifiedKey>) -> Self {
+    pub fn new(certified_key: sign::CertifiedKey) -> Self {
         Self(certified_key)
     }
 }

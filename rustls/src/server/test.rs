@@ -238,9 +238,9 @@ mod tests {
         };
         ServerConfig::builder_with_provider(x25519_provider.with_only_tls12().into())
             .with_no_client_auth()
-            .with_cert_resolver(Arc::new(AlwaysResolvesServerRawPublicKeys::new(Arc::new(
+            .with_cert_resolver(Arc::new(AlwaysResolvesServerRawPublicKeys::new(
                 server_certified_key(),
-            ))))
+            )))
             .unwrap()
     }
 

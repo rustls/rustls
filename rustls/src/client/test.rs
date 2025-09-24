@@ -455,9 +455,9 @@ mod tests {
         )
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
-        .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(Arc::new(
+        .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
             client_certified_key(),
-        ))))
+        )))
         .unwrap();
         config.key_log = key_log;
         config

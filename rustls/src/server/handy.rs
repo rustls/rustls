@@ -5,7 +5,6 @@ use crate::enums::CertificateType;
 use crate::error::{Error, PeerIncompatible};
 use crate::server::ClientHello;
 use crate::sign::CertifiedSigner;
-use crate::sync::Arc;
 use crate::{server, sign};
 
 /// Something which never stores sessions.
@@ -174,12 +173,12 @@ impl server::ProducesTickets for NeverProducesTickets {
 /// [RFC 7250] raw public key.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
-#[derive(Clone, Debug)]
-pub struct AlwaysResolvesServerRawPublicKeys(Arc<sign::CertifiedKey>);
+#[derive(Debug)]
+pub struct AlwaysResolvesServerRawPublicKeys(sign::CertifiedKey);
 
 impl AlwaysResolvesServerRawPublicKeys {
     /// Create a new `AlwaysResolvesServerRawPublicKeys` instance.
-    pub fn new(certified_key: Arc<sign::CertifiedKey>) -> Self {
+    pub fn new(certified_key: sign::CertifiedKey) -> Self {
         Self(certified_key)
     }
 }

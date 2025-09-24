@@ -78,16 +78,10 @@ pub trait Signer: Debug + Send + Sync {
 ///
 /// [`ConfigBuilder::with_cert_resolver()`]: crate::ConfigBuilder::with_cert_resolver
 #[derive(Debug)]
-pub struct SingleCertAndKey(Arc<CertifiedKey>);
+pub struct SingleCertAndKey(CertifiedKey);
 
 impl From<CertifiedKey> for SingleCertAndKey {
     fn from(certified_key: CertifiedKey) -> Self {
-        Self(Arc::new(certified_key))
-    }
-}
-
-impl From<Arc<CertifiedKey>> for SingleCertAndKey {
-    fn from(certified_key: Arc<CertifiedKey>) -> Self {
         Self(certified_key)
     }
 }

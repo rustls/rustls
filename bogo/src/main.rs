@@ -639,7 +639,7 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
 
 #[derive(Debug)]
 struct ClientCert {
-    certkey: Arc<sign::CertifiedKey>,
+    certkey: sign::CertifiedKey,
     issuer_dn: DistinguishedName,
     must_match_issuer: bool,
 }
@@ -658,7 +658,7 @@ impl ClientCert {
         }
 
         Self {
-            certkey: Arc::new(certkey),
+            certkey,
             issuer_dn,
             must_match_issuer: meta.must_match_issuer,
         }
