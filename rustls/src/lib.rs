@@ -333,6 +333,7 @@
     missing_docs,
     trivial_casts,
     trivial_numeric_casts,
+    unnameable_types,
     unreachable_pub,
     unused_import_braces,
     unused_extern_crates,
@@ -408,6 +409,7 @@ mod sync {
     pub(crate) type Weak<T> = alloc::sync::Weak<T>;
 }
 
+#[allow(unnameable_types)]
 #[macro_use]
 mod msgs;
 mod common_state;
@@ -445,7 +447,7 @@ mod webpki;
 
 /// Internal classes that are used in integration tests.
 /// The contents of this section DO NOT form part of the stable interface.
-#[allow(missing_docs)]
+#[allow(missing_docs, unnameable_types)]
 #[doc(hidden)]
 pub mod internal {
     /// Low-level TLS message parsing and encoding functions.
@@ -522,7 +524,7 @@ pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
 pub use crate::enums::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateType, CipherSuite, ContentType,
-    HandshakeType, ProtocolVersion, SignatureAlgorithm, SignatureScheme,
+    EchClientHelloType, HandshakeType, ProtocolVersion, SignatureAlgorithm, SignatureScheme,
 };
 pub use crate::error::{
     ApiMisuse, CertRevocationListError, CertificateError, EncryptedClientHelloError, Error,
@@ -544,7 +546,9 @@ pub use crate::suites::{
 pub use crate::ticketer::TicketRotator;
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
-pub use crate::verify::{CertificateIdentity, DigitallySignedStruct, PeerIdentity};
+pub use crate::verify::{
+    CertificateIdentity, DigitallySignedStruct, PeerIdentity, SignerPublicKey,
+};
 pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersion};
 pub use crate::webpki::RootCertStore;
 
@@ -563,8 +567,9 @@ pub mod client {
 
     pub use builder::WantsClientCert;
     pub use client_conn::{
-        ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, ResolvesClientCert,
-        Resumption, Tls12Resumption, UnbufferedClientConnection,
+        ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError,
+        MayEncryptEarlyData, ResolvesClientCert, Resumption, Tls12Resumption,
+        UnbufferedClientConnection,
     };
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
@@ -697,5 +702,6 @@ mod hash_map {
 }
 
 mod sealed {
+    #[allow(unnameable_types)]
     pub trait Sealed {}
 }
