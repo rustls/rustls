@@ -17,40 +17,6 @@ use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
 use crate::sync::Arc;
 
-/// Parse `der` as any ECDSA key type, returning the first which works.
-///
-/// Both SEC1 (PEM section starting with 'BEGIN EC PRIVATE KEY') and PKCS8
-/// (PEM section starting with 'BEGIN PRIVATE KEY') encodings are supported.
-pub fn any_ecdsa_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, Error> {
-    if let Ok(ecdsa_p256) = EcdsaSigningKey::new(
-        der,
-        SignatureScheme::ECDSA_NISTP256_SHA256,
-        &signature::ECDSA_P256_SHA256_ASN1_SIGNING,
-    ) {
-        return Ok(Arc::new(ecdsa_p256));
-    }
-
-    if let Ok(ecdsa_p384) = EcdsaSigningKey::new(
-        der,
-        SignatureScheme::ECDSA_NISTP384_SHA384,
-        &signature::ECDSA_P384_SHA384_ASN1_SIGNING,
-    ) {
-        return Ok(Arc::new(ecdsa_p384));
-    }
-
-    if let Ok(ecdsa_p521) = EcdsaSigningKey::new(
-        der,
-        SignatureScheme::ECDSA_NISTP521_SHA512,
-        &signature::ECDSA_P521_SHA512_ASN1_SIGNING,
-    ) {
-        return Ok(Arc::new(ecdsa_p521));
-    }
-
-    Err(Error::General(
-        "failed to parse ECDSA private key as PKCS#8 or SEC1".into(),
-    ))
-}
-
 /// Parse `der` as any EdDSA key type, returning the first which works.
 ///
 /// Note that, at the time of writing, Ed25519 does not have wide support
@@ -195,7 +161,7 @@ impl Debug for RsaSigner {
 /// different protocol versions.
 ///
 /// Currently this is only implemented for ECDSA keys.
-struct EcdsaSigningKey {
+pub(super) struct EcdsaSigningKey {
     key: Arc<EcdsaKeyPair>,
     scheme: SignatureScheme,
 }
@@ -252,6 +218,44 @@ impl SigningKey for EcdsaSigningKey {
 
     fn algorithm(&self) -> SignatureAlgorithm {
         self.scheme.algorithm()
+    }
+}
+
+impl TryFrom<&PrivateKeyDer<'_>> for EcdsaSigningKey {
+    type Error = Error;
+
+    /// Parse `der` as any ECDSA key type, returning the first which works.
+    ///
+    /// Both SEC1 (PEM section starting with 'BEGIN EC PRIVATE KEY') and PKCS8
+    /// (PEM section starting with 'BEGIN PRIVATE KEY') encodings are supported.
+    fn try_from(der: &PrivateKeyDer<'_>) -> Result<Self, Error> {
+        if let Ok(ecdsa_p256) = Self::new(
+            der,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            &signature::ECDSA_P256_SHA256_ASN1_SIGNING,
+        ) {
+            return Ok(ecdsa_p256);
+        }
+
+        if let Ok(ecdsa_p384) = Self::new(
+            der,
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            &signature::ECDSA_P384_SHA384_ASN1_SIGNING,
+        ) {
+            return Ok(ecdsa_p384);
+        }
+
+        if let Ok(ecdsa_p521) = Self::new(
+            der,
+            SignatureScheme::ECDSA_NISTP521_SHA512,
+            &signature::ECDSA_P521_SHA512_ASN1_SIGNING,
+        ) {
+            return Ok(ecdsa_p521);
+        }
+
+        Err(Error::General(
+            "failed to parse ECDSA private key as PKCS#8 or SEC1".into(),
+        ))
     }
 }
 
@@ -400,7 +404,7 @@ mod tests {
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
-        assert!(any_ecdsa_type(&key).is_ok());
+        assert!(EcdsaSigningKey::try_from(&key).is_ok());
     }
 
     #[test]
@@ -409,7 +413,7 @@ mod tests {
             &include_bytes!("../../testdata/nistp256key.der")[..],
         ));
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
-        assert!(any_ecdsa_type(&key).is_ok());
+        assert!(EcdsaSigningKey::try_from(&key).is_ok());
     }
 
     #[test]
@@ -453,7 +457,7 @@ mod tests {
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
-        assert!(any_ecdsa_type(&key).is_ok());
+        assert!(EcdsaSigningKey::try_from(&key).is_ok());
     }
 
     #[test]
@@ -462,7 +466,7 @@ mod tests {
             &include_bytes!("../../testdata/nistp384key.der")[..],
         ));
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
-        assert!(any_ecdsa_type(&key).is_ok());
+        assert!(EcdsaSigningKey::try_from(&key).is_ok());
     }
 
     #[test]
@@ -506,7 +510,7 @@ mod tests {
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
-        assert!(any_ecdsa_type(&key).is_ok());
+        assert!(EcdsaSigningKey::try_from(&key).is_ok());
     }
 
     #[test]
@@ -515,7 +519,7 @@ mod tests {
             &include_bytes!("../../testdata/nistp521key.der")[..],
         ));
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
-        assert!(any_ecdsa_type(&key).is_ok());
+        assert!(EcdsaSigningKey::try_from(&key).is_ok());
     }
 
     #[test]
@@ -562,7 +566,7 @@ mod tests {
         assert!(any_eddsa_type(&key).is_ok());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
-        assert!(any_ecdsa_type(&key).is_err());
+        assert!(EcdsaSigningKey::try_from(&key).is_err());
     }
 
     #[test]
@@ -596,7 +600,7 @@ mod tests {
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
-        assert!(any_ecdsa_type(&key).is_err());
+        assert!(EcdsaSigningKey::try_from(&key).is_err());
     }
 
     #[test]
@@ -605,7 +609,7 @@ mod tests {
             &include_bytes!("../../testdata/rsa2048key.pkcs1.der")[..],
         ));
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
-        assert!(any_ecdsa_type(&key).is_err());
+        assert!(EcdsaSigningKey::try_from(&key).is_err());
     }
 
     #[test]
@@ -656,7 +660,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            any_ecdsa_type(&key).err(),
+            EcdsaSigningKey::try_from(&key).err(),
             Some(Error::General(
                 "failed to parse ECDSA private key as PKCS#8 or SEC1".into()
             ))
@@ -672,7 +676,7 @@ mod tests {
 
 #[cfg(bench)]
 mod benchmarks {
-    use super::{PrivateKeyDer, PrivatePkcs8KeyDer, SignatureScheme, load_key};
+    use super::{EcdsaSigningKey, PrivateKeyDer, PrivatePkcs8KeyDer, SignatureScheme, load_key};
     use crate::crypto::aws_lc_rs::default_provider;
 
     #[bench]
@@ -826,7 +830,7 @@ mod benchmarks {
         ));
 
         b.iter(|| {
-            test::black_box(super::any_ecdsa_type(&key).unwrap());
+            test::black_box(EcdsaSigningKey::try_from(&key).unwrap());
         });
     }
 
@@ -837,7 +841,7 @@ mod benchmarks {
         ));
 
         b.iter(|| {
-            test::black_box(super::any_ecdsa_type(&key).unwrap());
+            test::black_box(EcdsaSigningKey::try_from(&key).unwrap());
         });
     }
 
@@ -848,7 +852,7 @@ mod benchmarks {
         ));
 
         b.iter(|| {
-            test::black_box(super::any_ecdsa_type(&key).unwrap());
+            test::black_box(EcdsaSigningKey::try_from(&key).unwrap());
         });
     }
 
