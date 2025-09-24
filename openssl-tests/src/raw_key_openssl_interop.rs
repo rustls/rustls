@@ -44,7 +44,7 @@ mod client {
             .expect("cannot open pub key file");
 
         let certified_key = Arc::new(CertifiedKey::new_unchecked(
-            vec![client_public_key_as_cert],
+            Arc::from([client_public_key_as_cert]),
             client_private_key,
         ));
 
@@ -181,7 +181,7 @@ mod server {
         let server_public_key_as_cert = CertificateDer::from(server_public_key.to_vec());
 
         let certified_key = Arc::new(CertifiedKey::new_unchecked(
-            vec![server_public_key_as_cert],
+            Arc::from([server_public_key_as_cert]),
             server_private_key,
         ));
 

@@ -132,7 +132,7 @@ fn test_early_exporter() {
     server_thread.join().unwrap();
 }
 
-fn load_certs() -> Vec<CertificateDer<'static>> {
+fn load_certs() -> Arc<[CertificateDer<'static>]> {
     CertificateDer::pem_file_iter(CERT_CHAIN_FILE)
         .unwrap()
         .map(|c| c.unwrap())

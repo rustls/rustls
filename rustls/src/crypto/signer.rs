@@ -124,7 +124,7 @@ impl ResolvesServerCert for SingleCertAndKey {
 #[derive(Clone, Debug)]
 pub struct CertifiedKey {
     /// The certificate chain or raw public key.
-    pub cert_chain: Vec<CertificateDer<'static>>,
+    pub cert_chain: Arc<[CertificateDer<'static>]>,
 
     /// The certified key.
     pub key: Arc<dyn SigningKey>,
@@ -143,7 +143,7 @@ impl CertifiedKey {
     ///
     /// [`KeyProvider`]: crate::crypto::KeyProvider
     pub fn from_der(
-        cert_chain: Vec<CertificateDer<'static>>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
         key: PrivateKeyDer<'static>,
         provider: &CryptoProvider,
     ) -> Result<Self, Error> {
@@ -166,7 +166,7 @@ impl CertifiedKey {
     /// This constructor should be used with all [`SigningKey`] implementations
     /// that can provide a public key, including those provided by rustls itself.
     pub fn new(
-        cert_chain: Vec<CertificateDer<'static>>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
         key: Arc<dyn SigningKey>,
     ) -> Result<Self, Error> {
         let parsed = ParsedCertificate::try_from(
@@ -196,7 +196,7 @@ impl CertifiedKey {
     /// This avoids parsing the end-entity certificate, which is useful when using client
     /// certificates that are not fully standards compliant, but known to usable by the peer.
     pub fn new_unchecked(
-        cert_chain: Vec<CertificateDer<'static>>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
         key: Arc<dyn SigningKey>,
     ) -> Self {
         Self {

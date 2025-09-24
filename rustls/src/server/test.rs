@@ -249,12 +249,12 @@ mod tests {
             .key_provider
             .load_private_key(server_key())
             .unwrap();
-        let public_key_as_cert = vec![CertificateDer::from(
+        let public_key_as_cert = Arc::from([CertificateDer::from(
             key.public_key()
                 .unwrap()
                 .as_ref()
                 .to_vec(),
-        )];
+        )]);
         CertifiedKey::new_unchecked(public_key_as_cert, key)
     }
 
@@ -265,11 +265,11 @@ mod tests {
         .unwrap()
     }
 
-    fn server_cert() -> Vec<CertificateDer<'static>> {
-        vec![
+    fn server_cert() -> Arc<[CertificateDer<'static>]> {
+        Arc::from([
             CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/end.der")[..]),
             CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/inter.der")[..]),
-        ]
+        ])
     }
 
     fn ffdhe_provider() -> CryptoProvider {

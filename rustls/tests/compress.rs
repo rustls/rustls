@@ -248,7 +248,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .key_provider
         .load_private_key(KeyType::Rsa2048.client_key())
         .unwrap();
-    let big_cert_and_key = sign::CertifiedKey::new_unchecked(vec![big_cert], key);
+    let big_cert_and_key = sign::CertifiedKey::new_unchecked(Arc::from([big_cert]), key);
     client_config.client_auth_cert_resolver =
         Arc::new(sign::SingleCertAndKey::from(big_cert_and_key));
 

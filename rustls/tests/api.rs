@@ -328,7 +328,7 @@ fn client_can_get_server_cert() {
             };
 
             assert_eq!(certs.end_entity, kt.chain()[0]);
-            assert_eq!(certs.intermediates, &kt.chain().as_slice()[1..]);
+            assert_eq!(certs.intermediates, &kt.chain()[1..]);
         }
     }
 }

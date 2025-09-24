@@ -468,12 +468,12 @@ mod tests {
             .key_provider
             .load_private_key(client_key())
             .unwrap();
-        let public_key_as_cert = vec![CertificateDer::from(
+        let public_key_as_cert = Arc::from([CertificateDer::from(
             key.public_key()
                 .unwrap()
                 .as_ref()
                 .to_vec(),
-        )];
+        )]);
         CertifiedKey::new_unchecked(public_key_as_cert, key)
     }
 
