@@ -1446,7 +1446,6 @@ impl State<ClientConnectionData> for ExpectFinished {
                     emit_certificate_tls13(&mut flight, None, auth_context);
                 }
                 ClientAuthDetails::Verify {
-                    cert_chain,
                     signer,
                     auth_context_tls13: auth_context,
                     compressor,
@@ -1454,15 +1453,15 @@ impl State<ClientConnectionData> for ExpectFinished {
                     if let Some(compressor) = compressor {
                         emit_compressed_certificate_tls13(
                             &mut flight,
-                            &cert_chain,
+                            &signer.cert_chain,
                             auth_context,
                             compressor,
                             &st.config,
                         );
                     } else {
-                        emit_certificate_tls13(&mut flight, Some(&cert_chain), auth_context);
+                        emit_certificate_tls13(&mut flight, Some(&signer.cert_chain), auth_context);
                     }
-                    emit_certverify_tls13(&mut flight, signer.as_ref())?;
+                    emit_certverify_tls13(&mut flight, &*signer.signer)?;
                 }
             }
         }

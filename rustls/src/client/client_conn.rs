@@ -19,6 +19,7 @@ use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtensionsInput;
 use crate::msgs::persist;
+use crate::sign::CertifiedSigner;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::sync::Arc;
 #[cfg(feature = "std")]
@@ -27,7 +28,7 @@ use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
 #[cfg(doc)]
 use crate::{DistinguishedName, crypto};
-use crate::{KeyLog, WantsVerifier, compress, sign, verify};
+use crate::{KeyLog, WantsVerifier, compress, verify};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -117,7 +118,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
         &self,
         root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>>;
+    ) -> Option<CertifiedSigner>;
 
     /// Returns which [`CertificateType`]s this resolver supports.
     ///
