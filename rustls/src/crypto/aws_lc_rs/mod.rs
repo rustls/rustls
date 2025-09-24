@@ -36,17 +36,34 @@ pub(crate) mod ticketer;
 pub(crate) mod tls12;
 pub(crate) mod tls13;
 
-/// A `CryptoProvider` backed by aws-lc-rs.
+/// The default `CryptoProvider` backed by aws-lc-rs.
 pub fn default_provider() -> CryptoProvider<'static> {
-    CryptoProvider {
-        tls12_cipher_suites: Cow::Borrowed(DEFAULT_TLS12_CIPHER_SUITES),
-        tls13_cipher_suites: Cow::Borrowed(DEFAULT_TLS13_CIPHER_SUITES),
-        kx_groups: Cow::Borrowed(DEFAULT_KX_GROUPS),
-        signature_verification_algorithms: SUPPORTED_SIG_ALGS,
-        secure_random: &AwsLcRs,
-        key_provider: &AwsLcRs,
-    }
+    DEFAULT_PROVIDER
 }
+
+/// The default `CryptoProvider` backed by aws-lc-rs.
+pub const DEFAULT_PROVIDER: CryptoProvider<'static> = CryptoProvider {
+    tls12_cipher_suites: Cow::Borrowed(DEFAULT_TLS12_CIPHER_SUITES),
+    tls13_cipher_suites: Cow::Borrowed(DEFAULT_TLS13_CIPHER_SUITES),
+    kx_groups: Cow::Borrowed(DEFAULT_KX_GROUPS),
+    signature_verification_algorithms: SUPPORTED_SIG_ALGS,
+    secure_random: &AwsLcRs,
+    key_provider: &AwsLcRs,
+};
+
+/// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.3.
+pub const DEFAULT_TLS13_PROVIDER: CryptoProvider<'static> = CryptoProvider {
+    tls12_cipher_suites: Cow::Borrowed(&[]),
+    ..DEFAULT_PROVIDER
+};
+
+/// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.2.
+///
+/// Use of TLS1.3 is **strongly** recommended.
+pub const DEFAULT_TLS12_PROVIDER: CryptoProvider<'static> = CryptoProvider {
+    tls13_cipher_suites: Cow::Borrowed(&[]),
+    ..DEFAULT_PROVIDER
+};
 
 /// `KeyProvider` impl for aws-lc-rs
 pub static DEFAULT_KEY_PROVIDER: &dyn KeyProvider = &AwsLcRs;
