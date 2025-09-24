@@ -30,10 +30,11 @@ use rustls::pki_types::{
     SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
 use rustls::server::ProducesTickets;
+use rustls::sign::CertifiedSigner;
 use rustls::{
-    CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerMisbehaved,
-    ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme, Tls12CipherSuite,
-    Tls13CipherSuite, crypto, server, sign,
+    CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerIncompatible,
+    PeerMisbehaved, ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme,
+    Tls12CipherSuite, Tls13CipherSuite, crypto, server, sign,
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
@@ -70,8 +71,12 @@ pub fn server_cert_resolver() -> Arc<dyn server::ResolvesServerCert> {
 struct DummyCert(Arc<sign::CertifiedKey>);
 
 impl server::ResolvesServerCert for DummyCert {
-    fn resolve(&self, _client_hello: &server::ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-        Some(self.0.clone())
+    fn resolve(&self, client_hello: &server::ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+        self.0
+            .signer(client_hello.signature_schemes())
+            .ok_or(Error::PeerIncompatible(
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ))
     }
 }
 

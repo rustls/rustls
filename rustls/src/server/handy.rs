@@ -2,7 +2,9 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use crate::enums::CertificateType;
+use crate::error::{Error, PeerIncompatible};
 use crate::server::ClientHello;
+use crate::sign::CertifiedSigner;
 use crate::sync::Arc;
 use crate::{server, sign};
 
@@ -183,8 +185,12 @@ impl AlwaysResolvesServerRawPublicKeys {
 }
 
 impl server::ResolvesServerCert for AlwaysResolvesServerRawPublicKeys {
-    fn resolve(&self, _client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-        Some(self.0.clone())
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+        self.0
+            .signer(client_hello.signature_schemes)
+            .ok_or(Error::PeerIncompatible(
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ))
     }
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
@@ -201,9 +207,10 @@ mod sni_resolver {
     use crate::error::Error;
     use crate::hash_map::HashMap;
     use crate::server::ClientHello;
+    use crate::sign::CertifiedSigner;
     use crate::sync::Arc;
     use crate::webpki::{ParsedCertificate, verify_server_name};
-    use crate::{server, sign};
+    use crate::{PeerIncompatible, server, sign};
 
     /// Something that resolves do different cert chains/keys based
     /// on client-supplied server name (via SNI).
@@ -249,12 +256,18 @@ mod sni_resolver {
     }
 
     impl server::ResolvesServerCert for ResolvesServerCertUsingSni {
-        fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-            if let Some(name) = client_hello.server_name() {
-                self.by_name.get(name).cloned()
-            } else {
-                // This kind of resolver requires SNI
-                None
+        fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+            let Some(name) = client_hello.server_name() else {
+                return Err(PeerIncompatible::NoServerNameProvided.into());
+            };
+
+            let Some(cert_key) = self.by_name.get(name) else {
+                return Err(Error::NoSuitableCertificate);
+            };
+
+            match cert_key.signer(client_hello.signature_schemes) {
+                Some(signer) => Ok(signer),
+                None => Err(PeerIncompatible::NoSignatureSchemesInCommon.into()),
             }
         }
     }
@@ -281,7 +294,7 @@ mod sni_resolver {
                         certificate_authorities: None,
                         named_groups: None,
                     })
-                    .is_none()
+                    .is_err()
             );
         }
 
@@ -303,7 +316,7 @@ mod sni_resolver {
                         certificate_authorities: None,
                         named_groups: None,
                     })
-                    .is_none()
+                    .is_err()
             );
         }
     }

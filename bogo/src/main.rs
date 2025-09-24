@@ -548,16 +548,21 @@ struct FixedSignatureSchemeServerCertResolver {
 }
 
 impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
-    fn resolve(&self, _client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-        let mut new = sign::CertifiedKey::new_unchecked(
-            self.cert_key.cert_chain.clone(),
-            Arc::new(FixedSignatureSchemeSigningKey {
-                key: self.cert_key.key.clone(),
-                scheme: self.scheme,
-            }),
-        );
-        new.ocsp = self.cert_key.ocsp.clone();
-        Some(Arc::new(new))
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+        if !client_hello
+            .signature_schemes()
+            .contains(&self.scheme)
+        {
+            return Err(Error::PeerIncompatible(
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ));
+        }
+
+        self.cert_key
+            .signer(&[self.scheme])
+            .ok_or(Error::PeerIncompatible(
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ))
     }
 }
 

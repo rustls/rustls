@@ -27,7 +27,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sealed::Sealed;
-use crate::sign::CertifiedKey;
+use crate::sign::CertifiedSigner;
 use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
@@ -384,28 +384,32 @@ impl ExpectClientHello {
             })
             .collect::<Vec<_>>();
 
-        input.sig_schemes.retain(|scheme| {
-            client_suites
-                .iter()
-                .any(|&suite| suite.usable_for_signature_algorithm(scheme.algorithm()))
-        });
+        if T::VERSION == ProtocolVersion::TLSv1_2 {
+            input.sig_schemes.retain(|scheme| {
+                client_suites
+                    .iter()
+                    .any(|&suite| suite.usable_for_signature_algorithm(scheme.algorithm()))
+            });
+        } else if T::VERSION == ProtocolVersion::TLSv1_3 {
+            input
+                .sig_schemes
+                .retain(SignatureScheme::supported_in_tls13);
+        }
 
         // Choose a certificate.
-        let cert_key = self
+        let signer = self
             .config
             .cert_resolver
             .resolve(&ClientHello::new(&input, cx.data.sni.as_ref(), T::VERSION))
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    Error::NoSuitableCertificate,
-                )
+            .map_err(|err| {
+                cx.common
+                    .send_fatal_alert(AlertDescription::HandshakeFailure, err)
             })?;
 
         let (suite, skxg) = self
             .choose_suite_and_kx_group(
                 suites,
-                cert_key.key.algorithm(),
+                signer.signer.scheme().algorithm(),
                 cx.common.protocol,
                 input
                     .client_hello
@@ -425,7 +429,7 @@ impl ExpectClientHello {
 
         suite
             .server_handler()
-            .handle_client_hello(suite, skxg, &cert_key, input, self, cx)
+            .handle_client_hello(suite, skxg, &signer, input, self, cx)
     }
 
     fn choose_suite_and_kx_group<T: Suite + 'static>(
@@ -580,7 +584,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         &self,
         suite: &'static T,
         kx_group: &'static dyn SupportedKxGroup,
-        cert_key: &CertifiedKey,
+        cert_key: &CertifiedSigner,
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
         cx: &mut ServerContext<'_>,

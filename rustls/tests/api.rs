@@ -13,6 +13,7 @@ use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+use rustls::sign::CertifiedSigner;
 use rustls::{
     AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ContentType, Error, HandshakeKind, HandshakeType, InconsistentKeys, KeyingMaterialExporter,
@@ -1674,9 +1675,8 @@ struct ServerCheckSni {
 }
 
 impl ResolvesServerCert for ServerCheckSni {
-    fn resolve(&self, client_hello: &ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, client_hello: &ClientHello) -> Result<CertifiedSigner, Error> {
         assert_eq!(client_hello.server_name().is_some(), self.expect_sni);
-
-        None
+        Err(Error::NoSuitableCertificate)
     }
 }

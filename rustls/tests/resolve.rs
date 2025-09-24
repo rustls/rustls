@@ -224,10 +224,10 @@ fn client_with_sni_disabled_does_not_send_sni() {
 struct ServerCheckNoSni {}
 
 impl ResolvesServerCert for ServerCheckNoSni {
-    fn resolve(&self, client_hello: &ClientHello) -> Option<Arc<CertifiedKey>> {
+    fn resolve(&self, client_hello: &ClientHello) -> Result<CertifiedSigner, Error> {
+        // We expect the client to not send SNI.
         assert!(client_hello.server_name().is_none());
-
-        None
+        Err(Error::NoSuitableCertificate)
     }
 }
 
