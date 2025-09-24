@@ -43,10 +43,8 @@ mod client {
         let server_raw_key = SubjectPublicKeyInfoDer::from_pem_file(server_pub_key)
             .expect("cannot open pub key file");
 
-        let certified_key = Arc::new(CertifiedKey::new_unchecked(
-            Arc::from([client_public_key_as_cert]),
-            client_private_key,
-        ));
+        let certified_key =
+            CertifiedKey::new_unchecked(Arc::from([client_public_key_as_cert]), client_private_key);
 
         ClientConfig::builder()
             .dangerous()
@@ -180,10 +178,8 @@ mod server {
             .expect("cannot load public key");
         let server_public_key_as_cert = CertificateDer::from(server_public_key.to_vec());
 
-        let certified_key = Arc::new(CertifiedKey::new_unchecked(
-            Arc::from([server_public_key_as_cert]),
-            server_private_key,
-        ));
+        let certified_key =
+            CertifiedKey::new_unchecked(Arc::from([server_public_key_as_cert]), server_private_key);
 
         let client_cert_verifier = Arc::new(SimpleRpkClientCertVerifier::new(vec![client_raw_key]));
         let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(certified_key));

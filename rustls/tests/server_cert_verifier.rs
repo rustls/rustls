@@ -222,7 +222,7 @@ fn client_can_request_certain_trusted_cas() {
     let server_config = Arc::new(
         ServerConfig::builder_with_provider(provider.clone().into())
             .with_no_client_auth()
-            .with_cert_resolver(Arc::new(cert_resolver.clone()))
+            .with_cert_resolver(Arc::new(cert_resolver))
             .unwrap(),
     );
 
@@ -629,8 +629,8 @@ fn client_check_server_valid_purpose() {
     );
 }
 
-#[derive(Debug, Clone)]
-pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, Arc<CertifiedKey>)>);
+#[derive(Debug)]
+pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, CertifiedKey)>);
 
 impl ResolvesServerCert for ResolvesCertChainByCaName {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {

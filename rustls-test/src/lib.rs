@@ -425,10 +425,7 @@ impl KeyType {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("client.spki.pem")).unwrap()
     }
 
-    pub fn certified_client_key(
-        &self,
-        provider: &CryptoProvider,
-    ) -> Result<Arc<CertifiedKey>, Error> {
+    pub fn certified_client_key(&self, provider: &CryptoProvider) -> Result<CertifiedKey, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.client_key())?;
@@ -436,16 +433,16 @@ impl KeyType {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
         let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new_unchecked(
+        Ok(CertifiedKey::new_unchecked(
             Arc::from([public_key_as_cert]),
             private_key,
-        )))
+        ))
     }
 
     pub fn certified_key_with_raw_pub_key(
         &self,
         provider: &CryptoProvider,
-    ) -> Result<Arc<CertifiedKey>, Error> {
+    ) -> Result<CertifiedKey, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.key())?;
@@ -453,20 +450,20 @@ impl KeyType {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
         let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new_unchecked(
+        Ok(CertifiedKey::new_unchecked(
             Arc::from([public_key_as_cert]),
             private_key,
-        )))
+        ))
     }
 
     pub fn certified_key_with_cert_chain(
         &self,
         provider: &CryptoProvider,
-    ) -> Result<Arc<CertifiedKey>, Error> {
+    ) -> Result<CertifiedKey, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.key())?;
-        Ok(Arc::new(CertifiedKey::new(self.chain(), private_key)?))
+        CertifiedKey::new(self.chain(), private_key)
     }
 
     fn crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
