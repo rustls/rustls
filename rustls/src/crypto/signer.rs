@@ -141,13 +141,13 @@ pub struct CertifiedSigner {
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[non_exhaustive]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct CertifiedKey {
     /// The certificate chain or raw public key.
     pub cert_chain: Arc<[CertificateDer<'static>]>,
 
     /// The certified key.
-    pub key: Arc<dyn SigningKey>,
+    pub key: Box<dyn SigningKey>,
 
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
@@ -187,7 +187,7 @@ impl CertifiedKey {
     /// that can provide a public key, including those provided by rustls itself.
     pub fn new(
         cert_chain: Arc<[CertificateDer<'static>]>,
-        key: Arc<dyn SigningKey>,
+        key: Box<dyn SigningKey>,
     ) -> Result<Self, Error> {
         let parsed = ParsedCertificate::try_from(
             cert_chain
@@ -217,7 +217,7 @@ impl CertifiedKey {
     /// certificates that are not fully standards compliant, but known to usable by the peer.
     pub fn new_unchecked(
         cert_chain: Arc<[CertificateDer<'static>]>,
-        key: Arc<dyn SigningKey>,
+        key: Box<dyn SigningKey>,
     ) -> Self {
         Self {
             cert_chain,

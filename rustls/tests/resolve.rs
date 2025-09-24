@@ -449,7 +449,7 @@ fn sni_resolver_works() {
     resolver
         .add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match"),
+            CertifiedKey::new(kt.chain(), signing_key).expect("keys match"),
         )
         .unwrap();
 
@@ -483,13 +483,13 @@ fn sni_resolver_works() {
 fn sni_resolver_rejects_wrong_names() {
     let kt = KeyType::Rsa2048;
     let mut resolver = ResolvesServerCertUsingSni::new();
-    let signing_key = kt.load_key(&provider::default_provider());
 
     assert_eq!(
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match")
+            CertifiedKey::new(kt.chain(), kt.load_key(&provider::default_provider()))
+                .expect("keys match")
         )
     );
     assert_eq!(
@@ -498,7 +498,8 @@ fn sni_resolver_rejects_wrong_names() {
         ))),
         resolver.add(
             DnsName::try_from("not-localhost").unwrap(),
-            CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match")
+            CertifiedKey::new(kt.chain(), kt.load_key(&provider::default_provider()))
+                .expect("keys match")
         )
     );
 }
@@ -514,7 +515,7 @@ fn sni_resolver_lower_cases_configured_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("LOCALHOST").unwrap(),
-            CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match")
+            CertifiedKey::new(kt.chain(), signing_key).expect("keys match")
         )
     );
 
@@ -544,7 +545,7 @@ fn sni_resolver_lower_cases_queried_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new(kt.chain(), signing_key.clone()).expect("keys match")
+            CertifiedKey::new(kt.chain(), signing_key).expect("keys match")
         )
     );
 
@@ -566,12 +567,11 @@ fn sni_resolver_lower_cases_queried_names() {
 fn sni_resolver_rejects_bad_certs() {
     let kt = KeyType::Rsa2048;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = kt.load_key(&provider::default_provider());
 
     assert_eq!(
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new_unchecked(Arc::from([]), signing_key.clone())
+            CertifiedKey::new_unchecked(Arc::from([]), kt.load_key(&provider::default_provider()))
         ),
         Err(ApiMisuse::EmptyCertificateChain.into()),
     );
@@ -581,7 +581,7 @@ fn sni_resolver_rejects_bad_certs() {
         Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new_unchecked(bad_chain, signing_key.clone())
+            CertifiedKey::new_unchecked(bad_chain, kt.load_key(&provider::default_provider()))
         )
     );
 }

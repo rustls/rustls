@@ -407,7 +407,7 @@ impl Debug for Ed25519Signer {
 fn load_key(
     provider: &CryptoProvider,
     der: PrivateKeyDer<'static>,
-) -> Result<Arc<dyn SigningKey>, Error> {
+) -> Result<Box<dyn SigningKey>, Error> {
     provider
         .key_provider
         .load_private_key(der)

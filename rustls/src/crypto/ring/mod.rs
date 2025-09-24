@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 use pki_types::PrivateKeyDer;
 pub(crate) use ring as ring_like;
 use webpki::ring as webpki_algs;
@@ -6,7 +8,6 @@ use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup}
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
-use crate::sync::Arc;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Error, Tls12CipherSuite, Tls13CipherSuite};
 
@@ -55,18 +56,18 @@ impl KeyProvider for Ring {
     fn load_private_key(
         &self,
         key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn SigningKey>, Error> {
+    ) -> Result<Box<dyn SigningKey>, Error> {
         if let Ok(rsa) = RsaSigningKey::try_from(&key_der) {
-            return Ok(Arc::new(rsa));
+            return Ok(Box::new(rsa));
         }
 
         if let Ok(ecdsa) = EcdsaSigningKey::try_from(&key_der) {
-            return Ok(Arc::new(ecdsa));
+            return Ok(Box::new(ecdsa));
         }
 
         if let PrivateKeyDer::Pkcs8(pkcs8) = key_der {
             if let Ok(eddsa) = Ed25519SigningKey::try_from(&pkcs8) {
-                return Ok(Arc::new(eddsa));
+                return Ok(Box::new(eddsa));
             }
         }
 
