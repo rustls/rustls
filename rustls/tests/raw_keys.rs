@@ -13,7 +13,7 @@ use super::provider;
 
 #[test]
 fn successful_raw_key_connection_and_correct_peer_certificates() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config_with_raw_key_support(*kt, &provider);
         let server_config = make_server_config_with_raw_key_support(*kt, &provider);
@@ -53,7 +53,7 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
 
 #[test]
 fn correct_certificate_type_extensions_from_client_hello() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config_with_raw_key_support(*kt, &provider);
         let mut server_config = make_server_config_with_raw_key_support(*kt, &provider);
@@ -72,7 +72,7 @@ fn correct_certificate_type_extensions_from_client_hello() {
 
 #[test]
 fn only_client_supports_raw_keys() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let client_config_rpk = make_client_config_with_raw_key_support(*kt, &provider);
         let server_config = make_server_config(*kt, &provider);
@@ -98,7 +98,7 @@ fn only_client_supports_raw_keys() {
 
 #[test]
 fn only_server_supports_raw_keys() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config(*kt, &provider.clone().with_only_tls13());
         let server_config_rpk = make_server_config_with_raw_key_support(*kt, &provider);

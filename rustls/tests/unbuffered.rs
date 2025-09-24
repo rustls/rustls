@@ -759,11 +759,11 @@ fn refresh_traffic_keys_automatically() {
     const CONFIDENTIALITY_LIMIT_PLUS_ONE: usize = CONFIDENTIALITY_LIMIT + 1;
 
     let client_config = ClientConfig::builder_with_provider(
-        aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider()),
+        aes_128_gcm_with_1024_confidentiality_limit(provider::DEFAULT_PROVIDER),
     )
     .finish(KeyType::Rsa2048);
 
-    let server_config = make_server_config(KeyType::Rsa2048, &provider::default_provider());
+    let server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut outcome = run(
         Arc::new(client_config),
         &mut NO_ACTIONS.clone(),
@@ -828,14 +828,14 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
     const CONFIDENTIALITY_LIMIT: usize = 1024;
     let provider = Arc::new(
         Arc::unwrap_or_clone(aes_128_gcm_with_1024_confidentiality_limit(dbg!(
-            provider::default_provider()
+            provider::DEFAULT_PROVIDER
         )))
         .with_only_tls12(),
     );
 
     let client_config = ClientConfig::builder_with_provider(provider).finish(KeyType::Ed25519);
 
-    let server_config = make_server_config(KeyType::Ed25519, &provider::default_provider());
+    let server_config = make_server_config(KeyType::Ed25519, &provider::DEFAULT_PROVIDER);
     let mut outcome = run(
         Arc::new(client_config),
         &mut NO_ACTIONS.clone(),
@@ -907,7 +907,7 @@ fn tls13_packed_handshake() {
 
     // regression test for https://github.com/rustls/rustls/issues/2040
     let client_config = ClientConfig::builder_with_provider(unsafe_plaintext_crypto_provider(
-        provider::default_provider(),
+        provider::DEFAULT_PROVIDER,
     ))
     .dangerous()
     .with_custom_certificate_verifier(Arc::new(MockServerVerifier::rejects_certificate(
@@ -938,7 +938,7 @@ fn tls13_packed_handshake() {
 fn rejects_junk() {
     let mut server = UnbufferedServerConnection::new(Arc::new(make_server_config(
         KeyType::Rsa2048,
-        &provider::default_provider(),
+        &provider::DEFAULT_PROVIDER,
     )))
     .unwrap();
 
@@ -1533,7 +1533,7 @@ fn test_secret_extraction_enabled() {
     // We support 3 different AEAD algorithms (AES-128-GCM mode, AES-256-GCM, and
     // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for suite in [
         SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_128_GCM_SHA256),
         SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_256_GCM_SHA384),
@@ -1615,7 +1615,7 @@ fn test_secret_extraction_enabled() {
 
 #[test]
 fn kernel_err_on_secret_extraction_not_enabled() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let server_config = make_server_config(KeyType::Rsa2048, &provider);
     let server_config = Arc::new(server_config);
 
@@ -1642,7 +1642,7 @@ fn kernel_err_on_secret_extraction_not_enabled() {
 
 #[test]
 fn kernel_err_on_handshake_not_complete() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.enable_secret_extraction = true;
     let server_config = Arc::new(server_config);
@@ -1667,7 +1667,7 @@ fn kernel_err_on_handshake_not_complete() {
 
 #[test]
 fn kernel_initial_traffic_secrets_match() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.enable_secret_extraction = true;
     let server_config = Arc::new(server_config);

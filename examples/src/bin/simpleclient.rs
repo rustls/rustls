@@ -20,7 +20,7 @@ fn main() {
     };
 
     let mut config = rustls::ClientConfig::builder_with_provider(
-        rustls::crypto::aws_lc_rs::default_provider().into(),
+        rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.into(),
     )
     .with_root_certificates(root_store)
     .with_no_client_auth()

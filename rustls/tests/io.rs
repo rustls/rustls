@@ -27,8 +27,10 @@ use super::provider;
 
 #[test]
 fn buffered_client_data_sent() {
-    let provider = provider::default_provider();
-    let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
+    let server_config = Arc::new(make_server_config(
+        KeyType::Rsa2048,
+        &provider::DEFAULT_PROVIDER,
+    ));
 
     for version_provider in [
         provider::DEFAULT_TLS12_PROVIDER,
@@ -50,8 +52,10 @@ fn buffered_client_data_sent() {
 
 #[test]
 fn buffered_server_data_sent() {
-    let provider = provider::default_provider();
-    let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
+    let server_config = Arc::new(make_server_config(
+        KeyType::Rsa2048,
+        &provider::DEFAULT_PROVIDER,
+    ));
 
     for version_provider in [
         provider::DEFAULT_TLS12_PROVIDER,
@@ -73,8 +77,10 @@ fn buffered_server_data_sent() {
 
 #[test]
 fn buffered_both_data_sent() {
-    let provider = provider::default_provider();
-    let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
+    let server_config = Arc::new(make_server_config(
+        KeyType::Rsa2048,
+        &provider::DEFAULT_PROVIDER,
+    ));
 
     for version_provider in [
         provider::DEFAULT_TLS12_PROVIDER,
@@ -113,7 +119,7 @@ fn buffered_both_data_sent() {
 
 #[test]
 fn server_respects_buffer_limit_pre_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     server.set_buffer_limit(Some(32));
 
@@ -141,7 +147,7 @@ fn server_respects_buffer_limit_pre_handshake() {
 
 #[test]
 fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     server.set_buffer_limit(Some(32));
 
@@ -165,7 +171,7 @@ fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
 
 #[test]
 fn server_respects_buffer_limit_post_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     // this test will vary in behaviour depending on the default suites
     do_handshake(&mut client, &mut server);
@@ -194,7 +200,7 @@ fn server_respects_buffer_limit_post_handshake() {
 
 #[test]
 fn client_respects_buffer_limit_pre_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     client.set_buffer_limit(Some(32));
 
@@ -222,7 +228,7 @@ fn client_respects_buffer_limit_pre_handshake() {
 
 #[test]
 fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     client.set_buffer_limit(Some(32));
 
@@ -246,7 +252,7 @@ fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
 
 #[test]
 fn client_respects_buffer_limit_post_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     do_handshake(&mut client, &mut server);
     client.set_buffer_limit(Some(48));
@@ -275,7 +281,7 @@ fn client_respects_buffer_limit_post_handshake() {
 #[test]
 fn client_detects_broken_write_vectored_impl() {
     // see https://github.com/rustls/rustls/issues/2316
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let err = client
         .write_tls(&mut BrokenWriteVectored)
         .unwrap_err();
@@ -303,7 +309,7 @@ fn client_detects_broken_write_vectored_impl() {
 
 #[test]
 fn buf_read() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     do_handshake(&mut client, &mut server);
 
@@ -334,35 +340,35 @@ fn buf_read() {
 
 #[test]
 fn server_read_returns_wouldblock_when_no_data() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert!(matches!(server.reader().read(&mut [0u8; 1]),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
 #[test]
 fn client_read_returns_wouldblock_when_no_data() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert!(matches!(client.reader().read(&mut [0u8; 1]),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
 #[test]
 fn server_fill_buf_returns_wouldblock_when_no_data() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert!(matches!(server.reader().fill_buf(),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
 #[test]
 fn client_fill_buf_returns_wouldblock_when_no_data() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert!(matches!(client.reader().fill_buf(),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
 #[test]
 fn new_server_returns_initial_io_state() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let io_state = server.process_new_packets().unwrap();
     println!("IoState is Debug {io_state:?}");
     assert_eq!(io_state.plaintext_bytes_to_read(), 0);
@@ -372,7 +378,7 @@ fn new_server_returns_initial_io_state() {
 
 #[test]
 fn new_client_returns_initial_io_state() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let io_state = client.process_new_packets().unwrap();
     println!("IoState is Debug {io_state:?}");
     assert_eq!(io_state.plaintext_bytes_to_read(), 0);
@@ -382,7 +388,7 @@ fn new_client_returns_initial_io_state() {
 
 #[test]
 fn client_complete_io_for_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     assert!(client.is_handshaking());
     let (rdlen, wrlen) = client
@@ -395,7 +401,7 @@ fn client_complete_io_for_handshake() {
 
 #[test]
 fn buffered_client_complete_io_for_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     assert!(client.is_handshaking());
     let (rdlen, wrlen) = client
@@ -408,7 +414,7 @@ fn buffered_client_complete_io_for_handshake() {
 
 #[test]
 fn client_complete_io_for_handshake_eof() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut input = io::Cursor::new(Vec::new());
 
     assert!(client.is_handshaking());
@@ -420,7 +426,7 @@ fn client_complete_io_for_handshake_eof() {
 
 #[test]
 fn client_complete_io_for_write() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
 
@@ -450,7 +456,7 @@ fn client_complete_io_for_write() {
 
 #[test]
 fn client_complete_io_with_nonblocking_io() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     // absolutely no progress writing ClientHello
     assert_eq!(
@@ -462,7 +468,7 @@ fn client_complete_io_with_nonblocking_io() {
     );
 
     // a little progress writing ClientHello
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert_eq!(
         client
             .complete_io(&mut TestNonBlockIo {
@@ -474,7 +480,7 @@ fn client_complete_io_with_nonblocking_io() {
     );
 
     // complete writing ClientHello
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert_eq!(
         client
             .complete_io(&mut TestNonBlockIo {
@@ -487,7 +493,7 @@ fn client_complete_io_with_nonblocking_io() {
     );
 
     // complete writing ClientHello, partial read of ServerHello
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let (rd, wr) = dbg!(client.complete_io(&mut TestNonBlockIo {
         writes: vec![4096],
         reads: vec![vec![ContentType::Handshake.into()]],
@@ -497,7 +503,7 @@ fn client_complete_io_with_nonblocking_io() {
     assert!(wr > 1);
 
     // data phase:
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
     // read
@@ -543,7 +549,7 @@ fn client_complete_io_with_nonblocking_io() {
 
 #[test]
 fn buffered_client_complete_io_for_write() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
 
@@ -573,7 +579,7 @@ fn buffered_client_complete_io_for_write() {
 
 #[test]
 fn client_complete_io_for_read() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
 
@@ -595,7 +601,7 @@ fn client_complete_io_for_read() {
 
 #[test]
 fn server_complete_io_for_handshake() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
 
@@ -611,7 +617,7 @@ fn server_complete_io_for_handshake() {
 
 #[test]
 fn server_complete_io_for_handshake_eof() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     let mut input = io::Cursor::new(Vec::new());
 
     assert!(server.is_handshaking());
@@ -623,7 +629,7 @@ fn server_complete_io_for_handshake_eof() {
 
 #[test]
 fn server_complete_io_for_write() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
 
@@ -652,7 +658,7 @@ fn server_complete_io_for_write() {
 
 #[test]
 fn server_complete_io_for_write_eof() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
 
@@ -709,7 +715,7 @@ impl<const N: usize> std::io::Read for EofWriter<N> {
 
 #[test]
 fn server_complete_io_for_read() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
 
@@ -731,7 +737,7 @@ fn server_complete_io_for_read() {
 
 #[test]
 fn server_complete_io_for_handshake_ending_with_alert() {
-    let (client_config, server_config) = make_disjoint_suite_configs(provider::default_provider());
+    let (client_config, server_config) = make_disjoint_suite_configs(provider::DEFAULT_PROVIDER);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     assert!(server.is_handshaking());
@@ -766,7 +772,7 @@ enum StreamKind {
 }
 
 fn test_client_stream_write(stream_kind: StreamKind) {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let data = b"hello";
@@ -783,7 +789,7 @@ fn test_client_stream_write(stream_kind: StreamKind) {
 }
 
 fn test_server_stream_write(stream_kind: StreamKind) {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let data = b"hello";
@@ -835,7 +841,7 @@ fn test_stream_read(read_kind: ReadKind, mut stream: impl BufRead, data: &[u8]) 
 }
 
 fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let data = b"world";
@@ -856,7 +862,7 @@ fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
 }
 
 fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let (mut client, mut server) = make_pair(*kt, &provider);
         let data = b"world";
@@ -878,7 +884,7 @@ fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
 
 #[test]
 fn test_client_write_and_vectored_write_equivalence() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
     const N: usize = 1000;
@@ -931,7 +937,7 @@ impl io::Write for FailsWrites {
 
 #[test]
 fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
     let mut pipe = FailsWrites {
@@ -951,7 +957,7 @@ fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
 
 #[test]
 fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
     let mut pipe = FailsWrites {
@@ -969,7 +975,7 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
 
 #[test]
 fn client_stream_handshake_error() {
-    let (client_config, server_config) = make_disjoint_suite_configs(provider::default_provider());
+    let (client_config, server_config) = make_disjoint_suite_configs(provider::DEFAULT_PROVIDER);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     {
@@ -992,7 +998,7 @@ fn client_stream_handshake_error() {
 
 #[test]
 fn client_streamowned_handshake_error() {
-    let (client_config, server_config) = make_disjoint_suite_configs(provider::default_provider());
+    let (client_config, server_config) = make_disjoint_suite_configs(provider::DEFAULT_PROVIDER);
     let (client, mut server) = make_pair_for_configs(client_config, server_config);
 
     let pipe = OtherSession::new_fails(&mut server);
@@ -1015,7 +1021,7 @@ fn client_streamowned_handshake_error() {
 
 #[test]
 fn server_stream_handshake_error() {
-    let (client_config, server_config) = make_disjoint_suite_configs(provider::default_provider());
+    let (client_config, server_config) = make_disjoint_suite_configs(provider::DEFAULT_PROVIDER);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     client
@@ -1038,7 +1044,7 @@ fn server_stream_handshake_error() {
 
 #[test]
 fn server_streamowned_handshake_error() {
-    let (client_config, server_config) = make_disjoint_suite_configs(provider::default_provider());
+    let (client_config, server_config) = make_disjoint_suite_configs(provider::DEFAULT_PROVIDER);
     let (mut client, server) = make_pair_for_configs(client_config, server_config);
 
     client
@@ -1059,7 +1065,7 @@ fn server_streamowned_handshake_error() {
 
 #[test]
 fn vectored_write_for_server_appdata() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
     server
@@ -1084,7 +1090,7 @@ fn vectored_write_for_server_appdata() {
 
 #[test]
 fn vectored_write_for_client_appdata() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
     client
@@ -1109,7 +1115,7 @@ fn vectored_write_for_client_appdata() {
 
 #[test]
 fn vectored_write_for_server_handshake_with_half_rtt_data() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.send_half_rtt_data = true;
     let (mut client, mut server) = make_pair_for_configs(
@@ -1155,7 +1161,7 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
 
 fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     let (mut client, mut server) = make_pair_for_configs(
-        make_client_config_with_auth(KeyType::Rsa2048, &provider::default_provider()),
+        make_client_config_with_auth(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER),
         server_config,
     );
 
@@ -1203,7 +1209,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
 fn vectored_write_for_server_handshake_no_half_rtt_with_client_auth() {
     let mut server_config = make_server_config_with_mandatory_client_auth(
         KeyType::Rsa2048,
-        &provider::default_provider(),
+        &provider::DEFAULT_PROVIDER,
     );
     server_config.send_half_rtt_data = true; // ask even though it will be ignored
     check_half_rtt_does_not_work(server_config);
@@ -1211,14 +1217,14 @@ fn vectored_write_for_server_handshake_no_half_rtt_with_client_auth() {
 
 #[test]
 fn vectored_write_for_server_handshake_no_half_rtt_by_default() {
-    let server_config = make_server_config(KeyType::Rsa2048, &provider::default_provider());
+    let server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert!(!server_config.send_half_rtt_data);
     check_half_rtt_does_not_work(server_config);
 }
 
 #[test]
 fn vectored_write_for_client_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     client
         .writer()
@@ -1255,7 +1261,7 @@ fn vectored_write_for_client_handshake() {
 
 #[test]
 fn vectored_write_with_slow_client() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     client.set_buffer_limit(Some(32));
 
@@ -1317,7 +1323,7 @@ fn test_client_mtu_reduction() {
         collector.writevs[0].clone()
     }
 
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let mut client_config = make_client_config(*kt, &provider);
         client_config.max_fragment_size = Some(64);
@@ -1332,7 +1338,7 @@ fn test_client_mtu_reduction() {
 
 #[test]
 fn test_server_mtu_reduction() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.max_fragment_size = Some(64);
     server_config.send_half_rtt_data = true;
@@ -1382,7 +1388,7 @@ fn test_server_mtu_reduction() {
 }
 
 fn check_client_max_fragment_size(size: usize) -> Option<Error> {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut client_config = make_client_config(KeyType::Ed25519, &provider);
     client_config.max_fragment_size = Some(size);
     ClientConnection::new(Arc::new(client_config), server_name("localhost")).err()
@@ -1412,7 +1418,7 @@ fn bad_client_max_fragment_sizes() {
 #[test]
 fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
     // general exercising of msgs::fragmenter and msgs::deframer
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         for version_provider in [
             provider::DEFAULT_TLS12_PROVIDER,
@@ -1450,7 +1456,7 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
 fn test_acceptor() {
     use rustls::server::Acceptor;
 
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let client_config = Arc::new(make_client_config(KeyType::Ed25519, &provider));
     let mut client = ClientConnection::new(client_config, server_name("localhost")).unwrap();
     let mut buf = Vec::new();
@@ -1469,7 +1475,7 @@ fn test_acceptor() {
     );
     assert_eq!(
         ch.named_groups().unwrap(),
-        provider::default_provider()
+        provider::DEFAULT_PROVIDER
             .kx_groups
             .iter()
             .map(|kx| kx.name())
@@ -1600,7 +1606,7 @@ fn test_received_plaintext_backpressure() {
 
 fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
 
     let server_config = Arc::new(
         ServerConfig::builder_with_provider(
@@ -1698,19 +1704,19 @@ fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
 
 #[test]
 fn server_flush_does_nothing() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert!(matches!(server.writer().flush(), Ok(())));
 }
 
 #[test]
 fn client_flush_does_nothing() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert!(matches!(client.writer().flush(), Ok(())));
 }
 
 #[test]
 fn server_close_notify() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let kt = KeyType::Rsa2048;
     let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt, &provider));
 
@@ -1753,7 +1759,7 @@ fn server_close_notify() {
 
 #[test]
 fn client_close_notify() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let kt = KeyType::Rsa2048;
     let server_config = Arc::new(make_server_config_with_mandatory_client_auth(kt, &provider));
 
@@ -1796,7 +1802,7 @@ fn client_close_notify() {
 
 #[test]
 fn server_closes_uncleanly() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let kt = KeyType::Rsa2048;
     let server_config = Arc::new(make_server_config(kt, &provider));
 
@@ -1845,7 +1851,7 @@ fn server_closes_uncleanly() {
 
 #[test]
 fn client_closes_uncleanly() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let kt = KeyType::Rsa2048;
     let server_config = Arc::new(make_server_config(kt, &provider));
 
@@ -1896,7 +1902,7 @@ fn client_closes_uncleanly() {
 fn test_complete_io_errors_if_close_notify_received_too_early() {
     let mut server = ServerConnection::new(Arc::new(make_server_config(
         KeyType::Rsa2048,
-        &provider::default_provider(),
+        &provider::DEFAULT_PROVIDER,
     )))
     .unwrap();
     let client_hello_followed_by_close_notify_alert = b"\
@@ -1927,7 +1933,7 @@ fn test_complete_io_errors_if_close_notify_received_too_early() {
 
 #[test]
 fn test_complete_io_with_no_io_needed() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
     client
         .writer()
@@ -1965,7 +1971,7 @@ fn test_complete_io_with_no_io_needed() {
 
 #[test]
 fn test_junk_after_close_notify_received() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
     client
         .writer()
@@ -2008,7 +2014,7 @@ fn test_junk_after_close_notify_received() {
 
 #[test]
 fn test_data_after_close_notify_is_ignored() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
     client
@@ -2040,7 +2046,7 @@ fn test_data_after_close_notify_is_ignored() {
 
 #[test]
 fn test_close_notify_sent_prior_to_handshake_complete() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     client.send_close_notify();
     assert_eq!(
         do_handshake_until_error(&mut client, &mut server),
@@ -2052,7 +2058,7 @@ fn test_close_notify_sent_prior_to_handshake_complete() {
 
 #[test]
 fn test_subsequent_close_notify_ignored() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     client.send_close_notify();
     assert!(transfer(&mut client, &mut server) > 0);
 
@@ -2063,7 +2069,7 @@ fn test_subsequent_close_notify_ignored() {
 
 #[test]
 fn test_second_close_notify_after_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
     client.send_close_notify();
     assert!(transfer(&mut client, &mut server) > 0);
@@ -2076,7 +2082,7 @@ fn test_second_close_notify_after_handshake() {
 
 #[test]
 fn test_read_tls_artificial_eof_after_close_notify() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
     client.send_close_notify();
     assert!(transfer(&mut client, &mut server) > 0);

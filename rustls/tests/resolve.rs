@@ -28,7 +28,7 @@ use crate::common::provider_with_one_suite;
 
 #[test]
 fn server_cert_resolve_with_sni() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config(*kt, &provider);
         let mut server_config = make_server_config(*kt, &provider);
@@ -50,7 +50,7 @@ fn server_cert_resolve_with_sni() {
 
 #[test]
 fn server_cert_resolve_with_alpn() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let mut client_config = make_client_config(*kt, &provider);
         client_config.alpn_protocols = vec!["foo".into(), "bar".into()];
@@ -72,7 +72,7 @@ fn server_cert_resolve_with_alpn() {
 
 #[test]
 fn server_cert_resolve_with_named_groups() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config(*kt, &provider);
 
@@ -96,7 +96,7 @@ fn server_cert_resolve_with_named_groups() {
 
 #[test]
 fn client_trims_terminating_dot() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config(*kt, &provider);
         let mut server_config = make_server_config(*kt, &provider);
@@ -121,11 +121,11 @@ fn check_sigalgs_reduced_by_ciphersuite(
     expected_sigalgs: Vec<SignatureScheme>,
 ) {
     let client_config = ClientConfig::builder_with_provider(
-        provider_with_one_suite(&provider::default_provider(), find_suite(suite)).into(),
+        provider_with_one_suite(&provider::DEFAULT_PROVIDER, find_suite(suite)).into(),
     )
     .finish(kt);
 
-    let mut server_config = make_server_config(kt, &provider::default_provider());
+    let mut server_config = make_server_config(kt, &provider::DEFAULT_PROVIDER);
 
     server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
         expected_sigalgs: Some(expected_sigalgs),
@@ -199,7 +199,7 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
 
 #[test]
 fn client_with_sni_disabled_does_not_send_sni() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let mut server_config = make_server_config(*kt, &provider);
         server_config.cert_resolver = Arc::new(ServerCheckNoSni {});
@@ -352,7 +352,7 @@ fn default_signature_schemes(version: ProtocolVersion) -> Vec<SignatureScheme> {
 fn client_cert_resolve_default() {
     // Test that in the default configuration that a client cert resolver gets the expected
     // CA subject hints, and supported signature algorithms.
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for key_type in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config_with_mandatory_client_auth(
             *key_type, &provider,
@@ -374,7 +374,7 @@ fn client_cert_resolve_default() {
 fn client_cert_resolve_server_no_hints() {
     // Test that a server can provide no hints and the client cert resolver gets the expected
     // arguments.
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for key_type in KeyType::all_for_provider(&provider) {
         // Build a verifier with no hint subjects.
         let verifier = webpki_client_verifier_builder(key_type.client_root_store(), &provider)
@@ -389,7 +389,7 @@ fn client_cert_resolve_server_no_hints() {
 fn client_cert_resolve_server_added_hint() {
     // Test that a server can add an extra subject above/beyond those found in its trust store
     // and the client cert resolver gets the expected arguments.
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let extra_name = b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponyland IDK CA".to_vec();
     for key_type in KeyType::all_for_provider(&provider) {
         let expected_hint_subjects = vec![
@@ -410,7 +410,7 @@ fn client_cert_resolve_server_added_hint() {
 #[test]
 fn server_exposes_offered_sni_even_if_resolver_fails() {
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let resolver = rustls::server::ResolvesServerCertUsingSni::new();
 
     let mut server_config = make_server_config(kt, &provider);
@@ -445,7 +445,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
 #[test]
 fn sni_resolver_works() {
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
     let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
     let signing_key: Arc<dyn SigningKey> = Arc::new(signing_key);
@@ -512,7 +512,7 @@ fn sni_resolver_rejects_wrong_names() {
 #[test]
 fn sni_resolver_lower_cases_configured_names() {
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
     let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
     let signing_key: Arc<dyn SigningKey> = Arc::new(signing_key);
@@ -543,7 +543,7 @@ fn sni_resolver_lower_cases_configured_names() {
 fn sni_resolver_lower_cases_queried_names() {
     // actually, the handshake parser does this, but the effect is the same.
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
     let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
     let signing_key: Arc<dyn SigningKey> = Arc::new(signing_key);

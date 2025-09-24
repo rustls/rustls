@@ -101,11 +101,10 @@ mod tests {
 
     #[test]
     fn test_client_rejects_hrr_with_varied_session_id() {
-        let config =
-            ClientConfig::builder_with_provider(super::provider::default_provider().into())
-                .with_root_certificates(roots())
-                .with_no_client_auth()
-                .unwrap();
+        let config = ClientConfig::builder_with_provider(super::provider::DEFAULT_PROVIDER.into())
+            .with_root_certificates(roots())
+            .with_no_client_auth()
+            .unwrap();
         let mut conn =
             ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())
                 .unwrap();
@@ -139,7 +138,7 @@ mod tests {
     #[test]
     fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
         let mut config =
-            ClientConfig::builder_with_provider(super::provider::default_provider().into())
+            ClientConfig::builder_with_provider(super::provider::DEFAULT_PROVIDER.into())
                 .with_root_certificates(roots())
                 .with_no_client_auth()
                 .unwrap();
@@ -458,7 +457,7 @@ mod tests {
     }
 
     fn client_certified_key() -> CertifiedKey {
-        let key = super::provider::default_provider()
+        let key = super::provider::DEFAULT_PROVIDER
             .key_provider
             .load_private_key(client_key())
             .unwrap();
@@ -483,7 +482,7 @@ mod tests {
         // creation of fake server messages.
         CryptoProvider {
             kx_groups: Cow::Owned(vec![super::provider::kx_group::X25519]),
-            ..super::provider::default_provider()
+            ..super::provider::DEFAULT_PROVIDER
         }
     }
 
@@ -620,7 +619,7 @@ mod tests {
 #[test]
 fn hybrid_kx_component_share_offered_if_supported_separately() {
     let ch = client_hello_sent_for_config(
-        ClientConfig::builder_with_provider(crate::crypto::aws_lc_rs::default_provider().into())
+        ClientConfig::builder_with_provider(crate::crypto::aws_lc_rs::DEFAULT_PROVIDER.into())
             .with_root_certificates(roots())
             .with_no_client_auth()
             .unwrap(),
@@ -643,7 +642,7 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
     use crate::crypto::aws_lc_rs;
     let provider = CryptoProvider {
         kx_groups: Cow::Owned(vec![aws_lc_rs::kx_group::X25519MLKEM768]),
-        ..aws_lc_rs::default_provider()
+        ..aws_lc_rs::DEFAULT_PROVIDER
     };
     let ch = client_hello_sent_for_config(
         ClientConfig::builder_with_provider(provider.into())

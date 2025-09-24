@@ -24,14 +24,9 @@ pub(crate) mod ticketer;
 pub(crate) mod tls12;
 pub(crate) mod tls13;
 
-/// A `CryptoProvider` backed by the [*ring*] crate.
+/// The default `CryptoProvider` backed by [*ring*].
 ///
 /// [*ring*]: https://github.com/briansmith/ring
-pub fn default_provider() -> CryptoProvider<'static> {
-    DEFAULT_PROVIDER
-}
-
-/// The default `CryptoProvider` backed by *ring*.
 pub const DEFAULT_PROVIDER: CryptoProvider<'static> = CryptoProvider {
     tls12_cipher_suites: Cow::Borrowed(DEFAULT_TLS12_CIPHER_SUITES),
     tls13_cipher_suites: Cow::Borrowed(DEFAULT_TLS13_CIPHER_SUITES),

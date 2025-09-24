@@ -38,7 +38,7 @@ fn server_config_with_verifier(
     kt: KeyType,
     client_cert_verifier: MockClientVerifier,
 ) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider::default_provider().into())
+    ServerConfig::builder_with_provider(provider::DEFAULT_PROVIDER.into())
         .with_client_cert_verifier(Arc::new(client_cert_verifier))
         .with_single_cert(kt.chain(), kt.key())
         .unwrap()
@@ -47,7 +47,7 @@ fn server_config_with_verifier(
 #[test]
 // Happy path, we resolve to a root, it is verified OK, should be able to connect
 fn client_verifier_works() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
         let server_config = server_config_with_verifier(*kt, client_verifier);
@@ -69,7 +69,7 @@ fn client_verifier_works() {
 // Server offers no verification schemes
 #[test]
 fn client_verifier_no_schemes() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let mut client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
         client_verifier.offered_schemes = Some(vec![]);
@@ -97,7 +97,7 @@ fn client_verifier_no_schemes() {
 // If we do have a root, we must do auth
 #[test]
 fn client_verifier_no_auth_yes_root() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let client_verifier = MockClientVerifier::new(ver_unreachable, *kt, &provider);
 
@@ -131,7 +131,7 @@ fn client_verifier_no_auth_yes_root() {
 #[test]
 // Triple checks we propagate the rustls::Error through
 fn client_verifier_fails_properly() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let client_verifier = MockClientVerifier::new(ver_err, *kt, &provider);
         let server_config = server_config_with_verifier(*kt, client_verifier);
@@ -160,7 +160,7 @@ fn client_verifier_fails_properly() {
 /// certificate and not being given one.
 #[test]
 fn server_allow_any_anonymous_or_authenticated_client() {
-    let provider = Arc::new(provider::default_provider());
+    let provider = Arc::new(provider::DEFAULT_PROVIDER);
     let kt = KeyType::Rsa2048;
     for client_cert_chain in [None, Some(kt.client_chain())] {
         let client_auth = webpki_client_verifier_builder(kt.client_root_store(), &provider)
@@ -207,7 +207,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
 
 #[test]
 fn client_auth_works() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config_with_mandatory_client_auth(
             *kt, &provider,
@@ -227,7 +227,7 @@ fn client_auth_works() {
 
 #[test]
 fn client_mandatory_auth_client_revocation_works() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         // Create a server configuration that includes a CRL that specifies the client certificate
         // is revoked.
@@ -304,7 +304,7 @@ fn client_mandatory_auth_client_revocation_works() {
 
 #[test]
 fn client_mandatory_auth_intermediate_revocation_works() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         // Create a server configuration that includes a CRL that specifies the intermediate certificate
         // is revoked. We check the full chain for revocation status (default), and allow unknown
@@ -359,7 +359,7 @@ fn client_mandatory_auth_intermediate_revocation_works() {
 
 #[test]
 fn client_optional_auth_client_revocation_works() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         // Create a server configuration that includes a CRL that specifies the client certificate
         // is revoked.

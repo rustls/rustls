@@ -249,7 +249,7 @@ mod tests {
     }
 
     fn server_certified_key() -> CertifiedKey {
-        let key = super::provider::default_provider()
+        let key = super::provider::DEFAULT_PROVIDER
             .key_provider
             .load_private_key(server_key())
             .unwrap();
@@ -280,7 +280,7 @@ mod tests {
         CryptoProvider {
             kx_groups: Cow::Owned(vec![FAKE_FFDHE_GROUP]),
             tls12_cipher_suites: Cow::Owned(vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256]),
-            ..super::provider::default_provider()
+            ..super::provider::DEFAULT_PROVIDER
         }
     }
 

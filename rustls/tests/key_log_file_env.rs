@@ -39,7 +39,7 @@ mod common;
 #[test]
 fn exercise_key_log_file_for_client() {
     serialized(|| {
-        let provider = provider::default_provider();
+        let provider = provider::DEFAULT_PROVIDER;
         let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
         unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
 
@@ -65,8 +65,7 @@ fn exercise_key_log_file_for_client() {
 #[test]
 fn exercise_key_log_file_for_server() {
     serialized(|| {
-        let provider = provider::default_provider();
-        let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+        let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
         unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
         server_config.key_log = Arc::new(rustls::KeyLogFile::new());
