@@ -26,15 +26,6 @@ pub struct RsaSigningKey {
     key: Arc<RsaKeyPair>,
 }
 
-static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
-    SignatureScheme::RSA_PSS_SHA512,
-    SignatureScheme::RSA_PSS_SHA384,
-    SignatureScheme::RSA_PSS_SHA256,
-    SignatureScheme::RSA_PKCS1_SHA512,
-    SignatureScheme::RSA_PKCS1_SHA384,
-    SignatureScheme::RSA_PKCS1_SHA256,
-];
-
 impl RsaSigningKey {
     /// Make a new `RsaSigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
@@ -56,11 +47,20 @@ impl RsaSigningKey {
             key: Arc::new(key_pair),
         })
     }
+
+    const SCHEMES: &[SignatureScheme] = &[
+        SignatureScheme::RSA_PSS_SHA512,
+        SignatureScheme::RSA_PSS_SHA384,
+        SignatureScheme::RSA_PSS_SHA256,
+        SignatureScheme::RSA_PKCS1_SHA512,
+        SignatureScheme::RSA_PKCS1_SHA384,
+        SignatureScheme::RSA_PKCS1_SHA256,
+    ];
 }
 
 impl SigningKey for RsaSigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
-        ALL_RSA_SCHEMES
+        Self::SCHEMES
             .iter()
             .find(|scheme| offered.contains(scheme))
             .map(|scheme| RsaSigner::new(self.key.clone(), *scheme))
