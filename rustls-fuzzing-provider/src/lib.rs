@@ -62,7 +62,7 @@ pub fn server_verifier() -> Arc<dyn ServerCertVerifier> {
 
 pub fn server_cert_resolver() -> Arc<dyn server::ResolvesServerCert> {
     let cert = CertificateDer::from(&include_bytes!("../../test-ca/ecdsa-p256/end.der")[..]);
-    let certified_key = sign::CertifiedKey::new_unchecked(vec![cert], Arc::new(SigningKey));
+    let certified_key = sign::CertifiedKey::new_unchecked(Arc::from([cert]), Arc::new(SigningKey));
     Arc::new(DummyCert(certified_key.into()))
 }
 

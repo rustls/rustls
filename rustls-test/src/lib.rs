@@ -364,12 +364,13 @@ impl KeyType {
 
     pub fn ca_cert(&self) -> CertificateDer<'_> {
         self.chain()
-            .into_iter()
+            .iter()
             .next_back()
+            .cloned()
             .expect("cert chain cannot be empty")
     }
 
-    pub fn chain(&self) -> Vec<CertificateDer<'static>> {
+    pub fn chain(&self) -> Arc<[CertificateDer<'static>]> {
         CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
             .map(|result| result.unwrap())
             .collect()
@@ -392,7 +393,7 @@ impl KeyType {
             .into()
     }
 
-    pub fn client_chain(&self) -> Vec<CertificateDer<'static>> {
+    pub fn client_chain(&self) -> Arc<[CertificateDer<'static>]> {
         CertificateDer::pem_slice_iter(self.bytes_for("client.fullchain"))
             .map(|result| result.unwrap())
             .collect()
@@ -436,7 +437,7 @@ impl KeyType {
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
         let public_key_as_cert = CertificateDer::from(public_key.to_vec());
         Ok(Arc::new(CertifiedKey::new_unchecked(
-            vec![public_key_as_cert],
+            Arc::from([public_key_as_cert]),
             private_key,
         )))
     }
@@ -453,7 +454,7 @@ impl KeyType {
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
         let public_key_as_cert = CertificateDer::from(public_key.to_vec());
         Ok(Arc::new(CertifiedKey::new_unchecked(
-            vec![public_key_as_cert],
+            Arc::from([public_key_as_cert]),
             private_key,
         )))
     }

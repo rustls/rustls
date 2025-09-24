@@ -63,7 +63,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// key for the end-entity certificate from the `cert_chain`.
     pub fn with_single_cert(
         self,
-        cert_chain: Vec<CertificateDer<'static>>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
         let certified_key = CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
@@ -85,7 +85,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// key for the end-entity certificate from the `cert_chain`.
     pub fn with_single_cert_with_ocsp(
         self,
-        cert_chain: Vec<CertificateDer<'static>>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
         key_der: PrivateKeyDer<'static>,
         ocsp: Vec<u8>,
     ) -> Result<ServerConfig, Error> {

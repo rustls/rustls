@@ -798,8 +798,10 @@ impl Parameters {
             ClientAuth::Yes => {
                 let roots = self.proto.key_type.chain();
                 let mut client_auth_roots = RootCertStore::empty();
-                for root in roots {
-                    client_auth_roots.add(root).unwrap();
+                for root in &*roots {
+                    client_auth_roots
+                        .add(root.clone())
+                        .unwrap();
                 }
                 WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), &provider)
                     .build()

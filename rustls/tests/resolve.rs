@@ -575,12 +575,12 @@ fn sni_resolver_rejects_bad_certs() {
     assert_eq!(
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new_unchecked(vec![], signing_key.clone())
+            CertifiedKey::new_unchecked(Arc::from([]), signing_key.clone())
         ),
         Err(ApiMisuse::EmptyCertificateChain.into()),
     );
 
-    let bad_chain = vec![CertificateDer::from(vec![0xa0])];
+    let bad_chain = Arc::from([CertificateDer::from(vec![0xa0])]);
     assert_eq!(
         Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(

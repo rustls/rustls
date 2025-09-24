@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
     let certs = CertificateDer::pem_file_iter(cert_file)
         .expect("cannot open certificate file")
         .map(|cert| cert.unwrap())
-        .collect::<Vec<_>>();
+        .collect::<Arc<[_]>>();
     let private_key =
         PrivateKeyDer::from_pem_file(private_key_file).expect("cannot open private key file");
 

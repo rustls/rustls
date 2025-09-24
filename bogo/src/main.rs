@@ -772,7 +772,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
 
     let mut cfg = ServerConfig::builder_with_provider(opts.provider().into())
         .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(certs, key, opts.server_ocsp_response.clone())
+        .with_single_cert_with_ocsp(Arc::from(certs), key, opts.server_ocsp_response.clone())
         .unwrap();
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
@@ -953,7 +953,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .expect("cannot load private key");
 
                 resolver.set_default(
-                    sign::CertifiedKey::new(certs, key).expect("keys match"),
+                    sign::CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
                     cred,
                 )
             }
@@ -966,7 +966,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .expect("cannot load private key");
 
                 resolver.add(
-                    sign::CertifiedKey::new(certs, key).expect("keys match"),
+                    sign::CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
                     cred,
                 );
             }
