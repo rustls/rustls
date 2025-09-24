@@ -618,7 +618,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let (versions, provider) = args.provider();
     let mut config = rustls::ServerConfig::builder_with_provider(provider.into())
         .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(Arc::from(certs), privkey, ocsp)
+        .with_single_cert_with_ocsp(Arc::from(certs), privkey, Arc::from(ocsp))
         .expect("bad certificates/private key");
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());

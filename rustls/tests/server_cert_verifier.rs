@@ -182,7 +182,7 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     for version_provider in all_versions(&provider) {
         let server_config = ServerConfig::builder_with_provider(provider.clone().into())
             .with_no_client_auth()
-            .with_single_cert_with_ocsp(kt.chain(), kt.key(), ocsp_response.to_vec())
+            .with_single_cert_with_ocsp(kt.chain(), kt.key(), Arc::from(&ocsp_response[..]))
             .unwrap();
 
         let client_config = ClientConfig::builder_with_provider(version_provider.into())

@@ -87,7 +87,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         self,
         cert_chain: Arc<[CertificateDer<'static>]>,
         key_der: PrivateKeyDer<'static>,
-        ocsp: Vec<u8>,
+        ocsp: Arc<[u8]>,
     ) -> Result<ServerConfig, Error> {
         let mut certified_key =
             CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
