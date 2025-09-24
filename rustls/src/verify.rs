@@ -352,6 +352,9 @@ pub struct SignatureVerificationInput<'a> {
     pub signature: &'a DigitallySignedStruct,
 }
 
+/// Public key used to verify a signature.
+///
+/// Used as part of [`SignatureVerificationInput`].
 #[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Debug)]
