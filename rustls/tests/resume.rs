@@ -94,8 +94,8 @@ fn resumption_combinations() {
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = make_server_config(*kt, &provider);
         for (version, version_provider) in [
-            (ProtocolVersion::TLSv1_2, provider.clone().with_only_tls12()),
-            (ProtocolVersion::TLSv1_3, provider.clone().with_only_tls13()),
+            (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
+            (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
         ] {
             let client_config = make_client_config(*kt, &version_provider);
             let (mut client, mut server) =
@@ -292,7 +292,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
 #[test]
 fn tls13_stateful_resumption() {
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider().with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(kt, &provider);
     let client_config = Arc::new(client_config);
 
@@ -367,7 +367,7 @@ fn tls13_stateful_resumption() {
 #[test]
 fn tls13_stateless_resumption() {
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider().with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(kt, &provider);
     let client_config = Arc::new(client_config);
 
