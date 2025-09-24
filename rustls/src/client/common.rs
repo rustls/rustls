@@ -1,6 +1,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use pki_types::CertificateDer;
+
 use super::ResolvesClientCert;
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
@@ -80,7 +82,7 @@ pub(super) enum ClientAuthDetails {
     Empty { auth_context_tls13: Option<Vec<u8>> },
     /// Send a non-empty `Certificate` and a `CertificateVerify`.
     Verify {
-        certkey: Arc<sign::CertifiedKey>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
         signer: Box<dyn sign::Signer>,
         auth_context_tls13: Option<Vec<u8>>,
         compressor: Option<&'static dyn compress::CertCompressor>,
@@ -105,7 +107,7 @@ impl ClientAuthDetails {
             if let Some(signer) = certkey.key.choose_scheme(sigschemes) {
                 debug!("Attempting client auth");
                 return Self::Verify {
-                    certkey,
+                    cert_chain: certkey.cert_chain.clone(),
                     signer,
                     auth_context_tls13,
                     compressor,
