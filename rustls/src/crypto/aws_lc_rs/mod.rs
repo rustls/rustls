@@ -22,7 +22,7 @@ pub mod hpke;
 pub(crate) mod pq;
 /// Using software keys for authentication.
 pub mod sign;
-use sign::{EcdsaSigningKey, RsaSigningKey, any_eddsa_type};
+use sign::{EcdsaSigningKey, Ed25519SigningKey, RsaSigningKey};
 
 #[path = "../ring/hash.rs"]
 pub(crate) mod hash;
@@ -101,8 +101,8 @@ impl KeyProvider for AwsLcRs {
         }
 
         if let PrivateKeyDer::Pkcs8(pkcs8) = key_der {
-            if let Ok(eddsa) = any_eddsa_type(&pkcs8) {
-                return Ok(eddsa);
+            if let Ok(eddsa) = Ed25519SigningKey::try_from(&pkcs8) {
+                return Ok(Arc::new(eddsa));
             }
         }
 
