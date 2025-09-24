@@ -92,7 +92,7 @@ impl KeyProvider for AwsLcRs {
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn SigningKey>, Error> {
-        if let Ok(rsa) = RsaSigningKey::new(&key_der) {
+        if let Ok(rsa) = RsaSigningKey::try_from(&key_der) {
             return Ok(Arc::new(rsa));
         }
 
