@@ -371,6 +371,7 @@ pub enum PeerIncompatible {
     NoEcPointFormatsInCommon,
     NoKxGroupsInCommon,
     NoSignatureSchemesInCommon,
+    NoServerNameProvided,
     NullCompressionRequired,
     ServerDoesNotSupportTls12Or13,
     ServerSentHelloRetryRequestWithUnknownExtension,

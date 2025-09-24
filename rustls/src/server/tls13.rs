@@ -43,7 +43,6 @@ mod client_hello {
     use super::*;
     use crate::compress::CertCompressor;
     use crate::crypto::SupportedKxGroup;
-    use crate::enums::SignatureScheme;
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup};
@@ -55,7 +54,7 @@ mod client_hello {
     use crate::msgs::persist::{ServerSessionValue, Tls13ServerSessionValue};
     use crate::sealed::Sealed;
     use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello, ServerHandler};
-    use crate::sign::{CertifiedKey, SigningKey};
+    use crate::sign::{CertifiedSigner, Signer};
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
@@ -71,8 +70,8 @@ mod client_hello {
             &self,
             suite: &'static Tls13CipherSuite,
             kx_group: &'static dyn SupportedKxGroup,
-            cert_key: &CertifiedKey,
-            mut input: ClientHelloInput<'_>,
+            signer: &CertifiedSigner,
+            input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             cx: &mut ServerContext<'_>,
         ) -> hs::NextStateOrError<'static> {
@@ -92,10 +91,6 @@ mod client_hello {
                     PeerMisbehaved::OfferedIncorrectCompressions,
                 ));
             }
-
-            input
-                .sig_schemes
-                .retain(SignatureScheme::supported_in_tls13);
 
             let shares_ext = input
                 .client_hello
@@ -320,7 +315,7 @@ mod client_hello {
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
             }
 
-            let mut ocsp_response = cert_key.ocsp.as_deref();
+            let mut ocsp_response = signer.ocsp.as_deref();
             let mut flight = HandshakeFlightTls13::new(&mut transcript);
             let (cert_types, doing_early_data) = emit_encrypted_extensions(
                 &mut flight,
@@ -340,19 +335,14 @@ mod client_hello {
                     emit_compressed_certificate_tls13(
                         &mut flight,
                         &st.config,
-                        &cert_key.cert_chain,
+                        &signer.cert_chain,
                         ocsp_response,
                         compressor,
                     );
                 } else {
-                    emit_certificate_tls13(&mut flight, &cert_key.cert_chain, ocsp_response);
+                    emit_certificate_tls13(&mut flight, &signer.cert_chain, ocsp_response);
                 }
-                emit_certificate_verify_tls13(
-                    &mut flight,
-                    cx.common,
-                    &*cert_key.key,
-                    &input.sig_schemes,
-                )?;
+                emit_certificate_verify_tls13(&mut flight, &*signer.signer)?;
                 client_auth
             } else {
                 false
@@ -802,21 +792,9 @@ mod client_hello {
 
     fn emit_certificate_verify_tls13(
         flight: &mut HandshakeFlightTls13<'_>,
-        common: &mut CommonState,
-        signing_key: &dyn SigningKey,
-        schemes: &[SignatureScheme],
+        signer: &dyn Signer,
     ) -> Result<(), Error> {
         let message = construct_server_verify_message(&flight.transcript.current_hash());
-
-        let signer = signing_key
-            .choose_scheme(schemes)
-            .ok_or_else(|| {
-                common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerIncompatible::NoSignatureSchemesInCommon,
-                )
-            })?;
-
         let scheme = signer.scheme();
         let sig = signer.sign(message.as_ref())?;
 

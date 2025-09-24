@@ -41,7 +41,7 @@ use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, ClientHello, ResolvesServerCert,
     UnbufferedServerConnection, WebPkiClientVerifier,
 };
-use rustls::sign::{CertifiedKey, SigningKey};
+use rustls::sign::{CertifiedKey, CertifiedSigner, SigningKey};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
@@ -1546,7 +1546,7 @@ pub struct ServerCheckCertResolve {
 }
 
 impl ResolvesServerCert for ServerCheckCertResolve {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         if client_hello
             .signature_schemes()
             .is_empty()
@@ -1622,7 +1622,7 @@ impl ResolvesServerCert for ServerCheckCertResolve {
             )
         }
 
-        None
+        Err(Error::NoSuitableCertificate)
     }
 }
 
@@ -2095,11 +2095,13 @@ pub mod encoding {
         pub fn new_sig_algs() -> Self {
             Self {
                 typ: ExtensionType::SignatureAlgorithms,
-                body: len_u16(
-                    SignatureScheme::RSA_PKCS1_SHA256
-                        .to_array()
-                        .to_vec(),
-                ),
+                body: len_u16(vector_of(
+                    [
+                        SignatureScheme::RSA_PKCS1_SHA256,
+                        SignatureScheme::ECDSA_NISTP256_SHA256,
+                    ]
+                    .into_iter(),
+                )),
             }
         }
 

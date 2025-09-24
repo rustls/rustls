@@ -11,11 +11,11 @@ use rustls::client::danger::{
 };
 use rustls::client::{WebPkiServerVerifier, verify_server_cert_signed_by_trust_anchor};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
-use rustls::sign::CertifiedKey;
+use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
     AlertDescription, CertificateError, CertificateType, ClientConfig, ClientConnection,
-    DistinguishedName, Error, ExtendedKeyPurpose, InvalidMessage, RootCertStore, ServerConfig,
-    ServerConnection,
+    DistinguishedName, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible, RootCertStore,
+    ServerConfig, ServerConnection,
 };
 use rustls_test::{
     ErrorFromPeer, KeyType, MockServerVerifier, certificate_error_expecting_name, do_handshake,
@@ -633,13 +633,19 @@ fn client_check_server_valid_purpose() {
 pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, Arc<CertifiedKey>)>);
 
 impl ResolvesServerCert for ResolvesCertChainByCaName {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         let Some(cas_extension) = client_hello.certificate_authorities() else {
             println!(
                 "ResolvesCertChainByCaName: no CAs extension in ClientHello, returning default cert"
             );
-            return Some(self.0[0].1.clone());
+            return self.0[0]
+                .1
+                .signer(client_hello.signature_schemes())
+                .ok_or(Error::PeerIncompatible(
+                    PeerIncompatible::NoSignatureSchemesInCommon,
+                ));
         };
+
         for (name, certified_key) in self.0.iter() {
             let name = X509Name::from_der(name.as_ref())
                 .unwrap()
@@ -648,11 +654,21 @@ impl ResolvesServerCert for ResolvesCertChainByCaName {
                 X509Name::from_der(ca_name.as_ref()).is_ok_and(|(_, ca_name)| ca_name == name)
             }) {
                 println!("ResolvesCertChainByCaName: found matching CA name: {name}");
-                return Some(certified_key.clone());
+                return certified_key
+                    .signer(client_hello.signature_schemes())
+                    .ok_or(Error::PeerIncompatible(
+                        PeerIncompatible::NoSignatureSchemesInCommon,
+                    ));
             }
         }
+
         println!("ResolvesCertChainByCaName: no matching CA name found, returning default Cert");
-        Some(self.0[0].1.clone())
+        self.0[0]
+            .1
+            .signer(client_hello.signature_schemes())
+            .ok_or(Error::PeerIncompatible(
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ))
     }
 }
 
