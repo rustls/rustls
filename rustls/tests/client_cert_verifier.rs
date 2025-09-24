@@ -17,8 +17,7 @@ use rustls_test::{
     server_name, webpki_client_verifier_builder,
 };
 
-use super::common::all_versions;
-use super::provider;
+use super::{ALL_VERSIONS, provider};
 
 // Client is authorized!
 fn ver_ok() -> Result<PeerVerified, Error> {
@@ -54,7 +53,7 @@ fn client_verifier_works() {
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in ALL_VERSIONS {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
@@ -74,7 +73,7 @@ fn client_verifier_no_schemes() {
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in ALL_VERSIONS {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
@@ -99,7 +98,7 @@ fn client_verifier_no_auth_yes_root() {
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in ALL_VERSIONS {
             let client_config = make_client_config(*kt, &version_provider);
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let mut client =
@@ -129,7 +128,7 @@ fn client_verifier_fails_properly() {
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in ALL_VERSIONS {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let mut client =
@@ -163,7 +162,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
             .unwrap();
         let server_config = Arc::new(server_config);
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in ALL_VERSIONS {
             let client_config = if client_cert_chain.is_some() {
                 make_client_config_with_auth(kt, &version_provider)
             } else {
@@ -199,7 +198,7 @@ fn client_auth_works() {
             *kt, &provider,
         ));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in ALL_VERSIONS {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -248,7 +247,7 @@ fn client_mandatory_auth_client_revocation_works() {
             make_server_config_with_client_verifier(*kt, ee_verifier_builder, &provider),
         );
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in ALL_VERSIONS {
             // Connecting to the server with a CRL that indicates the client certificate is revoked
             // should fail with the expected error.
             let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
@@ -313,7 +312,7 @@ fn client_mandatory_auth_intermediate_revocation_works() {
             &provider,
         ));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in ALL_VERSIONS {
             // When checking the full chain, we expect an error - the intermediate is revoked.
             let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
             let (mut client, mut server) =
@@ -345,7 +344,7 @@ fn client_optional_auth_client_revocation_works() {
             *kt, crls, &provider,
         ));
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in ALL_VERSIONS {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);

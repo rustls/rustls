@@ -21,6 +21,11 @@ macro_rules! provider_ring {
         const fn provider_is_fips() -> bool {
             false
         }
+        #[allow(dead_code)]
+        const ALL_VERSIONS: [rustls::crypto::CryptoProvider; 2] = [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ];
     };
 }
 
@@ -41,5 +46,10 @@ macro_rules! provider_aws_lc_rs {
         const fn provider_is_fips() -> bool {
             cfg!(feature = "fips")
         }
+        #[allow(dead_code)]
+        const ALL_VERSIONS: [rustls::crypto::CryptoProvider; 2] = [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ];
     };
 }
