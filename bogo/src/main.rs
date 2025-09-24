@@ -50,6 +50,7 @@ use rustls::server::danger::{
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
+use rustls::sign::CertifiedSigner;
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
     DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIncompatible,
@@ -580,7 +581,7 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
         &self,
         root_hint_subjects: &[&[u8]],
         sig_schemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>> {
+    ) -> Option<CertifiedSigner> {
         // `sig_schemes` is in server preference order, so respect that.
         for sig_scheme in sig_schemes.iter().copied() {
             for (i, cert) in self.additional.iter().enumerate() {
@@ -593,29 +594,19 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
                     continue;
                 }
 
-                if cert
-                    .certkey
-                    .key
-                    .choose_scheme(&[sig_scheme])
-                    .is_some()
-                {
+                if let Some(signer) = cert.certkey.signer(&[sig_scheme]) {
                     assert!(
                         Some(i as isize) == self.expect_selected || self.expect_selected.is_none()
                     );
-                    return Some(cert.certkey.clone());
+                    return Some(signer);
                 }
             }
         }
 
         if let Some(cert) = &self.default {
-            if cert
-                .certkey
-                .key
-                .choose_scheme(sig_schemes)
-                .is_some()
-            {
+            if let Some(signer) = cert.certkey.signer(sig_schemes) {
                 assert!(matches!(self.expect_selected, Some(-1) | None));
-                return Some(cert.certkey.clone());
+                return Some(signer);
             }
         }
 

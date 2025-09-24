@@ -942,9 +942,13 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         if let Some(client_auth) = &st.client_auth {
             let certs = match client_auth {
                 ClientAuthDetails::Empty { .. } => CertificateChain::default(),
-                ClientAuthDetails::Verify { cert_chain, .. } => {
-                    CertificateChain(cert_chain.iter().cloned().collect())
-                }
+                ClientAuthDetails::Verify { signer, .. } => CertificateChain(
+                    signer
+                        .cert_chain
+                        .iter()
+                        .cloned()
+                        .collect(),
+                ),
             };
             emit_certificate(&mut st.transcript, certs, cx.common);
         }
@@ -989,7 +993,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
         // 4c.
         if let Some(ClientAuthDetails::Verify { signer, .. }) = &st.client_auth {
-            emit_certverify(&mut transcript, signer.as_ref(), cx.common)?;
+            emit_certverify(&mut transcript, &*signer.signer, cx.common)?;
         }
 
         // 4d. Derive secrets.

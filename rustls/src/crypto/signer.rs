@@ -96,9 +96,9 @@ impl ResolvesClientCert for SingleCertAndKey {
     fn resolve(
         &self,
         _root_hint_subjects: &[&[u8]],
-        _sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<CertifiedKey>> {
-        Some(self.0.clone())
+        sig_schemes: &[SignatureScheme],
+    ) -> Option<CertifiedSigner> {
+        self.0.signer(sig_schemes)
     }
 
     fn has_certs(&self) -> bool {
@@ -110,6 +110,22 @@ impl ResolvesServerCert for SingleCertAndKey {
     fn resolve(&self, _client_hello: &ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         Some(self.0.clone())
     }
+}
+
+/// A packaged-together certificate chain and one-time-use signer.
+///
+/// This is used in the [`ResolvesClientCert`] and [`ResolvesClientCert`] traits
+/// as the return value of their `resolve()` methods.
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct CertifiedSigner {
+    /// A one-time-use signer for this certificate.
+    pub signer: Box<dyn Signer>,
+    /// The certificate chain or raw public key.
+    pub cert_chain: Arc<[CertificateDer<'static>]>,
+    /// An optional OCSP response from the certificate issuer,
+    /// attesting to its continued validity.
+    pub ocsp: Option<Arc<[u8]>>,
 }
 
 /// A packaged-together certificate chain, matching `SigningKey` and
@@ -218,6 +234,17 @@ impl CertifiedKey {
             true => Ok(()),
             false => Err(InconsistentKeys::KeyMismatch.into()),
         }
+    }
+
+    /// Attempt to produce a `CertifiedSigner` using one of the given signature schemes.
+    ///
+    /// Calls [`SigningKey::choose_scheme()`] and propagates `cert_chain` and `ocsp`.
+    pub fn signer(&self, sig_schemes: &[SignatureScheme]) -> Option<CertifiedSigner> {
+        Some(CertifiedSigner {
+            signer: self.key.choose_scheme(sig_schemes)?,
+            cert_chain: self.cert_chain.clone(),
+            ocsp: self.ocsp.clone(),
+        })
     }
 
     /// The end-entity certificate.

@@ -2,6 +2,7 @@ use pki_types::ServerName;
 
 use crate::enums::{CertificateType, SignatureScheme};
 use crate::msgs::persist;
+use crate::sign::CertifiedSigner;
 use crate::sync::Arc;
 use crate::{NamedGroup, client, sign};
 
@@ -192,7 +193,7 @@ impl client::ResolvesClientCert for FailResolveClientCert {
         &self,
         _root_hint_subjects: &[&[u8]],
         _sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>> {
+    ) -> Option<CertifiedSigner> {
         None
     }
 
@@ -207,6 +208,7 @@ impl client::ResolvesClientCert for FailResolveClientCert {
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Clone, Debug)]
 pub struct AlwaysResolvesClientRawPublicKeys(Arc<sign::CertifiedKey>);
+
 impl AlwaysResolvesClientRawPublicKeys {
     /// Create a new `AlwaysResolvesClientRawPublicKeys` instance.
     pub fn new(certified_key: Arc<sign::CertifiedKey>) -> Self {
@@ -218,9 +220,9 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
     fn resolve(
         &self,
         _root_hint_subjects: &[&[u8]],
-        _sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>> {
-        Some(self.0.clone())
+        sig_schemes: &[SignatureScheme],
+    ) -> Option<CertifiedSigner> {
+        self.0.signer(sig_schemes)
     }
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
@@ -251,11 +253,12 @@ mod tests {
     use crate::msgs::enums::NamedGroup;
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
+    use crate::sign::CertifiedSigner;
     use crate::sync::Arc;
     use crate::verify::{
         CertificateIdentity, PeerIdentity, ServerIdentity, SignatureVerificationInput,
     };
-    use crate::{Error, SignatureScheme, sign};
+    use crate::{Error, SignatureScheme};
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
@@ -362,7 +365,7 @@ mod tests {
             &self,
             _root_hint_subjects: &[&[u8]],
             _sigschemes: &[SignatureScheme],
-        ) -> Option<Arc<sign::CertifiedKey>> {
+        ) -> Option<CertifiedSigner> {
             unreachable!()
         }
 

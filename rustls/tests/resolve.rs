@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use pki_types::{CertificateDer, DnsName};
 use rustls::client::ResolvesClientCert;
 use rustls::server::{ClientHello, ResolvesServerCert, ResolvesServerCertUsingSni};
-use rustls::sign::CertifiedKey;
+use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
     ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection, DistinguishedName,
     Error, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SignatureScheme,
@@ -268,7 +268,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
         &self,
         root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<CertifiedKey>> {
+    ) -> Option<CertifiedSigner> {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);
 
