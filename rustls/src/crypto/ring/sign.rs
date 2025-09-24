@@ -10,33 +10,13 @@ use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_
 
 use super::ring_like::rand::{SecureRandom, SystemRandom};
 use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
+#[cfg(any(test, bench))]
+use crate::crypto::CryptoProvider;
 use crate::crypto::signer::{Signer, SigningKey, public_key_to_spki};
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
 use crate::sync::Arc;
 use crate::x509::{wrap_concat_in_sequence, wrap_in_octet_string};
-
-/// Parse `der` as any supported key encoding/type, returning
-/// the first which works.
-pub fn any_supported_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, Error> {
-    if let Ok(rsa) = RsaSigningKey::new(der) {
-        return Ok(Arc::new(rsa));
-    }
-
-    if let Ok(ecdsa) = any_ecdsa_type(der) {
-        return Ok(ecdsa);
-    }
-
-    if let PrivateKeyDer::Pkcs8(pkcs8) = der {
-        if let Ok(eddsa) = any_eddsa_type(pkcs8) {
-            return Ok(eddsa);
-        }
-    }
-
-    Err(Error::General(
-        "failed to parse private key as RSA, ECDSA, or EdDSA".into(),
-    ))
-}
 
 /// Parse `der` as any ECDSA key type, returning the first which works.
 ///
@@ -427,6 +407,16 @@ impl Debug for Ed25519Signer {
     }
 }
 
+#[cfg(any(test, bench))]
+fn load_key(
+    provider: &CryptoProvider,
+    der: PrivateKeyDer<'static>,
+) -> Result<Arc<dyn SigningKey>, Error> {
+    provider
+        .key_provider
+        .load_private_key(der)
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::format;
@@ -434,6 +424,7 @@ mod tests {
     use pki_types::{PrivatePkcs1KeyDer, PrivateSec1KeyDer};
 
     use super::*;
+    use crate::crypto::ring::default_provider;
 
     #[test]
     fn can_load_ecdsa_nistp256_pkcs8() {
@@ -441,7 +432,7 @@ mod tests {
             PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/nistp256key.pkcs8.der")[..]);
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
-        assert!(any_supported_type(&key).is_ok());
+        assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(any_ecdsa_type(&key).is_ok());
     }
 
@@ -450,7 +441,7 @@ mod tests {
         let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
             &include_bytes!("../../testdata/nistp256key.der")[..],
         ));
-        assert!(any_supported_type(&key).is_ok());
+        assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(any_ecdsa_type(&key).is_ok());
     }
 
@@ -460,7 +451,7 @@ mod tests {
             &include_bytes!("../../testdata/nistp256key.der")[..],
         ));
 
-        let k = any_supported_type(&key).unwrap();
+        let k = load_key(&default_provider(), key.clone_key()).unwrap();
         assert_eq!(format!("{k:?}"), "EcdsaSigningKey { algorithm: ECDSA }");
         assert_eq!(k.algorithm(), SignatureAlgorithm::ECDSA);
 
@@ -494,7 +485,7 @@ mod tests {
             PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/nistp384key.pkcs8.der")[..]);
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
-        assert!(any_supported_type(&key).is_ok());
+        assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(any_ecdsa_type(&key).is_ok());
     }
 
@@ -503,7 +494,7 @@ mod tests {
         let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
             &include_bytes!("../../testdata/nistp384key.der")[..],
         ));
-        assert!(any_supported_type(&key).is_ok());
+        assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(any_ecdsa_type(&key).is_ok());
     }
 
@@ -513,7 +504,7 @@ mod tests {
             &include_bytes!("../../testdata/nistp384key.der")[..],
         ));
 
-        let k = any_supported_type(&key).unwrap();
+        let k = load_key(&default_provider(), key.clone_key()).unwrap();
         assert_eq!(format!("{k:?}"), "EcdsaSigningKey { algorithm: ECDSA }");
         assert_eq!(k.algorithm(), SignatureAlgorithm::ECDSA);
 
@@ -546,7 +537,7 @@ mod tests {
         let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
         assert!(any_eddsa_type(&key).is_ok());
         let key = PrivateKeyDer::Pkcs8(key);
-        assert!(any_supported_type(&key).is_ok());
+        assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(any_ecdsa_type(&key).is_err());
     }
 
@@ -580,7 +571,7 @@ mod tests {
             PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..]);
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
-        assert!(any_supported_type(&key).is_ok());
+        assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(any_ecdsa_type(&key).is_err());
     }
 
@@ -589,7 +580,7 @@ mod tests {
         let key = PrivateKeyDer::Pkcs1(PrivatePkcs1KeyDer::from(
             &include_bytes!("../../testdata/rsa2048key.pkcs1.der")[..],
         ));
-        assert!(any_supported_type(&key).is_ok());
+        assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(any_ecdsa_type(&key).is_err());
     }
 
@@ -599,7 +590,7 @@ mod tests {
             &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
         ));
 
-        let k = any_supported_type(&key).unwrap();
+        let k = load_key(&default_provider(), key.clone_key()).unwrap();
         assert_eq!(format!("{k:?}"), "RsaSigningKey { algorithm: RSA }");
         assert_eq!(k.algorithm(), SignatureAlgorithm::RSA);
 
@@ -635,7 +626,7 @@ mod tests {
     fn cannot_load_invalid_pkcs8_encoding() {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(&b"invalid"[..]));
         assert_eq!(
-            any_supported_type(&key).err(),
+            load_key(&default_provider(), key.clone_key()).err(),
             Some(Error::General(
                 "failed to parse private key as RSA, ECDSA, or EdDSA".into()
             ))
@@ -657,14 +648,16 @@ mod tests {
 
 #[cfg(bench)]
 mod benchmarks {
-    use super::{PrivateKeyDer, PrivatePkcs8KeyDer, SignatureScheme};
+    use super::{PrivateKeyDer, PrivatePkcs8KeyDer, SignatureScheme, load_key};
+    use crate::crypto::ring::default_provider;
 
     #[bench]
     fn bench_rsa2048_pkcs1_sha256(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
         ));
-        let sk = super::any_supported_type(&key).unwrap();
+        let provider = default_provider();
+        let sk = load_key(&provider, key).unwrap();
         let signer = sk
             .choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
             .unwrap();
@@ -683,7 +676,8 @@ mod benchmarks {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
         ));
-        let sk = super::any_supported_type(&key).unwrap();
+        let provider = default_provider();
+        let sk = load_key(&provider, key).unwrap();
         let signer = sk
             .choose_scheme(&[SignatureScheme::RSA_PSS_SHA256])
             .unwrap();
@@ -702,7 +696,8 @@ mod benchmarks {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/eddsakey.der")[..],
         ));
-        let sk = super::any_supported_type(&key).unwrap();
+        let provider = default_provider();
+        let sk = load_key(&provider, key).unwrap();
         let signer = sk
             .choose_scheme(&[SignatureScheme::ED25519])
             .unwrap();
@@ -721,7 +716,8 @@ mod benchmarks {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/nistp256key.pkcs8.der")[..],
         ));
-        let sk = super::any_supported_type(&key).unwrap();
+        let provider = default_provider();
+        let sk = load_key(&provider, key).unwrap();
         let signer = sk
             .choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
             .unwrap();
@@ -740,7 +736,8 @@ mod benchmarks {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/nistp384key.pkcs8.der")[..],
         ));
-        let sk = super::any_supported_type(&key).unwrap();
+        let provider = default_provider();
+        let sk = load_key(&provider, key).unwrap();
         let signer = sk
             .choose_scheme(&[SignatureScheme::ECDSA_NISTP384_SHA384])
             .unwrap();
@@ -760,8 +757,9 @@ mod benchmarks {
             &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
         ));
 
+        let provider = default_provider();
         b.iter(|| {
-            test::black_box(super::any_supported_type(&key).unwrap());
+            test::black_box(load_key(&provider, key.clone_key()).unwrap());
         });
     }
 
@@ -771,8 +769,9 @@ mod benchmarks {
             &include_bytes!("../../testdata/rsa4096key.pkcs8.der")[..],
         ));
 
+        let provider = default_provider();
         b.iter(|| {
-            test::black_box(super::any_supported_type(&key).unwrap());
+            test::black_box(load_key(&provider, key.clone_key()).unwrap());
         });
     }
 
