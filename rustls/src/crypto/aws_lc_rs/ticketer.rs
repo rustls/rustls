@@ -15,7 +15,6 @@ use super::unspecified_err;
 use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
-use crate::polyfill::try_split_at;
 use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;
 use crate::sync::Arc;
@@ -173,10 +172,10 @@ impl ProducesTickets for Rfc5077Ticketer {
         }
 
         // Split off the key name from the remaining ciphertext.
-        let (alleged_key_name, ciphertext) = try_split_at(ciphertext, self.key_name.len())?;
+        let (alleged_key_name, ciphertext) = ciphertext.split_at_checked(self.key_name.len())?;
 
         // Split off the IV from the remaining ciphertext.
-        let (iv, ciphertext) = try_split_at(ciphertext, AES_CBC_IV_LEN)?;
+        let (iv, ciphertext) = ciphertext.split_at_checked(AES_CBC_IV_LEN)?;
 
         // And finally, split the encrypted state from the tag.
         let tag_len = self
@@ -184,7 +183,7 @@ impl ProducesTickets for Rfc5077Ticketer {
             .algorithm()
             .digest_algorithm()
             .output_len();
-        let (enc_state, mac) = try_split_at(ciphertext, ciphertext.len() - tag_len)?;
+        let (enc_state, mac) = ciphertext.split_at_checked(ciphertext.len() - tag_len)?;
 
         // Reconstitute the HMAC data to verify the tag.
         let mut hmac_data =

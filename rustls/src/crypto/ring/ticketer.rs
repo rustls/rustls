@@ -11,7 +11,6 @@ use super::ring_like::rand::{SecureRandom, SystemRandom};
 use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
-use crate::polyfill::try_split_at;
 use crate::server::ProducesTickets;
 use crate::sync::Arc;
 
@@ -148,9 +147,9 @@ impl ProducesTickets for AeadTicketer {
             return None;
         }
 
-        let (alleged_key_name, ciphertext) = try_split_at(ciphertext, self.key_name.len())?;
+        let (alleged_key_name, ciphertext) = ciphertext.split_at_checked(self.key_name.len())?;
 
-        let (nonce, ciphertext) = try_split_at(ciphertext, self.alg.nonce_len())?;
+        let (nonce, ciphertext) = ciphertext.split_at_checked(self.alg.nonce_len())?;
 
         // checking the key_name is the expected one, *and* then putting it into the
         // additionally authenticated data is duplicative.  this check quickly rejects
