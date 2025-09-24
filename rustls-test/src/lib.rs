@@ -42,7 +42,7 @@ use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, ClientHello, ResolvesServerCert,
     UnbufferedServerConnection, WebPkiClientVerifier,
 };
-use rustls::sign::CertifiedKey;
+use rustls::sign::{CertifiedKey, SigningKey};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
@@ -378,6 +378,13 @@ impl KeyType {
 
     pub fn spki(&self) -> SubjectPublicKeyInfoDer<'static> {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("end.spki.pem")).unwrap()
+    }
+
+    pub fn load_key(&self, provider: &CryptoProvider) -> Arc<dyn SigningKey> {
+        provider
+            .key_provider
+            .load_private_key(self.key())
+            .expect("valid key")
     }
 
     pub fn key(&self) -> PrivateKeyDer<'static> {

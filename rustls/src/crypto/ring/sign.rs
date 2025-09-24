@@ -19,18 +19,14 @@ use crate::sync::Arc;
 use crate::x509::{wrap_concat_in_sequence, wrap_in_octet_string};
 
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS.
-///
-/// This is used by the test suite, so it must be `pub`, but it isn't part of
-/// the public, stable, API.
-#[doc(hidden)]
-pub struct RsaSigningKey {
+pub(super) struct RsaSigningKey {
     key: Arc<RsaKeyPair>,
 }
 
 impl RsaSigningKey {
     /// Make a new `RsaSigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
-    pub fn new(der: &PrivateKeyDer<'_>) -> Result<Self, Error> {
+    pub(super) fn new(der: &PrivateKeyDer<'_>) -> Result<Self, Error> {
         let key_pair = match der {
             PrivateKeyDer::Pkcs1(pkcs1) => RsaKeyPair::from_der(pkcs1.secret_pkcs1_der()),
             PrivateKeyDer::Pkcs8(pkcs8) => RsaKeyPair::from_pkcs8(pkcs8.secret_pkcs8_der()),

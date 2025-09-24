@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use pki_types::{CertificateDer, DnsName};
 use rustls::client::ResolvesClientCert;
 use rustls::server::{ClientHello, ResolvesServerCert, ResolvesServerCertUsingSni};
-use rustls::sign::{CertifiedKey, SigningKey};
+use rustls::sign::CertifiedKey;
 use rustls::{
     ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection, DistinguishedName,
     Error, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SignatureScheme,
@@ -22,7 +22,6 @@ use rustls_test::{
     server_name, transfer, webpki_client_verifier_builder,
 };
 
-use super::provider::sign::RsaSigningKey;
 use super::{provider, provider_is_aws_lc_rs};
 use crate::common::{all_versions, provider_with_one_suite};
 
@@ -448,8 +447,7 @@ fn sni_resolver_works() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
-    let signing_key: Arc<dyn SigningKey> = Arc::new(signing_key);
+    let signing_key = kt.load_key(&provider);
     resolver
         .add(
             DnsName::try_from("localhost").unwrap(),
@@ -489,8 +487,7 @@ fn sni_resolver_works() {
 fn sni_resolver_rejects_wrong_names() {
     let kt = KeyType::Rsa2048;
     let mut resolver = ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
-    let signing_key: Arc<dyn SigningKey> = Arc::new(signing_key);
+    let signing_key = kt.load_key(&provider::default_provider());
 
     assert_eq!(
         Ok(()),
@@ -515,8 +512,7 @@ fn sni_resolver_lower_cases_configured_names() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
-    let signing_key: Arc<dyn SigningKey> = Arc::new(signing_key);
+    let signing_key = kt.load_key(&provider);
 
     assert_eq!(
         Ok(()),
@@ -546,8 +542,7 @@ fn sni_resolver_lower_cases_queried_names() {
     let kt = KeyType::Rsa2048;
     let provider = provider::default_provider();
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
-    let signing_key: Arc<dyn SigningKey> = Arc::new(signing_key);
+    let signing_key = kt.load_key(&provider);
 
     assert_eq!(
         Ok(()),
@@ -575,8 +570,7 @@ fn sni_resolver_lower_cases_queried_names() {
 fn sni_resolver_rejects_bad_certs() {
     let kt = KeyType::Rsa2048;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = RsaSigningKey::new(&kt.key()).unwrap();
-    let signing_key: Arc<dyn SigningKey> = Arc::new(signing_key);
+    let signing_key = kt.load_key(&provider::default_provider());
 
     assert_eq!(
         resolver.add(
