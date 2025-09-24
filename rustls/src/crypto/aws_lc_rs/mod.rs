@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 // aws-lc-rs has a -- roughly -- ring-compatible API, so we just reuse all that
@@ -91,18 +92,18 @@ impl KeyProvider for AwsLcRs {
     fn load_private_key(
         &self,
         key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn SigningKey>, Error> {
+    ) -> Result<Box<dyn SigningKey>, Error> {
         if let Ok(rsa) = RsaSigningKey::try_from(&key_der) {
-            return Ok(Arc::new(rsa));
+            return Ok(Box::new(rsa));
         }
 
         if let Ok(ecdsa) = EcdsaSigningKey::try_from(&key_der) {
-            return Ok(Arc::new(ecdsa));
+            return Ok(Box::new(ecdsa));
         }
 
         if let PrivateKeyDer::Pkcs8(pkcs8) = key_der {
             if let Ok(eddsa) = Ed25519SigningKey::try_from(&pkcs8) {
-                return Ok(Arc::new(eddsa));
+                return Ok(Box::new(eddsa));
             }
         }
 

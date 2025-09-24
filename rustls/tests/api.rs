@@ -635,12 +635,12 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 fn test_keys_match() {
     // Consistent: Both of these should have the same SPKI values
     let expect_consistent =
-        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Arc::new(SigningKeySomeSpki));
+        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Box::new(SigningKeySomeSpki));
     assert!(expect_consistent.is_ok());
 
     // Inconsistent: These should not have the same SPKI values
     let expect_inconsistent =
-        sign::CertifiedKey::new(KeyType::EcdsaP256.chain(), Arc::new(SigningKeySomeSpki));
+        sign::CertifiedKey::new(KeyType::EcdsaP256.chain(), Box::new(SigningKeySomeSpki));
     assert!(matches!(
         expect_inconsistent,
         Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
@@ -648,7 +648,7 @@ fn test_keys_match() {
 
     // Unknown: This signing key returns None for its SPKI, so we can't tell if the certified key is consistent
     assert!(matches!(
-        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Arc::new(SigningKeyNoneSpki)),
+        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Box::new(SigningKeyNoneSpki)),
         Err(Error::InconsistentKeys(InconsistentKeys::Unknown))
     ));
 }

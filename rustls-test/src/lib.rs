@@ -380,7 +380,7 @@ impl KeyType {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("end.spki.pem")).unwrap()
     }
 
-    pub fn load_key(&self, provider: &CryptoProvider) -> Arc<dyn SigningKey> {
+    pub fn load_key(&self, provider: &CryptoProvider) -> Box<dyn SigningKey> {
         provider
             .key_provider
             .load_private_key(self.key())

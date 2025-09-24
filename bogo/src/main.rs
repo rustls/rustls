@@ -519,7 +519,7 @@ enum OcspValidation {
 
 #[derive(Debug)]
 struct FixedSignatureSchemeSigningKey {
-    key: Arc<dyn sign::SigningKey>,
+    key: Box<dyn sign::SigningKey>,
     scheme: SignatureScheme,
 }
 
@@ -651,7 +651,7 @@ impl ClientCert {
         let issuer_dn = DistinguishedName::in_sequence(parsed_cert.issuer());
 
         if let Some(scheme) = meta.use_signing_scheme {
-            certkey.key = Arc::new(FixedSignatureSchemeSigningKey {
+            certkey.key = Box::new(FixedSignatureSchemeSigningKey {
                 key: certkey.key,
                 scheme: lookup_scheme(scheme),
             });
