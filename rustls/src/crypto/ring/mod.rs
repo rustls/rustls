@@ -12,7 +12,7 @@ use crate::{Error, Tls12CipherSuite, Tls13CipherSuite};
 
 /// Using software keys for authentication.
 pub mod sign;
-use sign::{EcdsaSigningKey, RsaSigningKey, any_eddsa_type};
+use sign::{EcdsaSigningKey, Ed25519SigningKey, RsaSigningKey};
 
 pub(crate) mod hash;
 pub(crate) mod hmac;
@@ -65,8 +65,8 @@ impl KeyProvider for Ring {
         }
 
         if let PrivateKeyDer::Pkcs8(pkcs8) = key_der {
-            if let Ok(eddsa) = any_eddsa_type(&pkcs8) {
-                return Ok(eddsa);
+            if let Ok(eddsa) = Ed25519SigningKey::try_from(&pkcs8) {
+                return Ok(Arc::new(eddsa));
             }
         }
 

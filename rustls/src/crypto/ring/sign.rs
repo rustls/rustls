@@ -18,20 +18,6 @@ use crate::error::Error;
 use crate::sync::Arc;
 use crate::x509::{wrap_concat_in_sequence, wrap_in_octet_string};
 
-/// Parse `der` as any EdDSA key type, returning the first which works.
-///
-/// Note that, at the time of writing, Ed25519 does not have wide support
-/// in browsers.  It is also not supported by the WebPKI, because the
-/// CA/Browser Forum Baseline Requirements do not support it for publicly
-/// trusted certificates.
-pub fn any_eddsa_type(der: &PrivatePkcs8KeyDer<'_>) -> Result<Arc<dyn SigningKey>, Error> {
-    // TODO: Add support for Ed448
-    Ok(Arc::new(Ed25519SigningKey::new(
-        der,
-        SignatureScheme::ED25519,
-    )?))
-}
-
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS.
 ///
 /// This is used by the test suite, so it must be `pub`, but it isn't part of
@@ -338,25 +324,9 @@ impl Debug for EcdsaSigner {
 /// different protocol versions.
 ///
 /// Currently this is only implemented for Ed25519 keys.
-struct Ed25519SigningKey {
+pub(super) struct Ed25519SigningKey {
     key: Arc<Ed25519KeyPair>,
     scheme: SignatureScheme,
-}
-
-impl Ed25519SigningKey {
-    /// Make a new `Ed25519SigningKey` from a DER encoding in PKCS#8 format,
-    /// expecting a key usable with precisely the given signature scheme.
-    fn new(der: &PrivatePkcs8KeyDer<'_>, scheme: SignatureScheme) -> Result<Self, Error> {
-        match Ed25519KeyPair::from_pkcs8_maybe_unchecked(der.secret_pkcs8_der()) {
-            Ok(key_pair) => Ok(Self {
-                key: Arc::new(key_pair),
-                scheme,
-            }),
-            Err(e) => Err(Error::General(format!(
-                "failed to parse Ed25519 private key: {e}"
-            ))),
-        }
-    }
 }
 
 impl SigningKey for Ed25519SigningKey {
@@ -377,6 +347,28 @@ impl SigningKey for Ed25519SigningKey {
 
     fn algorithm(&self) -> SignatureAlgorithm {
         self.scheme.algorithm()
+    }
+}
+
+impl TryFrom<&PrivatePkcs8KeyDer<'_>> for Ed25519SigningKey {
+    type Error = Error;
+
+    /// Parse `der` as an Ed25519 key.
+    ///
+    /// Note that, at the time of writing, Ed25519 does not have wide support
+    /// in browsers.  It is also not supported by the WebPKI, because the
+    /// CA/Browser Forum Baseline Requirements do not support it for publicly
+    /// trusted certificates.
+    fn try_from(der: &PrivatePkcs8KeyDer<'_>) -> Result<Self, Self::Error> {
+        match Ed25519KeyPair::from_pkcs8_maybe_unchecked(der.secret_pkcs8_der()) {
+            Ok(key_pair) => Ok(Self {
+                key: Arc::new(key_pair),
+                scheme: SignatureScheme::ED25519,
+            }),
+            Err(e) => Err(Error::General(format!(
+                "failed to parse Ed25519 private key: {e}"
+            ))),
+        }
     }
 }
 
@@ -434,7 +426,7 @@ mod tests {
     fn can_load_ecdsa_nistp256_pkcs8() {
         let key =
             PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/nistp256key.pkcs8.der")[..]);
-        assert!(any_eddsa_type(&key).is_err());
+        assert!(Ed25519SigningKey::try_from(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(EcdsaSigningKey::try_from(&key).is_ok());
@@ -487,7 +479,7 @@ mod tests {
     fn can_load_ecdsa_nistp384_pkcs8() {
         let key =
             PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/nistp384key.pkcs8.der")[..]);
-        assert!(any_eddsa_type(&key).is_err());
+        assert!(Ed25519SigningKey::try_from(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(EcdsaSigningKey::try_from(&key).is_ok());
@@ -539,7 +531,7 @@ mod tests {
     #[test]
     fn can_load_eddsa_pkcs8() {
         let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
-        assert!(any_eddsa_type(&key).is_ok());
+        assert!(Ed25519SigningKey::try_from(&key).is_ok());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(EcdsaSigningKey::try_from(&key).is_err());
@@ -549,7 +541,7 @@ mod tests {
     fn can_sign_eddsa() {
         let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
 
-        let k = any_eddsa_type(&key).unwrap();
+        let k = Ed25519SigningKey::try_from(&key).unwrap();
         assert_eq!(format!("{k:?}"), "Ed25519SigningKey { algorithm: ED25519 }");
         assert_eq!(k.algorithm(), SignatureAlgorithm::ED25519);
 
@@ -573,7 +565,7 @@ mod tests {
     fn can_load_rsa2048_pkcs8() {
         let key =
             PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..]);
-        assert!(any_eddsa_type(&key).is_err());
+        assert!(Ed25519SigningKey::try_from(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&default_provider(), key.clone_key()).is_ok());
         assert!(EcdsaSigningKey::try_from(&key).is_err());
@@ -652,7 +644,10 @@ mod tests {
 
 #[cfg(bench)]
 mod benchmarks {
-    use super::{EcdsaSigningKey, PrivateKeyDer, PrivatePkcs8KeyDer, SignatureScheme, load_key};
+    use super::{
+        EcdsaSigningKey, Ed25519SigningKey, PrivateKeyDer, PrivatePkcs8KeyDer, SignatureScheme,
+        load_key,
+    };
     use crate::crypto::ring::default_provider;
 
     #[bench]
@@ -806,7 +801,7 @@ mod benchmarks {
         let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
 
         b.iter(|| {
-            test::black_box(super::any_eddsa_type(&key).unwrap());
+            test::black_box(Ed25519SigningKey::try_from(&key).unwrap());
         });
     }
 
