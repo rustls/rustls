@@ -95,7 +95,7 @@ struct Options {
     support_tls12: bool,
     min_version: Option<ProtocolVersion>,
     max_version: Option<ProtocolVersion>,
-    server_ocsp_response: Vec<u8>,
+    server_ocsp_response: Arc<[u8]>,
     groups: Option<Vec<NamedGroup>>,
     export_keying_material: usize,
     export_keying_material_label: String,
@@ -165,7 +165,7 @@ impl Options {
             support_tls12: true,
             min_version: None,
             max_version: None,
-            server_ocsp_response: vec![],
+            server_ocsp_response: Arc::from([]),
             groups: None,
             export_keying_material: 0,
             export_keying_material_label: "".to_string(),
@@ -1704,8 +1704,8 @@ pub fn main() {
             }
 
             "-ocsp-response" => {
-                opts.server_ocsp_response = BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid base64");
+                opts.server_ocsp_response = Arc::from(BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                    .expect("invalid base64"));
             }
             "-select-alpn" => {
                 opts.protocols.push(args.remove(0));

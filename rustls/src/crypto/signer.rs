@@ -131,7 +131,7 @@ pub struct CertifiedKey {
 
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
-    pub ocsp: Option<Vec<u8>>,
+    pub ocsp: Option<Arc<[u8]>>,
 }
 
 impl CertifiedKey {
