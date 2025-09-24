@@ -947,7 +947,6 @@ pub struct TestNonBlockIo {
 
 impl io::Read for TestNonBlockIo {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        println!("read {:?}", buf.len());
         match self.reads.pop() {
             None => Err(io::ErrorKind::WouldBlock.into()),
             Some(data) => {
@@ -962,7 +961,6 @@ impl io::Read for TestNonBlockIo {
 
 impl io::Write for TestNonBlockIo {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        println!("write {:?}", buf.len());
         match self.writes.pop() {
             None => Err(io::ErrorKind::WouldBlock.into()),
             Some(n) => Ok(core::cmp::min(n, buf.len())),
@@ -970,7 +968,6 @@ impl io::Write for TestNonBlockIo {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        println!("flush");
         Ok(())
     }
 }
