@@ -21,8 +21,8 @@ use rustls_test::{
 };
 
 use super::provider::cipher_suite;
-use super::{provider, provider_is_aws_lc_rs, provider_is_fips};
-use crate::common::{all_versions, provider_with_one_suite};
+use super::{ALL_VERSIONS, provider, provider_is_aws_lc_rs, provider_is_fips};
+use crate::common::provider_with_one_suite;
 
 const MAX_ITERATIONS: usize = 100;
 
@@ -127,9 +127,8 @@ fn handshake_config(
 
 #[test]
 fn app_data_client_to_server() {
-    let provider = provider::DEFAULT_PROVIDER;
     let expected: &[_] = b"hello";
-    for version_provider in all_versions(&provider) {
+    for version_provider in ALL_VERSIONS {
         eprintln!("{version_provider:?}");
         let server_config = make_server_config(KeyType::Rsa2048, &version_provider);
         let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
@@ -162,9 +161,8 @@ fn app_data_client_to_server() {
 
 #[test]
 fn app_data_server_to_client() {
-    let provider = provider::DEFAULT_PROVIDER;
     let expected: &[_] = b"hello";
-    for version_provider in all_versions(&provider) {
+    for version_provider in ALL_VERSIONS {
         eprintln!("{version_provider:?}");
         let server_config = make_server_config(KeyType::Rsa2048, &version_provider);
         let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
@@ -435,7 +433,7 @@ fn run(
 
 #[test]
 fn close_notify_client_to_server() {
-    for version_provider in all_versions(&provider::DEFAULT_PROVIDER) {
+    for version_provider in ALL_VERSIONS {
         eprintln!("{version_provider:?}");
         let server_config = make_server_config(KeyType::Rsa2048, &version_provider);
         let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
@@ -459,7 +457,7 @@ fn close_notify_client_to_server() {
 
 #[test]
 fn close_notify_server_to_client() {
-    for version_provider in all_versions(&provider::DEFAULT_PROVIDER) {
+    for version_provider in ALL_VERSIONS {
         eprintln!("{version_provider:?}");
         let server_config = make_server_config(KeyType::Rsa2048, &version_provider);
         let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
@@ -483,7 +481,7 @@ fn close_notify_server_to_client() {
 
 #[test]
 fn full_closure_server_to_client() {
-    for version_provider in all_versions(&provider::DEFAULT_PROVIDER) {
+    for version_provider in ALL_VERSIONS {
         eprintln!("{version_provider:?}");
         let mut outcome = handshake(version_provider);
         let mut client = outcome.client.take().unwrap();

@@ -18,8 +18,7 @@ use rustls_test::{
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config, transfer,
 };
 
-use super::common::all_versions;
-use super::{COUNTS, CountingLogger, provider};
+use super::{ALL_VERSIONS, COUNTS, CountingLogger, provider};
 
 #[test]
 fn client_only_attempts_resumption_with_compatible_security() {
@@ -29,7 +28,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
     CountingLogger::reset();
 
     let server_config = make_server_config(kt, &provider);
-    for version_provider in all_versions(&provider) {
+    for version_provider in ALL_VERSIONS {
         let base_client_config = make_client_config(kt, &version_provider);
         let (mut client, mut server) =
             make_pair_for_configs(base_client_config.clone(), server_config.clone());

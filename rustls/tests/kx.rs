@@ -18,8 +18,7 @@ use rustls_test::{
     make_pair_for_configs, make_server_config, make_server_config_with_kx_groups, transfer,
 };
 
-use super::common::all_versions;
-use super::provider;
+use super::{ALL_VERSIONS, provider};
 
 #[test]
 fn test_client_config_keyshare() {
@@ -357,7 +356,7 @@ fn test_server_rejects_clients_without_any_kx_groups() {
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_group_overlap() {
-    for version_provider in all_versions(&provider::DEFAULT_PROVIDER) {
+    for version_provider in ALL_VERSIONS {
         let (mut client, mut server) = make_pair_for_configs(
             make_client_config_with_kx_groups(
                 KeyType::Rsa2048,
