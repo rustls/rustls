@@ -123,8 +123,8 @@ impl RsaSigner {
 }
 
 impl Signer for RsaSigner {
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        self.sign(message)
+    fn sign(self: Box<Self>, message: &[u8]) -> Result<Vec<u8>, Error> {
+        (*self).sign(message)
     }
 
     fn scheme(&self) -> SignatureScheme {
@@ -270,8 +270,8 @@ impl EcdsaSigner {
 }
 
 impl Signer for EcdsaSigner {
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        self.sign(message)
+    fn sign(self: Box<Self>, message: &[u8]) -> Result<Vec<u8>, Error> {
+        (*self).sign(message)
     }
 
     fn scheme(&self) -> SignatureScheme {
@@ -372,8 +372,8 @@ impl Ed25519Signer {
 }
 
 impl Signer for Ed25519Signer {
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        self.sign(message)
+    fn sign(self: Box<Self>, message: &[u8]) -> Result<Vec<u8>, Error> {
+        (*self).sign(message)
     }
 
     fn scheme(&self) -> SignatureScheme {

@@ -66,7 +66,7 @@ pub trait Signer: Debug + Send + Sync {
     /// implicit in [`Self::scheme()`].
     ///
     /// The returned signature format is also defined by [`Self::scheme()`].
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error>;
+    fn sign(self: Box<Self>, message: &[u8]) -> Result<Vec<u8>, Error>;
 
     /// Reveals which scheme will be used when you call [`Self::sign()`].
     fn scheme(&self) -> SignatureScheme;

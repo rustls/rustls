@@ -61,7 +61,7 @@ mod client_hello {
             &self,
             suite: &'static Tls12CipherSuite,
             kx_group: &'static dyn SupportedKxGroup,
-            signer: &CertifiedSigner,
+            signer: CertifiedSigner,
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             cx: &mut ServerContext<'_>,
@@ -217,7 +217,7 @@ mod client_hello {
             if let Some(ocsp_response) = ocsp_response {
                 emit_cert_status(&mut flight, ocsp_response);
             }
-            let server_kx = emit_server_kx(&mut flight, kx_group, &*signer.signer, &randoms)?;
+            let server_kx = emit_server_kx(&mut flight, kx_group, signer.signer, &randoms)?;
             let doing_client_auth = emit_certificate_req(&mut flight, &st.config)?;
             emit_server_hello_done(&mut flight);
 
@@ -384,7 +384,7 @@ mod client_hello {
     fn emit_server_kx(
         flight: &mut HandshakeFlightTls12<'_>,
         selected_group: &'static dyn SupportedKxGroup,
-        signer: &dyn Signer,
+        signer: Box<dyn Signer>,
         randoms: &ConnectionRandoms,
     ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
         let kx = selected_group.start()?;
