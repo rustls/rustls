@@ -1634,9 +1634,7 @@ fn server_invalid_sni_policy() {
         (Policy::IgnoreIpAddresses, SERVER_NAME_BAD, Reject),
     ];
 
-    let accept_result = Err(Error::General(
-        "no server certificate chain resolved".to_string(),
-    ));
+    let accept_result = Err(Error::NoSuitableCertificate);
     let reject_result = Err(Error::PeerMisbehaved(
         PeerMisbehaved::ServerNameMustContainOneHostName,
     ));
