@@ -396,8 +396,10 @@ impl ExpectClientHello {
             .cert_resolver
             .resolve(&ClientHello::new(&input, cx.data.sni.as_ref(), T::VERSION))
             .ok_or_else(|| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::AccessDenied, Error::NoSuitableCertificate)
+                cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    Error::NoSuitableCertificate,
+                )
             })?;
 
         let (suite, skxg) = self
