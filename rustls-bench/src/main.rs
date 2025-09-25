@@ -955,16 +955,16 @@ enum Provider {
 }
 
 impl Provider {
-    fn build(self) -> CryptoProvider {
+    fn build(self) -> CryptoProvider<'static> {
         match self {
             #[cfg(feature = "aws-lc-rs")]
-            Self::AwsLcRs => rustls::crypto::aws_lc_rs::default_provider(),
+            Self::AwsLcRs => rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER,
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
             Self::AwsLcRsFips => rustls::crypto::default_fips_provider(),
             #[cfg(feature = "graviola")]
             Self::Graviola => rustls_graviola::default_provider(),
             #[cfg(feature = "ring")]
-            Self::Ring => rustls::crypto::ring::default_provider(),
+            Self::Ring => rustls::crypto::ring::DEFAULT_PROVIDER,
             Self::_None => unreachable!(),
         }
     }
@@ -983,13 +983,15 @@ impl Provider {
         }
     }
 
-    fn build_with_cipher_suite(&self, name: CipherSuite) -> CryptoProvider {
+    fn build_with_cipher_suite(&self, name: CipherSuite) -> CryptoProvider<'static> {
         let mut provider = self.build();
         provider
             .tls12_cipher_suites
+            .to_mut()
             .retain(|cs| cs.common.suite == name);
         provider
             .tls13_cipher_suites
+            .to_mut()
             .retain(|cs| cs.common.suite == name);
         provider
     }

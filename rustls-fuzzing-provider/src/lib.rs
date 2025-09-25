@@ -13,6 +13,7 @@
     unused_qualifications
 )]
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use rustls::client::WebPkiServerVerifier;
@@ -38,11 +39,11 @@ use rustls::{
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
-pub fn provider() -> crypto::CryptoProvider {
+pub fn provider() -> crypto::CryptoProvider<'static> {
     crypto::CryptoProvider {
-        tls12_cipher_suites: vec![TLS_FUZZING_SUITE],
-        tls13_cipher_suites: vec![TLS13_FUZZING_SUITE],
-        kx_groups: vec![&KeyExchangeGroup],
+        tls12_cipher_suites: Cow::Owned(vec![TLS_FUZZING_SUITE]),
+        tls13_cipher_suites: Cow::Owned(vec![TLS13_FUZZING_SUITE]),
+        kx_groups: Cow::Owned(vec![KEY_EXCHANGE_GROUP]),
         signature_verification_algorithms: VERIFY_ALGORITHMS,
         secure_random: &Provider,
         key_provider: &Provider,
@@ -232,6 +233,8 @@ impl crypto::ActiveKeyExchange for ActiveKeyExchange {
         NamedGroup::from(0xfe00)
     }
 }
+
+const KEY_EXCHANGE_GROUP: &dyn crypto::SupportedKxGroup = &KeyExchangeGroup;
 
 #[derive(Debug)]
 struct KeyExchangeGroup;

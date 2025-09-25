@@ -145,7 +145,7 @@ impl CertifiedKey {
     pub fn from_der(
         cert_chain: Vec<CertificateDer<'static>>,
         key: PrivateKeyDer<'static>,
-        provider: &CryptoProvider,
+        provider: &CryptoProvider<'_>,
     ) -> Result<Self, Error> {
         Self::new(
             cert_chain,

@@ -27,7 +27,7 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// ```
 /// # #[cfg(feature = "aws-lc-rs")] {
-/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
+/// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
 /// use rustls::{ClientConfig, ServerConfig};
 /// ClientConfig::builder()
 /// //  ...
@@ -63,7 +63,7 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// ```
 /// # #[cfg(feature = "aws-lc-rs")] {
-/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
+/// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// ClientConfig::builder()
@@ -88,7 +88,7 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// ```no_run
 /// # #[cfg(feature = "aws-lc-rs")] {
-/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
+/// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
 /// # use rustls::ServerConfig;
 /// # let certs = vec![];
 /// # let private_key = pki_types::PrivateKeyDer::from(
@@ -143,14 +143,14 @@ use crate::{ClientConfig, ServerConfig};
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) state: State,
-    pub(crate) provider: Arc<CryptoProvider>,
+    pub(crate) provider: Arc<CryptoProvider<'static>>,
     pub(crate) time_provider: Arc<dyn TimeProvider>,
     pub(crate) side: PhantomData<Side>,
 }
 
 impl<Side: ConfigSide, State> ConfigBuilder<Side, State> {
     /// Return the crypto provider used to construct this builder.
-    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+    pub fn crypto_provider(&self) -> &Arc<CryptoProvider<'static>> {
         &self.provider
     }
 }

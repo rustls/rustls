@@ -35,16 +35,18 @@ use rustls_test::{
 use super::{provider, serialized};
 
 mod common;
-use common::all_versions;
 
 #[test]
 fn exercise_key_log_file_for_client() {
     serialized(|| {
-        let provider = provider::default_provider();
+        let provider = provider::DEFAULT_PROVIDER;
         let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
         unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let mut client_config = make_client_config(KeyType::Rsa2048, &version_provider);
             client_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
@@ -63,15 +65,17 @@ fn exercise_key_log_file_for_client() {
 #[test]
 fn exercise_key_log_file_for_server() {
     serialized(|| {
-        let provider = provider::default_provider();
-        let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+        let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
         unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
         server_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
         let server_config = Arc::new(server_config);
 
-        for version_provider in all_versions(&provider) {
+        for version_provider in [
+            provider::DEFAULT_TLS12_PROVIDER,
+            provider::DEFAULT_TLS13_PROVIDER,
+        ] {
             let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);

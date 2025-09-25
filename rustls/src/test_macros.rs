@@ -57,7 +57,7 @@ macro_rules! bench_for_each_provider {
 mod tests {
     #[test]
     fn test_each_provider() {
-        std::println!("provider is {:?}", super::provider::default_provider());
+        std::println!("provider is {:?}", super::provider::DEFAULT_PROVIDER);
     }
 }
 
@@ -66,6 +66,6 @@ mod tests {
 mod benchmarks {
     #[bench]
     fn bench_each_provider(b: &mut test::Bencher) {
-        b.iter(|| super::provider::default_provider());
+        b.iter(|| super::provider::DEFAULT_PROVIDER);
     }
 }

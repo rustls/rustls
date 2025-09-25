@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
@@ -9,7 +10,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ClientConfig, RootCertStore, ServerConfig};
 
-use crate::ffdhe::{self, FfdheKxGroup};
+use crate::ffdhe::{self, FFDHE2048_GROUP};
 use crate::utils::verify_openssl3_available;
 
 #[test]
@@ -22,7 +23,7 @@ fn rustls_server_with_ffdhe_kx_tls12() {
     test_rustls_server_with_ffdhe_kx(ffdhe_provider().with_only_tls12(), 1)
 }
 
-fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
+fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider<'static>, iters: usize) {
     verify_openssl3_available();
 
     let message = "Hello from rustls!\n";
@@ -193,19 +194,16 @@ fn load_private_key() -> PrivateKeyDer<'static> {
     PrivateKeyDer::from_pem_file(PRIV_KEY_FILE).unwrap()
 }
 
-fn ffdhe_provider() -> CryptoProvider {
+fn ffdhe_provider() -> CryptoProvider<'static> {
     CryptoProvider {
-        tls12_cipher_suites: vec![&ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
-        tls13_cipher_suites: vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256],
-        kx_groups: vec![&FfdheKxGroup(
-            rustls::NamedGroup::FFDHE2048,
-            rustls::ffdhe_groups::FFDHE2048,
-        )],
-        ..provider::default_provider()
+        tls12_cipher_suites: Cow::Owned(vec![&ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256]),
+        tls13_cipher_suites: Cow::Owned(vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256]),
+        kx_groups: Cow::Owned(vec![FFDHE2048_GROUP]),
+        ..provider::DEFAULT_PROVIDER
     }
 }
 
-fn server_config_with_ffdhe_kx(provider: CryptoProvider) -> ServerConfig {
+fn server_config_with_ffdhe_kx(provider: CryptoProvider<'static>) -> ServerConfig {
     ServerConfig::builder_with_provider(provider.into())
         .with_no_client_auth()
         .with_single_cert(load_certs(), load_private_key())

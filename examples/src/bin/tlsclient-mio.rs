@@ -19,6 +19,7 @@
 //!
 //! [mio]: https://docs.rs/mio/latest/mio/
 
+use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
@@ -275,18 +276,20 @@ struct Args {
 }
 
 impl Args {
-    fn provider(&self) -> CryptoProvider {
+    fn provider(&self) -> CryptoProvider<'static> {
         let kx_groups = match self.key_exchange.as_slice() {
-            [] => provider::DEFAULT_KX_GROUPS.to_vec(),
-            items => items
-                .iter()
-                .map(|kx| find_key_exchange(kx))
-                .collect::<Vec<&'static dyn SupportedKxGroup>>(),
+            [] => Cow::Borrowed(provider::DEFAULT_KX_GROUPS),
+            items => Cow::Owned(
+                items
+                    .iter()
+                    .map(|kx| find_key_exchange(kx))
+                    .collect::<Vec<&'static dyn SupportedKxGroup>>(),
+            ),
         };
 
         let provider = CryptoProvider {
             kx_groups,
-            ..provider::default_provider()
+            ..provider::DEFAULT_PROVIDER
         };
 
         let provider = match self.suite.as_slice() {
@@ -316,7 +319,10 @@ fn find_key_exchange(name: &str) -> &'static dyn SupportedKxGroup {
 }
 
 /// Alter `provider` to reduce the set of ciphersuites to just `suites`
-fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvider {
+fn filter_suites(
+    mut provider: CryptoProvider<'static>,
+    suites: &[String],
+) -> CryptoProvider<'static> {
     // first, check `suites` all name known suites, and will have some effect
     let known_suites = provider
         .tls12_cipher_suites
@@ -343,6 +349,7 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
     // now discard non-named suites
     provider
         .tls12_cipher_suites
+        .to_mut()
         .retain(|cs| {
             let name = format!("{:?}", cs.common.suite).to_lowercase();
             suites
@@ -351,6 +358,7 @@ fn filter_suites(mut provider: CryptoProvider, suites: &[String]) -> CryptoProvi
         });
     provider
         .tls13_cipher_suites
+        .to_mut()
         .retain(|cs| {
             let name = format!("{:?}", cs.common.suite).to_lowercase();
             suites
@@ -397,10 +405,10 @@ mod danger {
     use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
 
     #[derive(Debug)]
-    pub struct NoCertificateVerification(CryptoProvider);
+    pub struct NoCertificateVerification(CryptoProvider<'static>);
 
     impl NoCertificateVerification {
-        pub fn new(provider: CryptoProvider) -> Self {
+        pub fn new(provider: CryptoProvider<'static>) -> Self {
             Self(provider)
         }
     }
@@ -497,7 +505,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         config
             .dangerous()
             .set_certificate_verifier(Arc::new(danger::NoCertificateVerification::new(
-                provider::default_provider(),
+                provider::DEFAULT_PROVIDER,
             )));
     }
 

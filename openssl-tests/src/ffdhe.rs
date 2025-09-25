@@ -6,13 +6,16 @@ use rustls::crypto::{
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{CipherSuite, NamedGroup, Tls12CipherSuite};
 
+pub(crate) const FFDHE2048_GROUP: &dyn SupportedKxGroup =
+    &FfdheKxGroup(NamedGroup::FFDHE2048, rustls::ffdhe_groups::FFDHE2048);
+
 #[derive(Debug)]
 pub(crate) struct FfdheKxGroup(pub NamedGroup, pub FfdheGroup<'static>);
 
 impl SupportedKxGroup for FfdheKxGroup {
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, rustls::Error> {
         let mut x = vec![0; 64];
-        provider::default_provider()
+        provider::DEFAULT_PROVIDER
             .secure_random
             .fill(&mut x)?;
         let x = BigUint::from_bytes_be(&x);

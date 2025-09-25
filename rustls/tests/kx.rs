@@ -2,6 +2,7 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use rustls::client::Resumption;
@@ -17,12 +18,11 @@ use rustls_test::{
     make_pair_for_configs, make_server_config, make_server_config_with_kx_groups, transfer,
 };
 
-use super::common::all_versions;
 use super::provider;
 
 #[test]
 fn test_client_config_keyshare() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let kx_groups = vec![provider::kx_group::SECP384R1];
     let client_config =
         make_client_config_with_kx_groups(KeyType::Rsa2048, kx_groups.clone(), &provider);
@@ -33,7 +33,7 @@ fn test_client_config_keyshare() {
 
 #[test]
 fn test_client_config_keyshare_mismatch() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let client_config = make_client_config_with_kx_groups(
         KeyType::Rsa2048,
         vec![provider::kx_group::SECP384R1],
@@ -51,14 +51,8 @@ fn test_client_config_keyshare_mismatch() {
 #[test]
 fn exercise_all_key_exchange_methods() {
     for (version, version_provider) in [
-        (
-            ProtocolVersion::TLSv1_3,
-            provider::default_provider().with_only_tls13(),
-        ),
-        (
-            ProtocolVersion::TLSv1_2,
-            provider::default_provider().with_only_tls12(),
-        ),
+        (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
+        (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
     ] {
         for kx_group in provider::ALL_KX_GROUPS {
             if !kx_group
@@ -87,7 +81,7 @@ fn exercise_all_key_exchange_methods() {
 
 #[test]
 fn test_client_sends_helloretryrequest() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     // client sends a secp384r1 key share
     let mut client_config = make_client_config_with_kx_groups(
         KeyType::Rsa2048,
@@ -210,7 +204,7 @@ fn test_client_sends_helloretryrequest() {
 fn test_client_attempts_to_use_unsupported_kx_group() {
     // common to both client configs
     let shared_storage = Arc::new(ClientStorage::new());
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
 
     // first, client sends a secp-256 share and server agrees. secp-256 is inserted
     //   into kx group cache.
@@ -269,7 +263,7 @@ fn test_client_sends_share_for_less_preferred_group() {
 
     // common to both client configs
     let shared_storage = Arc::new(ClientStorage::new());
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
 
     // first, client sends a secp384r1 share and server agrees. secp384r1 is inserted
     //   into kx group cache.
@@ -331,7 +325,7 @@ fn test_client_sends_share_for_less_preferred_group() {
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_groups() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     server
         .read_tls(
             &mut encoding::message_framing(
@@ -362,7 +356,10 @@ fn test_server_rejects_clients_without_any_kx_groups() {
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_group_overlap() {
-    for version_provider in all_versions(&provider::default_provider()) {
+    for version_provider in [
+        provider::DEFAULT_TLS12_PROVIDER,
+        provider::DEFAULT_TLS13_PROVIDER,
+    ] {
         let (mut client, mut server) = make_pair_for_configs(
             make_client_config_with_kx_groups(
                 KeyType::Rsa2048,
@@ -371,7 +368,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
             ),
             ServerConfig::builder_with_provider(
                 CryptoProvider {
-                    kx_groups: vec![provider::kx_group::SECP384R1],
+                    kx_groups: Cow::Owned(vec![provider::kx_group::SECP384R1]),
                     ..version_provider
                 }
                 .into(),
@@ -398,13 +395,13 @@ fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
     let kt = KeyType::Rsa2048;
     let client_config = ClientConfig::builder_with_provider(
         CryptoProvider {
-            kx_groups: vec![&FakeHybrid, provider::kx_group::SECP384R1],
-            ..provider::default_provider()
+            kx_groups: Cow::Owned(vec![&FakeHybrid, provider::kx_group::SECP384R1]),
+            ..provider::DEFAULT_PROVIDER
         }
         .into(),
     )
     .finish(kt);
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let server_config = make_server_config(kt, &provider);
 
     let (mut client_1, mut server) = make_pair_for_configs(client_config, server_config);

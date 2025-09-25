@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(clippy::disallowed_types)]
 
+use std::borrow::Cow;
 pub use std::sync::Arc;
 
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
@@ -37,40 +38,34 @@ fn exactly_one_provider() -> bool {
     ))
 }
 
-pub fn all_versions(provider: &CryptoProvider) -> impl Iterator<Item = CryptoProvider> {
-    vec![
-        provider.clone().with_only_tls12(),
-        provider.clone().with_only_tls13(),
-    ]
-    .into_iter()
-}
-
 pub fn provider_with_one_suite(
-    provider: &CryptoProvider,
+    provider: &CryptoProvider<'static>,
     suite: SupportedCipherSuite,
-) -> CryptoProvider {
+) -> CryptoProvider<'static> {
     provider_with_suites(provider, &[suite])
 }
 
 pub fn provider_with_suites(
-    provider: &CryptoProvider,
+    provider: &CryptoProvider<'static>,
     suites: &[SupportedCipherSuite],
-) -> CryptoProvider {
-    let mut provider = CryptoProvider {
-        tls12_cipher_suites: vec![],
-        tls13_cipher_suites: vec![],
-        ..provider.clone()
-    };
+) -> CryptoProvider<'static> {
+    let mut tls12_cipher_suites = vec![];
+    let mut tls13_cipher_suites = vec![];
+
     for suite in suites {
         match suite {
             SupportedCipherSuite::Tls12(suite) => {
-                provider.tls12_cipher_suites.push(suite);
+                tls12_cipher_suites.push(*suite);
             }
             SupportedCipherSuite::Tls13(suite) => {
-                provider.tls13_cipher_suites.push(suite);
+                tls13_cipher_suites.push(*suite);
             }
             _ => unreachable!(),
         }
     }
-    provider
+    CryptoProvider {
+        tls12_cipher_suites: Cow::Owned(tls12_cipher_suites),
+        tls13_cipher_suites: Cow::Owned(tls13_cipher_suites),
+        ..provider.clone()
+    }
 }

@@ -22,7 +22,7 @@ fn test_early_exporter() {
     let port = listener.local_addr().unwrap().port();
 
     let server_thread = thread::spawn(move || {
-        let mut config = ServerConfig::builder_with_provider(provider::default_provider().into())
+        let mut config = ServerConfig::builder_with_provider(provider::DEFAULT_PROVIDER.into())
             .with_no_client_auth()
             .with_single_cert(load_certs(), load_private_key())
             .unwrap();

@@ -20,6 +20,7 @@
 )]
 
 use core::fmt::{Debug, Formatter};
+use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
 use std::{env, net, process, thread, time};
@@ -118,7 +119,7 @@ struct Options {
     expect_handshake_kind_resumed: Option<Vec<HandshakeKind>>,
     install_cert_compression_algs: CompressionAlgs,
     selected_provider: SelectedProvider,
-    provider: CryptoProvider,
+    provider: CryptoProvider<'static>,
     ech_config_list: Option<EchConfigListBytes<'static>>,
     expect_ech_accept: bool,
     expect_ech_retry_configs: Option<EchConfigListBytes<'static>>,
@@ -219,12 +220,13 @@ impl Options {
         self.support_tls12 && self.version_allowed(ProtocolVersion::TLSv1_2)
     }
 
-    fn provider(&self) -> CryptoProvider {
+    fn provider(&self) -> CryptoProvider<'static> {
         let mut provider = self.provider.clone();
 
         if let Some(groups) = &self.groups {
             provider
                 .kx_groups
+                .to_mut()
                 .retain(|kxg| groups.contains(&kxg.name()));
         }
 
@@ -306,7 +308,7 @@ impl SelectedProvider {
         }
     }
 
-    fn provider(&self) -> CryptoProvider {
+    fn provider(&self) -> CryptoProvider<'static> {
         match self {
             Self::AwsLcRs | Self::AwsLcRsFips => {
                 // ensure all suites and kx groups are included (even in fips builds)
@@ -314,14 +316,14 @@ impl SelectedProvider {
                 // this includes rustls-post-quantum, which just returns an altered
                 // version of `aws_lc_rs::default_provider()`
                 CryptoProvider {
-                    kx_groups: aws_lc_rs::DEFAULT_KX_GROUPS.to_vec(),
-                    tls12_cipher_suites: aws_lc_rs::ALL_TLS12_CIPHER_SUITES.to_vec(),
-                    tls13_cipher_suites: aws_lc_rs::ALL_TLS13_CIPHER_SUITES.to_vec(),
-                    ..aws_lc_rs::default_provider()
+                    kx_groups: Cow::Borrowed(aws_lc_rs::ALL_KX_GROUPS),
+                    tls12_cipher_suites: Cow::Borrowed(aws_lc_rs::ALL_TLS12_CIPHER_SUITES),
+                    tls13_cipher_suites: Cow::Borrowed(aws_lc_rs::ALL_TLS13_CIPHER_SUITES),
+                    ..aws_lc_rs::DEFAULT_PROVIDER
                 }
             }
 
-            Self::Ring => ring::default_provider(),
+            Self::Ring => ring::DEFAULT_PROVIDER,
         }
     }
 
@@ -2190,7 +2192,7 @@ impl compress::CertCompressor for RandomAlgorithm {
         let random_byte = {
             let mut bytes = [0];
             // nb. provider is irrelevant for this use
-            ring::default_provider()
+            ring::DEFAULT_PROVIDER
                 .secure_random
                 .fill(&mut bytes)
                 .unwrap();

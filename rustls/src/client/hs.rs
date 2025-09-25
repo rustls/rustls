@@ -71,7 +71,7 @@ impl ExpectServerHello {
         cx: &mut ClientContext<'_>,
     ) -> NextStateOrError<'static>
     where
-        CryptoProvider: Borrow<[&'static T]>,
+        CryptoProvider<'static>: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
     {
         if server_hello.compression_method != Compression::Null {
@@ -120,15 +120,16 @@ impl ExpectServerHello {
             }
         }
 
-        let suite = <CryptoProvider as Borrow<[&'static T]>>::borrow(&self.input.config.provider)
-            .iter()
-            .find(|cs| cs.common().suite == server_hello.cipher_suite)
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerMisbehaved::SelectedUnofferedCipherSuite,
-                )
-            })?;
+        let suite =
+            <CryptoProvider<'static> as Borrow<[&'static T]>>::borrow(&self.input.config.provider)
+                .iter()
+                .find(|cs| cs.common().suite == server_hello.cipher_suite)
+                .ok_or_else(|| {
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerMisbehaved::SelectedUnofferedCipherSuite,
+                    )
+                })?;
 
         match self.suite {
             Some(prev_suite) if prev_suite.suite() != suite.common().suite => {
