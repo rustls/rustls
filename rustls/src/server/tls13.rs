@@ -70,7 +70,7 @@ mod client_hello {
             &self,
             suite: &'static Tls13CipherSuite,
             kx_group: &'static dyn SupportedKxGroup,
-            signer: &CertifiedSigner,
+            signer: CertifiedSigner,
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             cx: &mut ServerContext<'_>,
@@ -342,7 +342,7 @@ mod client_hello {
                 } else {
                     emit_certificate_tls13(&mut flight, &signer.cert_chain, ocsp_response);
                 }
-                emit_certificate_verify_tls13(&mut flight, &*signer.signer)?;
+                emit_certificate_verify_tls13(&mut flight, signer.signer)?;
                 client_auth
             } else {
                 false
@@ -792,7 +792,7 @@ mod client_hello {
 
     fn emit_certificate_verify_tls13(
         flight: &mut HandshakeFlightTls13<'_>,
-        signer: &dyn Signer,
+        signer: Box<dyn Signer>,
     ) -> Result<(), Error> {
         let message = construct_server_verify_message(&flight.transcript.current_hash());
         let scheme = signer.scheme();

@@ -493,7 +493,7 @@ impl sign::SigningKey for SigningKey {
 }
 
 impl sign::Signer for SigningKey {
-    fn sign(&self, _message: &[u8]) -> Result<Vec<u8>, Error> {
+    fn sign(self: Box<Self>, _message: &[u8]) -> Result<Vec<u8>, Error> {
         Ok(SIGNATURE.to_vec())
     }
 

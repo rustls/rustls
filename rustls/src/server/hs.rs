@@ -429,7 +429,7 @@ impl ExpectClientHello {
 
         suite
             .server_handler()
-            .handle_client_hello(suite, skxg, &signer, input, self, cx)
+            .handle_client_hello(suite, skxg, signer, input, self, cx)
     }
 
     fn choose_suite_and_kx_group<T: Suite + 'static>(
@@ -584,7 +584,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         &self,
         suite: &'static T,
         kx_group: &'static dyn SupportedKxGroup,
-        cert_key: &CertifiedSigner,
+        cert_key: CertifiedSigner,
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
         cx: &mut ServerContext<'_>,

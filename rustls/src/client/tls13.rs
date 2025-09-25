@@ -1331,7 +1331,7 @@ fn emit_certificate_tls13(
 
 fn emit_certverify_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
-    signer: &dyn Signer,
+    signer: Box<dyn Signer>,
 ) -> Result<(), Error> {
     let message = construct_client_verify_message(&flight.transcript.current_hash());
 
@@ -1461,7 +1461,7 @@ impl State<ClientConnectionData> for ExpectFinished {
                     } else {
                         emit_certificate_tls13(&mut flight, Some(&signer.cert_chain), auth_context);
                     }
-                    emit_certverify_tls13(&mut flight, &*signer.signer)?;
+                    emit_certverify_tls13(&mut flight, signer.signer)?;
                 }
             }
         }
