@@ -431,9 +431,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
         transfer(&mut client, &mut server);
         assert_eq!(
             server.process_new_packets(),
-            Err(Error::General(
-                "no server certificate chain resolved".to_string()
-            ))
+            Err(Error::NoSuitableCertificate)
         );
         assert_eq!(
             Some(&DnsName::try_from("thisdoesnotexist.com").unwrap()),
@@ -477,9 +475,7 @@ fn sni_resolver_works() {
     let err = do_handshake_until_error(&mut client2, &mut server2);
     assert_eq!(
         err,
-        Err(ErrorFromPeer::Server(Error::General(
-            "no server certificate chain resolved".into()
-        )))
+        Err(ErrorFromPeer::Server(Error::NoSuitableCertificate))
     );
 }
 

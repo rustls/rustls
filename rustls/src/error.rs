@@ -93,6 +93,9 @@ pub enum Error {
     /// An incoming connection did not support any known application protocol.
     NoApplicationProtocol,
 
+    /// The server certificate resolver didn't find an appropriate certificate.
+    NoSuitableCertificate,
+
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
@@ -1068,6 +1071,7 @@ impl fmt::Display for Error {
             Self::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
             Self::HandshakeNotComplete => write!(f, "handshake not complete"),
             Self::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
+            Self::NoSuitableCertificate => write!(f, "no suitable certificate found"),
             Self::FailedToGetCurrentTime => write!(f, "failed to get current time"),
             Self::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
             Self::BadMaxFragmentSize => {

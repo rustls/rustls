@@ -396,10 +396,8 @@ impl ExpectClientHello {
             .cert_resolver
             .resolve(&ClientHello::new(&input, cx.data.sni.as_ref(), T::VERSION))
             .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::AccessDenied,
-                    Error::General("no server certificate chain resolved".to_owned()),
-                )
+                cx.common
+                    .send_fatal_alert(AlertDescription::AccessDenied, Error::NoSuitableCertificate)
             })?;
 
         let (suite, skxg) = self
