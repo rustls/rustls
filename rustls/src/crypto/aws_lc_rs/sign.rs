@@ -23,6 +23,24 @@ pub(super) struct RsaSigningKey {
 }
 
 impl RsaSigningKey {
+    fn to_signer(&self, scheme: SignatureScheme) -> RsaSigner {
+        let encoding: &dyn signature::RsaEncoding = match scheme {
+            SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA512 => &signature::RSA_PKCS1_SHA512,
+            SignatureScheme::RSA_PSS_SHA256 => &signature::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_SHA384 => &signature::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA512 => &signature::RSA_PSS_SHA512,
+            _ => unreachable!(),
+        };
+
+        RsaSigner {
+            key: self.key.clone(),
+            scheme,
+            encoding,
+        }
+    }
+
     const SCHEMES: &[SignatureScheme] = &[
         SignatureScheme::RSA_PSS_SHA512,
         SignatureScheme::RSA_PSS_SHA384,
@@ -38,7 +56,7 @@ impl SigningKey for RsaSigningKey {
         Self::SCHEMES
             .iter()
             .find(|scheme| offered.contains(scheme))
-            .map(|scheme| RsaSigner::new(self.key.clone(), *scheme))
+            .map(|&scheme| Box::new(self.to_signer(scheme)) as Box<dyn Signer>)
     }
 
     fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
@@ -93,26 +111,6 @@ struct RsaSigner {
 }
 
 impl RsaSigner {
-    fn new(key: Arc<RsaKeyPair>, scheme: SignatureScheme) -> Box<dyn Signer> {
-        let encoding: &dyn signature::RsaEncoding = match scheme {
-            SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
-            SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
-            SignatureScheme::RSA_PKCS1_SHA512 => &signature::RSA_PKCS1_SHA512,
-            SignatureScheme::RSA_PSS_SHA256 => &signature::RSA_PSS_SHA256,
-            SignatureScheme::RSA_PSS_SHA384 => &signature::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA512 => &signature::RSA_PSS_SHA512,
-            _ => unreachable!(),
-        };
-
-        Box::new(Self {
-            key,
-            scheme,
-            encoding,
-        })
-    }
-}
-
-impl Signer for RsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let mut sig = vec![0; self.key.public_modulus_len()];
 
@@ -121,6 +119,12 @@ impl Signer for RsaSigner {
             .sign(self.encoding, &rng, message, &mut sig)
             .map(|_| sig)
             .map_err(|_| Error::General("signing failed".to_string()))
+    }
+}
+
+impl Signer for RsaSigner {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
+        self.sign(message)
     }
 
     fn scheme(&self) -> SignatureScheme {
@@ -182,10 +186,7 @@ impl EcdsaSigningKey {
 impl SigningKey for EcdsaSigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
-            Some(Box::new(EcdsaSigner {
-                key: self.key.clone(),
-                scheme: self.scheme,
-            }))
+            Some(Box::new(EcdsaSigner::from(self)))
         } else {
             None
         }
@@ -258,7 +259,7 @@ struct EcdsaSigner {
     scheme: SignatureScheme,
 }
 
-impl Signer for EcdsaSigner {
+impl EcdsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let rng = SystemRandom::new();
         self.key
@@ -266,9 +267,24 @@ impl Signer for EcdsaSigner {
             .map_err(|_| Error::General("signing failed".into()))
             .map(|sig| sig.as_ref().into())
     }
+}
+
+impl Signer for EcdsaSigner {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
+        self.sign(message)
+    }
 
     fn scheme(&self) -> SignatureScheme {
         self.scheme
+    }
+}
+
+impl From<&EcdsaSigningKey> for EcdsaSigner {
+    fn from(sk: &EcdsaSigningKey) -> Self {
+        Self {
+            key: sk.key.clone(),
+            scheme: sk.scheme,
+        }
     }
 }
 
@@ -299,10 +315,7 @@ pub(super) struct Ed25519SigningKey {
 impl SigningKey for Ed25519SigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
-            Some(Box::new(Ed25519Signer {
-                key: self.key.clone(),
-                scheme: self.scheme,
-            }))
+            Some(Box::new(Ed25519Signer::from(self)))
         } else {
             None
         }
@@ -352,13 +365,28 @@ struct Ed25519Signer {
     scheme: SignatureScheme,
 }
 
-impl Signer for Ed25519Signer {
+impl Ed25519Signer {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         Ok(self.key.sign(message).as_ref().into())
+    }
+}
+
+impl Signer for Ed25519Signer {
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
+        self.sign(message)
     }
 
     fn scheme(&self) -> SignatureScheme {
         self.scheme
+    }
+}
+
+impl From<&Ed25519SigningKey> for Ed25519Signer {
+    fn from(sk: &Ed25519SigningKey) -> Self {
+        Self {
+            key: sk.key.clone(),
+            scheme: sk.scheme,
+        }
     }
 }
 
@@ -668,10 +696,7 @@ mod tests {
 
 #[cfg(bench)]
 mod benchmarks {
-    use super::{
-        EcdsaSigningKey, Ed25519SigningKey, PrivateKeyDer, PrivatePkcs8KeyDer, SignatureScheme,
-        load_key,
-    };
+    use super::*;
     use crate::crypto::aws_lc_rs::default_provider;
 
     #[bench]
@@ -679,11 +704,10 @@ mod benchmarks {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
         ));
-        let provider = default_provider();
-        let sk = load_key(&provider, key.clone_key()).unwrap();
-        let signer = sk
-            .choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
-            .unwrap();
+
+        let signer = RsaSigningKey::try_from(&key)
+            .unwrap()
+            .to_signer(SignatureScheme::RSA_PKCS1_SHA256);
 
         b.iter(|| {
             test::black_box(
@@ -699,11 +723,10 @@ mod benchmarks {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
         ));
-        let provider = default_provider();
-        let sk = load_key(&provider, key.clone_key()).unwrap();
-        let signer = sk
-            .choose_scheme(&[SignatureScheme::RSA_PSS_SHA256])
-            .unwrap();
+
+        let signer = RsaSigningKey::try_from(&key)
+            .unwrap()
+            .to_signer(SignatureScheme::RSA_PSS_SHA256);
 
         b.iter(|| {
             test::black_box(
@@ -716,14 +739,8 @@ mod benchmarks {
 
     #[bench]
     fn bench_eddsa(b: &mut test::Bencher) {
-        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/eddsakey.der")[..],
-        ));
-        let provider = default_provider();
-        let sk = load_key(&provider, key.clone_key()).unwrap();
-        let signer = sk
-            .choose_scheme(&[SignatureScheme::ED25519])
-            .unwrap();
+        let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
+        let signer = Ed25519Signer::from(&Ed25519SigningKey::try_from(&key).unwrap());
 
         b.iter(|| {
             test::black_box(
@@ -739,12 +756,8 @@ mod benchmarks {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/nistp256key.pkcs8.der")[..],
         ));
-        let provider = default_provider();
-        let sk = load_key(&provider, key.clone_key()).unwrap();
-        let signer = sk
-            .choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
-            .unwrap();
 
+        let signer = EcdsaSigner::from(&EcdsaSigningKey::try_from(&key).unwrap());
         b.iter(|| {
             test::black_box(
                 signer
@@ -759,12 +772,8 @@ mod benchmarks {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/nistp384key.pkcs8.der")[..],
         ));
-        let provider = default_provider();
-        let sk = load_key(&provider, key.clone_key()).unwrap();
-        let signer = sk
-            .choose_scheme(&[SignatureScheme::ECDSA_NISTP384_SHA384])
-            .unwrap();
 
+        let signer = EcdsaSigner::from(&EcdsaSigningKey::try_from(&key).unwrap());
         b.iter(|| {
             test::black_box(
                 signer
@@ -779,12 +788,8 @@ mod benchmarks {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/nistp521key.pkcs8.der")[..],
         ));
-        let provider = default_provider();
-        let sk = load_key(&provider, key.clone_key()).unwrap();
-        let signer = sk
-            .choose_scheme(&[SignatureScheme::ECDSA_NISTP521_SHA512])
-            .unwrap();
 
+        let signer = EcdsaSigner::from(&EcdsaSigningKey::try_from(&key).unwrap());
         b.iter(|| {
             test::black_box(
                 signer
