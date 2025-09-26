@@ -1156,7 +1156,7 @@ impl Accepted {
             sig_schemes: self.sig_schemes,
         };
 
-        let new = match state.with_certified_key(input, &mut cx) {
+        let new = match state.with_input(input, &mut cx) {
             Ok(new) => new,
             Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
         };

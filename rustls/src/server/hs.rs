@@ -298,7 +298,7 @@ impl ExpectClientHello {
     }
 
     /// Continues handling of a `ClientHello` message once config and certificate are available.
-    pub(super) fn with_certified_key(
+    pub(super) fn with_input(
         self,
         input: ClientHelloInput<'_>,
         cx: &mut ServerContext<'_>,
@@ -571,7 +571,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
         Self: 'm,
     {
         let input = ClientHelloInput::from_message(&m, self.done_retry, cx)?;
-        self.with_certified_key(input, cx)
+        self.with_input(input, cx)
     }
 
     fn into_owned(self: Box<Self>) -> NextState<'static> {
