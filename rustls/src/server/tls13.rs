@@ -340,7 +340,10 @@ mod client_hello {
                         compressor,
                     );
                 } else {
-                    emit_certificate_tls13(&mut flight, &signer.cert_chain, ocsp_response);
+                    emit_certificate_tls13(
+                        &mut flight,
+                        CertificatePayloadTls13::new(&signer.cert_chain, ocsp_response),
+                    );
                 }
                 emit_certificate_verify_tls13(&mut flight, signer.signer)?;
                 client_auth
@@ -755,13 +758,9 @@ mod client_hello {
 
     fn emit_certificate_tls13(
         flight: &mut HandshakeFlightTls13<'_>,
-        cert_chain: &[CertificateDer<'static>],
-        ocsp_response: Option<&[u8]>,
+        payload: CertificatePayloadTls13<'_>,
     ) {
-        let cert = HandshakeMessagePayload(HandshakePayload::CertificateTls13(
-            CertificatePayloadTls13::new(cert_chain, ocsp_response),
-        ));
-
+        let cert = HandshakeMessagePayload(HandshakePayload::CertificateTls13(payload));
         trace!("sending certificate {cert:?}");
         flight.add(cert);
     }
@@ -774,12 +773,11 @@ mod client_hello {
         cert_compressor: &'static dyn CertCompressor,
     ) {
         let payload = CertificatePayloadTls13::new(cert_chain, ocsp_response);
-
         let Ok(entry) = config
             .cert_compression_cache
             .compression_for(cert_compressor, &payload)
         else {
-            return emit_certificate_tls13(flight, cert_chain, ocsp_response);
+            return emit_certificate_tls13(flight, payload);
         };
 
         let c = HandshakeMessagePayload(HandshakePayload::CompressedCertificate(
