@@ -584,7 +584,7 @@ fn emit_client_kx(
 
 fn emit_certverify(
     transcript: &mut HandshakeHash,
-    signer: &dyn Signer,
+    signer: Box<dyn Signer>,
     common: &mut CommonState,
 ) -> Result<(), Error> {
     let message = transcript
@@ -942,9 +942,13 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         if let Some(client_auth) = &st.client_auth {
             let certs = match client_auth {
                 ClientAuthDetails::Empty { .. } => CertificateChain::default(),
-                ClientAuthDetails::Verify { certkey, .. } => {
-                    CertificateChain(certkey.cert_chain.clone())
-                }
+                ClientAuthDetails::Verify { signer, .. } => CertificateChain(
+                    signer
+                        .cert_chain
+                        .iter()
+                        .cloned()
+                        .collect(),
+                ),
             };
             emit_certificate(&mut st.transcript, certs, cx.common);
         }
@@ -988,8 +992,8 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             .then(|| transcript.current_hash());
 
         // 4c.
-        if let Some(ClientAuthDetails::Verify { signer, .. }) = &st.client_auth {
-            emit_certverify(&mut transcript, signer.as_ref(), cx.common)?;
+        if let Some(ClientAuthDetails::Verify { signer, .. }) = st.client_auth {
+            emit_certverify(&mut transcript, signer.signer, cx.common)?;
         }
 
         // 4d. Derive secrets.

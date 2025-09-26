@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 // aws-lc-rs has a -- roughly -- ring-compatible API, so we just reuse all that
@@ -22,7 +23,7 @@ pub mod hpke;
 pub(crate) mod pq;
 /// Using software keys for authentication.
 pub mod sign;
-use sign::{EcdsaSigningKey, Ed25519SigningKey, RsaSigningKey};
+use sign::{EcdsaSigner, Ed25519Signer, RsaSigningKey};
 
 #[path = "../ring/hash.rs"]
 pub(crate) mod hash;
@@ -91,18 +92,18 @@ impl KeyProvider for AwsLcRs {
     fn load_private_key(
         &self,
         key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn SigningKey>, Error> {
+    ) -> Result<Box<dyn SigningKey>, Error> {
         if let Ok(rsa) = RsaSigningKey::try_from(&key_der) {
-            return Ok(Arc::new(rsa));
+            return Ok(Box::new(rsa));
         }
 
-        if let Ok(ecdsa) = EcdsaSigningKey::try_from(&key_der) {
-            return Ok(Arc::new(ecdsa));
+        if let Ok(ecdsa) = EcdsaSigner::try_from(&key_der) {
+            return Ok(Box::new(ecdsa));
         }
 
         if let PrivateKeyDer::Pkcs8(pkcs8) = key_der {
-            if let Ok(eddsa) = Ed25519SigningKey::try_from(&pkcs8) {
-                return Ok(Arc::new(eddsa));
+            if let Ok(eddsa) = Ed25519Signer::try_from(&pkcs8) {
+                return Ok(Box::new(eddsa));
             }
         }
 

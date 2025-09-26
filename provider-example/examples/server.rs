@@ -94,7 +94,7 @@ impl TestPki {
         let mut server_config =
             ServerConfig::builder_with_provider(rustls_provider_example::provider().into())
                 .with_no_client_auth()
-                .with_single_cert(vec![self.server_cert_der], self.server_key_der)
+                .with_single_cert(Arc::from([self.server_cert_der]), self.server_key_der)
                 .unwrap();
 
         server_config.key_log = Arc::new(rustls::KeyLogFile::new());

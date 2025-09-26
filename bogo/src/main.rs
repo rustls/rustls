@@ -50,6 +50,7 @@ use rustls::server::danger::{
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
+use rustls::sign::{CertifiedSigner, SingleCertAndKey};
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
     DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIncompatible,
@@ -95,7 +96,7 @@ struct Options {
     support_tls12: bool,
     min_version: Option<ProtocolVersion>,
     max_version: Option<ProtocolVersion>,
-    server_ocsp_response: Vec<u8>,
+    server_ocsp_response: Arc<[u8]>,
     groups: Option<Vec<NamedGroup>>,
     export_keying_material: usize,
     export_keying_material_label: String,
@@ -165,7 +166,7 @@ impl Options {
             support_tls12: true,
             min_version: None,
             max_version: None,
-            server_ocsp_response: vec![],
+            server_ocsp_response: Arc::from([]),
             groups: None,
             export_keying_material: 0,
             export_keying_material_label: "".to_string(),
@@ -518,7 +519,7 @@ enum OcspValidation {
 
 #[derive(Debug)]
 struct FixedSignatureSchemeSigningKey {
-    key: Arc<dyn sign::SigningKey>,
+    key: Box<dyn sign::SigningKey>,
     scheme: SignatureScheme,
 }
 
@@ -542,18 +543,26 @@ impl sign::SigningKey for FixedSignatureSchemeSigningKey {
 
 #[derive(Debug)]
 struct FixedSignatureSchemeServerCertResolver {
-    resolver: Arc<dyn server::ResolvesServerCert>,
+    cert_key: sign::CertifiedKey,
     scheme: SignatureScheme,
 }
 
 impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-        let mut certkey = self.resolver.resolve(client_hello)?;
-        Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
-            key: certkey.key.clone(),
-            scheme: self.scheme,
-        });
-        Some(certkey)
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+        if !client_hello
+            .signature_schemes()
+            .contains(&self.scheme)
+        {
+            return Err(Error::PeerIncompatible(
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ));
+        }
+
+        self.cert_key
+            .signer(&[self.scheme])
+            .ok_or(Error::PeerIncompatible(
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ))
     }
 }
 
@@ -580,7 +589,7 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
         &self,
         root_hint_subjects: &[&[u8]],
         sig_schemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>> {
+    ) -> Option<CertifiedSigner> {
         // `sig_schemes` is in server preference order, so respect that.
         for sig_scheme in sig_schemes.iter().copied() {
             for (i, cert) in self.additional.iter().enumerate() {
@@ -593,29 +602,19 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
                     continue;
                 }
 
-                if cert
-                    .certkey
-                    .key
-                    .choose_scheme(&[sig_scheme])
-                    .is_some()
-                {
+                if let Some(signer) = cert.certkey.signer(&[sig_scheme]) {
                     assert!(
                         Some(i as isize) == self.expect_selected || self.expect_selected.is_none()
                     );
-                    return Some(cert.certkey.clone());
+                    return Some(signer);
                 }
             }
         }
 
         if let Some(cert) = &self.default {
-            if cert
-                .certkey
-                .key
-                .choose_scheme(sig_schemes)
-                .is_some()
-            {
+            if let Some(signer) = cert.certkey.signer(sig_schemes) {
                 assert!(matches!(self.expect_selected, Some(-1) | None));
-                return Some(cert.certkey.clone());
+                return Some(signer);
             }
         }
 
@@ -640,7 +639,7 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
 
 #[derive(Debug)]
 struct ClientCert {
-    certkey: Arc<sign::CertifiedKey>,
+    certkey: sign::CertifiedKey,
     issuer_dn: DistinguishedName,
     must_match_issuer: bool,
 }
@@ -652,14 +651,14 @@ impl ClientCert {
         let issuer_dn = DistinguishedName::in_sequence(parsed_cert.issuer());
 
         if let Some(scheme) = meta.use_signing_scheme {
-            certkey.key = Arc::new(FixedSignatureSchemeSigningKey {
+            certkey.key = Box::new(FixedSignatureSchemeSigningKey {
                 key: certkey.key,
                 scheme: lookup_scheme(scheme),
             });
         }
 
         Self {
-            certkey: Arc::new(certkey),
+            certkey,
             issuer_dn,
             must_match_issuer: meta.must_match_issuer,
         }
@@ -769,10 +768,21 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     );
     let cred = &opts.credentials.default;
     let (certs, key) = cred.load_from_file();
+    let provider = opts.provider();
+    let mut cert_key = sign::CertifiedKey::from_der(Arc::from(certs), key, &provider).unwrap();
+    cert_key.ocsp = Some(opts.server_ocsp_response.clone());
 
-    let mut cfg = ServerConfig::builder_with_provider(opts.provider().into())
+    let cert_resolver = match cred.use_signing_scheme {
+        Some(scheme) => Arc::new(FixedSignatureSchemeServerCertResolver {
+            cert_key,
+            scheme: lookup_scheme(scheme),
+        }) as Arc<dyn server::ResolvesServerCert>,
+        None => Arc::new(SingleCertAndKey::from(cert_key)),
+    };
+
+    let mut cfg = ServerConfig::builder_with_provider(Arc::new(provider))
         .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(certs, key, opts.server_ocsp_response.clone())
+        .with_cert_resolver(cert_resolver)
         .unwrap();
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
@@ -782,14 +792,6 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     cfg.ignore_client_order = opts.server_preference;
     if opts.export_traffic_secrets {
         cfg.key_log = key_log.clone();
-    }
-
-    if let Some(scheme) = cred.use_signing_scheme {
-        let scheme = lookup_scheme(scheme);
-        cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
-            resolver: cfg.cert_resolver.clone(),
-            scheme,
-        });
     }
 
     if opts.tickets {
@@ -953,7 +955,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .expect("cannot load private key");
 
                 resolver.set_default(
-                    sign::CertifiedKey::new(certs, key).expect("keys match"),
+                    sign::CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
                     cred,
                 )
             }
@@ -966,7 +968,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .expect("cannot load private key");
 
                 resolver.add(
-                    sign::CertifiedKey::new(certs, key).expect("keys match"),
+                    sign::CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
                     cred,
                 );
             }
@@ -1704,8 +1706,8 @@ pub fn main() {
             }
 
             "-ocsp-response" => {
-                opts.server_ocsp_response = BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid base64");
+                opts.server_ocsp_response = Arc::from(BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                    .expect("invalid base64"));
             }
             "-select-alpn" => {
                 opts.protocols.push(args.remove(0));

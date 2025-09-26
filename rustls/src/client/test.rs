@@ -455,9 +455,9 @@ mod tests {
         )
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
-        .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(Arc::new(
+        .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
             client_certified_key(),
-        ))))
+        )))
         .unwrap();
         config.key_log = key_log;
         config
@@ -468,12 +468,12 @@ mod tests {
             .key_provider
             .load_private_key(client_key())
             .unwrap();
-        let public_key_as_cert = vec![CertificateDer::from(
+        let public_key_as_cert = Arc::from([CertificateDer::from(
             key.public_key()
                 .unwrap()
                 .as_ref()
                 .to_vec(),
-        )];
+        )]);
         CertifiedKey::new_unchecked(public_key_as_cert, key)
     }
 

@@ -136,7 +136,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// struct HsmKeyLoader;
 ///
 /// impl rustls::crypto::KeyProvider for HsmKeyLoader {
-///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
+///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Box<dyn rustls::sign::SigningKey>, rustls::Error> {
 ///          fictitious_hsm_api::load_private_key(key_der)
 ///     }
 /// }
@@ -464,7 +464,7 @@ pub trait KeyProvider: Send + Sync + Debug {
     fn load_private_key(
         &self,
         key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn SigningKey>, Error>;
+    ) -> Result<Box<dyn SigningKey>, Error>;
 
     /// Return `true` if this is backed by a FIPS-approved implementation.
     ///

@@ -1,12 +1,11 @@
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::ResolvesClientCert;
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtensions};
-use crate::sync::Arc;
-use crate::{SignatureScheme, compress, sign};
+use crate::sign::CertifiedSigner;
+use crate::{SignatureScheme, compress};
 
 #[derive(Debug)]
 pub(super) struct ServerCertDetails<'a> {
@@ -80,8 +79,7 @@ pub(super) enum ClientAuthDetails {
     Empty { auth_context_tls13: Option<Vec<u8>> },
     /// Send a non-empty `Certificate` and a `CertificateVerify`.
     Verify {
-        certkey: Arc<sign::CertifiedKey>,
-        signer: Box<dyn sign::Signer>,
+        signer: CertifiedSigner,
         auth_context_tls13: Option<Vec<u8>>,
         compressor: Option<&'static dyn compress::CertCompressor>,
     },
@@ -101,16 +99,13 @@ impl ClientAuthDetails {
             .map(|p| p.as_ref())
             .collect::<Vec<&[u8]>>();
 
-        if let Some(certkey) = resolver.resolve(&acceptable_issuers, sigschemes) {
-            if let Some(signer) = certkey.key.choose_scheme(sigschemes) {
-                debug!("Attempting client auth");
-                return Self::Verify {
-                    certkey,
-                    signer,
-                    auth_context_tls13,
-                    compressor,
-                };
-            }
+        if let Some(signer) = resolver.resolve(&acceptable_issuers, sigschemes) {
+            debug!("Attempting client auth");
+            return Self::Verify {
+                signer,
+                auth_context_tls13,
+                compressor,
+            };
         }
 
         debug!("Client auth requested but no cert/sigscheme available");

@@ -30,10 +30,11 @@ use rustls::pki_types::{
     SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
 use rustls::server::ProducesTickets;
+use rustls::sign::CertifiedSigner;
 use rustls::{
-    CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerMisbehaved,
-    ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme, Tls12CipherSuite,
-    Tls13CipherSuite, crypto, server, sign,
+    CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerIncompatible,
+    PeerMisbehaved, ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme,
+    Tls12CipherSuite, Tls13CipherSuite, crypto, server, sign,
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
@@ -62,7 +63,7 @@ pub fn server_verifier() -> Arc<dyn ServerCertVerifier> {
 
 pub fn server_cert_resolver() -> Arc<dyn server::ResolvesServerCert> {
     let cert = CertificateDer::from(&include_bytes!("../../test-ca/ecdsa-p256/end.der")[..]);
-    let certified_key = sign::CertifiedKey::new_unchecked(vec![cert], Arc::new(SigningKey));
+    let certified_key = sign::CertifiedKey::new_unchecked(Arc::from([cert]), Box::new(SigningKey));
     Arc::new(DummyCert(certified_key.into()))
 }
 
@@ -70,8 +71,12 @@ pub fn server_cert_resolver() -> Arc<dyn server::ResolvesServerCert> {
 struct DummyCert(Arc<sign::CertifiedKey>);
 
 impl server::ResolvesServerCert for DummyCert {
-    fn resolve(&self, _client_hello: &server::ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-        Some(self.0.clone())
+    fn resolve(&self, client_hello: &server::ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+        self.0
+            .signer(client_hello.signature_schemes())
+            .ok_or(Error::PeerIncompatible(
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ))
     }
 }
 
@@ -96,8 +101,8 @@ impl crypto::KeyProvider for Provider {
     fn load_private_key(
         &self,
         _key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn sign::SigningKey>, Error> {
-        Ok(Arc::new(SigningKey))
+    ) -> Result<Box<dyn sign::SigningKey>, Error> {
+        Ok(Box::new(SigningKey))
     }
 }
 
@@ -488,7 +493,7 @@ impl sign::SigningKey for SigningKey {
 }
 
 impl sign::Signer for SigningKey {
-    fn sign(&self, _message: &[u8]) -> Result<Vec<u8>, Error> {
+    fn sign(self: Box<Self>, _message: &[u8]) -> Result<Vec<u8>, Error> {
         Ok(SIGNATURE.to_vec())
     }
 

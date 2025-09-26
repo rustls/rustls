@@ -41,7 +41,7 @@ use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, ClientHello, ResolvesServerCert,
     UnbufferedServerConnection, WebPkiClientVerifier,
 };
-use rustls::sign::{CertifiedKey, SigningKey};
+use rustls::sign::{CertifiedKey, CertifiedSigner, SigningKey};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
@@ -364,12 +364,13 @@ impl KeyType {
 
     pub fn ca_cert(&self) -> CertificateDer<'_> {
         self.chain()
-            .into_iter()
+            .iter()
             .next_back()
+            .cloned()
             .expect("cert chain cannot be empty")
     }
 
-    pub fn chain(&self) -> Vec<CertificateDer<'static>> {
+    pub fn chain(&self) -> Arc<[CertificateDer<'static>]> {
         CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
             .map(|result| result.unwrap())
             .collect()
@@ -379,7 +380,7 @@ impl KeyType {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("end.spki.pem")).unwrap()
     }
 
-    pub fn load_key(&self, provider: &CryptoProvider) -> Arc<dyn SigningKey> {
+    pub fn load_key(&self, provider: &CryptoProvider) -> Box<dyn SigningKey> {
         provider
             .key_provider
             .load_private_key(self.key())
@@ -392,7 +393,7 @@ impl KeyType {
             .into()
     }
 
-    pub fn client_chain(&self) -> Vec<CertificateDer<'static>> {
+    pub fn client_chain(&self) -> Arc<[CertificateDer<'static>]> {
         CertificateDer::pem_slice_iter(self.bytes_for("client.fullchain"))
             .map(|result| result.unwrap())
             .collect()
@@ -424,10 +425,7 @@ impl KeyType {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("client.spki.pem")).unwrap()
     }
 
-    pub fn certified_client_key(
-        &self,
-        provider: &CryptoProvider,
-    ) -> Result<Arc<CertifiedKey>, Error> {
+    pub fn certified_client_key(&self, provider: &CryptoProvider) -> Result<CertifiedKey, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.client_key())?;
@@ -435,16 +433,16 @@ impl KeyType {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
         let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new_unchecked(
-            vec![public_key_as_cert],
+        Ok(CertifiedKey::new_unchecked(
+            Arc::from([public_key_as_cert]),
             private_key,
-        )))
+        ))
     }
 
     pub fn certified_key_with_raw_pub_key(
         &self,
         provider: &CryptoProvider,
-    ) -> Result<Arc<CertifiedKey>, Error> {
+    ) -> Result<CertifiedKey, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.key())?;
@@ -452,20 +450,20 @@ impl KeyType {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
         let public_key_as_cert = CertificateDer::from(public_key.to_vec());
-        Ok(Arc::new(CertifiedKey::new_unchecked(
-            vec![public_key_as_cert],
+        Ok(CertifiedKey::new_unchecked(
+            Arc::from([public_key_as_cert]),
             private_key,
-        )))
+        ))
     }
 
     pub fn certified_key_with_cert_chain(
         &self,
         provider: &CryptoProvider,
-    ) -> Result<Arc<CertifiedKey>, Error> {
+    ) -> Result<CertifiedKey, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.key())?;
-        Ok(Arc::new(CertifiedKey::new(self.chain(), private_key)?))
+        CertifiedKey::new(self.chain(), private_key)
     }
 
     fn crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
@@ -1545,7 +1543,7 @@ pub struct ServerCheckCertResolve {
 }
 
 impl ResolvesServerCert for ServerCheckCertResolve {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         if client_hello
             .signature_schemes()
             .is_empty()
@@ -1621,7 +1619,7 @@ impl ResolvesServerCert for ServerCheckCertResolve {
             )
         }
 
-        None
+        Err(Error::NoSuitableCertificate)
     }
 }
 
@@ -2094,11 +2092,13 @@ pub mod encoding {
         pub fn new_sig_algs() -> Self {
             Self {
                 typ: ExtensionType::SignatureAlgorithms,
-                body: len_u16(
-                    SignatureScheme::RSA_PKCS1_SHA256
-                        .to_array()
-                        .to_vec(),
-                ),
+                body: len_u16(vector_of(
+                    [
+                        SignatureScheme::RSA_PKCS1_SHA256,
+                        SignatureScheme::ECDSA_NISTP256_SHA256,
+                    ]
+                    .into_iter(),
+                )),
             }
         }
 

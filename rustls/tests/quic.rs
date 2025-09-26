@@ -366,7 +366,7 @@ fn test_quic_invalid_early_data_size() {
 #[test]
 fn test_quic_server_no_params_received() {
     let provider = provider::default_provider().with_only_tls13();
-    let server_config = make_server_config(KeyType::Ed25519, &provider);
+    let server_config = make_server_config(KeyType::EcdsaP256, &provider);
     let server_config = Arc::new(server_config);
 
     let mut server =

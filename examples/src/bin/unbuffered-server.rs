@@ -29,7 +29,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut config = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(load_certs(cert_file)?, load_private_key(private_key_file)?)?;
+        .with_single_cert(
+            Arc::from(load_certs(cert_file)?),
+            load_private_key(private_key_file)?,
+        )?;
 
     if let Some(max_early_data_size) = MAX_EARLY_DATA_SIZE {
         config.max_early_data_size = max_early_data_size;

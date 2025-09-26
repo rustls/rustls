@@ -13,6 +13,7 @@ use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+use rustls::sign::CertifiedSigner;
 use rustls::{
     AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ContentType, Error, HandshakeKind, HandshakeType, InconsistentKeys, KeyingMaterialExporter,
@@ -328,7 +329,7 @@ fn client_can_get_server_cert() {
             };
 
             assert_eq!(certs.end_entity, kt.chain()[0]);
-            assert_eq!(certs.intermediates, &kt.chain().as_slice()[1..]);
+            assert_eq!(certs.intermediates, &kt.chain()[1..]);
         }
     }
 }
@@ -634,12 +635,12 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 fn test_keys_match() {
     // Consistent: Both of these should have the same SPKI values
     let expect_consistent =
-        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Arc::new(SigningKeySomeSpki));
+        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Box::new(SigningKeySomeSpki));
     assert!(expect_consistent.is_ok());
 
     // Inconsistent: These should not have the same SPKI values
     let expect_inconsistent =
-        sign::CertifiedKey::new(KeyType::EcdsaP256.chain(), Arc::new(SigningKeySomeSpki));
+        sign::CertifiedKey::new(KeyType::EcdsaP256.chain(), Box::new(SigningKeySomeSpki));
     assert!(matches!(
         expect_inconsistent,
         Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
@@ -647,7 +648,7 @@ fn test_keys_match() {
 
     // Unknown: This signing key returns None for its SPKI, so we can't tell if the certified key is consistent
     assert!(matches!(
-        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Arc::new(SigningKeyNoneSpki)),
+        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Box::new(SigningKeyNoneSpki)),
         Err(Error::InconsistentKeys(InconsistentKeys::Unknown))
     ));
 }
@@ -1634,9 +1635,7 @@ fn server_invalid_sni_policy() {
         (Policy::IgnoreIpAddresses, SERVER_NAME_BAD, Reject),
     ];
 
-    let accept_result = Err(Error::General(
-        "no server certificate chain resolved".to_string(),
-    ));
+    let accept_result = Err(Error::NoSuitableCertificate);
     let reject_result = Err(Error::PeerMisbehaved(
         PeerMisbehaved::ServerNameMustContainOneHostName,
     ));
@@ -1676,9 +1675,8 @@ struct ServerCheckSni {
 }
 
 impl ResolvesServerCert for ServerCheckSni {
-    fn resolve(&self, client_hello: &ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, client_hello: &ClientHello) -> Result<CertifiedSigner, Error> {
         assert_eq!(client_hello.server_name().is_some(), self.expect_sni);
-
-        None
+        Err(Error::NoSuitableCertificate)
     }
 }

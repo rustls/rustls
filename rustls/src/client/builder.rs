@@ -138,7 +138,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// This function fails if `key_der` is invalid.
     pub fn with_client_auth_cert(
         self,
-        cert_chain: Vec<CertificateDer<'static>>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
         let certified_key = CertifiedKey::from_der(cert_chain, key_der, &self.provider)?;

@@ -33,6 +33,7 @@ use crate::msgs::handshake::{ProtocolName, ServerExtensionsInput, ServerNamePayl
 #[cfg(feature = "std")]
 use crate::msgs::message::Message;
 use crate::server::hs::ClientHelloInput;
+use crate::sign::CertifiedSigner;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 #[cfg(feature = "std")]
@@ -40,7 +41,7 @@ use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
 use crate::{
-    DistinguishedName, KeyLog, NamedGroup, PeerMisbehaved, WantsVerifier, compress, sign, verify,
+    DistinguishedName, KeyLog, NamedGroup, PeerMisbehaved, WantsVerifier, compress, verify,
 };
 
 /// A trait for the ability to store server session data.
@@ -131,8 +132,15 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
     /// Choose a certificate chain and matching key given simplified
     /// ClientHello information.
     ///
-    /// Return `None` to abort the handshake.
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>>;
+    /// Yielding an `Error` will abort the handshake. Some relevant error variants:
+    ///
+    /// * [`PeerIncompatible::NoSignatureSchemesInCommon`]
+    /// * [`PeerIncompatible::NoServerNameProvided`]
+    /// * [`Error::NoSuitableCertificate`]
+    ///
+    /// [`PeerIncompatible::NoSignatureSchemesInCommon`]: crate::error::PeerIncompatible::NoSignatureSchemesInCommon
+    /// [`PeerIncompatible::NoServerNameProvided`]: crate::error::PeerIncompatible::NoServerNameProvided
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error>;
 
     /// Returns which [`CertificateType`]s this resolver supports.
     ///
@@ -1121,9 +1129,9 @@ impl Accepted {
 
     /// Convert the [`Accepted`] into a [`ServerConnection`].
     ///
-    /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
-    /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
-    /// configuration-dependent validation of the received `ClientHello` message fails.
+    /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] that
+    /// should be used for the session. Returns an error if configuration-dependent validation of
+    /// the received `ClientHello` message fails.
     pub fn into_connection(
         mut self,
         config: Arc<ServerConfig>,

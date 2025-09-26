@@ -208,7 +208,7 @@ fn ffdhe_provider() -> CryptoProvider {
 fn server_config_with_ffdhe_kx(provider: CryptoProvider) -> ServerConfig {
     ServerConfig::builder_with_provider(provider.into())
         .with_no_client_auth()
-        .with_single_cert(load_certs(), load_private_key())
+        .with_single_cert(Arc::from(load_certs()), load_private_key())
         .unwrap()
 }
 

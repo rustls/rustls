@@ -210,7 +210,7 @@ impl TestPki {
         let mut server_config = ServerConfig::builder()
             .with_client_cert_verifier(verifier)
             .with_single_cert(
-                vec![self.server_cert.cert.der().clone()],
+                Arc::from([self.server_cert.cert.der().clone()]),
                 PrivatePkcs8KeyDer::from(
                     self.server_cert
                         .signing_key

@@ -7,10 +7,10 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPubli
 use super::CryptoProvider;
 use crate::client::ResolvesClientCert;
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
-use crate::error::{Error, InconsistentKeys};
+use crate::error::{ApiMisuse, Error, InconsistentKeys, PeerIncompatible};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
-use crate::{ApiMisuse, x509};
+use crate::x509;
 
 /// An abstract signing key.
 ///
@@ -66,7 +66,7 @@ pub trait Signer: Debug + Send + Sync {
     /// implicit in [`Self::scheme()`].
     ///
     /// The returned signature format is also defined by [`Self::scheme()`].
-    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error>;
+    fn sign(self: Box<Self>, message: &[u8]) -> Result<Vec<u8>, Error>;
 
     /// Reveals which scheme will be used when you call [`Self::sign()`].
     fn scheme(&self) -> SignatureScheme;
@@ -78,16 +78,10 @@ pub trait Signer: Debug + Send + Sync {
 ///
 /// [`ConfigBuilder::with_cert_resolver()`]: crate::ConfigBuilder::with_cert_resolver
 #[derive(Debug)]
-pub struct SingleCertAndKey(Arc<CertifiedKey>);
+pub struct SingleCertAndKey(CertifiedKey);
 
 impl From<CertifiedKey> for SingleCertAndKey {
     fn from(certified_key: CertifiedKey) -> Self {
-        Self(Arc::new(certified_key))
-    }
-}
-
-impl From<Arc<CertifiedKey>> for SingleCertAndKey {
-    fn from(certified_key: Arc<CertifiedKey>) -> Self {
         Self(certified_key)
     }
 }
@@ -96,9 +90,9 @@ impl ResolvesClientCert for SingleCertAndKey {
     fn resolve(
         &self,
         _root_hint_subjects: &[&[u8]],
-        _sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<CertifiedKey>> {
-        Some(self.0.clone())
+        sig_schemes: &[SignatureScheme],
+    ) -> Option<CertifiedSigner> {
+        self.0.signer(sig_schemes)
     }
 
     fn has_certs(&self) -> bool {
@@ -107,9 +101,29 @@ impl ResolvesClientCert for SingleCertAndKey {
 }
 
 impl ResolvesServerCert for SingleCertAndKey {
-    fn resolve(&self, _client_hello: &ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
-        Some(self.0.clone())
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+        self.0
+            .signer(client_hello.signature_schemes())
+            .ok_or(Error::PeerIncompatible(
+                PeerIncompatible::NoSignatureSchemesInCommon,
+            ))
     }
+}
+
+/// A packaged-together certificate chain and one-time-use signer.
+///
+/// This is used in the [`ResolvesClientCert`] and [`ResolvesClientCert`] traits
+/// as the return value of their `resolve()` methods.
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct CertifiedSigner {
+    /// A one-time-use signer for this certificate.
+    pub signer: Box<dyn Signer>,
+    /// The certificate chain or raw public key.
+    pub cert_chain: Arc<[CertificateDer<'static>]>,
+    /// An optional OCSP response from the certificate issuer,
+    /// attesting to its continued validity.
+    pub ocsp: Option<Arc<[u8]>>,
 }
 
 /// A packaged-together certificate chain, matching `SigningKey` and
@@ -121,17 +135,17 @@ impl ResolvesServerCert for SingleCertAndKey {
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[non_exhaustive]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct CertifiedKey {
     /// The certificate chain or raw public key.
-    pub cert_chain: Vec<CertificateDer<'static>>,
+    pub cert_chain: Arc<[CertificateDer<'static>]>,
 
     /// The certified key.
-    pub key: Arc<dyn SigningKey>,
+    pub key: Box<dyn SigningKey>,
 
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
-    pub ocsp: Option<Vec<u8>>,
+    pub ocsp: Option<Arc<[u8]>>,
 }
 
 impl CertifiedKey {
@@ -143,7 +157,7 @@ impl CertifiedKey {
     ///
     /// [`KeyProvider`]: crate::crypto::KeyProvider
     pub fn from_der(
-        cert_chain: Vec<CertificateDer<'static>>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
         key: PrivateKeyDer<'static>,
         provider: &CryptoProvider,
     ) -> Result<Self, Error> {
@@ -166,8 +180,8 @@ impl CertifiedKey {
     /// This constructor should be used with all [`SigningKey`] implementations
     /// that can provide a public key, including those provided by rustls itself.
     pub fn new(
-        cert_chain: Vec<CertificateDer<'static>>,
-        key: Arc<dyn SigningKey>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
+        key: Box<dyn SigningKey>,
     ) -> Result<Self, Error> {
         let parsed = ParsedCertificate::try_from(
             cert_chain
@@ -196,8 +210,8 @@ impl CertifiedKey {
     /// This avoids parsing the end-entity certificate, which is useful when using client
     /// certificates that are not fully standards compliant, but known to usable by the peer.
     pub fn new_unchecked(
-        cert_chain: Vec<CertificateDer<'static>>,
-        key: Arc<dyn SigningKey>,
+        cert_chain: Arc<[CertificateDer<'static>]>,
+        key: Box<dyn SigningKey>,
     ) -> Self {
         Self {
             cert_chain,
@@ -218,6 +232,17 @@ impl CertifiedKey {
             true => Ok(()),
             false => Err(InconsistentKeys::KeyMismatch.into()),
         }
+    }
+
+    /// Attempt to produce a `CertifiedSigner` using one of the given signature schemes.
+    ///
+    /// Calls [`SigningKey::choose_scheme()`] and propagates `cert_chain` and `ocsp`.
+    pub fn signer(&self, sig_schemes: &[SignatureScheme]) -> Option<CertifiedSigner> {
+        Some(CertifiedSigner {
+            signer: self.key.choose_scheme(sig_schemes)?,
+            cert_chain: self.cert_chain.clone(),
+            ocsp: self.ocsp.clone(),
+        })
     }
 
     /// The end-entity certificate.
