@@ -759,7 +759,7 @@ mod client_hello {
         ocsp_response: Option<&[u8]>,
     ) {
         let cert = HandshakeMessagePayload(HandshakePayload::CertificateTls13(
-            CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response),
+            CertificatePayloadTls13::new(cert_chain, ocsp_response),
         ));
 
         trace!("sending certificate {cert:?}");
@@ -773,7 +773,7 @@ mod client_hello {
         ocsp_response: Option<&[u8]>,
         cert_compressor: &'static dyn CertCompressor,
     ) {
-        let payload = CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response);
+        let payload = CertificatePayloadTls13::new(cert_chain, ocsp_response);
 
         let Ok(entry) = config
             .cert_compression_cache

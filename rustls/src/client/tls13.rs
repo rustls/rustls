@@ -1300,7 +1300,7 @@ fn emit_compressed_certificate_tls13(
     compressor: &dyn compress::CertCompressor,
     config: &ClientConfig,
 ) {
-    let mut cert_payload = CertificatePayloadTls13::new(cert_chain.iter(), None);
+    let mut cert_payload = CertificatePayloadTls13::new(cert_chain, None);
     cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
 
     let Ok(compressed) = config
@@ -1320,8 +1320,8 @@ fn emit_certificate_tls13(
     cert_chain: Option<&[CertificateDer<'_>]>,
     auth_context: Option<Vec<u8>>,
 ) {
-    let certs = cert_chain.unwrap_or(&[][..]);
-    let mut cert_payload = CertificatePayloadTls13::new(certs.iter(), None);
+    let certs = cert_chain.unwrap_or_default();
+    let mut cert_payload = CertificatePayloadTls13::new(certs, None);
     cert_payload.context = PayloadU8::new(auth_context.unwrap_or_default());
 
     flight.add(HandshakeMessagePayload(HandshakePayload::CertificateTls13(

@@ -538,12 +538,12 @@ mod tests {
 
         let cache = CompressionCache::default();
 
-        let cert = CertificateDer::from(vec![1]);
+        let certs = &[CertificateDer::from(vec![1])];
 
-        let cert1 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"1"));
-        let cert2 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"2"));
-        let cert3 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"3"));
-        let cert4 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"4"));
+        let cert1 = CertificatePayloadTls13::new(certs, Some(b"1"));
+        let cert2 = CertificatePayloadTls13::new(certs, Some(b"2"));
+        let cert3 = CertificatePayloadTls13::new(certs, Some(b"3"));
+        let cert4 = CertificatePayloadTls13::new(certs, Some(b"4"));
 
         // insert zlib (1), (2), (3), (4)
 
