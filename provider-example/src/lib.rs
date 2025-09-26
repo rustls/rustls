@@ -6,7 +6,6 @@
     clippy::use_self,
     clippy::upper_case_acronyms,
     elided_lifetimes_in_paths,
-    trivial_casts,
     trivial_numeric_casts,
     unreachable_pub,
     unused_import_braces,

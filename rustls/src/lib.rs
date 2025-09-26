@@ -331,7 +331,6 @@
     clippy::upper_case_acronyms,
     elided_lifetimes_in_paths,
     missing_docs,
-    trivial_casts,
     trivial_numeric_casts,
     unnameable_types,
     unreachable_pub,

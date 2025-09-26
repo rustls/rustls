@@ -5,7 +5,6 @@
     clippy::use_self,
     clippy::upper_case_acronyms,
     elided_lifetimes_in_paths,
-    trivial_casts,
     trivial_numeric_casts,
     unreachable_pub,
     unused_import_braces,
@@ -313,13 +312,11 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     for (provider, ticketer, provider_name) in [
         (
             derandomize(ring::default_provider()),
-            #[allow(trivial_casts)]
             &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "ring",
         ),
         (
             derandomize(aws_lc_rs::default_provider()),
-            #[allow(trivial_casts)]
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "aws_lc_rs",
         ),
@@ -378,7 +375,6 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         }
     }
 
-    #[allow(trivial_casts)] // false positive
     let make_ticketer = &((|| Arc::new(rustls_fuzzing_provider::Ticketer))
         as fn() -> Arc<dyn rustls::server::ProducesTickets>);
 
