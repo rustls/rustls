@@ -364,7 +364,7 @@
     clippy::new_without_default
 )]
 // Enable documentation for all features on docs.rs
-#![cfg_attr(rustls_docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![cfg_attr(rustls_docsrs, feature(doc_cfg))]
 // Enable coverage() attr for nightly coverage builds, see
 // <https://github.com/rust-lang/rust/issues/84605>
 // (`coverage_nightly` is a cfg set by `cargo-llvm-cov`)
