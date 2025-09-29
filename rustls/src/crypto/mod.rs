@@ -690,8 +690,8 @@ impl From<Vec<u8>> for SharedSecret {
 ///     .with_no_client_auth();
 /// # }
 /// ```
-#[cfg(all(feature = "aws_lc_rs", any(feature = "fips", docsrs)))]
-#[cfg_attr(docsrs, doc(cfg(feature = "fips")))]
+#[cfg(all(feature = "aws_lc_rs", any(feature = "fips", rustls_docsrs)))]
+#[cfg_attr(rustls_docsrs, doc(cfg(feature = "fips")))]
 pub fn default_fips_provider() -> CryptoProvider {
     aws_lc_rs::default_provider()
 }

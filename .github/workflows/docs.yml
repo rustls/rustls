@@ -41,7 +41,7 @@ jobs:
         # keep features in sync with Cargo.toml `[package.metadata.docs.rs]` section
         run: cargo doc --locked --features read_buf,ring --no-deps --package rustls
         env:
-          RUSTDOCFLAGS: -Dwarnings --cfg=docsrs --html-after-content tag.html
+          RUSTDOCFLAGS: -Dwarnings --cfg=rustls_docsrs --html-after-content tag.html
 
       - name: Generate other pages
         run: |

@@ -114,7 +114,7 @@ path = "tests/runners/unbuffered.rs"
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
 features = ["read_buf", "ring"]
-rustdoc-args = ["--cfg", "docsrs"]
+rustdoc-args = ["--cfg", "rustls_docsrs"]
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
@@ -127,4 +127,9 @@ allowed_external_types = [
 enum_no_repr_variant_discriminant_changed = "warn"
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(bench)", "cfg(coverage_nightly)", "cfg(read_buf)"] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+  "cfg(bench)",
+  "cfg(coverage_nightly)",
+  "cfg(read_buf)",
+  "cfg(rustls_docsrs)",
+] }
