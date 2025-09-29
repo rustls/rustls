@@ -424,6 +424,13 @@ fn aws_lc_rs_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
 }
 
 fn derandomize(base: CryptoProvider) -> CryptoProvider {
+    // "Warm up" provider's actual entropy source.  aws-lc-rs particularly
+    // has an expensive process here, which is one-time (per calling thread)
+    // so not useful to include in benchmark measurements.
+    base.secure_random
+        .fill(&mut [0u8])
+        .unwrap();
+
     CryptoProvider {
         secure_random: &NotRandom,
         ..base
