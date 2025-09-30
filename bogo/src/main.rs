@@ -1236,7 +1236,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage) => {
             quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:")
         }
-        Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
+        Error::PeerMisbehaved(_) => panic!("!!! please add error mapping for {err:?}"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
