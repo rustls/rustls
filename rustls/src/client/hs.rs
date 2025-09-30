@@ -43,8 +43,8 @@ use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::verify::ServerVerifier;
 
-pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
-pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
+pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
+pub(super) type NextStateOrError = Result<NextState, Error>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
 pub(crate) struct ExpectServerHello {
@@ -69,7 +69,7 @@ impl ExpectServerHello {
         server_hello: &ServerHelloPayload,
         message: &Message<'_>,
         cx: &mut ClientContext<'_>,
-    ) -> NextStateOrError<'static>
+    ) -> NextStateOrError
     where
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
@@ -155,14 +155,7 @@ impl ExpectServerHello {
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
-    fn handle<'m>(
-        self: Box<Self>,
-        cx: &mut ClientContext<'_>,
-        m: Message<'m>,
-    ) -> NextStateOrError<'m>
-    where
-        Self: 'm,
-    {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> NextStateOrError {
         let server_hello =
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
         trace!("We got ServerHello {server_hello:#?}");
@@ -212,10 +205,6 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
         }
     }
-
-    fn into_owned(self: Box<Self>) -> NextState<'static> {
-        self
-    }
 }
 
 struct ExpectServerHelloOrHelloRetryRequest {
@@ -224,7 +213,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl ExpectServerHelloOrHelloRetryRequest {
-    fn into_expect_server_hello(self) -> NextState<'static> {
+    fn into_expect_server_hello(self) -> NextState {
         Box::new(self.next)
     }
 
@@ -232,7 +221,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         mut self,
         cx: &mut ClientContext<'_>,
         m: Message<'_>,
-    ) -> NextStateOrError<'static> {
+    ) -> NextStateOrError {
         let hrr = require_handshake_msg!(
             m,
             HandshakeType::HelloRetryRequest,
@@ -414,14 +403,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
-    fn handle<'m>(
-        self: Box<Self>,
-        cx: &mut ClientContext<'_>,
-        m: Message<'m>,
-    ) -> NextStateOrError<'m>
-    where
-        Self: 'm,
-    {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> NextStateOrError {
         match m.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(..)),
@@ -439,10 +421,6 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
                 &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
             )),
         }
-    }
-
-    fn into_owned(self: Box<Self>) -> NextState<'static> {
-        self
     }
 }
 
@@ -520,7 +498,7 @@ impl ClientHelloInput {
         self,
         extra_exts: ClientExtensionsInput<'static>,
         cx: &mut ClientContext<'_>,
-    ) -> NextStateOrError<'static> {
+    ) -> NextStateOrError {
         let mut transcript_buffer = HandshakeHashBuffer::new();
         if !self
             .config
@@ -575,7 +553,7 @@ fn emit_client_hello_for_retry(
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
     mut ech_state: Option<EchState>,
-) -> NextStateOrError<'static> {
+) -> NextStateOrError {
     let config = &input.config;
     // Defense in depth: the ECH state should be None if ECH is disabled based on config
     // builder semantics.
@@ -1111,5 +1089,5 @@ pub(crate) trait ClientHandler<T>: fmt::Debug + Sealed + Send + Sync {
         message: &Message<'_>,
         st: ExpectServerHello,
         cx: &mut ClientContext<'_>,
-    ) -> NextStateOrError<'static>;
+    ) -> NextStateOrError;
 }

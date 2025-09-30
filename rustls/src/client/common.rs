@@ -9,26 +9,15 @@ use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, 
 use crate::sign::CertifiedSigner;
 
 #[derive(Debug)]
-pub(super) struct ServerCertDetails<'a> {
-    pub(super) cert_chain: CertificateChain<'a>,
+pub(super) struct ServerCertDetails {
+    pub(super) cert_chain: CertificateChain<'static>,
     pub(super) ocsp_response: Vec<u8>,
 }
 
-impl<'a> ServerCertDetails<'a> {
-    pub(super) fn new(cert_chain: CertificateChain<'a>, ocsp_response: Vec<u8>) -> Self {
+impl ServerCertDetails {
+    pub(super) fn new(cert_chain: CertificateChain<'static>, ocsp_response: Vec<u8>) -> Self {
         Self {
             cert_chain,
-            ocsp_response,
-        }
-    }
-
-    pub(super) fn into_owned(self) -> ServerCertDetails<'static> {
-        let Self {
-            cert_chain,
-            ocsp_response,
-        } = self;
-        ServerCertDetails {
-            cert_chain: cert_chain.into_owned(),
             ocsp_response,
         }
     }
