@@ -234,8 +234,6 @@
     "ServerCipherFilter-RSA": ":INCOMPATIBLE:",
     "SkipEarlyData-HRR-FatalAlert-TLS13": ":HANDSHAKE_FAILURE:",
     "SkipEarlyData-HRR-TooMuchData-TLS13": ":UNEXPECTED_MESSAGE:",
-    "SkipEarlyData-Interleaved-TLS13": ":PEER_MISBEHAVIOUR:",
-    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": ":PEER_MISBEHAVIOUR:",
     "SkipEarlyData-TooMuchData-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "SupportedVersionSelection-TLS12": ":SELECTED_TLS12_USING_TLS13_VERSION_EXTENSION:",
     "TicketSessionIDLength-33-TLS-TLS12": ":BAD_HANDSHAKE_MSG:",
