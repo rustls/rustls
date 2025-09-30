@@ -1230,6 +1230,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints) => {
             quit(":SERVER_HELLO_MUST_OFFER_UNCOMPRESSED_EC_POINTS:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported) => {
+            quit(":TLS13_DOWNGRADE:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
