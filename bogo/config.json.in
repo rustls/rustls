@@ -184,7 +184,6 @@
     "ClientAuth-NoFallback-RSA": ":BAD_HANDSHAKE_MSG:",
     "ClientAuth-NoFallback-TLS13": ":BAD_HANDSHAKE_MSG:",
     "DisabledCurve-HelloRetryRequest-TLS13": ":ILLEGAL_HELLO_RETRY_REQUEST_WITH_UNOFFERED_GROUP:",
-    "Downgrade-TLS12-Client-TLS": ":PEER_MISBEHAVIOUR:",
     "EarlyData-SkipEndOfEarlyData-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "EmptyCertificateList": ":NO_CERTS:",
     "EmptyEncryptedExtensions-TLS13": ":BAD_HANDSHAKE_MSG:",
