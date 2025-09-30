@@ -342,21 +342,6 @@ impl WebPkiClientVerifier {
 }
 
 impl ClientVerifier for WebPkiClientVerifier {
-    fn offer_client_auth(&self) -> bool {
-        true
-    }
-
-    fn client_auth_mandatory(&self) -> bool {
-        match self.anonymous_policy {
-            AnonymousClientPolicy::Allow => false,
-            AnonymousClientPolicy::Deny => true,
-        }
-    }
-
-    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
-        self.root_hint_subjects.clone()
-    }
-
     fn verify_client_cert(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         let certificates = match identity.identity {
             PeerIdentity::X509(certificates) => certificates,
@@ -408,6 +393,21 @@ impl ClientVerifier for WebPkiClientVerifier {
         input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         verify_tls13_signature(input, &self.supported_algs)
+    }
+
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
+        self.root_hint_subjects.clone()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        match self.anonymous_policy {
+            AnonymousClientPolicy::Allow => false,
+            AnonymousClientPolicy::Deny => true,
+        }
+    }
+
+    fn offer_client_auth(&self) -> bool {
+        true
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {

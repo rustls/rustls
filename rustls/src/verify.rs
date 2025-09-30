@@ -120,50 +120,6 @@ pub struct ServerIdentity<'a> {
 /// Something that can verify a client certificate chain
 #[allow(unreachable_pub)]
 pub trait ClientVerifier: Debug + Send + Sync {
-    /// Returns `true` to enable the server to request a client certificate and
-    /// `false` to skip requesting a client certificate. Defaults to `true`.
-    fn offer_client_auth(&self) -> bool {
-        true
-    }
-
-    /// Return `true` to require a client certificate and `false` to make
-    /// client authentication optional.
-    /// Defaults to `self.offer_client_auth()`.
-    fn client_auth_mandatory(&self) -> bool {
-        self.offer_client_auth()
-    }
-
-    /// Returns the [`DistinguishedName`] [subjects] that the server will hint to clients to
-    /// identify acceptable authentication trust anchors.
-    ///
-    /// These hint values help the client pick a client certificate it believes the server will
-    /// accept. The hints must be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. They
-    /// are sent in the [`certificate_authorities`] extension of a [`CertificateRequest`] message
-    /// when [ClientVerifier::offer_client_auth] is true. When an empty list is sent the client
-    /// should always provide a client certificate if it has one.
-    ///
-    /// Generally this list should contain the [`DistinguishedName`] of each root trust
-    /// anchor in the root cert store that the server is configured to use for authenticating
-    /// presented client certificates.
-    ///
-    /// In some circumstances this list may be customized to include [`DistinguishedName`] entries
-    /// that do not correspond to a trust anchor in the server's root cert store. For example,
-    /// the server may be configured to trust a root CA that cross-signed an issuer certificate
-    /// that the client considers a trust anchor. From the server's perspective the cross-signed
-    /// certificate is an intermediate, and not present in the server's root cert store. The client
-    /// may have the cross-signed certificate configured as a trust anchor, and be unaware of the
-    /// root CA that cross-signed it. If the server's hints list only contained the subjects of the
-    /// server's root store the client would consider a client certificate issued by the cross-signed
-    /// issuer unacceptable, since its subject was not hinted. To avoid this circumstance the server
-    /// should customize the hints list to include the subject of the cross-signed issuer in addition
-    /// to the subjects from the root cert store.
-    ///
-    /// [subjects]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
-    /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
-    /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.3.2
-    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
-    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]>;
-
     /// Verify the client's identity.
     ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
@@ -201,6 +157,50 @@ pub trait ClientVerifier: Debug + Send + Sync {
         &self,
         input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error>;
+
+    /// Returns the [`DistinguishedName`] [subjects] that the server will hint to clients to
+    /// identify acceptable authentication trust anchors.
+    ///
+    /// These hint values help the client pick a client certificate it believes the server will
+    /// accept. The hints must be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. They
+    /// are sent in the [`certificate_authorities`] extension of a [`CertificateRequest`] message
+    /// when [ClientVerifier::offer_client_auth] is true. When an empty list is sent the client
+    /// should always provide a client certificate if it has one.
+    ///
+    /// Generally this list should contain the [`DistinguishedName`] of each root trust
+    /// anchor in the root cert store that the server is configured to use for authenticating
+    /// presented client certificates.
+    ///
+    /// In some circumstances this list may be customized to include [`DistinguishedName`] entries
+    /// that do not correspond to a trust anchor in the server's root cert store. For example,
+    /// the server may be configured to trust a root CA that cross-signed an issuer certificate
+    /// that the client considers a trust anchor. From the server's perspective the cross-signed
+    /// certificate is an intermediate, and not present in the server's root cert store. The client
+    /// may have the cross-signed certificate configured as a trust anchor, and be unaware of the
+    /// root CA that cross-signed it. If the server's hints list only contained the subjects of the
+    /// server's root store the client would consider a client certificate issued by the cross-signed
+    /// issuer unacceptable, since its subject was not hinted. To avoid this circumstance the server
+    /// should customize the hints list to include the subject of the cross-signed issuer in addition
+    /// to the subjects from the root cert store.
+    ///
+    /// [subjects]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
+    /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
+    /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.3.2
+    /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]>;
+
+    /// Return `true` to require a client certificate and `false` to make
+    /// client authentication optional.
+    /// Defaults to `self.offer_client_auth()`.
+    fn client_auth_mandatory(&self) -> bool {
+        self.offer_client_auth()
+    }
+
+    /// Returns `true` to enable the server to request a client certificate and
+    /// `false` to skip requesting a client certificate. Defaults to `true`.
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
 
     /// Return the list of SignatureSchemes that this verifier will handle,
     /// in `verify_tls12_signature` and `verify_tls13_signature` calls.
@@ -370,14 +370,6 @@ pub enum SignerPublicKey<'a> {
 pub struct NoClientAuth;
 
 impl ClientVerifier for NoClientAuth {
-    fn offer_client_auth(&self) -> bool {
-        false
-    }
-
-    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
-        unimplemented!();
-    }
-
     fn verify_client_cert(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         unimplemented!();
     }
@@ -394,6 +386,14 @@ impl ClientVerifier for NoClientAuth {
         _input: &SignatureVerificationInput<'_>,
     ) -> Result<HandshakeSignatureValid, Error> {
         unimplemented!();
+    }
+
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
+        unimplemented!();
+    }
+
+    fn offer_client_auth(&self) -> bool {
+        false
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
