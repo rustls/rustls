@@ -108,9 +108,7 @@ pub(crate) trait Suite: fmt::Debug {
 
     fn usable_for_protocol(&self, proto: Protocol) -> bool;
 
-    fn usable_for_signature_scheme(&self, _scheme: SignatureScheme) -> bool {
-        true
-    }
+    fn usable_for_signature_scheme(&self, _scheme: SignatureScheme) -> bool;
 
     fn usable_for_kx_algorithm(&self, _kxa: KeyExchangeAlgorithm) -> bool {
         true

@@ -1,9 +1,8 @@
 use core::fmt;
 
 use crate::common_state::Protocol;
-use crate::crypto;
-use crate::crypto::hash;
-use crate::enums::ProtocolVersion;
+use crate::crypto::{self, hash};
+use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::suites::{CipherSuiteCommon, Suite, SupportedCipherSuite};
 use crate::version::Tls13Version;
 
@@ -99,6 +98,10 @@ impl Suite for Tls13CipherSuite {
             Protocol::Tcp => true,
             Protocol::Quic => self.quic.is_some(),
         }
+    }
+
+    fn usable_for_signature_scheme(&self, scheme: SignatureScheme) -> bool {
+        scheme.supported_in_tls13()
     }
 
     fn common(&self) -> &CipherSuiteCommon {
