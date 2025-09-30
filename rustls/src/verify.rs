@@ -33,7 +33,7 @@ pub trait ServerVerifier: Debug + Send + Sync {
     ///
     /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2
     /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
-    fn verify_server_cert(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error>;
+    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///

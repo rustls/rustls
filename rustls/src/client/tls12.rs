@@ -893,7 +893,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         let cert_verified = st
             .config
             .verifier
-            .verify_server_cert(&ServerIdentity {
+            .verify_identity(&ServerIdentity {
                 identity: &identity,
                 server_name: &st.server_name,
                 ocsp_response: &st.server_cert.ocsp_response,

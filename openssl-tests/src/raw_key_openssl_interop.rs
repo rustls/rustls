@@ -97,7 +97,7 @@ mod client {
     }
 
     impl ServerVerifier for SimpleRpkServerVerifier {
-        fn verify_server_cert(
+        fn verify_identity(
             &self,
             identity: &ServerIdentity<'_>,
         ) -> Result<ServerVerified, Error> {

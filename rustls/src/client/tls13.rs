@@ -1234,7 +1234,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
         let cert_verified = self
             .config
             .verifier
-            .verify_server_cert(&ServerIdentity {
+            .verify_identity(&ServerIdentity {
                 identity: &identity,
                 server_name: &self.server_name,
                 ocsp_response: &self.server_cert.ocsp_response,

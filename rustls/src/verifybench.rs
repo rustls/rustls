@@ -231,7 +231,7 @@ impl Context {
         const OCSP_RESPONSE: &[u8] = &[];
 
         self.verifier
-            .verify_server_cert(&ServerIdentity {
+            .verify_identity(&ServerIdentity {
                 identity: &PeerIdentity::X509(CertificateIdentity {
                     end_entity: self.chain[0].clone(),
                     intermediates: self.chain[1..].to_vec(),

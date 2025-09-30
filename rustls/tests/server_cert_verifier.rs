@@ -9,7 +9,7 @@ use rustls::client::danger::{
     HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
     SignatureVerificationInput,
 };
-use rustls::client::{WebPkiServerVerifier, verify_server_cert_signed_by_trust_anchor};
+use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
@@ -555,7 +555,7 @@ fn client_check_server_certificate_ee_crl_expired() {
     }
 }
 
-/// Simple smoke-test of the webpki verify_server_cert_signed_by_trust_anchor helper API.
+/// Simple smoke-test of the webpki verify_identity_signed_by_trust_anchor helper API.
 /// This public API is intended to be used by consumers implementing their own verifier and
 /// so isn't used by the other existing verifier tests.
 #[test]
@@ -570,7 +570,7 @@ fn client_check_server_certificate_helper_api() {
         .client_root_store();
         // Using the correct trust anchors, we should verify without error.
         assert!(
-            verify_server_cert_signed_by_trust_anchor(
+            verify_identity_signed_by_trust_anchor(
                 &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
                 &correct_roots,
                 &[chain.get(1).unwrap().clone()],
@@ -581,7 +581,7 @@ fn client_check_server_certificate_helper_api() {
         );
         // Using the wrong trust anchors, we should get the expected error.
         assert_eq!(
-            verify_server_cert_signed_by_trust_anchor(
+            verify_identity_signed_by_trust_anchor(
                 &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
                 &incorrect_roots,
                 &[chain.get(1).unwrap().clone()],
@@ -606,7 +606,7 @@ fn client_check_server_valid_purpose() {
         ],
     };
 
-    let error = verify_server_cert_signed_by_trust_anchor(
+    let error = verify_identity_signed_by_trust_anchor(
         &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
         &roots,
         &[chain.get(1).unwrap().clone()],
@@ -679,9 +679,8 @@ struct ServerVerifierWithCasExt {
 }
 
 impl ServerVerifier for ServerVerifierWithCasExt {
-    fn verify_server_cert(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
-        self.verifier
-            .verify_server_cert(identity)
+    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
+        self.verifier.verify_identity(identity)
     }
 
     fn verify_tls12_signature(

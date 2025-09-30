@@ -594,7 +594,7 @@ pub mod client {
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     pub use crate::webpki::{
         ServerVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
-        verify_server_cert_signed_by_trust_anchor, verify_server_name,
+        verify_identity_signed_by_trust_anchor, verify_server_name,
     };
 }
 

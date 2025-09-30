@@ -20,9 +20,7 @@ pub use client_verifier::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 pub use server_verifier::{ServerVerifierBuilder, WebPkiServerVerifier};
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]
-pub use verify::{
-    ParsedCertificate, verify_server_cert_signed_by_trust_anchor, verify_server_name,
-};
+pub use verify::{ParsedCertificate, verify_identity_signed_by_trust_anchor, verify_server_name};
 pub use verify::{WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature};
 
 /// An error that can occur when building a certificate verifier.
