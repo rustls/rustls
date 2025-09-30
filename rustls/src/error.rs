@@ -524,12 +524,12 @@ pub enum CertificateError {
 
     /// The OCSP response provided to the verifier was invalid.
     ///
-    /// This should be returned from [`ServerVerifier::verify_server_cert()`]
+    /// This should be returned from [`ServerVerifier::verify_identity()`]
     /// when a verifier checks its `ocsp_response` parameter and finds it invalid.
     ///
     /// This maps to [`AlertDescription::BadCertificateStatusResponse`].
     ///
-    /// [`ServerVerifier::verify_server_cert()`]: crate::client::danger::ServerVerifier::verify_server_cert
+    /// [`ServerVerifier::verify_identity()`]: crate::client::danger::ServerVerifier::verify_identity
     InvalidOcspResponse,
 
     /// The certificate is valid, but the handshake is rejected for other

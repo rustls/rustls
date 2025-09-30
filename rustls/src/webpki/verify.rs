@@ -24,14 +24,14 @@ use crate::verify::{HandshakeSignatureValid, SignatureVerificationInput, SignerP
 /// were sent as part of the server's `Certificate` message. It is in the
 /// same order that the server sent them and may be empty.
 #[allow(dead_code)]
-pub fn verify_server_cert_signed_by_trust_anchor(
+pub fn verify_identity_signed_by_trust_anchor(
     cert: &ParsedCertificate<'_>,
     roots: &RootCertStore,
     intermediates: &[CertificateDer<'_>],
     now: UnixTime,
     supported_algs: &[&dyn SignatureVerificationAlgorithm],
 ) -> Result<(), Error> {
-    verify_server_cert_signed_by_trust_anchor_impl(
+    verify_identity_signed_by_trust_anchor_impl(
         cert,
         roots,
         intermediates,
@@ -44,7 +44,7 @@ pub fn verify_server_cert_signed_by_trust_anchor(
 /// Verify that the `end_entity` has an alternative name matching the `server_name`.
 ///
 /// Note: this only verifies the name and should be used in conjunction with more verification
-/// like [verify_server_cert_signed_by_trust_anchor]
+/// like [verify_identity_signed_by_trust_anchor]
 pub fn verify_server_name(
     cert: &ParsedCertificate<'_>,
     server_name: &ServerName<'_>,
@@ -226,11 +226,11 @@ pub fn verify_tls13_signature(
 ///
 /// `revocation` controls how revocation checking is performed, if at all.
 ///
-/// This function exists to be used by [`verify_server_cert_signed_by_trust_anchor`],
+/// This function exists to be used by [`verify_identity_signed_by_trust_anchor`],
 /// and differs only in providing a `Option<webpki::RevocationOptions>` argument. We
-/// can't include this argument in `verify_server_cert_signed_by_trust_anchor` because
+/// can't include this argument in `verify_identity_signed_by_trust_anchor` because
 /// it will leak the webpki types into Rustls' public API.
-pub(crate) fn verify_server_cert_signed_by_trust_anchor_impl(
+pub(crate) fn verify_identity_signed_by_trust_anchor_impl(
     cert: &ParsedCertificate<'_>,
     roots: &RootCertStore,
     intermediates: &[CertificateDer<'_>],

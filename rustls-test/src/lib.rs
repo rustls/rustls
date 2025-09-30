@@ -1112,8 +1112,8 @@ pub struct MockServerVerifier {
 }
 
 impl ServerVerifier for MockServerVerifier {
-    fn verify_server_cert(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
-        println!("verify_server_cert({identity:?})");
+    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
+        println!("verify_identity({identity:?})");
         if let Some(expected_ocsp) = &self.expected_ocsp_response {
             assert_eq!(expected_ocsp, identity.ocsp_response);
         }

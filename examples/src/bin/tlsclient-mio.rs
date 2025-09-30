@@ -406,7 +406,7 @@ mod danger {
     }
 
     impl rustls::client::danger::ServerVerifier for NoCertificateVerification {
-        fn verify_server_cert(
+        fn verify_identity(
             &self,
             _identity: &ServerIdentity<'_>,
         ) -> Result<rustls::client::danger::ServerVerified, rustls::Error> {

@@ -10,7 +10,7 @@ use crate::verify::{
     SignatureVerificationInput,
 };
 use crate::webpki::verify::{
-    ParsedCertificate, verify_server_cert_signed_by_trust_anchor_impl, verify_tls12_signature,
+    ParsedCertificate, verify_identity_signed_by_trust_anchor_impl, verify_tls12_signature,
     verify_tls13_signature,
 };
 use crate::webpki::{VerifierBuilderError, parse_crls, verify_server_name};
@@ -229,7 +229,7 @@ impl ServerVerifier for WebPkiServerVerifier {
     /// each certificate in the chain to a root CA (excluding the root itself), or only the
     /// end entity certificate. Similarly, unknown revocation status may be treated as an error
     /// or allowed based on configuration.
-    fn verify_server_cert(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
+    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
         let certificates = match identity.identity {
             PeerIdentity::X509(certificates) => certificates,
             PeerIdentity::RawPublicKey(_) => {
@@ -258,7 +258,7 @@ impl ServerVerifier for WebPkiServerVerifier {
 
         // Note: we use the crate-internal `_impl` fn here in order to provide revocation
         // checking information, if applicable.
-        verify_server_cert_signed_by_trust_anchor_impl(
+        verify_identity_signed_by_trust_anchor_impl(
             &cert,
             &self.roots,
             &certificates.intermediates,

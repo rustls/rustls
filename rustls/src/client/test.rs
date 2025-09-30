@@ -308,7 +308,7 @@ mod tests {
     }
 
     impl ServerVerifier for ExpectSha1EcdsaVerifier {
-        fn verify_server_cert(
+        fn verify_identity(
             &self,
             _identity: &ServerIdentity<'_>,
         ) -> Result<ServerVerified, Error> {
@@ -502,7 +502,7 @@ mod tests {
         }
 
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_server_cert(
+        fn verify_identity(
             &self,
             _identity: &ServerIdentity<'_>,
         ) -> Result<ServerVerified, Error> {
@@ -539,7 +539,7 @@ mod tests {
 
     impl ServerVerifier for ServerVerifierRequiringRpk {
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_server_cert(
+        fn verify_identity(
             &self,
             _identity: &ServerIdentity<'_>,
         ) -> Result<ServerVerified, Error> {
