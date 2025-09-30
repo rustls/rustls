@@ -24,7 +24,7 @@ use crate::sync::Arc;
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
 #[allow(unreachable_pub)]
-pub trait ServerCertVerifier: Debug + Send + Sync {
+pub trait ServerVerifier: Debug + Send + Sync {
     /// Verify the server's identity.
     ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
@@ -33,10 +33,7 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     ///
     /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2
     /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
-    fn verify_server_cert(
-        &self,
-        identity: &ServerIdentity<'_>,
-    ) -> Result<ServerCertVerified, Error>;
+    fn verify_server_cert(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -469,11 +466,11 @@ impl FinishedMessageVerified {
 /// Zero-sized marker type representing verification of a server cert chain.
 #[allow(unreachable_pub)]
 #[derive(Debug)]
-pub struct ServerCertVerified(());
+pub struct ServerVerified(());
 
 #[allow(unreachable_pub)]
-impl ServerCertVerified {
-    /// Make a `ServerCertVerified`
+impl ServerVerified {
+    /// Make a `ServerVerified`
     pub fn assertion() -> Self {
         Self(())
     }
@@ -507,7 +504,7 @@ fn assertions_are_debug() {
         "FinishedMessageVerified(())"
     );
     assert_eq!(
-        format!("{:?}", ServerCertVerified::assertion()),
-        "ServerCertVerified(())"
+        format!("{:?}", ServerVerified::assertion()),
+        "ServerVerified(())"
     );
 }

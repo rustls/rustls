@@ -599,7 +599,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
                 // We *don't* reverify the certificate chain here: resumption is a
                 // continuation of the previous session in terms of security policy.
-                let cert_verified = verify::ServerCertVerified::assertion();
+                let cert_verified = verify::ServerVerified::assertion();
                 let sig_verified = verify::HandshakeSignatureValid::assertion();
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
@@ -1380,7 +1380,7 @@ struct ExpectFinished {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::ServerVerified,
     sig_verified: verify::HandshakeSignatureValid,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
@@ -1533,7 +1533,7 @@ struct ExpectTraffic {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTraffic,
     resumption: KeyScheduleResumption,
-    _cert_verified: verify::ServerCertVerified,
+    _cert_verified: verify::ServerVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
 }

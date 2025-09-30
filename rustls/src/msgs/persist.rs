@@ -13,7 +13,7 @@ use crate::msgs::handshake::{ProtocolName, SessionId};
 use crate::sync::{Arc, Weak};
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-use crate::verify::{PeerIdentity, ServerCertVerifier};
+use crate::verify::{PeerIdentity, ServerVerifier};
 
 pub(crate) struct Retrieved<T> {
     pub(crate) value: T,
@@ -82,7 +82,7 @@ impl Tls13ClientSessionValue {
         ticket: Arc<PayloadU16>,
         secret: &[u8],
         peer_identity: PeerIdentity,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
+        server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
         time_now: UnixTime,
         lifetime_secs: u32,
@@ -164,7 +164,7 @@ impl Tls12ClientSessionValue {
         ticket: Arc<PayloadU16>,
         master_secret: &[u8; 48],
         peer_identity: PeerIdentity,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
+        server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
         time_now: UnixTime,
         lifetime_secs: u32,
@@ -223,7 +223,7 @@ pub struct ClientSessionCommon {
     epoch: u64,
     lifetime_secs: u32,
     peer_identity: Arc<PeerIdentity>,
-    server_cert_verifier: Weak<dyn ServerCertVerifier>,
+    server_cert_verifier: Weak<dyn ServerVerifier>,
     client_creds: Weak<dyn ResolvesClientCert>,
 }
 
@@ -233,7 +233,7 @@ impl ClientSessionCommon {
         time_now: UnixTime,
         lifetime_secs: u32,
         peer_identity: PeerIdentity,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
+        server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
     ) -> Self {
         Self {
@@ -248,7 +248,7 @@ impl ClientSessionCommon {
 
     pub(crate) fn compatible_config(
         &self,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
+        server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
     ) -> bool {
         let same_verifier = Weak::ptr_eq(
@@ -260,7 +260,7 @@ impl ClientSessionCommon {
         match (same_verifier, same_creds) {
             (true, true) => true,
             (false, _) => {
-                crate::log::trace!("resumption not allowed between different ServerCertVerifiers");
+                crate::log::trace!("resumption not allowed between different ServerVerifiers");
                 false
             }
             (_, _) => {

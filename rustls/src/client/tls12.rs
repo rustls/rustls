@@ -184,7 +184,7 @@ mod server_hello {
                     // proof of possession in the prior session.
                     cx.common.peer_identity = Some(resuming.peer_identity().clone());
                     cx.common.handshake_kind = Some(HandshakeKind::Resumed);
-                    let cert_verified = verify::ServerCertVerified::assertion();
+                    let cert_verified = verify::ServerVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
                     return if must_issue_new_ticket {
@@ -1087,7 +1087,7 @@ struct ExpectNewTicket {
     using_ems: bool,
     transcript: HandshakeHash,
     resuming: bool,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::ServerVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
 
@@ -1139,7 +1139,7 @@ struct ExpectCcs {
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
     resuming: bool,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::ServerVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
 
@@ -1200,7 +1200,7 @@ struct ExpectFinished {
     ticket: Option<NewSessionTicketPayload>,
     secrets: ConnectionSecrets,
     resuming: bool,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::ServerVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
 
@@ -1337,7 +1337,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 struct ExpectTraffic {
     // only `Some` if `config.enable_secret_extraction` is true
     extracted_secrets: Option<Result<PartiallyExtractedSecrets, Error>>,
-    _cert_verified: verify::ServerCertVerified,
+    _cert_verified: verify::ServerVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
 }

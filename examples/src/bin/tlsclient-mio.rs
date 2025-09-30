@@ -405,12 +405,12 @@ mod danger {
         }
     }
 
-    impl rustls::client::danger::ServerCertVerifier for NoCertificateVerification {
+    impl rustls::client::danger::ServerVerifier for NoCertificateVerification {
         fn verify_server_cert(
             &self,
             _identity: &ServerIdentity<'_>,
-        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-            Ok(rustls::client::danger::ServerCertVerified::assertion())
+        ) -> Result<rustls::client::danger::ServerVerified, rustls::Error> {
+            Ok(rustls::client::danger::ServerVerified::assertion())
         }
 
         fn verify_tls12_signature(

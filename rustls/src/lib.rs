@@ -582,7 +582,7 @@ pub mod client {
         pub use super::builder::danger::DangerousClientConfigBuilder;
         pub use super::client_conn::danger::DangerousClientConfig;
         pub use crate::verify::{
-            HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+            HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
             SignatureVerificationInput,
         };
     }
@@ -593,7 +593,7 @@ pub mod client {
 
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     pub use crate::webpki::{
-        ServerCertVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
+        ServerVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
         verify_server_cert_signed_by_trust_anchor, verify_server_name,
     };
 }

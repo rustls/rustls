@@ -53,7 +53,7 @@ states that look like:
 ```ignore
 struct ExpectTraffic {
    (...)
-    _cert_verified: verify::ServerCertVerified,
+    _cert_verified: verify::ServerVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
 }

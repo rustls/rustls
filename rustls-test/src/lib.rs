@@ -19,10 +19,10 @@ use std::io;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use rustls::client::danger::{
-    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+    HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
 };
 use rustls::client::{
-    AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, UnbufferedClientConnection,
+    AlwaysResolvesClientRawPublicKeys, ServerVerifierBuilder, UnbufferedClientConnection,
     WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
@@ -665,7 +665,7 @@ pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> C
 }
 
 pub fn make_client_config_with_verifier(
-    verifier_builder: ServerCertVerifierBuilder,
+    verifier_builder: ServerVerifierBuilder,
     provider: &CryptoProvider,
 ) -> ClientConfig {
     ClientConfig::builder_with_provider(provider.clone().into())
@@ -685,7 +685,7 @@ pub fn webpki_client_verifier_builder(
 pub fn webpki_server_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
-) -> ServerCertVerifierBuilder {
+) -> ServerVerifierBuilder {
     WebPkiServerVerifier::builder_with_provider(roots, provider)
 }
 
@@ -1111,18 +1111,15 @@ pub struct MockServerVerifier {
     raw_public_key_algorithms: Option<WebPkiSupportedAlgorithms>,
 }
 
-impl ServerCertVerifier for MockServerVerifier {
-    fn verify_server_cert(
-        &self,
-        identity: &ServerIdentity<'_>,
-    ) -> Result<ServerCertVerified, Error> {
+impl ServerVerifier for MockServerVerifier {
+    fn verify_server_cert(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
         println!("verify_server_cert({identity:?})");
         if let Some(expected_ocsp) = &self.expected_ocsp_response {
             assert_eq!(expected_ocsp, identity.ocsp_response);
         }
         match &self.cert_rejection_error {
             Some(error) => Err(error.clone()),
-            _ => Ok(ServerCertVerified::assertion()),
+            _ => Ok(ServerVerified::assertion()),
         }
     }
 

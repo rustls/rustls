@@ -41,7 +41,7 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarly;
-use crate::verify::ServerCertVerifier;
+use crate::verify::ServerVerifier;
 
 pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
@@ -1086,7 +1086,7 @@ impl ClientSessionValue {
 
     fn compatible_config(
         self,
-        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
+        server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
     ) -> Option<Self> {
         match &self {

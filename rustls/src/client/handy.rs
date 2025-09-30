@@ -246,7 +246,7 @@ mod tests {
 
     use super::NoClientSessionStorage;
     use super::provider::cipher_suite;
-    use crate::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use crate::client::danger::{HandshakeSignatureValid, ServerVerified, ServerVerifier};
     use crate::client::{ClientSessionStore, ResolvesClientCert};
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
@@ -264,7 +264,7 @@ mod tests {
         let c = NoClientSessionStorage {};
         let name = ServerName::try_from("example.com").unwrap();
         let now = UnixTime::now();
-        let server_cert_verifier: Arc<dyn ServerCertVerifier> = Arc::new(DummyServerCertVerifier);
+        let server_cert_verifier: Arc<dyn ServerVerifier> = Arc::new(DummyServerVerifier);
         let resolves_client_cert: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolvesClientCert);
 
         c.set_kx_hint(name.clone(), NamedGroup::X25519);
@@ -317,14 +317,14 @@ mod tests {
     }
 
     #[derive(Debug)]
-    struct DummyServerCertVerifier;
+    struct DummyServerVerifier;
 
-    impl ServerCertVerifier for DummyServerCertVerifier {
+    impl ServerVerifier for DummyServerVerifier {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_server_cert(
             &self,
             _identity: &ServerIdentity<'_>,
-        ) -> Result<ServerCertVerified, Error> {
+        ) -> Result<ServerVerified, Error> {
             unreachable!()
         }
 

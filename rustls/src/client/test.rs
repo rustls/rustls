@@ -41,7 +41,7 @@ mod tests {
     use crate::sign::CertifiedKey;
     use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
     use crate::verify::{
-        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+        HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
         SignatureVerificationInput,
     };
     use crate::{DigitallySignedStruct, DistinguishedName, KeyLog};
@@ -307,12 +307,12 @@ mod tests {
         seen_sha1_signature: AtomicBool,
     }
 
-    impl ServerCertVerifier for ExpectSha1EcdsaVerifier {
+    impl ServerVerifier for ExpectSha1EcdsaVerifier {
         fn verify_server_cert(
             &self,
             _identity: &ServerIdentity<'_>,
-        ) -> Result<ServerCertVerified, Error> {
-            Ok(ServerCertVerified::assertion())
+        ) -> Result<ServerVerified, Error> {
+            Ok(ServerVerified::assertion())
         }
 
         fn verify_tls12_signature(
@@ -496,7 +496,7 @@ mod tests {
     #[derive(Clone, Debug)]
     struct ServerVerifierWithAuthorityNames(Arc<[DistinguishedName]>);
 
-    impl ServerCertVerifier for ServerVerifierWithAuthorityNames {
+    impl ServerVerifier for ServerVerifierWithAuthorityNames {
         fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
             Some(self.0.clone())
         }
@@ -505,7 +505,7 @@ mod tests {
         fn verify_server_cert(
             &self,
             _identity: &ServerIdentity<'_>,
-        ) -> Result<ServerCertVerified, Error> {
+        ) -> Result<ServerVerified, Error> {
             unreachable!()
         }
 
@@ -537,12 +537,12 @@ mod tests {
     #[derive(Debug)]
     struct ServerVerifierRequiringRpk;
 
-    impl ServerCertVerifier for ServerVerifierRequiringRpk {
+    impl ServerVerifier for ServerVerifierRequiringRpk {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_server_cert(
             &self,
             _identity: &ServerIdentity<'_>,
-        ) -> Result<ServerCertVerified, Error> {
+        ) -> Result<ServerVerified, Error> {
             todo!()
         }
 

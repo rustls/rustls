@@ -3,7 +3,7 @@
 
 pub use std::sync::Arc;
 
-use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
+use rustls::client::{ServerVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::CryptoProvider;
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 use rustls::{RootCertStore, SupportedCipherSuite};
@@ -22,7 +22,7 @@ pub fn webpki_client_verifier_builder(
 pub fn webpki_server_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
-) -> ServerCertVerifierBuilder {
+) -> ServerVerifierBuilder {
     if exactly_one_provider() {
         WebPkiServerVerifier::builder(roots)
     } else {

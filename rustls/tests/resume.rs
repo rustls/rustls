@@ -83,7 +83,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
             c.borrow()
                 .trace
                 .iter()
-                .any(|item| item == "resumption not allowed between different ServerCertVerifiers")
+                .any(|item| item == "resumption not allowed between different ServerVerifiers")
         }));
     }
 }
