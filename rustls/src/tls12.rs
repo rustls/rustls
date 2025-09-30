@@ -15,7 +15,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{KeyExchangeAlgorithm, KxDecode};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
 use crate::version::Tls12Version;
-use crate::{ApiMisuse, ProtocolVersion, SignatureAlgorithm, crypto};
+use crate::{ApiMisuse, ProtocolVersion, crypto};
 
 /// A TLS 1.2 cipher suite supported by rustls.
 #[allow(clippy::exhaustive_structs)]
@@ -108,10 +108,10 @@ impl Suite for Tls12CipherSuite {
 
     /// Return true if this suite is usable for a key only offering `sig_alg`
     /// signatures.
-    fn usable_for_signature_algorithm(&self, sig_alg: SignatureAlgorithm) -> bool {
+    fn usable_for_signature_scheme(&self, scheme: SignatureScheme) -> bool {
         self.sign
             .iter()
-            .any(|scheme| scheme.algorithm() == sig_alg)
+            .any(|s| s.algorithm() == scheme.algorithm())
     }
 
     fn common(&self) -> &CipherSuiteCommon {

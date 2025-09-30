@@ -12,8 +12,7 @@ use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{
-    AlertDescription, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
-    SignatureAlgorithm, SignatureScheme,
+    AlertDescription, CertificateType, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -388,7 +387,7 @@ impl ExpectClientHello {
             input.sig_schemes.retain(|scheme| {
                 client_suites
                     .iter()
-                    .any(|&suite| suite.usable_for_signature_algorithm(scheme.algorithm()))
+                    .any(|&suite| suite.usable_for_signature_scheme(*scheme))
             });
         } else if T::VERSION == ProtocolVersion::TLSv1_3 {
             input
@@ -409,7 +408,7 @@ impl ExpectClientHello {
         let (suite, skxg) = self
             .choose_suite_and_kx_group(
                 suites,
-                signer.signer.scheme().algorithm(),
+                signer.signer.scheme(),
                 cx.common.protocol,
                 input
                     .client_hello
@@ -435,7 +434,7 @@ impl ExpectClientHello {
     fn choose_suite_and_kx_group<T: Suite + 'static>(
         &self,
         suites: &[&'static T],
-        sig_key_algorithm: SignatureAlgorithm,
+        sig_scheme: SignatureScheme,
         protocol: Protocol,
         client_groups: &[NamedGroup],
         client_suites: &[CipherSuite],
@@ -494,7 +493,7 @@ impl ExpectClientHello {
 
         let mut suitable_suites_iter = suites.iter().filter(|suite| {
             // Reduce our supported ciphersuites by the certified key's algorithm.
-            suite.usable_for_signature_algorithm(sig_key_algorithm)
+            suite.usable_for_signature_scheme(sig_scheme)
                 // And protocol
                 && suite.usable_for_protocol(protocol)
                 // And support for one of the key exchange groups
