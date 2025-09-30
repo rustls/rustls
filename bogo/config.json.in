@@ -65,8 +65,6 @@
     "LargeMessage-Reject": "not supported as a runtime option (cert size limit is compile-time constant)",
     "MTU*": "dtls only",
     "NPN-*": "no NPN support, never",
-    "NoCheckClientCertificateTypes": "we don't check TLS1.2 CertificateRequest.certificate_types",
-    "NoCheckECDSACurve-TLS12": "we don't have this check",
     "NoCommonCurves": "nothing to fall back to",
     "NoCommonSignatureAlgorithms-TLS12-Fallback": "requires TLS_RSA_WITH_AES_128_GCM_SHA256",
     "OmitExtensions-ClientHello-TLS12": "we require signature algorithms ext",
