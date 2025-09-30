@@ -45,7 +45,7 @@ use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
 };
 use rustls::server::danger::{
-    ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
+    ClientIdentity, ClientVerified, ClientVerifier, SignatureVerificationInput,
 };
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
@@ -388,7 +388,7 @@ fn decode_hex(hex: &str) -> Vec<u8> {
 struct DummyClientAuth {
     mandatory: bool,
     root_hint_subjects: Arc<[DistinguishedName]>,
-    parent: Arc<dyn ClientCertVerifier>,
+    parent: Arc<dyn ClientVerifier>,
 }
 
 impl DummyClientAuth {
@@ -410,7 +410,7 @@ impl DummyClientAuth {
     }
 }
 
-impl ClientCertVerifier for DummyClientAuth {
+impl ClientVerifier for DummyClientAuth {
     fn offer_client_auth(&self) -> bool {
         true
     }
@@ -423,11 +423,8 @@ impl ClientCertVerifier for DummyClientAuth {
         self.root_hint_subjects.clone()
     }
 
-    fn verify_client_cert(
-        &self,
-        _identity: &ClientIdentity<'_>,
-    ) -> Result<ClientCertVerified, Error> {
-        Ok(ClientCertVerified::assertion())
+    fn verify_client_cert(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
+        Ok(ClientVerified::assertion())
     }
 
     fn verify_tls12_signature(

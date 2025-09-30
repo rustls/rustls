@@ -295,7 +295,7 @@ impl<'a> ClientHello<'a> {
 /// Common configuration for a set of server sessions.
 ///
 /// Making one of these is cheap, though one of the inputs may be expensive: gathering trust roots
-/// from the operating system to add to the [`RootCertStore`] passed to a `ClientCertVerifier`
+/// from the operating system to add to the [`RootCertStore`] passed to a `ClientVerifier`
 /// builder may take on the order of a few hundred milliseconds.
 ///
 /// These must be created via the [`ServerConfig::builder()`] or [`ServerConfig::builder_with_provider()`]
@@ -388,7 +388,7 @@ pub struct ServerConfig {
     pub alpn_protocols: Vec<Vec<u8>>,
 
     /// How to verify client certificates.
-    pub(super) verifier: Arc<dyn verify::ClientCertVerifier>,
+    pub(super) verifier: Arc<dyn verify::ClientVerifier>,
 
     /// How to output key material for debugging.  The default
     /// does nothing.

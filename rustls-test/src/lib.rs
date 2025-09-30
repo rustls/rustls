@@ -35,10 +35,10 @@ use rustls::pki_types::{
     ServerName, SubjectPublicKeyInfoDer,
 };
 use rustls::server::danger::{
-    ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
+    ClientIdentity, ClientVerified, ClientVerifier, SignatureVerificationInput,
 };
 use rustls::server::{
-    AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, ClientHello, ResolvesServerCert,
+    AlwaysResolvesServerRawPublicKeys, ClientHello, ClientVerifierBuilder, ResolvesServerCert,
     UnbufferedServerConnection, WebPkiClientVerifier,
 };
 use rustls::sign::{CertifiedKey, CertifiedSigner, SigningKey};
@@ -568,7 +568,7 @@ pub fn make_server_config_with_optional_client_auth(
 
 pub fn make_server_config_with_client_verifier(
     kt: KeyType,
-    verifier_builder: ClientCertVerifierBuilder,
+    verifier_builder: ClientVerifierBuilder,
     provider: &CryptoProvider,
 ) -> ServerConfig {
     ServerConfig::builder_with_provider(provider.clone().into())
@@ -582,7 +582,7 @@ pub fn make_server_config_with_raw_key_support(
     provider: &CryptoProvider,
 ) -> ServerConfig {
     let mut client_verifier =
-        MockClientVerifier::new(|| Ok(ClientCertVerified::assertion()), kt, provider);
+        MockClientVerifier::new(|| Ok(ClientVerified::assertion()), kt, provider);
     let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(
         kt.certified_key_with_raw_pub_key(provider)
             .unwrap(),
@@ -678,7 +678,7 @@ pub fn make_client_config_with_verifier(
 pub fn webpki_client_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
-) -> ClientCertVerifierBuilder {
+) -> ClientVerifierBuilder {
     WebPkiClientVerifier::builder_with_provider(roots, provider)
 }
 
@@ -1242,18 +1242,18 @@ impl Default for MockServerVerifier {
 
 #[derive(Debug)]
 pub struct MockClientVerifier {
-    pub verified: fn() -> Result<ClientCertVerified, Error>,
+    pub verified: fn() -> Result<ClientVerified, Error>,
     pub subjects: Arc<[DistinguishedName]>,
     pub mandatory: bool,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
     expect_raw_public_keys: bool,
     raw_public_key_algorithms: Option<WebPkiSupportedAlgorithms>,
-    parent: Arc<dyn ClientCertVerifier>,
+    parent: Arc<dyn ClientVerifier>,
 }
 
 impl MockClientVerifier {
     pub fn new(
-        verified: fn() -> Result<ClientCertVerified, Error>,
+        verified: fn() -> Result<ClientVerified, Error>,
         kt: KeyType,
         provider: &CryptoProvider,
     ) -> Self {
@@ -1271,7 +1271,7 @@ impl MockClientVerifier {
     }
 }
 
-impl ClientCertVerifier for MockClientVerifier {
+impl ClientVerifier for MockClientVerifier {
     fn client_auth_mandatory(&self) -> bool {
         self.mandatory
     }
@@ -1280,10 +1280,7 @@ impl ClientCertVerifier for MockClientVerifier {
         self.subjects.clone()
     }
 
-    fn verify_client_cert(
-        &self,
-        _identity: &ClientIdentity<'_>,
-    ) -> Result<ClientCertVerified, Error> {
+    fn verify_client_cert(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         (self.verified)()
     }
 

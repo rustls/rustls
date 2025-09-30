@@ -9,14 +9,14 @@ use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
-use crate::verify::{ClientCertVerifier, NoClientAuth};
+use crate::verify::{ClientVerifier, NoClientAuth};
 use crate::{NoKeyLog, compress};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {
     /// Choose how to verify client certificates.
     pub fn with_client_cert_verifier(
         self,
-        client_cert_verifier: Arc<dyn ClientCertVerifier>,
+        client_cert_verifier: Arc<dyn ClientVerifier>,
     ) -> ConfigBuilder<ServerConfig, WantsServerCert> {
         ConfigBuilder {
             state: WantsServerCert {
@@ -40,7 +40,7 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
 pub struct WantsServerCert {
-    verifier: Arc<dyn ClientCertVerifier>,
+    verifier: Arc<dyn ClientVerifier>,
 }
 
 impl ConfigBuilder<ServerConfig, WantsServerCert> {
