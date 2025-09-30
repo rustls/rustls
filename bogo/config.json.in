@@ -208,7 +208,7 @@
     "NoSupportedCurves": ":INCOMPATIBLE:",
     "NoSupportedCurves-TLS13": ":INCOMPATIBLE:",
     "NoSupportedVersions": ":INCOMPATIBLE:",
-    "PointFormat-Client-MissingUncompressed": ":PEER_MISBEHAVIOUR:",
+    "PointFormat-Client-MissingUncompressed": ":SERVER_HELLO_MUST_OFFER_UNCOMPRESSED_EC_POINTS:",
     "PointFormat-Server-MissingUncompressed": ":INCOMPATIBLE:",
     "RenegotiationInfo-Forbidden-TLS13": ":UNEXPECTED_EXTENSION:",
     "RequestContextInHandshake-TLS13": ":BAD_HANDSHAKE_MSG:",
