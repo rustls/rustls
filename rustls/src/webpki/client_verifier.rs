@@ -13,7 +13,7 @@ use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::server::ServerConfig;
 use crate::sync::Arc;
 use crate::verify::{
-    ClientCertVerified, ClientCertVerifier, ClientIdentity, HandshakeSignatureValid, NoClientAuth,
+    ClientIdentity, ClientVerified, ClientVerifier, HandshakeSignatureValid, NoClientAuth,
     PeerIdentity, SignatureVerificationInput,
 };
 use crate::webpki::parse_crls;
@@ -24,7 +24,7 @@ use crate::{ApiMisuse, DistinguishedName, Error, RootCertStore, SignatureScheme}
 ///
 /// For more information, see the [`WebPkiClientVerifier`] documentation.
 #[derive(Debug, Clone)]
-pub struct ClientCertVerifierBuilder {
+pub struct ClientVerifierBuilder {
     roots: Arc<RootCertStore>,
     root_hint_subjects: Vec<DistinguishedName>,
     crls: Vec<CertificateRevocationListDer<'static>>,
@@ -35,7 +35,7 @@ pub struct ClientCertVerifierBuilder {
     supported_algs: WebPkiSupportedAlgorithms,
 }
 
-impl ClientCertVerifierBuilder {
+impl ClientVerifierBuilder {
     pub(crate) fn new(
         roots: Arc<RootCertStore>,
         supported_algs: WebPkiSupportedAlgorithms,
@@ -59,7 +59,7 @@ impl ClientCertVerifierBuilder {
     /// hint subjects, indicating the client should make a free choice of which certificate
     /// to send.
     ///
-    /// See [`ClientCertVerifier::root_hint_subjects`] for more information on
+    /// See [`ClientVerifier::root_hint_subjects`] for more information on
     /// circumstances where you may want to clear the default hint subjects.
     pub fn clear_root_hint_subjects(mut self) -> Self {
         self.root_hint_subjects = Vec::default();
@@ -73,7 +73,7 @@ impl ClientCertVerifierBuilder {
     /// existing hint subjects. Calling this function with empty `subjects` will have no
     /// effect.
     ///
-    /// See [`ClientCertVerifier::root_hint_subjects`] for more information on
+    /// See [`ClientVerifier::root_hint_subjects`] for more information on
     /// circumstances where you may want to override the default hint subjects.
     pub fn add_root_hint_subjects(
         mut self,
@@ -161,7 +161,7 @@ impl ClientCertVerifierBuilder {
     /// If `with_signature_verification_algorithms` was not called on the builder, a default set of
     /// signature verification algorithms is used, controlled by the selected [`CryptoProvider`].
     ///
-    /// Once built, the provided `Arc<dyn ClientCertVerifier>` can be used with a Rustls
+    /// Once built, the provided `Arc<dyn ClientVerifier>` can be used with a Rustls
     /// [`ServerConfig`] to configure client certificate validation using
     /// [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
     ///
@@ -169,7 +169,7 @@ impl ClientCertVerifierBuilder {
     /// This function will return a [`VerifierBuilderError`] if:
     /// 1. No trust anchors have been provided.
     /// 2. DER encoded CRLs have been provided that can not be parsed successfully.
-    pub fn build(self) -> Result<Arc<dyn ClientCertVerifier>, VerifierBuilderError> {
+    pub fn build(self) -> Result<Arc<dyn ClientVerifier>, VerifierBuilderError> {
         if self.roots.is_empty() {
             return Err(VerifierBuilderError::NoRootAnchors);
         }
@@ -193,7 +193,7 @@ impl ClientCertVerifierBuilder {
 /// It must be created via the [`WebPkiClientVerifier::builder()`] or
 /// [`WebPkiClientVerifier::builder_with_provider()`] functions.
 ///
-/// Once built, the provided `Arc<dyn ClientCertVerifier>` can be used with a Rustls [`ServerConfig`]
+/// Once built, the provided `Arc<dyn ClientVerifier>` can be used with a Rustls [`ServerConfig`]
 /// to configure client certificate validation using [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
 ///
 /// Example:
@@ -270,8 +270,8 @@ impl WebPkiClientVerifier {
     ///
     /// Use [`Self::builder_with_provider`] if you wish to specify an explicit provider.
     ///
-    /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
-    pub fn builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {
+    /// For more information, see the [`ClientVerifierBuilder`] documentation.
+    pub fn builder(roots: Arc<RootCertStore>) -> ClientVerifierBuilder {
         Self::builder_with_provider(
             roots,
             CryptoProvider::get_default_or_install_from_crate_features(),
@@ -287,12 +287,12 @@ impl WebPkiClientVerifier {
     ///
     /// The cryptography used comes from the specified [`CryptoProvider`].
     ///
-    /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
+    /// For more information, see the [`ClientVerifierBuilder`] documentation.
     pub fn builder_with_provider(
         roots: Arc<RootCertStore>,
         provider: &CryptoProvider,
-    ) -> ClientCertVerifierBuilder {
-        ClientCertVerifierBuilder::new(roots, provider.signature_verification_algorithms)
+    ) -> ClientVerifierBuilder {
+        ClientVerifierBuilder::new(roots, provider.signature_verification_algorithms)
     }
 
     /// Create a new `WebPkiClientVerifier` that disables client authentication. The server will
@@ -300,7 +300,7 @@ impl WebPkiClientVerifier {
     ///
     /// This is in contrast to using `WebPkiClientVerifier::builder().allow_unauthenticated().build()`,
     /// which will produce a verifier that will offer client authentication, but not require it.
-    pub fn no_client_auth() -> Arc<dyn ClientCertVerifier> {
+    pub fn no_client_auth() -> Arc<dyn ClientVerifier> {
         Arc::new(NoClientAuth {})
     }
 
@@ -341,7 +341,7 @@ impl WebPkiClientVerifier {
     }
 }
 
-impl ClientCertVerifier for WebPkiClientVerifier {
+impl ClientVerifier for WebPkiClientVerifier {
     fn offer_client_auth(&self) -> bool {
         true
     }
@@ -357,10 +357,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         self.root_hint_subjects.clone()
     }
 
-    fn verify_client_cert(
-        &self,
-        identity: &ClientIdentity<'_>,
-    ) -> Result<ClientCertVerified, Error> {
+    fn verify_client_cert(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         let certificates = match identity.identity {
             PeerIdentity::X509(certificates) => certificates,
             PeerIdentity::RawPublicKey(_) => {
@@ -396,7 +393,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
                 None,
             )
             .map_err(pki_error)
-            .map(|_| ClientCertVerified::assertion())
+            .map(|_| ClientVerified::assertion())
     }
 
     fn verify_tls12_signature(

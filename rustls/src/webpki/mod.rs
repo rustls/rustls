@@ -16,7 +16,7 @@ mod server_verifier;
 mod verify;
 
 pub use anchors::RootCertStore;
-pub use client_verifier::{ClientCertVerifierBuilder, WebPkiClientVerifier};
+pub use client_verifier::{ClientVerifierBuilder, WebPkiClientVerifier};
 pub use server_verifier::{ServerVerifierBuilder, WebPkiServerVerifier};
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]

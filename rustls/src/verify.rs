@@ -119,7 +119,7 @@ pub struct ServerIdentity<'a> {
 
 /// Something that can verify a client certificate chain
 #[allow(unreachable_pub)]
-pub trait ClientCertVerifier: Debug + Send + Sync {
+pub trait ClientVerifier: Debug + Send + Sync {
     /// Returns `true` to enable the server to request a client certificate and
     /// `false` to skip requesting a client certificate. Defaults to `true`.
     fn offer_client_auth(&self) -> bool {
@@ -139,7 +139,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     /// These hint values help the client pick a client certificate it believes the server will
     /// accept. The hints must be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. They
     /// are sent in the [`certificate_authorities`] extension of a [`CertificateRequest`] message
-    /// when [ClientCertVerifier::offer_client_auth] is true. When an empty list is sent the client
+    /// when [ClientVerifier::offer_client_auth] is true. When an empty list is sent the client
     /// should always provide a client certificate if it has one.
     ///
     /// Generally this list should contain the [`DistinguishedName`] of each root trust
@@ -172,10 +172,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     ///
     /// [InvalidCertificate]: Error#variant.InvalidCertificate
     /// [BadEncoding]: crate::CertificateError#variant.BadEncoding
-    fn verify_client_cert(
-        &self,
-        identity: &ClientIdentity<'_>,
-    ) -> Result<ClientCertVerified, Error>;
+    fn verify_client_cert(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error>;
 
     /// Verify a signature allegedly by the given client certificate.
     ///
@@ -366,13 +363,13 @@ pub enum SignerPublicKey<'a> {
 ///
 /// In contrast to using
 /// `WebPkiClientVerifier::builder(roots).allow_unauthenticated().build()`, the `NoClientAuth`
-/// `ClientCertVerifier` will not offer client authentication at all, vs offering but not
+/// `ClientVerifier` will not offer client authentication at all, vs offering but not
 /// requiring it.
 #[allow(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct NoClientAuth;
 
-impl ClientCertVerifier for NoClientAuth {
+impl ClientVerifier for NoClientAuth {
     fn offer_client_auth(&self) -> bool {
         false
     }
@@ -381,10 +378,7 @@ impl ClientCertVerifier for NoClientAuth {
         unimplemented!();
     }
 
-    fn verify_client_cert(
-        &self,
-        _identity: &ClientIdentity<'_>,
-    ) -> Result<ClientCertVerified, Error> {
+    fn verify_client_cert(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         unimplemented!();
     }
 
@@ -478,10 +472,10 @@ impl ServerVerified {
 
 /// Zero-sized marker type representing verification of a client cert chain.
 #[derive(Debug)]
-pub struct ClientCertVerified(());
+pub struct ClientVerified(());
 
-impl ClientCertVerified {
-    /// Make a `ClientCertVerified`
+impl ClientVerified {
+    /// Make a `ClientVerified`
     pub fn assertion() -> Self {
         Self(())
     }
@@ -492,8 +486,8 @@ fn assertions_are_debug() {
     use std::format;
 
     assert_eq!(
-        format!("{:?}", ClientCertVerified::assertion()),
-        "ClientCertVerified(())"
+        format!("{:?}", ClientVerified::assertion()),
+        "ClientVerified(())"
     );
     assert_eq!(
         format!("{:?}", HandshakeSignatureValid::assertion()),

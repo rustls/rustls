@@ -628,13 +628,13 @@ pub mod server {
 
     pub use crate::verify::NoClientAuth;
     pub use crate::webpki::{
-        ClientCertVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
+        ClientVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
     };
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
         pub use crate::verify::{
-            ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
+            ClientIdentity, ClientVerified, ClientVerifier, SignatureVerificationInput,
         };
     }
 

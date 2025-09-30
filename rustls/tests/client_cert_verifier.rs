@@ -1,10 +1,10 @@
-//! Tests for configuring and using a [`ClientCertVerifier`] for a server.
+//! Tests for configuring and using a [`ClientVerifier`] for a server.
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::sync::Arc;
 
-use rustls::server::danger::ClientCertVerified;
+use rustls::server::danger::ClientVerified;
 use rustls::{
     AlertDescription, CertificateError, ClientConnection, Error, InvalidMessage, PeerIdentity,
     PeerMisbehaved, ServerConfig, ServerConnection,
@@ -21,17 +21,17 @@ use super::common::all_versions;
 use super::provider;
 
 // Client is authorized!
-fn ver_ok() -> Result<ClientCertVerified, Error> {
-    Ok(ClientCertVerified::assertion())
+fn ver_ok() -> Result<ClientVerified, Error> {
+    Ok(ClientVerified::assertion())
 }
 
 // Use when we shouldn't even attempt verification
-fn ver_unreachable() -> Result<ClientCertVerified, Error> {
+fn ver_unreachable() -> Result<ClientVerified, Error> {
     unreachable!()
 }
 
 // Verifier that returns an error that we can expect
-fn ver_err() -> Result<ClientCertVerified, Error> {
+fn ver_err() -> Result<ClientVerified, Error> {
     Err(Error::General("test err".to_string()))
 }
 

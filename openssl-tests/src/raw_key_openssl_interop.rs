@@ -1,7 +1,7 @@
 //! This module provides tests for the interoperability of raw public keys with OpenSSL, and also
 //! demonstrates how to set up a client-server architecture that utilizes raw public keys.
 //!
-//! The module also includes example implementations of the `ServerVerifier` and `ClientCertVerifier` traits, using
+//! The module also includes example implementations of the `ServerVerifier` and `ClientVerifier` traits, using
 //! pre-configured raw public keys for the verification of the peer.
 
 mod client {
@@ -97,10 +97,7 @@ mod client {
     }
 
     impl ServerVerifier for SimpleRpkServerVerifier {
-        fn verify_identity(
-            &self,
-            identity: &ServerIdentity<'_>,
-        ) -> Result<ServerVerified, Error> {
+        fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
             let PeerIdentity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
@@ -152,7 +149,7 @@ mod server {
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::AlwaysResolvesServerRawPublicKeys;
     use rustls::server::danger::{
-        ClientCertVerified, ClientCertVerifier, ClientIdentity, SignatureVerificationInput,
+        ClientIdentity, ClientVerified, ClientVerifier, SignatureVerificationInput,
     };
     use rustls::sign::CertifiedKey;
     use rustls::{
@@ -181,7 +178,7 @@ mod server {
         let certified_key =
             CertifiedKey::new_unchecked(Arc::from([server_public_key_as_cert]), server_private_key);
 
-        let client_cert_verifier = Arc::new(SimpleRpkClientCertVerifier::new(vec![client_raw_key]));
+        let client_cert_verifier = Arc::new(SimpleRpkClientVerifier::new(vec![client_raw_key]));
         let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(certified_key));
 
         ServerConfig::builder()
@@ -232,12 +229,12 @@ mod server {
     ///
     /// Note: when the verifier is used for Raw Public Keys the `CertificateDer` argument to the functions contains the SPKI instead of a X509 Certificate
     #[derive(Debug)]
-    struct SimpleRpkClientCertVerifier {
+    struct SimpleRpkClientVerifier {
         trusted_spki: Vec<SubjectPublicKeyInfoDer<'static>>,
         supported_algs: WebPkiSupportedAlgorithms,
     }
 
-    impl SimpleRpkClientCertVerifier {
+    impl SimpleRpkClientVerifier {
         pub(crate) fn new(trusted_spki: Vec<SubjectPublicKeyInfoDer<'static>>) -> Self {
             Self {
                 trusted_spki,
@@ -246,7 +243,7 @@ mod server {
         }
     }
 
-    impl ClientCertVerifier for SimpleRpkClientCertVerifier {
+    impl ClientVerifier for SimpleRpkClientVerifier {
         fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
             Arc::from(Vec::new())
         }
@@ -254,14 +251,14 @@ mod server {
         fn verify_client_cert(
             &self,
             identity: &ClientIdentity<'_>,
-        ) -> Result<ClientCertVerified, Error> {
+        ) -> Result<ClientVerified, Error> {
             let PeerIdentity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
             match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(ClientCertVerified::assertion()),
+                true => Ok(ClientVerified::assertion()),
             }
         }
 
