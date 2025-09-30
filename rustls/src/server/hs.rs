@@ -33,8 +33,8 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
-pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
-pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
+pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
+pub(super) type NextStateOrError = Result<NextState, Error>;
 pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
 
 #[derive(Default)]
@@ -302,7 +302,7 @@ impl ExpectClientHello {
         self,
         input: ClientHelloInput<'_>,
         cx: &mut ServerContext<'_>,
-    ) -> NextStateOrError<'static> {
+    ) -> NextStateOrError {
         let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3);
@@ -361,7 +361,7 @@ impl ExpectClientHello {
         self,
         mut input: ClientHelloInput<'_>,
         cx: &mut ServerContext<'_>,
-    ) -> NextStateOrError<'static>
+    ) -> NextStateOrError
     where
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
@@ -562,20 +562,9 @@ impl ExpectClientHello {
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
-    fn handle<'m>(
-        self: Box<Self>,
-        cx: &mut ServerContext<'_>,
-        m: Message<'m>,
-    ) -> NextStateOrError<'m>
-    where
-        Self: 'm,
-    {
+    fn handle<'m>(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'m>) -> NextStateOrError {
         let input = ClientHelloInput::from_message(&m, self.done_retry, cx)?;
         self.with_certified_key(input, cx)
-    }
-
-    fn into_owned(self: Box<Self>) -> NextState<'static> {
-        self
     }
 }
 
@@ -588,7 +577,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
         cx: &mut ServerContext<'_>,
-    ) -> NextStateOrError<'static>;
+    ) -> NextStateOrError;
 }
 
 pub(crate) struct ClientHelloInput<'a> {

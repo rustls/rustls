@@ -186,7 +186,7 @@ impl CommonState {
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
         msg: Message<'_>,
-        mut state: Box<dyn State<Data>>,
+        state: Box<dyn State<Data>>,
         data: &mut Data,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
     ) -> Result<Box<dyn State<Data>>, Error> {
@@ -211,10 +211,7 @@ impl CommonState {
             sendable_plaintext,
         };
         match state.handle(&mut cx, msg) {
-            Ok(next) => {
-                state = next.into_owned();
-                Ok(state)
-            }
+            Ok(next) => Ok(next),
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
                 Err(self.send_fatal_alert(AlertDescription::UnexpectedMessage, e))
@@ -837,9 +834,7 @@ pub(crate) trait State<Data>: Send + Sync {
         self: Box<Self>,
         cx: &mut Context<'_, Data>,
         message: Message<'m>,
-    ) -> Result<Box<dyn State<Data> + 'm>, Error>
-    where
-        Self: 'm;
+    ) -> Result<Box<dyn State<Data>>, Error>;
 
     fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
         Err(Error::HandshakeNotComplete)
@@ -852,8 +847,6 @@ pub(crate) trait State<Data>: Send + Sync {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
     }
-
-    fn into_owned(self: Box<Self>) -> Box<dyn State<Data> + 'static>;
 }
 
 pub(crate) struct Context<'a, Data> {
