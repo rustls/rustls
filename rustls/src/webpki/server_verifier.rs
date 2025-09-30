@@ -6,7 +6,7 @@ use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, Unknown
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::sync::Arc;
 use crate::verify::{
-    HandshakeSignatureValid, PeerIdentity, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+    HandshakeSignatureValid, PeerIdentity, ServerIdentity, ServerVerified, ServerVerifier,
     SignatureVerificationInput,
 };
 use crate::webpki::verify::{
@@ -22,7 +22,7 @@ use crate::{ConfigBuilder, ServerConfig, crypto};
 ///
 /// For more information, see the [`WebPkiServerVerifier`] documentation.
 #[derive(Debug, Clone)]
-pub struct ServerCertVerifierBuilder {
+pub struct ServerVerifierBuilder {
     roots: Arc<RootCertStore>,
     crls: Vec<CertificateRevocationListDer<'static>>,
     revocation_check_depth: RevocationCheckDepth,
@@ -31,7 +31,7 @@ pub struct ServerCertVerifierBuilder {
     supported_algs: WebPkiSupportedAlgorithms,
 }
 
-impl ServerCertVerifierBuilder {
+impl ServerVerifierBuilder {
     pub(crate) fn new(
         roots: Arc<RootCertStore>,
         supported_algs: WebPkiSupportedAlgorithms,
@@ -103,7 +103,7 @@ impl ServerCertVerifierBuilder {
     /// If `with_signature_verification_algorithms` was not called on the builder, a default set of
     /// signature verification algorithms is used, controlled by the selected [`crypto::CryptoProvider`].
     ///
-    /// Once built, the provided `Arc<dyn ServerCertVerifier>` can be used with a Rustls
+    /// Once built, the provided `Arc<dyn ServerVerifier>` can be used with a Rustls
     /// [`ServerConfig`] to configure client certificate validation using
     /// [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
     ///
@@ -128,7 +128,7 @@ impl ServerCertVerifierBuilder {
     }
 }
 
-/// Default `ServerCertVerifier`, see the trait impl for more information.
+/// Default `ServerVerifier`, see the trait impl for more information.
 #[allow(unreachable_pub)]
 #[derive(Debug)]
 pub struct WebPkiServerVerifier {
@@ -149,8 +149,8 @@ impl WebPkiServerVerifier {
     ///
     /// Use [`Self::builder_with_provider`] if you wish to specify an explicit provider.
     ///
-    /// For more information, see the [`ServerCertVerifierBuilder`] documentation.
-    pub fn builder(roots: Arc<RootCertStore>) -> ServerCertVerifierBuilder {
+    /// For more information, see the [`ServerVerifierBuilder`] documentation.
+    pub fn builder(roots: Arc<RootCertStore>) -> ServerVerifierBuilder {
         Self::builder_with_provider(
             roots,
             CryptoProvider::get_default_or_install_from_crate_features(),
@@ -164,12 +164,12 @@ impl WebPkiServerVerifier {
     ///
     /// The cryptography used comes from the specified [`CryptoProvider`].
     ///
-    /// For more information, see the [`ServerCertVerifierBuilder`] documentation.
+    /// For more information, see the [`ServerVerifierBuilder`] documentation.
     pub fn builder_with_provider(
         roots: Arc<RootCertStore>,
         provider: &CryptoProvider,
-    ) -> ServerCertVerifierBuilder {
-        ServerCertVerifierBuilder::new(roots, provider.signature_verification_algorithms)
+    ) -> ServerVerifierBuilder {
+        ServerVerifierBuilder::new(roots, provider.signature_verification_algorithms)
     }
 
     /// Short-cut for creating a `WebPkiServerVerifier` that does not perform certificate revocation
@@ -218,7 +218,7 @@ impl WebPkiServerVerifier {
     }
 }
 
-impl ServerCertVerifier for WebPkiServerVerifier {
+impl ServerVerifier for WebPkiServerVerifier {
     /// Will verify the certificate is valid in the following ways:
     /// - Signed by a trusted `RootCertStore` CA
     /// - Not Expired
@@ -229,10 +229,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
     /// each certificate in the chain to a root CA (excluding the root itself), or only the
     /// end entity certificate. Similarly, unknown revocation status may be treated as an error
     /// or allowed based on configuration.
-    fn verify_server_cert(
-        &self,
-        identity: &ServerIdentity<'_>,
-    ) -> Result<ServerCertVerified, Error> {
+    fn verify_server_cert(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
         let certificates = match identity.identity {
             PeerIdentity::X509(certificates) => certificates,
             PeerIdentity::RawPublicKey(_) => {
@@ -271,7 +268,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         )?;
 
         verify_server_name(&cert, identity.server_name)?;
-        Ok(ServerCertVerified::assertion())
+        Ok(ServerVerified::assertion())
     }
 
     fn verify_tls12_signature(

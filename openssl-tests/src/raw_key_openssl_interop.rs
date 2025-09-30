@@ -1,7 +1,7 @@
 //! This module provides tests for the interoperability of raw public keys with OpenSSL, and also
 //! demonstrates how to set up a client-server architecture that utilizes raw public keys.
 //!
-//! The module also includes example implementations of the `ServerCertVerifier` and `ClientCertVerifier` traits, using
+//! The module also includes example implementations of the `ServerVerifier` and `ClientCertVerifier` traits, using
 //! pre-configured raw public keys for the verification of the peer.
 
 mod client {
@@ -11,7 +11,7 @@ mod client {
 
     use rustls::client::AlwaysResolvesClientRawPublicKeys;
     use rustls::client::danger::{
-        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+        HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
     };
     use rustls::crypto::{
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
@@ -48,7 +48,7 @@ mod client {
 
         ClientConfig::builder()
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(SimpleRpkServerCertVerifier::new(vec![
+            .with_custom_certificate_verifier(Arc::new(SimpleRpkServerVerifier::new(vec![
                 server_raw_key,
             ])))
             .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
@@ -82,12 +82,12 @@ mod client {
     ///
     /// Note: when the verifier is used for Raw Public Keys the `CertificateDer` argument to the functions contains the SPKI instead of a X509 Certificate
     #[derive(Debug)]
-    struct SimpleRpkServerCertVerifier {
+    struct SimpleRpkServerVerifier {
         trusted_spki: Vec<SubjectPublicKeyInfoDer<'static>>,
         supported_algs: WebPkiSupportedAlgorithms,
     }
 
-    impl SimpleRpkServerCertVerifier {
+    impl SimpleRpkServerVerifier {
         fn new(trusted_spki: Vec<SubjectPublicKeyInfoDer<'static>>) -> Self {
             Self {
                 trusted_spki,
@@ -96,18 +96,18 @@ mod client {
         }
     }
 
-    impl ServerCertVerifier for SimpleRpkServerCertVerifier {
+    impl ServerVerifier for SimpleRpkServerVerifier {
         fn verify_server_cert(
             &self,
             identity: &ServerIdentity<'_>,
-        ) -> Result<ServerCertVerified, Error> {
+        ) -> Result<ServerVerified, Error> {
             let PeerIdentity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
             match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(ServerCertVerified::assertion()),
+                true => Ok(ServerVerified::assertion()),
             }
         }
 

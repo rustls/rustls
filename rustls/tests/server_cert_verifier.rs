@@ -1,4 +1,4 @@
-//! Tests for configuring and using a [`ServerCertVerifier`] for a client.
+//! Tests for configuring and using a [`ServerVerifier`] for a client.
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use pki_types::UnixTime;
 use rustls::client::danger::{
-    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+    HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
     SignatureVerificationInput,
 };
 use rustls::client::{WebPkiServerVerifier, verify_server_cert_signed_by_trust_anchor};
@@ -238,7 +238,7 @@ fn client_can_request_certain_trusted_cas() {
                 .build()
                 .unwrap();
 
-        let cas_sending_server_verifier = Arc::new(ServerCertVerifierWithCasExt {
+        let cas_sending_server_verifier = Arc::new(ServerVerifierWithCasExt {
             verifier: server_verifier.clone(),
             ca_names: Arc::from(vec![DistinguishedName::from(
                 key_type
@@ -673,16 +673,13 @@ impl ResolvesServerCert for ResolvesCertChainByCaName {
 }
 
 #[derive(Debug)]
-struct ServerCertVerifierWithCasExt {
-    verifier: Arc<dyn ServerCertVerifier>,
+struct ServerVerifierWithCasExt {
+    verifier: Arc<dyn ServerVerifier>,
     ca_names: Arc<[DistinguishedName]>,
 }
 
-impl ServerCertVerifier for ServerCertVerifierWithCasExt {
-    fn verify_server_cert(
-        &self,
-        identity: &ServerIdentity<'_>,
-    ) -> Result<ServerCertVerified, Error> {
+impl ServerVerifier for ServerVerifierWithCasExt {
+    fn verify_server_cert(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
         self.verifier
             .verify_server_cert(identity)
     }
@@ -717,7 +714,7 @@ impl ServerCertVerifier for ServerCertVerifierWithCasExt {
     }
 
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
-        println!("ServerCertVerifierWithCasExt::root_hint_subjects() called!");
+        println!("ServerVerifierWithCasExt::root_hint_subjects() called!");
         Some(self.ca_names.clone())
     }
 }

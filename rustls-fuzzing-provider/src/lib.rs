@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 use rustls::client::WebPkiServerVerifier;
-use rustls::client::danger::ServerCertVerifier;
+use rustls::client::danger::ServerVerifier;
 use rustls::crypto::cipher::{
     AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape, MessageDecrypter,
     MessageEncrypter, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
@@ -49,7 +49,7 @@ pub fn provider() -> crypto::CryptoProvider {
     }
 }
 
-pub fn server_verifier() -> Arc<dyn ServerCertVerifier> {
+pub fn server_verifier() -> Arc<dyn ServerVerifier> {
     // we need one of these, but it doesn't matter what it is
     let mut root_store = RootCertStore::empty();
     root_store.add_parsable_certificates([CertificateDer::from(

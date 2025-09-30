@@ -29,7 +29,7 @@ use nix::sys::signal::{self, Signal};
 #[cfg(unix)]
 use nix::unistd::Pid;
 use rustls::client::danger::{
-    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerIdentity,
+    HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
 };
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
@@ -453,7 +453,7 @@ impl ClientCertVerifier for DummyClientAuth {
 
 #[derive(Debug)]
 struct DummyServerAuth {
-    parent: Arc<dyn ServerCertVerifier>,
+    parent: Arc<dyn ServerVerifier>,
     ocsp: OcspValidation,
 }
 
@@ -471,15 +471,12 @@ impl DummyServerAuth {
     }
 }
 
-impl ServerCertVerifier for DummyServerAuth {
-    fn verify_server_cert(
-        &self,
-        _identity: &ServerIdentity<'_>,
-    ) -> Result<ServerCertVerified, Error> {
+impl ServerVerifier for DummyServerAuth {
+    fn verify_server_cert(&self, _identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
         if let OcspValidation::Reject = self.ocsp {
             return Err(CertificateError::InvalidOcspResponse.into());
         }
-        Ok(ServerCertVerified::assertion())
+        Ok(ServerVerified::assertion())
     }
 
     fn verify_tls12_signature(

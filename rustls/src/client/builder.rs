@@ -101,7 +101,7 @@ pub(super) mod danger {
         /// Set a custom certificate verifier.
         pub fn with_custom_certificate_verifier(
             self,
-            verifier: Arc<dyn verify::ServerCertVerifier>,
+            verifier: Arc<dyn verify::ServerVerifier>,
         ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
             ConfigBuilder {
                 state: WantsClientCert {
@@ -122,7 +122,7 @@ pub(super) mod danger {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone)]
 pub struct WantsClientCert {
-    verifier: Arc<dyn verify::ServerCertVerifier>,
+    verifier: Arc<dyn verify::ServerVerifier>,
     client_ech_mode: Option<EchMode>,
 }
 

@@ -244,7 +244,7 @@ pub struct ClientConfig {
     pub(crate) provider: Arc<CryptoProvider>,
 
     /// How to verify the server certificate chain.
-    pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
+    pub(super) verifier: Arc<dyn verify::ServerVerifier>,
 
     /// How to decompress the server's certificate chain.
     ///
@@ -476,7 +476,7 @@ pub enum Tls12Resumption {
 /// Container for unsafe APIs
 pub(super) mod danger {
     use super::ClientConfig;
-    use super::verify::ServerCertVerifier;
+    use super::verify::ServerVerifier;
     use crate::sync::Arc;
 
     /// Accessor for dangerous configuration options.
@@ -487,8 +487,8 @@ pub(super) mod danger {
     }
 
     impl DangerousClientConfig<'_> {
-        /// Overrides the default `ServerCertVerifier` with something else.
-        pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
+        /// Overrides the default `ServerVerifier` with something else.
+        pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerVerifier>) {
             self.cfg.verifier = verifier;
         }
     }
