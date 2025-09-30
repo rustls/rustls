@@ -244,10 +244,6 @@ mod server {
     }
 
     impl ClientVerifier for SimpleRpkClientVerifier {
-        fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
-            Arc::from(Vec::new())
-        }
-
         fn verify_client_cert(
             &self,
             identity: &ClientIdentity<'_>,
@@ -274,6 +270,10 @@ mod server {
             input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
             verify_tls13_signature(input, &self.supported_algs)
+        }
+
+        fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
+            Arc::from(Vec::new())
         }
 
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {

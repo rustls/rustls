@@ -1272,14 +1272,6 @@ impl MockClientVerifier {
 }
 
 impl ClientVerifier for MockClientVerifier {
-    fn client_auth_mandatory(&self) -> bool {
-        self.mandatory
-    }
-
-    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
-        self.subjects.clone()
-    }
-
     fn verify_client_cert(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         (self.verified)()
     }
@@ -1311,6 +1303,14 @@ impl ClientVerifier for MockClientVerifier {
             self.parent
                 .verify_tls13_signature(input)
         }
+    }
+
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
+        self.subjects.clone()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        self.mandatory
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {

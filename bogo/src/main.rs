@@ -411,18 +411,6 @@ impl DummyClientAuth {
 }
 
 impl ClientVerifier for DummyClientAuth {
-    fn offer_client_auth(&self) -> bool {
-        true
-    }
-
-    fn client_auth_mandatory(&self) -> bool {
-        self.mandatory
-    }
-
-    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
-        self.root_hint_subjects.clone()
-    }
-
     fn verify_client_cert(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         Ok(ClientVerified::assertion())
     }
@@ -441,6 +429,18 @@ impl ClientVerifier for DummyClientAuth {
     ) -> Result<HandshakeSignatureValid, Error> {
         self.parent
             .verify_tls13_signature(input)
+    }
+
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
+        self.root_hint_subjects.clone()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        self.mandatory
+    }
+
+    fn offer_client_auth(&self) -> bool {
+        true
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
