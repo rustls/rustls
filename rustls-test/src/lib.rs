@@ -1272,7 +1272,7 @@ impl MockClientVerifier {
 }
 
 impl ClientVerifier for MockClientVerifier {
-    fn verify_client_cert(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
+    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         (self.verified)()
     }
 

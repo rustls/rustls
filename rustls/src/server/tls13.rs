@@ -1100,7 +1100,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
         self.config
             .verifier
-            .verify_client_cert(&ClientIdentity {
+            .verify_identity(&ClientIdentity {
                 identity: &peer_identity,
                 now: self.config.current_time()?,
             })

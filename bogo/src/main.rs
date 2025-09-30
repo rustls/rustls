@@ -411,7 +411,7 @@ impl DummyClientAuth {
 }
 
 impl ClientVerifier for DummyClientAuth {
-    fn verify_client_cert(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
+    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         Ok(ClientVerified::assertion())
     }
 
