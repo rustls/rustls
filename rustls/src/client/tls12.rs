@@ -915,7 +915,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
             // Check the signature is compatible with the ciphersuite.
             let signature = &st.server_kx.kx_sig;
-            if !suite.usable_for_signature_algorithm(signature.scheme.algorithm()) {
+            if !suite.usable_for_signature_scheme(signature.scheme) {
                 warn!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     signature.scheme.algorithm(),

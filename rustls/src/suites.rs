@@ -3,7 +3,7 @@ use core::fmt;
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::{self, KeyExchangeAlgorithm};
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureAlgorithm};
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
@@ -108,7 +108,7 @@ pub(crate) trait Suite: fmt::Debug {
 
     fn usable_for_protocol(&self, proto: Protocol) -> bool;
 
-    fn usable_for_signature_algorithm(&self, _alg: SignatureAlgorithm) -> bool {
+    fn usable_for_signature_scheme(&self, _scheme: SignatureScheme) -> bool {
         true
     }
 
