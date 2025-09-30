@@ -7,7 +7,7 @@ use core::fmt;
 use super::server_conn::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
-use crate::common_state::{KxState, Protocol, State};
+use crate::common_state::{KxState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
@@ -409,7 +409,6 @@ impl ExpectClientHello {
             .choose_suite_and_kx_group(
                 suites,
                 signer.signer.scheme(),
-                cx.common.protocol,
                 input
                     .client_hello
                     .named_groups
@@ -435,7 +434,6 @@ impl ExpectClientHello {
         &self,
         suites: &[&'static T],
         sig_scheme: SignatureScheme,
-        protocol: Protocol,
         client_groups: &[NamedGroup],
         client_suites: &[CipherSuite],
     ) -> Result<(&'static T, &'static dyn SupportedKxGroup), PeerIncompatible> {
@@ -494,8 +492,6 @@ impl ExpectClientHello {
         let mut suitable_suites_iter = suites.iter().filter(|suite| {
             // Reduce our supported ciphersuites by the certified key's algorithm.
             suite.usable_for_signature_scheme(sig_scheme)
-                // And protocol
-                && suite.usable_for_protocol(protocol)
                 // And support for one of the key exchange groups
                 && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
                 || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE))
