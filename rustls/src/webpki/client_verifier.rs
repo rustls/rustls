@@ -342,7 +342,7 @@ impl WebPkiClientVerifier {
 }
 
 impl ClientVerifier for WebPkiClientVerifier {
-    fn verify_client_cert(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
+    fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         let certificates = match identity.identity {
             PeerIdentity::X509(certificates) => certificates,
             PeerIdentity::RawPublicKey(_) => {

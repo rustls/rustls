@@ -244,10 +244,7 @@ mod server {
     }
 
     impl ClientVerifier for SimpleRpkClientVerifier {
-        fn verify_client_cert(
-            &self,
-            identity: &ClientIdentity<'_>,
-        ) -> Result<ClientVerified, Error> {
+        fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
             let PeerIdentity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };

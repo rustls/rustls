@@ -128,7 +128,7 @@ pub trait ClientVerifier: Debug + Send + Sync {
     ///
     /// [InvalidCertificate]: Error#variant.InvalidCertificate
     /// [BadEncoding]: crate::CertificateError#variant.BadEncoding
-    fn verify_client_cert(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error>;
+    fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error>;
 
     /// Verify a signature allegedly by the given client certificate.
     ///
@@ -370,7 +370,7 @@ pub enum SignerPublicKey<'a> {
 pub struct NoClientAuth;
 
 impl ClientVerifier for NoClientAuth {
-    fn verify_client_cert(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
+    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
         unimplemented!();
     }
 
