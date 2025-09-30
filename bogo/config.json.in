@@ -359,8 +359,6 @@
     "CertificateSelection-Client-SignatureAlgorithmKeyPrefs-MatchNone-TLS-TLS12": "",
     "CertificateSelection-Client-SignatureAlgorithmKeyPrefs-MatchNone-TLS-TLS13": "",
     "D__": "",
-    "Downgrade-TLS10-Client": "tls: no cipher suite supported by both client and server",
-    "Downgrade-TLS10-Server": "remote error: protocol version not supported",
     "DuplicateExtensionClient-TLS-TLS12": "remote error: illegal parameter",
     "DuplicateExtensionClient-TLS-TLS13": "remote error: illegal parameter",
     "DuplicateExtensionServer-TLS-TLS12": "remote error: illegal parameter",
