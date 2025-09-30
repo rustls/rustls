@@ -95,8 +95,7 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
 pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
-    /// Resolve a client certificate chain/private key to use as the client's
-    /// identity.
+    /// Resolve a client certificate chain/private key to use as the client's identity.
     ///
     /// `root_hint_subjects` is an optional list of certificate authority
     /// subject distinguished names that the client can use to help
@@ -109,11 +108,21 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
     /// `sigschemes` is the list of the [`SignatureScheme`]s the server
     /// supports.
     ///
+    /// The `CertifiedSigner` returned from this method contains a certificate chain and a
+    /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
+    /// [`CertifiedKey`], on which an implementation can call [`CertifiedKey::signer()`].
+    /// An implementation can either store long-lived [`CertifiedKey`] values, or instantiate
+    /// them as needed using one of its constructors.
+    ///
     /// Return `None` to continue the handshake without any client
     /// authentication.  The server may reject the handshake later
     /// if it requires authentication.
     ///
     /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
+    ///
+    /// [`CertifiedKey`]: crate::sign::CertifiedKey
+    /// [`CertifiedKey::signer()`]: crate::sign::CertifiedKey::signer
+    /// [`Signer`]: crate::sign::Signer
     fn resolve(
         &self,
         root_hint_subjects: &[&[u8]],

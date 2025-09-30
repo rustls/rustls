@@ -129,8 +129,13 @@ pub trait ProducesTickets: Debug + Send + Sync {
 /// a certificate (for instance, fetching a certificate from a data store),
 /// the [`Acceptor`] interface is more suitable.
 pub trait ResolvesServerCert: Debug + Send + Sync {
-    /// Choose a certificate chain and matching key given simplified
-    /// ClientHello information.
+    /// Choose a certificate chain and matching key given simplified ClientHello information.
+    ///
+    /// The `CertifiedSigner` returned from this method contains a certificate chain and a
+    /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
+    /// [`CertifiedKey`], on which an implementation can call [`CertifiedKey::signer()`].
+    /// An implementation can either store long-lived [`CertifiedKey`] values, or instantiate
+    /// them as needed using one of its constructors.
     ///
     /// Yielding an `Error` will abort the handshake. Some relevant error variants:
     ///
@@ -138,6 +143,9 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
     /// * [`PeerIncompatible::NoServerNameProvided`]
     /// * [`Error::NoSuitableCertificate`]
     ///
+    /// [`CertifiedKey`]: crate::sign::CertifiedKey
+    /// [`CertifiedKey::signer()`]: crate::sign::CertifiedKey::signer
+    /// [`Signer`]: crate::sign::Signer
     /// [`PeerIncompatible::NoSignatureSchemesInCommon`]: crate::error::PeerIncompatible::NoSignatureSchemesInCommon
     /// [`PeerIncompatible::NoServerNameProvided`]: crate::error::PeerIncompatible::NoServerNameProvided
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error>;
