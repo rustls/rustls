@@ -29,7 +29,7 @@ use nix::sys::signal::{self, Signal};
 #[cfg(unix)]
 use nix::unistd::Pid;
 use rustls::client::danger::{
-    HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
+    HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
@@ -44,9 +44,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
 };
-use rustls::server::danger::{
-    ClientIdentity, ClientVerified, ClientVerifier, SignatureVerificationInput,
-};
+use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
@@ -411,8 +409,8 @@ impl DummyClientAuth {
 }
 
 impl ClientVerifier for DummyClientAuth {
-    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
-        Ok(ClientVerified::assertion())
+    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
+        Ok(PeerVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -469,11 +467,11 @@ impl DummyServerAuth {
 }
 
 impl ServerVerifier for DummyServerAuth {
-    fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
+    fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
         if let OcspValidation::Reject = self.ocsp {
             return Err(CertificateError::InvalidOcspResponse.into());
         }
-        Ok(ServerVerified::assertion())
+        Ok(PeerVerified::assertion())
     }
 
     fn verify_tls12_signature(

@@ -41,7 +41,7 @@ mod tests {
     use crate::sign::CertifiedKey;
     use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
     use crate::verify::{
-        HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
+        HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
         SignatureVerificationInput,
     };
     use crate::{DigitallySignedStruct, DistinguishedName, KeyLog};
@@ -308,8 +308,8 @@ mod tests {
     }
 
     impl ServerVerifier for ExpectSha1EcdsaVerifier {
-        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
-            Ok(ServerVerified::assertion())
+        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
+            Ok(PeerVerified::assertion())
         }
 
         fn verify_tls12_signature(
@@ -499,7 +499,7 @@ mod tests {
         }
 
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
+        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
             unreachable!()
         }
 
@@ -533,7 +533,7 @@ mod tests {
 
     impl ServerVerifier for ServerVerifierRequiringRpk {
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
+        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
             todo!()
         }
 
