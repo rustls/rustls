@@ -81,9 +81,9 @@ impl HpkeRs {
     fn start(&self) -> Result<hpke_rs::Hpke<HpkeRustCrypto>, Error> {
         Ok(hpke_rs::Hpke::new(
             hpke_rs::Mode::Base,
-            KemAlgorithm::try_from(u16::from(self.0.kem)).map_err(other_err)?,
-            KdfAlgorithm::try_from(u16::from(self.0.sym.kdf_id)).map_err(other_err)?,
-            AeadAlgorithm::try_from(u16::from(self.0.sym.aead_id)).map_err(other_err)?,
+            KemAlgorithm::try_from(u16::from(self.0.kem)).map_err(OtherError::new)?,
+            KdfAlgorithm::try_from(u16::from(self.0.sym.kdf_id)).map_err(OtherError::new)?,
+            AeadAlgorithm::try_from(u16::from(self.0.sym.aead_id)).map_err(OtherError::new)?,
         ))
     }
 }
@@ -100,7 +100,7 @@ impl Hpke for HpkeRs {
         let (enc, ciphertext) = self
             .start()?
             .seal(&pk_r, info, aad, plaintext, None, None, None)
-            .map_err(other_err)?;
+            .map_err(OtherError::new)?;
         Ok((EncapsulatedSecret(enc.to_vec()), ciphertext))
     }
 
@@ -113,7 +113,7 @@ impl Hpke for HpkeRs {
         let (enc, context) = self
             .start()?
             .setup_sender(&pk_r, info, None, None, None)
-            .map_err(other_err)?;
+            .map_err(OtherError::new)?;
         Ok((
             EncapsulatedSecret(enc.to_vec()),
             Box::new(HpkeRsSender { context }),
@@ -140,7 +140,8 @@ impl Hpke for HpkeRs {
                 None,
                 None,
             )
-            .map_err(other_err)
+            .map_err(OtherError::new)
+            .map_err(Into::into)
     }
 
     fn setup_opener(
@@ -154,7 +155,7 @@ impl Hpke for HpkeRs {
             context: self
                 .start()?
                 .setup_receiver(enc.0.as_slice(), &sk_r, info, None, None, None)
-                .map_err(other_err)?,
+                .map_err(OtherError::new)?,
         }))
     }
 
@@ -170,7 +171,7 @@ impl Hpke for HpkeRs {
 
         let (public_key, secret_key) =
             HpkeRustCrypto::kem_key_gen(kem_algorithm, &mut HpkeRustCrypto::prng())
-                .map_err(other_err)?;
+                .map_err(OtherError::new)?;
 
         Ok((HpkePublicKey(public_key), HpkePrivateKey::from(secret_key)))
     }
@@ -189,7 +190,8 @@ impl HpkeSealer for HpkeRsSender {
     fn seal(&mut self, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Error> {
         self.context
             .seal(aad, plaintext)
-            .map_err(other_err)
+            .map_err(OtherError::new)
+            .map_err(Into::into)
     }
 }
 
@@ -202,18 +204,9 @@ impl HpkeOpener for HpkeRsReceiver {
     fn open(&mut self, aad: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Error> {
         self.context
             .open(aad, ciphertext)
-            .map_err(other_err)
+            .map_err(OtherError::new)
+            .map_err(Into::into)
     }
-}
-
-#[cfg(feature = "std")]
-fn other_err(err: impl core::error::Error + Send + Sync + 'static) -> Error {
-    Error::Other(OtherError(alloc::sync::Arc::new(err)))
-}
-
-#[cfg(not(feature = "std"))]
-fn other_err(_err: impl core::any::Any) -> Error {
-    Error::Other(OtherError())
 }
 
 #[cfg(test)]

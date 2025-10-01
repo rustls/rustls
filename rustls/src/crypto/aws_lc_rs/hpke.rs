@@ -12,15 +12,12 @@ use aws_lc_rs::encoding::{AsBigEndian, Curve25519SeedBin, EcPrivateKeyBin};
 use zeroize::Zeroize;
 
 use crate::crypto::aws_lc_rs::hmac::{HMAC_SHA256, HMAC_SHA384, HMAC_SHA512};
-use crate::crypto::aws_lc_rs::unspecified_err;
 use crate::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeOpener, HpkePrivateKey, HpkePublicKey, HpkeSealer, HpkeSuite,
 };
 use crate::crypto::tls13::{HkdfExpander, HkdfPrkExtract, HkdfUsingHmac, expand};
 use crate::msgs::enums::{HpkeAead, HpkeKdf, HpkeKem};
 use crate::msgs::handshake::HpkeSymmetricCipherSuite;
-#[cfg(feature = "std")]
-use crate::sync::Arc;
 use crate::{Error, OtherError};
 
 /// Default [RFC 9180] Hybrid Public Key Encryption (HPKE) suites supported by aws-lc-rs cryptography.
@@ -440,13 +437,13 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeSealer for Sealer<KEY_SIZ
         //   return ct
 
         let key = UnboundKey::new(self.key_schedule.aead, &self.key_schedule.key.0)
-            .map_err(unspecified_err)?;
+            .map_err(OtherError::new)?;
         let mut sealing_key = SealingKey::new(key, &mut self.key_schedule);
 
         let mut in_out_buffer = Vec::from(plaintext);
         sealing_key
             .seal_in_place_append_tag(Aad::from(aad), &mut in_out_buffer)
-            .map_err(unspecified_err)?;
+            .map_err(OtherError::new)?;
 
         Ok(in_out_buffer)
     }
@@ -493,13 +490,13 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeOpener for Opener<KEY_SIZ
         //   return pt
 
         let key = UnboundKey::new(self.key_schedule.aead, &self.key_schedule.key.0)
-            .map_err(unspecified_err)?;
+            .map_err(OtherError::new)?;
         let mut opening_key = OpeningKey::new(key, &mut self.key_schedule);
 
         let mut in_out_buffer = Vec::from(ciphertext);
         let plaintext = opening_key
             .open_in_place(Aad::from(aad), &mut in_out_buffer)
-            .map_err(unspecified_err)?;
+            .map_err(OtherError::new)?;
 
         Ok(plaintext.to_vec())
     }
@@ -536,7 +533,7 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
         //   skE, pkE = GenerateKeyPair()
 
         let sk_e =
-            agreement::PrivateKey::generate(self.agreement_algorithm).map_err(unspecified_err)?;
+            agreement::PrivateKey::generate(self.agreement_algorithm).map_err(OtherError::new)?;
         self.encap_impl(recipient, sk_e)
     }
 
@@ -550,7 +547,7 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
     ) -> Result<(KemSharedSecret<KDF_SIZE>, EncapsulatedSecret), Error> {
         // For test contexts only, we accept a static sk_e as an argument.
         let sk_e = agreement::PrivateKey::from_private_key(self.agreement_algorithm, test_only_ske)
-            .map_err(key_rejected_err)?;
+            .map_err(OtherError::new)?;
         self.encap_impl(recipient, sk_e)
     }
 
@@ -572,14 +569,14 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
 
         let enc = sk_e
             .compute_public_key()
-            .map_err(unspecified_err)?;
+            .map_err(OtherError::new)?;
         let pk_r = agreement::UnparsedPublicKey::new(self.agreement_algorithm, &recipient.0);
         let kem_context = [enc.as_ref(), pk_r.bytes()].concat();
 
         let shared_secret = agreement::agree(&sk_e, pk_r, aws_lc_rs::error::Unspecified, |dh| {
             Ok(self.extract_and_expand(dh, &kem_context))
         })
-        .map_err(unspecified_err)?;
+        .map_err(OtherError::new)?;
 
         Ok((
             KemSharedSecret(shared_secret),
@@ -610,16 +607,16 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
             self.agreement_algorithm,
             recipient.secret_bytes(),
         )
-        .map_err(key_rejected_err)?;
+        .map_err(OtherError::new)?;
         let pk_rm = sk_r
             .compute_public_key()
-            .map_err(unspecified_err)?;
+            .map_err(OtherError::new)?;
         let kem_context = [&enc.0, pk_rm.as_ref()].concat();
 
         let shared_secret = agreement::agree(&sk_r, pk_e, aws_lc_rs::error::Unspecified, |dh| {
             Ok(self.extract_and_expand(dh, &kem_context))
         })
-        .map_err(unspecified_err)?;
+        .map_err(OtherError::new)?;
 
         Ok(KemSharedSecret(shared_secret))
     }
@@ -688,7 +685,7 @@ fn generate_p_curve_key_pair(
     let (public_key, private_key) = generate_key_pair(alg)?;
     let raw_private_key: EcPrivateKeyBin<'_> = private_key
         .as_be_bytes()
-        .map_err(unspecified_err)?;
+        .map_err(OtherError::new)?;
     Ok((
         public_key,
         HpkePrivateKey::from(raw_private_key.as_ref().to_vec()),
@@ -705,7 +702,7 @@ fn generate_x25519_key_pair() -> Result<(HpkePublicKey, HpkePrivateKey), Error> 
     let (public_key, private_key) = generate_key_pair(&agreement::X25519)?;
     let raw_private_key: Curve25519SeedBin<'_> = private_key
         .as_be_bytes()
-        .map_err(unspecified_err)?;
+        .map_err(OtherError::new)?;
     Ok((
         public_key,
         HpkePrivateKey::from(raw_private_key.as_ref().to_vec()),
@@ -715,11 +712,11 @@ fn generate_x25519_key_pair() -> Result<(HpkePublicKey, HpkePrivateKey), Error> 
 fn generate_key_pair(
     alg: &'static agreement::Algorithm,
 ) -> Result<(HpkePublicKey, agreement::PrivateKey), Error> {
-    let private_key = agreement::PrivateKey::generate(alg).map_err(unspecified_err)?;
+    let private_key = agreement::PrivateKey::generate(alg).map_err(OtherError::new)?;
     let public_key = HpkePublicKey(
         private_key
             .compute_public_key()
-            .map_err(unspecified_err)?
+            .map_err(OtherError::new)?
             .as_ref()
             .to_vec(),
     );
@@ -922,17 +919,6 @@ struct KemSharedSecret<const KDF_LEN: usize>([u8; KDF_LEN]);
 impl<const KDF_LEN: usize> Drop for KemSharedSecret<KDF_LEN> {
     fn drop(&mut self) {
         self.0.zeroize();
-    }
-}
-
-fn key_rejected_err(_e: aws_lc_rs::error::KeyRejected) -> Error {
-    #[cfg(feature = "std")]
-    {
-        Error::Other(OtherError(Arc::new(_e)))
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        Error::Other(OtherError())
     }
 }
 

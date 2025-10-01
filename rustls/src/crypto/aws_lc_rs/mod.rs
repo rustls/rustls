@@ -13,9 +13,8 @@ use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup}
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
-use crate::sync::Arc;
 use crate::webpki::WebPkiSupportedAlgorithms;
-use crate::{Error, OtherError, Tls12CipherSuite, Tls13CipherSuite};
+use crate::{Error, Tls12CipherSuite, Tls13CipherSuite};
 
 /// Hybrid public key encryption (HPKE).
 pub mod hpke;
@@ -299,17 +298,6 @@ mod ring_shim {
 /// Are we in FIPS mode?
 pub(super) fn fips() -> bool {
     aws_lc_rs::try_fips_mode().is_ok()
-}
-
-pub(super) fn unspecified_err(_e: aws_lc_rs::error::Unspecified) -> Error {
-    #[cfg(feature = "std")]
-    {
-        Error::Other(OtherError(Arc::new(_e)))
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        Error::Other(OtherError())
-    }
 }
 
 #[cfg(test)]

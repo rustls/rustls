@@ -11,7 +11,7 @@ use aws_lc_rs::cipher::{
 use aws_lc_rs::{hmac, iv};
 
 use super::ring_like::rand::{SecureRandom, SystemRandom};
-use super::unspecified_err;
+use crate::OtherError;
 use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
@@ -72,18 +72,18 @@ impl Rfc5077Ticketer {
         // cipher keys has some setup overhead. We can't store just the `UnboundCipherKey` since
         // constructing the padded encrypt/decrypt specific types consume the `UnboundCipherKey`.
         let aes_encrypt_key =
-            UnboundCipherKey::new(&AES_256, &aes_key[..]).map_err(unspecified_err)?;
+            UnboundCipherKey::new(&AES_256, &aes_key[..]).map_err(OtherError::new)?;
         let aes_encrypt_key =
-            PaddedBlockEncryptingKey::cbc_pkcs7(aes_encrypt_key).map_err(unspecified_err)?;
+            PaddedBlockEncryptingKey::cbc_pkcs7(aes_encrypt_key).map_err(OtherError::new)?;
 
         // Convert the raw AES 256 key bytes into a decrypting key using CBC PKCS#7 padding.
         let aes_decrypt_key =
-            UnboundCipherKey::new(&AES_256, &aes_key[..]).map_err(unspecified_err)?;
+            UnboundCipherKey::new(&AES_256, &aes_key[..]).map_err(OtherError::new)?;
         let aes_decrypt_key =
-            PaddedBlockDecryptingKey::cbc_pkcs7(aes_decrypt_key).map_err(unspecified_err)?;
+            PaddedBlockDecryptingKey::cbc_pkcs7(aes_decrypt_key).map_err(OtherError::new)?;
 
         // Generate a random HMAC SHA256 key to use for HMAC authentication.
-        let hmac_key = hmac::Key::generate(hmac::HMAC_SHA256, &rand).map_err(unspecified_err)?;
+        let hmac_key = hmac::Key::generate(hmac::HMAC_SHA256, &rand).map_err(OtherError::new)?;
 
         // Generate a random key name.
         let mut key_name = [0u8; 16];

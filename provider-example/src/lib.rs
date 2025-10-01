@@ -18,9 +18,8 @@ extern crate alloc;
 extern crate std;
 
 use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use alloc::sync::Arc;
 
+use rustls::OtherError;
 use rustls::crypto::CryptoProvider;
 use rustls::pki_types::PrivateKeyDer;
 
@@ -61,13 +60,7 @@ impl rustls::crypto::KeyProvider for Provider {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Box<dyn rustls::sign::SigningKey>, rustls::Error> {
         Ok(Box::new(
-            sign::EcdsaSigningKeyP256::try_from(key_der).map_err(|err| {
-                #[cfg(feature = "std")]
-                let err = rustls::OtherError(Arc::new(err));
-                #[cfg(not(feature = "std"))]
-                let err = rustls::Error::General(alloc::format!("{}", err));
-                err
-            })?,
+            sign::EcdsaSigningKeyP256::try_from(key_der).map_err(OtherError::new)?,
         ))
     }
 }
