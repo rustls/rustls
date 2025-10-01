@@ -1222,12 +1222,10 @@ impl From<ApiMisuse> for Error {
 }
 
 mod other_error {
-    #[cfg(feature = "std")]
     use core::error::Error as StdError;
     use core::fmt;
 
     use super::Error;
-    #[cfg(feature = "std")]
     use crate::sync::Arc;
 
     /// Any other error that cannot be expressed by a more specific [`Error`] variant.
@@ -1238,7 +1236,7 @@ mod other_error {
     /// Enums holding this type will never compare equal to each other.
     #[allow(clippy::exhaustive_structs)]
     #[derive(Debug, Clone)]
-    pub struct OtherError(#[cfg(feature = "std")] pub Arc<dyn StdError + Send + Sync>);
+    pub struct OtherError(pub Arc<dyn StdError + Send + Sync>);
 
     impl PartialEq<Self> for OtherError {
         fn eq(&self, _other: &Self) -> bool {
@@ -1265,7 +1263,6 @@ mod other_error {
         }
     }
 
-    #[cfg(feature = "std")]
     impl StdError for OtherError {
         fn source(&self) -> Option<&(dyn StdError + 'static)> {
             Some(self.0.as_ref())

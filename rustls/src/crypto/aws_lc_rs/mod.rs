@@ -286,15 +286,8 @@ pub(super) fn fips() -> bool {
     aws_lc_rs::try_fips_mode().is_ok()
 }
 
-pub(super) fn unspecified_err(_e: aws_lc_rs::error::Unspecified) -> Error {
-    #[cfg(feature = "std")]
-    {
-        Error::Other(OtherError(Arc::new(_e)))
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        Error::Other(OtherError())
-    }
+pub(super) fn unspecified_err(e: aws_lc_rs::error::Unspecified) -> Error {
+    Error::Other(OtherError(Arc::new(e)))
 }
 
 #[cfg(test)]

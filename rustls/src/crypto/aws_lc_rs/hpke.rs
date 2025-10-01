@@ -19,7 +19,6 @@ use crate::crypto::hpke::{
 use crate::crypto::tls13::{HkdfExpander, HkdfPrkExtract, HkdfUsingHmac, expand};
 use crate::msgs::enums::{HpkeAead, HpkeKdf, HpkeKem};
 use crate::msgs::handshake::HpkeSymmetricCipherSuite;
-#[cfg(feature = "std")]
 use crate::sync::Arc;
 use crate::{Error, OtherError};
 
@@ -925,15 +924,8 @@ impl<const KDF_LEN: usize> Drop for KemSharedSecret<KDF_LEN> {
     }
 }
 
-fn key_rejected_err(_e: aws_lc_rs::error::KeyRejected) -> Error {
-    #[cfg(feature = "std")]
-    {
-        Error::Other(OtherError(Arc::new(_e)))
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        Error::Other(OtherError())
-    }
+fn key_rejected_err(e: aws_lc_rs::error::KeyRejected) -> Error {
+    Error::Other(OtherError(Arc::new(e)))
 }
 
 // The `cipher::chacha::KEY_LEN` const is not exported, so we copy it here:
