@@ -246,7 +246,7 @@ mod tests {
 
     use super::NoClientSessionStorage;
     use super::provider::cipher_suite;
-    use crate::client::danger::{HandshakeSignatureValid, ServerVerified, ServerVerifier};
+    use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
     use crate::client::{ClientSessionStore, ResolvesClientCert};
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
@@ -321,7 +321,7 @@ mod tests {
 
     impl ServerVerifier for DummyServerVerifier {
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
+        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
             unreachable!()
         }
 

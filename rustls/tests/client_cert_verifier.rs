@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use rustls::server::danger::ClientVerified;
+use rustls::server::danger::PeerVerified;
 use rustls::{
     AlertDescription, CertificateError, ClientConnection, Error, InvalidMessage, PeerIdentity,
     PeerMisbehaved, ServerConfig, ServerConnection,
@@ -21,17 +21,17 @@ use super::common::all_versions;
 use super::provider;
 
 // Client is authorized!
-fn ver_ok() -> Result<ClientVerified, Error> {
-    Ok(ClientVerified::assertion())
+fn ver_ok() -> Result<PeerVerified, Error> {
+    Ok(PeerVerified::assertion())
 }
 
 // Use when we shouldn't even attempt verification
-fn ver_unreachable() -> Result<ClientVerified, Error> {
+fn ver_unreachable() -> Result<PeerVerified, Error> {
     unreachable!()
 }
 
 // Verifier that returns an error that we can expect
-fn ver_err() -> Result<ClientVerified, Error> {
+fn ver_err() -> Result<PeerVerified, Error> {
     Err(Error::General("test err".to_string()))
 }
 

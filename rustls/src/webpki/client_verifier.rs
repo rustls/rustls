@@ -13,8 +13,8 @@ use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::server::ServerConfig;
 use crate::sync::Arc;
 use crate::verify::{
-    ClientIdentity, ClientVerified, ClientVerifier, HandshakeSignatureValid, NoClientAuth,
-    PeerIdentity, SignatureVerificationInput,
+    ClientIdentity, ClientVerifier, HandshakeSignatureValid, NoClientAuth, PeerIdentity,
+    PeerVerified, SignatureVerificationInput,
 };
 use crate::webpki::parse_crls;
 use crate::webpki::verify::{ParsedCertificate, verify_tls12_signature, verify_tls13_signature};
@@ -342,7 +342,7 @@ impl WebPkiClientVerifier {
 }
 
 impl ClientVerifier for WebPkiClientVerifier {
-    fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
+    fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
         let certificates = match identity.identity {
             PeerIdentity::X509(certificates) => certificates,
             PeerIdentity::RawPublicKey(_) => {
@@ -378,7 +378,7 @@ impl ClientVerifier for WebPkiClientVerifier {
                 None,
             )
             .map_err(pki_error)
-            .map(|_| ClientVerified::assertion())
+            .map(|_| PeerVerified::assertion())
     }
 
     fn verify_tls12_signature(

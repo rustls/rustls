@@ -409,8 +409,8 @@ mod danger {
         fn verify_identity(
             &self,
             _identity: &ServerIdentity<'_>,
-        ) -> Result<rustls::client::danger::ServerVerified, rustls::Error> {
-            Ok(rustls::client::danger::ServerVerified::assertion())
+        ) -> Result<rustls::client::danger::PeerVerified, rustls::Error> {
+            Ok(rustls::client::danger::PeerVerified::assertion())
         }
 
         fn verify_tls12_signature(

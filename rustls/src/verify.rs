@@ -33,7 +33,7 @@ pub trait ServerVerifier: Debug + Send + Sync {
     ///
     /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2
     /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
-    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error>;
+    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
     ///
@@ -128,7 +128,7 @@ pub trait ClientVerifier: Debug + Send + Sync {
     ///
     /// [InvalidCertificate]: Error#variant.InvalidCertificate
     /// [BadEncoding]: crate::CertificateError#variant.BadEncoding
-    fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error>;
+    fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error>;
 
     /// Verify a signature allegedly by the given client certificate.
     ///
@@ -370,7 +370,7 @@ pub enum SignerPublicKey<'a> {
 pub struct NoClientAuth;
 
 impl ClientVerifier for NoClientAuth {
-    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
+    fn verify_identity(&self, _identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
         unimplemented!();
     }
 
@@ -457,25 +457,12 @@ impl FinishedMessageVerified {
     }
 }
 
-/// Zero-sized marker type representing verification of a server cert chain.
-#[allow(unreachable_pub)]
+/// Zero-sized marker type representing verification of the peer's identity.
 #[derive(Debug)]
-pub struct ServerVerified(());
+pub struct PeerVerified(());
 
-#[allow(unreachable_pub)]
-impl ServerVerified {
-    /// Make a `ServerVerified`
-    pub fn assertion() -> Self {
-        Self(())
-    }
-}
-
-/// Zero-sized marker type representing verification of a client cert chain.
-#[derive(Debug)]
-pub struct ClientVerified(());
-
-impl ClientVerified {
-    /// Make a `ClientVerified`
+impl PeerVerified {
+    /// Make a `PeerVerified`
     pub fn assertion() -> Self {
         Self(())
     }
@@ -486,8 +473,8 @@ fn assertions_are_debug() {
     use std::format;
 
     assert_eq!(
-        format!("{:?}", ClientVerified::assertion()),
-        "ClientVerified(())"
+        format!("{:?}", PeerVerified::assertion()),
+        "PeerVerified(())"
     );
     assert_eq!(
         format!("{:?}", HandshakeSignatureValid::assertion()),
@@ -496,9 +483,5 @@ fn assertions_are_debug() {
     assert_eq!(
         format!("{:?}", FinishedMessageVerified::assertion()),
         "FinishedMessageVerified(())"
-    );
-    assert_eq!(
-        format!("{:?}", ServerVerified::assertion()),
-        "ServerVerified(())"
     );
 }

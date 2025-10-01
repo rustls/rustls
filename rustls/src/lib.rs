@@ -582,7 +582,7 @@ pub mod client {
         pub use super::builder::danger::DangerousClientConfigBuilder;
         pub use super::client_conn::danger::DangerousClientConfig;
         pub use crate::verify::{
-            HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
+            HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
             SignatureVerificationInput,
         };
     }
@@ -634,7 +634,7 @@ pub mod server {
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
         pub use crate::verify::{
-            ClientIdentity, ClientVerified, ClientVerifier, SignatureVerificationInput,
+            ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
         };
     }
 

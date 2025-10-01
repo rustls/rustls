@@ -11,7 +11,7 @@ mod client {
 
     use rustls::client::AlwaysResolvesClientRawPublicKeys;
     use rustls::client::danger::{
-        HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
+        HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
     };
     use rustls::crypto::{
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
@@ -97,14 +97,14 @@ mod client {
     }
 
     impl ServerVerifier for SimpleRpkServerVerifier {
-        fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
+        fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
             let PeerIdentity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
             match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(ServerVerified::assertion()),
+                true => Ok(PeerVerified::assertion()),
             }
         }
 
@@ -149,7 +149,7 @@ mod server {
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::AlwaysResolvesServerRawPublicKeys;
     use rustls::server::danger::{
-        ClientIdentity, ClientVerified, ClientVerifier, SignatureVerificationInput,
+        ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
     use rustls::sign::CertifiedKey;
     use rustls::{
@@ -244,14 +244,14 @@ mod server {
     }
 
     impl ClientVerifier for SimpleRpkClientVerifier {
-        fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<ClientVerified, Error> {
+        fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
             let PeerIdentity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
             match self.trusted_spki.contains(spki) {
                 false => Err(Error::InvalidCertificate(CertificateError::UnknownIssuer)),
-                true => Ok(ClientVerified::assertion()),
+                true => Ok(PeerVerified::assertion()),
             }
         }
 

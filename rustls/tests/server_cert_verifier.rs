@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use pki_types::UnixTime;
 use rustls::client::danger::{
-    HandshakeSignatureValid, ServerIdentity, ServerVerified, ServerVerifier,
+    HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
     SignatureVerificationInput,
 };
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
@@ -679,7 +679,7 @@ struct ServerVerifierWithCasExt {
 }
 
 impl ServerVerifier for ServerVerifierWithCasExt {
-    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<ServerVerified, Error> {
+    fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
         self.verifier.verify_identity(identity)
     }
 
