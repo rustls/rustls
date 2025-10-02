@@ -708,7 +708,7 @@ mod connection {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.common
                 .core
-                .data
+                .side
                 .early_data
                 .read(buf)
         }
@@ -750,7 +750,7 @@ mod connection {
         ///
         /// The server name is also used to match sessions during session resumption.
         pub fn server_name(&self) -> Option<&DnsName<'_>> {
-            self.inner.core.data.sni.as_ref()
+            self.inner.core.side.sni.as_ref()
         }
 
         /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -761,7 +761,7 @@ mod connection {
         pub fn received_resumption_data(&self) -> Option<&[u8]> {
             self.inner
                 .core
-                .data
+                .side
                 .received_resumption_data
                 .as_ref()
                 .map(|x| &x[..])
@@ -777,7 +777,7 @@ mod connection {
         /// from the client is desired, encrypt the data separately.
         pub fn set_resumption_data(&mut self, data: &[u8]) {
             assert!(data.len() < 2usize.pow(15));
-            self.inner.core.data.resumption_data = data.into();
+            self.inner.core.side.resumption_data = data.into();
         }
 
         /// Explicitly discard early data, notifying the client
@@ -803,7 +803,7 @@ mod connection {
             if self
                 .inner
                 .core
-                .data
+                .side
                 .early_data
                 .was_accepted()
             {
@@ -1086,11 +1086,11 @@ impl DerefMut for UnbufferedServerConnection {
 
 impl UnbufferedConnectionCommon<ServerConnectionData> {
     pub(crate) fn pop_early_data(&mut self) -> Option<Vec<u8>> {
-        self.core.data.early_data.pop()
+        self.core.side.early_data.pop()
     }
 
     pub(crate) fn peek_early_data(&self) -> Option<&[u8]> {
-        self.core.data.early_data.peek()
+        self.core.side.early_data.peek()
     }
 }
 
@@ -1326,7 +1326,7 @@ impl ConnectionCore<ServerConnectionData> {
             self.common_state.is_handshaking(),
             "cannot retroactively reject early data"
         );
-        self.data.early_data.reject();
+        self.side.early_data.reject();
     }
 }
 

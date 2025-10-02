@@ -619,7 +619,7 @@ mod connection {
             self.sess
                 .inner
                 .core
-                .data
+                .side
                 .early_data
                 .bytes_left()
         }
@@ -727,7 +727,7 @@ mod connection {
             if self
                 .inner
                 .core
-                .data
+                .side
                 .early_data
                 .is_enabled()
             {
@@ -754,7 +754,7 @@ mod connection {
 
         /// Return the connection's Encrypted Client Hello (ECH) status.
         pub fn ech_status(&self) -> EchStatus {
-            self.inner.core.data.ech_status
+            self.inner.core.side.ech_status
         }
 
         /// Returns the number of TLS1.3 tickets that have been received.
@@ -774,7 +774,7 @@ mod connection {
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
             self.inner
                 .core
-                .data
+                .side
                 .early_data
                 .check_write(data.len())
                 .map(|sz| {
@@ -848,7 +848,7 @@ impl ConnectionCore<ClientConnectionData> {
 
     #[cfg(feature = "std")]
     pub(crate) fn is_early_data_accepted(&self) -> bool {
-        self.data.early_data.is_accepted()
+        self.side.early_data.is_accepted()
     }
 }
 
@@ -952,7 +952,7 @@ impl TransmitTlsData<'_, ClientConnectionData> {
         if self
             .conn
             .core
-            .data
+            .side
             .early_data
             .is_enabled()
         {
@@ -981,7 +981,7 @@ impl MayEncryptEarlyData<'_> {
         let Some(allowed) = self
             .conn
             .core
-            .data
+            .side
             .early_data
             .check_write_opt(early_data.len())
         else {

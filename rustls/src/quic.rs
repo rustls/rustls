@@ -307,7 +307,7 @@ mod connection {
         ///
         /// The server name is also used to match sessions during session resumption.
         pub fn server_name(&self) -> Option<&DnsName<'_>> {
-            self.inner.core.data.sni.as_ref()
+            self.inner.core.side.sni.as_ref()
         }
 
         /// Set the resumption data to embed in future resumption tickets supplied to the client.
@@ -320,7 +320,7 @@ mod connection {
         /// from the client is desired, encrypt the data separately.
         pub fn set_resumption_data(&mut self, data: &[u8]) {
             assert!(data.len() < 2usize.pow(15));
-            self.inner.core.data.resumption_data = data.into();
+            self.inner.core.side.resumption_data = data.into();
         }
 
         /// Retrieves the resumption data supplied by the client, if any.
@@ -329,7 +329,7 @@ mod connection {
         pub fn received_resumption_data(&self) -> Option<&[u8]> {
             self.inner
                 .core
-                .data
+                .side
                 .received_resumption_data
                 .as_deref()
         }

@@ -836,7 +836,7 @@ impl<'a, Side: SideData> From<&'a mut ConnectionCommon<Side>> for Context<'a, Si
     fn from(conn: &'a mut ConnectionCommon<Side>) -> Self {
         Self {
             common: &mut conn.core.common_state,
-            data: &mut conn.core.data,
+            data: &mut conn.core.side,
             sendable_plaintext: Some(&mut conn.sendable_plaintext),
         }
     }
@@ -901,7 +901,7 @@ impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
 
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Box<dyn State<Side>>, Error>,
-    pub(crate) data: Side,
+    pub(crate) side: Side,
     pub(crate) common_state: CommonState,
     pub(crate) hs_deframer: HandshakeDeframer,
 
@@ -911,10 +911,10 @@ pub(crate) struct ConnectionCore<Side: SideData> {
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State<Side>>, data: Side, common_state: CommonState) -> Self {
+    pub(crate) fn new(state: Box<dyn State<Side>>, side: Side, common_state: CommonState) -> Self {
         Self {
             state: Ok(state),
-            data,
+            side,
             common_state,
             hs_deframer: HandshakeDeframer::default(),
             seen_consecutive_empty_fragments: 0,
@@ -1225,7 +1225,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         }
 
         self.common_state
-            .process_main_protocol(msg, state, &mut self.data, sendable_plaintext)
+            .process_main_protocol(msg, state, &mut self.side, sendable_plaintext)
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
