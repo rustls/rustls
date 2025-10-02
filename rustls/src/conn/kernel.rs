@@ -81,7 +81,7 @@ pub struct KernelConnection<Side> {
     protocol: Protocol,
     suite: SupportedCipherSuite,
 
-    _data: PhantomData<Side>,
+    _side: PhantomData<Side>,
 }
 
 impl<Side> KernelConnection<Side> {
@@ -99,7 +99,7 @@ impl<Side> KernelConnection<Side> {
                 .suite
                 .ok_or(Error::HandshakeNotComplete)?,
 
-            _data: PhantomData,
+            _side: PhantomData,
         })
     }
 
