@@ -1249,9 +1249,8 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
         #[allow(deprecated)]
         Error::InvalidCertificate(
-            CertificateError::UnsupportedSignatureAlgorithm
-            | CertificateError::UnsupportedSignatureAlgorithmContext { .. }
-            | CertificateError::UnsupportedSignatureAlgorithmForPublicKeyContext { .. },
+            CertificateError::UnsupportedSignatureAlgorithm { .. }
+            | CertificateError::UnsupportedSignatureAlgorithmForPublicKey { .. },
         ) => quit(":WRONG_SIGNATURE_TYPE:"),
         Error::InvalidCertificate(CertificateError::InvalidOcspResponse) => {
             // note: only use is in this file.
