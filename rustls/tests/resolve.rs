@@ -10,9 +10,9 @@ use rustls::client::ResolvesClientCert;
 use rustls::server::{ClientHello, ResolvesServerCert, ResolvesServerCertUsingSni};
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
-    ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection, DistinguishedName,
-    Error, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SignatureScheme,
-    SupportedCipherSuite,
+    ApiMisuse, CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection,
+    DistinguishedName, Error, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
+    SignatureScheme, SupportedCipherSuite,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, ServerCheckCertResolve,
@@ -282,8 +282,8 @@ impl ResolvesClientCert for ClientCheckCertResolve {
         None
     }
 
-    fn has_certs(&self) -> bool {
-        true
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[CertificateType::X509]
     }
 }
 

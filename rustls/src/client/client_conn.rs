@@ -131,16 +131,11 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 
     /// Returns which [`CertificateType`]s this resolver supports.
     ///
-    /// Returning an empty slice will result in an error. The default implementation signals
-    /// support for X.509 certificates. Implementations should return the same value every time.
+    /// Should return the empty slice if the resolver does not have any credentials to send.
+    /// Implementations should return the same value every time.
     ///
     /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
-    fn supported_certificate_types(&self) -> &'static [CertificateType] {
-        &[CertificateType::X509]
-    }
-
-    /// Return true if any certificates at all are available.
-    fn has_certs(&self) -> bool;
+    fn supported_certificate_types(&self) -> &'static [CertificateType];
 }
 
 /// Common configuration for (typically) all connections made by a program.

@@ -50,10 +50,10 @@ use rustls::server::{
 };
 use rustls::sign::{CertifiedSigner, SingleCertAndKey};
 use rustls::{
-    AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
-    DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIncompatible,
-    PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm, SignatureScheme,
-    client, compress, server, sign,
+    AlertDescription, CertificateCompressionAlgorithm, CertificateError, CertificateType,
+    Connection, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
+    SignatureScheme, client, compress, server, sign,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -624,8 +624,11 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
         })
     }
 
-    fn has_certs(&self) -> bool {
-        self.default.is_some() || !self.additional.is_empty()
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        match self.default.is_some() || !self.additional.is_empty() {
+            true => &[CertificateType::X509],
+            false => &[],
+        }
     }
 }
 

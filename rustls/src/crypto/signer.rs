@@ -6,7 +6,7 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPubli
 
 use super::CryptoProvider;
 use crate::client::ResolvesClientCert;
-use crate::enums::{SignatureAlgorithm, SignatureScheme};
+use crate::enums::{CertificateType, SignatureAlgorithm, SignatureScheme};
 use crate::error::{ApiMisuse, Error, InconsistentKeys, PeerIncompatible};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
@@ -95,8 +95,8 @@ impl ResolvesClientCert for SingleCertAndKey {
         self.0.signer(sig_schemes)
     }
 
-    fn has_certs(&self) -> bool {
-        true
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[CertificateType::X509]
     }
 }
 
