@@ -230,6 +230,7 @@ mod server_hello {
                 suite,
                 may_send_cert_status,
                 must_issue_new_ticket,
+                negotiated_client_type: server_hello.client_certificate_type,
             }))
         }
     }
@@ -248,6 +249,7 @@ struct ExpectCertificate {
     suite: &'static Tls12CipherSuite,
     may_send_cert_status: bool,
     must_issue_new_ticket: bool,
+    negotiated_client_type: Option<CertificateType>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
@@ -278,6 +280,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 suite: self.suite,
                 server_cert_chain,
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                negotiated_client_type: self.negotiated_client_type,
             }))
         } else {
             let server_cert = ServerCertDetails::new(server_cert_chain, vec![]);
@@ -293,6 +296,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 suite: self.suite,
                 server_cert,
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                negotiated_client_type: self.negotiated_client_type,
             }))
         }
     }
@@ -313,6 +317,7 @@ struct ExpectCertificateStatusOrServerKx<'m> {
     suite: &'static Tls12CipherSuite,
     server_cert_chain: CertificateChain<'m>,
     must_issue_new_ticket: bool,
+    negotiated_client_type: Option<CertificateType>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
@@ -339,6 +344,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
                 suite: self.suite,
                 server_cert: ServerCertDetails::new(self.server_cert_chain, vec![]),
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                negotiated_client_type: self.negotiated_client_type,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -355,6 +361,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
                 suite: self.suite,
                 server_cert_chain: self.server_cert_chain,
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                negotiated_client_type: self.negotiated_client_type,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -380,6 +387,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
             suite: self.suite,
             server_cert_chain: self.server_cert_chain.into_owned(),
             must_issue_new_ticket: self.must_issue_new_ticket,
+            negotiated_client_type: self.negotiated_client_type,
         })
     }
 }
@@ -395,6 +403,7 @@ struct ExpectCertificateStatus<'a> {
     suite: &'static Tls12CipherSuite,
     server_cert_chain: CertificateChain<'a>,
     must_issue_new_ticket: bool,
+    negotiated_client_type: Option<CertificateType>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateStatus<'_> {
@@ -432,6 +441,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus<'_> {
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
+            negotiated_client_type: self.negotiated_client_type,
         }))
     }
 
@@ -447,6 +457,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus<'_> {
             suite: self.suite,
             server_cert_chain: self.server_cert_chain.into_owned(),
             must_issue_new_ticket: self.must_issue_new_ticket,
+            negotiated_client_type: self.negotiated_client_type,
         })
     }
 }
@@ -462,6 +473,7 @@ struct ExpectServerKx<'a> {
     suite: &'static Tls12CipherSuite,
     server_cert: ServerCertDetails<'a>,
     must_issue_new_ticket: bool,
+    negotiated_client_type: Option<CertificateType>,
 }
 
 impl State<ClientConnectionData> for ExpectServerKx<'_> {
@@ -518,6 +530,7 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
             server_cert: self.server_cert,
             server_kx,
             must_issue_new_ticket: self.must_issue_new_ticket,
+            negotiated_client_type: self.negotiated_client_type,
         }))
     }
 
@@ -533,6 +546,7 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
             suite: self.suite,
             server_cert: self.server_cert.into_owned(),
             must_issue_new_ticket: self.must_issue_new_ticket,
+            negotiated_client_type: self.negotiated_client_type,
         })
     }
 }
@@ -665,6 +679,7 @@ struct ExpectServerDoneOrCertReq<'a> {
     server_cert: ServerCertDetails<'a>,
     server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
+    negotiated_client_type: Option<CertificateType>,
 }
 
 impl State<ClientConnectionData> for ExpectServerDoneOrCertReq<'_> {
@@ -695,6 +710,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq<'_> {
                 server_cert: self.server_cert,
                 server_kx: self.server_kx,
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                negotiated_client_type: self.negotiated_client_type,
             })
             .handle(cx, m)
         } else {
@@ -731,6 +747,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq<'_> {
             server_cert: self.server_cert.into_owned(),
             server_kx: self.server_kx,
             must_issue_new_ticket: self.must_issue_new_ticket,
+            negotiated_client_type: self.negotiated_client_type,
         })
     }
 }
@@ -747,6 +764,7 @@ struct ExpectCertificateRequest<'a> {
     server_cert: ServerCertDetails<'a>,
     server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
+    negotiated_client_type: Option<CertificateType>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
@@ -775,6 +793,8 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
         const NO_CONTEXT: Option<Vec<u8>> = None; // TLS 1.2 doesn't use a context.
         let no_compression = None; // or compression
         let client_auth = ClientAuthDetails::resolve(
+            self.negotiated_client_type
+                .unwrap_or(CertificateType::X509),
             self.config
                 .client_auth_cert_resolver
                 .as_ref(),
@@ -813,6 +833,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
             server_cert: self.server_cert.into_owned(),
             server_kx: self.server_kx,
             must_issue_new_ticket: self.must_issue_new_ticket,
+            negotiated_client_type: self.negotiated_client_type,
         })
     }
 }

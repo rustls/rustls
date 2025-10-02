@@ -579,6 +579,7 @@ impl MultipleClientCredentialResolver {
 impl client::ResolvesClientCert for MultipleClientCredentialResolver {
     fn resolve(
         &self,
+        _negotiated_type: CertificateType,
         root_hint_subjects: &[&[u8]],
         sig_schemes: &[SignatureScheme],
     ) -> Option<CertifiedSigner> {

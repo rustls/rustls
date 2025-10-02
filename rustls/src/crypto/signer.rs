@@ -89,10 +89,14 @@ impl From<CertifiedKey> for SingleCertAndKey {
 impl ResolvesClientCert for SingleCertAndKey {
     fn resolve(
         &self,
+        negotiated_type: CertificateType,
         _root_hint_subjects: &[&[u8]],
         sig_schemes: &[SignatureScheme],
     ) -> Option<CertifiedSigner> {
-        self.0.signer(sig_schemes)
+        match negotiated_type {
+            CertificateType::X509 => self.0.signer(sig_schemes),
+            _ => None,
+        }
     }
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
