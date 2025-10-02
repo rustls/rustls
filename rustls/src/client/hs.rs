@@ -522,10 +522,11 @@ impl ClientHelloInput {
         cx: &mut ClientContext<'_>,
     ) -> NextStateOrError<'static> {
         let mut transcript_buffer = HandshakeHashBuffer::new();
-        if self
+        if !self
             .config
             .client_auth_cert_resolver
-            .has_certs()
+            .supported_certificate_types()
+            .is_empty()
         {
             transcript_buffer.set_client_auth_enabled();
         }
@@ -715,8 +716,7 @@ fn emit_client_hello_for_retry(
         .client_auth_cert_resolver
         .supported_certificate_types();
     match client_certificate_types {
-        &[] => return Err(ApiMisuse::NoSupportedCertificateTypes.into()),
-        &[CertificateType::X509] => {}
+        &[] | &[CertificateType::X509] => {}
         supported => {
             exts.client_certificate_types = Some(supported.to_vec());
         }

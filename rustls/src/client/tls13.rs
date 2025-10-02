@@ -22,7 +22,7 @@ use crate::crypto::{ActiveKeyExchange, SharedSecret};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
-use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -662,12 +662,12 @@ fn check_cert_type(
     client_supported: &[CertificateType],
     server_negotiated: Option<CertificateType>,
 ) -> Result<(), Error> {
-    if client_supported.is_empty() {
-        return Err(ApiMisuse::NoSupportedCertificateTypes.into());
-    }
-
     match server_negotiated {
-        None if client_supported.contains(&CertificateType::X509) => Ok(()),
+        None if client_supported.is_empty()
+            || client_supported.contains(&CertificateType::X509) =>
+        {
+            Ok(())
+        }
         Some(ct) if client_supported.contains(&ct) => Ok(()),
         _ => Err(common.send_fatal_alert(
             AlertDescription::HandshakeFailure,

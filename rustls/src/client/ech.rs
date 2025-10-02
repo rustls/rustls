@@ -132,9 +132,10 @@ impl EchConfig {
         EchState::new(
             self,
             server_name.clone(),
-            config
+            !config
                 .client_auth_cert_resolver
-                .has_certs(),
+                .supported_certificate_types()
+                .is_empty(),
             config.provider.secure_random,
             config.enable_sni,
         )

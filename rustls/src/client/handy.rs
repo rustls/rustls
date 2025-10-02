@@ -196,8 +196,8 @@ impl client::ResolvesClientCert for FailResolveClientCert {
         None
     }
 
-    fn has_certs(&self) -> bool {
-        false
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[]
     }
 }
 
@@ -227,14 +227,6 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::RawPublicKey]
     }
-
-    /// Returns true if the resolver is ready to present an identity.
-    ///
-    /// Even though the function is called `has_certs`, it returns true
-    /// although only an RPK (Raw Public Key) is available, not an actual certificate.
-    fn has_certs(&self) -> bool {
-        true
-    }
 }
 
 #[cfg(test)]
@@ -248,6 +240,8 @@ mod tests {
     use super::provider::cipher_suite;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
     use crate::client::{ClientSessionStore, ResolvesClientCert};
+    use crate::enums::{CertificateType, SignatureScheme};
+    use crate::error::Error;
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
     use crate::msgs::handshake::SessionId;
@@ -257,7 +251,6 @@ mod tests {
     use crate::verify::{
         CertificateIdentity, PeerIdentity, ServerIdentity, SignatureVerificationInput,
     };
-    use crate::{Error, SignatureScheme};
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
@@ -366,7 +359,7 @@ mod tests {
         }
 
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn has_certs(&self) -> bool {
+        fn supported_certificate_types(&self) -> &'static [CertificateType] {
             unreachable!()
         }
     }
