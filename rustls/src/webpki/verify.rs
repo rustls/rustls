@@ -4,6 +4,7 @@ use core::fmt;
 use pki_types::{
     CertificateDer, ServerName, SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, UnixTime,
 };
+use webpki::ExtendedKeyUsage;
 
 use super::anchors::RootCertStore;
 use super::pki_error;
@@ -170,7 +171,7 @@ pub fn verify_tls12_signature(
     let mut error = None;
     for alg in possible_algs {
         match cert.verify_signature(*alg, input.message, input.signature.signature()) {
-            Err(err @ webpki::Error::UnsupportedSignatureAlgorithmForPublicKeyContext(_)) => {
+            Err(err @ webpki::Error::UnsupportedSignatureAlgorithmForPublicKey(_)) => {
                 error = Some(err);
                 continue;
             }
@@ -179,10 +180,10 @@ pub fn verify_tls12_signature(
         }
     }
 
-    #[allow(deprecated)] // The `unwrap_or()` should be statically unreachable
-    Err(pki_error(error.unwrap_or(
-        webpki::Error::UnsupportedSignatureAlgorithmForPublicKey,
-    )))
+    Err(match error {
+        Some(e) => pki_error(e),
+        None => Error::ApiMisuse(ApiMisuse::NoSignatureVerificationAlgorithms),
+    })
 }
 
 /// Verify a message signature using the `cert` public key and the first TLS 1.3 compatible
@@ -243,7 +244,7 @@ pub(crate) fn verify_identity_signed_by_trust_anchor_impl(
         &roots.roots,
         intermediates,
         now,
-        webpki::KeyUsage::server_auth(),
+        &ExtendedKeyUsage::server_auth(),
         revocation,
         None,
     );

@@ -6,7 +6,7 @@ use core::fmt;
 use std::time::SystemTimeError;
 
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
-use webpki::KeyUsage;
+use webpki::ExtendedKeyUsage;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::{EchConfigPayload, KeyExchangeAlgorithm};
@@ -816,8 +816,8 @@ impl ExtendedKeyPurpose {
     pub(crate) fn for_values(values: impl Iterator<Item = usize>) -> Self {
         let values = values.collect::<Vec<_>>();
         match &*values {
-            KeyUsage::CLIENT_AUTH_REPR => Self::ClientAuth,
-            KeyUsage::SERVER_AUTH_REPR => Self::ServerAuth,
+            ExtendedKeyUsage::CLIENT_AUTH_REPR => Self::ClientAuth,
+            ExtendedKeyUsage::SERVER_AUTH_REPR => Self::ServerAuth,
             _ => Self::Other(values),
         }
     }
@@ -847,13 +847,6 @@ impl fmt::Display for ExtendedKeyPurpose {
 pub enum CertRevocationListError {
     /// The CRL had a bad signature from its issuer.
     BadSignature,
-
-    /// The CRL had an unsupported signature from its issuer.
-    #[deprecated(
-        since = "0.23.29",
-        note = "use `UnsupportedSignatureAlgorithmContext` instead"
-    )]
-    UnsupportedSignatureAlgorithm,
 
     /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
     UnsupportedSignatureAlgorithmContext {
@@ -914,8 +907,6 @@ impl PartialEq<Self> for CertRevocationListError {
         #[allow(clippy::match_like_matches_macro)]
         match (self, other) {
             (BadSignature, BadSignature) => true,
-            #[allow(deprecated)]
-            (UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm) => true,
             (
                 UnsupportedSignatureAlgorithmContext {
                     signature_algorithm_id: left_signature_algorithm_id,
@@ -1194,6 +1185,9 @@ pub enum ApiMisuse {
     /// A `CryptoProvider` must have at least one key exchange group.
     NoKeyExchangeGroupsConfigured,
 
+    /// An empty list of signature verification algorithms was provided.
+    NoSignatureVerificationAlgorithms,
+
     /// ECH attempted with a configuration that does not support TLS1.3.
     EchRequiresTls13Support,
 
@@ -1446,10 +1440,6 @@ mod tests {
     fn crl_error_equality() {
         use super::CertRevocationListError::*;
         assert_eq!(BadSignature, BadSignature);
-        #[allow(deprecated)]
-        {
-            assert_eq!(UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm);
-        }
         assert_eq!(
             UnsupportedSignatureAlgorithmContext {
                 signature_algorithm_id: vec![1, 2, 3],

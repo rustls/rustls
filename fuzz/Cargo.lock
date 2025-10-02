@@ -345,9 +345,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.6"
+version = "0.104.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8572f3c2cb9934231157b45499fc41e1f58c589fdfb81a844ba873265e80f8eb"
+checksum = "9655b87b6a80dd6577dc97b247eb2e52bc2a8479e65e31f233f1e0a8ef14b3bc"
 dependencies = [
  "ring",
  "rustls-pki-types",

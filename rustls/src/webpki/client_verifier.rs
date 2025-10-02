@@ -1,7 +1,10 @@
 use alloc::vec::Vec;
 
 use pki_types::CertificateRevocationListDer;
-use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
+use webpki::{
+    CertRevocationList, ExpirationPolicy, ExtendedKeyUsage, RevocationCheckDepth,
+    UnknownStatusPolicy,
+};
 
 use super::{VerifierBuilderError, pki_error};
 #[cfg(doc)]
@@ -252,6 +255,7 @@ impl ClientVerifierBuilder {
 pub struct WebPkiClientVerifier {
     roots: Arc<RootCertStore>,
     root_hint_subjects: Arc<[DistinguishedName]>,
+    eku_validator: ExtendedKeyUsage,
     crls: Vec<CertRevocationList<'static>>,
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
@@ -331,6 +335,7 @@ impl WebPkiClientVerifier {
         Self {
             roots,
             root_hint_subjects,
+            eku_validator: ExtendedKeyUsage::client_auth(),
             crls,
             revocation_check_depth,
             unknown_revocation_policy,
@@ -373,7 +378,7 @@ impl ClientVerifier for WebPkiClientVerifier {
                 &self.roots.roots,
                 &certificates.intermediates,
                 identity.now,
-                webpki::KeyUsage::client_auth(),
+                &self.eku_validator,
                 revocation,
                 None,
             )
