@@ -190,6 +190,7 @@ pub(super) struct FailResolveClientCert {}
 impl client::ResolvesClientCert for FailResolveClientCert {
     fn resolve(
         &self,
+        _negotiated_type: CertificateType,
         _root_hint_subjects: &[&[u8]],
         _sigschemes: &[SignatureScheme],
     ) -> Option<CertifiedSigner> {
@@ -218,10 +219,14 @@ impl AlwaysResolvesClientRawPublicKeys {
 impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
     fn resolve(
         &self,
+        negotiated_type: CertificateType,
         _root_hint_subjects: &[&[u8]],
         sig_schemes: &[SignatureScheme],
     ) -> Option<CertifiedSigner> {
-        self.0.signer(sig_schemes)
+        match negotiated_type {
+            CertificateType::RawPublicKey => self.0.signer(sig_schemes),
+            _ => None,
+        }
     }
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
@@ -352,6 +357,7 @@ mod tests {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn resolve(
             &self,
+            _negotiated_type: CertificateType,
             _root_hint_subjects: &[&[u8]],
             _sigschemes: &[SignatureScheme],
         ) -> Option<CertifiedSigner> {

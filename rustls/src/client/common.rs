@@ -1,11 +1,12 @@
 use alloc::vec::Vec;
 
 use super::ResolvesClientCert;
+use crate::compress;
+use crate::enums::{CertificateType, SignatureScheme};
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtensions};
 use crate::sign::CertifiedSigner;
-use crate::{SignatureScheme, compress};
 
 #[derive(Debug)]
 pub(super) struct ServerCertDetails<'a> {
@@ -87,6 +88,7 @@ pub(super) enum ClientAuthDetails {
 
 impl ClientAuthDetails {
     pub(super) fn resolve(
+        negotiated_type: CertificateType,
         resolver: &dyn ResolvesClientCert,
         canames: Option<&[DistinguishedName]>,
         sigschemes: &[SignatureScheme],
@@ -99,7 +101,7 @@ impl ClientAuthDetails {
             .map(|p| p.as_ref())
             .collect::<Vec<&[u8]>>();
 
-        if let Some(signer) = resolver.resolve(&acceptable_issuers, sigschemes) {
+        if let Some(signer) = resolver.resolve(negotiated_type, &acceptable_issuers, sigschemes) {
             debug!("Attempting client auth");
             return Self::Verify {
                 signer,

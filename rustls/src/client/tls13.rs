@@ -635,6 +635,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         key_schedule: self.key_schedule,
                         ech_retry_configs,
                         expected_certificate_type,
+                        negotiated_client_type: exts.client_certificate_type,
                     })
                 } else {
                     Box::new(ExpectCertificateOrCertReq {
@@ -646,6 +647,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         key_schedule: self.key_schedule,
                         ech_retry_configs,
                         expected_certificate_type,
+                        negotiated_client_type: exts.client_certificate_type,
                     })
                 })
             }
@@ -685,6 +687,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     key_schedule: KeyScheduleHandshake,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
     expected_certificate_type: CertificateType,
+    negotiated_client_type: Option<CertificateType>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
@@ -741,6 +744,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 offered_cert_compression: true,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
+                negotiated_client_type: self.negotiated_client_type,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -838,6 +842,7 @@ struct ExpectCertificateOrCertReq {
     key_schedule: KeyScheduleHandshake,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
     expected_certificate_type: CertificateType,
+    negotiated_client_type: Option<CertificateType>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
@@ -879,6 +884,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 offered_cert_compression: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
+                negotiated_client_type: self.negotiated_client_type,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -910,6 +916,7 @@ struct ExpectCertificateRequest {
     offered_cert_compression: bool,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
     expected_certificate_type: CertificateType,
+    negotiated_client_type: Option<CertificateType>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateRequest {
@@ -971,6 +978,8 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             .copied();
 
         let client_auth = ClientAuthDetails::resolve(
+            self.negotiated_client_type
+                .unwrap_or(CertificateType::X509),
             self.config
                 .client_auth_cert_resolver
                 .as_ref(),

@@ -125,6 +125,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
     /// [`Signer`]: crate::sign::Signer
     fn resolve(
         &self,
+        negotiated_type: CertificateType,
         root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
     ) -> Option<CertifiedSigner>;

@@ -266,6 +266,7 @@ impl Drop for ClientCheckCertResolve {
 impl ResolvesClientCert for ClientCheckCertResolve {
     fn resolve(
         &self,
+        _negotiated_type: CertificateType,
         root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
     ) -> Option<CertifiedSigner> {
