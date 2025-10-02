@@ -466,14 +466,7 @@ pub enum CertificateError {
     BadSignature,
 
     /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
-    #[deprecated(
-        since = "0.23.29",
-        note = "use `UnsupportedSignatureAlgorithmContext` instead"
-    )]
-    UnsupportedSignatureAlgorithm,
-
-    /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
-    UnsupportedSignatureAlgorithmContext {
+    UnsupportedSignatureAlgorithm {
         /// The signature algorithm OID that was unsupported.
         signature_algorithm_id: Vec<u8>,
         /// Supported algorithms that were available for signature verification.
@@ -481,7 +474,7 @@ pub enum CertificateError {
     },
 
     /// A signature was made with an algorithm that doesn't match the relevant public key.
-    UnsupportedSignatureAlgorithmForPublicKeyContext {
+    UnsupportedSignatureAlgorithmForPublicKey {
         /// The signature algorithm OID.
         signature_algorithm_id: Vec<u8>,
         /// The public key algorithm OID.
@@ -581,14 +574,12 @@ impl PartialEq<Self> for CertificateError {
             (UnhandledCriticalExtension, UnhandledCriticalExtension) => true,
             (UnknownIssuer, UnknownIssuer) => true,
             (BadSignature, BadSignature) => true,
-            #[allow(deprecated)]
-            (UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm) => true,
             (
-                UnsupportedSignatureAlgorithmContext {
+                UnsupportedSignatureAlgorithm {
                     signature_algorithm_id: left_signature_algorithm_id,
                     supported_algorithms: left_supported_algorithms,
                 },
-                UnsupportedSignatureAlgorithmContext {
+                UnsupportedSignatureAlgorithm {
                     signature_algorithm_id: right_signature_algorithm_id,
                     supported_algorithms: right_supported_algorithms,
                 },
@@ -597,11 +588,11 @@ impl PartialEq<Self> for CertificateError {
                     == (right_signature_algorithm_id, right_supported_algorithms)
             }
             (
-                UnsupportedSignatureAlgorithmForPublicKeyContext {
+                UnsupportedSignatureAlgorithmForPublicKey {
                     signature_algorithm_id: left_signature_algorithm_id,
                     public_key_algorithm_id: left_public_key_algorithm_id,
                 },
-                UnsupportedSignatureAlgorithmForPublicKeyContext {
+                UnsupportedSignatureAlgorithmForPublicKey {
                     signature_algorithm_id: right_signature_algorithm_id,
                     public_key_algorithm_id: right_public_key_algorithm_id,
                 },
@@ -675,11 +666,9 @@ impl From<CertificateError> for AlertDescription {
             | ExpiredRevocationList
             | ExpiredRevocationListContext { .. } => Self::UnknownCa,
             InvalidOcspResponse => Self::BadCertificateStatusResponse,
-            #[allow(deprecated)]
             BadSignature
-            | UnsupportedSignatureAlgorithm
-            | UnsupportedSignatureAlgorithmContext { .. }
-            | UnsupportedSignatureAlgorithmForPublicKeyContext { .. } => Self::DecryptError,
+            | UnsupportedSignatureAlgorithm { .. }
+            | UnsupportedSignatureAlgorithmForPublicKey { .. } => Self::DecryptError,
             InvalidPurpose | InvalidPurposeContext { .. } => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
             // RFC 5246/RFC 8446
@@ -849,7 +838,7 @@ pub enum CertRevocationListError {
     BadSignature,
 
     /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
-    UnsupportedSignatureAlgorithmContext {
+    UnsupportedSignatureAlgorithm {
         /// The signature algorithm OID that was unsupported.
         signature_algorithm_id: Vec<u8>,
         /// Supported algorithms that were available for signature verification.
@@ -857,7 +846,7 @@ pub enum CertRevocationListError {
     },
 
     /// A signature was made with an algorithm that doesn't match the relevant public key.
-    UnsupportedSignatureAlgorithmForPublicKeyContext {
+    UnsupportedSignatureAlgorithmForPublicKey {
         /// The signature algorithm OID.
         signature_algorithm_id: Vec<u8>,
         /// The public key algorithm OID.
@@ -908,11 +897,11 @@ impl PartialEq<Self> for CertRevocationListError {
         match (self, other) {
             (BadSignature, BadSignature) => true,
             (
-                UnsupportedSignatureAlgorithmContext {
+                UnsupportedSignatureAlgorithm {
                     signature_algorithm_id: left_signature_algorithm_id,
                     supported_algorithms: left_supported_algorithms,
                 },
-                UnsupportedSignatureAlgorithmContext {
+                UnsupportedSignatureAlgorithm {
                     signature_algorithm_id: right_signature_algorithm_id,
                     supported_algorithms: right_supported_algorithms,
                 },
@@ -921,11 +910,11 @@ impl PartialEq<Self> for CertRevocationListError {
                     == (right_signature_algorithm_id, right_supported_algorithms)
             }
             (
-                UnsupportedSignatureAlgorithmForPublicKeyContext {
+                UnsupportedSignatureAlgorithmForPublicKey {
                     signature_algorithm_id: left_signature_algorithm_id,
                     public_key_algorithm_id: left_public_key_algorithm_id,
                 },
-                UnsupportedSignatureAlgorithmForPublicKeyContext {
+                UnsupportedSignatureAlgorithmForPublicKey {
                     signature_algorithm_id: right_signature_algorithm_id,
                     public_key_algorithm_id: right_public_key_algorithm_id,
                 },
@@ -1372,26 +1361,22 @@ mod tests {
             }
         );
         assert_eq!(BadSignature, BadSignature);
-        #[allow(deprecated)]
-        {
-            assert_eq!(UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm);
-        }
         assert_eq!(
-            UnsupportedSignatureAlgorithmContext {
+            UnsupportedSignatureAlgorithm {
                 signature_algorithm_id: vec![1, 2, 3],
                 supported_algorithms: vec![]
             },
-            UnsupportedSignatureAlgorithmContext {
+            UnsupportedSignatureAlgorithm {
                 signature_algorithm_id: vec![1, 2, 3],
                 supported_algorithms: vec![]
             }
         );
         assert_eq!(
-            UnsupportedSignatureAlgorithmForPublicKeyContext {
+            UnsupportedSignatureAlgorithmForPublicKey {
                 signature_algorithm_id: vec![1, 2, 3],
                 public_key_algorithm_id: vec![4, 5, 6]
             },
-            UnsupportedSignatureAlgorithmForPublicKeyContext {
+            UnsupportedSignatureAlgorithmForPublicKey {
                 signature_algorithm_id: vec![1, 2, 3],
                 public_key_algorithm_id: vec![4, 5, 6]
             }
@@ -1441,21 +1426,21 @@ mod tests {
         use super::CertRevocationListError::*;
         assert_eq!(BadSignature, BadSignature);
         assert_eq!(
-            UnsupportedSignatureAlgorithmContext {
+            UnsupportedSignatureAlgorithm {
                 signature_algorithm_id: vec![1, 2, 3],
                 supported_algorithms: vec![]
             },
-            UnsupportedSignatureAlgorithmContext {
+            UnsupportedSignatureAlgorithm {
                 signature_algorithm_id: vec![1, 2, 3],
                 supported_algorithms: vec![]
             }
         );
         assert_eq!(
-            UnsupportedSignatureAlgorithmForPublicKeyContext {
+            UnsupportedSignatureAlgorithmForPublicKey {
                 signature_algorithm_id: vec![1, 2, 3],
                 public_key_algorithm_id: vec![4, 5, 6]
             },
-            UnsupportedSignatureAlgorithmForPublicKeyContext {
+            UnsupportedSignatureAlgorithmForPublicKey {
                 signature_algorithm_id: vec![1, 2, 3],
                 public_key_algorithm_id: vec![4, 5, 6]
             }

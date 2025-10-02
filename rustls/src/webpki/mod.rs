@@ -79,15 +79,13 @@ fn pki_error(error: webpki::Error) -> Error {
         IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl.into(),
 
         InvalidSignatureForPublicKey => CertificateError::BadSignature.into(),
-        UnsupportedSignatureAlgorithm(cx) => {
-            CertificateError::UnsupportedSignatureAlgorithmContext {
-                signature_algorithm_id: cx.signature_algorithm_id,
-                supported_algorithms: cx.supported_algorithms,
-            }
-            .into()
+        UnsupportedSignatureAlgorithm(cx) => CertificateError::UnsupportedSignatureAlgorithm {
+            signature_algorithm_id: cx.signature_algorithm_id,
+            supported_algorithms: cx.supported_algorithms,
         }
+        .into(),
         UnsupportedSignatureAlgorithmForPublicKey(cx) => {
-            CertificateError::UnsupportedSignatureAlgorithmForPublicKeyContext {
+            CertificateError::UnsupportedSignatureAlgorithmForPublicKey {
                 signature_algorithm_id: cx.signature_algorithm_id,
                 public_key_algorithm_id: cx.public_key_algorithm_id,
             }
@@ -96,14 +94,14 @@ fn pki_error(error: webpki::Error) -> Error {
 
         InvalidCrlSignatureForPublicKey => CertRevocationListError::BadSignature.into(),
         UnsupportedCrlSignatureAlgorithm(cx) => {
-            CertRevocationListError::UnsupportedSignatureAlgorithmContext {
+            CertRevocationListError::UnsupportedSignatureAlgorithm {
                 signature_algorithm_id: cx.signature_algorithm_id,
                 supported_algorithms: cx.supported_algorithms,
             }
             .into()
         }
         UnsupportedCrlSignatureAlgorithmForPublicKey(cx) => {
-            CertRevocationListError::UnsupportedSignatureAlgorithmForPublicKeyContext {
+            CertRevocationListError::UnsupportedSignatureAlgorithmForPublicKey {
                 signature_algorithm_id: cx.signature_algorithm_id,
                 public_key_algorithm_id: cx.public_key_algorithm_id,
             }
@@ -134,13 +132,13 @@ fn crl_error(e: webpki::Error) -> CertRevocationListError {
     match e {
         InvalidCrlSignatureForPublicKey => CertRevocationListError::BadSignature,
         UnsupportedCrlSignatureAlgorithm(cx) => {
-            CertRevocationListError::UnsupportedSignatureAlgorithmContext {
+            CertRevocationListError::UnsupportedSignatureAlgorithm {
                 signature_algorithm_id: cx.signature_algorithm_id,
                 supported_algorithms: cx.supported_algorithms,
             }
         }
         UnsupportedCrlSignatureAlgorithmForPublicKey(cx) => {
-            CertRevocationListError::UnsupportedSignatureAlgorithmForPublicKeyContext {
+            CertRevocationListError::UnsupportedSignatureAlgorithmForPublicKey {
                 signature_algorithm_id: cx.signature_algorithm_id,
                 public_key_algorithm_id: cx.public_key_algorithm_id,
             }
@@ -193,7 +191,7 @@ mod tests {
                 }
             )),
             Error::InvalidCertRevocationList(
-                CertRevocationListError::UnsupportedSignatureAlgorithmContext {
+                CertRevocationListError::UnsupportedSignatureAlgorithm {
                     signature_algorithm_id: vec![],
                     supported_algorithms: vec![],
                 }
@@ -207,7 +205,7 @@ mod tests {
                 }
             )),
             Error::InvalidCertRevocationList(
-                CertRevocationListError::UnsupportedSignatureAlgorithmForPublicKeyContext {
+                CertRevocationListError::UnsupportedSignatureAlgorithmForPublicKey {
                     signature_algorithm_id: vec![],
                     public_key_algorithm_id: vec![],
                 }
@@ -239,7 +237,7 @@ mod tests {
                         supported_algorithms: vec![],
                     },
                 ),
-                UnsupportedSignatureAlgorithmContext {
+                UnsupportedSignatureAlgorithm {
                     signature_algorithm_id: vec![],
                     supported_algorithms: vec![],
                 },
@@ -251,7 +249,7 @@ mod tests {
                         public_key_algorithm_id: vec![],
                     },
                 ),
-                UnsupportedSignatureAlgorithmForPublicKeyContext {
+                UnsupportedSignatureAlgorithmForPublicKey {
                     signature_algorithm_id: vec![],
                     public_key_algorithm_id: vec![],
                 },
