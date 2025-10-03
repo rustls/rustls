@@ -274,6 +274,75 @@ impl<const N: usize> From<&[u8; N]> for PrefixedPayload {
     }
 }
 
+#[derive(Debug)]
+pub struct PrefixedPayloadBorrowed<'a> {
+    buffer: &'a mut [u8],
+    payload_len: usize,
+}
+
+impl<'a> PrefixedPayloadBorrowed<'a> {
+    pub fn with_capacity(buffer: &'a mut [u8], payload_capacity: usize) -> Option<Self> {
+        (buffer.len() >= HEADER_SIZE + payload_capacity).then_some(Self {
+            buffer,
+            payload_len: 0,
+        })
+    }
+
+    pub fn extend_from_slice(&mut self, slice: &[u8]) {
+        let payload_end = HEADER_SIZE + self.payload_len;
+        self.buffer[payload_end..payload_end + slice.len()].copy_from_slice(slice);
+        self.payload_len += slice.len();
+    }
+
+    pub fn extend_from_chunks(&mut self, chunks: &OutboundChunks<'_>) {
+        match *chunks {
+            OutboundChunks::Single(chunk) => self.extend_from_slice(chunk),
+            OutboundChunks::Multiple { chunks, start, end } => {
+                let mut size = 0;
+                for chunk in chunks.iter() {
+                    let psize = size;
+                    let len = chunk.len();
+                    size += len;
+                    if size <= start || psize >= end {
+                        continue;
+                    }
+                    let start = start.saturating_sub(psize);
+                    let end = if end - psize < len { end - psize } else { len };
+                    self.extend_from_slice(&chunk[start..end]);
+                }
+            }
+        }
+    }
+
+    pub fn truncate(&mut self, len: usize) {
+        self.payload_len = len
+    }
+
+    fn len(&self) -> usize {
+        self.payload_len
+    }
+}
+
+impl<'a> AsRef<[u8]> for PrefixedPayloadBorrowed<'a> {
+    fn as_ref(&self) -> &[u8] {
+        &self.buffer[HEADER_SIZE..HEADER_SIZE + self.payload_len]
+    }
+}
+
+impl<'a> AsMut<[u8]> for PrefixedPayloadBorrowed<'a> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.buffer[HEADER_SIZE..HEADER_SIZE + self.payload_len]
+    }
+}
+
+impl<'a, 'b> Extend<&'a u8> for PrefixedPayloadBorrowed<'b> {
+    fn extend<T: IntoIterator<Item = &'a u8>>(&mut self, iter: T) {
+        for byte in iter {
+            self.extend_from_slice(&[*byte]);
+        }
+    }
+}
+
 pub(crate) fn read_opaque_message_header(
     r: &mut Reader<'_>,
 ) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
