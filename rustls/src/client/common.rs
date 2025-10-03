@@ -90,21 +90,15 @@ impl ClientAuthDetails {
     pub(super) fn resolve(
         negotiated_type: CertificateType,
         resolver: &dyn ResolvesClientCert,
-        canames: Option<&[DistinguishedName]>,
+        root_hint_subjects: Option<&[DistinguishedName]>,
         signature_schemes: &[SignatureScheme],
         auth_context_tls13: Option<Vec<u8>>,
         compressor: Option<&'static dyn compress::CertCompressor>,
     ) -> Self {
-        let root_hint_subjects = canames
-            .unwrap_or_default()
-            .iter()
-            .map(|p| p.as_ref())
-            .collect::<Vec<&[u8]>>();
-
         let server_hello = CredentialRequest {
             negotiated_type,
             signature_schemes,
-            root_hint_subjects: &root_hint_subjects,
+            root_hint_subjects: root_hint_subjects.unwrap_or_default(),
         };
 
         if let Some(signer) = resolver.resolve(&server_hello) {

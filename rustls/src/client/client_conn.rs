@@ -11,6 +11,8 @@ use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
+#[cfg(doc)]
+use crate::crypto;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -26,9 +28,7 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
-#[cfg(doc)]
-use crate::{DistinguishedName, crypto};
-use crate::{KeyLog, WantsVerifier, compress, verify};
+use crate::{DistinguishedName, KeyLog, WantsVerifier, compress, verify};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -126,7 +126,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 /// Context from the server to inform client credential selection.
 pub struct CredentialRequest<'a> {
     pub(super) negotiated_type: CertificateType,
-    pub(super) root_hint_subjects: &'a [&'a [u8]],
+    pub(super) root_hint_subjects: &'a [DistinguishedName],
     pub(super) signature_schemes: &'a [SignatureScheme],
 }
 
@@ -134,12 +134,14 @@ impl CredentialRequest<'_> {
     /// List of certificate authority subject distinguished names provided by the server.
     ///
     /// If the list is empty, the client should send whatever certificate it has. The hints
-    /// are expected to be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. See
-    /// [`DistinguishedName`] for more information on decoding with external crates like
+    /// are expected to be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. Note that
+    /// the encoding comes from the server and has not been validated by rustls.
+    ///
+    /// See [`DistinguishedName`] for more information on decoding with external crates like
     /// `x509-parser`.
     ///
     /// [`DistinguishedName`]: crate::DistinguishedName
-    pub fn root_hint_subjects(&self) -> &[&[u8]] {
+    pub fn root_hint_subjects(&self) -> &[DistinguishedName] {
         self.root_hint_subjects
     }
 

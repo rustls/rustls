@@ -595,7 +595,7 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
                 if cert.must_match_issuer
                     && !root_hint_subjects
                         .iter()
-                        .any(|dn| *dn == cert.issuer_dn.as_ref())
+                        .any(|dn| dn.as_ref() == cert.issuer_dn.as_ref())
                 {
                     continue;
                 }

@@ -2151,6 +2151,12 @@ impl DistinguishedName {
     }
 }
 
+impl PartialEq for DistinguishedName {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.0 == other.0.0
+    }
+}
+
 /// RFC8446: `DistinguishedName authorities<3..2^16-1>;` however,
 /// RFC5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
 impl TlsListElement for DistinguishedName {
