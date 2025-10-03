@@ -472,9 +472,11 @@ impl KeyType {
         .unwrap()
     }
 
-    pub fn ca_distinguished_name(&self) -> &'static [u8] {
+    pub fn ca_distinguished_name(&self) -> Vec<u8> {
         match self {
-            Self::Rsa2048 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 2048 CA",
+            Self::Rsa2048 => {
+                b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 2048 CA" as &'static [u8]
+            }
             Self::Rsa3072 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 3072 CA",
             Self::Rsa4096 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 4096 CA",
             Self::EcdsaP256 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p256 CA",
@@ -482,6 +484,7 @@ impl KeyType {
             Self::EcdsaP521 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p521 CA",
             Self::Ed25519 => b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA",
         }
+        .to_vec()
     }
 
     pub fn client_root_store(&self) -> Arc<RootCertStore> {

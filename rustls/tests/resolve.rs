@@ -358,11 +358,7 @@ fn client_cert_resolve_default() {
 
         // In a default configuration we expect that the verifier's trust anchors are used
         // for the hint subjects.
-        let expected_root_hint_subjects = vec![
-            key_type
-                .ca_distinguished_name()
-                .to_vec(),
-        ];
+        let expected_root_hint_subjects = vec![key_type.ca_distinguished_name()];
 
         test_client_cert_resolve(*key_type, server_config, expected_root_hint_subjects);
     }
@@ -390,12 +386,7 @@ fn client_cert_resolve_server_added_hint() {
     let provider = provider::DEFAULT_PROVIDER;
     let extra_name = b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponyland IDK CA".to_vec();
     for key_type in KeyType::all_for_provider(&provider) {
-        let expected_hint_subjects = vec![
-            key_type
-                .ca_distinguished_name()
-                .to_vec(),
-            extra_name.clone(),
-        ];
+        let expected_hint_subjects = vec![key_type.ca_distinguished_name(), extra_name.clone()];
         // Create a verifier that adds the extra_name as a hint subject in addition to the ones
         // from the root cert store.
         let verifier = webpki_client_verifier_builder(key_type.client_root_store(), &provider)
