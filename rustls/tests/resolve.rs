@@ -235,14 +235,14 @@ impl ResolvesServerCert for ServerCheckNoSni {
 struct ClientCheckCertResolve {
     query_count: AtomicUsize,
     expect_queries: usize,
-    expect_root_hint_subjects: Vec<Vec<u8>>,
+    expect_root_hint_subjects: Vec<DistinguishedName>,
     expect_sigschemes: Vec<SignatureScheme>,
 }
 
 impl ClientCheckCertResolve {
     fn new(
         expect_queries: usize,
-        expect_root_hint_subjects: Vec<Vec<u8>>,
+        expect_root_hint_subjects: Vec<DistinguishedName>,
         expect_sigschemes: Vec<SignatureScheme>,
     ) -> Self {
         Self {
@@ -278,7 +278,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
         assert_eq!(server_hello.signature_schemes(), self.expect_sigschemes);
         assert_eq!(
             server_hello.root_hint_subjects(),
-            self.expect_root_hint_subjects
+            &self.expect_root_hint_subjects
         );
 
         None
@@ -292,7 +292,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
 fn test_client_cert_resolve(
     key_type: KeyType,
     server_config: Arc<ServerConfig>,
-    expected_root_hint_subjects: Vec<Vec<u8>>,
+    expected_root_hint_subjects: Vec<DistinguishedName>,
 ) {
     for (version, version_provider) in [
         (ProtocolVersion::TLSv1_3, &provider::DEFAULT_TLS13_PROVIDER),
@@ -384,13 +384,15 @@ fn client_cert_resolve_server_added_hint() {
     // Test that a server can add an extra subject above/beyond those found in its trust store
     // and the client cert resolver gets the expected arguments.
     let provider = provider::DEFAULT_PROVIDER;
-    let extra_name = b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponyland IDK CA".to_vec();
+    let extra_name = DistinguishedName::from(
+        b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponyland IDK CA".to_vec(),
+    );
     for key_type in KeyType::all_for_provider(&provider) {
         let expected_hint_subjects = vec![key_type.ca_distinguished_name(), extra_name.clone()];
         // Create a verifier that adds the extra_name as a hint subject in addition to the ones
         // from the root cert store.
         let verifier = webpki_client_verifier_builder(key_type.client_root_store(), &provider)
-            .add_root_hint_subjects([DistinguishedName::from(extra_name.clone())].into_iter());
+            .add_root_hint_subjects([extra_name.clone()].into_iter());
         let server_config = make_server_config_with_client_verifier(*key_type, verifier, &provider);
         test_client_cert_resolve(*key_type, server_config.into(), expected_hint_subjects);
     }
