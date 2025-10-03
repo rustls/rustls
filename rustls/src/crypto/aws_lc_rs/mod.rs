@@ -48,6 +48,20 @@ pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
     key_provider: &AwsLcRs,
 };
 
+/// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.3.
+pub const DEFAULT_TLS13_PROVIDER: CryptoProvider = CryptoProvider {
+    tls12_cipher_suites: Cow::Borrowed(&[]),
+    ..DEFAULT_PROVIDER
+};
+
+/// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.2.
+///
+/// Use of TLS1.3 is **strongly** recommended.
+pub const DEFAULT_TLS12_PROVIDER: CryptoProvider = CryptoProvider {
+    tls13_cipher_suites: Cow::Borrowed(&[]),
+    ..DEFAULT_PROVIDER
+};
+
 /// `KeyProvider` impl for aws-lc-rs
 pub static DEFAULT_KEY_PROVIDER: &dyn KeyProvider = &AwsLcRs;
 

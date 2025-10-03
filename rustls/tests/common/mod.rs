@@ -40,8 +40,14 @@ fn exactly_one_provider() -> bool {
 
 pub fn all_versions(provider: &CryptoProvider) -> impl Iterator<Item = CryptoProvider> {
     vec![
-        provider.clone().with_only_tls12(),
-        provider.clone().with_only_tls13(),
+        CryptoProvider {
+            tls13_cipher_suites: Default::default(),
+            ..provider.clone()
+        },
+        CryptoProvider {
+            tls12_cipher_suites: Default::default(),
+            ..provider.clone()
+        },
     ]
     .into_iter()
 }

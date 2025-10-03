@@ -37,6 +37,20 @@ pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
     key_provider: &Ring,
 };
 
+/// The default `CryptoProvider` backed by *ring* that only supports TLS1.3.
+pub const DEFAULT_TLS13_PROVIDER: CryptoProvider = CryptoProvider {
+    tls12_cipher_suites: Cow::Borrowed(&[]),
+    ..DEFAULT_PROVIDER
+};
+
+/// The default `CryptoProvider` backed by *ring* that only supports TLS1.2.
+///
+/// Use of TLS1.3 is **strongly** recommended.
+pub const DEFAULT_TLS12_PROVIDER: CryptoProvider = CryptoProvider {
+    tls13_cipher_suites: Cow::Borrowed(&[]),
+    ..DEFAULT_PROVIDER
+};
+
 /// Default crypto provider.
 #[derive(Debug)]
 struct Ring;

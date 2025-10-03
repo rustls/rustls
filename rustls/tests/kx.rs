@@ -52,14 +52,8 @@ fn test_client_config_keyshare_mismatch() {
 #[test]
 fn exercise_all_key_exchange_methods() {
     for (version, version_provider) in [
-        (
-            ProtocolVersion::TLSv1_3,
-            provider::DEFAULT_PROVIDER.with_only_tls13(),
-        ),
-        (
-            ProtocolVersion::TLSv1_2,
-            provider::DEFAULT_PROVIDER.with_only_tls12(),
-        ),
+        (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
+        (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
     ] {
         for kx_group in provider::ALL_KX_GROUPS {
             if !kx_group

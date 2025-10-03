@@ -1552,22 +1552,16 @@ fn test_acceptor() {
 fn test_acceptor_rejected_handshake() {
     use rustls::server::Acceptor;
 
-    let client_config = ClientConfig::builder_with_provider(
-        provider::DEFAULT_PROVIDER
-            .with_only_tls13()
-            .into(),
-    )
-    .finish(KeyType::Ed25519);
+    let client_config =
+        ClientConfig::builder_with_provider(provider::DEFAULT_TLS13_PROVIDER.into())
+            .finish(KeyType::Ed25519);
     let mut client = ClientConnection::new(client_config.into(), server_name("localhost")).unwrap();
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
 
-    let server_config = ServerConfig::builder_with_provider(
-        provider::DEFAULT_PROVIDER
-            .with_only_tls12()
-            .into(),
-    )
-    .finish(KeyType::Ed25519);
+    let server_config =
+        ServerConfig::builder_with_provider(provider::DEFAULT_TLS12_PROVIDER.into())
+            .finish(KeyType::Ed25519);
     let mut acceptor = Acceptor::default();
     acceptor
         .read_tls(&mut buf.as_slice())

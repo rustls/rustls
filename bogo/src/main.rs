@@ -230,8 +230,14 @@ impl Options {
 
         match (self.tls12_supported(), self.tls13_supported()) {
             (true, true) => provider,
-            (true, false) => provider.with_only_tls12(),
-            (false, true) => provider.with_only_tls13(),
+            (true, false) => CryptoProvider {
+                tls13_cipher_suites: Default::default(),
+                ..provider
+            },
+            (false, true) => CryptoProvider {
+                tls12_cipher_suites: Default::default(),
+                ..provider
+            },
             _ => panic!("nonsense version constraint"),
         }
     }
@@ -908,7 +914,13 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
     let cfg = ClientConfig::builder_with_provider(provider.clone());
 
     let cfg = if opts.selected_provider.supports_ech() {
-        let ech_cfg = ClientConfig::builder_with_provider(opts.provider().with_only_tls13().into());
+        let ech_cfg = ClientConfig::builder_with_provider(
+            CryptoProvider {
+                tls12_cipher_suites: Default::default(),
+                ..opts.provider()
+            }
+            .into(),
+        );
 
         if let Some(ech_config_list) = &opts.ech_config_list {
             let ech_mode: EchMode = EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)

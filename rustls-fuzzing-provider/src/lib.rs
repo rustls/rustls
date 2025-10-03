@@ -39,16 +39,24 @@ use rustls::{
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
-pub fn provider() -> crypto::CryptoProvider {
-    crypto::CryptoProvider {
-        tls12_cipher_suites: Cow::Owned(vec![TLS_FUZZING_SUITE]),
-        tls13_cipher_suites: Cow::Owned(vec![TLS13_FUZZING_SUITE]),
-        kx_groups: Cow::Owned(vec![KEY_EXCHANGE_GROUP]),
-        signature_verification_algorithms: VERIFY_ALGORITHMS,
-        secure_random: &Provider,
-        key_provider: &Provider,
-    }
-}
+pub const PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {
+    tls12_cipher_suites: Cow::Borrowed(&[TLS_FUZZING_SUITE]),
+    tls13_cipher_suites: Cow::Borrowed(&[TLS13_FUZZING_SUITE]),
+    kx_groups: Cow::Borrowed(&[KEY_EXCHANGE_GROUP]),
+    signature_verification_algorithms: VERIFY_ALGORITHMS,
+    secure_random: &Provider,
+    key_provider: &Provider,
+};
+
+pub const PROVIDER_TLS12: crypto::CryptoProvider = crypto::CryptoProvider {
+    tls13_cipher_suites: Cow::Borrowed(&[]),
+    ..PROVIDER
+};
+
+pub const PROVIDER_TLS13: crypto::CryptoProvider = crypto::CryptoProvider {
+    tls12_cipher_suites: Cow::Borrowed(&[]),
+    ..PROVIDER
+};
 
 pub fn server_verifier() -> Arc<dyn ServerVerifier> {
     // we need one of these, but it doesn't matter what it is
@@ -57,7 +65,7 @@ pub fn server_verifier() -> Arc<dyn ServerVerifier> {
         &include_bytes!("../../test-ca/ecdsa-p256/inter.der")[..],
     )]);
 
-    WebPkiServerVerifier::builder_with_provider(root_store.into(), &provider())
+    WebPkiServerVerifier::builder_with_provider(root_store.into(), &PROVIDER)
         .build()
         .unwrap()
 }
@@ -107,7 +115,7 @@ impl crypto::KeyProvider for Provider {
     }
 }
 
-pub static TLS13_FUZZING_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
+pub const TLS13_FUZZING_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::Unknown(0xff13),
         hash_provider: &Hash,
@@ -119,7 +127,7 @@ pub static TLS13_FUZZING_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
     quic: None,
 };
 
-pub static TLS_FUZZING_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
+pub const TLS_FUZZING_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::Unknown(0xff12),
         hash_provider: &Hash,

@@ -27,7 +27,7 @@ fn key_log_for_tls12() {
     let client_key_log = Arc::new(KeyLogToVec::new("client"));
     let server_key_log = Arc::new(KeyLogToVec::new("server"));
 
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls12();
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
     let kt = KeyType::Rsa2048;
     let mut client_config = make_client_config(kt, &provider);
     client_config.key_log = client_key_log.clone();
@@ -64,7 +64,7 @@ fn key_log_for_tls13() {
     let client_key_log = Arc::new(KeyLogToVec::new("client"));
     let server_key_log = Arc::new(KeyLogToVec::new("server"));
 
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let kt = KeyType::Rsa2048;
     let mut client_config = make_client_config(kt, &provider);
     client_config.key_log = client_key_log.clone();
@@ -487,12 +487,12 @@ fn test_automatic_refresh_traffic_keys() {
 
 #[test]
 fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
-    let provider = Arc::new(
-        Arc::unwrap_or_clone(aes_128_gcm_with_1024_confidentiality_limit(dbg!(
+    let provider = Arc::new(CryptoProvider {
+        tls13_cipher_suites: Default::default(),
+        ..Arc::unwrap_or_clone(aes_128_gcm_with_1024_confidentiality_limit(dbg!(
             provider::DEFAULT_PROVIDER
         )))
-        .with_only_tls12(),
-    );
+    });
 
     let client_config =
         ClientConfig::builder_with_provider(provider.clone()).finish(KeyType::Ed25519);

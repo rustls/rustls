@@ -379,9 +379,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         as fn() -> Arc<dyn rustls::server::ProducesTickets>);
 
     all.push(BenchmarkParams::new(
-        rustls_fuzzing_provider::provider()
-            .with_only_tls13()
-            .into(),
+        rustls_fuzzing_provider::PROVIDER_TLS13.into(),
         make_ticketer,
         AuthKeySource::FuzzingProvider,
         ProtocolVersion::TLSv1_3,
@@ -389,9 +387,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     ));
 
     all.push(BenchmarkParams::new(
-        rustls_fuzzing_provider::provider()
-            .with_only_tls12()
-            .into(),
+        rustls_fuzzing_provider::PROVIDER_TLS12.into(),
         make_ticketer,
         AuthKeySource::FuzzingProvider,
         ProtocolVersion::TLSv1_2,

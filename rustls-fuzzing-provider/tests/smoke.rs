@@ -11,7 +11,7 @@ use rustls::{ClientConfig, ClientConnection, ServerConfig, ServerConnection};
 
 #[test]
 fn pairwise_tls12() {
-    let transcript = test_version(rustls_fuzzing_provider::provider().with_only_tls12());
+    let transcript = test_version(rustls_fuzzing_provider::PROVIDER_TLS12);
 
     fs::write(
         "../fuzz/corpus/unbuffered/tls12-server.bin",
@@ -42,7 +42,7 @@ fn pairwise_tls12() {
 
 #[test]
 fn pairwise_tls13() {
-    let transcript = test_version(rustls_fuzzing_provider::provider().with_only_tls13());
+    let transcript = test_version(rustls_fuzzing_provider::PROVIDER_TLS13);
 
     fs::write(
         "../fuzz/corpus/unbuffered/tls13-server.bin",

@@ -51,14 +51,11 @@ mod tests {
     /// is not sent if the client does not support TLS 1.2.
     #[test]
     fn test_no_session_ticket_request_on_tls_1_3() {
-        let mut config = ClientConfig::builder_with_provider(
-            super::provider::DEFAULT_PROVIDER
-                .with_only_tls13()
-                .into(),
-        )
-        .with_root_certificates(roots())
-        .with_no_client_auth()
-        .unwrap();
+        let mut config =
+            ClientConfig::builder_with_provider(super::provider::DEFAULT_TLS13_PROVIDER.into())
+                .with_root_certificates(roots())
+                .with_no_client_auth()
+                .unwrap();
         config.resumption = Resumption::in_memory_sessions(128)
             .tls12_resumption(Tls12Resumption::SessionIdOrTickets);
         let ch = client_hello_sent_for_config(config).unwrap();
@@ -68,14 +65,10 @@ mod tests {
     #[test]
     fn test_no_renegotiation_scsv_on_tls_1_3() {
         let ch = client_hello_sent_for_config(
-            ClientConfig::builder_with_provider(
-                super::provider::DEFAULT_PROVIDER
-                    .with_only_tls13()
-                    .into(),
-            )
-            .with_root_certificates(roots())
-            .with_no_client_auth()
-            .unwrap(),
+            ClientConfig::builder_with_provider(super::provider::DEFAULT_TLS13_PROVIDER.into())
+                .with_root_certificates(roots())
+                .with_no_client_auth()
+                .unwrap(),
         )
         .unwrap();
         assert!(
@@ -87,8 +80,8 @@ mod tests {
     #[test]
     fn test_client_does_not_offer_sha1() {
         for provider in [
-            super::provider::DEFAULT_PROVIDER.with_only_tls12(),
-            super::provider::DEFAULT_PROVIDER.with_only_tls13(),
+            super::provider::DEFAULT_TLS12_PROVIDER,
+            super::provider::DEFAULT_TLS13_PROVIDER,
         ] {
             let config = ClientConfig::builder_with_provider(provider.into())
                 .with_root_certificates(roots())
@@ -192,8 +185,8 @@ mod tests {
             )]));
 
         for (provider, cas_extension_expected) in [
-            (super::provider::DEFAULT_PROVIDER.with_only_tls12(), false),
-            (super::provider::DEFAULT_PROVIDER.with_only_tls13(), true),
+            (super::provider::DEFAULT_TLS12_PROVIDER, false),
+            (super::provider::DEFAULT_TLS13_PROVIDER, true),
         ] {
             let client_hello = client_hello_sent_for_config(
                 ClientConfig::builder_with_provider(provider.into())
@@ -446,9 +439,11 @@ mod tests {
 
     fn client_config_for_rpk(key_log: Arc<dyn KeyLog>) -> ClientConfig {
         let mut config = ClientConfig::builder_with_provider(
-            x25519_provider()
-                .with_only_tls13()
-                .into(),
+            CryptoProvider {
+                tls12_cipher_suites: Default::default(),
+                ..x25519_provider()
+            }
+            .into(),
         )
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))

@@ -287,20 +287,20 @@ impl Args {
             ),
         };
 
+        let provider = match lookup_versions(&self.protover).as_slice() {
+            [ProtocolVersion::TLSv1_2] => provider::DEFAULT_TLS12_PROVIDER,
+            [ProtocolVersion::TLSv1_3] => provider::DEFAULT_TLS13_PROVIDER,
+            _ => provider::DEFAULT_PROVIDER,
+        };
+
         let provider = CryptoProvider {
             kx_groups,
-            ..provider::DEFAULT_PROVIDER
+            ..provider
         };
 
-        let provider = match self.suite.as_slice() {
+        match self.suite.as_slice() {
             [] => provider,
             _ => filter_suites(provider, &self.suite),
-        };
-
-        match lookup_versions(&self.protover).as_slice() {
-            [ProtocolVersion::TLSv1_2] => provider.with_only_tls12(),
-            [ProtocolVersion::TLSv1_3] => provider.with_only_tls13(),
-            _ => provider,
         }
     }
 }

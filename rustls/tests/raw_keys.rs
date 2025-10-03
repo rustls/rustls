@@ -98,9 +98,9 @@ fn only_client_supports_raw_keys() {
 
 #[test]
 fn only_server_supports_raw_keys() {
-    let provider = provider::DEFAULT_PROVIDER;
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
-        let client_config = make_client_config(*kt, &provider.clone().with_only_tls13());
+        let client_config = make_client_config(*kt, &provider);
         let server_config_rpk = make_server_config_with_raw_key_support(*kt, &provider);
 
         let (mut client, mut server_rpk) = make_pair_for_configs(client_config, server_config_rpk);

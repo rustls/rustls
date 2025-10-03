@@ -94,14 +94,8 @@ fn resumption_combinations() {
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = make_server_config(*kt, &provider);
         for (version, version_provider) in [
-            (
-                ProtocolVersion::TLSv1_2,
-                provider::DEFAULT_PROVIDER.with_only_tls12(),
-            ),
-            (
-                ProtocolVersion::TLSv1_3,
-                provider::DEFAULT_PROVIDER.with_only_tls13(),
-            ),
+            (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
+            (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
         ] {
             let client_config = make_client_config(*kt, &version_provider);
             let (mut client, mut server) =
@@ -186,17 +180,12 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     let client_config = Arc::new(client_config);
 
     let server_config_1 = Arc::new(
-        ServerConfig::builder_with_provider(
-            provider
-                .clone()
-                .with_only_tls13()
-                .into(),
-        )
-        .finish(KeyType::Ed25519),
+        ServerConfig::builder_with_provider(provider::DEFAULT_TLS13_PROVIDER.into())
+            .finish(KeyType::Ed25519),
     );
 
     let mut server_config_2 =
-        ServerConfig::builder_with_provider(provider.with_only_tls12().into())
+        ServerConfig::builder_with_provider(provider::DEFAULT_TLS12_PROVIDER.into())
             .finish(KeyType::Ed25519);
     server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
 
@@ -298,7 +287,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
 #[test]
 fn tls13_stateful_resumption() {
     let kt = KeyType::Rsa2048;
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(kt, &provider);
     let client_config = Arc::new(client_config);
 
@@ -373,7 +362,7 @@ fn tls13_stateful_resumption() {
 #[test]
 fn tls13_stateless_resumption() {
     let kt = KeyType::Rsa2048;
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(kt, &provider);
     let client_config = Arc::new(client_config);
 
