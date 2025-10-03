@@ -32,7 +32,7 @@ use super::provider;
 
 #[test]
 fn client_can_override_certificate_verification() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let verifier = Arc::new(MockServerVerifier::accepts_anything());
 
@@ -53,7 +53,7 @@ fn client_can_override_certificate_verification() {
 
 #[test]
 fn client_can_override_certificate_verification_and_reject_certificate() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let verifier = Arc::new(MockServerVerifier::rejects_certificate(
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
@@ -85,7 +85,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
 
 #[test]
 fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let mut client_config = make_client_config(*kt, &provider.clone().with_only_tls12());
         let verifier = Arc::new(MockServerVerifier::rejects_tls12_signatures(
@@ -115,7 +115,7 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
 
 #[test]
 fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let mut client_config = make_client_config(*kt, &provider.clone().with_only_tls13());
         let verifier = Arc::new(MockServerVerifier::rejects_tls13_signatures(
@@ -145,7 +145,7 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
 
 #[test]
 fn client_can_override_certificate_verification_and_offer_no_signature_schemes() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let verifier = Arc::new(MockServerVerifier::offers_no_signature_schemes());
 
@@ -177,7 +177,7 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
 fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     let ocsp_response = b"hello-ocsp-world!";
     let kt = KeyType::EcdsaP256;
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
 
     for version_provider in all_versions(&provider) {
         let server_config = ServerConfig::builder_with_provider(provider.clone().into())
@@ -200,7 +200,7 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
 
 #[test]
 fn client_can_request_certain_trusted_cas() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     // These keys have CAs with different names, which our test needs.
     // They also share the same sigalgs, so the server won't pick one over the other based on sigalgs.
     let key_types = [KeyType::Rsa2048, KeyType::Rsa3072, KeyType::Rsa4096];
@@ -299,7 +299,7 @@ fn client_checks_server_certificate_with_given_ip_address() {
         do_handshake_until_error(&mut client, &mut server)
     }
 
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
@@ -339,7 +339,7 @@ fn client_checks_server_certificate_with_given_ip_address() {
 
 #[test]
 fn client_checks_server_certificate_with_given_name() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
@@ -365,7 +365,7 @@ fn client_checks_server_certificate_with_given_name() {
 
 #[test]
 fn client_check_server_certificate_ee_revoked() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
@@ -396,7 +396,7 @@ fn client_check_server_certificate_ee_revoked() {
 
 #[test]
 fn client_check_server_certificate_ee_unknown_revocation() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
@@ -449,7 +449,7 @@ fn client_check_server_certificate_ee_unknown_revocation() {
 
 #[test]
 fn client_check_server_certificate_intermediate_revoked() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
@@ -503,7 +503,7 @@ fn client_check_server_certificate_intermediate_revoked() {
 
 #[test]
 fn client_check_server_certificate_ee_crl_expired() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
@@ -560,7 +560,7 @@ fn client_check_server_certificate_ee_crl_expired() {
 /// so isn't used by the other existing verifier tests.
 #[test]
 fn client_check_server_certificate_helper_api() {
-    for kt in KeyType::all_for_provider(&provider::default_provider()) {
+    for kt in KeyType::all_for_provider(&provider::DEFAULT_PROVIDER) {
         let chain = kt.chain();
         let correct_roots = kt.client_root_store();
         let incorrect_roots = match kt {

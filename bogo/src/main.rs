@@ -317,11 +317,11 @@ impl SelectedProvider {
                     kx_groups: Cow::Borrowed(aws_lc_rs::ALL_KX_GROUPS),
                     tls12_cipher_suites: Cow::Borrowed(aws_lc_rs::ALL_TLS12_CIPHER_SUITES),
                     tls13_cipher_suites: Cow::Borrowed(aws_lc_rs::ALL_TLS13_CIPHER_SUITES),
-                    ..aws_lc_rs::default_provider()
+                    ..aws_lc_rs::DEFAULT_PROVIDER
                 }
             }
 
-            Self::Ring => ring::default_provider(),
+            Self::Ring => ring::DEFAULT_PROVIDER,
         }
     }
 
@@ -2266,7 +2266,7 @@ impl compress::CertCompressor for RandomAlgorithm {
         let random_byte = {
             let mut bytes = [0];
             // nb. provider is irrelevant for this use
-            ring::default_provider()
+            ring::DEFAULT_PROVIDER
                 .secure_random
                 .fill(&mut bytes)
                 .unwrap();

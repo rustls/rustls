@@ -36,7 +36,7 @@ mod benchmarks {
     #[bench]
     fn reddit_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "reddit.com",
             &[
                 include_bytes!("testdata/cert-reddit.0.der"),
@@ -49,7 +49,7 @@ mod benchmarks {
     #[bench]
     fn github_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "github.com",
             &[
                 include_bytes!("testdata/cert-github.0.der"),
@@ -63,7 +63,7 @@ mod benchmarks {
     #[bench]
     fn arstechnica_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "arstechnica.com",
             &[
                 include_bytes!("testdata/cert-arstechnica.0.der"),
@@ -77,7 +77,7 @@ mod benchmarks {
     #[bench]
     fn servo_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "servo.org",
             &[
                 include_bytes!("testdata/cert-servo.0.der"),
@@ -91,7 +91,7 @@ mod benchmarks {
     #[bench]
     fn twitter_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "twitter.com",
             &[
                 include_bytes!("testdata/cert-twitter.0.der"),
@@ -104,7 +104,7 @@ mod benchmarks {
     #[bench]
     fn wikipedia_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "wikipedia.org",
             &[
                 include_bytes!("testdata/cert-wikipedia.0.der"),
@@ -117,7 +117,7 @@ mod benchmarks {
     #[bench]
     fn google_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "www.google.com",
             &[
                 include_bytes!("testdata/cert-google.0.der"),
@@ -131,7 +131,7 @@ mod benchmarks {
     #[bench]
     fn hn_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "news.ycombinator.com",
             &[
                 include_bytes!("testdata/cert-hn.0.der"),
@@ -144,7 +144,7 @@ mod benchmarks {
     #[bench]
     fn stackoverflow_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "stackoverflow.com",
             &[
                 include_bytes!("testdata/cert-stackoverflow.0.der"),
@@ -157,7 +157,7 @@ mod benchmarks {
     #[bench]
     fn duckduckgo_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "duckduckgo.com",
             &[
                 include_bytes!("testdata/cert-duckduckgo.0.der"),
@@ -171,7 +171,7 @@ mod benchmarks {
     #[bench]
     fn rustlang_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "www.rust-lang.org",
             &[
                 include_bytes!("testdata/cert-rustlang.0.der"),
@@ -186,7 +186,7 @@ mod benchmarks {
     #[bench]
     fn wapo_cert(b: &mut test::Bencher) {
         let ctx = Context::new(
-            provider::default_provider(),
+            provider::DEFAULT_PROVIDER,
             "www.washingtonpost.com",
             &[
                 include_bytes!("testdata/cert-wapo.0.der"),

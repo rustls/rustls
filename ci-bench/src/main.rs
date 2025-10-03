@@ -311,12 +311,12 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 
     for (provider, ticketer, provider_name) in [
         (
-            derandomize(ring::default_provider()),
+            derandomize(ring::DEFAULT_PROVIDER),
             &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "ring",
         ),
         (
-            derandomize(aws_lc_rs::default_provider()),
+            derandomize(aws_lc_rs::DEFAULT_PROVIDER),
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "aws_lc_rs",
         ),

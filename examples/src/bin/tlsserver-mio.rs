@@ -473,7 +473,7 @@ struct Args {
 
 impl Args {
     fn provider(&self) -> (Vec<ProtocolVersion>, CryptoProvider) {
-        let provider = provider::default_provider();
+        let provider = provider::DEFAULT_PROVIDER;
 
         let provider = match self.suite.as_slice() {
             [] => provider,

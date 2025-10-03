@@ -23,7 +23,7 @@ use super::{COUNTS, CountingLogger, provider};
 
 #[test]
 fn client_only_attempts_resumption_with_compatible_security() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let kt = KeyType::Rsa2048;
     CountingLogger::install();
     CountingLogger::reset();
@@ -90,12 +90,18 @@ fn client_only_attempts_resumption_with_compatible_security() {
 
 #[test]
 fn resumption_combinations() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = make_server_config(*kt, &provider);
         for (version, version_provider) in [
-            (ProtocolVersion::TLSv1_2, provider.clone().with_only_tls12()),
-            (ProtocolVersion::TLSv1_3, provider.clone().with_only_tls13()),
+            (
+                ProtocolVersion::TLSv1_2,
+                provider::DEFAULT_PROVIDER.with_only_tls12(),
+            ),
+            (
+                ProtocolVersion::TLSv1_3,
+                provider::DEFAULT_PROVIDER.with_only_tls13(),
+            ),
         ] {
             let client_config = make_client_config(*kt, &version_provider);
             let (mut client, mut server) =
@@ -173,7 +179,7 @@ fn expected_kx_for_version(version: ProtocolVersion) -> NamedGroup {
 /// https://github.com/rustls/rustls/issues/797
 #[test]
 fn test_client_tls12_no_resume_after_server_downgrade() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut client_config = make_client_config(KeyType::Ed25519, &provider);
     let client_storage = Arc::new(ClientStorage::new());
     client_config.resumption = Resumption::store(client_storage.clone());
@@ -239,7 +245,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
 #[test]
 fn test_tls13_client_resumption_does_not_reuse_tickets() {
     let shared_storage = Arc::new(ClientStorage::new());
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
 
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     client_config.resumption = Resumption::store(shared_storage.clone());
@@ -292,7 +298,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
 #[test]
 fn tls13_stateful_resumption() {
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider().with_only_tls13();
+    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
     let client_config = make_client_config(kt, &provider);
     let client_config = Arc::new(client_config);
 
@@ -367,7 +373,7 @@ fn tls13_stateful_resumption() {
 #[test]
 fn tls13_stateless_resumption() {
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider().with_only_tls13();
+    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
     let client_config = make_client_config(kt, &provider);
     let client_config = Arc::new(client_config);
 
@@ -441,13 +447,13 @@ fn tls13_stateless_resumption() {
 
 #[test]
 fn early_data_not_available() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::default_provider());
+    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert!(client.early_data().is_none());
 }
 
 fn early_data_configs() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut client_config = make_client_config(kt, &provider);
     client_config.enable_early_data = true;
     client_config.resumption = Resumption::store(Arc::new(ClientStorage::new()));
@@ -539,7 +545,7 @@ fn early_data_is_available_on_resumption() {
 fn early_data_not_available_on_server_before_client_hello() {
     let mut server = ServerConnection::new(Arc::new(make_server_config(
         KeyType::Rsa2048,
-        &provider::default_provider(),
+        &provider::DEFAULT_PROVIDER,
     )))
     .unwrap();
     assert!(server.early_data().is_none());

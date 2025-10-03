@@ -275,7 +275,7 @@ mod tests {
             "WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }",
             format!(
                 "{:?}",
-                crate::crypto::ring::default_provider().signature_verification_algorithms
+                crate::crypto::ring::DEFAULT_PROVIDER.signature_verification_algorithms
             )
         );
     }

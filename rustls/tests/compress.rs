@@ -27,7 +27,7 @@ use super::provider;
 fn test_server_uses_cached_compressed_certificates() {
     static COMPRESS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.cert_compressors = vec![&CountingCompressor];
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
@@ -66,7 +66,7 @@ fn test_server_uses_cached_compressed_certificates() {
 
 #[test]
 fn test_server_uses_uncompressed_certificate_if_compression_fails() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.cert_compressors = vec![&FailingCompressor];
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
@@ -78,7 +78,7 @@ fn test_server_uses_uncompressed_certificate_if_compression_fails() {
 
 #[test]
 fn test_client_uses_uncompressed_certificate_if_compression_fails() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config =
         make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
     server_config.cert_decompressors = vec![&NeverDecompressor];
@@ -129,7 +129,7 @@ impl rustls::compress::CertDecompressor for NeverDecompressor {
 fn test_server_can_opt_out_of_compression_cache() {
     static COMPRESS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.cert_compressors = vec![&AlwaysInteractiveCompressor];
     server_config.cert_compression_cache = Arc::new(rustls::compress::CompressionCache::Disabled);
@@ -170,7 +170,7 @@ fn test_server_can_opt_out_of_compression_cache() {
 
 #[test]
 fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.cert_compressors = vec![&IdentityCompressor];
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
@@ -192,7 +192,7 @@ fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
 
 #[test]
 fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config =
         make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
     server_config.cert_decompressors = vec![&GarbageDecompressor];
@@ -215,7 +215,7 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
 
 #[test]
 fn test_cert_decompression_by_server_fails() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let mut server_config =
         make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
     server_config.cert_decompressors = vec![&FailingDecompressor];
@@ -239,12 +239,12 @@ fn test_cert_decompression_by_server_fails() {
 #[cfg(feature = "zlib")]
 #[test]
 fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     let server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
     let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, &provider);
 
     let big_cert = CertificateDer::from(vec![0u8; 0xffff]);
-    let key = provider::default_provider()
+    let key = provider::DEFAULT_PROVIDER
         .key_provider
         .load_private_key(KeyType::Rsa2048.client_key())
         .unwrap();
