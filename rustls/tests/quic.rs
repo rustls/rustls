@@ -67,7 +67,7 @@ fn test_quic_handshake() {
     }
 
     let kt = KeyType::Rsa2048;
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let mut client_config = make_client_config(kt, &provider);
     client_config.enable_early_data = true;
     let client_config = Arc::new(client_config);
@@ -273,7 +273,7 @@ fn test_quic_handshake() {
 fn test_quic_rejects_missing_alpn() {
     let client_params = &b"client params"[..];
     let server_params = &b"server params"[..];
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
 
     for &kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config(kt, &provider);
@@ -310,7 +310,7 @@ fn test_quic_rejects_missing_alpn() {
 
 #[test]
 fn test_quic_no_tls13_error() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls12();
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
     let mut client_config = make_client_config(KeyType::Ed25519, &provider);
     client_config.alpn_protocols = vec!["foo".into()];
     let client_config = Arc::new(client_config);
@@ -337,7 +337,7 @@ fn test_quic_no_tls13_error() {
 
 #[test]
 fn test_quic_invalid_early_data_size() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let mut server_config = make_server_config(KeyType::Ed25519, &provider);
     server_config.alpn_protocols = vec!["foo".into()];
 
@@ -365,7 +365,7 @@ fn test_quic_invalid_early_data_size() {
 
 #[test]
 fn test_quic_server_no_params_received() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let server_config = make_server_config(KeyType::EcdsaP256, &provider);
     let server_config = Arc::new(server_config);
 
@@ -384,7 +384,7 @@ fn test_quic_server_no_params_received() {
 
 #[test]
 fn test_quic_server_no_tls12() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let mut server_config = make_server_config(KeyType::Ed25519, &provider);
     server_config.alpn_protocols = vec!["foo".into()];
     let server_config = Arc::new(server_config);
@@ -436,7 +436,7 @@ fn quic_transfer<L: SideData, R: SideData>(
 fn test_quic_resumption_data_basic() {
     let server_params = b"server params";
     let kt = KeyType::Rsa2048;
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
 
     let mut server_config = make_server_config(kt, &provider);
     server_config.alpn_protocols = vec!["foo".into()];
@@ -474,7 +474,7 @@ fn test_quic_resumption_data_0rtt() {
     let client_params = b"client params";
     let server_params = b"server params";
     let kt = KeyType::Rsa2048;
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
 
     let mut client_config = make_client_config(kt, &provider);
     client_config.alpn_protocols = vec!["foo".into()];
@@ -750,7 +750,7 @@ fn packet_key_api() {
 
 #[test]
 fn test_quic_exporter() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     for &kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config(kt, &provider);
         let server_config = make_server_config(kt, &provider);
@@ -801,10 +801,7 @@ fn test_quic_exporter() {
 #[test]
 fn test_fragmented_append() {
     // Create a QUIC client connection.
-    let client_config = make_client_config(
-        KeyType::Rsa2048,
-        &provider::DEFAULT_PROVIDER.with_only_tls13(),
-    );
+    let client_config = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_TLS13_PROVIDER);
     let client_config = Arc::new(client_config);
     let mut client = quic::ClientConnection::new(
         client_config.clone(),

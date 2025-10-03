@@ -224,8 +224,14 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
             ..provider::DEFAULT_PROVIDER
         };
         let provider = match protocol_version {
-            ProtocolVersion::TLSv1_2 => provider.with_only_tls12(),
-            ProtocolVersion::TLSv1_3 => provider.with_only_tls13(),
+            ProtocolVersion::TLSv1_2 => CryptoProvider {
+                tls13_cipher_suites: Default::default(),
+                ..provider
+            },
+            ProtocolVersion::TLSv1_3 => CryptoProvider {
+                tls12_cipher_suites: Default::default(),
+                ..provider
+            },
             _ => unreachable!(),
         };
         let client_config = rustls::ClientConfig::builder_with_provider(provider.into())

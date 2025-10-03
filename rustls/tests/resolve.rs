@@ -294,14 +294,8 @@ fn test_client_cert_resolve(
     expected_root_hint_subjects: Vec<Vec<u8>>,
 ) {
     for (version, version_provider) in [
-        (
-            ProtocolVersion::TLSv1_3,
-            &provider::DEFAULT_PROVIDER.with_only_tls13(),
-        ),
-        (
-            ProtocolVersion::TLSv1_2,
-            &provider::DEFAULT_PROVIDER.with_only_tls12(),
-        ),
+        (ProtocolVersion::TLSv1_3, &provider::DEFAULT_TLS13_PROVIDER),
+        (ProtocolVersion::TLSv1_2, &provider::DEFAULT_TLS12_PROVIDER),
     ] {
         println!("{version:?} {key_type:?}:");
 

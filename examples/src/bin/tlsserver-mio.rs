@@ -473,22 +473,25 @@ struct Args {
 
 impl Args {
     fn provider(&self) -> (Vec<ProtocolVersion>, CryptoProvider) {
-        let provider = provider::DEFAULT_PROVIDER;
+        let (versions, provider) = match lookup_versions(&self.protover).as_slice() {
+            versions @ [ProtocolVersion::TLSv1_2] => {
+                (versions.to_vec(), provider::DEFAULT_TLS12_PROVIDER)
+            }
+            versions @ [ProtocolVersion::TLSv1_3] => {
+                (versions.to_vec(), provider::DEFAULT_TLS13_PROVIDER)
+            }
+            _ => (
+                vec![ProtocolVersion::TLSv1_2, ProtocolVersion::TLSv1_3],
+                provider::DEFAULT_PROVIDER,
+            ),
+        };
 
         let provider = match self.suite.as_slice() {
             [] => provider,
             _ => filter_suites(provider, &self.suite),
         };
 
-        let versions = lookup_versions(&self.protover);
-        match versions.as_slice() {
-            [ProtocolVersion::TLSv1_2] => (versions, provider.with_only_tls12()),
-            [ProtocolVersion::TLSv1_3] => (versions, provider.with_only_tls13()),
-            _ => (
-                vec![ProtocolVersion::TLSv1_2, ProtocolVersion::TLSv1_3],
-                provider,
-            ),
-        }
+        (versions, provider)
     }
 }
 

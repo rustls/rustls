@@ -338,22 +338,6 @@ See the documentation of the CryptoProvider type for more information.
             && key_provider.fips()
     }
 
-    /// Return a new `CryptoProvider` that only supports TLS1.3.
-    pub fn with_only_tls13(self) -> Self {
-        Self {
-            tls12_cipher_suites: Cow::Borrowed(&[]),
-            ..self
-        }
-    }
-
-    /// Return a new `CryptoProvider` that only supports TLS1.2.
-    pub fn with_only_tls12(self) -> Self {
-        Self {
-            tls13_cipher_suites: Cow::Borrowed(&[]),
-            ..self
-        }
-    }
-
     pub(crate) fn consistency_check(&self) -> Result<(), Error> {
         if self.tls12_cipher_suites.is_empty() && self.tls13_cipher_suites.is_empty() {
             return Err(ApiMisuse::NoCipherSuitesConfigured.into());

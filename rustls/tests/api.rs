@@ -173,8 +173,14 @@ fn apply_versions(provider: CryptoProvider, versions: &[ProtocolVersion]) -> Cry
         []
         | [ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2]
         | [ProtocolVersion::TLSv1_2, ProtocolVersion::TLSv1_3] => provider,
-        [ProtocolVersion::TLSv1_3] => provider.with_only_tls13(),
-        [ProtocolVersion::TLSv1_2] => provider.with_only_tls12(),
+        [ProtocolVersion::TLSv1_3] => CryptoProvider {
+            tls12_cipher_suites: Cow::Borrowed(&[]),
+            ..provider
+        },
+        [ProtocolVersion::TLSv1_2] => CryptoProvider {
+            tls13_cipher_suites: Cow::Borrowed(&[]),
+            ..provider
+        },
         _ => panic!("unhandled versions {versions:?}"),
     }
 }
@@ -426,11 +432,7 @@ fn test_config_builders_debug() {
         .into(),
     );
     let _ = format!("{b:?}");
-    let b = ServerConfig::builder_with_provider(
-        provider::DEFAULT_PROVIDER
-            .with_only_tls13()
-            .into(),
-    );
+    let b = ServerConfig::builder_with_provider(provider::DEFAULT_TLS13_PROVIDER.into());
     let _ = format!("{b:?}");
     let b = b.with_no_client_auth();
     let _ = format!("{b:?}");
@@ -444,11 +446,7 @@ fn test_config_builders_debug() {
         .into(),
     );
     let _ = format!("{b:?}");
-    let b = ClientConfig::builder_with_provider(
-        provider::DEFAULT_PROVIDER
-            .with_only_tls13()
-            .into(),
-    );
+    let b = ClientConfig::builder_with_provider(provider::DEFAULT_TLS13_PROVIDER.into());
     let _ = format!("{b:?}");
 }
 
@@ -763,7 +761,7 @@ fn do_exporter_test(
 
 #[test]
 fn test_tls12_exporter() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls12();
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config(*kt, &provider);
         let server_config = make_server_config(*kt, &provider);
@@ -786,7 +784,7 @@ fn test_tls12_exporter() {
 
 #[test]
 fn test_tls13_exporter() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let client_config = make_client_config(*kt, &provider);
         let server_config = make_server_config(*kt, &provider);
@@ -797,7 +795,7 @@ fn test_tls13_exporter() {
 
 #[test]
 fn test_tls13_exporter_maximum_output_length() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(KeyType::EcdsaP256, &provider);
     let server_config = make_server_config(KeyType::EcdsaP256, &provider);
 
@@ -1248,7 +1246,7 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
         }
     }
 
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls12();
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     let storage = Arc::new(ClientStorage::new());
     client_config.resumption = Resumption::store(storage.clone());
@@ -1360,23 +1358,15 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
 
         // A ECH client configuration should only be considered FIPS approved if the
         // ECH HPKE suite is itself FIPS approved.
-        let config = ClientConfig::builder_with_provider(
-            provider::DEFAULT_PROVIDER
-                .with_only_tls13()
-                .into(),
-        )
-        .with_ech(EchMode::Enable(ech_config));
+        let config = ClientConfig::builder_with_provider(provider::DEFAULT_TLS13_PROVIDER.into())
+            .with_ech(EchMode::Enable(ech_config));
         let config = config.finish(KeyType::Rsa2048);
         assert_eq!(config.fips(), suite.fips());
 
         // The same applies if an ECH GREASE client configuration is used.
         let (public_key, _) = suite.generate_key_pair().unwrap();
-        let config = ClientConfig::builder_with_provider(
-            provider::DEFAULT_PROVIDER
-                .with_only_tls13()
-                .into(),
-        )
-        .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)));
+        let config = ClientConfig::builder_with_provider(provider::DEFAULT_TLS13_PROVIDER.into())
+            .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)));
         let config = config.finish(KeyType::Rsa2048);
         assert_eq!(config.fips(), suite.fips());
 
@@ -1389,7 +1379,7 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
 
 #[test]
 fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(KeyType::Rsa2048, &provider);
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.enable_secret_extraction = true;
@@ -1422,7 +1412,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
 
 #[test]
 fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls12();
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
     let client_config = make_client_config(KeyType::Rsa2048, &provider);
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.enable_secret_extraction = true;
@@ -1461,7 +1451,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
 
 #[test]
 fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     client_config.enable_secret_extraction = true;
     let server_config = make_server_config(KeyType::Rsa2048, &provider);
@@ -1488,7 +1478,7 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
 
 #[test]
 fn test_illegal_client_renegotiation_attempt_during_tls12_handshake() {
-    let provider = provider::DEFAULT_PROVIDER.with_only_tls12();
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
     let server_config = make_server_config(KeyType::Rsa2048, &provider);
     let client_config = make_client_config(KeyType::Rsa2048, &provider);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);

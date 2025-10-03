@@ -85,9 +85,9 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
 
 #[test]
 fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
-    let provider = provider::DEFAULT_PROVIDER;
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_config = make_client_config(*kt, &provider.clone().with_only_tls12());
+        let mut client_config = make_client_config(*kt, &provider);
         let verifier = Arc::new(MockServerVerifier::rejects_tls12_signatures(
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
         ));
@@ -115,9 +115,9 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
 
 #[test]
 fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
-    let provider = provider::DEFAULT_PROVIDER;
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_config = make_client_config(*kt, &provider.clone().with_only_tls13());
+        let mut client_config = make_client_config(*kt, &provider);
         let verifier = Arc::new(MockServerVerifier::rejects_tls13_signatures(
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
         ));
