@@ -212,6 +212,51 @@ impl OutboundOpaqueMessage {
             payload: Payload::Owned(self.payload.as_ref().to_vec()),
         }
     }
+
+    pub fn copy_to_borrowed<'a>(
+        &self,
+        outgoing_buffer: &'a mut [u8],
+    ) -> Option<OutboundOpaqueMessageBorrowed<'a>> {
+        Some(OutboundOpaqueMessageBorrowed {
+            typ: self.typ,
+            version: self.version,
+            payload: self
+                .payload
+                .copy_to_borrowed(outgoing_buffer)?,
+        })
+    }
+}
+
+/// The borrowed counterpart to [`OutboundOpaqueMessage`], allowing
+/// zero-allocation encryption and zero-copy I/O.
+#[derive(Debug)]
+pub struct OutboundOpaqueMessageBorrowed<'a> {
+    pub typ: ContentType,
+    pub version: ProtocolVersion,
+    pub payload: PrefixedPayloadBorrowed<'a>,
+}
+
+impl<'a> OutboundOpaqueMessageBorrowed<'a> {
+    pub fn new(
+        typ: ContentType,
+        version: ProtocolVersion,
+        payload: PrefixedPayloadBorrowed<'a>,
+    ) -> Self {
+        Self {
+            typ,
+            version,
+            payload,
+        }
+    }
+
+    pub fn encode(self) -> (&'a mut [u8], &'a mut [u8]) {
+        let length = self.payload.len() as u16;
+        let encoded_payload = self.payload.buffer;
+        encoded_payload[0] = self.typ.into();
+        encoded_payload[1..3].copy_from_slice(&self.version.to_array());
+        encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
+        encoded_payload.split_at_mut(HEADER_SIZE + length as usize)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -238,6 +283,15 @@ impl PrefixedPayload {
 
     fn len(&self) -> usize {
         self.0.len() - HEADER_SIZE
+    }
+
+    pub fn copy_to_borrowed<'a>(
+        &self,
+        outgoing_buffer: &'a mut [u8],
+    ) -> Option<PrefixedPayloadBorrowed<'a>> {
+        let mut payload = PrefixedPayloadBorrowed::with_capacity(outgoing_buffer, self.len())?;
+        payload.extend_from_slice(self.as_ref());
+        Some(payload)
     }
 }
 
