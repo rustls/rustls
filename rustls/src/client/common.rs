@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use super::ResolvesClientCert;
+use super::{CredentialRequest, ResolvesClientCert};
 use crate::compress;
 use crate::enums::{CertificateType, SignatureScheme};
 use crate::log::{debug, trace};
@@ -91,17 +91,23 @@ impl ClientAuthDetails {
         negotiated_type: CertificateType,
         resolver: &dyn ResolvesClientCert,
         canames: Option<&[DistinguishedName]>,
-        sigschemes: &[SignatureScheme],
+        signature_schemes: &[SignatureScheme],
         auth_context_tls13: Option<Vec<u8>>,
         compressor: Option<&'static dyn compress::CertCompressor>,
     ) -> Self {
-        let acceptable_issuers = canames
+        let root_hint_subjects = canames
             .unwrap_or_default()
             .iter()
             .map(|p| p.as_ref())
             .collect::<Vec<&[u8]>>();
 
-        if let Some(signer) = resolver.resolve(negotiated_type, &acceptable_issuers, sigschemes) {
+        let server_hello = CredentialRequest {
+            negotiated_type,
+            signature_schemes,
+            root_hint_subjects: &root_hint_subjects,
+        };
+
+        if let Some(signer) = resolver.resolve(&server_hello) {
             debug!("Attempting client auth");
             return Self::Verify {
                 signer,

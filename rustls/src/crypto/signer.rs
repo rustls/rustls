@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
 use super::CryptoProvider;
-use crate::client::ResolvesClientCert;
+use crate::client::{CredentialRequest, ResolvesClientCert};
 use crate::enums::{CertificateType, SignatureAlgorithm, SignatureScheme};
 use crate::error::{ApiMisuse, Error, InconsistentKeys, PeerIncompatible};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
@@ -87,14 +87,11 @@ impl From<CertifiedKey> for SingleCertAndKey {
 }
 
 impl ResolvesClientCert for SingleCertAndKey {
-    fn resolve(
-        &self,
-        negotiated_type: CertificateType,
-        _root_hint_subjects: &[&[u8]],
-        sig_schemes: &[SignatureScheme],
-    ) -> Option<CertifiedSigner> {
-        match negotiated_type {
-            CertificateType::X509 => self.0.signer(sig_schemes),
+    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+        match server_hello.negotiated_type() {
+            CertificateType::X509 => self
+                .0
+                .signer(server_hello.signature_schemes()),
             _ => None,
         }
     }

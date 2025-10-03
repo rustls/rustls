@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use pki_types::{CertificateDer, DnsName};
-use rustls::client::ResolvesClientCert;
+use rustls::client::{CredentialRequest, ResolvesClientCert};
 use rustls::server::{ClientHello, ResolvesServerCert, ResolvesServerCertUsingSni};
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
@@ -264,21 +264,22 @@ impl Drop for ClientCheckCertResolve {
 }
 
 impl ResolvesClientCert for ClientCheckCertResolve {
-    fn resolve(
-        &self,
-        _negotiated_type: CertificateType,
-        root_hint_subjects: &[&[u8]],
-        sigschemes: &[SignatureScheme],
-    ) -> Option<CertifiedSigner> {
+    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);
 
-        if sigschemes.is_empty() {
+        if server_hello
+            .signature_schemes()
+            .is_empty()
+        {
             panic!("no signature schemes shared by server");
         }
 
-        assert_eq!(sigschemes, self.expect_sigschemes);
-        assert_eq!(root_hint_subjects, self.expect_root_hint_subjects);
+        assert_eq!(server_hello.signature_schemes(), self.expect_sigschemes);
+        assert_eq!(
+            server_hello.root_hint_subjects(),
+            self.expect_root_hint_subjects
+        );
 
         None
     }
