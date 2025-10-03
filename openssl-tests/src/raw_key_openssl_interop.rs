@@ -27,7 +27,7 @@ mod client {
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
     pub(super) fn make_config(client_private_key: &str, server_pub_key: &str) -> ClientConfig {
-        let client_private_key = Arc::new(provider::default_provider())
+        let client_private_key = Arc::new(provider::DEFAULT_PROVIDER)
             .key_provider
             .load_private_key(
                 PrivateKeyDer::from_pem_file(client_private_key)
@@ -91,7 +91,7 @@ mod client {
         fn new(trusted_spki: Vec<SubjectPublicKeyInfoDer<'static>>) -> Self {
             Self {
                 trusted_spki,
-                supported_algs: provider::default_provider().signature_verification_algorithms,
+                supported_algs: provider::DEFAULT_PROVIDER.signature_verification_algorithms,
             }
         }
     }
@@ -162,7 +162,7 @@ mod server {
         let client_raw_key = SubjectPublicKeyInfoDer::from_pem_file(client_pub_key)
             .expect("cannot open pub key file");
 
-        let server_private_key = provider::default_provider()
+        let server_private_key = provider::DEFAULT_PROVIDER
             .key_provider
             .load_private_key(
                 PrivateKeyDer::from_pem_file(server_private_key)
@@ -238,7 +238,7 @@ mod server {
         pub(crate) fn new(trusted_spki: Vec<SubjectPublicKeyInfoDer<'static>>) -> Self {
             Self {
                 trusted_spki,
-                supported_algs: provider::default_provider().signature_verification_algorithms,
+                supported_algs: provider::DEFAULT_PROVIDER.signature_verification_algorithms,
             }
         }
     }

@@ -60,10 +60,10 @@ pub use crate::suites::CipherSuiteCommon;
 /// This crate comes with two built-in options, provided as
 /// `CryptoProvider` structures:
 ///
-/// - [`crypto::aws_lc_rs::default_provider`]: (behind the `aws_lc_rs` crate feature).
+/// - [`crypto::aws_lc_rs::DEFAULT_PROVIDER`]: (behind the `aws_lc_rs` crate feature).
 ///   This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
 ///   crate.  The `fips` crate feature makes this option use FIPS140-3-approved cryptography.
-/// - [`crypto::ring::default_provider`]: (behind the `ring` crate feature).
+/// - [`crypto::ring::DEFAULT_PROVIDER`]: (behind the `ring` crate feature).
 ///   This provider uses the [*ring*](https://github.com/briansmith/ring) crate.
 ///
 /// This structure provides defaults. Everything in it can be overridden at
@@ -129,7 +129,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// pub fn provider() -> rustls::crypto::CryptoProvider {
 ///   rustls::crypto::CryptoProvider{
 ///     key_provider: &HsmKeyLoader,
-///     ..aws_lc_rs::default_provider()
+///     ..aws_lc_rs::DEFAULT_PROVIDER
 ///   }
 /// }
 ///
@@ -295,7 +295,7 @@ See the documentation of the CryptoProvider type for more information.
             not(feature = "custom-provider")
         ))]
         {
-            return Some(ring::default_provider());
+            return Some(ring::DEFAULT_PROVIDER);
         }
 
         #[cfg(all(
@@ -304,7 +304,7 @@ See the documentation of the CryptoProvider type for more information.
             not(feature = "custom-provider")
         ))]
         {
-            return Some(aws_lc_rs::default_provider());
+            return Some(aws_lc_rs::DEFAULT_PROVIDER);
         }
 
         #[allow(unreachable_code)]
@@ -801,7 +801,7 @@ impl From<Vec<u8>> for SharedSecret {
 #[cfg(all(feature = "aws-lc-rs", any(feature = "fips", rustls_docsrs)))]
 #[cfg_attr(rustls_docsrs, doc(cfg(feature = "fips")))]
 pub fn default_fips_provider() -> CryptoProvider {
-    aws_lc_rs::default_provider()
+    aws_lc_rs::DEFAULT_PROVIDER
 }
 
 mod static_default {

@@ -27,7 +27,7 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// ```
 /// # #[cfg(feature = "aws-lc-rs")] {
-/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
+/// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
 /// use rustls::{ClientConfig, ServerConfig};
 /// ClientConfig::builder()
 /// //  ...
@@ -63,7 +63,7 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// ```
 /// # #[cfg(feature = "aws-lc-rs")] {
-/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
+/// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// ClientConfig::builder()
@@ -88,8 +88,8 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// ```no_run
 /// # #[cfg(feature = "aws-lc-rs")] {
-/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
 /// # use std::sync::Arc;
+/// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
 /// # use rustls::ServerConfig;
 /// # let certs = vec![];
 /// # let private_key = pki_types::PrivateKeyDer::from(

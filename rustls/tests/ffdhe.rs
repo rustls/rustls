@@ -31,7 +31,7 @@ fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups(
             provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
         ]),
-        ..provider::default_provider()
+        ..provider::DEFAULT_PROVIDER
     };
 
     let build_err = ClientConfig::builder_with_provider(bad_crypto_provider.into())
@@ -94,7 +94,7 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
             ]),
             tls13_cipher_suites: Cow::Owned(vec![]),
             kx_groups: Cow::Owned(vec![&FFDHE4096_KX_GROUP, provider::kx_group::SECP256R1]),
-            ..provider::default_provider()
+            ..provider::DEFAULT_PROVIDER
         }
         .into(),
     )
@@ -107,7 +107,7 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             ]),
             kx_groups: Cow::Owned(vec![&FFDHE2048_KX_GROUP, provider::kx_group::SECP256R1]),
-            ..provider::default_provider()
+            ..provider::DEFAULT_PROVIDER
         }
         .into(),
     )
@@ -141,7 +141,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
             ]),
             tls13_cipher_suites: Cow::Owned(vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256]),
             kx_groups: Cow::Owned(vec![provider::kx_group::SECP256R1, &FFDHE2048_KX_GROUP]),
-            ..provider::default_provider()
+            ..provider::DEFAULT_PROVIDER
         }
         .into(),
     )
@@ -221,7 +221,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
             ]),
             tls13_cipher_suites: Cow::Owned(vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256]),
             kx_groups: Cow::Owned(client_kx_groups),
-            ..provider::default_provider()
+            ..provider::DEFAULT_PROVIDER
         };
         let provider = match protocol_version {
             ProtocolVersion::TLSv1_2 => provider.with_only_tls12(),
@@ -267,7 +267,7 @@ pub fn ffdhe_provider() -> CryptoProvider {
             provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
         ]),
         kx_groups: Cow::Owned(FFDHE_KX_GROUPS.to_vec()),
-        ..provider::default_provider()
+        ..provider::DEFAULT_PROVIDER
     }
 }
 

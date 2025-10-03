@@ -289,7 +289,7 @@ impl Args {
 
         let provider = CryptoProvider {
             kx_groups,
-            ..provider::default_provider()
+            ..provider::DEFAULT_PROVIDER
         };
 
         let provider = match self.suite.as_slice() {
@@ -502,7 +502,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         config
             .dangerous()
             .set_certificate_verifier(Arc::new(danger::NoCertificateVerification::new(
-                provider::default_provider(),
+                provider::DEFAULT_PROVIDER,
             )));
     }
 

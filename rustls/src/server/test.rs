@@ -65,7 +65,7 @@ mod tests {
 
     #[test]
     fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
-        let provider = super::provider::default_provider().with_only_tls12();
+        let provider = super::provider::DEFAULT_PROVIDER.with_only_tls12();
         let mut config = ServerConfig::builder_with_provider(provider.into())
             .with_no_client_auth()
             .with_single_cert(server_cert(), server_key())
@@ -234,20 +234,22 @@ mod tests {
     }
 
     fn server_config_for_rpk() -> ServerConfig {
-        let x25519_provider = CryptoProvider {
-            kx_groups: Cow::Owned(vec![super::provider::kx_group::X25519]),
-            ..super::provider::default_provider()
-        };
-        ServerConfig::builder_with_provider(x25519_provider.with_only_tls12().into())
-            .with_no_client_auth()
-            .with_cert_resolver(Arc::new(AlwaysResolvesServerRawPublicKeys::new(
-                server_certified_key(),
-            )))
-            .unwrap()
+        ServerConfig::builder_with_provider(
+            CryptoProvider {
+                kx_groups: Cow::Owned(vec![super::provider::kx_group::X25519]),
+                ..super::provider::DEFAULT_PROVIDER.with_only_tls12()
+            }
+            .into(),
+        )
+        .with_no_client_auth()
+        .with_cert_resolver(Arc::new(AlwaysResolvesServerRawPublicKeys::new(
+            server_certified_key(),
+        )))
+        .unwrap()
     }
 
     fn server_certified_key() -> CertifiedKey {
-        let key = super::provider::default_provider()
+        let key = super::provider::DEFAULT_PROVIDER
             .key_provider
             .load_private_key(server_key())
             .unwrap();
@@ -278,7 +280,7 @@ mod tests {
         CryptoProvider {
             kx_groups: Cow::Owned(vec![FAKE_FFDHE_GROUP]),
             tls12_cipher_suites: Cow::Owned(vec![&TLS_DHE_RSA_WITH_AES_128_GCM_SHA256]),
-            ..super::provider::default_provider()
+            ..super::provider::DEFAULT_PROVIDER
         }
     }
 

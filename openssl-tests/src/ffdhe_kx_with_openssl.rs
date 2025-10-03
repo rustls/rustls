@@ -199,7 +199,7 @@ fn ffdhe_provider() -> CryptoProvider {
         tls12_cipher_suites: Cow::Owned(vec![&ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256]),
         tls13_cipher_suites: Cow::Owned(vec![provider::cipher_suite::TLS13_AES_128_GCM_SHA256]),
         kx_groups: Cow::Owned(vec![FFDHE2048_GROUP]),
-        ..provider::default_provider()
+        ..provider::DEFAULT_PROVIDER
     }
 }
 

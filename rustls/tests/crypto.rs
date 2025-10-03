@@ -27,7 +27,7 @@ fn key_log_for_tls12() {
     let client_key_log = Arc::new(KeyLogToVec::new("client"));
     let server_key_log = Arc::new(KeyLogToVec::new("server"));
 
-    let provider = provider::default_provider().with_only_tls12();
+    let provider = provider::DEFAULT_PROVIDER.with_only_tls12();
     let kt = KeyType::Rsa2048;
     let mut client_config = make_client_config(kt, &provider);
     client_config.key_log = client_key_log.clone();
@@ -64,7 +64,7 @@ fn key_log_for_tls13() {
     let client_key_log = Arc::new(KeyLogToVec::new("client"));
     let server_key_log = Arc::new(KeyLogToVec::new("server"));
 
-    let provider = provider::default_provider().with_only_tls13();
+    let provider = provider::DEFAULT_PROVIDER.with_only_tls13();
     let kt = KeyType::Rsa2048;
     let mut client_config = make_client_config(kt, &provider);
     client_config.key_log = client_key_log.clone();
@@ -186,7 +186,7 @@ fn test_secret_extraction_enabled() {
     // We support 3 different AEAD algorithms (AES-128-GCM mode, AES-256-GCM, and
     // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
     let kt = KeyType::Rsa2048;
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for suite in [
         SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_128_GCM_SHA256),
         SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_256_GCM_SHA384),
@@ -258,7 +258,7 @@ fn test_secret_extract_produces_correct_variant() {
         let kt = KeyType::Rsa2048;
 
         let provider: Arc<CryptoProvider> =
-            provider_with_one_suite(&provider::default_provider(), suite).into();
+            provider_with_one_suite(&provider::DEFAULT_PROVIDER, suite).into();
 
         let mut server_config = ServerConfig::builder_with_provider(provider.clone()).finish(kt);
 
@@ -320,7 +320,7 @@ fn test_secret_extraction_disabled_or_too_early() {
     let kt = KeyType::Rsa2048;
     let provider = Arc::new(CryptoProvider {
         tls13_cipher_suites: Cow::Owned(vec![cipher_suite::TLS13_AES_128_GCM_SHA256]),
-        ..provider::default_provider()
+        ..provider::DEFAULT_PROVIDER
     });
 
     for (server_enable, client_enable) in [(true, false), (false, true)] {
@@ -372,7 +372,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 
 #[test]
 fn test_refresh_traffic_keys_during_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::DEFAULT_PROVIDER);
     assert_eq!(
         client
             .refresh_traffic_keys()
@@ -389,7 +389,7 @@ fn test_refresh_traffic_keys_during_handshake() {
 
 #[test]
 fn test_refresh_traffic_keys() {
-    let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::default_provider());
+    let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
     fn check_both_directions(client: &mut ClientConnection, server: &mut ServerConnection) {
@@ -432,7 +432,7 @@ fn test_automatic_refresh_traffic_keys() {
     }
 
     const KEY_UPDATE_SIZE: usize = encrypted_size(5);
-    let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider());
+    let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::DEFAULT_PROVIDER);
 
     let client_config =
         ClientConfig::builder_with_provider(provider.clone()).finish(KeyType::Ed25519);
@@ -489,7 +489,7 @@ fn test_automatic_refresh_traffic_keys() {
 fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
     let provider = Arc::new(
         Arc::unwrap_or_clone(aes_128_gcm_with_1024_confidentiality_limit(dbg!(
-            provider::default_provider()
+            provider::DEFAULT_PROVIDER
         )))
         .with_only_tls12(),
     );
@@ -527,7 +527,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
 
 #[test]
 fn test_keys_match_for_all_signing_key_types() {
-    let provider = provider::default_provider();
+    let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let key = provider
             .key_provider
