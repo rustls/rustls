@@ -1,6 +1,7 @@
 use pki_types::ServerName;
 
-use crate::enums::{CertificateType, SignatureScheme};
+use super::CredentialRequest;
+use crate::enums::CertificateType;
 use crate::msgs::persist;
 use crate::sign::CertifiedSigner;
 use crate::{NamedGroup, client, sign};
@@ -188,12 +189,7 @@ pub use cache::ClientSessionMemoryCache;
 pub(super) struct FailResolveClientCert {}
 
 impl client::ResolvesClientCert for FailResolveClientCert {
-    fn resolve(
-        &self,
-        _negotiated_type: CertificateType,
-        _root_hint_subjects: &[&[u8]],
-        _sigschemes: &[SignatureScheme],
-    ) -> Option<CertifiedSigner> {
+    fn resolve(&self, _: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         None
     }
 
@@ -217,14 +213,11 @@ impl AlwaysResolvesClientRawPublicKeys {
 }
 
 impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
-    fn resolve(
-        &self,
-        negotiated_type: CertificateType,
-        _root_hint_subjects: &[&[u8]],
-        sig_schemes: &[SignatureScheme],
-    ) -> Option<CertifiedSigner> {
-        match negotiated_type {
-            CertificateType::RawPublicKey => self.0.signer(sig_schemes),
+    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+        match server_hello.negotiated_type() {
+            CertificateType::RawPublicKey => self
+                .0
+                .signer(server_hello.signature_schemes()),
             _ => None,
         }
     }
@@ -244,7 +237,7 @@ mod tests {
     use super::NoClientSessionStorage;
     use super::provider::cipher_suite;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
-    use crate::client::{ClientSessionStore, ResolvesClientCert};
+    use crate::client::{ClientSessionStore, CredentialRequest, ResolvesClientCert};
     use crate::enums::{CertificateType, SignatureScheme};
     use crate::error::Error;
     use crate::msgs::base::PayloadU16;
@@ -355,12 +348,7 @@ mod tests {
 
     impl ResolvesClientCert for DummyResolvesClientCert {
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn resolve(
-            &self,
-            _negotiated_type: CertificateType,
-            _root_hint_subjects: &[&[u8]],
-            _sigschemes: &[SignatureScheme],
-        ) -> Option<CertifiedSigner> {
+        fn resolve(&self, _: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
             unreachable!()
         }
 

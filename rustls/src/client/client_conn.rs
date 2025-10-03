@@ -97,17 +97,6 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
 pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
     /// Resolve a client certificate chain/private key to use as the client's identity.
     ///
-    /// `root_hint_subjects` is an optional list of certificate authority
-    /// subject distinguished names that the client can use to help
-    /// decide on a client certificate the server is likely to accept. If
-    /// the list is empty, the client should send whatever certificate it
-    /// has. The hints are expected to be DER-encoded X.500 distinguished names,
-    /// per [RFC 5280 A.1]. See [`DistinguishedName`] for more information
-    /// on decoding with external crates like `x509-parser`.
-    ///
-    /// `sigschemes` is the list of the [`SignatureScheme`]s the server
-    /// supports.
-    ///
     /// The `CertifiedSigner` returned from this method contains a certificate chain and a
     /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
     /// [`CertifiedKey`], on which an implementation can call [`CertifiedKey::signer()`].
@@ -123,12 +112,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
     /// [`CertifiedKey`]: crate::sign::CertifiedKey
     /// [`CertifiedKey::signer()`]: crate::sign::CertifiedKey::signer
     /// [`Signer`]: crate::sign::Signer
-    fn resolve(
-        &self,
-        negotiated_type: CertificateType,
-        root_hint_subjects: &[&[u8]],
-        sigschemes: &[SignatureScheme],
-    ) -> Option<CertifiedSigner>;
+    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner>;
 
     /// Returns which [`CertificateType`]s this resolver supports.
     ///
@@ -137,6 +121,41 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
     ///
     /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
     fn supported_certificate_types(&self) -> &'static [CertificateType];
+}
+
+/// Context from the server to inform client credential selection.
+pub struct CredentialRequest<'a> {
+    pub(super) negotiated_type: CertificateType,
+    pub(super) root_hint_subjects: &'a [&'a [u8]],
+    pub(super) signature_schemes: &'a [SignatureScheme],
+}
+
+impl CredentialRequest<'_> {
+    /// List of certificate authority subject distinguished names provided by the server.
+    ///
+    /// If the list is empty, the client should send whatever certificate it has. The hints
+    /// are expected to be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. See
+    /// [`DistinguishedName`] for more information on decoding with external crates like
+    /// `x509-parser`.
+    ///
+    /// [`DistinguishedName`]: crate::DistinguishedName
+    pub fn root_hint_subjects(&self) -> &[&[u8]] {
+        self.root_hint_subjects
+    }
+
+    /// Get the compatible signature schemes.
+    pub fn signature_schemes(&self) -> &[SignatureScheme] {
+        self.signature_schemes
+    }
+
+    /// The negotiated certificate type.
+    ///
+    /// If the server does not support [RFC 7250], this will be `CertificateType::X509`.
+    ///
+    /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
+    pub fn negotiated_type(&self) -> CertificateType {
+        self.negotiated_type
+    }
 }
 
 /// Common configuration for (typically) all connections made by a program.
