@@ -208,9 +208,7 @@ fn client_can_request_certain_trusted_cas() {
             .iter()
             .map(|kt| {
                 (
-                    kt.ca_distinguished_name()
-                        .to_vec()
-                        .into(),
+                    kt.ca_distinguished_name().into(),
                     kt.certified_key_with_cert_chain(&provider)
                         .unwrap(),
                 )
@@ -240,9 +238,7 @@ fn client_can_request_certain_trusted_cas() {
         let cas_sending_server_verifier = Arc::new(ServerVerifierWithCasExt {
             verifier: server_verifier.clone(),
             ca_names: Arc::from(vec![DistinguishedName::from(
-                key_type
-                    .ca_distinguished_name()
-                    .to_vec(),
+                key_type.ca_distinguished_name(),
             )]),
         });
 
