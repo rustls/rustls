@@ -58,7 +58,7 @@ mod tests {
     use crate::ffdhe_groups::FfdheGroup;
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
-    use crate::server::{AlwaysResolvesServerRawPublicKeys, ServerConfig, ServerConnection};
+    use crate::server::{ServerConfig, ServerConnection, SingleRawPublicKeyResolver};
     use crate::sign::CertifiedKey;
     use crate::sync::Arc;
     use crate::{CipherSuiteCommon, Tls12CipherSuite};
@@ -248,7 +248,7 @@ mod tests {
             .into(),
         )
         .with_no_client_auth()
-        .with_cert_resolver(Arc::new(AlwaysResolvesServerRawPublicKeys::new(
+        .with_server_credential_resolver(Arc::new(SingleRawPublicKeyResolver::new(
             server_certified_key(),
         )))
         .unwrap()

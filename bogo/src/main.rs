@@ -547,7 +547,7 @@ struct FixedSignatureSchemeServerCertResolver {
     scheme: SignatureScheme,
 }
 
-impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
+impl server::ServerCredentialResolver for FixedSignatureSchemeServerCertResolver {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         if !client_hello
             .signature_schemes()
@@ -777,13 +777,13 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
         Some(scheme) => Arc::new(FixedSignatureSchemeServerCertResolver {
             cert_key,
             scheme: lookup_scheme(scheme),
-        }) as Arc<dyn server::ResolvesServerCert>,
+        }) as Arc<dyn server::ServerCredentialResolver>,
         None => Arc::new(SingleCertAndKey::from(cert_key)),
     };
 
     let mut cfg = ServerConfig::builder_with_provider(Arc::new(provider))
         .with_client_cert_verifier(client_auth)
-        .with_cert_resolver(cert_resolver)
+        .with_server_credential_resolver(cert_resolver)
         .unwrap();
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);

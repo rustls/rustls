@@ -8,7 +8,7 @@ use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::enums::{CertificateType, SignatureAlgorithm, SignatureScheme};
 use crate::error::{ApiMisuse, Error, InconsistentKeys, PeerIncompatible};
-use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
 use crate::x509;
 
@@ -31,15 +31,15 @@ use crate::x509;
 ///
 /// A signing key created outside of the `KeyProvider` extension trait can be used
 /// to create a [`CertifiedKey`], which in turn can be used to create a
-/// [`ResolvesServerCertUsingSni`]. Alternately, a `CertifiedKey` can be returned from a
-/// custom implementation of the [`ResolvesServerCert`] or [`ClientCredentialResolver`] traits.
+/// [`ServerNameResolver`]. Alternately, a `CertifiedKey` can be returned from a
+/// custom implementation of the [`ServerCredentialResolver`] or [`ClientCredentialResolver`] traits.
 ///
 /// [`KeyProvider::load_private_key()`]: crate::crypto::KeyProvider::load_private_key
 /// [`ConfigBuilder::with_single_cert()`]: crate::ConfigBuilder::with_single_cert
 /// [`ConfigBuilder::with_single_cert_with_ocsp()`]: crate::ConfigBuilder::with_single_cert_with_ocsp
 /// [`ConfigBuilder::with_client_auth_cert()`]: crate::ConfigBuilder::with_client_auth_cert
-/// [`ResolvesServerCertUsingSni`]: crate::server::ResolvesServerCertUsingSni
-/// [`ResolvesServerCert`]: crate::server::ResolvesServerCert
+/// [`ServerNameResolver`]: crate::server::ServerNameResolver
+/// [`ServerCredentialResolver`]: crate::server::ServerCredentialResolver
 /// [`ClientCredentialResolver`]: crate::client::ClientCredentialResolver
 pub trait SigningKey: Debug + Send + Sync {
     /// Choose a `SignatureScheme` from those offered.
@@ -74,9 +74,9 @@ pub trait Signer: Debug + Send + Sync {
 
 /// Server certificate resolver which always resolves to the same certificate and key.
 ///
-/// For use with [`ConfigBuilder::with_cert_resolver()`].
+/// For use with [`ConfigBuilder::with_server_credential_resolver()`].
 ///
-/// [`ConfigBuilder::with_cert_resolver()`]: crate::ConfigBuilder::with_cert_resolver
+/// [`ConfigBuilder::with_server_credential_resolver()`]: crate::ConfigBuilder::with_server_credential_resolver
 #[derive(Debug)]
 pub struct SingleCertAndKey(CertifiedKey);
 
@@ -101,7 +101,7 @@ impl ClientCredentialResolver for SingleCertAndKey {
     }
 }
 
-impl ResolvesServerCert for SingleCertAndKey {
+impl ServerCredentialResolver for SingleCertAndKey {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         self.0
             .signer(client_hello.signature_schemes())
@@ -113,7 +113,7 @@ impl ResolvesServerCert for SingleCertAndKey {
 
 /// A packaged-together certificate chain and one-time-use signer.
 ///
-/// This is used in the [`ClientCredentialResolver`] and [`ResolvesServerCert`] traits
+/// This is used in the [`ClientCredentialResolver`] and [`ServerCredentialResolver`] traits
 /// as the return value of their `resolve()` methods.
 #[non_exhaustive]
 #[derive(Debug)]

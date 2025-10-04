@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use pki_types::{CertificateDer, DnsName};
 use rustls::client::{ClientCredentialResolver, CredentialRequest};
-use rustls::server::{ClientHello, ResolvesServerCert, ResolvesServerCertUsingSni};
+use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
     ApiMisuse, CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection,
@@ -223,7 +223,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
 #[derive(Debug)]
 struct ServerCheckNoSni {}
 
-impl ResolvesServerCert for ServerCheckNoSni {
+impl ServerCredentialResolver for ServerCheckNoSni {
     fn resolve(&self, client_hello: &ClientHello) -> Result<CertifiedSigner, Error> {
         // We expect the client to not send SNI.
         assert!(client_hello.server_name().is_none());
@@ -399,7 +399,7 @@ fn client_cert_resolve_server_added_hint() {
 fn server_exposes_offered_sni_even_if_resolver_fails() {
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_PROVIDER;
-    let resolver = rustls::server::ResolvesServerCertUsingSni::new();
+    let resolver = rustls::server::ServerNameResolver::new();
 
     let mut server_config = make_server_config(kt, &provider);
     server_config.cert_resolver = Arc::new(resolver);
@@ -429,7 +429,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
 fn sni_resolver_works() {
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_PROVIDER;
-    let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
+    let mut resolver = rustls::server::ServerNameResolver::new();
     let signing_key = kt.load_key(&provider);
     resolver
         .add(
@@ -467,7 +467,7 @@ fn sni_resolver_works() {
 #[test]
 fn sni_resolver_rejects_wrong_names() {
     let kt = KeyType::Rsa2048;
-    let mut resolver = ResolvesServerCertUsingSni::new();
+    let mut resolver = ServerNameResolver::new();
 
     assert_eq!(
         Ok(()),
@@ -493,7 +493,7 @@ fn sni_resolver_rejects_wrong_names() {
 fn sni_resolver_lower_cases_configured_names() {
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_PROVIDER;
-    let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
+    let mut resolver = rustls::server::ServerNameResolver::new();
     let signing_key = kt.load_key(&provider);
 
     assert_eq!(
@@ -523,7 +523,7 @@ fn sni_resolver_lower_cases_queried_names() {
     // actually, the handshake parser does this, but the effect is the same.
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_PROVIDER;
-    let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
+    let mut resolver = rustls::server::ServerNameResolver::new();
     let signing_key = kt.load_key(&provider);
 
     assert_eq!(
@@ -551,7 +551,7 @@ fn sni_resolver_lower_cases_queried_names() {
 #[test]
 fn sni_resolver_rejects_bad_certs() {
     let kt = KeyType::Rsa2048;
-    let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
+    let mut resolver = rustls::server::ServerNameResolver::new();
 
     assert_eq!(
         resolver.add(

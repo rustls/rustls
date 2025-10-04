@@ -18,7 +18,7 @@ It's a TODO to make these and other extension points async.)
 Once you have these two pieces, configuring a server to use them involves, briefly:
 
 - packaging your [`sign::SigningKey`][signing_key] with the matching certificate chain into a [`sign::CertifiedKey`][certified_key]
-- making a [`ResolvesServerCertUsingSni`][cert_using_sni] and feeding in your [`sign::CertifiedKey`][certified_key] for all SNI hostnames you want to use it for,
+- making a [`ServerNameResolver`][cert_using_sni] and feeding in your [`sign::CertifiedKey`][certified_key] for all SNI hostnames you want to use it for,
 - setting that as your `ServerConfig`'s [`cert_resolver`][cert_resolver]
 
 For a complete example of implementing a custom [`sign::SigningKey`][signing_key] and
@@ -30,7 +30,7 @@ For a complete example of implementing a custom [`sign::SigningKey`][signing_key
 [signer]: crate::crypto::signer::Signer
 [sign_method]: crate::crypto::signer::Signer::sign
 [certified_key]: crate::crypto::signer::CertifiedKey
-[cert_using_sni]: crate::server::ResolvesServerCertUsingSni
+[cert_using_sni]: crate::server::ServerNameResolver
 [cert_resolver]: crate::ServerConfig::cert_resolver
 [rustls-cng-signer]: https://github.com/rustls/rustls-cng/blob/dev/src/signer.rs
 

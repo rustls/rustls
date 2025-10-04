@@ -128,7 +128,7 @@ pub trait ProducesTickets: Debug + Send + Sync {
 /// For applications that use async I/O and need to do I/O to choose
 /// a certificate (for instance, fetching a certificate from a data store),
 /// the [`Acceptor`] interface is more suitable.
-pub trait ResolvesServerCert: Debug + Send + Sync {
+pub trait ServerCredentialResolver: Debug + Send + Sync {
     /// Choose a certificate chain and matching key given simplified ClientHello information.
     ///
     /// The `CertifiedSigner` returned from this method contains a certificate chain and a
@@ -387,9 +387,9 @@ pub struct ServerConfig {
     pub ticketer: Arc<dyn ProducesTickets>,
 
     /// How to choose a server cert and key. This is usually set by
-    /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_cert_resolver].
+    /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_server_credential_resolver].
     /// For async applications, see also [Acceptor].
-    pub cert_resolver: Arc<dyn ResolvesServerCert>,
+    pub cert_resolver: Arc<dyn ServerCredentialResolver>,
 
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
@@ -864,7 +864,7 @@ mod connection {
     /// characteristics of the `ClientHello`. In particular it is useful for
     /// servers that need to do some I/O to load a certificate and its private key
     /// and don't want to use the blocking interface provided by
-    /// [`super::ResolvesServerCert`].
+    /// [`super::ServerCredentialResolver`].
     ///
     /// Create an Acceptor with [`Acceptor::default()`].
     ///

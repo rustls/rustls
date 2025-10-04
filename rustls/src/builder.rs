@@ -57,7 +57,7 @@ use crate::{ClientConfig, ServerConfig};
 /// or disabled using one of:
 /// - [`ConfigBuilder::with_no_client_auth`] - to not send client authentication (most common)
 /// - [`ConfigBuilder::with_client_auth_cert`] - to always send a specific certificate
-/// - [`ConfigBuilder::with_credential_resolver`] - to send a certificate chosen dynamically
+/// - [`ConfigBuilder::with_server_credential_resolver`] - to send a certificate chosen dynamically
 ///
 /// For example:
 ///
@@ -82,7 +82,7 @@ use crate::{ClientConfig, ServerConfig};
 /// Next, _certificate sending_ must be configured by calling one of:
 /// - [`ConfigBuilder::with_single_cert`] - to send a specific certificate
 /// - [`ConfigBuilder::with_single_cert_with_ocsp`] - to send a specific certificate, plus stapled OCSP
-/// - [`ConfigBuilder::with_cert_resolver`] - to send a certificate chosen dynamically
+/// - [`ConfigBuilder::with_server_credential_resolver`] - to send a certificate chosen dynamically
 ///
 /// For example:
 ///

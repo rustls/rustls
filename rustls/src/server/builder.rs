@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use super::server_conn::InvalidSniPolicy;
-use super::{ResolvesServerCert, ServerConfig, handy};
+use super::{ServerConfig, ServerCredentialResolver, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
@@ -67,7 +67,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
         let certified_key = CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
-        self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
+        self.with_server_credential_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 
     /// Sets a single certificate chain, matching private key and optional OCSP
@@ -92,13 +92,13 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         let mut certified_key =
             CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
         certified_key.ocsp = Some(ocsp);
-        self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
+        self.with_server_credential_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 
-    /// Sets a custom [`ResolvesServerCert`].
-    pub fn with_cert_resolver(
+    /// Sets a custom [`ServerCredentialResolver`].
+    pub fn with_server_credential_resolver(
         self,
-        cert_resolver: Arc<dyn ResolvesServerCert>,
+        cert_resolver: Arc<dyn ServerCredentialResolver>,
     ) -> Result<ServerConfig, Error> {
         self.provider.consistency_check()?;
         Ok(ServerConfig {
