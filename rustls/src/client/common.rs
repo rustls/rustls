@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use super::{CredentialRequest, ResolvesClientCert};
+use super::{ClientCredentialResolver, CredentialRequest};
 use crate::compress;
 use crate::enums::{CertificateType, SignatureScheme};
 use crate::log::{debug, trace};
@@ -89,7 +89,7 @@ pub(super) enum ClientAuthDetails {
 impl ClientAuthDetails {
     pub(super) fn resolve(
         negotiated_type: CertificateType,
-        resolver: &dyn ResolvesClientCert,
+        resolver: &dyn ClientCredentialResolver,
         root_hint_subjects: Option<&[DistinguishedName]>,
         signature_schemes: &[SignatureScheme],
         auth_context_tls13: Option<Vec<u8>>,

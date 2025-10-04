@@ -70,7 +70,7 @@ pub fn server_verifier() -> Arc<dyn ServerVerifier> {
         .unwrap()
 }
 
-pub fn server_cert_resolver() -> Arc<dyn server::ResolvesServerCert> {
+pub fn server_cert_resolver() -> Arc<dyn server::ServerCredentialResolver> {
     let cert = CertificateDer::from(&include_bytes!("../../test-ca/ecdsa-p256/end.der")[..]);
     let certified_key = sign::CertifiedKey::new_unchecked(Arc::from([cert]), Box::new(SigningKey));
     Arc::new(DummyCert(certified_key.into()))
@@ -79,7 +79,7 @@ pub fn server_cert_resolver() -> Arc<dyn server::ResolvesServerCert> {
 #[derive(Debug)]
 struct DummyCert(Arc<sign::CertifiedKey>);
 
-impl server::ResolvesServerCert for DummyCert {
+impl server::ServerCredentialResolver for DummyCert {
     fn resolve(&self, client_hello: &server::ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         self.0
             .signer(client_hello.signature_schemes())

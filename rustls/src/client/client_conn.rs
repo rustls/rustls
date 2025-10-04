@@ -94,7 +94,7 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
 
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
+pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     /// Resolve a client certificate chain/private key to use as the client's identity.
     ///
     /// The `CertifiedSigner` returned from this method contains a certificate chain and a
@@ -112,7 +112,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
     /// [`CertifiedKey`]: crate::sign::CertifiedKey
     /// [`CertifiedKey::signer()`]: crate::sign::CertifiedKey::signer
     /// [`Signer`]: crate::sign::Signer
-    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner>;
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner>;
 
     /// Returns which [`CertificateType`]s this resolver supports.
     ///
@@ -227,7 +227,7 @@ pub struct ClientConfig {
     pub max_fragment_size: Option<usize>,
 
     /// How to decide what client auth certificate/keys to use.
-    pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
+    pub client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
 
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.

@@ -13,7 +13,7 @@ use rustls::client::Resumption;
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
-use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::sign::CertifiedSigner;
 use rustls::{
     AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
@@ -1664,7 +1664,7 @@ struct ServerCheckSni {
     expect_sni: bool,
 }
 
-impl ResolvesServerCert for ServerCheckSni {
+impl ServerCredentialResolver for ServerCheckSni {
     fn resolve(&self, client_hello: &ClientHello) -> Result<CertifiedSigner, Error> {
         assert_eq!(client_hello.server_name().is_some(), self.expect_sni);
         Err(Error::NoSuitableCertificate)

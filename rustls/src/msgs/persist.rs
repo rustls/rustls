@@ -4,7 +4,7 @@ use core::cmp;
 use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
-use crate::client::ResolvesClientCert;
+use crate::client::ClientCredentialResolver;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
@@ -83,7 +83,7 @@ impl Tls13ClientSessionValue {
         secret: &[u8],
         peer_identity: PeerIdentity,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
         lifetime_secs: u32,
         age_add: u32,
@@ -165,7 +165,7 @@ impl Tls12ClientSessionValue {
         master_secret: &[u8; 48],
         peer_identity: PeerIdentity,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
         lifetime_secs: u32,
         extended_ms: bool,
@@ -224,7 +224,7 @@ pub struct ClientSessionCommon {
     lifetime_secs: u32,
     peer_identity: Arc<PeerIdentity>,
     server_cert_verifier: Weak<dyn ServerVerifier>,
-    client_creds: Weak<dyn ResolvesClientCert>,
+    client_creds: Weak<dyn ClientCredentialResolver>,
 }
 
 impl ClientSessionCommon {
@@ -234,7 +234,7 @@ impl ClientSessionCommon {
         lifetime_secs: u32,
         peer_identity: PeerIdentity,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        client_creds: &Arc<dyn ClientCredentialResolver>,
     ) -> Self {
         Self {
             ticket,
@@ -249,7 +249,7 @@ impl ClientSessionCommon {
     pub(crate) fn compatible_config(
         &self,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        client_creds: &Arc<dyn ClientCredentialResolver>,
     ) -> bool {
         let same_verifier = Weak::ptr_eq(
             &Arc::downgrade(server_cert_verifier),
@@ -265,7 +265,7 @@ impl ClientSessionCommon {
             }
             (_, _) => {
                 crate::log::trace!(
-                    "resumption not allowed between different ResolvesClientCert values"
+                    "resumption not allowed between different ClientCredentialResolver values"
                 );
                 false
             }

@@ -447,7 +447,7 @@ mod tests {
         )
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
-        .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
+        .with_client_credential_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
             client_certified_key(),
         )))
         .unwrap();

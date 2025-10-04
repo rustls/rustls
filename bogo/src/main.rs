@@ -547,7 +547,7 @@ struct FixedSignatureSchemeServerCertResolver {
     scheme: SignatureScheme,
 }
 
-impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
+impl server::ServerCredentialResolver for FixedSignatureSchemeServerCertResolver {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         if !client_hello
             .signature_schemes()
@@ -584,11 +584,11 @@ impl MultipleClientCredentialResolver {
     }
 }
 
-impl client::ResolvesClientCert for MultipleClientCredentialResolver {
-    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         // `sig_schemes` is in server preference order, so respect that.
-        let sig_schemes = server_hello.signature_schemes();
-        let root_hint_subjects = server_hello.root_hint_subjects();
+        let sig_schemes = request.signature_schemes();
+        let root_hint_subjects = request.root_hint_subjects();
         for sig_scheme in sig_schemes.iter().copied() {
             for (i, cert) in self.additional.iter().enumerate() {
                 // if the server sends any issuer hints, respect them
@@ -777,13 +777,13 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
         Some(scheme) => Arc::new(FixedSignatureSchemeServerCertResolver {
             cert_key,
             scheme: lookup_scheme(scheme),
-        }) as Arc<dyn server::ResolvesServerCert>,
+        }) as Arc<dyn server::ServerCredentialResolver>,
         None => Arc::new(SingleCertAndKey::from(cert_key)),
     };
 
     let mut cfg = ServerConfig::builder_with_provider(Arc::new(provider))
         .with_client_cert_verifier(client_auth)
-        .with_cert_resolver(cert_resolver)
+        .with_server_credential_resolver(cert_resolver)
         .unwrap();
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
@@ -980,7 +980,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                 );
             }
 
-            cfg.with_client_cert_resolver(Arc::new(resolver))
+            cfg.with_client_credential_resolver(Arc::new(resolver))
                 .unwrap()
         }
         false => cfg.with_no_client_auth().unwrap(),

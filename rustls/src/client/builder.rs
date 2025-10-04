@@ -5,7 +5,7 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::client::{ClientConfig, EchMode, ResolvesClientCert, handy};
+use crate::client::{ClientConfig, ClientCredentialResolver, EchMode, handy};
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
@@ -142,18 +142,18 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
         let certified_key = CertifiedKey::from_der(cert_chain, key_der, &self.provider)?;
-        self.with_client_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
+        self.with_client_credential_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 
     /// Do not support client auth.
     pub fn with_no_client_auth(self) -> Result<ClientConfig, Error> {
-        self.with_client_cert_resolver(Arc::new(handy::FailResolveClientCert {}))
+        self.with_client_credential_resolver(Arc::new(handy::FailResolveClientCert {}))
     }
 
-    /// Sets a custom [`ResolvesClientCert`].
-    pub fn with_client_cert_resolver(
+    /// Sets a custom [`ClientCredentialResolver`].
+    pub fn with_client_credential_resolver(
         self,
-        client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
+        client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
     ) -> Result<ClientConfig, Error> {
         self.provider.consistency_check()?;
 

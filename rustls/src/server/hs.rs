@@ -598,9 +598,9 @@ impl<'a> ClientHelloInput<'a> {
     ///
     /// This represents the first part of the `ClientHello` handling, where we do all validation that
     /// doesn't depend on a `ServerConfig` being available and extract everything needed to build a
-    /// [`ClientHello`] value for a [`ResolvesServerCert`].
+    /// [`ClientHello`] value for a [`ServerCredentialResolver`].
     ///
-    /// [`ResolvesServerCert`]: crate::server::ResolvesServerCert
+    /// [`ServerCredentialResolver`]: crate::server::ServerCredentialResolver
     pub(super) fn from_message(
         message: &'a Message<'a>,
         done_retry: bool,

@@ -61,7 +61,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
         #[cfg(feature = "log")]
         assert!(COUNTS.with(|c| {
             c.borrow().trace.iter().any(|item| {
-                item == "resumption not allowed between different ResolvesClientCert values"
+                item == "resumption not allowed between different ClientCredentialResolver values"
             })
         }));
 

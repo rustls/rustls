@@ -22,7 +22,7 @@ fn fuzz_buffered_api(data: &[u8]) {
     let config = Arc::new(
         ServerConfig::builder_with_provider(rustls_fuzzing_provider::PROVIDER.into())
             .with_no_client_auth()
-            .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver())
+            .with_server_credential_resolver(rustls_fuzzing_provider::server_cert_resolver())
             .unwrap(),
     );
     let mut stream = io::Cursor::new(data);
