@@ -213,11 +213,11 @@ impl AlwaysResolvesClientRawPublicKeys {
 }
 
 impl client::ClientCredentialResolver for AlwaysResolvesClientRawPublicKeys {
-    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
-        match server_hello.negotiated_type() {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+        match request.negotiated_type() {
             CertificateType::RawPublicKey => self
                 .0
-                .signer(server_hello.signature_schemes()),
+                .signer(request.signature_schemes()),
             _ => None,
         }
     }

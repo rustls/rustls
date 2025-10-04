@@ -264,20 +264,17 @@ impl Drop for ClientCheckCertResolve {
 }
 
 impl ClientCredentialResolver for ClientCheckCertResolve {
-    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);
 
-        if server_hello
-            .signature_schemes()
-            .is_empty()
-        {
+        if request.signature_schemes().is_empty() {
             panic!("no signature schemes shared by server");
         }
 
-        assert_eq!(server_hello.signature_schemes(), self.expect_sigschemes);
+        assert_eq!(request.signature_schemes(), self.expect_sigschemes);
         assert_eq!(
-            server_hello.root_hint_subjects(),
+            request.root_hint_subjects(),
             &self.expect_root_hint_subjects
         );
 
