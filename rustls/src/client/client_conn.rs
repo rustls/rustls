@@ -112,7 +112,7 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     /// [`CertifiedKey`]: crate::sign::CertifiedKey
     /// [`CertifiedKey::signer()`]: crate::sign::CertifiedKey::signer
     /// [`Signer`]: crate::sign::Signer
-    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner>;
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner>;
 
     /// Returns which [`CertificateType`]s this resolver supports.
     ///

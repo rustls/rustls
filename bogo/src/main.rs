@@ -585,10 +585,10 @@ impl MultipleClientCredentialResolver {
 }
 
 impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
-    fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         // `sig_schemes` is in server preference order, so respect that.
-        let sig_schemes = server_hello.signature_schemes();
-        let root_hint_subjects = server_hello.root_hint_subjects();
+        let sig_schemes = request.signature_schemes();
+        let root_hint_subjects = request.root_hint_subjects();
         for sig_scheme in sig_schemes.iter().copied() {
             for (i, cert) in self.additional.iter().enumerate() {
                 // if the server sends any issuer hints, respect them
