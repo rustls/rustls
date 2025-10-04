@@ -147,7 +147,7 @@ mod server {
     };
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
-    use rustls::server::AlwaysResolvesServerRawPublicKeys;
+    use rustls::server::SingleRawPublicKeyResolver;
     use rustls::server::danger::{
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
@@ -179,11 +179,11 @@ mod server {
             CertifiedKey::new_unchecked(Arc::from([server_public_key_as_cert]), server_private_key);
 
         let client_cert_verifier = Arc::new(SimpleRpkClientVerifier::new(vec![client_raw_key]));
-        let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(certified_key));
+        let server_cert_resolver = Arc::new(SingleRawPublicKeyResolver::new(certified_key));
 
         ServerConfig::builder()
             .with_client_cert_verifier(client_cert_verifier)
-            .with_cert_resolver(server_cert_resolver)
+            .with_server_credential_resolver(server_cert_resolver)
             .unwrap()
     }
 

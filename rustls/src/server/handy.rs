@@ -169,21 +169,21 @@ impl server::ProducesTickets for NeverProducesTickets {
     }
 }
 
-/// An exemplar `ResolvesServerCert` implementation that always resolves to a single
+/// An exemplar `ServerCredentialResolver` implementation that always resolves to a single
 /// [RFC 7250] raw public key.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Debug)]
-pub struct AlwaysResolvesServerRawPublicKeys(sign::CertifiedKey);
+pub struct SingleRawPublicKeyResolver(sign::CertifiedKey);
 
-impl AlwaysResolvesServerRawPublicKeys {
+impl SingleRawPublicKeyResolver {
     /// Create a new `AlwaysResolvesServerRawPublicKeys` instance.
     pub fn new(certified_key: sign::CertifiedKey) -> Self {
         Self(certified_key)
     }
 }
 
-impl server::ResolvesServerCert for AlwaysResolvesServerRawPublicKeys {
+impl server::ServerCredentialResolver for SingleRawPublicKeyResolver {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         self.0
             .signer(client_hello.signature_schemes)
@@ -214,11 +214,11 @@ mod sni_resolver {
     /// Something that resolves do different cert chains/keys based
     /// on client-supplied server name (via SNI).
     #[derive(Debug)]
-    pub struct ResolvesServerCertUsingSni {
+    pub struct ServerNameResolver {
         by_name: HashMap<DnsName<'static>, Arc<sign::CertifiedKey>>,
     }
 
-    impl ResolvesServerCertUsingSni {
+    impl ServerNameResolver {
         /// Create a new and empty (i.e., knows no certificates) resolver.
         pub fn new() -> Self {
             Self {
@@ -254,7 +254,7 @@ mod sni_resolver {
         }
     }
 
-    impl server::ResolvesServerCert for ResolvesServerCertUsingSni {
+    impl server::ServerCredentialResolver for ServerNameResolver {
         fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
             let Some(name) = client_hello.server_name() else {
                 return Err(PeerIncompatible::NoServerNameProvided.into());
@@ -276,11 +276,11 @@ mod sni_resolver {
         use alloc::borrow::Cow;
 
         use super::*;
-        use crate::server::ResolvesServerCert;
+        use crate::server::ServerCredentialResolver;
 
         #[test]
-        fn test_resolvesservercertusingsni_requires_sni() {
-            let rscsni = ResolvesServerCertUsingSni::new();
+        fn test_server_name_resolver_requires_sni() {
+            let rscsni = ServerNameResolver::new();
             assert!(
                 rscsni
                     .resolve(&ClientHello {
@@ -298,8 +298,8 @@ mod sni_resolver {
         }
 
         #[test]
-        fn test_resolvesservercertusingsni_handles_unknown_name() {
-            let rscsni = ResolvesServerCertUsingSni::new();
+        fn test_server_name_resolver_handles_unknown_name() {
+            let rscsni = ServerNameResolver::new();
             let name = DnsName::try_from("hello.com")
                 .unwrap()
                 .to_owned();
@@ -322,7 +322,7 @@ mod sni_resolver {
 }
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
-pub use sni_resolver::ResolvesServerCertUsingSni;
+pub use sni_resolver::ServerNameResolver;
 
 #[cfg(test)]
 mod tests {

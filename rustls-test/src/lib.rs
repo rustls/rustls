@@ -37,7 +37,7 @@ use rustls::pki_types::{
 };
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{
-    AlwaysResolvesServerRawPublicKeys, ClientHello, ClientVerifierBuilder, ResolvesServerCert,
+    ClientHello, ClientVerifierBuilder, ServerCredentialResolver, SingleRawPublicKeyResolver,
     UnbufferedServerConnection, WebPkiClientVerifier,
 };
 use rustls::sign::{CertifiedKey, CertifiedSigner, SigningKey};
@@ -584,7 +584,7 @@ pub fn make_server_config_with_raw_key_support(
 ) -> ServerConfig {
     let mut client_verifier =
         MockClientVerifier::new(|| Ok(PeerVerified::assertion()), kt, provider);
-    let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(
+    let server_cert_resolver = Arc::new(SingleRawPublicKeyResolver::new(
         kt.certified_key_with_raw_pub_key(provider)
             .unwrap(),
     ));
@@ -592,7 +592,7 @@ pub fn make_server_config_with_raw_key_support(
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
     ServerConfig::builder_with_provider(provider.clone().into())
         .with_client_cert_verifier(Arc::new(client_verifier))
-        .with_cert_resolver(server_cert_resolver)
+        .with_server_credential_resolver(server_cert_resolver)
         .unwrap()
 }
 
@@ -1537,7 +1537,7 @@ pub struct ServerCheckCertResolve {
     pub expected_named_groups: Option<Vec<NamedGroup>>,
 }
 
-impl ResolvesServerCert for ServerCheckCertResolve {
+impl ServerCredentialResolver for ServerCheckCertResolve {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         if client_hello
             .signature_schemes()
