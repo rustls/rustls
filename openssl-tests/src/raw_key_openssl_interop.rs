@@ -51,7 +51,7 @@ mod client {
             .with_custom_certificate_verifier(Arc::new(SimpleRpkServerVerifier::new(vec![
                 server_raw_key,
             ])))
-            .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
+            .with_client_credential_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
                 certified_key,
             )))
             .unwrap()

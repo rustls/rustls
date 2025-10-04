@@ -34,7 +34,7 @@
     "CBCRecordSplitting*": "no cbc suites",
     "CertificateSelection-*ClientCertificateTypes-*": "no support for CertificateRequest::certificate_types",
     "CertificateSelection-*TrustAnchorIDs-*": "no support for trust anchor IDs draft",
-    "CertificateSelection-Client-SignatureAlgorithmECDSACurve-TLS-TLS12": "ResolvesClientCert does not receive protocol version",
+    "CertificateSelection-Client-SignatureAlgorithmECDSACurve-TLS-TLS12": "ClientCredentialResolver does not receive protocol version",
     "CertificateSelection-Server-*": "TODO certificate selection for servers",
     "CheckClientCertificateTypes": "we don't check TLS1.2 CertificateRequest.certificate_types",
     "CheckClientCertificateTypes": "we don't check TLS1.2 CertificateRequest.certificate_types",

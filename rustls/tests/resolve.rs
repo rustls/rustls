@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use pki_types::{CertificateDer, DnsName};
-use rustls::client::{CredentialRequest, ResolvesClientCert};
+use rustls::client::{ClientCredentialResolver, CredentialRequest};
 use rustls::server::{ClientHello, ResolvesServerCert, ResolvesServerCertUsingSni};
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
@@ -263,7 +263,7 @@ impl Drop for ClientCheckCertResolve {
     }
 }
 
-impl ResolvesClientCert for ClientCheckCertResolve {
+impl ClientCredentialResolver for ClientCheckCertResolve {
     fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);

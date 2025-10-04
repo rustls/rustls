@@ -609,7 +609,7 @@ pub fn make_client_config_with_raw_key_support(
     ClientConfig::builder_with_provider(provider.clone().into())
         .dangerous()
         .with_custom_certificate_verifier(server_verifier)
-        .with_client_cert_resolver(client_cert_resolver)
+        .with_client_credential_resolver(client_cert_resolver)
         .unwrap()
 }
 

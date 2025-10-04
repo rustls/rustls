@@ -57,7 +57,7 @@ use crate::{ClientConfig, ServerConfig};
 /// or disabled using one of:
 /// - [`ConfigBuilder::with_no_client_auth`] - to not send client authentication (most common)
 /// - [`ConfigBuilder::with_client_auth_cert`] - to always send a specific certificate
-/// - [`ConfigBuilder::with_client_cert_resolver`] - to send a certificate chosen dynamically
+/// - [`ConfigBuilder::with_credential_resolver`] - to send a certificate chosen dynamically
 ///
 /// For example:
 ///

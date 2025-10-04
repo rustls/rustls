@@ -584,7 +584,7 @@ impl MultipleClientCredentialResolver {
     }
 }
 
-impl client::ResolvesClientCert for MultipleClientCredentialResolver {
+impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
     fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         // `sig_schemes` is in server preference order, so respect that.
         let sig_schemes = server_hello.signature_schemes();
@@ -980,7 +980,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                 );
             }
 
-            cfg.with_client_cert_resolver(Arc::new(resolver))
+            cfg.with_client_credential_resolver(Arc::new(resolver))
                 .unwrap()
         }
         false => cfg.with_no_client_auth().unwrap(),

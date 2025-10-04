@@ -188,7 +188,7 @@ pub use cache::ClientSessionMemoryCache;
 #[derive(Debug)]
 pub(super) struct FailResolveClientCert {}
 
-impl client::ResolvesClientCert for FailResolveClientCert {
+impl client::ClientCredentialResolver for FailResolveClientCert {
     fn resolve(&self, _: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         None
     }
@@ -198,7 +198,7 @@ impl client::ResolvesClientCert for FailResolveClientCert {
     }
 }
 
-/// An exemplar `ResolvesClientCert` implementation that always resolves to a single
+/// An exemplar `ClientCredentialResolver` implementation that always resolves to a single
 /// [RFC 7250] raw public key.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
@@ -212,7 +212,7 @@ impl AlwaysResolvesClientRawPublicKeys {
     }
 }
 
-impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
+impl client::ClientCredentialResolver for AlwaysResolvesClientRawPublicKeys {
     fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         match server_hello.negotiated_type() {
             CertificateType::RawPublicKey => self
@@ -237,7 +237,7 @@ mod tests {
     use super::NoClientSessionStorage;
     use super::provider::cipher_suite;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
-    use crate::client::{ClientSessionStore, CredentialRequest, ResolvesClientCert};
+    use crate::client::{ClientCredentialResolver, ClientSessionStore, CredentialRequest};
     use crate::enums::{CertificateType, SignatureScheme};
     use crate::error::Error;
     use crate::msgs::base::PayloadU16;
@@ -256,7 +256,8 @@ mod tests {
         let name = ServerName::try_from("example.com").unwrap();
         let now = UnixTime::now();
         let server_cert_verifier: Arc<dyn ServerVerifier> = Arc::new(DummyServerVerifier);
-        let resolves_client_cert: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolvesClientCert);
+        let resolves_client_cert: Arc<dyn ClientCredentialResolver> =
+            Arc::new(DummyClientCredentialResolver);
 
         c.set_kx_hint(name.clone(), NamedGroup::X25519);
         assert_eq!(None, c.kx_hint(&name));
@@ -344,9 +345,9 @@ mod tests {
     }
 
     #[derive(Debug)]
-    struct DummyResolvesClientCert;
+    struct DummyClientCredentialResolver;
 
-    impl ResolvesClientCert for DummyResolvesClientCert {
+    impl ClientCredentialResolver for DummyClientCredentialResolver {
         #[cfg_attr(coverage_nightly, coverage(off))]
         fn resolve(&self, _: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
             unreachable!()
