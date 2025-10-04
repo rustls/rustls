@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
 use super::CryptoProvider;
-use crate::client::{CredentialRequest, ResolvesClientCert};
+use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::enums::{CertificateType, SignatureAlgorithm, SignatureScheme};
 use crate::error::{ApiMisuse, Error, InconsistentKeys, PeerIncompatible};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
@@ -32,7 +32,7 @@ use crate::x509;
 /// A signing key created outside of the `KeyProvider` extension trait can be used
 /// to create a [`CertifiedKey`], which in turn can be used to create a
 /// [`ResolvesServerCertUsingSni`]. Alternately, a `CertifiedKey` can be returned from a
-/// custom implementation of the [`ResolvesServerCert`] or [`ResolvesClientCert`] traits.
+/// custom implementation of the [`ResolvesServerCert`] or [`ClientCredentialResolver`] traits.
 ///
 /// [`KeyProvider::load_private_key()`]: crate::crypto::KeyProvider::load_private_key
 /// [`ConfigBuilder::with_single_cert()`]: crate::ConfigBuilder::with_single_cert
@@ -40,7 +40,7 @@ use crate::x509;
 /// [`ConfigBuilder::with_client_auth_cert()`]: crate::ConfigBuilder::with_client_auth_cert
 /// [`ResolvesServerCertUsingSni`]: crate::server::ResolvesServerCertUsingSni
 /// [`ResolvesServerCert`]: crate::server::ResolvesServerCert
-/// [`ResolvesClientCert`]: crate::client::ResolvesClientCert
+/// [`ClientCredentialResolver`]: crate::client::ClientCredentialResolver
 pub trait SigningKey: Debug + Send + Sync {
     /// Choose a `SignatureScheme` from those offered.
     ///
@@ -86,7 +86,7 @@ impl From<CertifiedKey> for SingleCertAndKey {
     }
 }
 
-impl ResolvesClientCert for SingleCertAndKey {
+impl ClientCredentialResolver for SingleCertAndKey {
     fn resolve(&self, server_hello: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         match server_hello.negotiated_type() {
             CertificateType::X509 => self
@@ -113,7 +113,7 @@ impl ResolvesServerCert for SingleCertAndKey {
 
 /// A packaged-together certificate chain and one-time-use signer.
 ///
-/// This is used in the [`ResolvesClientCert`] and [`ResolvesClientCert`] traits
+/// This is used in the [`ClientCredentialResolver`] and [`ResolvesServerCert`] traits
 /// as the return value of their `resolve()` methods.
 #[non_exhaustive]
 #[derive(Debug)]

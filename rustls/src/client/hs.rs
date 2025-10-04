@@ -8,7 +8,7 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-use super::{ResolvesClientCert, Tls12Resumption};
+use super::{ClientCredentialResolver, Tls12Resumption};
 #[cfg(feature = "log")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
@@ -1087,7 +1087,7 @@ impl ClientSessionValue {
     fn compatible_config(
         self,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ResolvesClientCert>,
+        client_creds: &Arc<dyn ClientCredentialResolver>,
     ) -> Option<Self> {
         match &self {
             Self::Tls13(v) => v
