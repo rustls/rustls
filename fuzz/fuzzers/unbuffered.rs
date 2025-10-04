@@ -32,7 +32,7 @@ fn client(data: &mut [u8]) {
 fn server(data: &mut [u8]) {
     let config = ServerConfig::builder_with_provider(rustls_fuzzing_provider::PROVIDER.into())
         .with_no_client_auth()
-        .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver())
+        .with_server_credential_resolver(rustls_fuzzing_provider::server_cert_resolver())
         .unwrap();
     let conn = UnbufferedServerConnection::new(config.into()).unwrap();
     fuzz_unbuffered(data, ClientServer::Server(conn));

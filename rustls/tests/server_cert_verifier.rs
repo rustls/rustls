@@ -10,7 +10,7 @@ use rustls::client::danger::{
     SignatureVerificationInput,
 };
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
-use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
     AlertDescription, CertificateError, CertificateType, ClientConfig, ClientConnection,
@@ -219,7 +219,7 @@ fn client_can_request_certain_trusted_cas() {
     let server_config = Arc::new(
         ServerConfig::builder_with_provider(provider.clone().into())
             .with_no_client_auth()
-            .with_cert_resolver(Arc::new(cert_resolver))
+            .with_server_credential_resolver(Arc::new(cert_resolver))
             .unwrap(),
     );
 
@@ -625,7 +625,7 @@ fn client_check_server_valid_purpose() {
 #[derive(Debug)]
 pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, CertifiedKey)>);
 
-impl ResolvesServerCert for ResolvesCertChainByCaName {
+impl ServerCredentialResolver for ResolvesCertChainByCaName {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         let Some(cas_extension) = client_hello.certificate_authorities() else {
             println!(
