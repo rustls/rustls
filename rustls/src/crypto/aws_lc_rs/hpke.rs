@@ -19,7 +19,6 @@ use crate::crypto::hpke::{
 use crate::crypto::tls13::{HkdfExpander, HkdfPrkExtract, HkdfUsingHmac, expand};
 use crate::msgs::enums::{HpkeAead, HpkeKdf, HpkeKem};
 use crate::msgs::handshake::HpkeSymmetricCipherSuite;
-use crate::sync::Arc;
 use crate::{Error, OtherError};
 
 /// Default [RFC 9180] Hybrid Public Key Encryption (HPKE) suites supported by aws-lc-rs cryptography.
@@ -925,7 +924,7 @@ impl<const KDF_LEN: usize> Drop for KemSharedSecret<KDF_LEN> {
 }
 
 fn key_rejected_err(e: aws_lc_rs::error::KeyRejected) -> Error {
-    Error::Other(OtherError(Arc::new(e)))
+    Error::Other(OtherError::new(e))
 }
 
 // The `cipher::chacha::KEY_LEN` const is not exported, so we copy it here:

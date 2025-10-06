@@ -7,7 +7,6 @@ use webpki::{CertRevocationList, InvalidNameContext, OwnedCertRevocationList};
 use crate::error::{
     CertRevocationListError, CertificateError, Error, ExtendedKeyPurpose, OtherError,
 };
-use crate::sync::Arc;
 
 mod anchors;
 mod client_verifier;
@@ -118,7 +117,7 @@ fn pki_error(error: webpki::Error) -> Error {
             .into()
         }
 
-        _ => CertificateError::Other(OtherError(Arc::new(error))).into(),
+        _ => CertificateError::Other(OtherError::new(error)).into(),
     }
 }
 
@@ -148,7 +147,7 @@ fn crl_error(e: webpki::Error) -> CertRevocationListError {
         UnsupportedIndirectCrl => CertRevocationListError::UnsupportedIndirectCrl,
         UnsupportedRevocationReason => CertRevocationListError::UnsupportedRevocationReason,
 
-        _ => CertRevocationListError::Other(OtherError(Arc::new(e))),
+        _ => CertRevocationListError::Other(OtherError::new(e)),
     }
 }
 
