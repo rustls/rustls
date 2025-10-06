@@ -60,6 +60,12 @@ impl rustls::crypto::KeyProvider for Provider {
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Box<dyn rustls::sign::SigningKey>, rustls::Error> {
+        let PrivateKeyDer::Pkcs8(key_der) = key_der else {
+            return Err(rustls::Error::General(
+                "only PKCS#8 private keys are supported".into(),
+            ));
+        };
+
         Ok(Box::new(
             sign::EcdsaSigningKeyP256::try_from(key_der).map_err(|err| {
                 #[cfg(feature = "std")]

@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use pkcs8::{DecodePrivateKey, EncodePublicKey};
-use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
+use rustls::pki_types::{PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer};
 use rustls::sign::{Signer, SigningKey};
 use rustls::{SignatureAlgorithm, SignatureScheme};
 use signature::{RandomizedSigner, SignatureEncoding};
@@ -14,19 +14,16 @@ pub(crate) struct EcdsaSigningKeyP256 {
     scheme: SignatureScheme,
 }
 
-impl TryFrom<PrivateKeyDer<'_>> for EcdsaSigningKeyP256 {
+impl TryFrom<PrivatePkcs8KeyDer<'_>> for EcdsaSigningKeyP256 {
     type Error = pkcs8::Error;
 
-    fn try_from(value: PrivateKeyDer<'_>) -> Result<Self, Self::Error> {
-        match value {
-            PrivateKeyDer::Pkcs8(der) => {
-                p256::ecdsa::SigningKey::from_pkcs8_der(der.secret_pkcs8_der()).map(|kp| Self {
-                    key: Arc::new(kp),
-                    scheme: SignatureScheme::ECDSA_NISTP256_SHA256,
-                })
-            }
-            _ => panic!("unsupported private key format"),
-        }
+    fn try_from(value: PrivatePkcs8KeyDer<'_>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            key: Arc::new(p256::ecdsa::SigningKey::from_pkcs8_der(
+                value.secret_pkcs8_der(),
+            )?),
+            scheme: SignatureScheme::ECDSA_NISTP256_SHA256,
+        })
     }
 }
 
