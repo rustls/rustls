@@ -19,10 +19,10 @@ extern crate std;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
 use rustls::pki_types::PrivateKeyDer;
+use rustls::{Error, OtherError};
 
 mod aead;
 mod hash;
@@ -59,21 +59,15 @@ impl rustls::crypto::KeyProvider for Provider {
     fn load_private_key(
         &self,
         key_der: PrivateKeyDer<'static>,
-    ) -> Result<Box<dyn rustls::sign::SigningKey>, rustls::Error> {
+    ) -> Result<Box<dyn rustls::sign::SigningKey>, Error> {
         let PrivateKeyDer::Pkcs8(key_der) = key_der else {
-            return Err(rustls::Error::General(
+            return Err(Error::General(
                 "only PKCS#8 private keys are supported".into(),
             ));
         };
 
         Ok(Box::new(
-            sign::EcdsaSigningKeyP256::try_from(key_der).map_err(|err| {
-                #[cfg(feature = "std")]
-                let err = rustls::OtherError(Arc::new(err));
-                #[cfg(not(feature = "std"))]
-                let err = rustls::Error::General(alloc::format!("{}", err));
-                err
-            })?,
+            sign::EcdsaSigningKeyP256::try_from(key_der).map_err(other_err)?,
         ))
     }
 }
@@ -111,3 +105,34 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: &rustls::Tls12CipherSuit
         prf_provider: &rustls::crypto::tls12::PrfUsingHmac(&hmac::Sha256Hmac),
         aead_alg: &aead::Chacha20Poly1305,
     };
+
+/// While rustls supports `core::error::Error`, hpke-rs's support is conditional on `std`.
+#[cfg(feature = "std")]
+fn other_err(err: impl core::error::Error + Send + Sync + 'static) -> Error {
+    Error::Other(OtherError::new(err))
+}
+
+/// Since hpke-rs does not implement `core::error::Error` for `no_std`, we fall back to
+/// using a string representation of the error.
+#[cfg(not(feature = "std"))]
+fn other_err(error: impl core::fmt::Display + Send + Sync + 'static) -> Error {
+    use core::fmt;
+
+    struct DisplayError<T: fmt::Display>(T);
+
+    impl<T: fmt::Display> core::error::Error for DisplayError<T> {}
+
+    impl<T: fmt::Display> fmt::Display for DisplayError<T> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
+    impl<T: fmt::Display> fmt::Debug for DisplayError<T> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            fmt::Display::fmt(&self.0, f)
+        }
+    }
+
+    Error::Other(OtherError::new(DisplayError(error)))
+}

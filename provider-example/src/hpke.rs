@@ -5,11 +5,13 @@ use core::fmt::Debug;
 use hpke_rs_crypto::HpkeCrypto;
 use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_rust_crypto::HpkeRustCrypto;
+use rustls::Error;
 use rustls::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeAead as HpkeAeadId, HpkeKdf as HpkeKdfId, HpkeKem as HpkeKemId,
     HpkeOpener, HpkePrivateKey, HpkePublicKey, HpkeSealer, HpkeSuite, HpkeSymmetricCipherSuite,
 };
-use rustls::{Error, OtherError};
+
+use super::other_err;
 
 /// All supported HPKE suites.
 ///
@@ -204,21 +206,6 @@ impl HpkeOpener for HpkeRsReceiver {
             .open(aad, ciphertext)
             .map_err(other_err)
     }
-}
-
-/// While rustls supports `core::error::Error`, hpke-rs's support is conditional on `std`.
-#[cfg(feature = "std")]
-fn other_err(err: impl core::error::Error + Send + Sync + 'static) -> Error {
-    Error::Other(OtherError(alloc::sync::Arc::new(err)))
-}
-
-/// Since hpke-rs does not implement `core::error::Error` for `no_std`, we fall back to
-/// using a string representation of the error.
-#[cfg(not(feature = "std"))]
-fn other_err(error: impl core::fmt::Display) -> Error {
-    let error =
-        Box::<dyn core::error::Error + Send + Sync + 'static>::from(alloc::format!("{error}"));
-    Error::Other(OtherError(alloc::sync::Arc::from(error)))
 }
 
 #[cfg(test)]

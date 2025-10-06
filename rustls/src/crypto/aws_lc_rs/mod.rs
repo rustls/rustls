@@ -13,7 +13,6 @@ use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup}
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
-use crate::sync::Arc;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Error, OtherError, Tls12CipherSuite, Tls13CipherSuite};
 
@@ -300,7 +299,7 @@ pub(super) fn fips() -> bool {
 }
 
 pub(super) fn unspecified_err(e: aws_lc_rs::error::Unspecified) -> Error {
-    Error::Other(OtherError(Arc::new(e)))
+    Error::Other(OtherError::new(e))
 }
 
 #[cfg(test)]

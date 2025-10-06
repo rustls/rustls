@@ -1236,7 +1236,14 @@ mod other_error {
     /// Enums holding this type will never compare equal to each other.
     #[allow(clippy::exhaustive_structs)]
     #[derive(Debug, Clone)]
-    pub struct OtherError(pub Arc<dyn StdError + Send + Sync>);
+    pub struct OtherError(Arc<dyn StdError + Send + Sync>);
+
+    impl OtherError {
+        /// Create a new `OtherError` from any error type.
+        pub fn new(err: impl StdError + Send + Sync + 'static) -> Self {
+            Self(Arc::new(err))
+        }
+    }
 
     impl PartialEq<Self> for OtherError {
         fn eq(&self, _other: &Self) -> bool {
@@ -1286,8 +1293,6 @@ mod tests {
         AlertDescription, CertRevocationListError, Error, InconsistentKeys, InvalidMessage,
         OtherError, UnixTime,
     };
-    #[cfg(feature = "std")]
-    use crate::sync::Arc;
 
     #[test]
     fn certificate_error_equality() {
@@ -1410,10 +1415,7 @@ mod tests {
             ApplicationVerificationFailure
         );
         assert_eq!(InvalidOcspResponse, InvalidOcspResponse);
-        let other = Other(OtherError(
-            #[cfg(feature = "std")]
-            Arc::from(Box::from("")),
-        ));
+        let other = Other(OtherError::new(TestError));
         assert_ne!(other, other);
         assert_ne!(BadEncoding, Expired);
     }
@@ -1454,10 +1456,7 @@ mod tests {
         assert_eq!(UnsupportedDeltaCrl, UnsupportedDeltaCrl);
         assert_eq!(UnsupportedIndirectCrl, UnsupportedIndirectCrl);
         assert_eq!(UnsupportedRevocationReason, UnsupportedRevocationReason);
-        let other = Other(OtherError(
-            #[cfg(feature = "std")]
-            Arc::from(Box::from("")),
-        ));
+        let other = Other(OtherError::new(TestError));
         assert_ne!(other, other);
         assert_ne!(BadSignature, InvalidCrlNumber);
     }
@@ -1465,7 +1464,7 @@ mod tests {
     #[test]
     #[cfg(feature = "std")]
     fn other_error_equality() {
-        let other_error = OtherError(Arc::from(Box::from("")));
+        let other_error = OtherError::new(TestError);
         assert_ne!(other_error, other_error);
         let other: Error = other_error.into();
         assert_ne!(other, other);
@@ -1542,10 +1541,7 @@ mod tests {
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
             Error::Unreachable("smoke"),
             super::ApiMisuse::ExporterAlreadyUsed.into(),
-            Error::Other(OtherError(
-                #[cfg(feature = "std")]
-                Arc::from(Box::from("")),
-            )),
+            Error::Other(OtherError::new(TestError)),
         ];
 
         for err in all {
@@ -1553,6 +1549,17 @@ mod tests {
             println!("  fmt '{err}'");
         }
     }
+
+    #[derive(Debug)]
+    struct TestError;
+
+    impl core::fmt::Display for TestError {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "test error")
+        }
+    }
+
+    impl core::error::Error for TestError {}
 
     #[test]
     fn alert_display() {
