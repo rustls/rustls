@@ -2,7 +2,10 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::INVALID_KEY_SHARE;
-use crate::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, SupportedKxGroup};
+use crate::crypto::{
+    ActiveKeyExchange, CompletedKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange,
+    SupportedKxGroup,
+};
 use crate::{Error, NamedGroup};
 
 /// A generalization of hybrid key exchange.
@@ -15,21 +18,21 @@ pub(crate) struct Hybrid {
 }
 
 impl SupportedKxGroup for Hybrid {
-    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
-        let classical = self.classical.start()?;
-        let post_quantum = self.post_quantum.start()?;
+    fn start(&self) -> Result<StartedKeyExchange, Error> {
+        let classical = self.classical.start()?.into_single();
+        let post_quantum = self.post_quantum.start()?.into_single();
 
         let combined_pub_key = self
             .layout
             .concat(post_quantum.pub_key(), classical.pub_key());
 
-        Ok(Box::new(ActiveHybrid {
+        Ok(StartedKeyExchange::Hybrid(Box::new(ActiveHybrid {
             classical,
             post_quantum,
             name: self.name,
             layout: self.layout,
             combined_pub_key,
-        }))
+        })))
     }
 
     fn start_and_complete(&self, client_share: &[u8]) -> Result<CompletedKeyExchange, Error> {
@@ -113,24 +116,30 @@ impl ActiveKeyExchange for ActiveHybrid {
         Ok(SharedSecret::from(secret))
     }
 
-    /// Allow the classical computation to be offered and selected separately.
-    fn hybrid_component(&self) -> Option<(NamedGroup, &[u8])> {
-        Some((self.classical.group(), self.classical.pub_key()))
-    }
-
-    fn complete_hybrid_component(
-        self: Box<Self>,
-        peer_pub_key: &[u8],
-    ) -> Result<SharedSecret, Error> {
-        self.classical.complete(peer_pub_key)
-    }
-
     fn pub_key(&self) -> &[u8] {
         &self.combined_pub_key
     }
 
     fn group(&self) -> NamedGroup {
         self.name
+    }
+}
+
+impl HybridKeyExchange for ActiveHybrid {
+    fn component(&self) -> (NamedGroup, &[u8]) {
+        (self.classical.group(), self.classical.pub_key())
+    }
+
+    fn complete_component(self: Box<Self>, peer_pub_key: &[u8]) -> Result<SharedSecret, Error> {
+        self.classical.complete(peer_pub_key)
+    }
+
+    fn into_key_exchange(self: Box<Self>) -> Box<dyn ActiveKeyExchange> {
+        self
+    }
+
+    fn as_key_exchange(&self) -> &(dyn ActiveKeyExchange + 'static) {
+        self
     }
 }
 

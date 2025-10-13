@@ -52,7 +52,8 @@ mod tests {
     use super::super::*;
     use crate::common_state::KxState;
     use crate::crypto::{
-        ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm, SupportedKxGroup,
+        ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm, StartedKeyExchange,
+        SupportedKxGroup,
     };
     use crate::enums::CertificateType;
     use crate::ffdhe_groups::FfdheGroup;
@@ -304,8 +305,8 @@ mod tests {
             NamedGroup::FFDHE2048
         }
 
-        fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
-            Ok(Box::new(ActiveFakeFfdhe))
+        fn start(&self) -> Result<StartedKeyExchange, Error> {
+            Ok(StartedKeyExchange::Single(Box::new(ActiveFakeFfdhe)))
         }
     }
 

@@ -6,7 +6,10 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use rustls::client::Resumption;
-use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
+use rustls::crypto::{
+    ActiveKeyExchange, CryptoProvider, HybridKeyExchange, SharedSecret, StartedKeyExchange,
+    SupportedKxGroup,
+};
 use rustls::internal::msgs::enums::ExtensionType;
 use rustls::{
     AlertDescription, ClientConfig, ContentType, Error, HandshakeKind, InvalidMessage, NamedGroup,
@@ -420,8 +423,8 @@ fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
 struct FakeHybrid;
 
 impl SupportedKxGroup for FakeHybrid {
-    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
-        Ok(Box::new(FakeHybridActive))
+    fn start(&self) -> Result<StartedKeyExchange, Error> {
+        Ok(StartedKeyExchange::Hybrid(Box::new(FakeHybridActive)))
     }
 
     fn name(&self) -> NamedGroup {
@@ -436,15 +439,29 @@ impl ActiveKeyExchange for FakeHybridActive {
         Err(PeerMisbehaved::InvalidKeyShare.into())
     }
 
-    fn hybrid_component(&self) -> Option<(NamedGroup, &[u8])> {
-        Some((provider::kx_group::SECP384R1.name(), b"classical"))
-    }
-
     fn pub_key(&self) -> &[u8] {
         b"hybrid"
     }
 
     fn group(&self) -> NamedGroup {
         FakeHybrid.name()
+    }
+}
+
+impl HybridKeyExchange for FakeHybridActive {
+    fn component(&self) -> (NamedGroup, &[u8]) {
+        (provider::kx_group::SECP384R1.name(), b"classical")
+    }
+
+    fn complete_component(self: Box<Self>, _peer_pub_key: &[u8]) -> Result<SharedSecret, Error> {
+        unimplemented!()
+    }
+
+    fn as_key_exchange(&self) -> &(dyn ActiveKeyExchange + 'static) {
+        self
+    }
+
+    fn into_key_exchange(self: Box<Self>) -> Box<dyn ActiveKeyExchange> {
+        self
     }
 }

@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 
-use crypto::SupportedKxGroup;
-use rustls::crypto;
+use rustls::crypto::{self, StartedKeyExchange, SupportedKxGroup};
 
 pub(crate) struct KeyExchange {
     priv_key: x25519_dalek::EphemeralSecret,
@@ -33,12 +32,12 @@ pub(crate) const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[&X25519];
 pub(crate) struct X25519;
 
 impl SupportedKxGroup for X25519 {
-    fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
+    fn start(&self) -> Result<StartedKeyExchange, rustls::Error> {
         let priv_key = x25519_dalek::EphemeralSecret::random_from_rng(rand_core::OsRng);
-        Ok(Box::new(KeyExchange {
+        Ok(StartedKeyExchange::Single(Box::new(KeyExchange {
             pub_key: (&priv_key).into(),
             priv_key,
-        }))
+        })))
     }
 
     fn name(&self) -> rustls::NamedGroup {
