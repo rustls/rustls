@@ -487,7 +487,7 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     /// Start a key exchange.
     ///
     /// This will prepare an ephemeral secret key in the supported group, and a corresponding
-    /// public key. The key exchange can be completed by calling [ActiveKeyExchange#complete]
+    /// public key. The key exchange can be completed by calling [`ActiveKeyExchange::complete()`]
     /// or discarded.
     ///
     /// # Errors
@@ -716,7 +716,7 @@ pub struct CompletedKeyExchange {
     pub secret: SharedSecret,
 }
 
-/// The result from [`ActiveKeyExchange::complete`] or [`ActiveKeyExchange::complete_hybrid_component`].
+/// The result from [`ActiveKeyExchange::complete()`] or [`ActiveKeyExchange::complete_hybrid_component()`].
 pub struct SharedSecret {
     buf: Vec<u8>,
     offset: usize,
