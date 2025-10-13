@@ -1003,7 +1003,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             ));
         };
         cx.common.kx_state = KxState::Start(skxg);
-        let kx = skxg.start()?;
+        let kx = skxg.start()?.into_single();
 
         // 4b.
         let mut transcript = st.transcript;

@@ -23,8 +23,8 @@ use rustls::crypto::cipher::{
     Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use rustls::crypto::{
-    CipherSuiteCommon, GetRandomFailed, KeyExchangeAlgorithm, WebPkiSupportedAlgorithms, hash,
-    tls12, tls13,
+    CipherSuiteCommon, GetRandomFailed, KeyExchangeAlgorithm, StartedKeyExchange,
+    WebPkiSupportedAlgorithms, hash, tls12, tls13,
 };
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
@@ -252,8 +252,8 @@ const KEY_EXCHANGE_GROUP: &dyn crypto::SupportedKxGroup = &KeyExchangeGroup;
 struct KeyExchangeGroup;
 
 impl crypto::SupportedKxGroup for KeyExchangeGroup {
-    fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, Error> {
-        Ok(Box::new(ActiveKeyExchange))
+    fn start(&self) -> Result<StartedKeyExchange, Error> {
+        Ok(StartedKeyExchange::Single(Box::new(ActiveKeyExchange)))
     }
 
     fn name(&self) -> NamedGroup {

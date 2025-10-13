@@ -387,7 +387,7 @@ mod client_hello {
         signer: Box<dyn Signer>,
         randoms: &ConnectionRandoms,
     ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
-        let kx = selected_group.start()?;
+        let kx = selected_group.start()?.into_single();
         let kx_params = ServerKeyExchangeParams::new(&*kx);
 
         let mut msg = Vec::new();

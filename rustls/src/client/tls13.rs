@@ -18,7 +18,7 @@ use crate::common_state::{
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::hash::Hash;
-use crate::crypto::{ActiveKeyExchange, SharedSecret};
+use crate::crypto::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
@@ -268,7 +268,7 @@ impl Sealed for Handler {}
 
 enum KeyExchangeChoice {
     Whole(Box<dyn ActiveKeyExchange>),
-    Component(Box<dyn ActiveKeyExchange>),
+    Component(Box<dyn HybridKeyExchange>),
 }
 
 impl KeyExchangeChoice {
@@ -277,36 +277,36 @@ impl KeyExchangeChoice {
     fn new(
         config: &Arc<ClientConfig>,
         cx: &mut ClientContext<'_>,
-        our_key_share: Box<dyn ActiveKeyExchange>,
+        our_key_share: StartedKeyExchange,
         their_key_share: &KeyShareEntry,
     ) -> Result<Self, ()> {
         if our_key_share.group() == their_key_share.group {
-            return Ok(Self::Whole(our_key_share));
+            return Ok(Self::Whole(our_key_share.into_single()));
         }
 
-        let (component_group, _) = our_key_share
-            .hybrid_component()
+        let (hybrid_key_share, actual_skxg) = our_key_share
+            .as_hybrid_checked(&config.provider.kx_groups, ProtocolVersion::TLSv1_3)
             .ok_or(())?;
 
-        if component_group != their_key_share.group {
+        if hybrid_key_share.component().0 != their_key_share.group {
             return Err(());
         }
 
+        let StartedKeyExchange::Hybrid(hybrid_key_share) = our_key_share else {
+            return Err(()); // unreachable due to `as_hybrid_checked`
+        };
+
         // correct the record for the benefit of accuracy of
         // `negotiated_key_exchange_group()`
-        let actual_skxg = config
-            .provider
-            .find_kx_group(component_group, ProtocolVersion::TLSv1_3)
-            .ok_or(())?;
         cx.common.kx_state = KxState::Start(actual_skxg);
 
-        Ok(Self::Component(our_key_share))
+        Ok(Self::Component(hybrid_key_share))
     }
 
     fn complete(self, peer_pub_key: &[u8]) -> Result<SharedSecret, Error> {
         match self {
             Self::Whole(akx) => akx.complete(peer_pub_key),
-            Self::Component(akx) => akx.complete_hybrid_component(peer_pub_key),
+            Self::Component(akx) => akx.complete_component(peer_pub_key),
         }
     }
 }
@@ -329,7 +329,7 @@ pub(super) fn initial_key_share(
     config: &ClientConfig,
     server_name: &ServerName<'_>,
     kx_state: &mut KxState,
-) -> Result<Box<dyn ActiveKeyExchange>, Error> {
+) -> Result<StartedKeyExchange, Error> {
     let group = config
         .resumption
         .store

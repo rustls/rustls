@@ -17,7 +17,7 @@ use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
-use crate::crypto::{ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm};
+use crate::crypto::{CryptoProvider, KeyExchangeAlgorithm, StartedKeyExchange};
 use crate::enums::{
     AlertDescription, CertificateType, CipherSuite, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -58,7 +58,7 @@ pub(crate) struct ExpectServerHello {
     //
     // If this is `None` then we do not support early data.
     pub(super) early_data_key_schedule: Option<KeyScheduleEarly>,
-    pub(super) offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
+    pub(super) offered_key_share: Option<StartedKeyExchange>,
     pub(super) suite: Option<SupportedCipherSuite>,
     pub(super) ech_state: Option<EchState>,
 }
@@ -251,13 +251,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         if let (None, Some(req_group)) = (&hrr.cookie, hrr.key_share) {
             let offered_hybrid = offered_key_share
-                .hybrid_component()
-                .and_then(|(group_name, _)| {
-                    config
-                        .provider
-                        .find_kx_group(group_name, ProtocolVersion::TLSv1_3)
-                })
-                .map(|skxg| skxg.name());
+                .as_hybrid_checked(&config.provider.kx_groups, ProtocolVersion::TLSv1_3)
+                .map(|(hybrid, _)| hybrid.component().0);
 
             if req_group == offered_key_share.group() || Some(req_group) == offered_hybrid {
                 return Err({
@@ -574,7 +569,7 @@ impl ClientHelloInput {
 fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
-    key_share: Option<Box<dyn ActiveKeyExchange>>,
+    key_share: Option<StartedKeyExchange>,
     extra_exts: ClientExtensionsInput<'static>,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
@@ -673,17 +668,11 @@ fn emit_client_hello_for_retry(
             // Only for the initial client hello, or a HRR that does not specify a kx group,
             // see if we can send a second KeyShare for "free".  We only do this if the same
             // algorithm is also supported separately by our provider for this version
-            // (`find_kx_group` looks that up).
-            if let Some((component_group, component_share)) =
-                key_share
-                    .hybrid_component()
-                    .filter(|(group, _)| {
-                        config
-                            .provider
-                            .find_kx_group(*group, ProtocolVersion::TLSv1_3)
-                            .is_some()
-                    })
+            // (via `component_separately_supported`).
+            if let Some((hybrid, _)) =
+                key_share.as_hybrid_checked(&config.provider.kx_groups, ProtocolVersion::TLSv1_3)
             {
+                let (component_group, component_share) = hybrid.component();
                 shares.push(KeyShareEntry::new(component_group, component_share));
             }
         }

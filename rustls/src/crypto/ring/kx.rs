@@ -5,7 +5,7 @@ use core::fmt;
 
 use super::ring_like::agreement;
 use super::ring_like::rand::SystemRandom;
-use crate::crypto::{ActiveKeyExchange, SharedSecret, SupportedKxGroup};
+use crate::crypto::{ActiveKeyExchange, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
 use crate::rand::GetRandomFailed;
@@ -40,7 +40,7 @@ struct KxGroup {
 }
 
 impl SupportedKxGroup for KxGroup {
-    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
+    fn start(&self) -> Result<StartedKeyExchange, Error> {
         let rng = SystemRandom::new();
         let priv_key = agreement::EphemeralPrivateKey::generate(self.agreement_algorithm, &rng)
             .map_err(|_| GetRandomFailed)?;
@@ -49,13 +49,13 @@ impl SupportedKxGroup for KxGroup {
             .compute_public_key()
             .map_err(|_| GetRandomFailed)?;
 
-        Ok(Box::new(KeyExchange {
+        Ok(StartedKeyExchange::Single(Box::new(KeyExchange {
             name: self.name,
             agreement_algorithm: self.agreement_algorithm,
             priv_key,
             pub_key,
             pub_key_validator: self.pub_key_validator,
-        }))
+        })))
     }
 
     fn name(&self) -> NamedGroup {
@@ -172,7 +172,7 @@ mod benchmarks {
 
     fn bench_any(b: &mut test::Bencher, kxg: &dyn super::SupportedKxGroup) {
         b.iter(|| {
-            let akx = kxg.start().unwrap();
+            let akx = kxg.start().unwrap().into_single();
             let pub_key = akx.pub_key().to_vec();
             test::black_box(akx.complete(&pub_key).unwrap());
         });

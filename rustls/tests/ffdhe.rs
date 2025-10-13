@@ -8,7 +8,7 @@ use std::sync::Arc;
 use num_bigint::BigUint;
 use rustls::crypto::{
     ActiveKeyExchange, CipherSuiteCommon, CryptoProvider, KeyExchangeAlgorithm, SharedSecret,
-    SupportedKxGroup,
+    StartedKeyExchange, SupportedKxGroup,
 };
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{
@@ -300,7 +300,7 @@ pub static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSu
 pub struct FfdheKxGroup(pub NamedGroup, pub FfdheGroup<'static>);
 
 impl SupportedKxGroup for FfdheKxGroup {
-    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, rustls::Error> {
+    fn start(&self) -> Result<StartedKeyExchange, rustls::Error> {
         let mut x = vec![0; 64];
         ffdhe_provider()
             .secure_random
@@ -313,13 +313,13 @@ impl SupportedKxGroup for FfdheKxGroup {
         let x_pub = g.modpow(&x, &p);
         let x_pub = to_bytes_be_with_len(x_pub, self.1.p.len());
 
-        Ok(Box::new(ActiveFfdheKx {
+        Ok(StartedKeyExchange::Single(Box::new(ActiveFfdheKx {
             x_pub,
             x,
             p,
             group: self.1,
             named_group: self.0,
-        }))
+        })))
     }
 
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
