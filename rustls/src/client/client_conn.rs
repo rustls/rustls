@@ -13,7 +13,7 @@ use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::CryptoProvider;
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -391,22 +391,6 @@ impl ClientConfig {
         self.provider
             .iter_cipher_suites()
             .find(|&scs| scs.suite() == suite)
-    }
-
-    pub(super) fn find_kx_group(
-        &self,
-        group: NamedGroup,
-        version: ProtocolVersion,
-    ) -> Option<&'static dyn SupportedKxGroup> {
-        if !group.usable_for_version(version) {
-            return None;
-        }
-
-        self.provider
-            .kx_groups
-            .iter()
-            .find(|skxg| skxg.name() == group)
-            .copied()
     }
 
     pub(super) fn current_time(&self) -> Result<UnixTime, Error> {

@@ -449,12 +449,7 @@ impl ExpectClientHello {
             let supported = self
                 .config
                 .provider
-                .kx_groups
-                .iter()
-                .find(|skxg| {
-                    let named_group = skxg.name();
-                    named_group == *offered_group && named_group.usable_for_version(T::VERSION)
-                });
+                .find_kx_group(*offered_group, T::VERSION);
 
             match offered_group.key_exchange_algorithm() {
                 KeyExchangeAlgorithm::DHE => {
@@ -466,7 +461,7 @@ impl ExpectClientHello {
                 }
             }
 
-            if let Some(&supported) = supported {
+            if let Some(supported) = supported {
                 supported_groups.push(supported);
             }
         }

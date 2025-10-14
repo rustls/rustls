@@ -983,6 +983,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         let maybe_skxg = match &kx_params {
             ServerKeyExchangeParams::Ecdh(ecdh) => st
                 .config
+                .provider
                 .find_kx_group(ecdh.curve_params.named_group, ProtocolVersion::TLSv1_2),
             ServerKeyExchangeParams::Dh(dh) => {
                 let ffdhe_group = dh.as_ffdhe_group();

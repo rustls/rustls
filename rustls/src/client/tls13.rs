@@ -295,6 +295,7 @@ impl KeyExchangeChoice {
         // correct the record for the benefit of accuracy of
         // `negotiated_key_exchange_group()`
         let actual_skxg = config
+            .provider
             .find_kx_group(component_group, ProtocolVersion::TLSv1_3)
             .ok_or(())?;
         cx.common.kx_state = KxState::Start(actual_skxg);
@@ -333,7 +334,11 @@ pub(super) fn initial_key_share(
         .resumption
         .store
         .kx_hint(server_name)
-        .and_then(|group_name| config.find_kx_group(group_name, ProtocolVersion::TLSv1_3))
+        .and_then(|group_name| {
+            config
+                .provider
+                .find_kx_group(group_name, ProtocolVersion::TLSv1_3)
+        })
         .unwrap_or_else(|| {
             config
                 .provider

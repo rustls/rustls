@@ -253,7 +253,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
             let offered_hybrid = offered_key_share
                 .hybrid_component()
                 .and_then(|(group_name, _)| {
-                    config.find_kx_group(group_name, ProtocolVersion::TLSv1_3)
+                    config
+                        .provider
+                        .find_kx_group(group_name, ProtocolVersion::TLSv1_3)
                 })
                 .map(|skxg| skxg.name());
 
@@ -387,7 +389,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         let key_share = match hrr.key_share {
             Some(group) if group != offered_key_share.group() => {
-                let Some(skxg) = config.find_kx_group(group, ProtocolVersion::TLSv1_3) else {
+                let Some(skxg) = config
+                    .provider
+                    .find_kx_group(group, ProtocolVersion::TLSv1_3)
+                else {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
@@ -674,6 +679,7 @@ fn emit_client_hello_for_retry(
                     .hybrid_component()
                     .filter(|(group, _)| {
                         config
+                            .provider
                             .find_kx_group(*group, ProtocolVersion::TLSv1_3)
                             .is_some()
                     })

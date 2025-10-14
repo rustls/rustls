@@ -398,6 +398,20 @@ See the documentation of the CryptoProvider type for more information.
             _ => false,
         }
     }
+
+    pub(crate) fn find_kx_group(
+        &self,
+        name: NamedGroup,
+        version: ProtocolVersion,
+    ) -> Option<&'static dyn SupportedKxGroup> {
+        if !name.usable_for_version(version) {
+            return None;
+        }
+        self.kx_groups
+            .iter()
+            .find(|skxg| skxg.name() == name)
+            .copied()
+    }
 }
 
 impl Borrow<[&'static Tls12CipherSuite]> for CryptoProvider {
