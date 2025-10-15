@@ -210,7 +210,7 @@ impl CommonState {
             data,
             sendable_plaintext,
         };
-        match state.handle(&mut cx, msg) {
+        match state.handle_message(&mut cx, msg) {
             Ok(next) => Ok(next),
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
@@ -831,7 +831,7 @@ impl IoState {
 }
 
 pub(crate) trait State<Side>: Send + Sync {
-    fn handle<'m>(
+    fn handle_message<'m>(
         self: Box<Self>,
         cx: &mut Context<'_, Side>,
         message: Message<'m>,

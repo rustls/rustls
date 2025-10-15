@@ -840,7 +840,7 @@ struct ExpectAndSkipRejectedEarlyData {
 }
 
 impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -856,7 +856,7 @@ impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
             }
         }
 
-        self.next.handle(cx, m)
+        self.next.handle_message(cx, m)
     }
 }
 
@@ -870,7 +870,11 @@ struct ExpectCertificateOrCompressedCertificate {
 }
 
 impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
+    fn handle_message(
+        self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'_>,
+    ) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -884,7 +888,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 message_already_in_transcript: false,
                 expected_certificate_type: self.expected_certificate_type,
             })
-            .handle(cx, m),
+            .handle_message(cx, m),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
@@ -897,7 +901,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 send_tickets: self.send_tickets,
                 expected_certificate_type: self.expected_certificate_type,
             })
-            .handle(cx, m),
+            .handle_message(cx, m),
 
             payload => Err(inappropriate_handshake_message(
                 &payload,
@@ -921,7 +925,7 @@ struct ExpectCompressedCertificate {
 }
 
 impl State<ServerConnectionData> for ExpectCompressedCertificate {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -999,7 +1003,7 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             message_already_in_transcript: true,
             expected_certificate_type: self.expected_certificate_type,
         })
-        .handle(cx, m)
+        .handle_message(cx, m)
     }
 }
 
@@ -1014,7 +1018,7 @@ struct ExpectCertificate {
 }
 
 impl State<ServerConnectionData> for ExpectCertificate {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -1102,7 +1106,7 @@ struct ExpectCertificateVerify {
 }
 
 impl State<ServerConnectionData> for ExpectCertificateVerify {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -1157,7 +1161,7 @@ struct ExpectEarlyData {
 }
 
 impl State<ServerConnectionData> for ExpectEarlyData {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -1291,7 +1295,7 @@ impl ExpectFinished {
 }
 
 impl State<ServerConnectionData> for ExpectFinished {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -1378,7 +1382,7 @@ impl ExpectTraffic {
 }
 
 impl State<ServerConnectionData> for ExpectTraffic {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -1444,7 +1448,7 @@ struct ExpectQuicTraffic {
 }
 
 impl State<ServerConnectionData> for ExpectQuicTraffic {
-    fn handle(
+    fn handle_message(
         self: Box<Self>,
         _cx: &mut ServerContext<'_>,
         m: Message<'_>,
