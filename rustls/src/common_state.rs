@@ -205,12 +205,14 @@ impl CommonState {
             }
         }
 
-        let mut cx = Context {
-            common: self,
-            data,
-            sendable_plaintext,
-        };
-        match state.handle_message(&mut cx, msg) {
+        match state.handle(Input::Message(
+            &mut Context {
+                common: self,
+                data,
+                sendable_plaintext,
+            },
+            msg,
+        )) {
             Ok(next) => Ok(next),
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
@@ -831,6 +833,15 @@ impl IoState {
 }
 
 pub(crate) trait State<Side>: Send + Sync {
+    /// Handle an `input` and return the next state.
+    fn handle<'a, 'b>(
+        self: Box<Self>,
+        input: Input<'a, 'b, Side>,
+    ) -> Result<Box<dyn State<Side>>, Error> {
+        let (cx, m) = input.message()?;
+        self.handle_message(cx, m)
+    }
+
     fn handle_message<'m>(
         self: Box<Self>,
         cx: &mut Context<'_, Side>,
@@ -847,6 +858,20 @@ pub(crate) trait State<Side>: Send + Sync {
         self: Box<Self>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
+    }
+}
+
+/// Possible inputs to the state machine.
+pub(crate) enum Input<'c, 'm, Side> {
+    /// A TLS protocol message
+    Message(&'c mut Context<'c, Side>, Message<'m>),
+}
+
+impl<'c, 'm, Side> Input<'c, 'm, Side> {
+    pub(crate) fn message(self) -> Result<(&'c mut Context<'c, Side>, Message<'m>), Error> {
+        match self {
+            Self::Message(cx, m) => Ok((cx, m)),
+        }
     }
 }
 
