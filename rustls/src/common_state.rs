@@ -833,6 +833,11 @@ impl IoState {
 }
 
 pub(crate) trait State<Side>: Send + Sync {
+    /// Declare the acceptable `Input` variant for `handle()`
+    fn requirement(&self) -> Requirement {
+        Requirement::Message
+    }
+
     /// Handle an `input` and return the next state.
     fn handle<'a, 'b>(
         self: Box<Self>,
@@ -873,6 +878,12 @@ impl<'c, 'm, Side> Input<'c, 'm, Side> {
             Self::Message(cx, m) => Ok((cx, m)),
         }
     }
+}
+
+/// Possible types of input to the state machine
+pub(crate) enum Requirement {
+    /// Corresponds to [`Input::Message`]
+    Message,
 }
 
 pub(crate) struct Context<'a, Data> {
