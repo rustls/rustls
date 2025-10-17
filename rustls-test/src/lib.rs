@@ -361,14 +361,6 @@ impl KeyType {
         }
     }
 
-    pub fn ca_cert(&self) -> CertificateDer<'_> {
-        self.chain()
-            .iter()
-            .next_back()
-            .cloned()
-            .expect("cert chain cannot be empty")
-    }
-
     pub fn chain(&self) -> Arc<[CertificateDer<'static>]> {
         CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
             .map(|result| result.unwrap())
@@ -487,14 +479,17 @@ impl KeyType {
     }
 
     pub fn client_root_store(&self) -> Arc<RootCertStore> {
-        // The key type's chain file contains the DER encoding of the EE cert, the intermediate cert,
-        // and the root trust anchor. We want only the trust anchor to build the root cert store.
-        let chain = self.chain();
         let mut roots = RootCertStore::empty();
-        roots
-            .add(chain.last().unwrap().clone())
-            .unwrap();
+        roots.add(self.ca_cert()).unwrap();
         roots.into()
+    }
+
+    pub fn ca_cert(&self) -> CertificateDer<'_> {
+        self.chain()
+            .iter()
+            .next_back()
+            .cloned()
+            .expect("cert chain cannot be empty")
     }
 }
 
