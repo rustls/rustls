@@ -221,20 +221,6 @@ impl CertifiedKey {
         }
     }
 
-    /// Verify the consistency of this [`CertifiedKey`]'s public and private keys.
-    /// This is done by performing a comparison of SubjectPublicKeyInfo bytes.
-    pub fn keys_match(&self) -> Result<(), Error> {
-        let Some(key_spki) = self.key.public_key() else {
-            return Err(InconsistentKeys::Unknown.into());
-        };
-
-        let cert = ParsedCertificate::try_from(self.end_entity_cert()?)?;
-        match key_spki == cert.subject_public_key_info() {
-            true => Ok(()),
-            false => Err(InconsistentKeys::KeyMismatch.into()),
-        }
-    }
-
     /// Attempt to produce a `CertifiedSigner` using one of the given signature schemes.
     ///
     /// Calls [`SigningKey::choose_scheme()`] and propagates `cert_chain` and `ocsp`.
