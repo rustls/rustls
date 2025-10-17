@@ -33,10 +33,11 @@ use rustls::server::{
     NoServerSessionStorage, ProducesTickets, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,
 };
+use rustls::sign::PeerIdentity;
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind,
-    PeerIdentity, ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData,
+    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData,
 };
 use rustls_test::KeyType;
 

@@ -11,13 +11,14 @@ use super::{VerifierBuilderError, pki_error};
 use crate::ConfigBuilder;
 #[cfg(doc)]
 use crate::crypto;
+use crate::crypto::signer::PeerIdentity;
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 #[cfg(doc)]
 use crate::server::ServerConfig;
 use crate::sync::Arc;
 use crate::verify::{
-    ClientIdentity, ClientVerifier, HandshakeSignatureValid, NoClientAuth, PeerIdentity,
-    PeerVerified, SignatureVerificationInput,
+    ClientIdentity, ClientVerifier, HandshakeSignatureValid, NoClientAuth, PeerVerified,
+    SignatureVerificationInput,
 };
 use crate::webpki::parse_crls;
 use crate::webpki::verify::{ParsedCertificate, verify_tls12_signature, verify_tls13_signature};

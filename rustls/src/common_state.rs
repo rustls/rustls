@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::SupportedKxGroup;
+use crate::crypto::signer::PeerIdentity;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -23,7 +24,6 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-use crate::verify::PeerIdentity;
 use crate::{quic, record_layer};
 
 /// Connection state common to both client and server connections.

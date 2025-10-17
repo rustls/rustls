@@ -6,10 +6,11 @@ use pki_types::PrivateKeyDer;
 use super::server_conn::InvalidSniPolicy;
 use super::{ServerConfig, ServerCredentialResolver, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
+use crate::crypto::signer::PeerIdentity;
 use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
-use crate::verify::{ClientVerifier, NoClientAuth, PeerIdentity};
+use crate::verify::{ClientVerifier, NoClientAuth};
 use crate::{NoKeyLog, compress};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {

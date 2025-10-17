@@ -9,9 +9,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
 use rustls::pki_types::CertificateDer;
-use rustls::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
-use rustls::{PeerIdentity, sign};
+use rustls::sign::{self, PeerIdentity};
+use rustls::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls_test::make_pair_for_arc_configs;
 use rustls_test::{

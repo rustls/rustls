@@ -31,11 +31,11 @@ use rustls::pki_types::{
     SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
 use rustls::server::ProducesTickets;
-use rustls::sign::CertifiedSigner;
+use rustls::sign::{CertifiedSigner, PeerIdentity};
 use rustls::{
-    CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerIdentity,
-    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, SignatureAlgorithm,
-    SignatureScheme, Tls12CipherSuite, Tls13CipherSuite, crypto, server, sign,
+    CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerIncompatible,
+    PeerMisbehaved, ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme,
+    Tls12CipherSuite, Tls13CipherSuite, crypto, server, sign,
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.

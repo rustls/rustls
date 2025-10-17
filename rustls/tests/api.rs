@@ -14,12 +14,12 @@ use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
-use rustls::sign::CertifiedSigner;
+use rustls::sign::{CertifiedSigner, PeerIdentity};
 use rustls::{
     AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ContentType, Error, HandshakeKind, HandshakeType, InconsistentKeys, KeyingMaterialExporter,
-    NamedGroup, PeerIdentity, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
-    SignatureScheme, SupportedCipherSuite, sign,
+    NamedGroup, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SignatureScheme,
+    SupportedCipherSuite, sign,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{

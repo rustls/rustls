@@ -40,6 +40,7 @@ use rustls::server::{
     ClientHello, ClientVerifierBuilder, ServerCredentialResolver, SingleRawPublicKeyResolver,
     UnbufferedServerConnection, WebPkiClientVerifier,
 };
+use rustls::sign::PeerIdentity;
 use rustls::sign::{CertifiedKey, CertifiedSigner, SigningKey};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
@@ -47,8 +48,8 @@ use rustls::unbuffered::{
 use rustls::{
     CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection,
     ConnectionCommon, ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup,
-    PeerIdentity, ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData,
-    SignatureScheme, SupportedCipherSuite,
+    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
+    SupportedCipherSuite,
 };
 
 macro_rules! embed_files {

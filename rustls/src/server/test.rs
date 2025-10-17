@@ -60,9 +60,9 @@ mod tests {
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{ServerConfig, ServerConnection, SingleRawPublicKeyResolver};
-    use crate::sign::CertifiedKey;
+    use crate::sign::{CertifiedKey, PeerIdentity};
     use crate::sync::Arc;
-    use crate::{CipherSuiteCommon, PeerIdentity, Tls12CipherSuite};
+    use crate::{CipherSuiteCommon, Tls12CipherSuite};
 
     #[test]
     fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {

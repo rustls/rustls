@@ -18,9 +18,9 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use std::{env, io};
 
-use rustls::PeerIdentity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::sign::PeerIdentity;
 
 fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();

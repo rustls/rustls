@@ -238,6 +238,7 @@ mod tests {
     use super::provider::cipher_suite;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
     use crate::client::{ClientCredentialResolver, ClientSessionStore, CredentialRequest};
+    use crate::crypto::signer::{CertificateIdentity, PeerIdentity};
     use crate::enums::{CertificateType, SignatureScheme};
     use crate::error::Error;
     use crate::msgs::base::PayloadU16;
@@ -246,9 +247,7 @@ mod tests {
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::sign::CertifiedSigner;
     use crate::sync::Arc;
-    use crate::verify::{
-        CertificateIdentity, PeerIdentity, ServerIdentity, SignatureVerificationInput,
-    };
+    use crate::verify::{ServerIdentity, SignatureVerificationInput};
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {

@@ -49,10 +49,11 @@ use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificati
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
+use rustls::sign::PeerIdentity;
 use rustls::sign::{CertifiedKey, CertifiedSigner, SingleCertAndKey};
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, CertificateType,
-    Connection, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIdentity,
+    Connection, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
     SignatureScheme, client, compress, server, sign,
 };

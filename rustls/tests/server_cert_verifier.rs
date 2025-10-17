@@ -11,11 +11,12 @@ use rustls::client::danger::{
 };
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
+use rustls::sign::PeerIdentity;
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
     AlertDescription, CertificateError, CertificateType, ClientConfig, ClientConnection,
-    DistinguishedName, Error, ExtendedKeyPurpose, InvalidMessage, PeerIdentity, PeerIncompatible,
-    RootCertStore, ServerConfig, ServerConnection,
+    DistinguishedName, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible, RootCertStore,
+    ServerConfig, ServerConnection,
 };
 use rustls_test::{
     ErrorFromPeer, KeyType, MockServerVerifier, certificate_error_expecting_name, do_handshake,

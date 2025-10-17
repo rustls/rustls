@@ -26,7 +26,8 @@ use pki_types::{CertificateDer, ServerName, UnixTime};
 use webpki_roots;
 
 use crate::crypto::CryptoProvider;
-use crate::verify::{CertificateIdentity, PeerIdentity, ServerIdentity, ServerVerifier};
+use crate::sign::{CertificateIdentity, PeerIdentity};
+use crate::verify::{ServerIdentity, ServerVerifier};
 use crate::webpki::{RootCertStore, WebPkiServerVerifier};
 
 #[macro_rules_attribute::apply(bench_for_each_provider)]

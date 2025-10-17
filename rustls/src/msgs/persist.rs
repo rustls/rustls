@@ -5,6 +5,7 @@ use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
 use crate::client::ClientCredentialResolver;
+use crate::crypto::signer::PeerIdentity;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
@@ -13,7 +14,7 @@ use crate::msgs::handshake::{ProtocolName, SessionId};
 use crate::sync::{Arc, Weak};
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-use crate::verify::{PeerIdentity, ServerVerifier};
+use crate::verify::ServerVerifier;
 
 pub(crate) struct Retrieved<T> {
     pub(crate) value: T,
@@ -550,7 +551,7 @@ mod tests {
     use pki_types::CertificateDer;
 
     use super::*;
-    use crate::verify::CertificateIdentity;
+    use crate::crypto::signer::CertificateIdentity;
 
     #[cfg(feature = "std")] // for UnixTime::now
     #[test]
