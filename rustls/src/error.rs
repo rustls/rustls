@@ -1087,7 +1087,6 @@ impl From<SystemTimeError> for Error {
     }
 }
 
-#[cfg(feature = "std")]
 impl core::error::Error for Error {}
 
 impl From<rand::GetRandomFailed> for Error {
