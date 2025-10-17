@@ -127,6 +127,14 @@ pub struct CertifiedSigner {
     pub ocsp: Option<Arc<[u8]>>,
 }
 
+impl CertifiedSigner {
+    pub(crate) fn certificates(&self) -> impl Iterator<Item = CertificateDer<'_>> + '_ {
+        self.cert_chain
+            .iter()
+            .map(|cert| CertificateDer::from(cert.as_ref()))
+    }
+}
+
 /// A packaged-together certificate chain, matching `SigningKey` and
 /// optional stapled OCSP response.
 ///

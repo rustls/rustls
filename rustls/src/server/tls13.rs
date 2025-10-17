@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 
 pub(crate) use client_hello::TLS13_HANDLER;
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
@@ -335,14 +335,14 @@ mod client_hello {
                     emit_compressed_certificate_tls13(
                         &mut flight,
                         &st.config,
-                        &signer.cert_chain,
+                        &signer,
                         ocsp_response,
                         compressor,
                     );
                 } else {
                     emit_certificate_tls13(
                         &mut flight,
-                        CertificatePayloadTls13::new(&signer.cert_chain, ocsp_response),
+                        CertificatePayloadTls13::new(signer.certificates(), ocsp_response),
                     );
                 }
                 emit_certificate_verify_tls13(&mut flight, signer.signer)?;
@@ -768,11 +768,11 @@ mod client_hello {
     fn emit_compressed_certificate_tls13(
         flight: &mut HandshakeFlightTls13<'_>,
         config: &ServerConfig,
-        cert_chain: &[CertificateDer<'static>],
+        signer: &CertifiedSigner,
         ocsp_response: Option<&[u8]>,
         cert_compressor: &'static dyn CertCompressor,
     ) {
-        let payload = CertificatePayloadTls13::new(cert_chain, ocsp_response);
+        let payload = CertificatePayloadTls13::new(signer.certificates(), ocsp_response);
         let Ok(entry) = config
             .cert_compression_cache
             .compression_for(cert_compressor, &payload)
