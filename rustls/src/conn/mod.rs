@@ -21,6 +21,7 @@ use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::record_layer::Decrypted;
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
+use crate::verify::PeerVerified;
 
 // pub so that it can be re-exported from the crate root
 pub mod kernel;
@@ -873,6 +874,7 @@ pub struct UnbufferedConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
     wants_write: bool,
     emitted_peer_closed_state: bool,
+    verification_result: Option<Result<PeerVerified, Error>>,
 }
 
 impl<Side: SideData> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<Side> {
@@ -881,6 +883,7 @@ impl<Side: SideData> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<S
             core,
             wants_write: false,
             emitted_peer_closed_state: false,
+            verification_result: None,
         }
     }
 }
