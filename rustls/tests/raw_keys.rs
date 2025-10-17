@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use rustls::sign::PeerIdentity;
+use rustls::sign::Identity;
 use rustls::{CertificateType, Error, PeerIncompatible};
 use rustls_test::{
     ErrorFromPeer, KeyType, ServerCheckCertResolve, do_handshake, do_handshake_until_error,
@@ -24,11 +24,11 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
 
         // Test that the client peer certificate is the server's public key
         match client.peer_identity() {
-            Some(PeerIdentity::X509(certificates)) => {
+            Some(Identity::X509(certificates)) => {
                 assert!(certificates.intermediates.is_empty());
                 assert_eq!(certificates.end_entity.as_ref(), kt.spki().as_ref());
             }
-            Some(PeerIdentity::RawPublicKey(spki)) => {
+            Some(Identity::RawPublicKey(spki)) => {
                 assert_eq!(spki, &kt.spki());
             }
             _ => {
@@ -38,11 +38,11 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
 
         // Test that the server peer certificate is the client's public key
         match server.peer_identity() {
-            Some(PeerIdentity::X509(certificates)) => {
+            Some(Identity::X509(certificates)) => {
                 assert!(certificates.intermediates.is_empty());
                 assert_eq!(certificates.end_entity.as_ref(), kt.client_spki().as_ref());
             }
-            Some(PeerIdentity::RawPublicKey(spki)) => {
+            Some(Identity::RawPublicKey(spki)) => {
                 assert_eq!(spki, &kt.client_spki());
             }
             _ => {

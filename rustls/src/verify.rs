@@ -3,7 +3,7 @@ use core::fmt::Debug;
 
 use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::enums::{CertificateType, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::base::PayloadU16;
@@ -105,7 +105,7 @@ pub trait ServerVerifier: Debug + Send + Sync {
 #[derive(Debug)]
 pub struct ServerIdentity<'a> {
     /// Identity information presented by the server.
-    pub identity: &'a PeerIdentity<'a>,
+    pub identity: &'a Identity<'a>,
     /// The server name the client specified when connecting to the server.
     pub server_name: &'a ServerName<'a>,
     /// OCSP response stapled to the server's `Certificate` message, if any.
@@ -225,7 +225,7 @@ pub trait ClientVerifier: Debug + Send + Sync {
 #[derive(Debug)]
 pub struct ClientIdentity<'a> {
     /// Identity information presented by the client.
-    pub identity: &'a PeerIdentity<'a>,
+    pub identity: &'a Identity<'a>,
     /// Current time against which time-sensitive inputs should be validated.
     pub now: UnixTime,
 }

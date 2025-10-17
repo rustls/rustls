@@ -33,7 +33,7 @@ use rustls::server::{
     NoServerSessionStorage, ProducesTickets, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,
 };
-use rustls::sign::PeerIdentity;
+use rustls::sign::Identity;
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind,
@@ -797,7 +797,7 @@ impl Parameters {
         let provider = Arc::new(self.provider.build());
         let client_auth = match self.client_auth {
             ClientAuth::Yes => {
-                let PeerIdentity::X509(id) = &*self.proto.key_type.identity() else {
+                let Identity::X509(id) = &*self.proto.key_type.identity() else {
                     panic!("client auth requested but no X.509 identity available");
                 };
 

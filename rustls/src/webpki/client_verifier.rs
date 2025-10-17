@@ -11,7 +11,7 @@ use super::{VerifierBuilderError, pki_error};
 use crate::ConfigBuilder;
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 #[cfg(doc)]
 use crate::server::ServerConfig;
@@ -350,8 +350,8 @@ impl WebPkiClientVerifier {
 impl ClientVerifier for WebPkiClientVerifier {
     fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
         let certificates = match identity.identity {
-            PeerIdentity::X509(certificates) => certificates,
-            PeerIdentity::RawPublicKey(_) => {
+            Identity::X509(certificates) => certificates,
+            Identity::RawPublicKey(_) => {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             }
         };

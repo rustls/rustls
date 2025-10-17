@@ -8,7 +8,7 @@ use rustls::ServerConfig;
 use rustls::crypto::aws_lc_rs as provider;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::sign::PeerIdentity;
+use rustls::sign::Identity;
 
 use crate::utils::verify_openssl3_available;
 
@@ -26,7 +26,7 @@ fn test_early_exporter() {
         let mut config = ServerConfig::builder_with_provider(provider::DEFAULT_PROVIDER.into())
             .with_no_client_auth()
             .with_single_cert(
-                Arc::new(PeerIdentity::from_cert_chain(load_certs()).unwrap()),
+                Arc::new(Identity::from_cert_chain(load_certs()).unwrap()),
                 load_private_key(),
             )
             .unwrap();

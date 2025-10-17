@@ -60,7 +60,7 @@ mod tests {
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{ServerConfig, ServerConnection, SingleRawPublicKeyResolver};
-    use crate::sign::{CertifiedKey, PeerIdentity};
+    use crate::sign::{CertifiedKey, Identity};
     use crate::sync::Arc;
     use crate::{CipherSuiteCommon, Tls12CipherSuite};
 
@@ -260,7 +260,7 @@ mod tests {
             .key_provider
             .load_private_key(server_key())
             .unwrap();
-        let identity = Arc::from(PeerIdentity::RawPublicKey(
+        let identity = Arc::from(Identity::RawPublicKey(
             key.public_key().unwrap().into_owned(),
         ));
         CertifiedKey::new_unchecked(identity, key)
@@ -273,9 +273,9 @@ mod tests {
         .unwrap()
     }
 
-    fn server_identity() -> Arc<PeerIdentity<'static>> {
+    fn server_identity() -> Arc<Identity<'static>> {
         Arc::new(
-            PeerIdentity::from_cert_chain(vec![
+            Identity::from_cert_chain(vec![
                 CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/end.der")[..]),
                 CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/inter.der")[..]),
             ])

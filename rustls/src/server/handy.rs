@@ -203,7 +203,7 @@ mod sni_resolver {
 
     use pki_types::{DnsName, ServerName};
 
-    use crate::crypto::signer::{CertificateIdentity, CertifiedSigner, PeerIdentity};
+    use crate::crypto::signer::{CertificateIdentity, CertifiedSigner, Identity};
     use crate::error::Error;
     use crate::hash_map::HashMap;
     use crate::server::ClientHello;
@@ -241,7 +241,7 @@ mod sni_resolver {
             // *server* attempting to detect accidental misconfiguration.
 
             let wrapped = ServerName::DnsName(name);
-            if let PeerIdentity::X509(CertificateIdentity { end_entity, .. }) = &*ck.identity {
+            if let Identity::X509(CertificateIdentity { end_entity, .. }) = &*ck.identity {
                 let parsed = ParsedCertificate::try_from(end_entity)?;
                 verify_server_name(&parsed, &wrapped)?;
             }

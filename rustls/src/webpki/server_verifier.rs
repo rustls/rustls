@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::sync::Arc;
 use crate::verify::{
@@ -232,8 +232,8 @@ impl ServerVerifier for WebPkiServerVerifier {
     /// or allowed based on configuration.
     fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
         let certificates = match identity.identity {
-            PeerIdentity::X509(certificates) => certificates,
-            PeerIdentity::RawPublicKey(_) => {
+            Identity::X509(certificates) => certificates,
+            Identity::RawPublicKey(_) => {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             }
         };

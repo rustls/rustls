@@ -11,7 +11,7 @@ use rustls::client::danger::{
 };
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
-use rustls::sign::PeerIdentity;
+use rustls::sign::Identity;
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
     AlertDescription, CertificateError, CertificateType, ClientConfig, ClientConnection,
@@ -555,7 +555,7 @@ fn client_check_server_certificate_ee_crl_expired() {
 #[test]
 fn client_check_server_certificate_helper_api() {
     for kt in KeyType::all_for_provider(&provider::DEFAULT_PROVIDER) {
-        let PeerIdentity::X509(identity) = &*kt.identity() else {
+        let Identity::X509(identity) = &*kt.identity() else {
             panic!("expected X509 identity");
         };
 
@@ -593,7 +593,7 @@ fn client_check_server_certificate_helper_api() {
 
 #[test]
 fn client_check_server_valid_purpose() {
-    let PeerIdentity::X509(identity) = &*KeyType::EcdsaP256.client_identity() else {
+    let Identity::X509(identity) = &*KeyType::EcdsaP256.client_identity() else {
         panic!("expected X509 identity");
     };
 

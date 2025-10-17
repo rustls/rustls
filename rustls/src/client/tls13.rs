@@ -18,7 +18,7 @@ use crate::common_state::{
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::hash::Hash;
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::crypto::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -1168,7 +1168,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
         trace!("Server cert is {:?}", self.server_cert.cert_chain);
 
         // 1. Verify the certificate chain.
-        let identity = PeerIdentity::from_peer(
+        let identity = Identity::from_peer(
             self.server_cert.cert_chain.0,
             self.expected_certificate_type,
             cx.common,

@@ -17,7 +17,7 @@ use rcgen::{Issuer, KeyPair, SerialNumber};
 use rustls::RootCertStore;
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
-use rustls::sign::PeerIdentity;
+use rustls::sign::Identity;
 
 fn main() {
     let args = Args::parse();
@@ -212,8 +212,7 @@ impl TestPki {
             .with_client_cert_verifier(verifier)
             .with_single_cert(
                 Arc::from(
-                    PeerIdentity::from_cert_chain(vec![self.server_cert.cert.der().clone()])
-                        .unwrap(),
+                    Identity::from_cert_chain(vec![self.server_cert.cert.der().clone()]).unwrap(),
                 ),
                 PrivatePkcs8KeyDer::from(
                     self.server_cert

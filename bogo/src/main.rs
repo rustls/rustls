@@ -49,7 +49,7 @@ use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificati
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
-use rustls::sign::PeerIdentity;
+use rustls::sign::Identity;
 use rustls::sign::{CertifiedKey, CertifiedSigner, SingleCertAndKey};
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, CertificateType,
@@ -284,7 +284,7 @@ impl Credential {
             .collect::<Vec<_>>();
         let key = PrivateKeyDer::from_pem_file(&self.key_file).unwrap();
         CertifiedKey::from_der(
-            Arc::from(PeerIdentity::from_cert_chain(certs).unwrap()),
+            Arc::from(Identity::from_cert_chain(certs).unwrap()),
             key,
             provider,
         )
@@ -653,7 +653,7 @@ struct ClientCert {
 
 impl ClientCert {
     fn new(mut certkey: CertifiedKey, meta: &Credential) -> Self {
-        let PeerIdentity::X509(id) = &*certkey.identity else {
+        let Identity::X509(id) = &*certkey.identity else {
             panic!("only X.509 client certs supported");
         };
 

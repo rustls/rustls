@@ -238,7 +238,7 @@ mod tests {
     use super::provider::cipher_suite;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
     use crate::client::{ClientCredentialResolver, ClientSessionStore, CredentialRequest};
-    use crate::crypto::signer::{CertificateIdentity, PeerIdentity};
+    use crate::crypto::signer::{CertificateIdentity, Identity};
     use crate::enums::{CertificateType, SignatureScheme};
     use crate::error::Error;
     use crate::msgs::base::PayloadU16;
@@ -271,7 +271,7 @@ mod tests {
                     SessionId::empty(),
                     Arc::new(PayloadU16::empty()),
                     &[0u8; 48],
-                    PeerIdentity::X509(CertificateIdentity {
+                    Identity::X509(CertificateIdentity {
                         end_entity: CertificateDer::from(&[][..]),
                         intermediates: Vec::new(),
                     }),
@@ -292,7 +292,7 @@ mod tests {
                 cipher_suite::TLS13_AES_256_GCM_SHA384,
                 Arc::new(PayloadU16::empty()),
                 &[],
-                PeerIdentity::X509(CertificateIdentity {
+                Identity::X509(CertificateIdentity {
                     end_entity: CertificateDer::from(&[][..]),
                     intermediates: Vec::new(),
                 }),

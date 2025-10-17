@@ -13,7 +13,7 @@ use crate::common_state::{
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -1051,7 +1051,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             .client_auth_mandatory();
 
         let peer_identity =
-            PeerIdentity::from_peer(client_cert.0, self.expected_certificate_type, cx.common)?;
+            Identity::from_peer(client_cert.0, self.expected_certificate_type, cx.common)?;
 
         let Some(peer_identity) = peer_identity else {
             if !mandatory {
@@ -1099,7 +1099,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    peer_identity: PeerIdentity<'static>,
+    peer_identity: Identity<'static>,
     send_tickets: usize,
 }
 

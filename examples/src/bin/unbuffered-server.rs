@@ -12,7 +12,7 @@ use rustls::ServerConfig;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::UnbufferedServerConnection;
-use rustls::sign::PeerIdentity;
+use rustls::sign::Identity;
 use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus,
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(
-            Arc::new(PeerIdentity::from_cert_chain(load_certs(cert_file)?)?),
+            Arc::new(Identity::from_cert_chain(load_certs(cert_file)?)?),
             load_private_key(private_key_file)?,
         )?;
 
