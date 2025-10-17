@@ -49,7 +49,7 @@ use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificati
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
-use rustls::sign::{CertifiedSigner, SingleCertAndKey};
+use rustls::sign::{CertifiedKey, CertifiedSigner, SingleCertAndKey};
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, CertificateType,
     Connection, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
@@ -543,7 +543,7 @@ impl sign::SigningKey for FixedSignatureSchemeSigningKey {
 
 #[derive(Debug)]
 struct FixedSignatureSchemeServerCertResolver {
-    cert_key: sign::CertifiedKey,
+    cert_key: CertifiedKey,
     scheme: SignatureScheme,
 }
 
@@ -574,12 +574,12 @@ struct MultipleClientCredentialResolver {
 }
 
 impl MultipleClientCredentialResolver {
-    fn add(&mut self, key: sign::CertifiedKey, meta: &Credential) {
+    fn add(&mut self, key: CertifiedKey, meta: &Credential) {
         self.additional
             .push(ClientCert::new(key, meta));
     }
 
-    fn set_default(&mut self, key: sign::CertifiedKey, meta: &Credential) {
+    fn set_default(&mut self, key: CertifiedKey, meta: &Credential) {
         self.default = Some(ClientCert::new(key, meta));
     }
 }
@@ -640,13 +640,13 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
 
 #[derive(Debug)]
 struct ClientCert {
-    certkey: sign::CertifiedKey,
+    certkey: CertifiedKey,
     issuer_dn: DistinguishedName,
     must_match_issuer: bool,
 }
 
 impl ClientCert {
-    fn new(mut certkey: sign::CertifiedKey, meta: &Credential) -> Self {
+    fn new(mut certkey: CertifiedKey, meta: &Credential) -> Self {
         let parsed_cert =
             webpki::EndEntityCert::try_from(certkey.cert_chain.last().unwrap()).unwrap();
         let issuer_dn = DistinguishedName::in_sequence(parsed_cert.issuer());
@@ -770,7 +770,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     let cred = &opts.credentials.default;
     let (certs, key) = cred.load_from_file();
     let provider = opts.provider();
-    let mut cert_key = sign::CertifiedKey::from_der(Arc::from(certs), key, &provider).unwrap();
+    let mut cert_key = CertifiedKey::from_der(Arc::from(certs), key, &provider).unwrap();
     cert_key.ocsp = Some(opts.server_ocsp_response.clone());
 
     let cert_resolver = match cred.use_signing_scheme {
@@ -962,7 +962,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .expect("cannot load private key");
 
                 resolver.set_default(
-                    sign::CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
+                    CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
                     cred,
                 )
             }
@@ -975,7 +975,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
                     .expect("cannot load private key");
 
                 resolver.add(
-                    sign::CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
+                    CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
                     cred,
                 );
             }
