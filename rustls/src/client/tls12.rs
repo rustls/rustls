@@ -846,13 +846,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         if let Some(client_auth) = &st.client_auth {
             let certs = match client_auth {
                 ClientAuthDetails::Empty { .. } => CertificateChain::default(),
-                ClientAuthDetails::Verify { signer, .. } => CertificateChain(
-                    signer
-                        .cert_chain
-                        .iter()
-                        .cloned()
-                        .collect(),
-                ),
+                ClientAuthDetails::Verify { signer, .. } => CertificateChain::from_signer(signer),
             };
             emit_certificate(&mut st.transcript, certs, cx.common);
         }

@@ -28,6 +28,7 @@ use crate::msgs::enums::{
     PskKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
+use crate::sign::CertifiedSigner;
 use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 use crate::x509::wrap_in_sequence;
@@ -1617,6 +1618,18 @@ impl DerefMut for ServerHelloPayload {
 
 #[derive(Clone, Default, Debug)]
 pub(crate) struct CertificateChain(pub(crate) Vec<CertificateDer<'static>>);
+
+impl CertificateChain {
+    pub(crate) fn from_signer(signer: &CertifiedSigner) -> Self {
+        Self(
+            signer
+                .cert_chain
+                .iter()
+                .map(|c| c.clone().into_owned())
+                .collect(),
+        )
+    }
+}
 
 impl<'a> Codec<'a> for CertificateChain {
     fn encode(&self, bytes: &mut Vec<u8>) {
