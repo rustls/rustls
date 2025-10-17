@@ -1215,6 +1215,14 @@ pub enum ApiMisuse {
     NoSupportedCertificateTypes,
 }
 
+impl fmt::Display for ApiMisuse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl core::error::Error for ApiMisuse {}
+
 impl From<ApiMisuse> for Error {
     fn from(e: ApiMisuse) -> Self {
         Self::ApiMisuse(e)
