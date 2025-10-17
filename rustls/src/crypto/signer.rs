@@ -16,66 +16,6 @@ use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
 use crate::{AlertDescription, InvalidMessage, SignerPublicKey, x509};
 
-/// An abstract signing key.
-///
-/// This interface is used by rustls to use a private signing key
-/// for authentication.  This includes server and client authentication.
-///
-/// Objects of this type are always used within Rustls as
-/// `Arc<dyn SigningKey>`. There are no concrete public structs in Rustls
-/// that implement this trait.
-///
-/// You can obtain a `SigningKey` by calling the [`KeyProvider::load_private_key()`]
-/// method, which is usually referenced via [`CryptoProvider::key_provider`].
-///
-/// The `KeyProvider` method `load_private_key()` is called under the hood by
-/// [`ConfigBuilder::with_single_cert()`],
-/// [`ConfigBuilder::with_client_auth_cert()`], and
-/// [`ConfigBuilder::with_single_cert_with_ocsp()`].
-///
-/// A signing key created outside of the `KeyProvider` extension trait can be used
-/// to create a [`CertifiedKey`], which in turn can be used to create a
-/// [`ServerNameResolver`]. Alternately, a `CertifiedKey` can be returned from a
-/// custom implementation of the [`ServerCredentialResolver`] or [`ClientCredentialResolver`] traits.
-///
-/// [`KeyProvider::load_private_key()`]: crate::crypto::KeyProvider::load_private_key
-/// [`ConfigBuilder::with_single_cert()`]: crate::ConfigBuilder::with_single_cert
-/// [`ConfigBuilder::with_single_cert_with_ocsp()`]: crate::ConfigBuilder::with_single_cert_with_ocsp
-/// [`ConfigBuilder::with_client_auth_cert()`]: crate::ConfigBuilder::with_client_auth_cert
-/// [`ServerNameResolver`]: crate::server::ServerNameResolver
-/// [`ServerCredentialResolver`]: crate::server::ServerCredentialResolver
-/// [`ClientCredentialResolver`]: crate::client::ClientCredentialResolver
-pub trait SigningKey: Debug + Send + Sync {
-    /// Choose a `SignatureScheme` from those offered.
-    ///
-    /// Expresses the choice by returning something that implements `Signer`,
-    /// using the chosen scheme.
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
-
-    /// Get the RFC 5280-compliant SubjectPublicKeyInfo (SPKI) of this [`SigningKey`].
-    ///
-    /// If an implementation does not have the ability to derive this,
-    /// it can return `None`.
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>>;
-
-    /// What kind of key we have.
-    fn algorithm(&self) -> SignatureAlgorithm;
-}
-
-/// A thing that can sign a message.
-pub trait Signer: Debug + Send + Sync {
-    /// Signs `message` using the selected scheme.
-    ///
-    /// `message` is not hashed; the implementer must hash it using the hash function
-    /// implicit in [`Self::scheme()`].
-    ///
-    /// The returned signature format is also defined by [`Self::scheme()`].
-    fn sign(self: Box<Self>, message: &[u8]) -> Result<Vec<u8>, Error>;
-
-    /// Reveals which scheme will be used when you call [`Self::sign()`].
-    fn scheme(&self) -> SignatureScheme;
-}
-
 /// Server certificate resolver which always resolves to the same certificate and key.
 ///
 /// For use with [`ConfigBuilder::with_server_credential_resolver()`].
@@ -401,6 +341,66 @@ impl<'a> CertificateIdentity<'a> {
                 .collect(),
         }
     }
+}
+
+/// An abstract signing key.
+///
+/// This interface is used by rustls to use a private signing key
+/// for authentication.  This includes server and client authentication.
+///
+/// Objects of this type are always used within Rustls as
+/// `Arc<dyn SigningKey>`. There are no concrete public structs in Rustls
+/// that implement this trait.
+///
+/// You can obtain a `SigningKey` by calling the [`KeyProvider::load_private_key()`]
+/// method, which is usually referenced via [`CryptoProvider::key_provider`].
+///
+/// The `KeyProvider` method `load_private_key()` is called under the hood by
+/// [`ConfigBuilder::with_single_cert()`],
+/// [`ConfigBuilder::with_client_auth_cert()`], and
+/// [`ConfigBuilder::with_single_cert_with_ocsp()`].
+///
+/// A signing key created outside of the `KeyProvider` extension trait can be used
+/// to create a [`CertifiedKey`], which in turn can be used to create a
+/// [`ServerNameResolver`]. Alternately, a `CertifiedKey` can be returned from a
+/// custom implementation of the [`ServerCredentialResolver`] or [`ClientCredentialResolver`] traits.
+///
+/// [`KeyProvider::load_private_key()`]: crate::crypto::KeyProvider::load_private_key
+/// [`ConfigBuilder::with_single_cert()`]: crate::ConfigBuilder::with_single_cert
+/// [`ConfigBuilder::with_single_cert_with_ocsp()`]: crate::ConfigBuilder::with_single_cert_with_ocsp
+/// [`ConfigBuilder::with_client_auth_cert()`]: crate::ConfigBuilder::with_client_auth_cert
+/// [`ServerNameResolver`]: crate::server::ServerNameResolver
+/// [`ServerCredentialResolver`]: crate::server::ServerCredentialResolver
+/// [`ClientCredentialResolver`]: crate::client::ClientCredentialResolver
+pub trait SigningKey: Debug + Send + Sync {
+    /// Choose a `SignatureScheme` from those offered.
+    ///
+    /// Expresses the choice by returning something that implements `Signer`,
+    /// using the chosen scheme.
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
+
+    /// Get the RFC 5280-compliant SubjectPublicKeyInfo (SPKI) of this [`SigningKey`].
+    ///
+    /// If an implementation does not have the ability to derive this,
+    /// it can return `None`.
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>>;
+
+    /// What kind of key we have.
+    fn algorithm(&self) -> SignatureAlgorithm;
+}
+
+/// A thing that can sign a message.
+pub trait Signer: Debug + Send + Sync {
+    /// Signs `message` using the selected scheme.
+    ///
+    /// `message` is not hashed; the implementer must hash it using the hash function
+    /// implicit in [`Self::scheme()`].
+    ///
+    /// The returned signature format is also defined by [`Self::scheme()`].
+    fn sign(self: Box<Self>, message: &[u8]) -> Result<Vec<u8>, Error>;
+
+    /// Reveals which scheme will be used when you call [`Self::sign()`].
+    fn scheme(&self) -> SignatureScheme;
 }
 
 /// Convert a public key and algorithm identifier into [`SubjectPublicKeyInfoDer`].
