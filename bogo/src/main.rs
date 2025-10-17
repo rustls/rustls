@@ -276,13 +276,13 @@ struct Credential {
 }
 
 impl Credential {
-    fn load_from_file(&self) -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
+    fn load_from_file(&self, provider: &CryptoProvider) -> CertifiedKey {
         let certs = CertificateDer::pem_file_iter(&self.cert_file)
             .unwrap()
             .map(|cert| cert.unwrap())
             .collect::<Vec<_>>();
         let key = PrivateKeyDer::from_pem_file(&self.key_file).unwrap();
-        (certs, key)
+        CertifiedKey::from_der(Arc::from(certs), key, provider).unwrap()
     }
 
     fn configured(&self) -> bool {
@@ -768,9 +768,8 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
         "TODO: server certificate switching not implemented yet"
     );
     let cred = &opts.credentials.default;
-    let (certs, key) = cred.load_from_file();
     let provider = opts.provider();
-    let mut cert_key = CertifiedKey::from_der(Arc::from(certs), key, &provider).unwrap();
+    let mut cert_key = cred.load_from_file(&provider);
     cert_key.ocsp = Some(opts.server_ocsp_response.clone());
 
     let cert_resolver = match cred.use_signing_scheme {
@@ -955,29 +954,11 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
 
             if opts.credentials.default.configured() {
                 let cred = &opts.credentials.default;
-                let (certs, key) = cred.load_from_file();
-                let key = provider
-                    .key_provider
-                    .load_private_key(key)
-                    .expect("cannot load private key");
-
-                resolver.set_default(
-                    CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
-                    cred,
-                )
+                resolver.set_default(cred.load_from_file(&provider), cred)
             }
 
             for cred in opts.credentials.additional.iter() {
-                let (certs, key) = cred.load_from_file();
-                let key = provider
-                    .key_provider
-                    .load_private_key(key)
-                    .expect("cannot load private key");
-
-                resolver.add(
-                    CertifiedKey::new(Arc::from(certs), key).expect("keys match"),
-                    cred,
-                );
+                resolver.add(cred.load_from_file(&provider), cred);
             }
 
             cfg.with_client_credential_resolver(Arc::new(resolver))
