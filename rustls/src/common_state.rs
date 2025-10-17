@@ -481,6 +481,7 @@ impl CommonState {
     }
 
     pub(crate) fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
+        self.temper_counters.received_app_data();
         self.received_plaintext
             .append(bytes.into_vec());
     }
@@ -964,6 +965,14 @@ impl TemperCounters {
             }
         }
     }
+
+    fn received_app_data(&mut self) {
+        self.allowed_key_update_requests = Self::INITIAL_KEY_UPDATE_REQUESTS;
+    }
+
+    // cf. BoringSSL `kMaxKeyUpdates`
+    // <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls13_both.cc#L35-L38>
+    const INITIAL_KEY_UPDATE_REQUESTS: u8 = 32;
 }
 
 impl Default for TemperCounters {
@@ -977,9 +986,7 @@ impl Default for TemperCounters {
             // a second request after this is fatal.
             allowed_renegotiation_requests: 1,
 
-            // cf. BoringSSL `kMaxKeyUpdates`
-            // <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls13_both.cc#L35-L38>
-            allowed_key_update_requests: 32,
+            allowed_key_update_requests: Self::INITIAL_KEY_UPDATE_REQUESTS,
 
             // At most two CCS are allowed: one after each ClientHello (recall a second
             // ClientHello happens after a HelloRetryRequest).
