@@ -1083,7 +1083,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
-            peer_identity,
+            peer_identity: peer_identity.into_owned(),
             send_tickets: self.send_tickets,
         }))
     }

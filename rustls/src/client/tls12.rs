@@ -275,7 +275,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 using_ems: self.using_ems,
                 transcript: self.transcript,
                 suite: self.suite,
-                server_cert_chain,
+                server_cert_chain: server_cert_chain.into_owned(),
                 must_issue_new_ticket: self.must_issue_new_ticket,
                 negotiated_client_type: self.negotiated_client_type,
             }))
@@ -289,7 +289,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 using_ems: self.using_ems,
                 transcript: self.transcript,
                 suite: self.suite,
-                server_cert: ServerCertDetails::new(server_cert_chain, vec![]),
+                server_cert: ServerCertDetails::new(server_cert_chain.into_owned(), vec![]),
                 must_issue_new_ticket: self.must_issue_new_ticket,
                 negotiated_client_type: self.negotiated_client_type,
             }))
@@ -306,7 +306,7 @@ struct ExpectCertificateStatusOrServerKx {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_chain: CertificateChain,
+    server_cert_chain: CertificateChain<'static>,
     must_issue_new_ticket: bool,
     negotiated_client_type: Option<CertificateType>,
 }
@@ -369,7 +369,7 @@ struct ExpectCertificateStatus {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_chain: CertificateChain,
+    server_cert_chain: CertificateChain<'static>,
     must_issue_new_ticket: bool,
     negotiated_client_type: Option<CertificateType>,
 }
@@ -483,7 +483,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
 
 fn emit_certificate(
     transcript: &mut HandshakeHash,
-    cert_chain: CertificateChain,
+    cert_chain: CertificateChain<'_>,
     common: &mut CommonState,
 ) {
     let cert = Message {

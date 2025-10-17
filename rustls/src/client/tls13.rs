@@ -1118,8 +1118,12 @@ impl State<ClientConnectionData> for ExpectCertificate {
         }
 
         let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
-        let server_cert =
-            ServerCertDetails::new(cert_chain.into_certificate_chain(), end_entity_ocsp);
+        let server_cert = ServerCertDetails::new(
+            cert_chain
+                .into_certificate_chain()
+                .into_owned(),
+            end_entity_ocsp,
+        );
 
         Ok(Box::new(ExpectCertificateVerify {
             config: self.config,
