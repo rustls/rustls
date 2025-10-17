@@ -74,7 +74,7 @@ use crate::{CommonState, ConnectionTrafficSecrets, Error, ProtocolVersion, Suppo
 pub struct KernelConnection<Side> {
     state: Box<dyn KernelState>,
 
-    peer_identity: Option<PeerIdentity>,
+    peer_identity: Option<PeerIdentity<'static>>,
     quic: Quic,
 
     negotiated_version: ProtocolVersion,
@@ -251,7 +251,7 @@ pub(crate) trait KernelState: Send + Sync {
 }
 
 pub(crate) struct KernelContext<'a> {
-    pub(crate) peer_identity: Option<&'a PeerIdentity>,
+    pub(crate) peer_identity: Option<&'a PeerIdentity<'static>>,
     pub(crate) protocol: Protocol,
     pub(crate) quic: &'a Quic,
 }

@@ -1097,7 +1097,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    peer_identity: PeerIdentity,
+    peer_identity: PeerIdentity<'static>,
     send_tickets: usize,
 }
 

@@ -105,7 +105,7 @@ pub trait ServerVerifier: Debug + Send + Sync {
 #[derive(Debug)]
 pub struct ServerIdentity<'a> {
     /// Identity information presented by the server.
-    pub identity: &'a PeerIdentity,
+    pub identity: &'a PeerIdentity<'a>,
     /// The server name the client specified when connecting to the server.
     pub server_name: &'a ServerName<'a>,
     /// OCSP response stapled to the server's `Certificate` message, if any.
@@ -225,7 +225,7 @@ pub trait ClientVerifier: Debug + Send + Sync {
 #[derive(Debug)]
 pub struct ClientIdentity<'a> {
     /// Identity information presented by the client.
-    pub identity: &'a PeerIdentity,
+    pub identity: &'a PeerIdentity<'a>,
     /// Current time against which time-sensitive inputs should be validated.
     pub now: UnixTime,
 }
@@ -234,18 +234,18 @@ pub struct ClientIdentity<'a> {
 #[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PeerIdentity {
+pub enum PeerIdentity<'a> {
     /// A standard X.509 certificate chain.
     ///
     /// This is the most common case.
-    X509(CertificateIdentity),
+    X509(CertificateIdentity<'a>),
     /// A raw public key, as defined in [RFC 7250](https://tools.ietf.org/html/rfc7250).
-    RawPublicKey(SubjectPublicKeyInfoDer<'static>),
+    RawPublicKey(SubjectPublicKeyInfoDer<'a>),
 }
 
-impl PeerIdentity {
+impl<'a> PeerIdentity<'a> {
     pub(crate) fn from_cert_chain(
-        mut cert_chain: Vec<CertificateDer<'_>>,
+        mut cert_chain: Vec<CertificateDer<'a>>,
         expected: CertificateType,
         common: &mut CommonState,
     ) -> Result<Option<Self>, Error> {
@@ -256,8 +256,8 @@ impl PeerIdentity {
 
         match expected {
             CertificateType::X509 => Ok(Some(Self::X509(CertificateIdentity {
-                end_entity: first.into_owned(),
-                intermediates: iter.map(|c| c.into_owned()).collect(),
+                end_entity: first,
+                intermediates: iter.collect(),
             }))),
             CertificateType::RawPublicKey => match iter.count() {
                 0 => Ok(Some(Self::RawPublicKey(
@@ -275,6 +275,14 @@ impl PeerIdentity {
         }
     }
 
+    /// Convert this `PeerIdentity` into an owned version.
+    pub fn into_owned(self) -> PeerIdentity<'static> {
+        match self {
+            Self::X509(id) => PeerIdentity::X509(id.into_owned()),
+            Self::RawPublicKey(spki) => PeerIdentity::RawPublicKey(spki.into_owned()),
+        }
+    }
+
     /// Get the public key of this identity as a `SignerPublicKey`.
     pub fn as_signer(&self) -> SignerPublicKey<'_> {
         match self {
@@ -284,7 +292,7 @@ impl PeerIdentity {
     }
 }
 
-impl<'a> Codec<'a> for PeerIdentity {
+impl<'a> Codec<'a> for PeerIdentity<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Self::X509(certificates) => {
@@ -305,7 +313,6 @@ impl<'a> Codec<'a> for PeerIdentity {
                 end_entity: CertificateDer::read(reader)?.into_owned(),
                 intermediates: Vec::<CertificateDer<'_>>::read(reader)?
                     .into_iter()
-                    .map(|der| der.into_owned())
                     .collect(),
             })),
             1 => Ok(Self::RawPublicKey(
@@ -322,13 +329,27 @@ impl<'a> Codec<'a> for PeerIdentity {
 #[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CertificateIdentity {
+pub struct CertificateIdentity<'a> {
     /// Certificate for the entity being verified.
-    pub end_entity: CertificateDer<'static>,
+    pub end_entity: CertificateDer<'a>,
     /// All certificates other than `end_entity` received in the peer's `Certificate` message.
     ///
     /// It is in the same order that the peer sent them and may be empty.
-    pub intermediates: Vec<CertificateDer<'static>>,
+    pub intermediates: Vec<CertificateDer<'a>>,
+}
+
+impl<'a> CertificateIdentity<'a> {
+    /// Convert this `CertificateIdentity` into an owned version.
+    pub fn into_owned(self) -> CertificateIdentity<'static> {
+        CertificateIdentity {
+            end_entity: self.end_entity.into_owned(),
+            intermediates: self
+                .intermediates
+                .into_iter()
+                .map(|cert| cert.into_owned())
+                .collect(),
+        }
+    }
 }
 
 /// Input for message signature verification.

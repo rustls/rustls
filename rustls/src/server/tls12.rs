@@ -531,7 +531,7 @@ struct ExpectClientKx {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: Box<dyn ActiveKeyExchange>,
-    peer_identity: Option<PeerIdentity>,
+    peer_identity: Option<PeerIdentity<'static>>,
     send_ticket: bool,
 }
 
@@ -609,7 +609,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     session_id: SessionId,
     using_ems: bool,
-    peer_identity: PeerIdentity,
+    peer_identity: PeerIdentity<'static>,
     send_ticket: bool,
 }
 
