@@ -2,18 +2,19 @@ use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use pki_types::{CertificateDer, ServerName};
+use pki_types::{CertificateDer, ServerName, UnixTime};
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
 use super::hs::{ClientContext, ClientHelloInput, ClientSessionValue};
 use crate::check::inappropriate_handshake_message;
-use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
+use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::ech::{self, EchStatus};
 use crate::client::hs::{ClientHandler, ExpectServerHello};
 use crate::client::{ClientConfig, ClientSessionStore, hs};
 use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
+    CommonState, HandshakeFlightTls13, HandshakeKind, Input, KxState, Protocol, Requirement, Side,
+    State,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
@@ -1129,22 +1130,106 @@ impl State<ClientConnectionData> for ExpectCertificate {
             ));
         }
 
-        let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
-        let server_cert =
-            ServerCertDetails::new(cert_chain.into_certificate_chain(), end_entity_ocsp);
+        let ocsp_response = cert_chain.end_entity_ocsp().to_vec();
+        let identity = PeerIdentity::from_cert_chain(
+            cert_chain.into_certificate_chain().0,
+            self.expected_certificate_type,
+            cx.common,
+        )?
+        .ok_or_else(|| {
+            cx.common.send_fatal_alert(
+                AlertDescription::BadCertificate,
+                PeerMisbehaved::NoCertificatesPresented,
+            )
+        })?;
+        let verify_time = self.config.current_time()?;
 
-        Ok(Box::new(ExpectCertificateVerify {
+        Ok(Box::new(RequireVerifyIdentity {
             config: self.config,
             server_name: self.server_name,
             randoms: self.randoms,
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
-            server_cert,
+            identity,
+            ocsp_response,
+            verify_time,
             client_auth: self.client_auth,
             ech_retry_configs: self.ech_retry_configs,
-            expected_certificate_type: self.expected_certificate_type,
         }))
+    }
+}
+
+// --- Asynchronous chain verification
+struct RequireVerifyIdentity {
+    config: Arc<ClientConfig>,
+    server_name: ServerName<'static>,
+    randoms: ConnectionRandoms,
+    suite: &'static Tls13CipherSuite,
+    transcript: HandshakeHash,
+    key_schedule: KeyScheduleHandshake,
+    identity: PeerIdentity,
+    ocsp_response: Vec<u8>,
+    verify_time: UnixTime,
+    client_auth: Option<ClientAuthDetails>,
+    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+}
+
+impl State<ClientConnectionData> for RequireVerifyIdentity {
+    fn requirement(&self) -> Requirement<'_> {
+        Requirement::VerifyServerIdentity {
+            identity: ServerIdentity {
+                identity: &self.identity,
+                server_name: &self.server_name,
+                ocsp_response: &self.ocsp_response,
+                now: self.verify_time,
+            },
+            verifier: self.config.verifier.as_ref(),
+        }
+    }
+
+    fn handle<'a, 'b>(
+        self: Box<Self>,
+        input: Input<'a, 'b, ClientConnectionData>,
+    ) -> hs::NextStateOrError {
+        let Self {
+            config,
+            server_name,
+            randoms,
+            suite,
+            transcript,
+            key_schedule,
+            identity,
+            ocsp_response: _,
+            verify_time: _,
+            client_auth,
+            ech_retry_configs,
+        } = *self;
+        match input {
+            Input::PeerVerified(cert_verified) => Ok(Box::new(ExpectCertificateVerify {
+                config,
+                server_name,
+                randoms,
+                suite,
+                transcript,
+                key_schedule,
+                identity,
+                cert_verified,
+                client_auth,
+                ech_retry_configs,
+            })),
+            _ => Err(Error::Unreachable(
+                "unexpected state input type in RequireVerifyIdentity",
+            )),
+        }
+    }
+
+    fn handle_message(
+        self: Box<Self>,
+        _cx: &mut ClientContext<'_>,
+        _message: Message<'_>,
+    ) -> hs::NextStateOrError {
+        unreachable!()
     }
 }
 
@@ -1156,10 +1241,10 @@ struct ExpectCertificateVerify {
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
-    server_cert: ServerCertDetails,
+    identity: PeerIdentity,
     client_auth: Option<ClientAuthDetails>,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
-    expected_certificate_type: CertificateType,
+    cert_verified: verify::PeerVerified,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateVerify {
@@ -1174,34 +1259,10 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             HandshakePayload::CertificateVerify
         )?;
 
-        trace!("Server cert is {:?}", self.server_cert.cert_chain);
+        trace!("Server cert is {:?}", self.identity);
 
         // 1. Verify the certificate chain.
-        let identity = PeerIdentity::from_cert_chain(
-            self.server_cert.cert_chain.0,
-            self.expected_certificate_type,
-            cx.common,
-        )?
-        .ok_or_else(|| {
-            cx.common.send_fatal_alert(
-                AlertDescription::BadCertificate,
-                PeerMisbehaved::NoCertificatesPresented,
-            )
-        })?;
-
-        let cert_verified = self
-            .config
-            .verifier
-            .verify_identity(&ServerIdentity {
-                identity: &identity,
-                server_name: &self.server_name,
-                ocsp_response: &self.server_cert.ocsp_response,
-                now: self.config.current_time()?,
-            })
-            .map_err(|err| {
-                cx.common
-                    .send_cert_verify_error_alert(err)
-            })?;
+        // (previously completed, proven by self.cert_verified)
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.transcript.current_hash();
@@ -1210,7 +1271,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             .verifier
             .verify_tls13_signature(&SignatureVerificationInput {
                 message: construct_server_verify_message(&handshake_hash).as_ref(),
-                signer: &identity.as_signer(),
+                signer: &self.identity.as_signer(),
                 signature: cert_verify,
             })
             .map_err(|err| {
@@ -1218,7 +1279,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                     .send_cert_verify_error_alert(err)
             })?;
 
-        cx.common.peer_identity = Some(identity);
+        cx.common.peer_identity = Some(self.identity);
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
@@ -1229,7 +1290,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
-            cert_verified,
+            cert_verified: self.cert_verified,
             sig_verified,
             ech_retry_configs: self.ech_retry_configs,
         }))
