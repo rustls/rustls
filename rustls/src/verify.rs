@@ -244,7 +244,7 @@ pub enum PeerIdentity<'a> {
 }
 
 impl<'a> PeerIdentity<'a> {
-    pub(crate) fn from_cert_chain(
+    pub(crate) fn from_peer(
         mut cert_chain: Vec<CertificateDer<'a>>,
         expected: CertificateType,
         common: &mut CommonState,

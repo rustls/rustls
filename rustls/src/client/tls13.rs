@@ -1165,7 +1165,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
         trace!("Server cert is {:?}", self.server_cert.cert_chain);
 
         // 1. Verify the certificate chain.
-        let identity = PeerIdentity::from_cert_chain(
+        let identity = PeerIdentity::from_peer(
             self.server_cert.cert_chain.0,
             self.expected_certificate_type,
             cx.common,
