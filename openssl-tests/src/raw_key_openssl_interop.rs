@@ -19,7 +19,7 @@ mod client {
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
-    use rustls::sign::{CertifiedKey, PeerIdentity};
+    use rustls::sign::{CertifiedKey, Identity};
     use rustls::{
         ApiMisuse, CertificateError, CertificateType, ClientConfig, ClientConnection, Error,
         InconsistentKeys, PeerIncompatible, SignatureScheme, Stream,
@@ -43,7 +43,7 @@ mod client {
             .expect("cannot open pub key file");
 
         let certified_key = CertifiedKey::new_unchecked(
-            Arc::new(PeerIdentity::RawPublicKey(client_public_key.into_owned())),
+            Arc::new(Identity::RawPublicKey(client_public_key.into_owned())),
             client_private_key,
         );
 
@@ -99,7 +99,7 @@ mod client {
 
     impl ServerVerifier for SimpleRpkServerVerifier {
         fn verify_identity(&self, identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
-            let PeerIdentity::RawPublicKey(spki) = identity.identity else {
+            let Identity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
@@ -153,7 +153,7 @@ mod server {
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
     use rustls::sign::CertifiedKey;
-    use rustls::sign::PeerIdentity;
+    use rustls::sign::Identity;
     use rustls::{
         ApiMisuse, CertificateError, CertificateType, DistinguishedName, Error, InconsistentKeys,
         PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
@@ -177,7 +177,7 @@ mod server {
             .expect("cannot load public key");
 
         let certified_key = CertifiedKey::new_unchecked(
-            Arc::new(PeerIdentity::RawPublicKey(server_public_key.into_owned())),
+            Arc::new(Identity::RawPublicKey(server_public_key.into_owned())),
             server_private_key,
         );
 
@@ -248,7 +248,7 @@ mod server {
 
     impl ClientVerifier for SimpleRpkClientVerifier {
         fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error> {
-            let PeerIdentity::RawPublicKey(spki) = identity.identity else {
+            let Identity::RawPublicKey(spki) = identity.identity else {
                 return Err(ApiMisuse::UnverifiableCertificateType.into());
             };
 
@@ -296,7 +296,7 @@ mod tests {
 
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-    use rustls::sign::PeerIdentity;
+    use rustls::sign::Identity;
 
     use super::{client, server};
     use crate::utils::verify_openssl3_available;
@@ -372,7 +372,7 @@ mod tests {
         let config = rustls::ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(
-                Arc::new(PeerIdentity::from_cert_chain(certs).unwrap()),
+                Arc::new(Identity::from_cert_chain(certs).unwrap()),
                 private_key,
             )
             .unwrap();

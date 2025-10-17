@@ -6,7 +6,7 @@ use pki_types::PrivateKeyDer;
 use super::server_conn::InvalidSniPolicy;
 use super::{ServerConfig, ServerCredentialResolver, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
@@ -64,7 +64,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// key for the end-entity certificate from the `cert_chain`.
     pub fn with_single_cert(
         self,
-        identity: Arc<PeerIdentity<'static>>,
+        identity: Arc<Identity<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
         let certified_key = CertifiedKey::from_der(identity, key_der, self.crypto_provider())?;
@@ -86,7 +86,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// key for the end-entity certificate from the `cert_chain`.
     pub fn with_single_cert_with_ocsp(
         self,
-        identity: Arc<PeerIdentity<'static>>,
+        identity: Arc<Identity<'static>>,
         key_der: PrivateKeyDer<'static>,
         ocsp: Arc<[u8]>,
     ) -> Result<ServerConfig, Error> {

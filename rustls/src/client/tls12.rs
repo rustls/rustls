@@ -17,7 +17,7 @@ use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::KeyExchangeAlgorithm;
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -781,7 +781,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // 5. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
-        let identity = PeerIdentity::from_peer(
+        let identity = Identity::from_peer(
             st.server_cert.cert_chain.0,
             CertificateType::X509,
             cx.common,

@@ -20,7 +20,7 @@ use std::{env, io};
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::sign::PeerIdentity;
+use rustls::sign::Identity;
 
 fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();
@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
 
     let mut config = rustls::ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(Arc::new(PeerIdentity::from_cert_chain(certs)?), private_key)?;
+        .with_single_cert(Arc::new(Identity::from_cert_chain(certs)?), private_key)?;
     config.max_early_data_size = 1000;
 
     let listener = TcpListener::bind(format!("[::]:{}", 4443)).unwrap();

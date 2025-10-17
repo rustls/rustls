@@ -65,7 +65,7 @@ pub struct CertifiedSigner {
     /// A one-time-use signer for this certificate.
     pub signer: Box<dyn Signer>,
     /// The certificate chain or raw public key.
-    pub identity: Arc<PeerIdentity<'static>>,
+    pub identity: Arc<Identity<'static>>,
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
     pub ocsp: Option<Arc<[u8]>>,
@@ -83,7 +83,7 @@ pub struct CertifiedSigner {
 #[derive(Debug)]
 pub struct CertifiedKey {
     /// The certificate chain or raw public key.
-    pub identity: Arc<PeerIdentity<'static>>,
+    pub identity: Arc<Identity<'static>>,
 
     /// The certified key.
     pub key: Box<dyn SigningKey>,
@@ -102,7 +102,7 @@ impl CertifiedKey {
     ///
     /// [`KeyProvider`]: crate::crypto::KeyProvider
     pub fn from_der(
-        identity: Arc<PeerIdentity<'static>>,
+        identity: Arc<Identity<'static>>,
         key: PrivateKeyDer<'static>,
         provider: &CryptoProvider,
     ) -> Result<Self, Error> {
@@ -122,11 +122,8 @@ impl CertifiedKey {
     ///
     /// This constructor should be used with all [`SigningKey`] implementations
     /// that can provide a public key, including those provided by rustls itself.
-    pub fn new(
-        identity: Arc<PeerIdentity<'static>>,
-        key: Box<dyn SigningKey>,
-    ) -> Result<Self, Error> {
-        if let PeerIdentity::X509(CertificateIdentity { end_entity, .. }) = &*identity {
+    pub fn new(identity: Arc<Identity<'static>>, key: Box<dyn SigningKey>) -> Result<Self, Error> {
+        if let Identity::X509(CertificateIdentity { end_entity, .. }) = &*identity {
             let parsed = ParsedCertificate::try_from(end_entity)?;
             match (key.public_key(), parsed.subject_public_key_info()) {
                 (None, _) => return Err(Error::InconsistentKeys(InconsistentKeys::Unknown)),
@@ -151,7 +148,7 @@ impl CertifiedKey {
     ///
     /// This avoids parsing the end-entity certificate, which is useful when using client
     /// certificates that are not fully standards compliant, but known to usable by the peer.
-    pub fn new_unchecked(identity: Arc<PeerIdentity<'static>>, key: Box<dyn SigningKey>) -> Self {
+    pub fn new_unchecked(identity: Arc<Identity<'static>>, key: Box<dyn SigningKey>) -> Self {
         Self {
             identity,
             key,
@@ -175,7 +172,7 @@ impl CertifiedKey {
 #[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PeerIdentity<'a> {
+pub enum Identity<'a> {
     /// A standard X.509 certificate chain.
     ///
     /// This is the most common case.
@@ -184,7 +181,7 @@ pub enum PeerIdentity<'a> {
     RawPublicKey(SubjectPublicKeyInfoDer<'a>),
 }
 
-impl<'a> PeerIdentity<'a> {
+impl<'a> Identity<'a> {
     /// Create a `PeerIdentity::X509` from a certificate chain.
     ///
     /// Returns `None` if `cert_chain` is empty.
@@ -232,10 +229,10 @@ impl<'a> PeerIdentity<'a> {
     }
 
     /// Convert this `PeerIdentity` into an owned version.
-    pub fn into_owned(self) -> PeerIdentity<'static> {
+    pub fn into_owned(self) -> Identity<'static> {
         match self {
-            Self::X509(id) => PeerIdentity::X509(id.into_owned()),
-            Self::RawPublicKey(spki) => PeerIdentity::RawPublicKey(spki.into_owned()),
+            Self::X509(id) => Identity::X509(id.into_owned()),
+            Self::RawPublicKey(spki) => Identity::RawPublicKey(spki.into_owned()),
         }
     }
 
@@ -263,7 +260,7 @@ impl<'a> PeerIdentity<'a> {
     }
 }
 
-impl<'a> Codec<'a> for PeerIdentity<'a> {
+impl<'a> Codec<'a> for Identity<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Self::X509(certificates) => {

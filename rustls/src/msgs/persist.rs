@@ -5,7 +5,7 @@ use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
 use crate::client::ClientCredentialResolver;
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
@@ -82,7 +82,7 @@ impl Tls13ClientSessionValue {
         suite: &'static Tls13CipherSuite,
         ticket: Arc<PayloadU16>,
         secret: &[u8],
-        peer_identity: PeerIdentity<'static>,
+        peer_identity: Identity<'static>,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
@@ -164,7 +164,7 @@ impl Tls12ClientSessionValue {
         session_id: SessionId,
         ticket: Arc<PayloadU16>,
         master_secret: &[u8; 48],
-        peer_identity: PeerIdentity<'static>,
+        peer_identity: Identity<'static>,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
@@ -223,7 +223,7 @@ pub struct ClientSessionCommon {
     ticket: Arc<PayloadU16>,
     epoch: u64,
     lifetime_secs: u32,
-    peer_identity: Arc<PeerIdentity<'static>>,
+    peer_identity: Arc<Identity<'static>>,
     server_cert_verifier: Weak<dyn ServerVerifier>,
     client_creds: Weak<dyn ClientCredentialResolver>,
 }
@@ -233,7 +233,7 @@ impl ClientSessionCommon {
         ticket: Arc<PayloadU16>,
         time_now: UnixTime,
         lifetime_secs: u32,
-        peer_identity: PeerIdentity<'static>,
+        peer_identity: Identity<'static>,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ClientCredentialResolver>,
     ) -> Self {
@@ -273,7 +273,7 @@ impl ClientSessionCommon {
         }
     }
 
-    pub(crate) fn peer_identity(&self) -> &PeerIdentity<'static> {
+    pub(crate) fn peer_identity(&self) -> &Identity<'static> {
         &self.peer_identity
     }
 
@@ -448,7 +448,7 @@ impl From<Tls13ServerSessionValue> for ServerSessionValue {
 pub struct CommonServerSessionValue {
     pub(crate) sni: Option<DnsName<'static>>,
     pub(crate) cipher_suite: CipherSuite,
-    pub(crate) peer_identity: Option<PeerIdentity<'static>>,
+    pub(crate) peer_identity: Option<Identity<'static>>,
     pub(crate) alpn: Option<ProtocolName>,
     pub(crate) application_data: PayloadU16,
     #[doc(hidden)]
@@ -459,7 +459,7 @@ impl CommonServerSessionValue {
     pub(crate) fn new(
         sni: Option<&DnsName<'_>>,
         cipher_suite: CipherSuite,
-        peer_identity: Option<PeerIdentity<'static>>,
+        peer_identity: Option<Identity<'static>>,
         alpn: Option<ProtocolName>,
         application_data: Vec<u8>,
         creation_time: UnixTime,
@@ -533,7 +533,7 @@ impl Codec<'_> for CommonServerSessionValue {
             sni,
             cipher_suite: CipherSuite::read(r)?,
             peer_identity: match u8::read(r)? {
-                1 => Some(PeerIdentity::read(r)?.into_owned()),
+                1 => Some(Identity::read(r)?.into_owned()),
                 _ => None,
             },
             alpn: match u8::read(r)? {
@@ -592,7 +592,7 @@ mod tests {
                 CommonServerSessionValue::new(
                     None,
                     CipherSuite::TLS13_AES_128_GCM_SHA256,
-                    Some(PeerIdentity::X509(CertificateIdentity {
+                    Some(Identity::X509(CertificateIdentity {
                         end_entity: CertificateDer::from(&[10, 11, 12][..]),
                         intermediates: alloc::vec![],
                     })),

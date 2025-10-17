@@ -6,7 +6,7 @@ use pki_types::PrivateKeyDer;
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{ClientConfig, ClientCredentialResolver, EchMode, handy};
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
@@ -139,7 +139,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// This function fails if `key_der` is invalid.
     pub fn with_client_auth_cert(
         self,
-        identity: Arc<PeerIdentity<'static>>,
+        identity: Arc<Identity<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
         let certified_key = CertifiedKey::from_der(identity, key_der, &self.provider)?;

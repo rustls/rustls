@@ -40,7 +40,7 @@ use rustls::server::{
     ClientHello, ClientVerifierBuilder, ServerCredentialResolver, SingleRawPublicKeyResolver,
     UnbufferedServerConnection, WebPkiClientVerifier,
 };
-use rustls::sign::PeerIdentity;
+use rustls::sign::Identity;
 use rustls::sign::{CertifiedKey, CertifiedSigner, SigningKey};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
@@ -362,9 +362,9 @@ impl KeyType {
         }
     }
 
-    pub fn identity(&self) -> Arc<PeerIdentity<'static>> {
+    pub fn identity(&self) -> Arc<Identity<'static>> {
         Arc::new(
-            PeerIdentity::from_cert_chain(
+            Identity::from_cert_chain(
                 CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
                     .map(|result| result.unwrap())
                     .collect(),
@@ -390,9 +390,9 @@ impl KeyType {
             .into()
     }
 
-    pub fn client_identity(&self) -> Arc<PeerIdentity<'static>> {
+    pub fn client_identity(&self) -> Arc<Identity<'static>> {
         Arc::new(
-            PeerIdentity::from_cert_chain(
+            Identity::from_cert_chain(
                 CertificateDer::pem_slice_iter(self.bytes_for("client.fullchain"))
                     .map(|result| result.unwrap())
                     .collect(),
@@ -436,7 +436,7 @@ impl KeyType {
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?
             .into_owned();
         Ok(CertifiedKey::new_unchecked(
-            Arc::new(PeerIdentity::RawPublicKey(public_key)),
+            Arc::new(Identity::RawPublicKey(public_key)),
             private_key,
         ))
     }
@@ -453,7 +453,7 @@ impl KeyType {
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?
             .into_owned();
         Ok(CertifiedKey::new_unchecked(
-            Arc::new(PeerIdentity::RawPublicKey(public_key)),
+            Arc::new(Identity::RawPublicKey(public_key)),
             private_key,
         ))
     }
@@ -496,7 +496,7 @@ impl KeyType {
     }
 
     pub fn ca_cert(&self) -> CertificateDer<'_> {
-        let PeerIdentity::X509(id) = &*self.identity() else {
+        let Identity::X509(id) = &*self.identity() else {
             panic!("expected raw key identity");
         };
 

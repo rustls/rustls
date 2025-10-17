@@ -13,7 +13,7 @@ use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::ActiveKeyExchange;
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -477,7 +477,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         trace!("certs {cert_chain:?}");
 
         let peer_identity =
-            match PeerIdentity::from_peer(cert_chain.0, CertificateType::X509, cx.common)? {
+            match Identity::from_peer(cert_chain.0, CertificateType::X509, cx.common)? {
                 None if mandatory => {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::CertificateRequired,
@@ -527,7 +527,7 @@ struct ExpectClientKx {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: Box<dyn ActiveKeyExchange>,
-    peer_identity: Option<PeerIdentity<'static>>,
+    peer_identity: Option<Identity<'static>>,
     send_ticket: bool,
 }
 
@@ -605,7 +605,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     session_id: SessionId,
     using_ems: bool,
-    peer_identity: PeerIdentity<'static>,
+    peer_identity: Identity<'static>,
     send_ticket: bool,
 }
 

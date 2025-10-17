@@ -10,7 +10,7 @@ use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
 use rustls::pki_types::CertificateDer;
 #[cfg(feature = "zlib")]
-use rustls::sign::{self, PeerIdentity};
+use rustls::sign::{self, Identity};
 use rustls::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls_test::make_pair_for_arc_configs;
@@ -249,7 +249,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .load_private_key(KeyType::Rsa2048.client_key())
         .unwrap();
     let big_cert_and_key = sign::CertifiedKey::new_unchecked(
-        Arc::new(PeerIdentity::from_cert_chain(vec![big_cert]).unwrap()),
+        Arc::new(Identity::from_cert_chain(vec![big_cert]).unwrap()),
         key,
     );
     client_config.client_auth_cert_resolver =

@@ -26,7 +26,7 @@ use pki_types::{CertificateDer, ServerName, UnixTime};
 use webpki_roots;
 
 use crate::crypto::CryptoProvider;
-use crate::sign::{CertificateIdentity, PeerIdentity};
+use crate::sign::{CertificateIdentity, Identity};
 use crate::verify::{ServerIdentity, ServerVerifier};
 use crate::webpki::{RootCertStore, WebPkiServerVerifier};
 
@@ -233,7 +233,7 @@ impl Context {
 
         self.verifier
             .verify_identity(&ServerIdentity {
-                identity: &PeerIdentity::X509(CertificateIdentity {
+                identity: &Identity::X509(CertificateIdentity {
                     end_entity: self.chain[0].clone(),
                     intermediates: self.chain[1..].to_vec(),
                 }),

@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use pki_types::{CertificateDer, DnsName};
 use rustls::client::{ClientCredentialResolver, CredentialRequest};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
-use rustls::sign::{CertifiedKey, CertifiedSigner, PeerIdentity};
+use rustls::sign::{CertifiedKey, CertifiedSigner, Identity};
 use rustls::{
     CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection,
     DistinguishedName, Error, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
@@ -554,7 +554,7 @@ fn sni_resolver_rejects_bad_certs() {
     let mut resolver = rustls::server::ServerNameResolver::new();
 
     let bad_chain =
-        Arc::from(PeerIdentity::from_cert_chain(vec![CertificateDer::from(vec![0xa0])]).unwrap());
+        Arc::from(Identity::from_cert_chain(vec![CertificateDer::from(vec![0xa0])]).unwrap());
     assert_eq!(
         Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(

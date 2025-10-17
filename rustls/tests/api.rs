@@ -14,7 +14,7 @@ use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
-use rustls::sign::{CertifiedSigner, PeerIdentity};
+use rustls::sign::{CertifiedSigner, Identity};
 use rustls::{
     AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ContentType, Error, HandshakeKind, HandshakeType, InconsistentKeys, KeyingMaterialExporter,
@@ -661,7 +661,7 @@ struct SigningKeySomeSpki;
 
 impl sign::SigningKey for SigningKeySomeSpki {
     fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer<'_>> {
-        let PeerIdentity::X509(identity) = &*KeyType::Rsa2048.identity() else {
+        let Identity::X509(identity) = &*KeyType::Rsa2048.identity() else {
             panic!("expected X509 identity");
         };
 

@@ -663,7 +663,7 @@ pub mod pki_types {
 /// Message signing interfaces.
 pub mod sign {
     pub use crate::crypto::signer::{
-        CertificateIdentity, CertifiedKey, CertifiedSigner, PeerIdentity, Signer, SigningKey,
+        CertificateIdentity, CertifiedKey, CertifiedSigner, Identity, Signer, SigningKey,
         SingleCertAndKey, public_key_to_spki,
     };
 }

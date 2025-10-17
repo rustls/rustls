@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rustls::client::Resumption;
-use rustls::sign::{CertificateIdentity, PeerIdentity};
+use rustls::sign::{CertificateIdentity, Identity};
 use rustls::{
     ApiMisuse, ClientConfig, ClientConnection, Error, HandshakeKind, NamedGroup, PeerMisbehaved,
     ProtocolVersion, ServerConfig, ServerConnection,
@@ -307,8 +307,7 @@ fn tls13_stateful_resumption() {
         client
             .peer_identity()
             .map(|identity| match identity {
-                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
-                    intermediates.len(),
+                Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
         Some(2)
@@ -328,8 +327,7 @@ fn tls13_stateful_resumption() {
         client
             .peer_identity()
             .map(|identity| match identity {
-                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
-                    intermediates.len(),
+                Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
         Some(2)
@@ -349,8 +347,7 @@ fn tls13_stateful_resumption() {
         client
             .peer_identity()
             .map(|identity| match identity {
-                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
-                    intermediates.len(),
+                Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
         Some(2)
@@ -382,8 +379,7 @@ fn tls13_stateless_resumption() {
         client
             .peer_identity()
             .map(|identity| match identity {
-                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
-                    intermediates.len(),
+                Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
         Some(2)
@@ -403,8 +399,7 @@ fn tls13_stateless_resumption() {
         client
             .peer_identity()
             .map(|identity| match identity {
-                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
-                    intermediates.len(),
+                Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
         Some(2)
@@ -424,8 +419,7 @@ fn tls13_stateless_resumption() {
         client
             .peer_identity()
             .map(|identity| match identity {
-                PeerIdentity::X509(CertificateIdentity { intermediates, .. }) =>
-                    intermediates.len(),
+                Identity::X509(CertificateIdentity { intermediates, .. }) => intermediates.len(),
                 _ => 0,
             }),
         Some(2)

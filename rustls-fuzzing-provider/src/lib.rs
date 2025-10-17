@@ -31,7 +31,7 @@ use rustls::pki_types::{
     SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
 use rustls::server::ProducesTickets;
-use rustls::sign::{CertifiedSigner, PeerIdentity};
+use rustls::sign::{CertifiedSigner, Identity};
 use rustls::{
     CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerIncompatible,
     PeerMisbehaved, ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme,
@@ -73,7 +73,7 @@ pub fn server_verifier() -> Arc<dyn ServerVerifier> {
 pub fn server_cert_resolver() -> Arc<dyn server::ServerCredentialResolver> {
     let cert = CertificateDer::from(&include_bytes!("../../test-ca/ecdsa-p256/end.der")[..]);
     let certified_key = sign::CertifiedKey::new_unchecked(
-        Arc::new(PeerIdentity::from_cert_chain(vec![cert]).unwrap()),
+        Arc::new(Identity::from_cert_chain(vec![cert]).unwrap()),
         Box::new(SigningKey),
     );
     Arc::new(DummyCert(certified_key.into()))

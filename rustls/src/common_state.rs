@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::SupportedKxGroup;
-use crate::crypto::signer::PeerIdentity;
+use crate::crypto::signer::Identity;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -48,7 +48,7 @@ pub struct CommonState {
     pub(crate) has_received_close_notify: bool,
     #[cfg(feature = "std")]
     pub(crate) has_seen_eof: bool,
-    pub(crate) peer_identity: Option<PeerIdentity<'static>>,
+    pub(crate) peer_identity: Option<Identity<'static>>,
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
@@ -126,7 +126,7 @@ impl CommonState {
     /// client, if client authentication was completed.
     ///
     /// The return value is None until this value is available.
-    pub fn peer_identity(&self) -> Option<&PeerIdentity<'static>> {
+    pub fn peer_identity(&self) -> Option<&Identity<'static>> {
         self.peer_identity.as_ref()
     }
 

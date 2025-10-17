@@ -27,7 +27,7 @@ mod tests {
     use super::super::*;
     use crate::client::AlwaysResolvesClientRawPublicKeys;
     use crate::crypto::cipher::MessageEncrypter;
-    use crate::crypto::signer::PeerIdentity;
+    use crate::crypto::signer::Identity;
     use crate::crypto::tls13::OkmBlock;
     use crate::enums::CertificateType;
     use crate::msgs::base::PayloadU8;
@@ -462,7 +462,7 @@ mod tests {
             .load_private_key(client_key())
             .unwrap();
         let identity = Arc::from(
-            PeerIdentity::from_cert_chain(vec![CertificateDer::from(
+            Identity::from_cert_chain(vec![CertificateDer::from(
                 key.public_key()
                     .unwrap()
                     .as_ref()
