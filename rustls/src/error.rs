@@ -147,9 +147,9 @@ pub enum Error {
     Other(OtherError),
 }
 
-/// Specific failure cases from [`keys_match`] or a [`crate::crypto::signer::SigningKey`] that cannot produce a corresponding public key.
+/// Specific failure cases from [`CertifiedKey::new()`] or a [`crate::crypto::signer::SigningKey`] that cannot produce a corresponding public key.
 ///
-/// [`keys_match`]: crate::crypto::signer::CertifiedKey::keys_match
+/// [`CertifiedKey::new()`]: crate::crypto::signer::CertifiedKey::new()
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InconsistentKeys {
