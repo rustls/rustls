@@ -1751,20 +1751,6 @@ pub(crate) struct CertificatePayloadTls13<'a> {
     pub(crate) entries: Vec<CertificateEntry<'a>>,
 }
 
-impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.context.encode(bytes);
-        self.entries.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        Ok(Self {
-            context: PayloadU8::read(r)?,
-            entries: Vec::read(r)?,
-        })
-    }
-}
-
 impl<'a> CertificatePayloadTls13<'a> {
     pub(crate) fn new(
         certs: impl Iterator<Item = CertificateDer<'a>>,
@@ -1828,6 +1814,20 @@ impl<'a> CertificatePayloadTls13<'a> {
                 .map(|e| e.cert)
                 .collect(),
         )
+    }
+}
+
+impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.context.encode(bytes);
+        self.entries.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            context: PayloadU8::read(r)?,
+            entries: Vec::read(r)?,
+        })
     }
 }
 
