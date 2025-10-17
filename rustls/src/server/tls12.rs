@@ -499,7 +499,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                             cx.common
                                 .send_cert_verify_error_alert(err)
                         })?;
-                    Some(identity)
+                    Some(identity.into_owned())
                 }
             };
 
