@@ -81,7 +81,7 @@ impl Tls13ClientSessionValue {
         suite: &'static Tls13CipherSuite,
         ticket: Arc<PayloadU16>,
         secret: &[u8],
-        peer_identity: PeerIdentity,
+        peer_identity: PeerIdentity<'static>,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
@@ -163,7 +163,7 @@ impl Tls12ClientSessionValue {
         session_id: SessionId,
         ticket: Arc<PayloadU16>,
         master_secret: &[u8; 48],
-        peer_identity: PeerIdentity,
+        peer_identity: PeerIdentity<'static>,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
@@ -222,7 +222,7 @@ pub struct ClientSessionCommon {
     ticket: Arc<PayloadU16>,
     epoch: u64,
     lifetime_secs: u32,
-    peer_identity: Arc<PeerIdentity>,
+    peer_identity: Arc<PeerIdentity<'static>>,
     server_cert_verifier: Weak<dyn ServerVerifier>,
     client_creds: Weak<dyn ClientCredentialResolver>,
 }
@@ -232,7 +232,7 @@ impl ClientSessionCommon {
         ticket: Arc<PayloadU16>,
         time_now: UnixTime,
         lifetime_secs: u32,
-        peer_identity: PeerIdentity,
+        peer_identity: PeerIdentity<'static>,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ClientCredentialResolver>,
     ) -> Self {
@@ -272,7 +272,7 @@ impl ClientSessionCommon {
         }
     }
 
-    pub(crate) fn peer_identity(&self) -> &PeerIdentity {
+    pub(crate) fn peer_identity(&self) -> &PeerIdentity<'static> {
         &self.peer_identity
     }
 
@@ -447,7 +447,7 @@ impl From<Tls13ServerSessionValue> for ServerSessionValue {
 pub struct CommonServerSessionValue {
     pub(crate) sni: Option<DnsName<'static>>,
     pub(crate) cipher_suite: CipherSuite,
-    pub(crate) peer_identity: Option<PeerIdentity>,
+    pub(crate) peer_identity: Option<PeerIdentity<'static>>,
     pub(crate) alpn: Option<ProtocolName>,
     pub(crate) application_data: PayloadU16,
     #[doc(hidden)]
@@ -458,7 +458,7 @@ impl CommonServerSessionValue {
     pub(crate) fn new(
         sni: Option<&DnsName<'_>>,
         cipher_suite: CipherSuite,
-        peer_identity: Option<PeerIdentity>,
+        peer_identity: Option<PeerIdentity<'static>>,
         alpn: Option<ProtocolName>,
         application_data: Vec<u8>,
         creation_time: UnixTime,
@@ -532,7 +532,7 @@ impl Codec<'_> for CommonServerSessionValue {
             sni,
             cipher_suite: CipherSuite::read(r)?,
             peer_identity: match u8::read(r)? {
-                1 => Some(PeerIdentity::read(r)?),
+                1 => Some(PeerIdentity::read(r)?.into_owned()),
                 _ => None,
             },
             alpn: match u8::read(r)? {
