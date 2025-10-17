@@ -35,8 +35,6 @@ use crate::verify::{ClientIdentity, PeerIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
-    use pki_types::CertificateDer;
-
     use super::*;
     use crate::common_state::KxState;
     use crate::crypto::SupportedKxGroup;
@@ -213,7 +211,7 @@ mod client_hello {
                 &randoms,
                 st.extra_exts,
             )?;
-            emit_certificate(&mut flight, &signer.cert_chain);
+            emit_certificate(&mut flight, &signer);
             if let Some(ocsp_response) = ocsp_response {
                 emit_cert_status(&mut flight, ocsp_response);
             }
@@ -366,12 +364,9 @@ mod client_hello {
         Ok(ep.send_ticket)
     }
 
-    fn emit_certificate(
-        flight: &mut HandshakeFlightTls12<'_>,
-        cert_chain: &[CertificateDer<'static>],
-    ) {
+    fn emit_certificate(flight: &mut HandshakeFlightTls12<'_>, signer: &CertifiedSigner) {
         flight.add(HandshakeMessagePayload(HandshakePayload::Certificate(
-            CertificateChain(cert_chain.to_vec()),
+            CertificateChain::from_signer(signer),
         )));
     }
 
