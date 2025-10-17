@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use pki_types::{CertificateDer, ServerName};
+use pki_types::ServerName;
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
@@ -37,7 +37,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::{self, Retrieved};
 use crate::sealed::Sealed;
-use crate::sign::Signer;
+use crate::sign::{CertifiedSigner, Signer};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
@@ -1226,19 +1226,19 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
 
 fn emit_compressed_certificate_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
-    cert_chain: &[CertificateDer<'_>],
+    signer: &CertifiedSigner,
     auth_context: Option<Vec<u8>>,
     compressor: &dyn compress::CertCompressor,
     config: &ClientConfig,
 ) {
-    let mut cert_payload = CertificatePayloadTls13::new(cert_chain, None);
+    let mut cert_payload = CertificatePayloadTls13::new(signer.certificates(), None);
     cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
 
     let Ok(compressed) = config
         .cert_compression_cache
         .compression_for(compressor, &cert_payload)
     else {
-        return emit_certificate_tls13(flight, Some(cert_chain), auth_context);
+        return emit_certificate_tls13(flight, Some(signer), auth_context);
     };
 
     flight.add(HandshakeMessagePayload(
@@ -1248,13 +1248,15 @@ fn emit_compressed_certificate_tls13(
 
 fn emit_certificate_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
-    cert_chain: Option<&[CertificateDer<'_>]>,
+    signer: Option<&CertifiedSigner>,
     auth_context: Option<Vec<u8>>,
 ) {
-    let certs = cert_chain.unwrap_or_default();
-    let mut cert_payload = CertificatePayloadTls13::new(certs, None);
-    cert_payload.context = PayloadU8::new(auth_context.unwrap_or_default());
+    let mut cert_payload = match signer {
+        Some(signer) => CertificatePayloadTls13::new(signer.certificates(), None),
+        None => CertificatePayloadTls13::new([].into_iter(), None),
+    };
 
+    cert_payload.context = PayloadU8::new(auth_context.unwrap_or_default());
     flight.add(HandshakeMessagePayload(HandshakePayload::CertificateTls13(
         cert_payload,
     )));
@@ -1377,13 +1379,13 @@ impl State<ClientConnectionData> for ExpectFinished {
                     if let Some(compressor) = compressor {
                         emit_compressed_certificate_tls13(
                             &mut flight,
-                            &signer.cert_chain,
+                            &signer,
                             auth_context,
                             compressor,
                             &st.config,
                         );
                     } else {
-                        emit_certificate_tls13(&mut flight, Some(&signer.cert_chain), auth_context);
+                        emit_certificate_tls13(&mut flight, Some(&signer), auth_context);
                     }
                     emit_certverify_tls13(&mut flight, signer.signer)?;
                 }

@@ -1758,13 +1758,15 @@ impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
 }
 
 impl<'a> CertificatePayloadTls13<'a> {
-    pub(crate) fn new(certs: &'a [CertificateDer<'a>], ocsp_response: Option<&'a [u8]>) -> Self {
+    pub(crate) fn new(
+        certs: impl Iterator<Item = CertificateDer<'a>>,
+        ocsp_response: Option<&'a [u8]>,
+    ) -> Self {
         Self {
             context: PayloadU8::empty(),
             entries: certs
                 // zip certificate iterator with `ocsp_response` followed by
                 // an infinite-length iterator of `None`.
-                .iter()
                 .zip(
                     ocsp_response
                         .into_iter()
