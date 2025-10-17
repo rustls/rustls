@@ -632,7 +632,7 @@ impl ServerSideStepper<'_> {
         let mut cfg = match params.auth_key {
             AuthKeySource::KeyType(key_type) => cfg
                 .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
-                .with_single_cert(key_type.chain(), key_type.key())
+                .with_single_cert(key_type.identity(), key_type.key())
                 .expect("bad certs/private key?"),
 
             AuthKeySource::FuzzingProvider => cfg

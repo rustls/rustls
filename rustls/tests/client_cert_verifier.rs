@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use rustls::server::danger::PeerVerified;
 use rustls::{
-    AlertDescription, CertificateError, ClientConnection, Error, InvalidMessage, PeerIdentity,
-    PeerMisbehaved, ServerConfig, ServerConnection,
+    AlertDescription, CertificateError, ClientConnection, Error, InvalidMessage, PeerMisbehaved,
+    ServerConfig, ServerConnection,
 };
 use rustls_test::{
     ErrorFromPeer, KeyType, MockClientVerifier, do_handshake, do_handshake_until_both_error,
@@ -40,7 +40,7 @@ fn server_config_with_verifier(
 ) -> ServerConfig {
     ServerConfig::builder_with_provider(provider::DEFAULT_PROVIDER.into())
         .with_client_cert_verifier(Arc::new(client_cert_verifier))
-        .with_single_cert(kt.chain(), kt.key())
+        .with_single_cert(kt.identity(), kt.key())
         .unwrap()
 }
 
@@ -150,7 +150,7 @@ fn client_verifier_fails_properly() {
 fn server_allow_any_anonymous_or_authenticated_client() {
     let provider = Arc::new(provider::DEFAULT_PROVIDER);
     let kt = KeyType::Rsa2048;
-    for client_cert_chain in [None, Some(kt.client_chain())] {
+    for client_cert_chain in [None, Some(kt.client_identity())] {
         let client_auth = webpki_client_verifier_builder(kt.client_root_store(), &provider)
             .allow_unauthenticated()
             .build()
@@ -158,7 +158,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
 
         let server_config = ServerConfig::builder_with_provider(provider.clone())
             .with_client_cert_verifier(client_auth)
-            .with_single_cert(kt.chain(), kt.key())
+            .with_single_cert(kt.identity(), kt.key())
             .unwrap();
         let server_config = Arc::new(server_config);
 
@@ -171,21 +171,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             do_handshake(&mut client, &mut server);
-
-            let certs = match server.peer_identity() {
-                Some(PeerIdentity::X509(certs)) => Some(certs),
-                None => None,
-                _ => panic!("expected X509 certs"),
-            };
-
-            let (certs, client_chain) = match (certs, &client_cert_chain) {
-                (Some(certs), Some(client_chain)) => (certs, client_chain),
-                (None, None) => continue,
-                _ => panic!("expected both sides to agree on presence of client certs"),
-            };
-
-            assert_eq!(certs.end_entity, client_chain[0]);
-            assert_eq!(certs.intermediates, &client_chain[1..]);
+            assert_eq!(server.peer_identity(), client_cert_chain.as_deref());
         }
     }
 }

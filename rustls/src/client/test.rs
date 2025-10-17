@@ -45,7 +45,7 @@ mod tests {
         HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
         SignatureVerificationInput,
     };
-    use crate::{DigitallySignedStruct, DistinguishedName, KeyLog};
+    use crate::{DigitallySignedStruct, DistinguishedName, KeyLog, PeerIdentity};
 
     /// Tests that session_ticket(35) extension
     /// is not sent if the client does not support TLS 1.2.
@@ -460,13 +460,16 @@ mod tests {
             .key_provider
             .load_private_key(client_key())
             .unwrap();
-        let public_key_as_cert = Arc::from([CertificateDer::from(
-            key.public_key()
-                .unwrap()
-                .as_ref()
-                .to_vec(),
-        )]);
-        CertifiedKey::new_unchecked(public_key_as_cert, key)
+        let identity = Arc::from(
+            PeerIdentity::from_cert_chain(vec![CertificateDer::from(
+                key.public_key()
+                    .unwrap()
+                    .as_ref()
+                    .to_vec(),
+            )])
+            .unwrap(),
+        );
+        CertifiedKey::new_unchecked(identity, key)
     }
 
     fn client_key() -> PrivateKeyDer<'static> {

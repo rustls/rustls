@@ -280,7 +280,7 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
             .into()
         )
         .with_no_client_auth()
-        .with_single_cert(KeyType::EcdsaP256.chain(), KeyType::EcdsaP256.key())
+        .with_single_cert(KeyType::EcdsaP256.identity(), KeyType::EcdsaP256.key())
         .err(),
         Some(ApiMisuse::NoKeyExchangeGroupsConfigured.into())
     );
@@ -298,7 +298,7 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
             .into()
         )
         .with_no_client_auth()
-        .with_single_cert(KeyType::EcdsaP256.chain(), KeyType::EcdsaP256.key())
+        .with_single_cert(KeyType::EcdsaP256.identity(), KeyType::EcdsaP256.key())
         .err(),
         Some(ApiMisuse::NoCipherSuitesConfigured.into())
     );
@@ -329,14 +329,7 @@ fn client_can_get_server_cert() {
             let (mut client, mut server) =
                 make_pair_for_configs(client_config, make_server_config(*kt, &provider));
             do_handshake(&mut client, &mut server);
-
-            let certs = match client.peer_identity() {
-                Some(PeerIdentity::X509(certs)) => certs,
-                _ => panic!("expected X509 certs"),
-            };
-
-            assert_eq!(certs.end_entity, kt.chain()[0]);
-            assert_eq!(certs.intermediates, &kt.chain()[1..]);
+            assert_eq!(client.peer_identity().unwrap(), &*kt.identity());
         }
     }
 }
@@ -380,15 +373,7 @@ fn server_can_get_client_cert() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             do_handshake(&mut client, &mut server);
-
-            let certs = match server.peer_identity() {
-                Some(PeerIdentity::X509(certs)) => certs,
-                _ => panic!("expected X509 certs"),
-            };
-
-            let client_chain = kt.client_chain();
-            assert_eq!(certs.end_entity, client_chain[0]);
-            assert_eq!(certs.intermediates, &client_chain[1..]);
+            assert_eq!(server.peer_identity().unwrap(), &*kt.client_identity());
         }
     }
 }
@@ -634,12 +619,12 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 fn test_keys_match() {
     // Consistent: Both of these should have the same SPKI values
     let expect_consistent =
-        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Box::new(SigningKeySomeSpki));
+        sign::CertifiedKey::new(KeyType::Rsa2048.identity(), Box::new(SigningKeySomeSpki));
     assert!(expect_consistent.is_ok());
 
     // Inconsistent: These should not have the same SPKI values
     let expect_inconsistent =
-        sign::CertifiedKey::new(KeyType::EcdsaP256.chain(), Box::new(SigningKeySomeSpki));
+        sign::CertifiedKey::new(KeyType::EcdsaP256.identity(), Box::new(SigningKeySomeSpki));
     assert!(matches!(
         expect_inconsistent,
         Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
@@ -647,7 +632,7 @@ fn test_keys_match() {
 
     // Unknown: This signing key returns None for its SPKI, so we can't tell if the certified key is consistent
     assert!(matches!(
-        sign::CertifiedKey::new(KeyType::Rsa2048.chain(), Box::new(SigningKeyNoneSpki)),
+        sign::CertifiedKey::new(KeyType::Rsa2048.identity(), Box::new(SigningKeyNoneSpki)),
         Err(Error::InconsistentKeys(InconsistentKeys::Unknown))
     ));
 }
@@ -676,8 +661,11 @@ struct SigningKeySomeSpki;
 
 impl sign::SigningKey for SigningKeySomeSpki {
     fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer<'_>> {
-        let chain = KeyType::Rsa2048.chain();
-        let cert = ParsedCertificate::try_from(chain.first().unwrap()).unwrap();
+        let PeerIdentity::X509(identity) = &*KeyType::Rsa2048.identity() else {
+            panic!("expected X509 identity");
+        };
+
+        let cert = ParsedCertificate::try_from(&identity.end_entity).unwrap();
         Some(
             cert.subject_public_key_info()
                 .into_owned(),

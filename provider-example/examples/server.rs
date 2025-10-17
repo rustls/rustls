@@ -1,9 +1,9 @@
 use std::io::Write;
 use std::sync::Arc;
 
-use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::Acceptor;
+use rustls::{PeerIdentity, ServerConfig};
 
 fn main() {
     env_logger::init();
@@ -94,7 +94,10 @@ impl TestPki {
         let mut server_config =
             ServerConfig::builder_with_provider(rustls_provider_example::provider().into())
                 .with_no_client_auth()
-                .with_single_cert(Arc::from([self.server_cert_der]), self.server_key_der)
+                .with_single_cert(
+                    Arc::new(PeerIdentity::from_cert_chain(vec![self.server_cert_der]).unwrap()),
+                    self.server_key_der,
+                )
                 .unwrap();
 
         server_config.key_log = Arc::new(rustls::KeyLogFile::new());

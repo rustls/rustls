@@ -10,9 +10,9 @@ use rustls::client::{ClientCredentialResolver, CredentialRequest};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
-    ApiMisuse, CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection,
-    DistinguishedName, Error, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
-    SignatureScheme, SupportedCipherSuite,
+    CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection,
+    DistinguishedName, Error, PeerIdentity, PeerMisbehaved, ProtocolVersion, ServerConfig,
+    ServerConnection, SignatureScheme, SupportedCipherSuite,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, ServerCheckCertResolve,
@@ -434,7 +434,7 @@ fn sni_resolver_works() {
     resolver
         .add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new(kt.chain(), signing_key).expect("keys match"),
+            CertifiedKey::new(kt.identity(), signing_key).expect("keys match"),
         )
         .unwrap();
 
@@ -473,7 +473,7 @@ fn sni_resolver_rejects_wrong_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new(kt.chain(), kt.load_key(&provider::DEFAULT_PROVIDER))
+            CertifiedKey::new(kt.identity(), kt.load_key(&provider::DEFAULT_PROVIDER))
                 .expect("keys match")
         )
     );
@@ -483,7 +483,7 @@ fn sni_resolver_rejects_wrong_names() {
         ))),
         resolver.add(
             DnsName::try_from("not-localhost").unwrap(),
-            CertifiedKey::new(kt.chain(), kt.load_key(&provider::DEFAULT_PROVIDER))
+            CertifiedKey::new(kt.identity(), kt.load_key(&provider::DEFAULT_PROVIDER))
                 .expect("keys match")
         )
     );
@@ -500,7 +500,7 @@ fn sni_resolver_lower_cases_configured_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("LOCALHOST").unwrap(),
-            CertifiedKey::new(kt.chain(), signing_key).expect("keys match")
+            CertifiedKey::new(kt.identity(), signing_key).expect("keys match")
         )
     );
 
@@ -530,7 +530,7 @@ fn sni_resolver_lower_cases_queried_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new(kt.chain(), signing_key).expect("keys match")
+            CertifiedKey::new(kt.identity(), signing_key).expect("keys match")
         )
     );
 
@@ -553,15 +553,8 @@ fn sni_resolver_rejects_bad_certs() {
     let kt = KeyType::Rsa2048;
     let mut resolver = rustls::server::ServerNameResolver::new();
 
-    assert_eq!(
-        resolver.add(
-            DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new_unchecked(Arc::from([]), kt.load_key(&provider::DEFAULT_PROVIDER))
-        ),
-        Err(ApiMisuse::EmptyCertificateChain.into()),
-    );
-
-    let bad_chain = Arc::from([CertificateDer::from(vec![0xa0])]);
+    let bad_chain =
+        Arc::from(PeerIdentity::from_cert_chain(vec![CertificateDer::from(vec![0xa0])]).unwrap());
     assert_eq!(
         Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(

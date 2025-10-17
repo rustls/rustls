@@ -30,7 +30,7 @@ use mio::net::TcpStream;
 use rustls::crypto::{CryptoProvider, SupportedKxGroup, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ProtocolVersion, RootCertStore};
+use rustls::{PeerIdentity, ProtocolVersion, RootCertStore};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -470,7 +470,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
             let certs = load_certs(certs_file);
             let key = load_private_key(key_file);
             config
-                .with_client_auth_cert(Arc::from(certs), key)
+                .with_client_auth_cert(Arc::new(PeerIdentity::from_cert_chain(certs).unwrap()), key)
                 .expect("invalid client auth certs/key")
         }
         (None, None) => config.with_no_client_auth().unwrap(),

@@ -62,14 +62,14 @@ mod tests {
     use crate::server::{ServerConfig, ServerConnection, SingleRawPublicKeyResolver};
     use crate::sign::CertifiedKey;
     use crate::sync::Arc;
-    use crate::{CipherSuiteCommon, Tls12CipherSuite};
+    use crate::{CipherSuiteCommon, PeerIdentity, Tls12CipherSuite};
 
     #[test]
     fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
         let provider = super::provider::DEFAULT_TLS12_PROVIDER;
         let mut config = ServerConfig::builder_with_provider(provider.into())
             .with_no_client_auth()
-            .with_single_cert(server_cert(), server_key())
+            .with_single_cert(server_identity(), server_key())
             .unwrap();
 
         if config.provider.fips() {
@@ -110,7 +110,7 @@ mod tests {
             .into(),
         )
         .with_no_client_auth()
-        .with_single_cert(server_cert(), server_key())
+        .with_single_cert(server_identity(), server_key())
         .unwrap();
 
         let mut ch = minimal_client_hello();
@@ -136,7 +136,7 @@ mod tests {
             .into(),
         )
         .with_no_client_auth()
-        .with_single_cert(server_cert(), server_key())
+        .with_single_cert(server_identity(), server_key())
         .unwrap();
 
         let mut ch = minimal_client_hello();
@@ -163,7 +163,7 @@ mod tests {
             .into(),
         )
         .with_no_client_auth()
-        .with_single_cert(server_cert(), server_key())
+        .with_single_cert(server_identity(), server_key())
         .unwrap();
 
         let mut ch = minimal_client_hello();
@@ -260,13 +260,10 @@ mod tests {
             .key_provider
             .load_private_key(server_key())
             .unwrap();
-        let public_key_as_cert = Arc::from([CertificateDer::from(
-            key.public_key()
-                .unwrap()
-                .as_ref()
-                .to_vec(),
-        )]);
-        CertifiedKey::new_unchecked(public_key_as_cert, key)
+        let identity = Arc::from(PeerIdentity::RawPublicKey(
+            key.public_key().unwrap().into_owned(),
+        ));
+        CertifiedKey::new_unchecked(identity, key)
     }
 
     fn server_key() -> PrivateKeyDer<'static> {
@@ -276,11 +273,14 @@ mod tests {
         .unwrap()
     }
 
-    fn server_cert() -> Arc<[CertificateDer<'static>]> {
-        Arc::from([
-            CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/end.der")[..]),
-            CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/inter.der")[..]),
-        ])
+    fn server_identity() -> Arc<PeerIdentity<'static>> {
+        Arc::new(
+            PeerIdentity::from_cert_chain(vec![
+                CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/end.der")[..]),
+                CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/inter.der")[..]),
+            ])
+            .unwrap(),
+        )
     }
 
     fn ffdhe_provider() -> CryptoProvider {

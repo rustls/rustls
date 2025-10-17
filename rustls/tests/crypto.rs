@@ -203,7 +203,7 @@ fn test_secret_extraction_enabled() {
         let mut server_config =
             ServerConfig::builder_with_provider(provider_with_one_suite(&provider, suite).into())
                 .with_no_client_auth()
-                .with_single_cert(kt.chain(), kt.key())
+                .with_single_cert(kt.identity(), kt.key())
                 .unwrap();
         // Opt into secret extraction from both sides
         server_config.enable_secret_extraction = true;
@@ -326,7 +326,7 @@ fn test_secret_extraction_disabled_or_too_early() {
     for (server_enable, client_enable) in [(true, false), (false, true)] {
         let mut server_config = ServerConfig::builder_with_provider(provider.clone())
             .with_no_client_auth()
-            .with_single_cert(kt.chain(), kt.key())
+            .with_single_cert(kt.identity(), kt.key())
             .unwrap();
         server_config.enable_secret_extraction = server_enable;
         let server_config = Arc::new(server_config);
@@ -533,7 +533,7 @@ fn test_keys_match_for_all_signing_key_types() {
             .key_provider
             .load_private_key(kt.client_key())
             .unwrap();
-        let _ = CertifiedKey::new(kt.client_chain(), key).expect("keys match");
+        let _ = CertifiedKey::new(kt.client_identity(), key).expect("keys match");
         println!("{kt:?} ok");
     }
 }

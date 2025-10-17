@@ -47,8 +47,8 @@ use rustls::unbuffered::{
 use rustls::{
     CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection,
     ConnectionCommon, ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup,
-    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
-    SupportedCipherSuite,
+    PeerIdentity, ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData,
+    SignatureScheme, SupportedCipherSuite,
 };
 
 macro_rules! embed_files {
@@ -361,10 +361,15 @@ impl KeyType {
         }
     }
 
-    pub fn chain(&self) -> Arc<[CertificateDer<'static>]> {
-        CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
-            .map(|result| result.unwrap())
-            .collect()
+    pub fn identity(&self) -> Arc<PeerIdentity<'static>> {
+        Arc::new(
+            PeerIdentity::from_cert_chain(
+                CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
+                    .map(|result| result.unwrap())
+                    .collect(),
+            )
+            .unwrap(),
+        )
     }
 
     pub fn spki(&self) -> SubjectPublicKeyInfoDer<'static> {
@@ -384,10 +389,15 @@ impl KeyType {
             .into()
     }
 
-    pub fn client_chain(&self) -> Arc<[CertificateDer<'static>]> {
-        CertificateDer::pem_slice_iter(self.bytes_for("client.fullchain"))
-            .map(|result| result.unwrap())
-            .collect()
+    pub fn client_identity(&self) -> Arc<PeerIdentity<'static>> {
+        Arc::new(
+            PeerIdentity::from_cert_chain(
+                CertificateDer::pem_slice_iter(self.bytes_for("client.fullchain"))
+                    .map(|result| result.unwrap())
+                    .collect(),
+            )
+            .unwrap(),
+        )
     }
 
     pub fn end_entity_crl(&self) -> CertificateRevocationListDer<'static> {
@@ -422,10 +432,10 @@ impl KeyType {
             .load_private_key(self.client_key())?;
         let public_key = private_key
             .public_key()
-            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
-        let public_key_as_cert = CertificateDer::from(public_key.to_vec());
+            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?
+            .into_owned();
         Ok(CertifiedKey::new_unchecked(
-            Arc::from([public_key_as_cert]),
+            Arc::new(PeerIdentity::RawPublicKey(public_key)),
             private_key,
         ))
     }
@@ -439,10 +449,10 @@ impl KeyType {
             .load_private_key(self.key())?;
         let public_key = private_key
             .public_key()
-            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?;
-        let public_key_as_cert = CertificateDer::from(public_key.to_vec());
+            .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?
+            .into_owned();
         Ok(CertifiedKey::new_unchecked(
-            Arc::from([public_key_as_cert]),
+            Arc::new(PeerIdentity::RawPublicKey(public_key)),
             private_key,
         ))
     }
@@ -454,7 +464,7 @@ impl KeyType {
         let private_key = provider
             .key_provider
             .load_private_key(self.key())?;
-        CertifiedKey::new(self.chain(), private_key)
+        CertifiedKey::new(self.identity(), private_key)
     }
 
     fn crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
@@ -485,7 +495,11 @@ impl KeyType {
     }
 
     pub fn ca_cert(&self) -> CertificateDer<'_> {
-        self.chain()
+        let PeerIdentity::X509(id) = &*self.identity() else {
+            panic!("expected raw key identity");
+        };
+
+        id.intermediates
             .iter()
             .next_back()
             .cloned()
@@ -500,7 +514,7 @@ pub trait ServerConfigExt {
 impl ServerConfigExt for rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
     fn finish(self, kt: KeyType) -> ServerConfig {
         self.with_no_client_auth()
-            .with_single_cert(kt.chain(), kt.key())
+            .with_single_cert(kt.identity(), kt.key())
             .unwrap()
     }
 }
@@ -569,7 +583,7 @@ pub fn make_server_config_with_client_verifier(
 ) -> ServerConfig {
     ServerConfig::builder_with_provider(provider.clone().into())
         .with_client_cert_verifier(verifier_builder.build().unwrap())
-        .with_single_cert(kt.chain(), kt.key())
+        .with_single_cert(kt.identity(), kt.key())
         .unwrap()
 }
 
@@ -632,7 +646,7 @@ impl ClientConfigExt for rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifi
         );
 
         self.with_root_certificates(root_store)
-            .with_client_auth_cert(kt.client_chain(), kt.client_key())
+            .with_client_auth_cert(kt.client_identity(), kt.client_key())
             .unwrap()
     }
 }

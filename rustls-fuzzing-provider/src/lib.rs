@@ -33,9 +33,9 @@ use rustls::pki_types::{
 use rustls::server::ProducesTickets;
 use rustls::sign::CertifiedSigner;
 use rustls::{
-    CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerIncompatible,
-    PeerMisbehaved, ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme,
-    Tls12CipherSuite, Tls13CipherSuite, crypto, server, sign,
+    CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerIdentity,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, SignatureAlgorithm,
+    SignatureScheme, Tls12CipherSuite, Tls13CipherSuite, crypto, server, sign,
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
@@ -72,7 +72,10 @@ pub fn server_verifier() -> Arc<dyn ServerVerifier> {
 
 pub fn server_cert_resolver() -> Arc<dyn server::ServerCredentialResolver> {
     let cert = CertificateDer::from(&include_bytes!("../../test-ca/ecdsa-p256/end.der")[..]);
-    let certified_key = sign::CertifiedKey::new_unchecked(Arc::from([cert]), Box::new(SigningKey));
+    let certified_key = sign::CertifiedKey::new_unchecked(
+        Arc::new(PeerIdentity::from_cert_chain(vec![cert]).unwrap()),
+        Box::new(SigningKey),
+    );
     Arc::new(DummyCert(certified_key.into()))
 }
 

@@ -1623,9 +1623,8 @@ impl<'a> CertificateChain<'a> {
     pub(crate) fn from_signer(signer: &'a CertifiedSigner) -> Self {
         Self(
             signer
-                .cert_chain
-                .iter()
-                .map(|c| CertificateDer::from(c.as_ref()))
+                .identity
+                .as_certificates()
                 .collect(),
         )
     }

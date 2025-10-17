@@ -208,6 +208,7 @@ mod sni_resolver {
     use crate::server::ClientHello;
     use crate::sign::CertifiedSigner;
     use crate::sync::Arc;
+    use crate::verify::{CertificateIdentity, PeerIdentity};
     use crate::webpki::{ParsedCertificate, verify_server_name};
     use crate::{PeerIncompatible, server, sign};
 
@@ -241,9 +242,10 @@ mod sni_resolver {
             // *server* attempting to detect accidental misconfiguration.
 
             let wrapped = ServerName::DnsName(name);
-            ck.end_entity_cert()
-                .and_then(ParsedCertificate::try_from)
-                .and_then(|cert| verify_server_name(&cert, &wrapped))?;
+            if let PeerIdentity::X509(CertificateIdentity { end_entity, .. }) = &*ck.identity {
+                let parsed = ParsedCertificate::try_from(end_entity)?;
+                verify_server_name(&parsed, &wrapped)?;
+            }
 
             let ServerName::DnsName(name) = wrapped else {
                 unreachable!()

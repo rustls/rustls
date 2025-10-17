@@ -2,15 +2,16 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
+use pki_types::{AlgorithmIdentifier, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
 use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::enums::{CertificateType, SignatureAlgorithm, SignatureScheme};
-use crate::error::{ApiMisuse, Error, InconsistentKeys, PeerIncompatible};
+use crate::error::{Error, InconsistentKeys, PeerIncompatible};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
-use crate::x509;
+use crate::verify::PeerIdentity;
+use crate::{CertificateIdentity, x509};
 
 /// An abstract signing key.
 ///
@@ -121,18 +122,10 @@ pub struct CertifiedSigner {
     /// A one-time-use signer for this certificate.
     pub signer: Box<dyn Signer>,
     /// The certificate chain or raw public key.
-    pub cert_chain: Arc<[CertificateDer<'static>]>,
+    pub identity: Arc<PeerIdentity<'static>>,
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
     pub ocsp: Option<Arc<[u8]>>,
-}
-
-impl CertifiedSigner {
-    pub(crate) fn certificates(&self) -> impl Iterator<Item = CertificateDer<'_>> + '_ {
-        self.cert_chain
-            .iter()
-            .map(|cert| CertificateDer::from(cert.as_ref()))
-    }
 }
 
 /// A packaged-together certificate chain, matching `SigningKey` and
@@ -147,7 +140,7 @@ impl CertifiedSigner {
 #[derive(Debug)]
 pub struct CertifiedKey {
     /// The certificate chain or raw public key.
-    pub cert_chain: Arc<[CertificateDer<'static>]>,
+    pub identity: Arc<PeerIdentity<'static>>,
 
     /// The certified key.
     pub key: Box<dyn SigningKey>,
@@ -166,49 +159,46 @@ impl CertifiedKey {
     ///
     /// [`KeyProvider`]: crate::crypto::KeyProvider
     pub fn from_der(
-        cert_chain: Arc<[CertificateDer<'static>]>,
+        identity: Arc<PeerIdentity<'static>>,
         key: PrivateKeyDer<'static>,
         provider: &CryptoProvider,
     ) -> Result<Self, Error> {
         Self::new(
-            cert_chain,
+            identity,
             provider
                 .key_provider
                 .load_private_key(key)?,
         )
     }
 
-    /// Make a new CertifiedKey, with the given chain and key.
+    /// Make a new CertifiedKey, with the given identity and key.
     ///
-    /// The cert chain must not be empty. The first certificate in the chain
-    /// must be the end-entity certificate. The end-entity certificate's
-    /// subject public key info must match that of the `key`'s public key.
-    /// If the `key` does not have a public key, this will return an
-    /// `InconsistentKeys::Unknown` error.
+    /// Yields [`Error::InconsistentKeys`] if the `identity` is `X509` and the end-entity certificate's subject
+    /// public key info does not match that of the `key`'s public key, or if the `key` does not
+    /// have a public key.
     ///
     /// This constructor should be used with all [`SigningKey`] implementations
     /// that can provide a public key, including those provided by rustls itself.
     pub fn new(
-        cert_chain: Arc<[CertificateDer<'static>]>,
+        identity: Arc<PeerIdentity<'static>>,
         key: Box<dyn SigningKey>,
     ) -> Result<Self, Error> {
-        let parsed = ParsedCertificate::try_from(
-            cert_chain
-                .first()
-                .ok_or(ApiMisuse::EmptyCertificateChain)?,
-        )?;
-
-        match (key.public_key(), parsed.subject_public_key_info()) {
-            (None, _) => Err(Error::InconsistentKeys(InconsistentKeys::Unknown)),
-            (Some(key_spki), cert_spki) if key_spki != cert_spki => {
-                Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
+        if let PeerIdentity::X509(CertificateIdentity { end_entity, .. }) = &*identity {
+            let parsed = ParsedCertificate::try_from(end_entity)?;
+            match (key.public_key(), parsed.subject_public_key_info()) {
+                (None, _) => return Err(Error::InconsistentKeys(InconsistentKeys::Unknown)),
+                (Some(key_spki), cert_spki) if key_spki != cert_spki => {
+                    return Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch));
+                }
+                _ => {}
             }
-            _ => Ok(Self {
-                cert_chain,
-                key,
-                ocsp: None,
-            }),
-        }
+        };
+
+        Ok(Self {
+            identity,
+            key,
+            ocsp: None,
+        })
     }
 
     /// Make a new `CertifiedKey` from a raw private key.
@@ -218,12 +208,9 @@ impl CertifiedKey {
     ///
     /// This avoids parsing the end-entity certificate, which is useful when using client
     /// certificates that are not fully standards compliant, but known to usable by the peer.
-    pub fn new_unchecked(
-        cert_chain: Arc<[CertificateDer<'static>]>,
-        key: Box<dyn SigningKey>,
-    ) -> Self {
+    pub fn new_unchecked(identity: Arc<PeerIdentity<'static>>, key: Box<dyn SigningKey>) -> Self {
         Self {
-            cert_chain,
+            identity,
             key,
             ocsp: None,
         }
@@ -235,16 +222,9 @@ impl CertifiedKey {
     pub fn signer(&self, sig_schemes: &[SignatureScheme]) -> Option<CertifiedSigner> {
         Some(CertifiedSigner {
             signer: self.key.choose_scheme(sig_schemes)?,
-            cert_chain: self.cert_chain.clone(),
+            identity: self.identity.clone(),
             ocsp: self.ocsp.clone(),
         })
-    }
-
-    /// The end-entity certificate.
-    pub fn end_entity_cert(&self) -> Result<&CertificateDer<'_>, Error> {
-        self.cert_chain
-            .first()
-            .ok_or(Error::ApiMisuse(ApiMisuse::EmptyCertificateChain))
     }
 }
 

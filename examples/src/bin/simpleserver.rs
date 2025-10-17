@@ -13,6 +13,7 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
 
+use rustls::PeerIdentity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
@@ -33,7 +34,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
     let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
     let config = rustls::ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs, private_key)?;
+        .with_single_cert(Arc::new(PeerIdentity::from_cert_chain(certs)?), private_key)?;
 
     let listener = TcpListener::bind(format!("[::]:{}", 4443)).unwrap();
     let (mut tcp_stream, _) = listener.accept()?;
