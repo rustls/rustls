@@ -1,11 +1,12 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use core::iter;
 
 use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 
-use crate::CommonState;
+use crate::common_state::CommonState;
 use crate::enums::{AlertDescription, CertificateType, SignatureScheme};
-use crate::error::{Error, InvalidMessage, PeerIncompatible};
+use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::DistinguishedName;
@@ -247,13 +248,13 @@ impl<'a> PeerIdentity<'a> {
     /// Create a `PeerIdentity::X509` from a certificate chain.
     ///
     /// Returns `None` if `cert_chain` is empty.
-    pub fn from_cert_chain(mut cert_chain: Vec<CertificateDer<'a>>) -> Option<Self> {
+    pub fn from_cert_chain(mut cert_chain: Vec<CertificateDer<'a>>) -> Result<Self, ApiMisuse> {
         let mut iter = cert_chain.drain(..);
         let Some(first) = iter.next() else {
-            return None;
+            return Err(ApiMisuse::EmptyCertificateChain);
         };
 
-        Some(Self::X509(CertificateIdentity {
+        Ok(Self::X509(CertificateIdentity {
             end_entity: first,
             intermediates: iter.collect(),
         }))
@@ -298,6 +299,21 @@ impl<'a> PeerIdentity<'a> {
         }
     }
 
+    pub(crate) fn as_certificates(&'a self) -> impl Iterator<Item = CertificateDer<'a>> + 'a {
+        match self {
+            Self::X509(cert) => IdentityCertificateIterator::X509(
+                iter::once(CertificateDer::from(cert.end_entity.as_ref())).chain(
+                    cert.intermediates
+                        .iter()
+                        .map(|c| CertificateDer::from(c.as_ref())),
+                ),
+            ),
+            Self::RawPublicKey(spki) => IdentityCertificateIterator::RawPublicKey(iter::once(
+                CertificateDer::from(spki.as_ref()),
+            )),
+        }
+    }
+
     /// Get the public key of this identity as a `SignerPublicKey`.
     pub fn as_signer(&self) -> SignerPublicKey<'_> {
         match self {
@@ -336,6 +352,26 @@ impl<'a> Codec<'a> for PeerIdentity<'a> {
             _ => Err(InvalidMessage::UnexpectedMessage(
                 "invalid PeerIdentity discriminant",
             )),
+        }
+    }
+}
+
+enum IdentityCertificateIterator<C, R> {
+    X509(C),
+    RawPublicKey(R),
+}
+
+impl<'a, C, R> Iterator for IdentityCertificateIterator<C, R>
+where
+    C: Iterator<Item = CertificateDer<'a>>,
+    R: Iterator<Item = CertificateDer<'a>>,
+{
+    type Item = CertificateDer<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::X509(iter) => iter.next(),
+            Self::RawPublicKey(iter) => iter.next(),
         }
     }
 }

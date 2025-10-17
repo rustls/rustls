@@ -32,7 +32,7 @@ use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
-use rustls::{ProtocolVersion, RootCertStore};
+use rustls::{PeerIdentity, ProtocolVersion, RootCertStore};
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
@@ -626,7 +626,11 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let (versions, provider) = args.provider();
     let mut config = rustls::ServerConfig::builder_with_provider(provider.into())
         .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(Arc::from(certs), privkey, Arc::from(ocsp))
+        .with_single_cert_with_ocsp(
+            Arc::new(PeerIdentity::from_cert_chain(certs).unwrap()),
+            privkey,
+            Arc::from(ocsp),
+        )
         .expect("bad certificates/private key");
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());

@@ -14,9 +14,9 @@ use std::{fs, thread};
 
 use clap::Parser;
 use rcgen::{Issuer, KeyPair, SerialNumber};
-use rustls::RootCertStore;
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
+use rustls::{PeerIdentity, RootCertStore};
 
 fn main() {
     let args = Args::parse();
@@ -210,7 +210,10 @@ impl TestPki {
         let mut server_config = ServerConfig::builder()
             .with_client_cert_verifier(verifier)
             .with_single_cert(
-                Arc::from([self.server_cert.cert.der().clone()]),
+                Arc::from(
+                    PeerIdentity::from_cert_chain(vec![self.server_cert.cert.der().clone()])
+                        .unwrap(),
+                ),
                 PrivatePkcs8KeyDer::from(
                     self.server_cert
                         .signing_key

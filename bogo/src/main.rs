@@ -52,7 +52,7 @@ use rustls::server::{
 use rustls::sign::{CertifiedKey, CertifiedSigner, SingleCertAndKey};
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, CertificateType,
-    Connection, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
+    Connection, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIdentity,
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
     SignatureScheme, client, compress, server, sign,
 };
@@ -282,7 +282,12 @@ impl Credential {
             .map(|cert| cert.unwrap())
             .collect::<Vec<_>>();
         let key = PrivateKeyDer::from_pem_file(&self.key_file).unwrap();
-        CertifiedKey::from_der(Arc::from(certs), key, provider).unwrap()
+        CertifiedKey::from_der(
+            Arc::from(PeerIdentity::from_cert_chain(certs).unwrap()),
+            key,
+            provider,
+        )
+        .unwrap()
     }
 
     fn configured(&self) -> bool {
@@ -647,8 +652,15 @@ struct ClientCert {
 
 impl ClientCert {
     fn new(mut certkey: CertifiedKey, meta: &Credential) -> Self {
-        let parsed_cert =
-            webpki::EndEntityCert::try_from(certkey.cert_chain.last().unwrap()).unwrap();
+        let PeerIdentity::X509(id) = &*certkey.identity else {
+            panic!("only X.509 client certs supported");
+        };
+
+        let parsed_cert = webpki::EndEntityCert::try_from(match id.intermediates.last() {
+            Some(root) => root,
+            None => &id.end_entity,
+        })
+        .unwrap();
         let issuer_dn = DistinguishedName::in_sequence(parsed_cert.issuer());
 
         if let Some(scheme) = meta.use_signing_scheme {

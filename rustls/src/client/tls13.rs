@@ -1235,7 +1235,7 @@ fn emit_compressed_certificate_tls13(
     compressor: &dyn compress::CertCompressor,
     config: &ClientConfig,
 ) {
-    let mut cert_payload = CertificatePayloadTls13::new(signer.certificates(), None);
+    let mut cert_payload = CertificatePayloadTls13::new(signer.identity.as_certificates(), None);
     cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
 
     let Ok(compressed) = config
@@ -1256,7 +1256,7 @@ fn emit_certificate_tls13(
     auth_context: Option<Vec<u8>>,
 ) {
     let mut cert_payload = match signer {
-        Some(signer) => CertificatePayloadTls13::new(signer.certificates(), None),
+        Some(signer) => CertificatePayloadTls13::new(signer.identity.as_certificates(), None),
         None => CertificatePayloadTls13::new([].into_iter(), None),
     };
 

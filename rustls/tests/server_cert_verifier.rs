@@ -14,8 +14,8 @@ use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
     AlertDescription, CertificateError, CertificateType, ClientConfig, ClientConnection,
-    DistinguishedName, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible, RootCertStore,
-    ServerConfig, ServerConnection,
+    DistinguishedName, Error, ExtendedKeyPurpose, InvalidMessage, PeerIdentity, PeerIncompatible,
+    RootCertStore, ServerConfig, ServerConnection,
 };
 use rustls_test::{
     ErrorFromPeer, KeyType, MockServerVerifier, certificate_error_expecting_name, do_handshake,
@@ -181,7 +181,7 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     for version_provider in ALL_VERSIONS {
         let server_config = ServerConfig::builder_with_provider(provider.clone().into())
             .with_no_client_auth()
-            .with_single_cert_with_ocsp(kt.chain(), kt.key(), Arc::from(&ocsp_response[..]))
+            .with_single_cert_with_ocsp(kt.identity(), kt.key(), Arc::from(&ocsp_response[..]))
             .unwrap();
 
         let client_config = ClientConfig::builder_with_provider(version_provider.into())
@@ -554,7 +554,10 @@ fn client_check_server_certificate_ee_crl_expired() {
 #[test]
 fn client_check_server_certificate_helper_api() {
     for kt in KeyType::all_for_provider(&provider::DEFAULT_PROVIDER) {
-        let chain = kt.chain();
+        let PeerIdentity::X509(identity) = &*kt.identity() else {
+            panic!("expected X509 identity");
+        };
+
         let correct_roots = kt.client_root_store();
         let incorrect_roots = match kt {
             KeyType::Rsa2048 => KeyType::EcdsaP256,
@@ -564,9 +567,9 @@ fn client_check_server_certificate_helper_api() {
         // Using the correct trust anchors, we should verify without error.
         assert!(
             verify_identity_signed_by_trust_anchor(
-                &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
+                &ParsedCertificate::try_from(&identity.end_entity).unwrap(),
                 &correct_roots,
-                &[chain.get(1).unwrap().clone()],
+                &identity.intermediates,
                 UnixTime::now(),
                 webpki::ALL_VERIFICATION_ALGS,
             )
@@ -575,9 +578,9 @@ fn client_check_server_certificate_helper_api() {
         // Using the wrong trust anchors, we should get the expected error.
         assert_eq!(
             verify_identity_signed_by_trust_anchor(
-                &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
+                &ParsedCertificate::try_from(&identity.end_entity).unwrap(),
                 &incorrect_roots,
-                &[chain.get(1).unwrap().clone()],
+                &identity.intermediates,
                 UnixTime::now(),
                 webpki::ALL_VERIFICATION_ALGS,
             )
@@ -589,8 +592,11 @@ fn client_check_server_certificate_helper_api() {
 
 #[test]
 fn client_check_server_valid_purpose() {
-    let chain = KeyType::EcdsaP256.client_chain();
-    let trust_anchor = chain.last().unwrap();
+    let PeerIdentity::X509(identity) = &*KeyType::EcdsaP256.client_identity() else {
+        panic!("expected X509 identity");
+    };
+
+    let trust_anchor = identity.intermediates.last().unwrap();
     let roots = RootCertStore {
         roots: vec![
             anchor_from_trusted_cert(trust_anchor)
@@ -600,9 +606,9 @@ fn client_check_server_valid_purpose() {
     };
 
     let error = verify_identity_signed_by_trust_anchor(
-        &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
+        &ParsedCertificate::try_from(&identity.end_entity).unwrap(),
         &roots,
-        &[chain.get(1).unwrap().clone()],
+        &identity.intermediates,
         UnixTime::now(),
         webpki::ALL_VERIFICATION_ALGS,
     )

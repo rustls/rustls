@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
-use pki_types::{CertificateDer, PrivateKeyDer};
+use pki_types::PrivateKeyDer;
 
 use super::server_conn::InvalidSniPolicy;
 use super::{ServerConfig, ServerCredentialResolver, handy};
@@ -9,7 +9,7 @@ use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
-use crate::verify::{ClientVerifier, NoClientAuth};
+use crate::verify::{ClientVerifier, NoClientAuth, PeerIdentity};
 use crate::{NoKeyLog, compress};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {
@@ -63,10 +63,10 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// key for the end-entity certificate from the `cert_chain`.
     pub fn with_single_cert(
         self,
-        cert_chain: Arc<[CertificateDer<'static>]>,
+        identity: Arc<PeerIdentity<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
-        let certified_key = CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
+        let certified_key = CertifiedKey::from_der(identity, key_der, self.crypto_provider())?;
         self.with_server_credential_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 
@@ -85,12 +85,11 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// key for the end-entity certificate from the `cert_chain`.
     pub fn with_single_cert_with_ocsp(
         self,
-        cert_chain: Arc<[CertificateDer<'static>]>,
+        identity: Arc<PeerIdentity<'static>>,
         key_der: PrivateKeyDer<'static>,
         ocsp: Arc<[u8]>,
     ) -> Result<ServerConfig, Error> {
-        let mut certified_key =
-            CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
+        let mut certified_key = CertifiedKey::from_der(identity, key_der, self.crypto_provider())?;
         certified_key.ocsp = Some(ocsp);
         self.with_server_credential_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }

@@ -90,14 +90,14 @@ use crate::{ClientConfig, ServerConfig};
 /// # #[cfg(feature = "aws-lc-rs")] {
 /// # use std::sync::Arc;
 /// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
-/// # use rustls::ServerConfig;
+/// # use rustls::{PeerIdentity, ServerConfig};
 /// # let certs = vec![];
 /// # let private_key = pki_types::PrivateKeyDer::from(
 /// #    pki_types::PrivatePkcs8KeyDer::from(vec![])
 /// # );
 /// ServerConfig::builder()
 ///     .with_no_client_auth()
-///     .with_single_cert(Arc::from(certs), private_key)
+///     .with_single_cert(Arc::new(PeerIdentity::from_cert_chain(certs).unwrap()), private_key)
 ///     .expect("bad certificate/key/provider");
 /// # }
 /// ```

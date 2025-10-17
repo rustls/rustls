@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
-use pki_types::{CertificateDer, PrivateKeyDer};
+use pki_types::PrivateKeyDer;
 
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
@@ -11,7 +11,7 @@ use crate::key_log::NoKeyLog;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
 use crate::webpki::{self, WebPkiServerVerifier};
-use crate::{compress, verify};
+use crate::{PeerIdentity, compress, verify};
 
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Enable Encrypted Client Hello (ECH) in the given mode.
@@ -138,10 +138,10 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// This function fails if `key_der` is invalid.
     pub fn with_client_auth_cert(
         self,
-        cert_chain: Arc<[CertificateDer<'static>]>,
+        identity: Arc<PeerIdentity<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
-        let certified_key = CertifiedKey::from_der(cert_chain, key_der, &self.provider)?;
+        let certified_key = CertifiedKey::from_der(identity, key_der, &self.provider)?;
         self.with_client_credential_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
     }
 

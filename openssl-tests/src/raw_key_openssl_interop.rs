@@ -17,7 +17,7 @@ mod client {
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
     };
     use rustls::pki_types::pem::PemObject;
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
+    use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
     use rustls::sign::CertifiedKey;
     use rustls::{
@@ -38,13 +38,14 @@ mod client {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))
             .expect("cannot load public key");
-        let client_public_key_as_cert = CertificateDer::from(client_public_key.to_vec());
 
         let server_raw_key = SubjectPublicKeyInfoDer::from_pem_file(server_pub_key)
             .expect("cannot open pub key file");
 
-        let certified_key =
-            CertifiedKey::new_unchecked(Arc::from([client_public_key_as_cert]), client_private_key);
+        let certified_key = CertifiedKey::new_unchecked(
+            Arc::new(PeerIdentity::RawPublicKey(client_public_key.into_owned())),
+            client_private_key,
+        );
 
         ClientConfig::builder()
             .dangerous()
@@ -146,7 +147,7 @@ mod server {
         WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
     };
     use rustls::pki_types::pem::PemObject;
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
+    use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::SingleRawPublicKeyResolver;
     use rustls::server::danger::{
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
@@ -173,10 +174,11 @@ mod server {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))
             .expect("cannot load public key");
-        let server_public_key_as_cert = CertificateDer::from(server_public_key.to_vec());
 
-        let certified_key =
-            CertifiedKey::new_unchecked(Arc::from([server_public_key_as_cert]), server_private_key);
+        let certified_key = CertifiedKey::new_unchecked(
+            Arc::new(PeerIdentity::RawPublicKey(server_public_key.into_owned())),
+            server_private_key,
+        );
 
         let client_cert_verifier = Arc::new(SimpleRpkClientVerifier::new(vec![client_raw_key]));
         let server_cert_resolver = Arc::new(SingleRawPublicKeyResolver::new(certified_key));
@@ -287,9 +289,11 @@ mod tests {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
     use std::process::{Command, Stdio};
+    use std::sync::Arc;
     use std::sync::mpsc::channel;
     use std::thread;
 
+    use rustls::PeerIdentity;
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
@@ -366,7 +370,10 @@ mod tests {
         let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
         let config = rustls::ServerConfig::builder()
             .with_no_client_auth()
-            .with_single_cert(certs, private_key)
+            .with_single_cert(
+                Arc::new(PeerIdentity::from_cert_chain(certs).unwrap()),
+                private_key,
+            )
             .unwrap();
         let server_thread = thread::spawn(move || {
             server::run_server(config, listener).expect("failed to run server to completion")

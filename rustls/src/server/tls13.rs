@@ -342,7 +342,10 @@ mod client_hello {
                 } else {
                     emit_certificate_tls13(
                         &mut flight,
-                        CertificatePayloadTls13::new(signer.certificates(), ocsp_response),
+                        CertificatePayloadTls13::new(
+                            signer.identity.as_certificates(),
+                            ocsp_response,
+                        ),
                     );
                 }
                 emit_certificate_verify_tls13(&mut flight, signer.signer)?;
@@ -772,7 +775,8 @@ mod client_hello {
         ocsp_response: Option<&[u8]>,
         cert_compressor: &'static dyn CertCompressor,
     ) {
-        let payload = CertificatePayloadTls13::new(signer.certificates(), ocsp_response);
+        let payload =
+            CertificatePayloadTls13::new(signer.identity.as_certificates(), ocsp_response);
         let Ok(entry) = config
             .cert_compression_cache
             .compression_for(cert_compressor, &payload)

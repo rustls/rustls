@@ -36,7 +36,7 @@ use rustls::server::{
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind,
-    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData,
+    PeerIdentity, ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData,
 };
 use rustls_test::KeyType;
 
@@ -796,13 +796,17 @@ impl Parameters {
         let provider = Arc::new(self.provider.build());
         let client_auth = match self.client_auth {
             ClientAuth::Yes => {
-                let roots = self.proto.key_type.chain();
+                let PeerIdentity::X509(id) = &*self.proto.key_type.identity() else {
+                    panic!("client auth requested but no X.509 identity available");
+                };
+
                 let mut client_auth_roots = RootCertStore::empty();
-                for root in &*roots {
+                for root in &id.intermediates {
                     client_auth_roots
                         .add(root.clone())
                         .unwrap();
                 }
+
                 WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), &provider)
                     .build()
                     .unwrap()
@@ -812,7 +816,7 @@ impl Parameters {
 
         let mut cfg = ServerConfig::builder_with_provider(provider)
             .with_client_cert_verifier(client_auth)
-            .with_single_cert(self.proto.key_type.chain(), self.proto.key_type.key())
+            .with_single_cert(self.proto.key_type.identity(), self.proto.key_type.key())
             .expect("bad certs/private key?");
 
         match self.resume {
@@ -847,7 +851,7 @@ impl Parameters {
         let mut cfg = match self.client_auth {
             ClientAuth::Yes => cfg
                 .with_client_auth_cert(
-                    self.proto.key_type.client_chain(),
+                    self.proto.key_type.client_identity(),
                     self.proto.key_type.client_key(),
                 )
                 .unwrap(),

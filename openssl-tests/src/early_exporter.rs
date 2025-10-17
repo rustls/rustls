@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::{str, thread};
 
 use openssl::ssl::{SslConnector, SslMethod, SslSession, SslStream};
-use rustls::ServerConfig;
 use rustls::crypto::aws_lc_rs as provider;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::{PeerIdentity, ServerConfig};
 
 use crate::utils::verify_openssl3_available;
 
@@ -24,7 +24,10 @@ fn test_early_exporter() {
     let server_thread = thread::spawn(move || {
         let mut config = ServerConfig::builder_with_provider(provider::DEFAULT_PROVIDER.into())
             .with_no_client_auth()
-            .with_single_cert(load_certs(), load_private_key())
+            .with_single_cert(
+                Arc::new(PeerIdentity::from_cert_chain(load_certs()).unwrap()),
+                load_private_key(),
+            )
             .unwrap();
         config.max_early_data_size = 8192;
         let config = Arc::new(config);
@@ -132,7 +135,7 @@ fn test_early_exporter() {
     server_thread.join().unwrap();
 }
 
-fn load_certs() -> Arc<[CertificateDer<'static>]> {
+fn load_certs() -> Vec<CertificateDer<'static>> {
     CertificateDer::pem_file_iter(CERT_CHAIN_FILE)
         .unwrap()
         .map(|c| c.unwrap())

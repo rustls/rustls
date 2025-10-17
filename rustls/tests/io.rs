@@ -1607,7 +1607,7 @@ fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
             .into(),
         )
         .with_no_client_auth()
-        .with_single_cert(kt.chain(), kt.key())
+        .with_single_cert(kt.identity(), kt.key())
         .unwrap(),
     );
 
