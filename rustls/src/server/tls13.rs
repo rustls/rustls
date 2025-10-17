@@ -1045,11 +1045,8 @@ impl State<ServerConnectionData> for ExpectCertificate {
             .verifier
             .client_auth_mandatory();
 
-        let peer_identity = PeerIdentity::from_cert_chain(
-            client_cert.0,
-            self.expected_certificate_type,
-            cx.common,
-        )?;
+        let peer_identity =
+            PeerIdentity::from_peer(client_cert.0, self.expected_certificate_type, cx.common)?;
 
         let Some(peer_identity) = peer_identity else {
             if !mandatory {

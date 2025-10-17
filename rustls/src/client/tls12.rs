@@ -782,7 +782,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // 5. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
-        let identity = PeerIdentity::from_cert_chain(
+        let identity = PeerIdentity::from_peer(
             st.server_cert.cert_chain.0,
             CertificateType::X509,
             cx.common,

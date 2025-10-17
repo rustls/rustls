@@ -476,7 +476,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         trace!("certs {cert_chain:?}");
 
         let peer_identity =
-            match PeerIdentity::from_cert_chain(cert_chain.0, CertificateType::X509, cx.common)? {
+            match PeerIdentity::from_peer(cert_chain.0, CertificateType::X509, cx.common)? {
                 None if mandatory => {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::CertificateRequired,
