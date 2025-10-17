@@ -8,6 +8,7 @@ use core::{fmt, mem};
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
+use crate::common_state::{Input, Requirement};
 use crate::conn::SideData;
 use crate::error::Error;
 use crate::msgs::deframer::buffers::DeframerSliceBuffer;
@@ -102,6 +103,45 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     Ok(r) => r,
                 }
             };
+
+            if let Ok(Requirement::VerifyServerIdentity { .. }) = self
+                .core
+                .state
+                .as_ref()
+                .map(|s| s.requirement())
+            {
+                let state =
+                    match mem::replace(&mut self.core.state, Err(Error::HandshakeNotComplete)) {
+                        Ok(state) => state,
+                        Err(e) => {
+                            buffer.queue_discard(buffer_progress.take_discard());
+                            self.core.state = Err(e.clone());
+                            return UnbufferedStatus {
+                                discard: buffer.pending_discard(),
+                                state: Err(e),
+                            };
+                        }
+                    };
+                let Requirement::VerifyServerIdentity { identity, verifier } = state.requirement()
+                else {
+                    unreachable!()
+                };
+                let state = match verifier
+                    .verify_identity(&identity)
+                    .and_then(|verified| state.handle(Input::PeerVerified(verified)))
+                {
+                    Ok(state) => state,
+                    Err(err) => {
+                        buffer.queue_discard(buffer_progress.take_discard());
+                        self.core.state = Err(err.clone());
+                        return UnbufferedStatus {
+                            discard: buffer.pending_discard(),
+                            state: Err(err),
+                        };
+                    }
+                };
+                self.core.state = Ok(state);
+            }
 
             if let Some(msg) = deframer_output {
                 let mut state =

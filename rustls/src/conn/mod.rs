@@ -7,7 +7,9 @@ use std::io;
 
 use kernel::KernelConnection;
 
-use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
+use crate::common_state::{
+    CommonState, Context, DEFAULT_BUFFER_LIMIT, Input, IoState, Requirement, State,
+};
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::log::trace;
@@ -937,6 +939,20 @@ impl<Side: SideData> ConnectionCore<Side> {
         let mut buffer_progress = self.hs_deframer.progress();
 
         loop {
+            match state.requirement() {
+                Requirement::Message => {}
+                Requirement::VerifyServerIdentity { identity, verifier } => {
+                    let verified = verifier
+                        .verify_identity(&identity)
+                        .map_err(|err| {
+                            self.common_state
+                                .send_cert_verify_error_alert(err)
+                        })?;
+                    state = state.handle(Input::PeerVerified(verified))?;
+                    continue;
+                }
+            }
+
             let res = self.deframe(
                 Some(&*state),
                 deframer_buffer.filled_mut(),

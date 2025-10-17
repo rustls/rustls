@@ -23,7 +23,7 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-use crate::verify::PeerIdentity;
+use crate::verify::{PeerIdentity, PeerVerified, ServerIdentity, ServerVerifier};
 use crate::{quic, record_layer};
 
 /// Connection state common to both client and server connections.
@@ -834,7 +834,7 @@ impl IoState {
 
 pub(crate) trait State<Side>: Send + Sync {
     /// Declare the acceptable `Input` variant for `handle()`
-    fn requirement(&self) -> Requirement {
+    fn requirement(&self) -> Requirement<'_> {
         Requirement::Message
     }
 
@@ -870,20 +870,29 @@ pub(crate) trait State<Side>: Send + Sync {
 pub(crate) enum Input<'c, 'm, Side> {
     /// A TLS protocol message
     Message(&'c mut Context<'c, Side>, Message<'m>),
+    /// Confirmation that the peer's identity was verified.
+    PeerVerified(PeerVerified),
 }
 
 impl<'c, 'm, Side> Input<'c, 'm, Side> {
     pub(crate) fn message(self) -> Result<(&'c mut Context<'c, Side>, Message<'m>), Error> {
         match self {
             Self::Message(cx, m) => Ok((cx, m)),
+            _ => Err(Error::Unreachable("wrong state input type")),
         }
     }
 }
 
 /// Possible types of input to the state machine
-pub(crate) enum Requirement {
+#[derive(Debug)]
+pub(crate) enum Requirement<'a> {
     /// Corresponds to [`Input::Message`]
     Message,
+    /// Requires an input of [`Input::PeerVerified`]
+    VerifyServerIdentity {
+        identity: ServerIdentity<'a>,
+        verifier: &'a dyn ServerVerifier,
+    },
 }
 
 pub(crate) struct Context<'a, Data> {
