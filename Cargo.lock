@@ -2619,7 +2619,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.32"
+version = "0.23.33"
 dependencies = [
  "aws-lc-rs",
  "base64",
