@@ -244,6 +244,21 @@ pub enum PeerIdentity<'a> {
 }
 
 impl<'a> PeerIdentity<'a> {
+    /// Create a `PeerIdentity::X509` from a certificate chain.
+    ///
+    /// Returns `None` if `cert_chain` is empty.
+    pub fn from_cert_chain(mut cert_chain: Vec<CertificateDer<'a>>) -> Option<Self> {
+        let mut iter = cert_chain.drain(..);
+        let Some(first) = iter.next() else {
+            return None;
+        };
+
+        Some(Self::X509(CertificateIdentity {
+            end_entity: first,
+            intermediates: iter.collect(),
+        }))
+    }
+
     pub(crate) fn from_peer(
         mut cert_chain: Vec<CertificateDer<'a>>,
         expected: CertificateType,
