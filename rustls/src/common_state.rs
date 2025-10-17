@@ -23,7 +23,7 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-use crate::verify::PeerIdentity;
+use crate::verify::{PeerIdentity, PeerVerified, ServerIdentity, ServerVerifier};
 use crate::{quic, record_layer};
 
 /// Connection state common to both client and server connections.
@@ -205,12 +205,14 @@ impl CommonState {
             }
         }
 
-        let mut cx = Context {
-            common: self,
-            data,
-            sendable_plaintext,
-        };
-        match state.handle(&mut cx, msg) {
+        match state.handle(Input::Message(
+            &mut Context {
+                common: self,
+                data,
+                sendable_plaintext,
+            },
+            msg,
+        )) {
             Ok(next) => Ok(next),
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
@@ -831,7 +833,21 @@ impl IoState {
 }
 
 pub(crate) trait State<Side>: Send + Sync {
-    fn handle<'m>(
+    /// Declare the acceptable `Input` variant for `handle()`
+    fn requirement(&self) -> Requirement<'_> {
+        Requirement::Message
+    }
+
+    /// Handle an `input` and return the next state.
+    fn handle<'a, 'b>(
+        self: Box<Self>,
+        input: Input<'a, 'b, Side>,
+    ) -> Result<Box<dyn State<Side>>, Error> {
+        let (cx, m) = input.message()?;
+        self.handle_message(cx, m)
+    }
+
+    fn handle_message<'m>(
         self: Box<Self>,
         cx: &mut Context<'_, Side>,
         message: Message<'m>,
@@ -848,6 +864,35 @@ pub(crate) trait State<Side>: Send + Sync {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
     }
+}
+
+/// Possible inputs to the state machine.
+pub(crate) enum Input<'c, 'm, Side> {
+    /// A TLS protocol message
+    Message(&'c mut Context<'c, Side>, Message<'m>),
+    /// Confirmation that the peer's identity was verified.
+    PeerVerified(PeerVerified),
+}
+
+impl<'c, 'm, Side> Input<'c, 'm, Side> {
+    pub(crate) fn message(self) -> Result<(&'c mut Context<'c, Side>, Message<'m>), Error> {
+        match self {
+            Self::Message(cx, m) => Ok((cx, m)),
+            _ => Err(Error::Unreachable("wrong state input type")),
+        }
+    }
+}
+
+/// Possible types of input to the state machine
+#[derive(Debug)]
+pub(crate) enum Requirement<'a> {
+    /// Corresponds to [`Input::Message`]
+    Message,
+    /// Requires an input of [`Input::PeerVerified`]
+    VerifyServerIdentity {
+        identity: ServerIdentity<'a>,
+        verifier: &'a dyn ServerVerifier,
+    },
 }
 
 pub(crate) struct Context<'a, Data> {

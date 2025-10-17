@@ -511,7 +511,7 @@ pub mod unbuffered {
     pub use crate::conn::unbuffered::{
         AppDataRecord, ConnectionState, EncodeError, EncodeTlsData, EncryptError,
         InsufficientSizeError, ReadEarlyData, ReadTraffic, TransmitTlsData, UnbufferedStatus,
-        WriteTraffic,
+        VerifyServerIdentity, WriteTraffic,
     };
 }
 

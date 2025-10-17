@@ -798,6 +798,7 @@ pub fn do_unbuffered_handshake(
                         .unwrap();
                 }
                 ConnectionState::TransmitTlsData(data) => data.done(),
+                ConnectionState::VerifyServerIdentity(vsi) => vsi.complete(),
                 st => unreachable!("unexpected connection state: {st:?}"),
             }
 

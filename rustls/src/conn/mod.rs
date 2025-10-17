@@ -7,7 +7,9 @@ use std::io;
 
 use kernel::KernelConnection;
 
-use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
+use crate::common_state::{
+    CommonState, Context, DEFAULT_BUFFER_LIMIT, Input, IoState, Requirement, State,
+};
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::log::trace;
@@ -19,6 +21,7 @@ use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::record_layer::Decrypted;
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
+use crate::verify::PeerVerified;
 
 // pub so that it can be re-exported from the crate root
 pub mod kernel;
@@ -871,6 +874,7 @@ pub struct UnbufferedConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
     wants_write: bool,
     emitted_peer_closed_state: bool,
+    verification_result: Option<Result<PeerVerified, Error>>,
 }
 
 impl<Side: SideData> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<Side> {
@@ -879,6 +883,7 @@ impl<Side: SideData> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<S
             core,
             wants_write: false,
             emitted_peer_closed_state: false,
+            verification_result: None,
         }
     }
 }
@@ -937,6 +942,20 @@ impl<Side: SideData> ConnectionCore<Side> {
         let mut buffer_progress = self.hs_deframer.progress();
 
         loop {
+            match state.requirement() {
+                Requirement::Message => {}
+                Requirement::VerifyServerIdentity { identity, verifier } => {
+                    let verified = verifier
+                        .verify_identity(&identity)
+                        .map_err(|err| {
+                            self.common_state
+                                .send_cert_verify_error_alert(err)
+                        })?;
+                    state = state.handle(Input::PeerVerified(verified))?;
+                    continue;
+                }
+            }
+
             let res = self.deframe(
                 Some(&*state),
                 deframer_buffer.filled_mut(),

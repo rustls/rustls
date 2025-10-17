@@ -349,6 +349,7 @@ fn run(
                 outcome.client_saw_peer_closed_state = true;
             }
             State::Closed => {}
+            State::VerifyServerIdentity => {}
             state => unreachable!("{state:?}"),
         }
 
@@ -405,6 +406,7 @@ fn run(
                 outcome.server_saw_peer_closed_state = true;
             }
             State::Closed => {}
+            State::VerifyServerIdentity => unreachable!(),
         }
 
         count += 1;
@@ -912,6 +914,7 @@ fn tls13_packed_handshake() {
     assert_eq!(discard, first_flight.len());
 
     let mut second_flight = include_bytes!("data/bug2040-message-2.bin").to_vec();
+    verify_server_identity(client.process_tls_records(&mut second_flight[..]));
     let UnbufferedStatus { state, .. } = client.process_tls_records(&mut second_flight[..]);
     assert_eq!(
         state.unwrap_err(),
@@ -1076,6 +1079,21 @@ fn confirm_transmit_tls_data<T: SideData>(status: UnbufferedStatus<'_, '_, T>) {
     }
 }
 
+fn verify_server_identity<T: SideData>(status: UnbufferedStatus<'_, '_, T>) {
+    match status {
+        UnbufferedStatus {
+            discard: 0,
+            state: Ok(ConnectionState::VerifyServerIdentity(vsi)),
+            ..
+        } => {
+            vsi.complete();
+        }
+        _ => {
+            panic!("unexpected state {status:?} (wanted VerifyServerIdentity)");
+        }
+    }
+}
+
 #[derive(Debug)]
 enum State {
     Closed,
@@ -1097,6 +1115,7 @@ enum State {
         sent_app_data: bool,
         sent_close_notify: bool,
     },
+    VerifyServerIdentity,
 }
 
 const NO_ACTIONS: Actions = Actions {
@@ -1308,6 +1327,11 @@ fn handle_state<Side: SideData>(
 
         ConnectionState::PeerClosed => State::PeerClosed,
         ConnectionState::Closed => State::Closed,
+
+        ConnectionState::VerifyServerIdentity(vsi) => {
+            vsi.complete();
+            State::VerifyServerIdentity
+        }
 
         _ => unreachable!(),
     }
@@ -1774,6 +1798,7 @@ const TLS12_CLIENT_TRANSCRIPT: &[&str] = &[
     "EncodeTlsData",
     "TransmitTlsData",
     "BlockedHandshake",
+    "VerifyServerIdentity",
     "EncodeTlsData",
     "EncodeTlsData",
     "EncodeTlsData",
@@ -1787,6 +1812,7 @@ const TLS12_SERVER_TRANSCRIPT: &[&str] = &[
     "BlockedHandshake",
     "EncodeTlsData",
     "TransmitTlsData",
+    "BlockedHandshake",
     "BlockedHandshake",
     "BlockedHandshake",
     "BlockedHandshake",
@@ -1805,6 +1831,7 @@ const TLS12_CLIENT_TRANSCRIPT_FRAGMENTED: &[&str] = &[
     "BlockedHandshake",
     "BlockedHandshake",
     "BlockedHandshake",
+    "VerifyServerIdentity",
     "EncodeTlsData",
     "EncodeTlsData",
     "EncodeTlsData",
@@ -1826,6 +1853,7 @@ const TLS12_SERVER_TRANSCRIPT_FRAGMENTED: &[&str] = &[
     "BlockedHandshake",
     "BlockedHandshake",
     "BlockedHandshake",
+    "BlockedHandshake",
     "EncodeTlsData",
     "EncodeTlsData",
     "TransmitTlsData",
@@ -1838,6 +1866,7 @@ const TLS13_CLIENT_TRANSCRIPT: &[&str] = &[
     "BlockedHandshake",
     "EncodeTlsData",
     "TransmitTlsData",
+    "VerifyServerIdentity",
     "EncodeTlsData",
     "TransmitTlsData",
     "WriteTraffic",
@@ -1850,6 +1879,7 @@ const TLS13_SERVER_TRANSCRIPT: &[&str] = &[
     "EncodeTlsData",
     "EncodeTlsData",
     "TransmitTlsData",
+    "BlockedHandshake",
     "BlockedHandshake",
     "EncodeTlsData",
     "TransmitTlsData",
@@ -1867,6 +1897,7 @@ const TLS13_CLIENT_TRANSCRIPT_FRAGMENTED: &[&str] = &[
     "BlockedHandshake",
     "BlockedHandshake",
     "BlockedHandshake",
+    "VerifyServerIdentity",
     "EncodeTlsData",
     "TransmitTlsData",
     "WriteTraffic",
@@ -1884,6 +1915,7 @@ const TLS13_SERVER_TRANSCRIPT_FRAGMENTED: &[&str] = &[
     "EncodeTlsData",
     "EncodeTlsData",
     "TransmitTlsData",
+    "BlockedHandshake",
     "BlockedHandshake",
     "EncodeTlsData",
     "TransmitTlsData",

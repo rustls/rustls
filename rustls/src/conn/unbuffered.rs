@@ -8,10 +8,12 @@ use core::{fmt, mem};
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
+use crate::common_state::{Input, Requirement};
 use crate::conn::SideData;
 use crate::error::Error;
 use crate::msgs::deframer::buffers::DeframerSliceBuffer;
 use crate::server::ServerConnectionData;
+use crate::verify;
 
 impl UnbufferedConnectionCommon<ClientConnectionData> {
     /// Processes the TLS records in `incoming_tls` buffer until a new [`UnbufferedStatus`] is
@@ -79,6 +81,45 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     buffer.pending_discard(),
                     EncodeTlsData::new(self, chunk).into(),
                 );
+            }
+
+            if let Ok(Requirement::VerifyServerIdentity { .. }) = self
+                .core
+                .state
+                .as_ref()
+                .map(|s| s.requirement())
+            {
+                let Some(verified) = self.verification_result.take() else {
+                    break (
+                        buffer.pending_discard(),
+                        ConnectionState::VerifyServerIdentity(VerifyServerIdentity { conn: self }),
+                    );
+                };
+
+                let state =
+                    match mem::replace(&mut self.core.state, Err(Error::HandshakeNotComplete)) {
+                        Ok(state) => state,
+                        Err(e) => {
+                            buffer.queue_discard(buffer_progress.take_discard());
+                            self.core.state = Err(e.clone());
+                            return UnbufferedStatus {
+                                discard: buffer.pending_discard(),
+                                state: Err(e),
+                            };
+                        }
+                    };
+                let state = match verified.and_then(|v| state.handle(Input::PeerVerified(v))) {
+                    Ok(state) => state,
+                    Err(err) => {
+                        buffer.queue_discard(buffer_progress.take_discard());
+                        self.core.state = Err(err.clone());
+                        return UnbufferedStatus {
+                            discard: buffer.pending_discard(),
+                            state: Err(err),
+                        };
+                    }
+                };
+                self.core.state = Ok(state);
             }
 
             let deframer_output = if self
@@ -274,6 +315,17 @@ pub enum ConnectionState<'c, 'i, Side: SideData> {
     /// appended to `incoming_tls`, [`UnbufferedConnectionCommon::process_tls_records`] will yield
     /// the [`ConnectionState::ReadTraffic`] state.
     WriteTraffic(WriteTraffic<'c, Side>),
+
+    /// Progress awaits verification of the server's identity.
+    ///
+    /// To make progress, perform one of these options:
+    ///
+    /// - You can call [`VerifyServerIdentity::complete()`] to simply perform this work
+    ///   synchronously with the configured verifier, or
+    /// - instead obtain the inputs to this process with [`VerifyServerIdentity::identity()`]
+    ///   and progress that verification outside the library (asynchronously perhaps) and then
+    ///   call [`VerifyServerIdentity::dangerous_external()`] to signal completion.
+    VerifyServerIdentity(VerifyServerIdentity<'c, Side>),
 }
 
 impl<'c, 'i, Data: SideData> From<ReadTraffic<'c, 'i, Data>> for ConnectionState<'c, 'i, Data> {
@@ -322,6 +374,10 @@ impl<Side: SideData> fmt::Debug for ConnectionState<'_, '_, Side> {
                 .finish(),
 
             Self::WriteTraffic(..) => f.debug_tuple("WriteTraffic").finish(),
+
+            Self::VerifyServerIdentity(..) => f
+                .debug_tuple("VerifyServerIdentity")
+                .finish(),
         }
     }
 }
@@ -550,6 +606,53 @@ impl<Side: SideData> TransmitTlsData<'_, Side> {
         } else {
             None
         }
+    }
+}
+
+/// Server identity must be verified
+pub struct VerifyServerIdentity<'c, Side: SideData> {
+    pub(crate) conn: &'c mut UnbufferedConnectionCommon<Side>,
+}
+
+impl<Side: SideData> VerifyServerIdentity<'_, Side> {
+    /// Synchronously complete the identity verification using the configured verifier
+    /// in the [`ClientConfig`].
+    ///
+    /// This is enacted on the next call to [`UnbufferedConnection::process_tls_records()`]
+    /// and the state machine will progress forwards (or yield the error that occured).
+    pub fn complete(self) {
+        if let Ok(Requirement::VerifyServerIdentity { identity, verifier }) = self
+            .conn
+            .core
+            .state
+            .as_ref()
+            .map(|s| s.requirement())
+        {
+            let verified = verifier.verify_identity(&identity);
+            self.conn.verification_result = Some(verified);
+        }
+    }
+
+    /// Obtain the server's identity that must be verified.
+    pub fn identity(&self) -> verify::ServerIdentity<'_> {
+        self.conn
+            .core
+            .state
+            .as_ref()
+            .ok()
+            .and_then(|s| match s.requirement() {
+                Requirement::VerifyServerIdentity { identity, .. } => Some(identity),
+                _ => None,
+            })
+            .expect("unexpected connection state")
+    }
+
+    /// Complete the verification with the given verification token.
+    ///
+    /// This is enacted on the next call to [`UnbufferedConnection::process_tls_records()`]
+    /// and the state machine will progress forwards.
+    pub fn dangerous_complete(self, verified: verify::PeerVerified) {
+        self.conn.verification_result = Some(Ok(verified));
     }
 }
 

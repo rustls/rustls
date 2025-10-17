@@ -460,7 +460,7 @@ struct ExpectCertificate {
 }
 
 impl State<ServerConnectionData> for ExpectCertificate {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -536,7 +536,7 @@ struct ExpectClientKx {
 }
 
 impl State<ServerConnectionData> for ExpectClientKx {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -614,7 +614,7 @@ struct ExpectCertificateVerify {
 }
 
 impl State<ServerConnectionData> for ExpectCertificateVerify {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -683,7 +683,11 @@ struct ExpectCcs {
 }
 
 impl State<ServerConnectionData> for ExpectCcs {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
+    fn handle_message(
+        self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'_>,
+    ) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
@@ -807,7 +811,7 @@ struct ExpectFinished {
 }
 
 impl State<ServerConnectionData> for ExpectFinished {
-    fn handle(
+    fn handle_message(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
@@ -899,7 +903,11 @@ struct ExpectTraffic {
 impl ExpectTraffic {}
 
 impl State<ServerConnectionData> for ExpectTraffic {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
+    fn handle_message(
+        self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'_>,
+    ) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common

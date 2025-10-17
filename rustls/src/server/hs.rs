@@ -553,7 +553,11 @@ impl ExpectClientHello {
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
-    fn handle<'m>(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'m>) -> NextStateOrError {
+    fn handle_message<'m>(
+        self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'m>,
+    ) -> NextStateOrError {
         let input = ClientHelloInput::from_message(&m, self.done_retry, cx)?;
         self.with_input(input, cx)
     }

@@ -1199,7 +1199,7 @@ struct Accepting;
 #[cfg(feature = "std")]
 impl State<ServerConnectionData> for Accepting {
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn handle<'m>(
+    fn handle_message<'m>(
         self: Box<Self>,
         _cx: &mut hs::ServerContext<'_>,
         _m: Message<'m>,
