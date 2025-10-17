@@ -13,6 +13,7 @@ use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::ActiveKeyExchange;
+use crate::crypto::signer::PeerIdentity;
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -31,7 +32,7 @@ use crate::msgs::persist;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::verify::{ClientIdentity, PeerIdentity, SignatureVerificationInput};
+use crate::verify::{ClientIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {

@@ -8,9 +8,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rustls::client::Resumption;
+use rustls::sign::{CertificateIdentity, PeerIdentity};
 use rustls::{
-    ApiMisuse, CertificateIdentity, ClientConfig, ClientConnection, Error, HandshakeKind,
-    NamedGroup, PeerIdentity, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
+    ApiMisuse, ClientConfig, ClientConnection, Error, HandshakeKind, NamedGroup, PeerMisbehaved,
+    ProtocolVersion, ServerConfig, ServerConnection,
 };
 use rustls_test::{
     ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt, do_handshake,

@@ -8,7 +8,8 @@ use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{ClientConfig, PeerIdentity, RootCertStore, ServerConfig};
+use rustls::sign::PeerIdentity;
+use rustls::{ClientConfig, RootCertStore, ServerConfig};
 
 use crate::ffdhe::{self, FFDHE2048_GROUP};
 use crate::utils::verify_openssl3_available;

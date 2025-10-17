@@ -1,17 +1,20 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use core::iter;
 
-use pki_types::{AlgorithmIdentifier, PrivateKeyDer, SubjectPublicKeyInfoDer};
+use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
 use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
+use crate::common_state::CommonState;
 use crate::enums::{CertificateType, SignatureAlgorithm, SignatureScheme};
+use crate::error::ApiMisuse;
 use crate::error::{Error, InconsistentKeys, PeerIncompatible};
+use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
-use crate::verify::PeerIdentity;
-use crate::{CertificateIdentity, x509};
+use crate::{AlertDescription, InvalidMessage, SignerPublicKey, x509};
 
 /// An abstract signing key.
 ///
@@ -225,6 +228,178 @@ impl CertifiedKey {
             identity: self.identity.clone(),
             ocsp: self.ocsp.clone(),
         })
+    }
+}
+
+/// A peer's identity, depending on the negotiated certificate type.
+#[allow(unreachable_pub)]
+#[non_exhaustive]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PeerIdentity<'a> {
+    /// A standard X.509 certificate chain.
+    ///
+    /// This is the most common case.
+    X509(CertificateIdentity<'a>),
+    /// A raw public key, as defined in [RFC 7250](https://tools.ietf.org/html/rfc7250).
+    RawPublicKey(SubjectPublicKeyInfoDer<'a>),
+}
+
+impl<'a> PeerIdentity<'a> {
+    /// Create a `PeerIdentity::X509` from a certificate chain.
+    ///
+    /// Returns `None` if `cert_chain` is empty.
+    pub fn from_cert_chain(mut cert_chain: Vec<CertificateDer<'a>>) -> Result<Self, ApiMisuse> {
+        let mut iter = cert_chain.drain(..);
+        let Some(first) = iter.next() else {
+            return Err(ApiMisuse::EmptyCertificateChain);
+        };
+
+        Ok(Self::X509(CertificateIdentity {
+            end_entity: first,
+            intermediates: iter.collect(),
+        }))
+    }
+
+    pub(crate) fn from_peer(
+        mut cert_chain: Vec<CertificateDer<'a>>,
+        expected: CertificateType,
+        common: &mut CommonState,
+    ) -> Result<Option<Self>, Error> {
+        let mut iter = cert_chain.drain(..);
+        let Some(first) = iter.next() else {
+            return Ok(None);
+        };
+
+        match expected {
+            CertificateType::X509 => Ok(Some(Self::X509(CertificateIdentity {
+                end_entity: first,
+                intermediates: iter.collect(),
+            }))),
+            CertificateType::RawPublicKey => match iter.count() {
+                0 => Ok(Some(Self::RawPublicKey(
+                    SubjectPublicKeyInfoDer::from(first.as_ref()).into_owned(),
+                ))),
+                _ => Err(common.send_fatal_alert(
+                    AlertDescription::BadCertificate,
+                    PeerIncompatible::MultipleRawKeys,
+                )),
+            },
+            CertificateType::Unknown(ty) => Err(common.send_fatal_alert(
+                AlertDescription::UnsupportedCertificate,
+                PeerIncompatible::UnknownCertificateType(ty),
+            )),
+        }
+    }
+
+    /// Convert this `PeerIdentity` into an owned version.
+    pub fn into_owned(self) -> PeerIdentity<'static> {
+        match self {
+            Self::X509(id) => PeerIdentity::X509(id.into_owned()),
+            Self::RawPublicKey(spki) => PeerIdentity::RawPublicKey(spki.into_owned()),
+        }
+    }
+
+    pub(crate) fn as_certificates(&'a self) -> impl Iterator<Item = CertificateDer<'a>> + 'a {
+        match self {
+            Self::X509(cert) => IdentityCertificateIterator::X509(
+                iter::once(CertificateDer::from(cert.end_entity.as_ref())).chain(
+                    cert.intermediates
+                        .iter()
+                        .map(|c| CertificateDer::from(c.as_ref())),
+                ),
+            ),
+            Self::RawPublicKey(spki) => IdentityCertificateIterator::RawPublicKey(iter::once(
+                CertificateDer::from(spki.as_ref()),
+            )),
+        }
+    }
+
+    /// Get the public key of this identity as a `SignerPublicKey`.
+    pub fn as_signer(&self) -> SignerPublicKey<'_> {
+        match self {
+            Self::X509(cert) => SignerPublicKey::X509(&cert.end_entity),
+            Self::RawPublicKey(spki) => SignerPublicKey::RawPublicKey(spki),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for PeerIdentity<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Self::X509(certificates) => {
+                0u8.encode(bytes);
+                certificates.end_entity.encode(bytes);
+                certificates.intermediates.encode(bytes);
+            }
+            Self::RawPublicKey(spki) => {
+                1u8.encode(bytes);
+                spki.encode(bytes);
+            }
+        }
+    }
+
+    fn read(reader: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        match u8::read(reader)? {
+            0 => Ok(Self::X509(CertificateIdentity {
+                end_entity: CertificateDer::read(reader)?.into_owned(),
+                intermediates: Vec::<CertificateDer<'_>>::read(reader)?
+                    .into_iter()
+                    .collect(),
+            })),
+            1 => Ok(Self::RawPublicKey(
+                SubjectPublicKeyInfoDer::read(reader)?.into_owned(),
+            )),
+            _ => Err(InvalidMessage::UnexpectedMessage(
+                "invalid PeerIdentity discriminant",
+            )),
+        }
+    }
+}
+
+enum IdentityCertificateIterator<C, R> {
+    X509(C),
+    RawPublicKey(R),
+}
+
+impl<'a, C, R> Iterator for IdentityCertificateIterator<C, R>
+where
+    C: Iterator<Item = CertificateDer<'a>>,
+    R: Iterator<Item = CertificateDer<'a>>,
+{
+    type Item = CertificateDer<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::X509(iter) => iter.next(),
+            Self::RawPublicKey(iter) => iter.next(),
+        }
+    }
+}
+
+/// Data required to verify the peer's identity.
+#[allow(unreachable_pub)]
+#[non_exhaustive]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CertificateIdentity<'a> {
+    /// Certificate for the entity being verified.
+    pub end_entity: CertificateDer<'a>,
+    /// All certificates other than `end_entity` received in the peer's `Certificate` message.
+    ///
+    /// It is in the same order that the peer sent them and may be empty.
+    pub intermediates: Vec<CertificateDer<'a>>,
+}
+
+impl<'a> CertificateIdentity<'a> {
+    /// Convert this `CertificateIdentity` into an owned version.
+    pub fn into_owned(self) -> CertificateIdentity<'static> {
+        CertificateIdentity {
+            end_entity: self.end_entity.into_owned(),
+            intermediates: self
+                .intermediates
+                .into_iter()
+                .map(|cert| cert.into_owned())
+                .collect(),
+        }
     }
 }
 

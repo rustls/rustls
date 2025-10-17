@@ -18,6 +18,7 @@ use crate::common_state::{
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::hash::Hash;
+use crate::crypto::signer::PeerIdentity;
 use crate::crypto::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -47,9 +48,7 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::{
-    self, DigitallySignedStruct, PeerIdentity, ServerIdentity, SignatureVerificationInput,
-};
+use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
 
 // Extensions we expect in plaintext in the ServerHello.

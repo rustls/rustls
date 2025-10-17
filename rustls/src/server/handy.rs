@@ -203,12 +203,11 @@ mod sni_resolver {
 
     use pki_types::{DnsName, ServerName};
 
+    use crate::crypto::signer::{CertificateIdentity, CertifiedSigner, PeerIdentity};
     use crate::error::Error;
     use crate::hash_map::HashMap;
     use crate::server::ClientHello;
-    use crate::sign::CertifiedSigner;
     use crate::sync::Arc;
-    use crate::verify::{CertificateIdentity, PeerIdentity};
     use crate::webpki::{ParsedCertificate, verify_server_name};
     use crate::{PeerIncompatible, server, sign};
 

@@ -545,9 +545,7 @@ pub use crate::suites::{
 pub use crate::ticketer::TicketRotator;
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
-pub use crate::verify::{
-    CertificateIdentity, DigitallySignedStruct, PeerIdentity, SignerPublicKey,
-};
+pub use crate::verify::{DigitallySignedStruct, SignerPublicKey};
 pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersion};
 pub use crate::webpki::RootCertStore;
 
@@ -665,7 +663,8 @@ pub mod pki_types {
 /// Message signing interfaces.
 pub mod sign {
     pub use crate::crypto::signer::{
-        CertifiedKey, CertifiedSigner, Signer, SigningKey, SingleCertAndKey, public_key_to_spki,
+        CertificateIdentity, CertifiedKey, CertifiedSigner, PeerIdentity, Signer, SigningKey,
+        SingleCertAndKey, public_key_to_spki,
     };
 }
 

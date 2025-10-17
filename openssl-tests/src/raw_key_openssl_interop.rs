@@ -19,10 +19,10 @@ mod client {
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
-    use rustls::sign::CertifiedKey;
+    use rustls::sign::{CertifiedKey, PeerIdentity};
     use rustls::{
         ApiMisuse, CertificateError, CertificateType, ClientConfig, ClientConnection, Error,
-        InconsistentKeys, PeerIdentity, PeerIncompatible, SignatureScheme, Stream,
+        InconsistentKeys, PeerIncompatible, SignatureScheme, Stream,
     };
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
@@ -153,9 +153,10 @@ mod server {
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
     use rustls::sign::CertifiedKey;
+    use rustls::sign::PeerIdentity;
     use rustls::{
         ApiMisuse, CertificateError, CertificateType, DistinguishedName, Error, InconsistentKeys,
-        PeerIdentity, PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
+        PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
     };
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
@@ -293,9 +294,9 @@ mod tests {
     use std::sync::mpsc::channel;
     use std::thread;
 
-    use rustls::PeerIdentity;
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    use rustls::sign::PeerIdentity;
 
     use super::{client, server};
     use crate::utils::verify_openssl3_available;

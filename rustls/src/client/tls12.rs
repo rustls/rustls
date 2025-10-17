@@ -17,6 +17,7 @@ use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::KeyExchangeAlgorithm;
+use crate::crypto::signer::PeerIdentity;
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -36,9 +37,7 @@ use crate::sign::Signer;
 use crate::suites::{PartiallyExtractedSecrets, Suite};
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::verify::{
-    self, DigitallySignedStruct, PeerIdentity, ServerIdentity, SignatureVerificationInput,
-};
+use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
 
 mod server_hello {
     use super::*;

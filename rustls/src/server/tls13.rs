@@ -13,6 +13,7 @@ use crate::common_state::{
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
+use crate::crypto::signer::PeerIdentity;
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -36,7 +37,7 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::verify::{ClientIdentity, PeerIdentity};
+use crate::verify::ClientIdentity;
 use crate::{ConnectionTrafficSecrets, compress, rand, verify};
 
 mod client_hello {

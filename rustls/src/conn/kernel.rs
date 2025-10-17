@@ -58,10 +58,10 @@ use core::marker::PhantomData;
 
 use crate::client::ClientConnectionData;
 use crate::common_state::Protocol;
+use crate::crypto::signer::PeerIdentity;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::NewSessionTicketPayloadTls13;
 use crate::quic::Quic;
-use crate::verify::PeerIdentity;
 use crate::{CommonState, ConnectionTrafficSecrets, Error, ProtocolVersion, SupportedCipherSuite};
 
 /// A kernel connection.

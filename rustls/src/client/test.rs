@@ -27,6 +27,7 @@ mod tests {
     use super::super::*;
     use crate::client::AlwaysResolvesClientRawPublicKeys;
     use crate::crypto::cipher::MessageEncrypter;
+    use crate::crypto::signer::PeerIdentity;
     use crate::crypto::tls13::OkmBlock;
     use crate::enums::CertificateType;
     use crate::msgs::base::PayloadU8;
@@ -45,7 +46,7 @@ mod tests {
         HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
         SignatureVerificationInput,
     };
-    use crate::{DigitallySignedStruct, DistinguishedName, KeyLog, PeerIdentity};
+    use crate::{DigitallySignedStruct, DistinguishedName, KeyLog};
 
     /// Tests that session_ticket(35) extension
     /// is not sent if the client does not support TLS 1.2.

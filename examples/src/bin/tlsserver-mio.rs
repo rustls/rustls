@@ -32,7 +32,8 @@ use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
-use rustls::{PeerIdentity, ProtocolVersion, RootCertStore};
+use rustls::sign::PeerIdentity;
+use rustls::{ProtocolVersion, RootCertStore};
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
