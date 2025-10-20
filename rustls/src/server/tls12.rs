@@ -815,7 +815,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         let vh = self.transcript.current_hash();
         let expect_verify_data = self.secrets.client_verify_data(&vh);
 
-        let _fin_verified =
+        let fin_verified =
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
                 true => verify::FinishedMessageVerified::assertion(),
                 false => {
@@ -879,7 +879,7 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,
-            _fin_verified,
+            _fin_verified: fin_verified,
         }))
     }
 }

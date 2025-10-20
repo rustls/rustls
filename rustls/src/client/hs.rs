@@ -444,9 +444,9 @@ impl ClientHelloInput {
     ) -> Result<Self, Error> {
         let mut resuming = ClientSessionValue::retrieve(&server_name, &config, cx);
         let session_id = match &mut resuming {
-            Some(_resuming) => {
+            Some(resuming) => {
                 debug!("Resuming session");
-                match &mut _resuming.value {
+                match &mut resuming.value {
                     ClientSessionValue::Tls12(inner) => {
                         // If we have a ticket, we use the sessionid as a signal that
                         // we're  doing an abbreviated handshake.  See section 3.4 in

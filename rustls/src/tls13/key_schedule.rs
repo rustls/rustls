@@ -330,7 +330,7 @@ impl KeyScheduleHandshake {
 
         let before_finished =
             KeyScheduleBeforeFinished::new(self.ks, hs_hash, key_log, client_random);
-        let (_client_secret, server_secret) = (
+        let (client_secret, server_secret) = (
             &before_finished.current_client_traffic_secret,
             &before_finished.current_server_traffic_secret,
         );
@@ -341,7 +341,7 @@ impl KeyScheduleHandshake {
 
         if common.is_quic() {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
-                _client_secret.clone(),
+                client_secret.clone(),
                 server_secret.clone(),
                 before_finished.ks.suite,
                 before_finished.ks.suite.quic.unwrap(),
