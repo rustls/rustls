@@ -51,7 +51,7 @@ pub mod hpke;
 mod signer;
 pub use signer::{
     CertificateIdentity, CertifiedSigner, Credentials, Identity, Signer, SigningKey,
-    SingleCertAndKey, public_key_to_spki,
+    SingleCredential, public_key_to_spki,
 };
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;

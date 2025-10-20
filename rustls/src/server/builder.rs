@@ -6,7 +6,7 @@ use pki_types::PrivateKeyDer;
 use super::server_conn::InvalidSniPolicy;
 use super::{ServerConfig, ServerCredentialResolver, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::crypto::{Credentials, Identity, SingleCertAndKey};
+use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::error::Error;
 use crate::sync::Arc;
 use crate::verify::{ClientVerifier, NoClientAuth};
@@ -67,7 +67,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
         let credentials = Credentials::from_der(identity, key_der, self.crypto_provider())?;
-        self.with_server_credential_resolver(Arc::new(SingleCertAndKey::from(credentials)))
+        self.with_server_credential_resolver(Arc::new(SingleCredential::from(credentials)))
     }
 
     /// Sets a single certificate chain, matching private key and optional OCSP
@@ -91,7 +91,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     ) -> Result<ServerConfig, Error> {
         let mut credentials = Credentials::from_der(identity, key_der, self.crypto_provider())?;
         credentials.ocsp = Some(ocsp);
-        self.with_server_credential_resolver(Arc::new(SingleCertAndKey::from(credentials)))
+        self.with_server_credential_resolver(Arc::new(SingleCredential::from(credentials)))
     }
 
     /// Sets a custom [`ServerCredentialResolver`].

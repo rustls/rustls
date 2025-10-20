@@ -39,7 +39,7 @@ use rustls::client::{
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::{
-    CertifiedSigner, Credentials, CryptoProvider, Identity, Signer, SigningKey, SingleCertAndKey,
+    CertifiedSigner, Credentials, CryptoProvider, Identity, Signer, SigningKey, SingleCredential,
     aws_lc_rs, ring,
 };
 use rustls::internal::msgs::codec::Codec;
@@ -791,7 +791,13 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
             credentials,
             scheme: lookup_scheme(scheme),
         }) as Arc<dyn server::ServerCredentialResolver>,
+<<<<<<< HEAD
         None => Arc::new(SingleCertAndKey::from(credentials)),
+||||||| parent of de9b337f (crypto: rename SingleCertAndKey to SingleCredential)
+        None => Arc::new(SingleCertAndKey::from(cert_key)),
+=======
+        None => Arc::new(SingleCredential::from(cert_key)),
+>>>>>>> de9b337f (crypto: rename SingleCertAndKey to SingleCredential)
     };
 
     let mut cfg = ServerConfig::builder_with_provider(Arc::new(provider))

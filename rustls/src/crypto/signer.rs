@@ -16,21 +16,21 @@ use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
 use crate::{AlertDescription, InvalidMessage, SignerPublicKey, x509};
 
-/// Server certificate resolver which always resolves to the same certificate and key.
+/// Server certificate resolver which always resolves to the same identity and key.
 ///
 /// For use with [`ConfigBuilder::with_server_credential_resolver()`].
 ///
 /// [`ConfigBuilder::with_server_credential_resolver()`]: crate::ConfigBuilder::with_server_credential_resolver
 #[derive(Debug)]
-pub struct SingleCertAndKey(Credentials);
+pub struct SingleCredential(Credentials);
 
-impl From<Credentials> for SingleCertAndKey {
+impl From<Credentials> for SingleCredential {
     fn from(credentials: Credentials) -> Self {
         Self(credentials)
     }
 }
 
-impl ClientCredentialResolver for SingleCertAndKey {
+impl ClientCredentialResolver for SingleCredential {
     fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
         match request.negotiated_type() {
             CertificateType::X509 => self
@@ -45,7 +45,7 @@ impl ClientCredentialResolver for SingleCertAndKey {
     }
 }
 
-impl ServerCredentialResolver for SingleCertAndKey {
+impl ServerCredentialResolver for SingleCredential {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
         self.0
             .signer(client_hello.signature_schemes())
