@@ -10,7 +10,7 @@ use rustls::client::danger::{
     SignatureVerificationInput,
 };
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
-use rustls::crypto::{CertifiedKey, CertifiedSigner, Identity};
+use rustls::crypto::{CertifiedSigner, Credentials, Identity};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
     AlertDescription, CertificateError, CertificateType, ClientConfig, ClientConnection,
@@ -209,7 +209,7 @@ fn client_can_request_certain_trusted_cas() {
             .map(|kt| {
                 (
                     kt.ca_distinguished_name(),
-                    kt.certified_key_with_cert_chain(&provider)
+                    kt.credentials_with_cert_chain(&provider)
                         .unwrap(),
                 )
             })
@@ -629,7 +629,7 @@ fn client_check_server_valid_purpose() {
 }
 
 #[derive(Debug)]
-pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, CertifiedKey)>);
+pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, Credentials)>);
 
 impl ServerCredentialResolver for ResolvesCertChainByCaName {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
@@ -645,7 +645,7 @@ impl ServerCredentialResolver for ResolvesCertChainByCaName {
                 ));
         };
 
-        for (name, certified_key) in self.0.iter() {
+        for (name, credentials) in self.0.iter() {
             let name = X509Name::from_der(name.as_ref())
                 .unwrap()
                 .1;
@@ -653,7 +653,7 @@ impl ServerCredentialResolver for ResolvesCertChainByCaName {
                 X509Name::from_der(ca_name.as_ref()).is_ok_and(|(_, ca_name)| ca_name == name)
             }) {
                 println!("ResolvesCertChainByCaName: found matching CA name: {name}");
-                return certified_key
+                return credentials
                     .signer(client_hello.signature_schemes())
                     .ok_or(Error::PeerIncompatible(
                         PeerIncompatible::NoSignatureSchemesInCommon,

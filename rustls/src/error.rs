@@ -100,15 +100,15 @@ pub enum Error {
     /// or too large.
     BadMaxFragmentSize,
 
-    /// Specific failure cases from [`CertifiedKey::new()`] or a
+    /// Specific failure cases from [`Credentials::new()`] or a
     /// [`crate::crypto::SigningKey`] that cannot produce a corresponding public key.
     ///
-    /// If encountered while building a [`CertifiedKey`], consider if
-    /// [`CertifiedKey::new_unchecked()`] might be appropriate for your use case.
+    /// If encountered while building a [`Credentials`], consider if
+    /// [`Credentials::new_unchecked()`] might be appropriate for your use case.
     ///
-    /// [`CertifiedKey::new()`]: crate::crypto::CertifiedKey::new()
-    /// [`CertifiedKey`]: crate::crypto::CertifiedKey
-    /// [`CertifiedKey::new_unchecked()`]: crate::crypto::CertifiedKey::new_unchecked()
+    /// [`Credentials::new()`]: crate::crypto::Credentials::new()
+    /// [`Credentials`]: crate::crypto::Credentials
+    /// [`Credentials::new_unchecked()`]: crate::crypto::Credentials::new_unchecked()
     InconsistentKeys(InconsistentKeys),
 
     /// The server rejected encrypted client hello (ECH) negotiation
@@ -147,9 +147,9 @@ pub enum Error {
     Other(OtherError),
 }
 
-/// Specific failure cases from [`CertifiedKey::new()`] or a [`crate::crypto::SigningKey`] that cannot produce a corresponding public key.
+/// Specific failure cases from [`Credentials::new()`] or a [`crate::crypto::SigningKey`] that cannot produce a corresponding public key.
 ///
-/// [`CertifiedKey::new()`]: crate::crypto::CertifiedKey::new()
+/// [`Credentials::new()`]: crate::crypto::Credentials::new()
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InconsistentKeys {

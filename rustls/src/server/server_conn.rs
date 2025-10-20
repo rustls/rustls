@@ -132,8 +132,8 @@ pub trait ServerCredentialResolver: Debug + Send + Sync {
     ///
     /// The `CertifiedSigner` returned from this method contains a certificate chain and a
     /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
-    /// [`CertifiedKey`], on which an implementation can call [`CertifiedKey::signer()`].
-    /// An implementation can either store long-lived [`CertifiedKey`] values, or instantiate
+    /// [`Credentials`], on which an implementation can call [`Credentials::signer()`].
+    /// An implementation can either store long-lived [`Credentials`] values, or instantiate
     /// them as needed using one of its constructors.
     ///
     /// Yielding an `Error` will abort the handshake. Some relevant error variants:
@@ -142,8 +142,8 @@ pub trait ServerCredentialResolver: Debug + Send + Sync {
     /// * [`PeerIncompatible::NoServerNameProvided`]
     /// * [`Error::NoSuitableCertificate`]
     ///
-    /// [`CertifiedKey`]: crate::crypto::CertifiedKey
-    /// [`CertifiedKey::signer()`]: crate::crypto::CertifiedKey::signer
+    /// [`Credentials`]: crate::crypto::Credentials
+    /// [`Credentials::signer()`]: crate::crypto::Credentials::signer
     /// [`Signer`]: crate::crypto::Signer
     /// [`PeerIncompatible::NoSignatureSchemesInCommon`]: crate::error::PeerIncompatible::NoSignatureSchemesInCommon
     /// [`PeerIncompatible::NoServerNameProvided`]: crate::error::PeerIncompatible::NoServerNameProvided

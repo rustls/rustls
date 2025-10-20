@@ -563,7 +563,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         &self,
         suite: &'static T,
         kx_group: &'static dyn SupportedKxGroup,
-        cert_key: CertifiedSigner,
+        credentials: CertifiedSigner,
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
         cx: &mut ServerContext<'_>,

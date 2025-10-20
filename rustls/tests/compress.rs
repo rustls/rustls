@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(feature = "zlib")]
 use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
-use rustls::crypto::{CertifiedKey, Identity, SingleCertAndKey};
+use rustls::crypto::{Credentials, Identity, SingleCertAndKey};
 #[cfg(feature = "zlib")]
 use rustls::pki_types::CertificateDer;
 use rustls::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
@@ -248,7 +248,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .key_provider
         .load_private_key(KeyType::Rsa2048.client_key())
         .unwrap();
-    let big_cert_and_key = CertifiedKey::new_unchecked(
+    let big_cert_and_key = Credentials::new_unchecked(
         Arc::new(Identity::from_cert_chain(vec![big_cert]).unwrap()),
         key,
     );

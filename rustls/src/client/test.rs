@@ -28,7 +28,7 @@ mod tests {
     use crate::client::AlwaysResolvesClientRawPublicKeys;
     use crate::crypto::cipher::MessageEncrypter;
     use crate::crypto::tls13::OkmBlock;
-    use crate::crypto::{CertifiedKey, Identity};
+    use crate::crypto::{Credentials, Identity};
     use crate::enums::CertificateType;
     use crate::msgs::base::PayloadU8;
     use crate::msgs::enums::ECCurveType;
@@ -448,14 +448,14 @@ mod tests {
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
         .with_client_credential_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-            client_certified_key(),
+            client_credentials(),
         )))
         .unwrap();
         config.key_log = key_log;
         config
     }
 
-    fn client_certified_key() -> CertifiedKey {
+    fn client_credentials() -> Credentials {
         let key = super::provider::DEFAULT_PROVIDER
             .key_provider
             .load_private_key(client_key())
@@ -469,7 +469,7 @@ mod tests {
             )])
             .unwrap(),
         );
-        CertifiedKey::new_unchecked(identity, key)
+        Credentials::new_unchecked(identity, key)
     }
 
     fn client_key() -> PrivateKeyDer<'static> {

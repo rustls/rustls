@@ -6,7 +6,7 @@ use pki_types::PrivateKeyDer;
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{ClientConfig, ClientCredentialResolver, EchMode, handy};
-use crate::crypto::{CertifiedKey, Identity, SingleCertAndKey};
+use crate::crypto::{Credentials, Identity, SingleCertAndKey};
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
 use crate::sync::Arc;
@@ -141,8 +141,8 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         identity: Arc<Identity<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
-        let certified_key = CertifiedKey::from_der(identity, key_der, &self.provider)?;
-        self.with_client_credential_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
+        let credentials = Credentials::from_der(identity, key_der, &self.provider)?;
+        self.with_client_credential_resolver(Arc::new(SingleCertAndKey::from(credentials)))
     }
 
     /// Do not support client auth.

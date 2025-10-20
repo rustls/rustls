@@ -22,11 +22,11 @@ use crate::{AlertDescription, InvalidMessage, SignerPublicKey, x509};
 ///
 /// [`ConfigBuilder::with_server_credential_resolver()`]: crate::ConfigBuilder::with_server_credential_resolver
 #[derive(Debug)]
-pub struct SingleCertAndKey(CertifiedKey);
+pub struct SingleCertAndKey(Credentials);
 
-impl From<CertifiedKey> for SingleCertAndKey {
-    fn from(certified_key: CertifiedKey) -> Self {
-        Self(certified_key)
+impl From<Credentials> for SingleCertAndKey {
+    fn from(credentials: Credentials) -> Self {
+        Self(credentials)
     }
 }
 
@@ -81,7 +81,7 @@ pub struct CertifiedSigner {
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct CertifiedKey {
+pub struct Credentials {
     /// The certificate chain or raw public key.
     pub identity: Arc<Identity<'static>>,
 
@@ -93,12 +93,12 @@ pub struct CertifiedKey {
     pub ocsp: Option<Arc<[u8]>>,
 }
 
-impl CertifiedKey {
-    /// Create a new `CertifiedKey` from a certificate chain and DER-encoded private key.
+impl Credentials {
+    /// Create a new [`Credentials`] from a certificate chain and DER-encoded private key.
     ///
     /// Attempt to parse the private key with the given [`CryptoProvider`]'s [`KeyProvider`] and
-    /// verify that it matches the public key in the first certificate of the `cert_chain`
-    /// if possible.
+    /// verify that it matches the public key in the first certificate of the `identity`
+    /// if possible (if it is an `X509` identity).
     ///
     /// [`KeyProvider`]: crate::crypto::KeyProvider
     pub fn from_der(
@@ -114,7 +114,7 @@ impl CertifiedKey {
         )
     }
 
-    /// Make a new CertifiedKey, with the given identity and key.
+    /// Make a new [`Credentials`], with the given identity and key.
     ///
     /// Yields [`Error::InconsistentKeys`] if the `identity` is `X509` and the end-entity certificate's subject
     /// public key info does not match that of the `key`'s public key, or if the `key` does not
@@ -141,9 +141,9 @@ impl CertifiedKey {
         })
     }
 
-    /// Make a new `CertifiedKey` from a raw private key.
+    /// Make a new `Credentials` from a raw private key.
     ///
-    /// Unlike [`CertifiedKey::new()`], this does not check that the end-entity certificate's
+    /// Unlike [`Credentials::new()`], this does not check that the end-entity certificate's
     /// subject key matches `key`'s public key.
     ///
     /// This avoids parsing the end-entity certificate, which is useful when using client
@@ -358,8 +358,8 @@ impl<'a> CertificateIdentity<'a> {
 /// [`ConfigBuilder::with_single_cert_with_ocsp()`].
 ///
 /// A signing key created outside of the `KeyProvider` extension trait can be used
-/// to create a [`CertifiedKey`], which in turn can be used to create a
-/// [`ServerNameResolver`]. Alternately, a `CertifiedKey` can be returned from a
+/// to create a [`Credentials`], which in turn can be used to create a
+/// [`ServerNameResolver`]. Alternately, a `Credentials` can be returned from a
 /// custom implementation of the [`ServerCredentialResolver`] or [`ClientCredentialResolver`] traits.
 ///
 /// [`KeyProvider::load_private_key()`]: crate::crypto::KeyProvider::load_private_key

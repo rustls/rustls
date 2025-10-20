@@ -19,7 +19,7 @@ use rcgen::{
 use time::OffsetDateTime;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut certified_keys = HashMap::<
+    let mut credentialss = HashMap::<
         (Role, &'static SignatureAlgorithm),
         (Issuer<'static, KeyPair>, Certificate),
     >::with_capacity(ROLES.len() * SIG_ALGS.len());
@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     (params, cert)
                 }
                 Role::Intermediate => {
-                    let issuer = certified_keys
+                    let issuer = credentialss
                         .get(&(Role::TrustAnchor, alg.inner))
                         .unwrap();
                     let params = role.params(alg);
@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     (params, cert)
                 }
                 Role::EndEntity | Role::Client => {
-                    let issuer = certified_keys
+                    let issuer = credentialss
                         .get(&(Role::Intermediate, alg.inner))
                         .unwrap();
                     let params = role.params(alg);
@@ -71,10 +71,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // intermediates this will be the trust anchor, and for client/EE certs this will
                 // be the intermediate.
                 let issuer = match role {
-                    Role::Intermediate => certified_keys
+                    Role::Intermediate => credentialss
                         .get(&(Role::TrustAnchor, alg.inner))
                         .unwrap(),
-                    Role::EndEntity | Role::Client => certified_keys
+                    Role::EndEntity | Role::Client => credentialss
                         .get(&(Role::Intermediate, alg.inner))
                         .unwrap(),
                     _ => panic!("unexpected role for CRL generation: {role:?}"),
@@ -99,11 +99,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // When we're issuing end entity or client certs we have a bit of extra work to do
             // now that we have full chains in hand.
             if matches!(role, Role::EndEntity | Role::Client) {
-                let root = &certified_keys
+                let root = &credentialss
                     .get(&(Role::TrustAnchor, alg.inner))
                     .unwrap()
                     .1;
-                let intermediate = &certified_keys
+                let intermediate = &credentialss
                     .get(&(Role::Intermediate, alg.inner))
                     .unwrap()
                     .1;
@@ -133,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 raw_public_key_file.write_all(key_pair.public_key_pem().as_bytes())?;
             }
 
-            certified_keys.insert((role, alg.inner), (Issuer::new(params, key_pair), cert));
+            credentialss.insert((role, alg.inner), (Issuer::new(params, key_pair), cert));
         }
     }
 

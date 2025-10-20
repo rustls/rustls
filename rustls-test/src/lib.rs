@@ -28,7 +28,7 @@ use rustls::client::{
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use rustls::crypto::{
-    CertifiedKey, CertifiedSigner, CryptoProvider, Identity, SigningKey, WebPkiSupportedAlgorithms,
+    CertifiedSigner, Credentials, CryptoProvider, Identity, SigningKey, WebPkiSupportedAlgorithms,
     verify_tls13_signature,
 };
 use rustls::internal::msgs::codec::{Codec, Reader};
@@ -428,7 +428,7 @@ impl KeyType {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("client.spki.pem")).unwrap()
     }
 
-    pub fn certified_client_key(&self, provider: &CryptoProvider) -> Result<CertifiedKey, Error> {
+    pub fn certified_client_key(&self, provider: &CryptoProvider) -> Result<Credentials, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.client_key())?;
@@ -436,16 +436,16 @@ impl KeyType {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?
             .into_owned();
-        Ok(CertifiedKey::new_unchecked(
+        Ok(Credentials::new_unchecked(
             Arc::new(Identity::RawPublicKey(public_key)),
             private_key,
         ))
     }
 
-    pub fn certified_key_with_raw_pub_key(
+    pub fn credentials_with_raw_pub_key(
         &self,
         provider: &CryptoProvider,
-    ) -> Result<CertifiedKey, Error> {
+    ) -> Result<Credentials, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.key())?;
@@ -453,20 +453,20 @@ impl KeyType {
             .public_key()
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))?
             .into_owned();
-        Ok(CertifiedKey::new_unchecked(
+        Ok(Credentials::new_unchecked(
             Arc::new(Identity::RawPublicKey(public_key)),
             private_key,
         ))
     }
 
-    pub fn certified_key_with_cert_chain(
+    pub fn credentials_with_cert_chain(
         &self,
         provider: &CryptoProvider,
-    ) -> Result<CertifiedKey, Error> {
+    ) -> Result<Credentials, Error> {
         let private_key = provider
             .key_provider
             .load_private_key(self.key())?;
-        CertifiedKey::new(self.identity(), private_key)
+        Credentials::new(self.identity(), private_key)
     }
 
     fn crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
@@ -596,7 +596,7 @@ pub fn make_server_config_with_raw_key_support(
     let mut client_verifier =
         MockClientVerifier::new(|| Ok(PeerVerified::assertion()), kt, provider);
     let server_cert_resolver = Arc::new(SingleRawPublicKeyResolver::new(
-        kt.certified_key_with_raw_pub_key(provider)
+        kt.credentials_with_raw_pub_key(provider)
             .unwrap(),
     ));
     client_verifier.expect_raw_public_keys = true;

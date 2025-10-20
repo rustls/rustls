@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::crypto::{CertifiedKey, CertifiedSigner};
+use crate::crypto::{CertifiedSigner, Credentials};
 use crate::enums::CertificateType;
 use crate::error::{Error, PeerIncompatible};
 use crate::server;
@@ -174,12 +174,12 @@ impl server::ProducesTickets for NeverProducesTickets {
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Debug)]
-pub struct SingleRawPublicKeyResolver(CertifiedKey);
+pub struct SingleRawPublicKeyResolver(Credentials);
 
 impl SingleRawPublicKeyResolver {
     /// Create a new `AlwaysResolvesServerRawPublicKeys` instance.
-    pub fn new(certified_key: CertifiedKey) -> Self {
-        Self(certified_key)
+    pub fn new(credentials: Credentials) -> Self {
+        Self(credentials)
     }
 }
 
@@ -203,7 +203,7 @@ mod sni_resolver {
 
     use pki_types::{DnsName, ServerName};
 
-    use crate::crypto::{CertificateIdentity, CertifiedKey, CertifiedSigner, Identity};
+    use crate::crypto::{CertificateIdentity, CertifiedSigner, Credentials, Identity};
     use crate::error::Error;
     use crate::hash_map::HashMap;
     use crate::server::ClientHello;
@@ -215,7 +215,7 @@ mod sni_resolver {
     /// on client-supplied server name (via SNI).
     #[derive(Debug)]
     pub struct ServerNameResolver {
-        by_name: HashMap<DnsName<'static>, Arc<CertifiedKey>>,
+        by_name: HashMap<DnsName<'static>, Arc<Credentials>>,
     }
 
     impl ServerNameResolver {
@@ -226,11 +226,11 @@ mod sni_resolver {
             }
         }
 
-        /// Add a new `CertifiedKey` to be used for the given SNI `name`.
+        /// Add a new `Credentials` to be used for the given SNI `name`.
         ///
         /// This function fails if the `name` is not valid for the supplied certificate, or if
         /// the certificate chain is syntactically faulty.
-        pub fn add(&mut self, name: DnsName<'static>, ck: CertifiedKey) -> Result<(), Error> {
+        pub fn add(&mut self, name: DnsName<'static>, ck: Credentials) -> Result<(), Error> {
             // Check the certificate chain for validity:
             // - it should be non-empty list
             // - the first certificate should be parsable as a x509v3,
@@ -261,11 +261,11 @@ mod sni_resolver {
                 return Err(PeerIncompatible::NoServerNameProvided.into());
             };
 
-            let Some(cert_key) = self.by_name.get(name) else {
+            let Some(credentials) = self.by_name.get(name) else {
                 return Err(Error::NoSuitableCertificate);
             };
 
-            match cert_key.signer(client_hello.signature_schemes) {
+            match credentials.signer(client_hello.signature_schemes) {
                 Some(signer) => Ok(signer),
                 None => Err(PeerIncompatible::NoSignatureSchemesInCommon.into()),
             }
