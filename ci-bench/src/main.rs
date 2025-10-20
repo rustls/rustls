@@ -31,10 +31,10 @@ use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
 use rustls::crypto::{CryptoProvider, GetRandomFailed, SecureRandom, aws_lc_rs, ring};
+use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
-    CipherSuite, ClientConfig, ClientConnection, HandshakeKind, ProtocolVersion, RootCertStore,
-    ServerConfig, ServerConnection,
+    ClientConfig, ClientConnection, HandshakeKind, RootCertStore, ServerConfig, ServerConnection,
 };
 use rustls_test::KeyType;
 

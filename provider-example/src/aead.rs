@@ -2,13 +2,14 @@ use alloc::boxed::Box;
 
 use chacha20poly1305::aead::Buffer;
 use chacha20poly1305::{AeadInPlace, KeyInit, KeySizeUser};
+use rustls::ConnectionTrafficSecrets;
 use rustls::crypto::cipher::{
     AeadKey, BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape,
     MessageDecrypter, MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaqueMessage,
     OutboundPlainMessage, PrefixedPayload, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
     UnsupportedOperationError, make_tls12_aad, make_tls13_aad,
 };
-use rustls::{ConnectionTrafficSecrets, ContentType, ProtocolVersion};
+use rustls::enums::{ContentType, ProtocolVersion};
 
 pub(crate) struct Chacha20Poly1305;
 

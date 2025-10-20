@@ -8,13 +8,12 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPubli
 use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::common_state::CommonState;
-use crate::enums::{CertificateType, SignatureAlgorithm, SignatureScheme};
-use crate::error::ApiMisuse;
-use crate::error::{Error, InconsistentKeys, PeerIncompatible};
+use crate::enums::{AlertDescription, CertificateType, SignatureAlgorithm, SignatureScheme};
+use crate::error::{ApiMisuse, Error, InconsistentKeys, PeerIncompatible};
 use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
-use crate::{AlertDescription, InvalidMessage, SignerPublicKey, x509};
+use crate::{InvalidMessage, SignerPublicKey, x509};
 
 /// Server certificate resolver which always resolves to the same identity and key.
 ///

@@ -21,6 +21,7 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
 use rustls::crypto::{CryptoProvider, SigningKey};
+use rustls::enums::{CipherSuite, SignatureScheme};
 use rustls::pki_types::PrivateKeyDer;
 use rustls::{Error, OtherError};
 
@@ -79,7 +80,7 @@ static ALL_TLS13_CIPHER_SUITES: &[&rustls::Tls13CipherSuite] = &[TLS13_CHACHA20_
 
 pub static TLS13_CHACHA20_POLY1305_SHA256: &rustls::Tls13CipherSuite = &rustls::Tls13CipherSuite {
     common: rustls::crypto::CipherSuiteCommon {
-        suite: rustls::CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+        suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
         hash_provider: &hash::Sha256,
         confidentiality_limit: u64::MAX,
     },
@@ -92,15 +93,15 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: &rustls::Tls13CipherSuite = &rustls::
 pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: &rustls::Tls12CipherSuite =
     &rustls::Tls12CipherSuite {
         common: rustls::crypto::CipherSuiteCommon {
-            suite: rustls::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+            suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             hash_provider: &hash::Sha256,
             confidentiality_limit: u64::MAX,
         },
         protocol_version: rustls::version::TLS12_VERSION,
         kx: rustls::crypto::KeyExchangeAlgorithm::ECDHE,
         sign: &[
-            rustls::SignatureScheme::RSA_PSS_SHA256,
-            rustls::SignatureScheme::RSA_PKCS1_SHA256,
+            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA256,
         ],
         prf_provider: &rustls::crypto::tls12::PrfUsingHmac(&hmac::Sha256Hmac),
         aead_alg: &aead::Chacha20Poly1305,

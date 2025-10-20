@@ -1,8 +1,8 @@
 use der::Reader;
 use rsa::signature::Verifier;
 use rsa::{BigUint, RsaPublicKey, pkcs1v15, pss};
-use rustls::SignatureScheme;
 use rustls::crypto::WebPkiSupportedAlgorithms;
+use rustls::enums::SignatureScheme;
 use rustls::pki_types::{
     AlgorithmIdentifier, InvalidSignature, SignatureVerificationAlgorithm, alg_id,
 };

@@ -12,6 +12,7 @@ use crate::ConfigBuilder;
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::{CryptoProvider, Identity, WebPkiSupportedAlgorithms};
+use crate::enums::SignatureScheme;
 #[cfg(doc)]
 use crate::server::ServerConfig;
 use crate::sync::Arc;
@@ -21,7 +22,7 @@ use crate::verify::{
 };
 use crate::webpki::parse_crls;
 use crate::webpki::verify::{ParsedCertificate, verify_tls12_signature, verify_tls13_signature};
-use crate::{ApiMisuse, DistinguishedName, Error, RootCertStore, SignatureScheme};
+use crate::{ApiMisuse, DistinguishedName, Error, RootCertStore};
 
 /// A builder for configuring a `webpki` client certificate verifier.
 ///

@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use rustls::crypto::Identity;
-use rustls::{CertificateType, Error, PeerIncompatible};
+use rustls::enums::CertificateType;
+use rustls::{Error, PeerIncompatible};
 use rustls_test::{
     ErrorFromPeer, KeyType, ServerCheckCertResolve, do_handshake, do_handshake_until_error,
     make_client_config, make_client_config_with_raw_key_support, make_pair_for_configs,

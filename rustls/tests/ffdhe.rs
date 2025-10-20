@@ -10,11 +10,9 @@ use rustls::crypto::{
     ActiveKeyExchange, CipherSuiteCommon, CryptoProvider, KeyExchangeAlgorithm, SharedSecret,
     StartedKeyExchange, SupportedKxGroup,
 };
+use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::ffdhe_groups::FfdheGroup;
-use rustls::{
-    CipherSuite, ClientConfig, NamedGroup, ProtocolVersion, SupportedCipherSuite, Tls12CipherSuite,
-    ffdhe_groups,
-};
+use rustls::{ClientConfig, NamedGroup, SupportedCipherSuite, Tls12CipherSuite, ffdhe_groups};
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, do_handshake, do_suite_and_kx_test,
     make_pair_for_arc_configs, make_pair_for_configs,
@@ -84,8 +82,6 @@ fn ffdhe_ciphersuite() {
 
 #[test]
 fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() {
-    use rustls::{CipherSuite, NamedGroup};
-
     let client_config = rustls::ClientConfig::builder_with_provider(
         CryptoProvider {
             tls12_cipher_suites: Cow::Owned(vec![

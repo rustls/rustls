@@ -29,14 +29,15 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
 use rustls::crypto::{CryptoProvider, Identity};
+use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::server::{
     NoServerSessionStorage, ProducesTickets, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,
 };
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
 use rustls::{
-    CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind,
-    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData,
+    ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind, RootCertStore,
+    ServerConfig, ServerConnection, SideData,
 };
 use rustls_test::KeyType;
 

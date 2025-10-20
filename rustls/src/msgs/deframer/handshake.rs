@@ -3,10 +3,10 @@ use core::mem;
 use core::ops::Range;
 
 use super::buffers::{BufferProgress, Coalescer, Delocator, Locator};
+use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, u24};
 use crate::msgs::message::InboundPlainMessage;
-use crate::{ContentType, ProtocolVersion};
 
 #[derive(Debug)]
 pub(crate) struct HandshakeDeframer {

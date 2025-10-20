@@ -160,7 +160,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
         trace!("We got ServerHello {server_hello:#?}");
 
-        use crate::ProtocolVersion::{TLSv1_2, TLSv1_3};
+        use ProtocolVersion::{TLSv1_2, TLSv1_3};
         let config = &self.input.config;
         let tls13_supported = config.supports_version(TLSv1_3);
 

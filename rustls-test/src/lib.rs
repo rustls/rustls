@@ -31,6 +31,7 @@ use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SigningKey,
     WebPkiSupportedAlgorithms, verify_tls13_signature,
 };
+use rustls::enums::{CertificateType, CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::pki_types::pem::PemObject;
@@ -47,10 +48,9 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection, Connection,
-    ConnectionCommon, ContentType, DistinguishedName, Error, InconsistentKeys, NamedGroup,
-    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
-    SupportedCipherSuite,
+    CertificateError, ClientConfig, ClientConnection, Connection, ConnectionCommon,
+    DistinguishedName, Error, InconsistentKeys, NamedGroup, RootCertStore, ServerConfig,
+    ServerConnection, SideData, SupportedCipherSuite,
 };
 
 macro_rules! embed_files {
@@ -2011,12 +2011,12 @@ impl rustls::client::ClientSessionStore for ClientStorage {
 
 /// Deeply inefficient, test-only TLS encoding helpers
 pub mod encoding {
+    use rustls::NamedGroup;
+    use rustls::enums::{
+        AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
+    };
     use rustls::internal::msgs::codec::Codec;
     use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
-    use rustls::{
-        AlertDescription, CipherSuite, ContentType, HandshakeType, NamedGroup, ProtocolVersion,
-        SignatureScheme,
-    };
 
     /// Return a client hello with mandatory extensions added to `extensions`
     ///

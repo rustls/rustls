@@ -15,7 +15,7 @@ macro_rules! require_handshake_msg(
         ), .. } => Ok(hm),
         payload => Err($crate::check::inappropriate_handshake_message(
             payload,
-            &[$crate::ContentType::Handshake],
+            &[$crate::enums::ContentType::Handshake],
             &[$handshake_type]))
     }
   )
@@ -31,7 +31,7 @@ macro_rules! require_handshake_msg_move(
         payload =>
             Err($crate::check::inappropriate_handshake_message(
                 &payload,
-                &[$crate::ContentType::Handshake],
+                &[$crate::enums::ContentType::Handshake],
                 &[$handshake_type]))
     }
   )
