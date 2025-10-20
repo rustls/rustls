@@ -13,6 +13,7 @@ use crate::ConfigBuilder;
 use crate::crypto;
 use crate::crypto::{CryptoProvider, Identity, WebPkiSupportedAlgorithms};
 use crate::enums::SignatureScheme;
+use crate::error::ApiMisuse;
 #[cfg(doc)]
 use crate::server::ServerConfig;
 use crate::sync::Arc;
@@ -22,7 +23,7 @@ use crate::verify::{
 };
 use crate::webpki::parse_crls;
 use crate::webpki::verify::{ParsedCertificate, verify_tls12_signature, verify_tls13_signature};
-use crate::{ApiMisuse, DistinguishedName, Error, RootCertStore};
+use crate::{DistinguishedName, Error, RootCertStore};
 
 /// A builder for configuring a `webpki` client certificate verifier.
 ///
@@ -441,6 +442,7 @@ mod tests {
 
     use super::{WebPkiClientVerifier, provider};
     use crate::RootCertStore;
+    use crate::error::CertRevocationListError;
     use crate::server::VerifierBuilderError;
     use crate::sync::Arc;
 
@@ -634,7 +636,7 @@ mod tests {
     fn smoke() {
         let all = vec![
             VerifierBuilderError::NoRootAnchors,
-            VerifierBuilderError::InvalidCrl(crate::CertRevocationListError::ParseError),
+            VerifierBuilderError::InvalidCrl(CertRevocationListError::ParseError),
         ];
 
         for err in all {

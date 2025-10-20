@@ -22,7 +22,7 @@ use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto;
 use crate::crypto::{CryptoProvider, SelectedCredential};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::log::trace;
@@ -39,9 +39,7 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{
-    DistinguishedName, KeyLog, NamedGroup, PeerMisbehaved, WantsVerifier, compress, verify,
-};
+use crate::{DistinguishedName, KeyLog, NamedGroup, WantsVerifier, compress, verify};
 
 /// A trait for the ability to store server session data.
 ///
@@ -656,14 +654,14 @@ mod connection {
     use pki_types::DnsName;
 
     use super::{Accepted, Accepting, ServerConfig, ServerConnectionData, ServerExtensionsInput};
+    use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
-    use crate::error::Error;
+    use crate::error::{ApiMisuse, Error};
     use crate::server::hs::ClientHelloInput;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
-    use crate::{ApiMisuse, KeyingMaterialExporter};
 
     /// Allows reading of early data in resumed TLS1.3 connections.
     ///

@@ -29,14 +29,14 @@ use rustls::crypto::{
 use rustls::enums::{
     CipherSuite, ContentType, ProtocolVersion, SignatureAlgorithm, SignatureScheme,
 };
+use rustls::error::{PeerIncompatible, PeerMisbehaved};
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
     SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
 use rustls::server::{self, ProducesTickets};
 use rustls::{
-    ConnectionTrafficSecrets, Error, NamedGroup, PeerIncompatible, PeerMisbehaved, RootCertStore,
-    Tls12CipherSuite, Tls13CipherSuite,
+    ConnectionTrafficSecrets, Error, NamedGroup, RootCertStore, Tls12CipherSuite, Tls13CipherSuite,
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.

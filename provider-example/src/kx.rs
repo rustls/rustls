@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
 use rustls::crypto::{self, StartedKeyExchange, SupportedKxGroup};
+use rustls::error::PeerMisbehaved;
 
 pub(crate) struct KeyExchange {
     priv_key: x25519_dalek::EphemeralSecret,
@@ -11,7 +12,7 @@ impl crypto::ActiveKeyExchange for KeyExchange {
     fn complete(self: Box<Self>, peer: &[u8]) -> Result<crypto::SharedSecret, rustls::Error> {
         let peer_array: [u8; 32] = peer
             .try_into()
-            .map_err(|_| rustls::Error::from(rustls::PeerMisbehaved::InvalidKeyShare))?;
+            .map_err(|_| rustls::Error::from(PeerMisbehaved::InvalidKeyShare))?;
         let their_pub = x25519_dalek::PublicKey::from(peer_array);
         let shared_secret = self.priv_key.diffie_hellman(&their_pub);
         Ok(crypto::SharedSecret::from(&shared_secret.as_bytes()[..]))

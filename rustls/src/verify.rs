@@ -124,10 +124,9 @@ pub trait ClientVerifier: Debug + Send + Sync {
     ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
     /// the implementer to handle invalid data. It is recommended that the implementer returns
-    /// an [InvalidCertificate] error with the [BadEncoding] variant when these cases are encountered.
+    /// a [`CertificateError::BadEncoding`] error when these cases are encountered.
     ///
-    /// [InvalidCertificate]: Error#variant.InvalidCertificate
-    /// [BadEncoding]: crate::CertificateError#variant.BadEncoding
+    /// [`CertificateError::BadEncoding`]: crate::error::CertificateError::BadEncoding
     fn verify_identity(&self, identity: &ClientIdentity<'_>) -> Result<PeerVerified, Error>;
 
     /// Verify a signature allegedly by the given client certificate.

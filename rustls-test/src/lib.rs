@@ -32,6 +32,7 @@ use rustls::crypto::{
     WebPkiSupportedAlgorithms, verify_tls13_signature,
 };
 use rustls::enums::{CertificateType, CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
+use rustls::error::{CertificateError, Error, InconsistentKeys};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::pki_types::pem::PemObject;
@@ -48,9 +49,8 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    CertificateError, ClientConfig, ClientConnection, Connection, ConnectionCommon,
-    DistinguishedName, Error, InconsistentKeys, NamedGroup, RootCertStore, ServerConfig,
-    ServerConnection, SideData, SupportedCipherSuite,
+    ClientConfig, ClientConnection, Connection, ConnectionCommon, DistinguishedName, NamedGroup,
+    RootCertStore, ServerConfig, ServerConnection, SideData, SupportedCipherSuite,
 };
 
 macro_rules! embed_files {

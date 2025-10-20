@@ -10,9 +10,9 @@ use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
 use rustls::crypto::{Credentials, Identity, SingleCredential};
 use rustls::enums::{AlertDescription, CertificateCompressionAlgorithm};
+use rustls::error::{Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls::pki_types::CertificateDer;
-use rustls::{Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls_test::make_pair_for_arc_configs;
 use rustls_test::{

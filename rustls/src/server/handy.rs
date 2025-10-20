@@ -204,12 +204,11 @@ mod sni_resolver {
     use pki_types::{DnsName, ServerName};
 
     use crate::crypto::{CertificateIdentity, Credentials, Identity, SelectedCredential};
-    use crate::error::Error;
+    use crate::error::{Error, PeerIncompatible};
     use crate::hash_map::HashMap;
-    use crate::server::ClientHello;
+    use crate::server::{self, ClientHello};
     use crate::sync::Arc;
     use crate::webpki::{ParsedCertificate, verify_server_name};
-    use crate::{PeerIncompatible, server};
 
     /// Something that resolves do different cert chains/keys based
     /// on client-supplied server name (via SNI).

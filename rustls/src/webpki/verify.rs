@@ -8,9 +8,8 @@ use webpki::ExtendedKeyUsage;
 
 use super::anchors::RootCertStore;
 use super::pki_error;
-use crate::ApiMisuse;
 use crate::enums::SignatureScheme;
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::verify::{HandshakeSignatureValid, SignatureVerificationInput, SignerPublicKey};
 
 /// Verify that the end-entity certificate `end_entity` is a valid server cert

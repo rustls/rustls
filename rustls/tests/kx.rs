@@ -11,11 +11,9 @@ use rustls::crypto::{
     SupportedKxGroup,
 };
 use rustls::enums::{AlertDescription, ContentType, ProtocolVersion};
+use rustls::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use rustls::internal::msgs::enums::ExtensionType;
-use rustls::{
-    ClientConfig, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIncompatible,
-    PeerMisbehaved, ServerConfig,
-};
+use rustls::{ClientConfig, HandshakeKind, NamedGroup, ServerConfig};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, KeyType, OtherSession, ServerConfigExt,
     do_handshake, do_handshake_until_error, encoding, make_client_config_with_kx_groups, make_pair,
