@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use pki_types::{CertificateDer, DnsName};
 use rustls::client::{ClientCredentialResolver, CredentialRequest};
-use rustls::crypto::{CertifiedSigner, Credentials, Identity};
+use rustls::crypto::{Credentials, Identity, SelectedCredential};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::{
     CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection,
@@ -224,7 +224,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
 struct ServerCheckNoSni {}
 
 impl ServerCredentialResolver for ServerCheckNoSni {
-    fn resolve(&self, client_hello: &ClientHello) -> Result<CertifiedSigner, Error> {
+    fn resolve(&self, client_hello: &ClientHello) -> Result<SelectedCredential, Error> {
         // We expect the client to not send SNI.
         assert!(client_hello.server_name().is_none());
         Err(Error::NoSuitableCertificate)
@@ -264,7 +264,7 @@ impl Drop for ClientCheckCertResolve {
 }
 
 impl ClientCredentialResolver for ClientCheckCertResolve {
-    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential> {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);
 

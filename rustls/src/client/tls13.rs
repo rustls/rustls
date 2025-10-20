@@ -19,7 +19,7 @@ use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::hash::Hash;
 use crate::crypto::{
-    ActiveKeyExchange, CertifiedSigner, HybridKeyExchange, Identity, SharedSecret, Signer,
+    ActiveKeyExchange, HybridKeyExchange, Identity, SelectedCredential, SharedSecret, Signer,
     StartedKeyExchange,
 };
 use crate::enums::{
@@ -1230,19 +1230,20 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
 
 fn emit_compressed_certificate_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
-    signer: &CertifiedSigner,
+    credentials: &SelectedCredential,
     auth_context: Option<Vec<u8>>,
     compressor: &dyn compress::CertCompressor,
     config: &ClientConfig,
 ) {
-    let mut cert_payload = CertificatePayloadTls13::new(signer.identity.as_certificates(), None);
+    let mut cert_payload =
+        CertificatePayloadTls13::new(credentials.identity.as_certificates(), None);
     cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
 
     let Ok(compressed) = config
         .cert_compression_cache
         .compression_for(compressor, &cert_payload)
     else {
-        return emit_certificate_tls13(flight, Some(signer), auth_context);
+        return emit_certificate_tls13(flight, Some(credentials), auth_context);
     };
 
     flight.add(HandshakeMessagePayload(
@@ -1252,11 +1253,13 @@ fn emit_compressed_certificate_tls13(
 
 fn emit_certificate_tls13(
     flight: &mut HandshakeFlightTls13<'_>,
-    signer: Option<&CertifiedSigner>,
+    credentials: Option<&SelectedCredential>,
     auth_context: Option<Vec<u8>>,
 ) {
-    let mut cert_payload = match signer {
-        Some(signer) => CertificatePayloadTls13::new(signer.identity.as_certificates(), None),
+    let mut cert_payload = match credentials {
+        Some(credentials) => {
+            CertificatePayloadTls13::new(credentials.identity.as_certificates(), None)
+        }
         None => CertificatePayloadTls13::new([].into_iter(), None),
     };
 
@@ -1376,22 +1379,22 @@ impl State<ClientConnectionData> for ExpectFinished {
                     emit_certificate_tls13(&mut flight, None, auth_context);
                 }
                 ClientAuthDetails::Verify {
-                    signer,
+                    credentials,
                     auth_context_tls13: auth_context,
                     compressor,
                 } => {
                     if let Some(compressor) = compressor {
                         emit_compressed_certificate_tls13(
                             &mut flight,
-                            &signer,
+                            &credentials,
                             auth_context,
                             compressor,
                             &st.config,
                         );
                     } else {
-                        emit_certificate_tls13(&mut flight, Some(&signer), auth_context);
+                        emit_certificate_tls13(&mut flight, Some(&credentials), auth_context);
                     }
-                    emit_certverify_tls13(&mut flight, signer.signer)?;
+                    emit_certverify_tls13(&mut flight, credentials.signer)?;
                 }
             }
         }

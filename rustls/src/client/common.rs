@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use super::{ClientCredentialResolver, CredentialRequest};
 use crate::compress;
-use crate::crypto::CertifiedSigner;
+use crate::crypto::SelectedCredential;
 use crate::enums::{CertificateType, SignatureScheme};
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
@@ -69,7 +69,7 @@ pub(super) enum ClientAuthDetails {
     Empty { auth_context_tls13: Option<Vec<u8>> },
     /// Send a non-empty `Certificate` and a `CertificateVerify`.
     Verify {
-        signer: CertifiedSigner,
+        credentials: SelectedCredential,
         auth_context_tls13: Option<Vec<u8>>,
         compressor: Option<&'static dyn compress::CertCompressor>,
     },
@@ -90,10 +90,10 @@ impl ClientAuthDetails {
             root_hint_subjects: root_hint_subjects.unwrap_or_default(),
         };
 
-        if let Some(signer) = resolver.resolve(&server_hello) {
+        if let Some(credentials) = resolver.resolve(&server_hello) {
             debug!("Attempting client auth");
             return Self::Verify {
-                signer,
+                credentials,
                 auth_context_tls13,
                 compressor,
             };

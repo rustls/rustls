@@ -20,7 +20,7 @@ use crate::conn::ConnectionCommon;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CertifiedSigner, CryptoProvider};
+use crate::crypto::{CryptoProvider, SelectedCredential};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -130,7 +130,7 @@ pub trait ProducesTickets: Debug + Send + Sync {
 pub trait ServerCredentialResolver: Debug + Send + Sync {
     /// Choose a certificate chain and matching key given simplified ClientHello information.
     ///
-    /// The `CertifiedSigner` returned from this method contains a certificate chain and a
+    /// The `SelectedCredential` returned from this method contains an identity and a
     /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
     /// [`Credentials`], on which an implementation can call [`Credentials::signer()`].
     /// An implementation can either store long-lived [`Credentials`] values, or instantiate
@@ -147,7 +147,7 @@ pub trait ServerCredentialResolver: Debug + Send + Sync {
     /// [`Signer`]: crate::crypto::Signer
     /// [`PeerIncompatible::NoSignatureSchemesInCommon`]: crate::error::PeerIncompatible::NoSignatureSchemesInCommon
     /// [`PeerIncompatible::NoServerNameProvided`]: crate::error::PeerIncompatible::NoServerNameProvided
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error>;
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error>;
 
     /// Returns which [`CertificateType`]s this resolver supports.
     ///

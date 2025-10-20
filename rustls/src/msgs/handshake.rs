@@ -9,7 +9,7 @@ use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
 
-use crate::crypto::{ActiveKeyExchange, CertifiedSigner, SecureRandom};
+use crate::crypto::{ActiveKeyExchange, SecureRandom, SelectedCredential};
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, CipherSuite, EchClientHelloType,
     HandshakeType, ProtocolVersion, SignatureScheme,
@@ -1619,7 +1619,7 @@ impl DerefMut for ServerHelloPayload {
 pub(crate) struct CertificateChain<'a>(pub(crate) Vec<CertificateDer<'a>>);
 
 impl<'a> CertificateChain<'a> {
-    pub(crate) fn from_signer(signer: &'a CertifiedSigner) -> Self {
+    pub(crate) fn from_signer(signer: &'a SelectedCredential) -> Self {
         Self(
             signer
                 .identity

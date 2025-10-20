@@ -1,7 +1,7 @@
 use pki_types::ServerName;
 
 use super::CredentialRequest;
-use crate::crypto::{CertifiedSigner, Credentials};
+use crate::crypto::{Credentials, SelectedCredential};
 use crate::enums::CertificateType;
 use crate::msgs::persist;
 use crate::{NamedGroup, client};
@@ -189,7 +189,7 @@ pub use cache::ClientSessionMemoryCache;
 pub(super) struct FailResolveClientCert {}
 
 impl client::ClientCredentialResolver for FailResolveClientCert {
-    fn resolve(&self, _: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+    fn resolve(&self, _: &CredentialRequest<'_>) -> Option<SelectedCredential> {
         None
     }
 
@@ -213,7 +213,7 @@ impl AlwaysResolvesClientRawPublicKeys {
 }
 
 impl client::ClientCredentialResolver for AlwaysResolvesClientRawPublicKeys {
-    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential> {
         match request.negotiated_type() {
             CertificateType::RawPublicKey => self
                 .0
@@ -238,7 +238,7 @@ mod tests {
     use super::provider::cipher_suite;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
     use crate::client::{ClientCredentialResolver, ClientSessionStore, CredentialRequest};
-    use crate::crypto::{CertificateIdentity, CertifiedSigner, Identity};
+    use crate::crypto::{CertificateIdentity, Identity, SelectedCredential};
     use crate::enums::{CertificateType, SignatureScheme};
     use crate::error::Error;
     use crate::msgs::base::PayloadU16;
@@ -347,7 +347,7 @@ mod tests {
 
     impl ClientCredentialResolver for DummyClientCredentialResolver {
         #[cfg_attr(coverage_nightly, coverage(off))]
-        fn resolve(&self, _: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+        fn resolve(&self, _: &CredentialRequest<'_>) -> Option<SelectedCredential> {
             unreachable!()
         }
 

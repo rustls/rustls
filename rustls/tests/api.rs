@@ -10,7 +10,9 @@ use std::{io, mem};
 use pki_types::{DnsName, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
 use rustls::client::Resumption;
-use rustls::crypto::{CertifiedSigner, Credentials, CryptoProvider, Identity, Signer, SigningKey};
+use rustls::crypto::{
+    Credentials, CryptoProvider, Identity, SelectedCredential, Signer, SigningKey,
+};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
@@ -1652,7 +1654,7 @@ struct ServerCheckSni {
 }
 
 impl ServerCredentialResolver for ServerCheckSni {
-    fn resolve(&self, client_hello: &ClientHello) -> Result<CertifiedSigner, Error> {
+    fn resolve(&self, client_hello: &ClientHello) -> Result<SelectedCredential, Error> {
         assert_eq!(client_hello.server_name().is_some(), self.expect_sni);
         Err(Error::NoSuitableCertificate)
     }

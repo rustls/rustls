@@ -13,7 +13,7 @@ use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CertifiedSigner, CryptoProvider};
+use crate::crypto::{CryptoProvider, SelectedCredential};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -96,7 +96,7 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
 pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     /// Resolve a client certificate chain/private key to use as the client's identity.
     ///
-    /// The `CertifiedSigner` returned from this method contains a certificate chain and a
+    /// The `SelectedCredential` returned from this method contains an identity and a
     /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
     /// [`Credentials`], on which an implementation can call [`Credentials::signer()`].
     /// An implementation can either store long-lived [`Credentials`] values, or instantiate
@@ -111,7 +111,7 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     /// [`Credentials`]: crate::crypto::Credentials
     /// [`Credentials::signer()`]: crate::crypto::Credentials::signer
     /// [`Signer`]: crate::crypto::Signer
-    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner>;
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential>;
 
     /// Returns which [`CertificateType`]s this resolver supports.
     ///

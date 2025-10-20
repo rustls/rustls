@@ -39,8 +39,8 @@ use rustls::client::{
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::{
-    CertifiedSigner, Credentials, CryptoProvider, Identity, Signer, SigningKey, SingleCredential,
-    aws_lc_rs, ring,
+    Credentials, CryptoProvider, Identity, SelectedCredential, Signer, SigningKey,
+    SingleCredential, aws_lc_rs, ring,
 };
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
@@ -555,7 +555,7 @@ struct FixedSignatureSchemeServerCertResolver {
 }
 
 impl server::ServerCredentialResolver for FixedSignatureSchemeServerCertResolver {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
         if !client_hello
             .signature_schemes()
             .contains(&self.scheme)
@@ -592,7 +592,7 @@ impl MultipleClientCredentialResolver {
 }
 
 impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
-    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential> {
         // `sig_schemes` is in server preference order, so respect that.
         let sig_schemes = request.signature_schemes();
         let root_hint_subjects = request.root_hint_subjects();
@@ -791,13 +791,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
             credentials,
             scheme: lookup_scheme(scheme),
         }) as Arc<dyn server::ServerCredentialResolver>,
-<<<<<<< HEAD
-        None => Arc::new(SingleCertAndKey::from(credentials)),
-||||||| parent of de9b337f (crypto: rename SingleCertAndKey to SingleCredential)
-        None => Arc::new(SingleCertAndKey::from(cert_key)),
-=======
-        None => Arc::new(SingleCredential::from(cert_key)),
->>>>>>> de9b337f (crypto: rename SingleCertAndKey to SingleCredential)
+        None => Arc::new(SingleCredential::from(credentials)),
     };
 
     let mut cfg = ServerConfig::builder_with_provider(Arc::new(provider))
