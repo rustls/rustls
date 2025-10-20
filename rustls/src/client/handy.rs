@@ -1,7 +1,7 @@
 use pki_types::ServerName;
 
 use super::CredentialRequest;
-use crate::crypto::{CertifiedKey, CertifiedSigner};
+use crate::crypto::{CertifiedSigner, Credentials};
 use crate::enums::CertificateType;
 use crate::msgs::persist;
 use crate::{NamedGroup, client};
@@ -203,12 +203,12 @@ impl client::ClientCredentialResolver for FailResolveClientCert {
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Debug)]
-pub struct AlwaysResolvesClientRawPublicKeys(CertifiedKey);
+pub struct AlwaysResolvesClientRawPublicKeys(Credentials);
 
 impl AlwaysResolvesClientRawPublicKeys {
     /// Create a new `AlwaysResolvesClientRawPublicKeys` instance.
-    pub fn new(certified_key: CertifiedKey) -> Self {
-        Self(certified_key)
+    pub fn new(credentials: Credentials) -> Self {
+        Self(credentials)
     }
 }
 

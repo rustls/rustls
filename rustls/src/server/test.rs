@@ -52,7 +52,7 @@ mod tests {
     use super::super::*;
     use crate::common_state::KxState;
     use crate::crypto::{
-        ActiveKeyExchange, CertifiedKey, CryptoProvider, Identity, KeyExchangeAlgorithm,
+        ActiveKeyExchange, Credentials, CryptoProvider, Identity, KeyExchangeAlgorithm,
         StartedKeyExchange, SupportedKxGroup,
     };
     use crate::enums::CertificateType;
@@ -249,12 +249,12 @@ mod tests {
         )
         .with_no_client_auth()
         .with_server_credential_resolver(Arc::new(SingleRawPublicKeyResolver::new(
-            server_certified_key(),
+            server_credentials(),
         )))
         .unwrap()
     }
 
-    fn server_certified_key() -> CertifiedKey {
+    fn server_credentials() -> Credentials {
         let key = super::provider::DEFAULT_PROVIDER
             .key_provider
             .load_private_key(server_key())
@@ -262,7 +262,7 @@ mod tests {
         let identity = Arc::from(Identity::RawPublicKey(
             key.public_key().unwrap().into_owned(),
         ));
-        CertifiedKey::new_unchecked(identity, key)
+        Credentials::new_unchecked(identity, key)
     }
 
     fn server_key() -> PrivateKeyDer<'static> {

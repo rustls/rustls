@@ -39,7 +39,7 @@ use rustls::client::{
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::{
-    CertifiedKey, CertifiedSigner, CryptoProvider, Identity, Signer, SigningKey, SingleCertAndKey,
+    CertifiedSigner, Credentials, CryptoProvider, Identity, Signer, SigningKey, SingleCertAndKey,
     aws_lc_rs, ring,
 };
 use rustls::internal::msgs::codec::Codec;
@@ -278,13 +278,13 @@ struct Credential {
 }
 
 impl Credential {
-    fn load_from_file(&self, provider: &CryptoProvider) -> CertifiedKey {
+    fn load_from_file(&self, provider: &CryptoProvider) -> Credentials {
         let certs = CertificateDer::pem_file_iter(&self.cert_file)
             .unwrap()
             .map(|cert| cert.unwrap())
             .collect::<Vec<_>>();
         let key = PrivateKeyDer::from_pem_file(&self.key_file).unwrap();
-        CertifiedKey::from_der(
+        Credentials::from_der(
             Arc::from(Identity::from_cert_chain(certs).unwrap()),
             key,
             provider,
@@ -550,7 +550,7 @@ impl SigningKey for FixedSignatureSchemeSigningKey {
 
 #[derive(Debug)]
 struct FixedSignatureSchemeServerCertResolver {
-    cert_key: CertifiedKey,
+    credentials: Credentials,
     scheme: SignatureScheme,
 }
 
@@ -565,7 +565,7 @@ impl server::ServerCredentialResolver for FixedSignatureSchemeServerCertResolver
             ));
         }
 
-        self.cert_key
+        self.credentials
             .signer(&[self.scheme])
             .ok_or(Error::PeerIncompatible(
                 PeerIncompatible::NoSignatureSchemesInCommon,
@@ -581,12 +581,12 @@ struct MultipleClientCredentialResolver {
 }
 
 impl MultipleClientCredentialResolver {
-    fn add(&mut self, key: CertifiedKey, meta: &Credential) {
+    fn add(&mut self, key: Credentials, meta: &Credential) {
         self.additional
             .push(ClientCert::new(key, meta));
     }
 
-    fn set_default(&mut self, key: CertifiedKey, meta: &Credential) {
+    fn set_default(&mut self, key: Credentials, meta: &Credential) {
         self.default = Some(ClientCert::new(key, meta));
     }
 }
@@ -647,13 +647,13 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
 
 #[derive(Debug)]
 struct ClientCert {
-    certkey: CertifiedKey,
+    certkey: Credentials,
     issuer_dn: DistinguishedName,
     must_match_issuer: bool,
 }
 
 impl ClientCert {
-    fn new(mut certkey: CertifiedKey, meta: &Credential) -> Self {
+    fn new(mut certkey: Credentials, meta: &Credential) -> Self {
         let Identity::X509(id) = &*certkey.identity else {
             panic!("only X.509 client certs supported");
         };
@@ -783,15 +783,15 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     );
     let cred = &opts.credentials.default;
     let provider = opts.provider();
-    let mut cert_key = cred.load_from_file(&provider);
-    cert_key.ocsp = Some(opts.server_ocsp_response.clone());
+    let mut credentials = cred.load_from_file(&provider);
+    credentials.ocsp = Some(opts.server_ocsp_response.clone());
 
     let cert_resolver = match cred.use_signing_scheme {
         Some(scheme) => Arc::new(FixedSignatureSchemeServerCertResolver {
-            cert_key,
+            credentials,
             scheme: lookup_scheme(scheme),
         }) as Arc<dyn server::ServerCredentialResolver>,
-        None => Arc::new(SingleCertAndKey::from(cert_key)),
+        None => Arc::new(SingleCertAndKey::from(credentials)),
     };
 
     let mut cfg = ServerConfig::builder_with_provider(Arc::new(provider))

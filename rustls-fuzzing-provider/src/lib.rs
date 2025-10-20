@@ -23,7 +23,7 @@ use rustls::crypto::cipher::{
     Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use rustls::crypto::{
-    self, CertifiedKey, CertifiedSigner, CipherSuiteCommon, GetRandomFailed, Identity,
+    self, CertifiedSigner, CipherSuiteCommon, Credentials, GetRandomFailed, Identity,
     KeyExchangeAlgorithm, StartedKeyExchange, WebPkiSupportedAlgorithms, hash, tls12, tls13,
 };
 use rustls::pki_types::{
@@ -71,15 +71,15 @@ pub fn server_verifier() -> Arc<dyn ServerVerifier> {
 
 pub fn server_cert_resolver() -> Arc<dyn server::ServerCredentialResolver> {
     let cert = CertificateDer::from(&include_bytes!("../../test-ca/ecdsa-p256/end.der")[..]);
-    let certified_key = CertifiedKey::new_unchecked(
+    let credentials = Credentials::new_unchecked(
         Arc::new(Identity::from_cert_chain(vec![cert]).unwrap()),
         Box::new(SigningKey),
     );
-    Arc::new(DummyCert(certified_key.into()))
+    Arc::new(DummyCert(credentials.into()))
 }
 
 #[derive(Debug)]
-struct DummyCert(Arc<CertifiedKey>);
+struct DummyCert(Arc<Credentials>);
 
 impl server::ServerCredentialResolver for DummyCert {
     fn resolve(&self, client_hello: &server::ClientHello<'_>) -> Result<CertifiedSigner, Error> {

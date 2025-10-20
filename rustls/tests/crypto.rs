@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
-use rustls::crypto::{CertifiedKey, CryptoProvider};
+use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::{
     ClientConfig, ClientConnection, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
     ServerConnection, SupportedCipherSuite,
@@ -532,7 +532,7 @@ fn test_keys_match_for_all_signing_key_types() {
             .key_provider
             .load_private_key(kt.client_key())
             .unwrap();
-        let _ = CertifiedKey::new(kt.client_identity(), key).expect("keys match");
+        let _ = Credentials::new(kt.client_identity(), key).expect("keys match");
         println!("{kt:?} ok");
     }
 }

@@ -14,7 +14,7 @@ mod client {
         HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
     };
     use rustls::crypto::{
-        CertifiedKey, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
+        Credentials, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
         verify_tls13_signature,
     };
     use rustls::pki_types::pem::PemObject;
@@ -42,7 +42,7 @@ mod client {
         let server_raw_key = SubjectPublicKeyInfoDer::from_pem_file(server_pub_key)
             .expect("cannot open pub key file");
 
-        let certified_key = CertifiedKey::new_unchecked(
+        let credentials = Credentials::new_unchecked(
             Arc::new(Identity::RawPublicKey(client_public_key.into_owned())),
             client_private_key,
         );
@@ -53,7 +53,7 @@ mod client {
                 server_raw_key,
             ])))
             .with_client_credential_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-                certified_key,
+                credentials,
             )))
             .unwrap()
     }
@@ -144,7 +144,7 @@ mod server {
 
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{
-        CertifiedKey, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
+        Credentials, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
         verify_tls13_signature,
     };
     use rustls::pki_types::pem::PemObject;
@@ -175,13 +175,13 @@ mod server {
             .ok_or(Error::InconsistentKeys(InconsistentKeys::Unknown))
             .expect("cannot load public key");
 
-        let certified_key = CertifiedKey::new_unchecked(
+        let credentials = Credentials::new_unchecked(
             Arc::new(Identity::RawPublicKey(server_public_key.into_owned())),
             server_private_key,
         );
 
         let client_cert_verifier = Arc::new(SimpleRpkClientVerifier::new(vec![client_raw_key]));
-        let server_cert_resolver = Arc::new(SingleRawPublicKeyResolver::new(certified_key));
+        let server_cert_resolver = Arc::new(SingleRawPublicKeyResolver::new(credentials));
 
         ServerConfig::builder()
             .with_client_cert_verifier(client_cert_verifier)

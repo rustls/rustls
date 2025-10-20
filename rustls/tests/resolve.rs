@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use pki_types::{CertificateDer, DnsName};
 use rustls::client::{ClientCredentialResolver, CredentialRequest};
-use rustls::crypto::{CertifiedKey, CertifiedSigner, Identity};
+use rustls::crypto::{CertifiedSigner, Credentials, Identity};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::{
     CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection,
@@ -434,7 +434,7 @@ fn sni_resolver_works() {
     resolver
         .add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new(kt.identity(), signing_key).expect("keys match"),
+            Credentials::new(kt.identity(), signing_key).expect("keys match"),
         )
         .unwrap();
 
@@ -473,7 +473,7 @@ fn sni_resolver_rejects_wrong_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new(kt.identity(), kt.load_key(&provider::DEFAULT_PROVIDER))
+            Credentials::new(kt.identity(), kt.load_key(&provider::DEFAULT_PROVIDER))
                 .expect("keys match")
         )
     );
@@ -483,7 +483,7 @@ fn sni_resolver_rejects_wrong_names() {
         ))),
         resolver.add(
             DnsName::try_from("not-localhost").unwrap(),
-            CertifiedKey::new(kt.identity(), kt.load_key(&provider::DEFAULT_PROVIDER))
+            Credentials::new(kt.identity(), kt.load_key(&provider::DEFAULT_PROVIDER))
                 .expect("keys match")
         )
     );
@@ -500,7 +500,7 @@ fn sni_resolver_lower_cases_configured_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("LOCALHOST").unwrap(),
-            CertifiedKey::new(kt.identity(), signing_key).expect("keys match")
+            Credentials::new(kt.identity(), signing_key).expect("keys match")
         )
     );
 
@@ -530,7 +530,7 @@ fn sni_resolver_lower_cases_queried_names() {
         Ok(()),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new(kt.identity(), signing_key).expect("keys match")
+            Credentials::new(kt.identity(), signing_key).expect("keys match")
         )
     );
 
@@ -559,7 +559,7 @@ fn sni_resolver_rejects_bad_certs() {
         Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(
             DnsName::try_from("localhost").unwrap(),
-            CertifiedKey::new_unchecked(bad_chain, kt.load_key(&provider::DEFAULT_PROVIDER))
+            Credentials::new_unchecked(bad_chain, kt.load_key(&provider::DEFAULT_PROVIDER))
         )
     );
 }
