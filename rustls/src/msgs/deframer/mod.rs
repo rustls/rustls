@@ -102,7 +102,7 @@ mod tests {
     use std::prelude::v1::*;
 
     use super::*;
-    use crate::ContentType;
+    use crate::enums::ContentType;
 
     #[test]
     fn iterator_empty_before_header_received() {

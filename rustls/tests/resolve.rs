@@ -8,11 +8,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use pki_types::{CertificateDer, DnsName};
 use rustls::client::{ClientCredentialResolver, CredentialRequest};
 use rustls::crypto::{Credentials, Identity, SelectedCredential};
+use rustls::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::{
-    CertificateError, CertificateType, CipherSuite, ClientConfig, ClientConnection,
-    DistinguishedName, Error, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
-    SignatureScheme, SupportedCipherSuite,
+    CertificateError, ClientConfig, ClientConnection, DistinguishedName, Error, PeerMisbehaved,
+    ServerConfig, ServerConnection, SupportedCipherSuite,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, ServerCheckCertResolve,

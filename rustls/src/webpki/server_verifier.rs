@@ -4,6 +4,7 @@ use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
 use crate::crypto::{CryptoProvider, Identity, WebPkiSupportedAlgorithms};
+use crate::enums::SignatureScheme;
 use crate::sync::Arc;
 use crate::verify::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
@@ -14,7 +15,7 @@ use crate::webpki::verify::{
     verify_tls13_signature,
 };
 use crate::webpki::{VerifierBuilderError, parse_crls, verify_server_name};
-use crate::{ApiMisuse, Error, RootCertStore, SignatureScheme};
+use crate::{ApiMisuse, Error, RootCertStore};
 #[cfg(doc)]
 use crate::{ConfigBuilder, ServerConfig, crypto};
 

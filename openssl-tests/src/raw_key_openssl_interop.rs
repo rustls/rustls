@@ -17,12 +17,13 @@ mod client {
         Credentials, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
         verify_tls13_signature,
     };
+    use rustls::enums::{CertificateType, SignatureScheme};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
     use rustls::{
-        ApiMisuse, CertificateError, CertificateType, ClientConfig, ClientConnection, Error,
-        InconsistentKeys, PeerIncompatible, SignatureScheme, Stream,
+        ApiMisuse, CertificateError, ClientConfig, ClientConnection, Error, InconsistentKeys,
+        PeerIncompatible, Stream,
     };
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
@@ -147,6 +148,7 @@ mod server {
         Credentials, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
         verify_tls13_signature,
     };
+    use rustls::enums::{CertificateType, SignatureScheme};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::SingleRawPublicKeyResolver;
@@ -154,8 +156,8 @@ mod server {
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
     use rustls::{
-        ApiMisuse, CertificateError, CertificateType, DistinguishedName, Error, InconsistentKeys,
-        PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
+        ApiMisuse, CertificateError, DistinguishedName, Error, InconsistentKeys, PeerIncompatible,
+        ServerConfig, ServerConnection,
     };
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.

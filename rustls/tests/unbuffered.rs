@@ -5,14 +5,15 @@ use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
+use rustls::enums::AlertDescription;
 use rustls::server::{ServerConnectionData, UnbufferedServerConnection};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, ReadTraffic,
     UnbufferedConnectionCommon, UnbufferedStatus, WriteTraffic,
 };
 use rustls::{
-    AlertDescription, CertificateError, ClientConfig, ConnectionTrafficSecrets, Error,
-    InvalidMessage, ServerConfig, SideData, SupportedCipherSuite,
+    CertificateError, ClientConfig, ConnectionTrafficSecrets, Error, InvalidMessage, ServerConfig,
+    SideData, SupportedCipherSuite,
 };
 use rustls_test::{
     ClientConfigExt, KeyType, MockServerVerifier, aes_128_gcm_with_1024_confidentiality_limit,

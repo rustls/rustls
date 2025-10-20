@@ -11,11 +11,11 @@ use rustls::client::danger::{
 };
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
 use rustls::crypto::{Credentials, Identity, SelectedCredential};
+use rustls::enums::{AlertDescription, CertificateType, SignatureScheme};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
-    AlertDescription, CertificateError, CertificateType, ClientConfig, ClientConnection,
-    DistinguishedName, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible, RootCertStore,
-    ServerConfig, ServerConnection,
+    CertificateError, ClientConfig, ClientConnection, DistinguishedName, Error, ExtendedKeyPurpose,
+    InvalidMessage, PeerIncompatible, RootCertStore, ServerConfig, ServerConnection,
 };
 use rustls_test::{
     ErrorFromPeer, KeyType, MockServerVerifier, certificate_error_expecting_name, do_handshake,
@@ -698,7 +698,7 @@ impl ServerVerifier for ServerVerifierWithCasExt {
             .verify_tls13_signature(input)
     }
 
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.verifier.supported_verify_schemes()
     }
 

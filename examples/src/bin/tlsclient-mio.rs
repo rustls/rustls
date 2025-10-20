@@ -27,10 +27,11 @@ use std::{process, str};
 
 use clap::Parser;
 use mio::net::TcpStream;
+use rustls::RootCertStore;
 use rustls::crypto::{CryptoProvider, Identity, SupportedKxGroup, aws_lc_rs as provider};
+use rustls::enums::ProtocolVersion;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ProtocolVersion, RootCertStore};
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -396,10 +397,12 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 }
 
 mod danger {
+    use rustls::Error;
     use rustls::client::danger::{
         HandshakeSignatureValid, ServerIdentity, SignatureVerificationInput,
     };
     use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
+    use rustls::enums::SignatureScheme;
 
     #[derive(Debug)]
     pub struct NoCertificateVerification(CryptoProvider);
@@ -414,25 +417,25 @@ mod danger {
         fn verify_identity(
             &self,
             _identity: &ServerIdentity<'_>,
-        ) -> Result<rustls::client::danger::PeerVerified, rustls::Error> {
+        ) -> Result<rustls::client::danger::PeerVerified, Error> {
             Ok(rustls::client::danger::PeerVerified::assertion())
         }
 
         fn verify_tls12_signature(
             &self,
             input: &SignatureVerificationInput<'_>,
-        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        ) -> Result<HandshakeSignatureValid, Error> {
             verify_tls12_signature(input, &self.0.signature_verification_algorithms)
         }
 
         fn verify_tls13_signature(
             &self,
             input: &SignatureVerificationInput<'_>,
-        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        ) -> Result<HandshakeSignatureValid, Error> {
             verify_tls13_signature(input, &self.0.signature_verification_algorithms)
         }
 
-        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             self.0
                 .signature_verification_algorithms
                 .supported_schemes()

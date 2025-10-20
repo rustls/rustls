@@ -10,10 +10,11 @@ use rustls::crypto::{
     ActiveKeyExchange, CryptoProvider, HybridKeyExchange, SharedSecret, StartedKeyExchange,
     SupportedKxGroup,
 };
+use rustls::enums::{AlertDescription, ContentType, ProtocolVersion};
 use rustls::internal::msgs::enums::ExtensionType;
 use rustls::{
-    AlertDescription, ClientConfig, ContentType, Error, HandshakeKind, InvalidMessage, NamedGroup,
-    PeerIncompatible, PeerMisbehaved, ProtocolVersion, ServerConfig,
+    ClientConfig, Error, HandshakeKind, InvalidMessage, NamedGroup, PeerIncompatible,
+    PeerMisbehaved, ServerConfig,
 };
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, KeyType, OtherSession, ServerConfigExt,

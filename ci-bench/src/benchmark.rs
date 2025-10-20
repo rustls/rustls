@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
+use rustls::enums::ProtocolVersion;
 use rustls_test::KeyType;
 
 use crate::Side;
@@ -92,7 +93,7 @@ pub struct BenchmarkParams {
     /// Where to get keys for server auth
     pub auth_key: AuthKeySource,
     /// TLS version
-    pub version: rustls::ProtocolVersion,
+    pub version: ProtocolVersion,
     /// A user-facing label that identifies these params
     pub label: String,
 }
@@ -103,7 +104,7 @@ impl BenchmarkParams {
         provider: Arc<rustls::crypto::CryptoProvider>,
         ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
         auth_key: AuthKeySource,
-        version: rustls::ProtocolVersion,
+        version: ProtocolVersion,
         label: String,
     ) -> Self {
         Self {

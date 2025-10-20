@@ -9,9 +9,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
 use rustls::crypto::{Credentials, Identity, SingleCredential};
+use rustls::enums::{AlertDescription, CertificateCompressionAlgorithm};
 #[cfg(feature = "zlib")]
 use rustls::pki_types::CertificateDer;
-use rustls::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
+use rustls::{Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls_test::make_pair_for_arc_configs;
 use rustls_test::{
@@ -58,8 +59,8 @@ fn test_server_uses_cached_compressed_certificates() {
             rustls::compress::ZLIB_COMPRESSOR.compress(input, level)
         }
 
-        fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
-            rustls::CertificateCompressionAlgorithm::Zlib
+        fn algorithm(&self) -> CertificateCompressionAlgorithm {
+            CertificateCompressionAlgorithm::Zlib
         }
     }
 }
@@ -102,8 +103,8 @@ impl rustls::compress::CertCompressor for FailingCompressor {
         Err(rustls::compress::CompressionFailed)
     }
 
-    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
-        rustls::CertificateCompressionAlgorithm::Zlib
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Zlib
     }
 }
 
@@ -119,8 +120,8 @@ impl rustls::compress::CertDecompressor for NeverDecompressor {
         panic!("NeverDecompressor::decompress should not be called");
     }
 
-    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
-        rustls::CertificateCompressionAlgorithm::Zlib
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Zlib
     }
 }
 
@@ -162,8 +163,8 @@ fn test_server_can_opt_out_of_compression_cache() {
             rustls::compress::ZLIB_COMPRESSOR.compress(input, level)
         }
 
-        fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
-            rustls::CertificateCompressionAlgorithm::Zlib
+        fn algorithm(&self) -> CertificateCompressionAlgorithm {
+            CertificateCompressionAlgorithm::Zlib
         }
     }
 }
@@ -281,8 +282,8 @@ impl rustls::compress::CertDecompressor for GarbageDecompressor {
         Ok(())
     }
 
-    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
-        rustls::CertificateCompressionAlgorithm::Zlib
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Zlib
     }
 }
 
@@ -298,8 +299,8 @@ impl rustls::compress::CertDecompressor for FailingDecompressor {
         Err(rustls::compress::DecompressionFailed)
     }
 
-    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
-        rustls::CertificateCompressionAlgorithm::Zlib
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Zlib
     }
 }
 
@@ -315,7 +316,7 @@ impl rustls::compress::CertCompressor for IdentityCompressor {
         Ok(input.to_vec())
     }
 
-    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
-        rustls::CertificateCompressionAlgorithm::Zlib
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Zlib
     }
 }

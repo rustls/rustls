@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use rustls::client::Resumption;
+use rustls::enums::AlertDescription;
 use rustls::quic::{self, ConnectionCommon};
 use rustls::{ApiMisuse, Error, HandshakeKind, PeerIncompatible, PeerMisbehaved, Side, SideData};
 use rustls_test::{
@@ -225,10 +226,7 @@ fn test_quic_handshake() {
         .unwrap()
         .unwrap();
     assert!(step(&mut server, &mut client).is_err());
-    assert_eq!(
-        client.alert(),
-        Some(rustls::AlertDescription::BadCertificate)
-    );
+    assert_eq!(client.alert(), Some(AlertDescription::BadCertificate));
 
     // Key updates
 
@@ -303,7 +301,7 @@ fn test_quic_rejects_missing_alpn() {
 
         assert_eq!(
             server.alert(),
-            Some(rustls::AlertDescription::NoApplicationProtocol)
+            Some(AlertDescription::NoApplicationProtocol)
         );
     }
 }

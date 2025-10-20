@@ -59,10 +59,11 @@ use core::marker::PhantomData;
 use crate::client::ClientConnectionData;
 use crate::common_state::Protocol;
 use crate::crypto::Identity;
+use crate::enums::ProtocolVersion;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::NewSessionTicketPayloadTls13;
 use crate::quic::Quic;
-use crate::{CommonState, ConnectionTrafficSecrets, Error, ProtocolVersion, SupportedCipherSuite};
+use crate::{CommonState, ConnectionTrafficSecrets, Error, SupportedCipherSuite};
 
 /// A kernel connection.
 ///
@@ -166,7 +167,7 @@ impl KernelConnection<ClientConnectionData> {
     ///
     /// Code to parse out the payload should look something like this
     /// ```no_run
-    /// use rustls::{ContentType, HandshakeType};
+    /// use rustls::enums::{ContentType, HandshakeType};
     /// use rustls::kernel::KernelConnection;
     /// use rustls::client::ClientConnectionData;
     ///

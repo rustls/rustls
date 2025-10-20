@@ -436,7 +436,7 @@ mod check;
 #[cfg(feature = "log")]
 mod bs_debug;
 mod builder;
-mod enums;
+pub mod enums;
 mod key_log;
 #[cfg(feature = "std")]
 mod key_log_file;
@@ -521,10 +521,6 @@ pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
 #[cfg(feature = "std")]
 pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
-pub use crate::enums::{
-    AlertDescription, CertificateCompressionAlgorithm, CertificateType, CipherSuite, ContentType,
-    EchClientHelloType, HandshakeType, ProtocolVersion, SignatureAlgorithm, SignatureScheme,
-};
 pub use crate::error::{
     ApiMisuse, CertRevocationListError, CertificateError, EncryptedClientHelloError, Error,
     ExtendedKeyPurpose, InconsistentKeys, InvalidMessage, OtherError, PeerIncompatible,

@@ -9,9 +9,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rustls::client::Resumption;
 use rustls::crypto::{CertificateIdentity, Identity};
+use rustls::enums::ProtocolVersion;
 use rustls::{
     ApiMisuse, ClientConfig, ClientConnection, Error, HandshakeKind, NamedGroup, PeerMisbehaved,
-    ProtocolVersion, ServerConfig, ServerConnection,
+    ServerConfig, ServerConnection,
 };
 use rustls_test::{
     ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt, do_handshake,
@@ -225,10 +226,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     ));
 
     // but ends up with TLS1.2
-    assert_eq!(
-        client_2.protocol_version(),
-        Some(rustls::ProtocolVersion::TLSv1_2)
-    );
+    assert_eq!(client_2.protocol_version(), Some(ProtocolVersion::TLSv1_2));
 }
 
 #[test]
