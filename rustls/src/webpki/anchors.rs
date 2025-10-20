@@ -11,7 +11,7 @@ use crate::{DistinguishedName, Error};
 /// A container for root certificates able to provide a root-of-trust
 /// for connection authentication.
 #[expect(clippy::exhaustive_structs)]
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct RootCertStore {
     /// The list of roots.
     pub roots: Vec<TrustAnchor<'static>>,
