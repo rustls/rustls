@@ -442,7 +442,7 @@ impl ClientHelloInput {
         config: Arc<ClientConfig>,
     ) -> Result<Self, Error> {
         let session_key = ClientSessionKey {
-            partition: [0u8; 32], // TODO
+            partition: config.partition(),
             server_name,
         };
         let mut resuming = ClientSessionValue::retrieve(&session_key, &config, cx);

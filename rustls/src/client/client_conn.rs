@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 use core::any::Any;
-use core::hash::Hasher;
+use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
@@ -15,7 +15,7 @@ use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CryptoProvider, SelectedCredential};
+use crate::crypto::{CryptoProvider, SelectedCredential, hash};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -230,8 +230,11 @@ pub struct ClientConfig {
     ///
     /// However, resumption is only allowed between two `ClientConfig`s if their
     /// `client_auth_cert_resolver` (ie, potential client authentication credentials)
-    /// and `verifier` (ie, server certificate verification settings) are
-    /// the same (according to `Arc::ptr_eq`).
+    /// and `verifier` (ie, server certificate verification settings):
+    ///
+    /// - are the same type (determined by hashing their `TypeId`), and
+    /// - input the same data into [`verify::ServerVerifier::hash_config()`] and
+    ///   [`ClientCredentialResolver::hash_config()`].
     ///
     /// To illustrate, imagine two `ClientConfig`s `A` and `B`.  `A` fully validates
     /// the server certificate, `B` does not.  If `A` and `B` shared a resumption store,
@@ -424,6 +427,49 @@ impl ClientConfig {
         self.time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
+    }
+
+    /// A token which partitions this config's use of the [`Self::resumption`] store.
+    pub(super) fn partition(&self) -> [u8; 32] {
+        // Use a hash function that outputs at least 32 bytes.
+        let hash = self
+            .provider
+            .iter_cipher_suites()
+            .map(|cs| cs.hash_provider())
+            .find(|h| h.output_len() >= 32)
+            .expect("no suitable cipher suite available (with |H| >= 32)"); // this is -- in practice -- all cipher suites
+
+        let mut h = hash.start();
+        let mut adapter = HashAdapter(h.as_mut());
+
+        // Include TypeId of impl, so two different types with different non-configured
+        // behaviour do not collide even if their `hash_config()`s are the same.
+        self.client_auth_cert_resolver
+            .type_id()
+            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
+        self.client_auth_cert_resolver
+            .hash_config(&mut adapter);
+
+        self.verifier
+            .type_id()
+            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
+        self.verifier.hash_config(&mut adapter);
+
+        h.finish().as_ref()[..32]
+            .try_into()
+            .unwrap()
+    }
+}
+
+struct HashAdapter<'a>(&'a mut dyn hash::Context);
+
+impl Hasher for HashAdapter<'_> {
+    fn finish(&self) -> u64 {
+        unimplemented!()
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        self.0.update(bytes)
     }
 }
 
