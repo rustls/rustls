@@ -307,33 +307,31 @@ impl Hasher for HashAdapter<'_> {
 /// how to achieve interior mutability.  `Mutex` is a common choice.
 pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// Remember what `NamedGroup` the given server chose.
-    fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup);
+    fn set_kx_hint(&self, key: ClientSessionKey<'static>, group: NamedGroup);
 
     /// This should return the value most recently passed to `set_kx_hint`
-    /// for the given `server_name`.
+    /// for the given `key`.
     ///
     /// If `None` is returned, the caller chooses the first configured group,
     /// and an extra round trip might happen if that choice is unsatisfactory
     /// to the server.
-    fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup>;
+    fn kx_hint(&self, key: &ClientSessionKey<'_>) -> Option<NamedGroup>;
 
     /// Remember a TLS1.2 session.
     ///
     /// At most one of these can be remembered at a time, per `server_name`.
     fn set_tls12_session(
         &self,
-        server_name: ServerName<'static>,
+        key: ClientSessionKey<'static>,
         value: persist::Tls12ClientSessionValue,
     );
 
     /// Get the most recently saved TLS1.2 session for `server_name` provided to `set_tls12_session`.
-    fn tls12_session(
-        &self,
-        server_name: &ServerName<'_>,
-    ) -> Option<persist::Tls12ClientSessionValue>;
+    fn tls12_session(&self, key: &ClientSessionKey<'_>)
+    -> Option<persist::Tls12ClientSessionValue>;
 
     /// Remove and forget any saved TLS1.2 session for `server_name`.
-    fn remove_tls12_session(&self, server_name: &ServerName<'static>);
+    fn remove_tls12_session(&self, key: &ClientSessionKey<'static>);
 
     /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
     /// resumption of this session.
@@ -344,7 +342,7 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// simultaneously.
     fn insert_tls13_ticket(
         &self,
-        server_name: ServerName<'static>,
+        key: ClientSessionKey<'static>,
         value: persist::Tls13ClientSessionValue,
     );
 
@@ -353,8 +351,33 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// Implementations of this trait must return each value provided to `add_tls13_ticket` _at most once_.
     fn take_tls13_ticket(
         &self,
-        server_name: &ServerName<'static>,
+        key: &ClientSessionKey<'static>,
     ) -> Option<persist::Tls13ClientSessionValue>;
+}
+
+/// Identifies a security context and server in the [`ClientSessionStore`] interface.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub struct ClientSessionKey<'a> {
+    /// A hash to partition the client storage between different security domains.
+    pub config_hash: [u8; 32],
+
+    /// Transport-level identity of the server.
+    pub server_name: ServerName<'a>,
+}
+
+impl ClientSessionKey<'_> {
+    /// Copy the value to own its contents.
+    pub fn to_owned(&self) -> ClientSessionKey<'static> {
+        let Self {
+            config_hash,
+            server_name,
+        } = self;
+        ClientSessionKey {
+            config_hash: *config_hash,
+            server_name: server_name.to_owned(),
+        }
+    }
 }
 
 /// A trait for the ability to choose a certificate chain and

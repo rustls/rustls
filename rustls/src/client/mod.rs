@@ -15,8 +15,8 @@ pub use crate::webpki::{
 
 mod config;
 pub use config::{
-    ClientConfig, ClientCredentialResolver, ClientSessionStore, CredentialRequest, Resumption,
-    Tls12Resumption, WantsClientCert,
+    ClientConfig, ClientCredentialResolver, ClientSessionKey, ClientSessionStore,
+    CredentialRequest, Resumption, Tls12Resumption, WantsClientCert,
 };
 
 mod connection;

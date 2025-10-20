@@ -8,7 +8,7 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-use super::config::{ClientConfig, ClientCredentialResolver, Tls12Resumption};
+use super::config::{ClientConfig, ClientCredentialResolver, ClientSessionKey, Tls12Resumption};
 use super::connection::ClientConnectionData;
 use super::ech::{EchMode, EchState, EchStatus};
 use super::{ClientHelloDetails, tls13};
@@ -428,7 +428,7 @@ pub(crate) struct ClientHelloInput {
     pub(super) sent_tls13_fake_ccs: bool,
     pub(super) hello: ClientHelloDetails,
     pub(super) session_id: SessionId,
-    pub(super) server_name: ServerName<'static>,
+    pub(super) session_key: ClientSessionKey<'static>,
     pub(super) prev_ech_ext: Option<EncryptedClientHello>,
 }
 
@@ -439,7 +439,11 @@ impl ClientHelloInput {
         cx: &mut ClientContext<'_>,
         config: Arc<ClientConfig>,
     ) -> Result<Self, Error> {
-        let mut resuming = ClientSessionValue::retrieve(&server_name, &config, cx);
+        let session_key = ClientSessionKey {
+            config_hash: config.config_hash(),
+            server_name,
+        };
+        let mut resuming = ClientSessionValue::retrieve(&session_key, &config, cx);
         let session_id = match &mut resuming {
             Some(resuming) => {
                 debug!("Resuming session");
@@ -485,7 +489,7 @@ impl ClientHelloInput {
             sent_tls13_fake_ccs: false,
             hello,
             session_id,
-            server_name,
+            session_key,
             prev_ech_ext: None,
             config,
         })
@@ -509,7 +513,7 @@ impl ClientHelloInput {
         let key_share = if self.config.needs_key_share() {
             Some(tls13::initial_key_share(
                 &self.config,
-                &self.server_name,
+                &self.session_key,
                 &mut cx.common.kx_state,
             )?)
         } else {
@@ -518,7 +522,7 @@ impl ClientHelloInput {
 
         let ech_state = match self.config.ech_mode.as_ref() {
             Some(EchMode::Enable(ech_config)) => {
-                Some(ech_config.state(self.server_name.clone(), &self.config)?)
+                Some(ech_config.state(self.session_key.server_name.clone(), &self.config)?)
             }
             _ => None,
         };
@@ -626,7 +630,7 @@ fn emit_client_hello_for_retry(
 
         // If we have no ECH state, and SNI is enabled, try to use the input server_name
         // for the SNI domain name.
-        (None, true) => match &input.server_name {
+        (None, true) => match &input.session_key.server_name {
             ServerName::DnsName(dns_name) => Some(ServerNamePayload::from(dns_name)),
             _ => None,
         },
@@ -751,7 +755,7 @@ fn emit_client_hello_for_retry(
         .and_then(|mode| match mode {
             EchMode::Grease(cfg) => Some(cfg.grease_ext(
                 config.provider().secure_random,
-                input.server_name.clone(),
+                input.session_key.server_name.clone(),
                 &chp_payload,
             )),
             _ => None,
@@ -996,20 +1000,20 @@ pub(super) enum ClientSessionValue {
 
 impl ClientSessionValue {
     fn retrieve(
-        server_name: &ServerName<'static>,
+        key: &ClientSessionKey<'static>,
         config: &ClientConfig,
         cx: &mut ClientContext<'_>,
     ) -> Option<persist::Retrieved<Self>> {
         let found = config
             .resumption
             .store
-            .take_tls13_ticket(server_name)
+            .take_tls13_ticket(key)
             .map(ClientSessionValue::Tls13)
             .or_else(|| {
                 config
                     .resumption
                     .store
-                    .tls12_session(server_name)
+                    .tls12_session(key)
                     .map(ClientSessionValue::Tls12)
             })
             .and_then(|resuming| resuming.compatible_config(config.verifier(), config.resolver()))
@@ -1026,7 +1030,7 @@ impl ClientSessionValue {
                 }
             })
             .or_else(|| {
-                debug!("No cached session for {server_name:?}");
+                debug!("No cached session for {key:?}");
                 None
             });
 
