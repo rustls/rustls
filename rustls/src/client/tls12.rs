@@ -1132,7 +1132,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         // Constant-time verification of this is relatively unimportant: they only
         // get one chance.  But it can't hurt.
-        let _fin_verified =
+        let fin_verified =
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
                 true => verify::FinishedMessageVerified::assertion(),
                 false => {
@@ -1169,7 +1169,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             extracted_secrets,
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
-            _fin_verified,
+            _fin_verified: fin_verified,
         }))
     }
 

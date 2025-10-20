@@ -115,33 +115,33 @@ mod cache {
 
         fn set_tls12_session(
             &self,
-            _server_name: ServerName<'static>,
-            _value: persist::Tls12ClientSessionValue,
+            server_name: ServerName<'static>,
+            value: persist::Tls12ClientSessionValue,
         ) {
             self.servers
                 .lock()
                 .unwrap()
-                .get_or_insert_default_and_edit(_server_name.clone(), |data| {
-                    data.tls12 = Some(_value)
+                .get_or_insert_default_and_edit(server_name.clone(), |data| {
+                    data.tls12 = Some(value)
                 });
         }
 
         fn tls12_session(
             &self,
-            _server_name: &ServerName<'_>,
+            server_name: &ServerName<'_>,
         ) -> Option<persist::Tls12ClientSessionValue> {
             self.servers
                 .lock()
                 .unwrap()
-                .get(_server_name)
+                .get(server_name)
                 .and_then(|sd| sd.tls12.as_ref().cloned())
         }
 
-        fn remove_tls12_session(&self, _server_name: &ServerName<'static>) {
+        fn remove_tls12_session(&self, server_name: &ServerName<'static>) {
             self.servers
                 .lock()
                 .unwrap()
-                .get_mut(_server_name)
+                .get_mut(server_name)
                 .and_then(|data| data.tls12.take());
         }
 
