@@ -15,7 +15,7 @@ use crate::error::{AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncom
 use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
-use crate::{SignerPublicKey, x509};
+use crate::{DynHasher, SignerPublicKey, x509};
 
 /// Server certificate resolver which always resolves to the same identity and key.
 ///
@@ -58,6 +58,10 @@ impl ClientCredentialResolver for SingleCredential {
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         self.types
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.hash(&mut DynHasher(h));
     }
 }
 

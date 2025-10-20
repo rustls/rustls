@@ -559,3 +559,22 @@ const TEST_PROVIDERS: &[&crypto::CryptoProvider] = &[
     #[cfg(feature = "aws-lc-rs")]
     &crypto::aws_lc_rs::DEFAULT_PROVIDER,
 ];
+
+mod core_hash_polyfill {
+    use core::hash::Hasher;
+
+    /// Working around `core::hash::Hasher` not being dyn-compatible
+    pub(super) struct DynHasher<'a>(pub(crate) &'a mut dyn Hasher);
+
+    impl Hasher for DynHasher<'_> {
+        fn finish(&self) -> u64 {
+            self.0.finish()
+        }
+
+        fn write(&mut self, bytes: &[u8]) {
+            self.0.write(bytes)
+        }
+    }
+}
+
+pub(crate) use core_hash_polyfill::DynHasher;

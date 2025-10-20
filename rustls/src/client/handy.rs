@@ -1,3 +1,5 @@
+use core::hash::Hasher;
+
 use pki_types::ServerName;
 
 use super::CredentialRequest;
@@ -198,10 +200,13 @@ impl client::ClientCredentialResolver for FailResolveClientCert {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[]
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 #[cfg(test)]
 mod tests {
+    use core::hash::Hasher;
     use core::time::Duration;
     use std::prelude::v1::*;
 
@@ -320,6 +325,9 @@ mod tests {
         fn request_ocsp_response(&self) -> bool {
             unreachable!()
         }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 
     #[derive(Debug)]
@@ -335,5 +343,8 @@ mod tests {
         fn supported_certificate_types(&self) -> &'static [CertificateType] {
             unreachable!()
         }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 }

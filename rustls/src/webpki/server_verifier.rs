@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::hash::{Hash, Hasher};
 
 use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
@@ -17,7 +18,7 @@ use crate::webpki::verify::{
 use crate::webpki::{VerifierBuilderError, parse_crls, verify_server_name};
 #[cfg(doc)]
 use crate::{ConfigBuilder, ServerConfig, crypto};
-use crate::{Error, RootCertStore};
+use crate::{DynHasher, Error, RootCertStore};
 
 /// A builder for configuring a `webpki` server certificate verifier.
 ///
@@ -272,6 +273,10 @@ impl ServerVerifier for WebPkiServerVerifier {
 
     fn request_ocsp_response(&self) -> bool {
         false
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.hash(&mut DynHasher(h));
     }
 }
 

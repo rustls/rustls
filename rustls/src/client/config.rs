@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt;
+use core::hash::Hasher;
 use core::marker::PhantomData;
 
 use pki_types::{PrivateKeyDer, ServerName, UnixTime};
@@ -356,6 +357,9 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     ///
     /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
     fn supported_certificate_types(&self) -> &'static [CertificateType];
+
+    /// Instance configuration should be input to `h`.
+    fn hash_config(&self, h: &mut dyn Hasher);
 }
 
 /// Context from the server to inform client credential selection.
