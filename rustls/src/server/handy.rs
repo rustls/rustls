@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::crypto::{CertifiedSigner, Credentials};
+use crate::crypto::{Credentials, SelectedCredential};
 use crate::enums::CertificateType;
 use crate::error::{Error, PeerIncompatible};
 use crate::server;
@@ -184,7 +184,7 @@ impl SingleRawPublicKeyResolver {
 }
 
 impl server::ServerCredentialResolver for SingleRawPublicKeyResolver {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
         self.0
             .signer(client_hello.signature_schemes)
             .ok_or(Error::PeerIncompatible(
@@ -203,7 +203,7 @@ mod sni_resolver {
 
     use pki_types::{DnsName, ServerName};
 
-    use crate::crypto::{CertificateIdentity, CertifiedSigner, Credentials, Identity};
+    use crate::crypto::{CertificateIdentity, Credentials, Identity, SelectedCredential};
     use crate::error::Error;
     use crate::hash_map::HashMap;
     use crate::server::ClientHello;
@@ -256,7 +256,7 @@ mod sni_resolver {
     }
 
     impl server::ServerCredentialResolver for ServerNameResolver {
-        fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+        fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
             let Some(name) = client_hello.server_name() else {
                 return Err(PeerIncompatible::NoServerNameProvided.into());
             };

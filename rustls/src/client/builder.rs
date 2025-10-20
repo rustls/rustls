@@ -141,16 +141,8 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         identity: Arc<Identity<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
-<<<<<<< HEAD
         let credentials = Credentials::from_der(identity, key_der, &self.provider)?;
-        self.with_client_credential_resolver(Arc::new(SingleCertAndKey::from(credentials)))
-||||||| parent of de9b337f (crypto: rename SingleCertAndKey to SingleCredential)
-        let certified_key = Credentials::from_der(identity, key_der, &self.provider)?;
-        self.with_client_credential_resolver(Arc::new(SingleCertAndKey::from(certified_key)))
-=======
-        let certified_key = Credentials::from_der(identity, key_der, &self.provider)?;
-        self.with_client_credential_resolver(Arc::new(SingleCredential::from(certified_key)))
->>>>>>> de9b337f (crypto: rename SingleCertAndKey to SingleCredential)
+        self.with_client_credential_resolver(Arc::new(SingleCredential::from(credentials)))
     }
 
     /// Do not support client auth.

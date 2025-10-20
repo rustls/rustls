@@ -23,8 +23,8 @@ use rustls::crypto::cipher::{
     Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use rustls::crypto::{
-    self, CertifiedSigner, CipherSuiteCommon, Credentials, GetRandomFailed, Identity,
-    KeyExchangeAlgorithm, StartedKeyExchange, WebPkiSupportedAlgorithms, hash, tls12, tls13,
+    self, CipherSuiteCommon, Credentials, GetRandomFailed, Identity, KeyExchangeAlgorithm,
+    SelectedCredential, StartedKeyExchange, WebPkiSupportedAlgorithms, hash, tls12, tls13,
 };
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
@@ -82,7 +82,7 @@ pub fn server_cert_resolver() -> Arc<dyn server::ServerCredentialResolver> {
 struct DummyCert(Arc<Credentials>);
 
 impl server::ServerCredentialResolver for DummyCert {
-    fn resolve(&self, client_hello: &server::ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+    fn resolve(&self, client_hello: &server::ClientHello<'_>) -> Result<SelectedCredential, Error> {
         self.0
             .signer(client_hello.signature_schemes())
             .ok_or(Error::PeerIncompatible(

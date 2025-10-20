@@ -28,8 +28,8 @@ use rustls::client::{
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use rustls::crypto::{
-    CertifiedSigner, Credentials, CryptoProvider, Identity, SigningKey, WebPkiSupportedAlgorithms,
-    verify_tls13_signature,
+    Credentials, CryptoProvider, Identity, SelectedCredential, SigningKey,
+    WebPkiSupportedAlgorithms, verify_tls13_signature,
 };
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
@@ -1549,7 +1549,7 @@ pub struct ServerCheckCertResolve {
 }
 
 impl ServerCredentialResolver for ServerCheckCertResolve {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
         if client_hello
             .signature_schemes()
             .is_empty()

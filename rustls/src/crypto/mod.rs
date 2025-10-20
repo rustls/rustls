@@ -50,7 +50,7 @@ pub mod hpke;
 // Message signing interfaces.
 mod signer;
 pub use signer::{
-    CertificateIdentity, CertifiedSigner, Credentials, Identity, Signer, SigningKey,
+    CertificateIdentity, Credentials, Identity, SelectedCredential, Signer, SigningKey,
     SingleCredential, public_key_to_spki,
 };
 

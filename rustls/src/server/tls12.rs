@@ -37,7 +37,7 @@ use crate::{ConnectionTrafficSecrets, verify};
 mod client_hello {
     use super::*;
     use crate::common_state::KxState;
-    use crate::crypto::{CertifiedSigner, Signer, SupportedKxGroup};
+    use crate::crypto::{SelectedCredential, Signer, SupportedKxGroup};
     use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::{
         CertificateRequestPayload, CertificateStatus, ClientHelloPayload, ClientSessionTicket,
@@ -58,7 +58,7 @@ mod client_hello {
             &self,
             suite: &'static Tls12CipherSuite,
             kx_group: &'static dyn SupportedKxGroup,
-            signer: CertifiedSigner,
+            credentials: SelectedCredential,
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             cx: &mut ServerContext<'_>,
@@ -183,7 +183,7 @@ mod client_hello {
                 );
             }
 
-            let mut ocsp_response = signer.ocsp.as_deref();
+            let mut ocsp_response = credentials.ocsp.as_deref();
 
             // If we're not offered a ticket or a potential session ID, allocate a session ID.
             if !st.config.session_storage.can_cache() {
@@ -210,11 +210,11 @@ mod client_hello {
                 &randoms,
                 st.extra_exts,
             )?;
-            emit_certificate(&mut flight, &signer);
+            emit_certificate(&mut flight, &credentials);
             if let Some(ocsp_response) = ocsp_response {
                 emit_cert_status(&mut flight, ocsp_response);
             }
-            let server_kx = emit_server_kx(&mut flight, kx_group, signer.signer, &randoms)?;
+            let server_kx = emit_server_kx(&mut flight, kx_group, credentials.signer, &randoms)?;
             let doing_client_auth = emit_certificate_req(&mut flight, &st.config)?;
             emit_server_hello_done(&mut flight);
 
@@ -363,9 +363,9 @@ mod client_hello {
         Ok(ep.send_ticket)
     }
 
-    fn emit_certificate(flight: &mut HandshakeFlightTls12<'_>, signer: &CertifiedSigner) {
+    fn emit_certificate(flight: &mut HandshakeFlightTls12<'_>, credentials: &SelectedCredential) {
         flight.add(HandshakeMessagePayload(HandshakePayload::Certificate(
-            CertificateChain::from_signer(signer),
+            CertificateChain::from_signer(credentials),
         )));
     }
 
@@ -378,7 +378,7 @@ mod client_hello {
     fn emit_server_kx(
         flight: &mut HandshakeFlightTls12<'_>,
         selected_group: &'static dyn SupportedKxGroup,
-        signer: Box<dyn Signer>,
+        credentials: Box<dyn Signer>,
         randoms: &ConnectionRandoms,
     ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
         let kx = selected_group.start()?.into_single();
@@ -389,8 +389,8 @@ mod client_hello {
         msg.extend(randoms.server);
         kx_params.encode(&mut msg);
 
-        let sigscheme = signer.scheme();
-        let sig = signer.sign(&msg)?;
+        let sigscheme = credentials.scheme();
+        let sig = credentials.sign(&msg)?;
 
         let skx = ServerKeyExchangePayload::from(ServerKeyExchange {
             params: kx_params,

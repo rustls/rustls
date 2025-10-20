@@ -10,7 +10,7 @@ use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
-use crate::crypto::{CertifiedSigner, CryptoProvider, SupportedKxGroup};
+use crate::crypto::{CryptoProvider, SelectedCredential, SupportedKxGroup};
 use crate::enums::{
     AlertDescription, CertificateType, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
 };
@@ -395,7 +395,7 @@ impl ExpectClientHello {
         }
 
         // Choose a certificate.
-        let signer = self
+        let credentials = self
             .config
             .cert_resolver
             .resolve(&ClientHello::new(&input, cx.data.sni.as_ref(), T::VERSION))
@@ -407,7 +407,7 @@ impl ExpectClientHello {
         let (suite, skxg) = self
             .choose_suite_and_kx_group(
                 suites,
-                signer.signer.scheme(),
+                credentials.signer.scheme(),
                 input
                     .client_hello
                     .named_groups
@@ -426,7 +426,7 @@ impl ExpectClientHello {
 
         suite
             .server_handler()
-            .handle_client_hello(suite, skxg, signer, input, self, cx)
+            .handle_client_hello(suite, skxg, credentials, input, self, cx)
     }
 
     fn choose_suite_and_kx_group<T: Suite + 'static>(
@@ -563,7 +563,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         &self,
         suite: &'static T,
         kx_group: &'static dyn SupportedKxGroup,
-        credentials: CertifiedSigner,
+        credentials: SelectedCredential,
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
         cx: &mut ServerContext<'_>,

@@ -43,7 +43,7 @@ use crate::{ConnectionTrafficSecrets, compress, rand, verify};
 mod client_hello {
     use super::*;
     use crate::compress::CertCompressor;
-    use crate::crypto::{CertifiedSigner, Signer, SupportedKxGroup};
+    use crate::crypto::{SelectedCredential, Signer, SupportedKxGroup};
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup};
@@ -70,7 +70,7 @@ mod client_hello {
             &self,
             suite: &'static Tls13CipherSuite,
             kx_group: &'static dyn SupportedKxGroup,
-            signer: CertifiedSigner,
+            signer: SelectedCredential,
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             cx: &mut ServerContext<'_>,
@@ -771,7 +771,7 @@ mod client_hello {
     fn emit_compressed_certificate_tls13(
         flight: &mut HandshakeFlightTls13<'_>,
         config: &ServerConfig,
-        signer: &CertifiedSigner,
+        signer: &SelectedCredential,
         ocsp_response: Option<&[u8]>,
         cert_compressor: &'static dyn CertCompressor,
     ) {

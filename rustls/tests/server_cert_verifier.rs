@@ -10,7 +10,7 @@ use rustls::client::danger::{
     SignatureVerificationInput,
 };
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
-use rustls::crypto::{CertifiedSigner, Credentials, Identity};
+use rustls::crypto::{Credentials, Identity, SelectedCredential};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
     AlertDescription, CertificateError, CertificateType, ClientConfig, ClientConnection,
@@ -632,7 +632,7 @@ fn client_check_server_valid_purpose() {
 pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, Credentials)>);
 
 impl ServerCredentialResolver for ResolvesCertChainByCaName {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
         let Some(cas_extension) = client_hello.certificate_authorities() else {
             println!(
                 "ResolvesCertChainByCaName: no CAs extension in ClientHello, returning default cert"

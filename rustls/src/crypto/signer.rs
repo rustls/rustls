@@ -31,7 +31,7 @@ impl From<Credentials> for SingleCredential {
 }
 
 impl ClientCredentialResolver for SingleCredential {
-    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner> {
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential> {
         match request.negotiated_type() {
             CertificateType::X509 => self
                 .0
@@ -46,7 +46,7 @@ impl ClientCredentialResolver for SingleCredential {
 }
 
 impl ServerCredentialResolver for SingleCredential {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error> {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
         self.0
             .signer(client_hello.signature_schemes())
             .ok_or(Error::PeerIncompatible(
@@ -61,7 +61,7 @@ impl ServerCredentialResolver for SingleCredential {
 /// as the return value of their `resolve()` methods.
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct CertifiedSigner {
+pub struct SelectedCredential {
     /// A one-time-use signer for this certificate.
     pub signer: Box<dyn Signer>,
     /// The certificate chain or raw public key.
@@ -156,11 +156,11 @@ impl Credentials {
         }
     }
 
-    /// Attempt to produce a `CertifiedSigner` using one of the given signature schemes.
+    /// Attempt to produce a `SelectedCredential` using one of the given signature schemes.
     ///
     /// Calls [`SigningKey::choose_scheme()`] and propagates `cert_chain` and `ocsp`.
-    pub fn signer(&self, sig_schemes: &[SignatureScheme]) -> Option<CertifiedSigner> {
-        Some(CertifiedSigner {
+    pub fn signer(&self, sig_schemes: &[SignatureScheme]) -> Option<SelectedCredential> {
+        Some(SelectedCredential {
             signer: self.key.choose_scheme(sig_schemes)?,
             identity: self.identity.clone(),
             ocsp: self.ocsp.clone(),
