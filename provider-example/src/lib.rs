@@ -22,8 +22,8 @@ use alloc::boxed::Box;
 
 use rustls::crypto::{CryptoProvider, SigningKey};
 use rustls::enums::{CipherSuite, SignatureScheme};
+use rustls::error::{Error, OtherError};
 use rustls::pki_types::PrivateKeyDer;
-use rustls::{Error, OtherError};
 
 mod aead;
 mod hash;

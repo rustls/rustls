@@ -9,11 +9,11 @@ use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::common_state::CommonState;
 use crate::enums::{AlertDescription, CertificateType, SignatureAlgorithm, SignatureScheme};
-use crate::error::{ApiMisuse, Error, InconsistentKeys, PeerIncompatible};
+use crate::error::{ApiMisuse, Error, InconsistentKeys, InvalidMessage, PeerIncompatible};
 use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
-use crate::{InvalidMessage, SignerPublicKey, x509};
+use crate::{SignerPublicKey, x509};
 
 /// Server certificate resolver which always resolves to the same identity and key.
 ///

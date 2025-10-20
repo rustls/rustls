@@ -1,3 +1,5 @@
+//! Error types used throughout rustls.
+
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;

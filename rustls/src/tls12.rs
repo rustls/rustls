@@ -8,14 +8,13 @@ use zeroize::Zeroizing;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
-use crate::crypto::hash;
+use crate::crypto::{self, hash};
 use crate::enums::{AlertDescription, ProtocolVersion, SignatureScheme};
-use crate::error::{Error, InvalidMessage};
+use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{KeyExchangeAlgorithm, KxDecode};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
 use crate::version::Tls12Version;
-use crate::{ApiMisuse, crypto};
 
 /// A TLS 1.2 cipher suite supported by rustls.
 #[allow(clippy::exhaustive_structs)]

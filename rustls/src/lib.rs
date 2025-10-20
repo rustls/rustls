@@ -416,7 +416,7 @@ pub mod compress;
 mod conn;
 /// Crypto provider interface.
 pub mod crypto;
-mod error;
+pub mod error;
 mod hash_hs;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod limited_cache;
@@ -521,11 +521,7 @@ pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
 #[cfg(feature = "std")]
 pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
-pub use crate::error::{
-    ApiMisuse, CertRevocationListError, CertificateError, EncryptedClientHelloError, Error,
-    ExtendedKeyPurpose, InconsistentKeys, InvalidMessage, OtherError, PeerIncompatible,
-    PeerMisbehaved, RejectedEch,
-};
+pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
 #[cfg(feature = "std")]
 pub use crate::key_log_file::KeyLogFile;

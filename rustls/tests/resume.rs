@@ -10,9 +10,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use rustls::client::Resumption;
 use rustls::crypto::{CertificateIdentity, Identity};
 use rustls::enums::ProtocolVersion;
+use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::{
-    ApiMisuse, ClientConfig, ClientConnection, Error, HandshakeKind, NamedGroup, PeerMisbehaved,
-    ServerConfig, ServerConnection,
+    ClientConfig, ClientConnection, HandshakeKind, NamedGroup, ServerConfig, ServerConnection,
 };
 use rustls_test::{
     ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt, do_handshake,

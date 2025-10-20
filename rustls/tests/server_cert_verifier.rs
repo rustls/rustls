@@ -12,10 +12,13 @@ use rustls::client::danger::{
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
 use rustls::crypto::{Credentials, Identity, SelectedCredential};
 use rustls::enums::{AlertDescription, CertificateType, SignatureScheme};
+use rustls::error::{
+    CertificateError, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible,
+};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
-    CertificateError, ClientConfig, ClientConnection, DistinguishedName, Error, ExtendedKeyPurpose,
-    InvalidMessage, PeerIncompatible, RootCertStore, ServerConfig, ServerConnection,
+    ClientConfig, ClientConnection, DistinguishedName, RootCertStore, ServerConfig,
+    ServerConnection,
 };
 use rustls_test::{
     ErrorFromPeer, KeyType, MockServerVerifier, certificate_error_expecting_name, do_handshake,
@@ -163,7 +166,7 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
                 errs,
                 Err(vec![
                     ErrorFromPeer::Server(Error::InvalidMessage(
-                        rustls::InvalidMessage::NoSignatureSchemes
+                        InvalidMessage::NoSignatureSchemes
                     )),
                     ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::DecodeError)),
                 ])

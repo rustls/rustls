@@ -6,9 +6,11 @@ use std::vec;
 
 use pki_types::{CertificateDer, ServerName};
 
+use crate::RootCertStore;
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
 use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::Reader;
 use crate::msgs::enums::{Compression, NamedGroup};
@@ -18,7 +20,6 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage};
 use crate::sync::Arc;
-use crate::{Error, PeerIncompatible, PeerMisbehaved, RootCertStore};
 
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {

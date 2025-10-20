@@ -17,13 +17,13 @@ use rustls::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
     SignatureScheme,
 };
+use rustls::error::{ApiMisuse, CertificateError, Error, InconsistentKeys, PeerMisbehaved};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
-    ApiMisuse, CertificateError, ClientConfig, ClientConnection, Error, HandshakeKind,
-    InconsistentKeys, KeyingMaterialExporter, NamedGroup, PeerMisbehaved, ServerConfig,
-    ServerConnection, SupportedCipherSuite,
+    ClientConfig, ClientConnection, HandshakeKind, KeyingMaterialExporter, NamedGroup,
+    ServerConfig, ServerConnection, SupportedCipherSuite,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{

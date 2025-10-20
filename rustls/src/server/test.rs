@@ -5,6 +5,7 @@ use super::ServerConnectionData;
 use super::hs::ClientHelloInput;
 use crate::common_state::Context;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::error::{Error, PeerIncompatible};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::enums::{Compression, NamedGroup};
 use crate::msgs::handshake::{
@@ -12,7 +13,7 @@ use crate::msgs::handshake::{
     Random, SessionId, SupportedProtocolVersions,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::{CommonState, Error, PeerIncompatible, Side};
+use crate::{CommonState, Side};
 
 #[test]
 fn null_compression_required() {

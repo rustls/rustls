@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use rustls::client::Resumption;
 use rustls::enums::AlertDescription;
+use rustls::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use rustls::quic::{self, ConnectionCommon};
-use rustls::{ApiMisuse, Error, HandshakeKind, PeerIncompatible, PeerMisbehaved, Side, SideData};
+use rustls::{HandshakeKind, Side, SideData};
 use rustls_test::{
     ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
 };

@@ -12,9 +12,10 @@ use webpki::aws_lc_rs as webpki_algs;
 use super::signer::SigningKey;
 use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
+use crate::error::{Error, OtherError};
 use crate::rand::GetRandomFailed;
 use crate::webpki::WebPkiSupportedAlgorithms;
-use crate::{Error, OtherError, Tls12CipherSuite, Tls13CipherSuite};
+use crate::{Tls12CipherSuite, Tls13CipherSuite};
 
 /// Hybrid public key encryption (HPKE).
 pub mod hpke;

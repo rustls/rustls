@@ -9,17 +9,16 @@ use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
 use crate::enums::ProtocolVersion;
+use crate::error::{ApiMisuse, Error};
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;
 use crate::sync::Arc;
 pub use crate::webpki::{
     WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
 };
-use crate::{
-    ApiMisuse, Error, NamedGroup, SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite,
-};
 #[cfg(doc)]
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};
+use crate::{NamedGroup, SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite};
 
 /// *ring* based CryptoProvider.
 #[cfg(feature = "ring")]

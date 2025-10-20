@@ -18,13 +18,11 @@ mod client {
         verify_tls13_signature,
     };
     use rustls::enums::{CertificateType, SignatureScheme};
+    use rustls::error::{ApiMisuse, CertificateError, InconsistentKeys, PeerIncompatible};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
-    use rustls::{
-        ApiMisuse, CertificateError, ClientConfig, ClientConnection, Error, InconsistentKeys,
-        PeerIncompatible, Stream,
-    };
+    use rustls::{ClientConfig, ClientConnection, Error, Stream};
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
     pub(super) fn make_config(client_private_key: &str, server_pub_key: &str) -> ClientConfig {
@@ -149,16 +147,14 @@ mod server {
         verify_tls13_signature,
     };
     use rustls::enums::{CertificateType, SignatureScheme};
+    use rustls::error::{ApiMisuse, CertificateError, Error, InconsistentKeys, PeerIncompatible};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::SingleRawPublicKeyResolver;
     use rustls::server::danger::{
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
-    use rustls::{
-        ApiMisuse, CertificateError, DistinguishedName, Error, InconsistentKeys, PeerIncompatible,
-        ServerConfig, ServerConnection,
-    };
+    use rustls::{DistinguishedName, ServerConfig, ServerConnection};
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
     pub(super) fn make_config(server_private_key: &str, client_pub_key: &str) -> ServerConfig {

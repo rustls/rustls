@@ -9,10 +9,11 @@ use pki_types::{CertificateDer, DnsName};
 use rustls::client::{ClientCredentialResolver, CredentialRequest};
 use rustls::crypto::{Credentials, Identity, SelectedCredential};
 use rustls::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
+use rustls::error::{CertificateError, Error, PeerMisbehaved};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::{
-    CertificateError, ClientConfig, ClientConnection, DistinguishedName, Error, PeerMisbehaved,
-    ServerConfig, ServerConnection, SupportedCipherSuite,
+    ClientConfig, ClientConnection, DistinguishedName, ServerConfig, ServerConnection,
+    SupportedCipherSuite,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, ServerCheckCertResolve,
