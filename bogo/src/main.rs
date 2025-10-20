@@ -90,7 +90,7 @@ struct Options {
     host_name: String,
     use_sni: bool,
     trusted_cert_file: String,
-    credentials: Credentials,
+    credentials: CredentialSet,
     protocols: Vec<String>,
     reject_alpn: bool,
     support_tls13: bool,
@@ -160,7 +160,7 @@ impl Options {
             root_hint_subjects: vec![],
             offer_no_client_cas: false,
             trusted_cert_file: "".to_string(),
-            credentials: Credentials::default(),
+            credentials: CredentialSet::default(),
             protocols: vec![],
             reject_alpn: false,
             support_tls13: true,
@@ -246,14 +246,14 @@ impl Options {
 }
 
 #[derive(Debug, Default)]
-struct Credentials {
+struct CredentialSet {
     default: Credential,
     additional: Vec<Credential>,
     /// Some(-1) means `default`, otherwise index into `additional`
     expect_selected: Option<isize>,
 }
 
-impl Credentials {
+impl CredentialSet {
     fn last_mut(&mut self) -> &mut Credential {
         self.additional
             .last_mut()
