@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use pki_types::ServerName;
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
@@ -11,7 +10,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::client::ech::{self, EchStatus};
 use crate::client::hs::{ClientHandler, ExpectServerHello};
-use crate::client::{ClientConfig, ClientSessionStore, hs};
+use crate::client::{ClientConfig, ClientSessionKey, ClientSessionStore, hs};
 use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
 };
@@ -109,7 +108,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             resuming,
             mut sent_tls13_fake_ccs,
             mut hello,
-            server_name,
+            session_key,
             ..
         } = st.input;
 
@@ -233,7 +232,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         config
             .resumption
             .store
-            .set_kx_hint(server_name.clone(), their_key_share.group);
+            .set_kx_hint(session_key.clone(), their_key_share.group);
 
         // If we change keying when a subsequent handshake message is being joined,
         // the two halves will have different record layer protections.  Disallow this.
@@ -254,7 +253,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         Ok(Box::new(ExpectEncryptedExtensions {
             config,
             resuming_session,
-            server_name,
+            session_key,
             randoms,
             suite,
             transcript,
@@ -327,13 +326,13 @@ fn validate_server_hello(
 
 pub(super) fn initial_key_share(
     config: &ClientConfig,
-    server_name: &ServerName<'_>,
+    session_key: &ClientSessionKey<'_>,
     kx_state: &mut KxState,
 ) -> Result<StartedKeyExchange, Error> {
     let group = config
         .resumption
         .store
-        .kx_hint(server_name)
+        .kx_hint(session_key)
         .and_then(|group_name| {
             config
                 .provider
@@ -500,7 +499,7 @@ fn validate_encrypted_extensions(
 struct ExpectEncryptedExtensions {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls13ClientSessionValue>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -610,7 +609,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 let sig_verified = verify::HandshakeSignatureValid::assertion();
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
-                    server_name: self.server_name,
+                    session_key: self.session_key,
                     randoms: self.randoms,
                     suite: self.suite,
                     transcript: self.transcript,
@@ -635,7 +634,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 Ok(if self.hello.offered_cert_compression {
                     Box::new(ExpectCertificateOrCompressedCertificateOrCertReq {
                         config: self.config,
-                        server_name: self.server_name,
+                        session_key: self.session_key,
                         randoms: self.randoms,
                         suite: self.suite,
                         transcript: self.transcript,
@@ -647,7 +646,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 } else {
                     Box::new(ExpectCertificateOrCertReq {
                         config: self.config,
-                        server_name: self.server_name,
+                        session_key: self.session_key,
                         randoms: self.randoms,
                         suite: self.suite,
                         transcript: self.transcript,
@@ -683,7 +682,7 @@ fn check_cert_type(
 
 struct ExpectCertificateOrCompressedCertificateOrCertReq {
     config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -701,7 +700,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 ..
             } => Box::new(ExpectCertificate {
                 config: self.config,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -717,7 +716,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 ..
             } => Box::new(ExpectCompressedCertificate {
                 config: self.config,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -732,7 +731,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 ..
             } => Box::new(ExpectCertificateRequest {
                 config: self.config,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -758,7 +757,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
 
 struct ExpectCertificateOrCompressedCertificate {
     config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -776,7 +775,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 ..
             } => Box::new(ExpectCertificate {
                 config: self.config,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -792,7 +791,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 ..
             } => Box::new(ExpectCompressedCertificate {
                 config: self.config,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -816,7 +815,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
 
 struct ExpectCertificateOrCertReq {
     config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -834,7 +833,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 ..
             } => Box::new(ExpectCertificate {
                 config: self.config,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -850,7 +849,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 ..
             } => Box::new(ExpectCertificateRequest {
                 config: self.config,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -878,7 +877,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
 // in TLS1.3.
 struct ExpectCertificateRequest {
     config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -962,7 +961,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         Ok(if self.offered_cert_compression {
             Box::new(ExpectCertificateOrCompressedCertificate {
                 config: self.config,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -974,7 +973,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         } else {
             Box::new(ExpectCertificate {
                 config: self.config,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
@@ -990,7 +989,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
 
 struct ExpectCompressedCertificate {
     config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -1072,7 +1071,7 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
 
         Box::new(ExpectCertificate {
             config: self.config,
-            server_name: self.server_name,
+            session_key: self.session_key,
             randoms: self.randoms,
             suite: self.suite,
             transcript: self.transcript,
@@ -1088,7 +1087,7 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
 
 struct ExpectCertificate {
     config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -1132,7 +1131,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
 
         Ok(Box::new(ExpectCertificateVerify {
             config: self.config,
-            server_name: self.server_name,
+            session_key: self.session_key,
             randoms: self.randoms,
             suite: self.suite,
             transcript: self.transcript,
@@ -1148,7 +1147,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
 // --- TLS1.3 CertificateVerify ---
 struct ExpectCertificateVerify {
     config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -1191,7 +1190,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             .verifier
             .verify_identity(&ServerIdentity {
                 identity: &identity,
-                server_name: &self.server_name,
+                server_name: &self.session_key.server_name,
                 ocsp_response: &self.server_cert.ocsp_response,
                 now: self.config.current_time()?,
             })
@@ -1220,7 +1219,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
-            server_name: self.server_name,
+            session_key: self.session_key,
             randoms: self.randoms,
             suite: self.suite,
             transcript: self.transcript,
@@ -1319,7 +1318,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Com
 
 struct ExpectFinished {
     config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -1421,7 +1420,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         st.config
             .resumption
             .store
-            .remove_tls12_session(&st.server_name);
+            .remove_tls12_session(&st.session_key);
 
         /* Now move to our application traffic keys. */
         cx.common.check_aligned_handshake()?;
@@ -1441,7 +1440,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         let st = ExpectTraffic {
             config: st.config.clone(),
             session_storage: st.config.resumption.store.clone(),
-            server_name: st.server_name,
+            session_key: st.session_key,
             suite: st.suite,
             key_schedule,
             resumption,
@@ -1463,7 +1462,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 struct ExpectTraffic {
     config: Arc<ClientConfig>,
     session_storage: Arc<dyn ClientSessionStore>,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTraffic,
     resumption: KeyScheduleResumption,
@@ -1514,7 +1513,7 @@ impl ExpectTraffic {
         }
 
         self.session_storage
-            .insert_tls13_ticket(self.server_name.clone(), value);
+            .insert_tls13_ticket(self.session_key.clone(), value);
         Ok(())
     }
 
