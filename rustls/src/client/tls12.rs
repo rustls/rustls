@@ -4,11 +4,10 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use pki_types::ServerName;
 pub(crate) use server_hello::TLS12_HANDLER;
 use subtle::ConstantTimeEq;
 
-use super::config::ClientConfig;
+use super::config::{ClientConfig, ClientSessionKey};
 use super::connection::ClientConnectionData;
 use super::hs::{self, ClientContext};
 use super::{ClientAuthDetails, ServerCertDetails};
@@ -109,7 +108,7 @@ mod server_hello {
 
             let ClientHelloInput {
                 config,
-                server_name,
+                session_key,
                 ..
             } = st.input;
 
@@ -192,7 +191,7 @@ mod server_hello {
                             secrets,
                             resuming_session: Some(resuming),
                             session_id: server_hello.session_id,
-                            server_name,
+                            session_key,
                             using_ems,
                             transcript,
                             resuming: true,
@@ -205,7 +204,7 @@ mod server_hello {
                             secrets,
                             resuming_session: Some(resuming),
                             session_id: server_hello.session_id,
-                            server_name,
+                            session_key,
                             using_ems,
                             transcript,
                             ticket: None,
@@ -222,7 +221,7 @@ mod server_hello {
                 config,
                 resuming_session: None,
                 session_id: server_hello.session_id,
-                server_name,
+                session_key,
                 randoms,
                 using_ems,
                 transcript,
@@ -241,7 +240,7 @@ struct ExpectCertificate {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -269,7 +268,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -283,7 +282,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -300,7 +299,7 @@ struct ExpectCertificateStatusOrServerKx {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -320,7 +319,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -337,7 +336,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -363,7 +362,7 @@ struct ExpectCertificateStatus {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -398,7 +397,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            server_name: self.server_name,
+            session_key: self.session_key,
             randoms: self.randoms,
             using_ems: self.using_ems,
             transcript: self.transcript,
@@ -414,7 +413,7 @@ struct ExpectServerKx {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -464,7 +463,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            server_name: self.server_name,
+            session_key: self.session_key,
             randoms: self.randoms,
             using_ems: self.using_ems,
             transcript: self.transcript,
@@ -598,7 +597,7 @@ struct ExpectServerDoneOrCertReq {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -626,7 +625,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -644,7 +643,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
-                server_name: self.server_name,
+                session_key: self.session_key,
                 randoms: self.randoms,
                 using_ems: self.using_ems,
                 transcript: self.transcript,
@@ -663,7 +662,7 @@ struct ExpectCertificateRequest {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -710,7 +709,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            server_name: self.server_name,
+            session_key: self.session_key,
             randoms: self.randoms,
             using_ems: self.using_ems,
             transcript: self.transcript,
@@ -727,7 +726,7 @@ struct ExpectServerDone {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -760,7 +759,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         let proof = cx.common.check_aligned_handshake()?;
 
         trace!("Server cert is {:?}", st.server_cert.cert_chain);
-        debug!("Server DNS name is {:?}", st.server_name);
+        debug!("Server DNS name is {:?}", st.session_key.server_name);
 
         let suite = st.suite;
 
@@ -794,7 +793,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             .verifier()
             .verify_identity(&ServerIdentity {
                 identity: &identity,
-                server_name: &st.server_name,
+                server_name: &st.session_key.server_name,
                 ocsp_response: &st.server_cert.ocsp_response,
                 now: st.config.current_time()?,
             })
@@ -932,7 +931,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 secrets,
                 resuming_session: st.resuming_session,
                 session_id: st.session_id,
-                server_name: st.server_name,
+                session_key: st.session_key,
                 using_ems: st.using_ems,
                 transcript,
                 resuming: false,
@@ -945,7 +944,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 secrets,
                 resuming_session: st.resuming_session,
                 session_id: st.session_id,
-                server_name: st.server_name,
+                session_key: st.session_key,
                 using_ems: st.using_ems,
                 transcript,
                 ticket: None,
@@ -962,7 +961,7 @@ struct ExpectNewTicket {
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     using_ems: bool,
     transcript: HandshakeHash,
     resuming: bool,
@@ -989,7 +988,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
             secrets: self.secrets,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            server_name: self.server_name,
+            session_key: self.session_key,
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: Some(nst),
@@ -1006,7 +1005,7 @@ struct ExpectCcs {
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     using_ems: bool,
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
@@ -1040,7 +1039,7 @@ impl State<ClientConnectionData> for ExpectCcs {
             secrets: self.secrets,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
-            server_name: self.server_name,
+            session_key: self.session_key,
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: self.ticket,
@@ -1055,7 +1054,7 @@ struct ExpectFinished {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName<'static>,
+    session_key: ClientSessionKey<'static>,
     using_ems: bool,
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
@@ -1111,7 +1110,7 @@ impl ExpectFinished {
         self.config
             .resumption
             .store
-            .set_tls12_session(self.server_name.clone(), session_value);
+            .set_tls12_session(self.session_key.clone(), session_value);
     }
 }
 
@@ -1180,7 +1179,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             self.config
                 .resumption
                 .store
-                .remove_tls12_session(&self.server_name);
+                .remove_tls12_session(&self.session_key);
         }
     }
 }

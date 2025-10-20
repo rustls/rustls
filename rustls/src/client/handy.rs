@@ -1,8 +1,6 @@
 use core::hash::Hasher;
 
-use pki_types::ServerName;
-
-use super::CredentialRequest;
+use super::{ClientSessionKey, CredentialRequest};
 use crate::client;
 use crate::crypto::SelectedCredential;
 use crate::crypto::kx::NamedGroup;
@@ -14,23 +12,32 @@ use crate::msgs::persist;
 pub(super) struct NoClientSessionStorage;
 
 impl client::ClientSessionStore for NoClientSessionStorage {
-    fn set_kx_hint(&self, _: ServerName<'static>, _: NamedGroup) {}
+    fn set_kx_hint(&self, _: ClientSessionKey<'static>, _: NamedGroup) {}
 
-    fn kx_hint(&self, _: &ServerName<'_>) -> Option<NamedGroup> {
+    fn kx_hint(&self, _: &ClientSessionKey<'_>) -> Option<NamedGroup> {
         None
     }
 
-    fn set_tls12_session(&self, _: ServerName<'static>, _: persist::Tls12ClientSessionValue) {}
+    fn set_tls12_session(&self, _: ClientSessionKey<'static>, _: persist::Tls12ClientSessionValue) {
+    }
 
-    fn tls12_session(&self, _: &ServerName<'_>) -> Option<persist::Tls12ClientSessionValue> {
+    fn tls12_session(&self, _: &ClientSessionKey<'_>) -> Option<persist::Tls12ClientSessionValue> {
         None
     }
 
-    fn remove_tls12_session(&self, _: &ServerName<'_>) {}
+    fn remove_tls12_session(&self, _: &ClientSessionKey<'_>) {}
 
-    fn insert_tls13_ticket(&self, _: ServerName<'static>, _: persist::Tls13ClientSessionValue) {}
+    fn insert_tls13_ticket(
+        &self,
+        _: ClientSessionKey<'static>,
+        _: persist::Tls13ClientSessionValue,
+    ) {
+    }
 
-    fn take_tls13_ticket(&self, _: &ServerName<'_>) -> Option<persist::Tls13ClientSessionValue> {
+    fn take_tls13_ticket(
+        &self,
+        _: &ClientSessionKey<'_>,
+    ) -> Option<persist::Tls13ClientSessionValue> {
         None
     }
 }
@@ -40,8 +47,7 @@ mod cache {
     use alloc::collections::VecDeque;
     use core::fmt;
 
-    use pki_types::ServerName;
-
+    use super::ClientSessionKey;
     use crate::crypto::kx::NamedGroup;
     use crate::limited_cache;
     use crate::lock::Mutex;
@@ -74,7 +80,7 @@ mod cache {
     ///
     /// It enforces a limit on the number of entries to bound memory usage.
     pub struct ClientSessionMemoryCache {
-        servers: Mutex<limited_cache::LimitedCache<ServerName<'static>, ServerData>>,
+        servers: Mutex<limited_cache::LimitedCache<ClientSessionKey<'static>, ServerData>>,
     }
 
     impl ClientSessionMemoryCache {
@@ -102,62 +108,60 @@ mod cache {
     }
 
     impl super::client::ClientSessionStore for ClientSessionMemoryCache {
-        fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup) {
+        fn set_kx_hint(&self, key: ClientSessionKey<'static>, group: NamedGroup) {
             self.servers
                 .lock()
                 .unwrap()
-                .get_or_insert_default_and_edit(server_name, |data| data.kx_hint = Some(group));
+                .get_or_insert_default_and_edit(key, |data| data.kx_hint = Some(group));
         }
 
-        fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup> {
+        fn kx_hint(&self, key: &ClientSessionKey<'_>) -> Option<NamedGroup> {
             self.servers
                 .lock()
                 .unwrap()
-                .get(server_name)
+                .get(key)
                 .and_then(|sd| sd.kx_hint)
         }
 
         fn set_tls12_session(
             &self,
-            server_name: ServerName<'static>,
+            key: ClientSessionKey<'static>,
             value: persist::Tls12ClientSessionValue,
         ) {
             self.servers
                 .lock()
                 .unwrap()
-                .get_or_insert_default_and_edit(server_name.clone(), |data| {
-                    data.tls12 = Some(value)
-                });
+                .get_or_insert_default_and_edit(key.clone(), |data| data.tls12 = Some(value));
         }
 
         fn tls12_session(
             &self,
-            server_name: &ServerName<'_>,
+            key: &ClientSessionKey<'_>,
         ) -> Option<persist::Tls12ClientSessionValue> {
             self.servers
                 .lock()
                 .unwrap()
-                .get(server_name)
+                .get(key)
                 .and_then(|sd| sd.tls12.as_ref().cloned())
         }
 
-        fn remove_tls12_session(&self, server_name: &ServerName<'static>) {
+        fn remove_tls12_session(&self, key: &ClientSessionKey<'static>) {
             self.servers
                 .lock()
                 .unwrap()
-                .get_mut(server_name)
+                .get_mut(key)
                 .and_then(|data| data.tls12.take());
         }
 
         fn insert_tls13_ticket(
             &self,
-            server_name: ServerName<'static>,
+            key: ClientSessionKey<'static>,
             value: persist::Tls13ClientSessionValue,
         ) {
             self.servers
                 .lock()
                 .unwrap()
-                .get_or_insert_default_and_edit(server_name.clone(), |data| {
+                .get_or_insert_default_and_edit(key.clone(), |data| {
                     if data.tls13.len() == data.tls13.capacity() {
                         data.tls13.pop_front();
                     }
@@ -167,12 +171,12 @@ mod cache {
 
         fn take_tls13_ticket(
             &self,
-            server_name: &ServerName<'static>,
+            key: &ClientSessionKey<'static>,
         ) -> Option<persist::Tls13ClientSessionValue> {
             self.servers
                 .lock()
                 .unwrap()
-                .get_mut(server_name)
+                .get_mut(key)
                 .and_then(|data| data.tls13.pop_back())
         }
     }
@@ -215,8 +219,9 @@ mod tests {
     use super::NoClientSessionStorage;
     use crate::TEST_PROVIDERS;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
-    use crate::client::{ClientCredentialResolver, ClientSessionStore, CredentialRequest};
-    use crate::crypto::kx::NamedGroup;
+    use crate::client::{
+        ClientCredentialResolver, ClientSessionKey, ClientSessionStore, CredentialRequest,
+    };
     use crate::crypto::{
         CertificateIdentity, CipherSuite, Identity, SelectedCredential, SignatureScheme,
         tls12_suite, tls13_suite,
@@ -232,19 +237,23 @@ mod tests {
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
         let c = NoClientSessionStorage {};
-        let name = ServerName::try_from("example.com").unwrap();
+        let server_name = ServerName::try_from("example.com").unwrap();
+        let key = ClientSessionKey {
+            config_hash: Default::default(),
+            server_name,
+        };
         let now = UnixTime::now();
         let server_cert_verifier: Arc<dyn ServerVerifier> = Arc::new(DummyServerVerifier);
         let resolves_client_cert: Arc<dyn ClientCredentialResolver> =
             Arc::new(DummyClientCredentialResolver);
 
-        c.set_kx_hint(name.clone(), NamedGroup::X25519);
-        assert_eq!(None, c.kx_hint(&name));
+        c.set_kx_hint(key.clone(), NamedGroup::X25519);
+        assert_eq!(None, c.kx_hint(&key));
 
         for provider in TEST_PROVIDERS {
             {
                 c.set_tls12_session(
-                    name.clone(),
+                    key.clone(),
                     Tls12ClientSessionValue::new(
                         tls12_suite(
                             CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
@@ -264,12 +273,12 @@ mod tests {
                         true,
                     ),
                 );
-                assert!(c.tls12_session(&name).is_none());
-                c.remove_tls12_session(&name);
+                assert!(c.tls12_session(&key).is_none());
+                c.remove_tls12_session(&key);
             }
 
             c.insert_tls13_ticket(
-                name.clone(),
+                key.clone(),
                 Tls13ClientSessionValue::new(
                     tls13_suite(CipherSuite::TLS13_AES_256_GCM_SHA384, provider),
                     Arc::new(PayloadU16::empty()),
@@ -287,7 +296,7 @@ mod tests {
                 ),
             );
 
-            assert!(c.take_tls13_ticket(&name).is_none());
+            assert!(c.take_tls13_ticket(&key).is_none());
         }
     }
 
