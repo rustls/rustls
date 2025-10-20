@@ -17,9 +17,11 @@ use crate::{SignerPublicKey, x509};
 
 /// Server certificate resolver which always resolves to the same identity and key.
 ///
-/// For use with [`ConfigBuilder::with_server_credential_resolver()`].
+/// For use with [`ConfigBuilder::with_server_credential_resolver()`] or
+/// [`ConfigBuilder::with_client_credential_resolver()`].
 ///
 /// [`ConfigBuilder::with_server_credential_resolver()`]: crate::ConfigBuilder::with_server_credential_resolver
+/// [`ConfigBuilder::with_client_credential_resolver()`]: crate::ConfigBuilder::with_client_credential_resolver
 #[derive(Debug)]
 pub struct SingleCredential(Credentials);
 
