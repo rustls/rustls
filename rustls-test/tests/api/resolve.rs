@@ -2,6 +2,7 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use core::hash::Hasher;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -284,6 +285,8 @@ impl ClientCredentialResolver for ClientCheckCertResolve {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::X509]
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 fn test_client_cert_resolve(

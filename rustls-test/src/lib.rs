@@ -1,3 +1,4 @@
+use core::hash::Hasher;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 use std::borrow::Cow;
@@ -1163,6 +1164,8 @@ impl ServerVerifier for MockServerVerifier {
             true => &[CertificateType::RawPublicKey],
         }
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 impl MockServerVerifier {

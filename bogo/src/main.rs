@@ -5,6 +5,7 @@
 //
 
 use core::fmt::{Debug, Formatter};
+use core::hash::Hasher;
 use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
@@ -1008,6 +1009,10 @@ impl ServerVerifier for DummyServerAuth {
     fn request_ocsp_response(&self) -> bool {
         true
     }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.parent.hash_config(h)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -1131,6 +1136,8 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
             false => &[],
         }
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 #[derive(Debug)]
