@@ -54,22 +54,6 @@ impl ServerCredentialResolver for SingleCredential {
     }
 }
 
-/// A packaged-together certificate chain and one-time-use signer.
-///
-/// This is used in the [`ClientCredentialResolver`] and [`ServerCredentialResolver`] traits
-/// as the return value of their `resolve()` methods.
-#[non_exhaustive]
-#[derive(Debug)]
-pub struct SelectedCredential {
-    /// The certificate chain or raw public key.
-    pub identity: Arc<Identity<'static>>,
-    /// The signing key matching the `identity`.
-    pub signer: Box<dyn Signer>,
-    /// An optional OCSP response from the certificate issuer,
-    /// attesting to its continued validity.
-    pub ocsp: Option<Arc<[u8]>>,
-}
-
 /// A packaged-together certificate chain, matching `SigningKey` and
 /// optional stapled OCSP response.
 ///
@@ -163,6 +147,22 @@ impl Credentials {
             ocsp: self.ocsp.clone(),
         })
     }
+}
+
+/// A packaged-together certificate chain and one-time-use signer.
+///
+/// This is used in the [`ClientCredentialResolver`] and [`ServerCredentialResolver`] traits
+/// as the return value of their `resolve()` methods.
+#[non_exhaustive]
+#[derive(Debug)]
+pub struct SelectedCredential {
+    /// The certificate chain or raw public key.
+    pub identity: Arc<Identity<'static>>,
+    /// The signing key matching the `identity`.
+    pub signer: Box<dyn Signer>,
+    /// An optional OCSP response from the certificate issuer,
+    /// attesting to its continued validity.
+    pub ocsp: Option<Arc<[u8]>>,
 }
 
 /// A peer's identity, depending on the negotiated certificate type.
