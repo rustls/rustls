@@ -1,4 +1,5 @@
 use alloc::borrow::Cow;
+use core::hash::Hasher;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::prelude::v1::*;
 use std::sync::OnceLock;
@@ -330,6 +331,8 @@ impl ServerVerifier for ExpectSha1EcdsaVerifier {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         vec![SignatureScheme::ECDSA_SHA1_Legacy]
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 #[test]
@@ -539,6 +542,8 @@ impl ServerVerifier for ServerVerifierWithAuthorityNames {
     fn request_ocsp_response(&self) -> bool {
         false
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 #[derive(Debug)]
@@ -577,6 +582,8 @@ impl ServerVerifier for ServerVerifierRequiringRpk {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::RawPublicKey]
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 #[derive(Debug)]

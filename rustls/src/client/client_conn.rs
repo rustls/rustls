@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::hash::Hasher;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
@@ -27,7 +28,7 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
-use crate::{DistinguishedName, KeyLog, WantsVerifier, compress, verify};
+use crate::{DistinguishedName, DynHasher, KeyLog, WantsVerifier, compress, verify};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -120,6 +121,9 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     ///
     /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
     fn supported_certificate_types(&self) -> &'static [CertificateType];
+
+    /// Instance configuration should be input to `h`.
+    fn hash_config(&self, h: &mut dyn Hasher);
 }
 
 /// Context from the server to inform client credential selection.
