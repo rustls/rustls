@@ -130,7 +130,7 @@ impl ServerVerifierBuilder {
 }
 
 /// Default `ServerVerifier`, see the trait impl for more information.
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub struct WebPkiServerVerifier {
     roots: Arc<RootCertStore>,
     crls: Vec<CertRevocationList<'static>>,
