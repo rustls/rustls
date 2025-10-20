@@ -61,10 +61,10 @@ impl ServerCredentialResolver for SingleCredential {
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct SelectedCredential {
-    /// A one-time-use signer for this certificate.
-    pub signer: Box<dyn Signer>,
     /// The certificate chain or raw public key.
     pub identity: Arc<Identity<'static>>,
+    /// The signing key matching the `identity`.
+    pub signer: Box<dyn Signer>,
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
     pub ocsp: Option<Arc<[u8]>>,
@@ -83,10 +83,8 @@ pub struct SelectedCredential {
 pub struct Credentials {
     /// The certificate chain or raw public key.
     pub identity: Arc<Identity<'static>>,
-
-    /// The certified key.
+    /// The signing key matching the `identity`.
     pub key: Box<dyn SigningKey>,
-
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
     pub ocsp: Option<Arc<[u8]>>,
@@ -160,8 +158,8 @@ impl Credentials {
     /// Calls [`SigningKey::choose_scheme()`] and propagates `cert_chain` and `ocsp`.
     pub fn signer(&self, sig_schemes: &[SignatureScheme]) -> Option<SelectedCredential> {
         Some(SelectedCredential {
-            signer: self.key.choose_scheme(sig_schemes)?,
             identity: self.identity.clone(),
+            signer: self.key.choose_scheme(sig_schemes)?,
             ocsp: self.ocsp.clone(),
         })
     }
