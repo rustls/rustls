@@ -3,8 +3,8 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use pkcs8::{DecodePrivateKey, EncodePublicKey};
+use rustls::crypto::{Signer, SigningKey};
 use rustls::pki_types::{PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer};
-use rustls::sign::{Signer, SigningKey};
 use rustls::{SignatureAlgorithm, SignatureScheme};
 use signature::{RandomizedSigner, SignatureEncoding};
 

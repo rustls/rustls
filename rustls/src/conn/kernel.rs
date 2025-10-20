@@ -58,7 +58,7 @@ use core::marker::PhantomData;
 
 use crate::client::ClientConnectionData;
 use crate::common_state::Protocol;
-use crate::crypto::signer::Identity;
+use crate::crypto::Identity;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::NewSessionTicketPayloadTls13;
 use crate::quic::Quic;

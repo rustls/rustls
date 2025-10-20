@@ -27,8 +27,8 @@ mod tests {
     use super::super::*;
     use crate::client::AlwaysResolvesClientRawPublicKeys;
     use crate::crypto::cipher::MessageEncrypter;
-    use crate::crypto::signer::Identity;
     use crate::crypto::tls13::OkmBlock;
+    use crate::crypto::{CertifiedKey, Identity};
     use crate::enums::CertificateType;
     use crate::msgs::base::PayloadU8;
     use crate::msgs::enums::ECCurveType;
@@ -40,7 +40,6 @@ mod tests {
     use crate::msgs::message::PlainMessage;
     use crate::pki_types::PrivateKeyDer;
     use crate::pki_types::pem::PemObject;
-    use crate::sign::CertifiedKey;
     use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
     use crate::verify::{
         HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,

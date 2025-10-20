@@ -20,7 +20,7 @@ use crate::conn::ConnectionCommon;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CertifiedSigner, CryptoProvider};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -33,7 +33,6 @@ use crate::msgs::handshake::{ProtocolName, ServerExtensionsInput, ServerNamePayl
 #[cfg(feature = "std")]
 use crate::msgs::message::Message;
 use crate::server::hs::ClientHelloInput;
-use crate::sign::CertifiedSigner;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 #[cfg(feature = "std")]
@@ -143,9 +142,9 @@ pub trait ServerCredentialResolver: Debug + Send + Sync {
     /// * [`PeerIncompatible::NoServerNameProvided`]
     /// * [`Error::NoSuitableCertificate`]
     ///
-    /// [`CertifiedKey`]: crate::sign::CertifiedKey
-    /// [`CertifiedKey::signer()`]: crate::sign::CertifiedKey::signer
-    /// [`Signer`]: crate::sign::Signer
+    /// [`CertifiedKey`]: crate::crypto::CertifiedKey
+    /// [`CertifiedKey::signer()`]: crate::crypto::CertifiedKey::signer
+    /// [`Signer`]: crate::crypto::Signer
     /// [`PeerIncompatible::NoSignatureSchemesInCommon`]: crate::error::PeerIncompatible::NoSignatureSchemesInCommon
     /// [`PeerIncompatible::NoServerNameProvided`]: crate::error::PeerIncompatible::NoServerNameProvided
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<CertifiedSigner, Error>;

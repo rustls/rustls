@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use crate::crypto::{CertifiedKey, CertifiedSigner};
 use crate::enums::CertificateType;
 use crate::error::{Error, PeerIncompatible};
+use crate::server;
 use crate::server::ClientHello;
-use crate::sign::CertifiedSigner;
-use crate::{server, sign};
 
 /// Something which never stores sessions.
 #[allow(clippy::exhaustive_structs)]
@@ -174,11 +174,11 @@ impl server::ProducesTickets for NeverProducesTickets {
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Debug)]
-pub struct SingleRawPublicKeyResolver(sign::CertifiedKey);
+pub struct SingleRawPublicKeyResolver(CertifiedKey);
 
 impl SingleRawPublicKeyResolver {
     /// Create a new `AlwaysResolvesServerRawPublicKeys` instance.
-    pub fn new(certified_key: sign::CertifiedKey) -> Self {
+    pub fn new(certified_key: CertifiedKey) -> Self {
         Self(certified_key)
     }
 }
@@ -203,19 +203,19 @@ mod sni_resolver {
 
     use pki_types::{DnsName, ServerName};
 
-    use crate::crypto::signer::{CertificateIdentity, CertifiedSigner, Identity};
+    use crate::crypto::{CertificateIdentity, CertifiedKey, CertifiedSigner, Identity};
     use crate::error::Error;
     use crate::hash_map::HashMap;
     use crate::server::ClientHello;
     use crate::sync::Arc;
     use crate::webpki::{ParsedCertificate, verify_server_name};
-    use crate::{PeerIncompatible, server, sign};
+    use crate::{PeerIncompatible, server};
 
     /// Something that resolves do different cert chains/keys based
     /// on client-supplied server name (via SNI).
     #[derive(Debug)]
     pub struct ServerNameResolver {
-        by_name: HashMap<DnsName<'static>, Arc<sign::CertifiedKey>>,
+        by_name: HashMap<DnsName<'static>, Arc<CertifiedKey>>,
     }
 
     impl ServerNameResolver {
@@ -226,11 +226,11 @@ mod sni_resolver {
             }
         }
 
-        /// Add a new `sign::CertifiedKey` to be used for the given SNI `name`.
+        /// Add a new `CertifiedKey` to be used for the given SNI `name`.
         ///
         /// This function fails if the `name` is not valid for the supplied certificate, or if
         /// the certificate chain is syntactically faulty.
-        pub fn add(&mut self, name: DnsName<'static>, ck: sign::CertifiedKey) -> Result<(), Error> {
+        pub fn add(&mut self, name: DnsName<'static>, ck: CertifiedKey) -> Result<(), Error> {
             // Check the certificate chain for validity:
             // - it should be non-empty list
             // - the first certificate should be parsable as a x509v3,

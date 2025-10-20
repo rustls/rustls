@@ -10,7 +10,7 @@ use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::{CertifiedSigner, CryptoProvider, SupportedKxGroup};
 use crate::enums::{
     AlertDescription, CertificateType, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
 };
@@ -26,7 +26,6 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sealed::Sealed;
-use crate::sign::CertifiedSigner;
 use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;

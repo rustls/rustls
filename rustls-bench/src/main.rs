@@ -28,12 +28,11 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::{CryptoProvider, Identity};
 use rustls::server::{
     NoServerSessionStorage, ProducesTickets, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,
 };
-use rustls::sign::Identity;
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind,

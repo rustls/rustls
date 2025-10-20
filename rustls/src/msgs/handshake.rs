@@ -9,7 +9,7 @@ use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
 
-use crate::crypto::{ActiveKeyExchange, SecureRandom};
+use crate::crypto::{ActiveKeyExchange, CertifiedSigner, SecureRandom};
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, CipherSuite, EchClientHelloType,
     HandshakeType, ProtocolVersion, SignatureScheme,
@@ -28,7 +28,6 @@ use crate::msgs::enums::{
     PskKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
-use crate::sign::CertifiedSigner;
 use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 use crate::x509::wrap_in_sequence;

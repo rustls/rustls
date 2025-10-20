@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use rustls::sign::Identity;
+use rustls::crypto::Identity;
 use rustls::{CertificateType, Error, PeerIncompatible};
 use rustls_test::{
     ErrorFromPeer, KeyType, ServerCheckCertResolve, do_handshake, do_handshake_until_error,

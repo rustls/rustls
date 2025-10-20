@@ -10,9 +10,8 @@ use rustls::client::danger::{
     SignatureVerificationInput,
 };
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
+use rustls::crypto::{CertifiedKey, CertifiedSigner, Identity};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
-use rustls::sign::Identity;
-use rustls::sign::{CertifiedKey, CertifiedSigner};
 use rustls::{
     AlertDescription, CertificateError, CertificateType, ClientConfig, ClientConnection,
     DistinguishedName, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible, RootCertStore,

@@ -5,7 +5,7 @@ use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
 use crate::client::ClientCredentialResolver;
-use crate::crypto::signer::Identity;
+use crate::crypto::Identity;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
@@ -551,7 +551,7 @@ mod tests {
     use pki_types::CertificateDer;
 
     use super::*;
-    use crate::crypto::signer::CertificateIdentity;
+    use crate::crypto::CertificateIdentity;
 
     #[cfg(feature = "std")] // for UnixTime::now
     #[test]

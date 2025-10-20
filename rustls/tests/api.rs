@@ -10,16 +10,15 @@ use std::{io, mem};
 use pki_types::{DnsName, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
 use rustls::client::Resumption;
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::{CertifiedKey, CertifiedSigner, CryptoProvider, Identity, Signer, SigningKey};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
-use rustls::sign::{CertifiedSigner, Identity};
 use rustls::{
     AlertDescription, ApiMisuse, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ContentType, Error, HandshakeKind, HandshakeType, InconsistentKeys, KeyingMaterialExporter,
-    NamedGroup, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SignatureScheme,
-    SupportedCipherSuite, sign,
+    NamedGroup, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection,
+    SignatureAlgorithm, SignatureScheme, SupportedCipherSuite,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
@@ -619,12 +618,12 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 fn test_keys_match() {
     // Consistent: Both of these should have the same SPKI values
     let expect_consistent =
-        sign::CertifiedKey::new(KeyType::Rsa2048.identity(), Box::new(SigningKeySomeSpki));
+        CertifiedKey::new(KeyType::Rsa2048.identity(), Box::new(SigningKeySomeSpki));
     assert!(expect_consistent.is_ok());
 
     // Inconsistent: These should not have the same SPKI values
     let expect_inconsistent =
-        sign::CertifiedKey::new(KeyType::EcdsaP256.identity(), Box::new(SigningKeySomeSpki));
+        CertifiedKey::new(KeyType::EcdsaP256.identity(), Box::new(SigningKeySomeSpki));
     assert!(matches!(
         expect_inconsistent,
         Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
@@ -632,7 +631,7 @@ fn test_keys_match() {
 
     // Unknown: This signing key returns None for its SPKI, so we can't tell if the certified key is consistent
     assert!(matches!(
-        sign::CertifiedKey::new(KeyType::Rsa2048.identity(), Box::new(SigningKeyNoneSpki)),
+        CertifiedKey::new(KeyType::Rsa2048.identity(), Box::new(SigningKeyNoneSpki)),
         Err(Error::InconsistentKeys(InconsistentKeys::Unknown))
     ));
 }
@@ -641,8 +640,8 @@ fn test_keys_match() {
 #[derive(Debug)]
 struct SigningKeyNoneSpki;
 
-impl sign::SigningKey for SigningKeyNoneSpki {
-    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
+impl SigningKey for SigningKeyNoneSpki {
+    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         unimplemented!("Not meant to be called during tests")
     }
 
@@ -650,7 +649,7 @@ impl sign::SigningKey for SigningKeyNoneSpki {
         None
     }
 
-    fn algorithm(&self) -> rustls::SignatureAlgorithm {
+    fn algorithm(&self) -> SignatureAlgorithm {
         unimplemented!("Not meant to be called during tests")
     }
 }
@@ -659,8 +658,8 @@ impl sign::SigningKey for SigningKeyNoneSpki {
 #[derive(Debug)]
 struct SigningKeySomeSpki;
 
-impl sign::SigningKey for SigningKeySomeSpki {
-    fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer<'_>> {
+impl SigningKey for SigningKeySomeSpki {
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
         let Identity::X509(identity) = &*KeyType::Rsa2048.identity() else {
             panic!("expected X509 identity");
         };
@@ -672,11 +671,11 @@ impl sign::SigningKey for SigningKeySomeSpki {
         )
     }
 
-    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
+    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         unimplemented!("Not meant to be called during tests")
     }
 
-    fn algorithm(&self) -> rustls::SignatureAlgorithm {
+    fn algorithm(&self) -> SignatureAlgorithm {
         unimplemented!("Not meant to be called during tests")
     }
 }

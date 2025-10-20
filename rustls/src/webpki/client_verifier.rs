@@ -11,8 +11,7 @@ use super::{VerifierBuilderError, pki_error};
 use crate::ConfigBuilder;
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::signer::Identity;
-use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
+use crate::crypto::{CryptoProvider, Identity, WebPkiSupportedAlgorithms};
 #[cfg(doc)]
 use crate::server::ServerConfig;
 use crate::sync::Arc;

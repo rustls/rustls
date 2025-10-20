@@ -1,10 +1,10 @@
 use pki_types::ServerName;
 
 use super::CredentialRequest;
+use crate::crypto::{CertifiedKey, CertifiedSigner};
 use crate::enums::CertificateType;
 use crate::msgs::persist;
-use crate::sign::CertifiedSigner;
-use crate::{NamedGroup, client, sign};
+use crate::{NamedGroup, client};
 
 /// An implementer of `ClientSessionStore` which does nothing.
 #[derive(Debug)]
@@ -203,11 +203,11 @@ impl client::ClientCredentialResolver for FailResolveClientCert {
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Debug)]
-pub struct AlwaysResolvesClientRawPublicKeys(sign::CertifiedKey);
+pub struct AlwaysResolvesClientRawPublicKeys(CertifiedKey);
 
 impl AlwaysResolvesClientRawPublicKeys {
     /// Create a new `AlwaysResolvesClientRawPublicKeys` instance.
-    pub fn new(certified_key: sign::CertifiedKey) -> Self {
+    pub fn new(certified_key: CertifiedKey) -> Self {
         Self(certified_key)
     }
 }
@@ -238,14 +238,13 @@ mod tests {
     use super::provider::cipher_suite;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
     use crate::client::{ClientCredentialResolver, ClientSessionStore, CredentialRequest};
-    use crate::crypto::signer::{CertificateIdentity, Identity};
+    use crate::crypto::{CertificateIdentity, CertifiedSigner, Identity};
     use crate::enums::{CertificateType, SignatureScheme};
     use crate::error::Error;
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
-    use crate::sign::CertifiedSigner;
     use crate::sync::Arc;
     use crate::verify::{ServerIdentity, SignatureVerificationInput};
 

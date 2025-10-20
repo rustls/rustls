@@ -13,7 +13,7 @@ use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CertifiedSigner, CryptoProvider};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -21,7 +21,6 @@ use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtensionsInput;
 use crate::msgs::persist;
-use crate::sign::CertifiedSigner;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::sync::Arc;
 #[cfg(feature = "std")]
@@ -109,9 +108,9 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     ///
     /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
     ///
-    /// [`CertifiedKey`]: crate::sign::CertifiedKey
-    /// [`CertifiedKey::signer()`]: crate::sign::CertifiedKey::signer
-    /// [`Signer`]: crate::sign::Signer
+    /// [`CertifiedKey`]: crate::crypto::CertifiedKey
+    /// [`CertifiedKey::signer()`]: crate::crypto::CertifiedKey::signer
+    /// [`Signer`]: crate::crypto::Signer
     fn resolve(&self, request: &CredentialRequest<'_>) -> Option<CertifiedSigner>;
 
     /// Returns which [`CertificateType`]s this resolver supports.

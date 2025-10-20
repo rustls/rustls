@@ -10,7 +10,6 @@ use zeroize::Zeroize;
 
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;
-use crate::sign::SigningKey;
 use crate::sync::Arc;
 pub use crate::webpki::{
     WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
@@ -20,7 +19,7 @@ use crate::{
     Tls13CipherSuite,
 };
 #[cfg(doc)]
-use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server, sign};
+use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};
 
 /// *ring* based CryptoProvider.
 #[cfg(feature = "ring")]
@@ -48,9 +47,12 @@ pub mod tls13;
 /// Hybrid public key encryption (RFC 9180).
 pub mod hpke;
 
-// Message signing interfaces. Re-exported under rustls::sign. Kept crate-internal here to
-// avoid having two import paths to the same types.
-pub(crate) mod signer;
+// Message signing interfaces.
+mod signer;
+pub use signer::{
+    CertificateIdentity, CertifiedKey, CertifiedSigner, Identity, Signer, SigningKey,
+    SingleCertAndKey, public_key_to_spki,
+};
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 pub use crate::rand::GetRandomFailed;
@@ -138,7 +140,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// struct HsmKeyLoader;
 ///
 /// impl rustls::crypto::KeyProvider for HsmKeyLoader {
-///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Box<dyn rustls::sign::SigningKey>, rustls::Error> {
+///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Box<dyn rustls::crypto::SigningKey>, rustls::Error> {
 ///          fictitious_hsm_api::load_private_key(key_der)
 ///     }
 /// }
@@ -155,7 +157,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// - **Key exchange groups** - see [`crypto::SupportedKxGroup`].
 /// - **Signature verification algorithms** - see [`crypto::WebPkiSupportedAlgorithms`].
 /// - **Authentication key loading** - see [`crypto::KeyProvider::load_private_key()`] and
-///   [`sign::SigningKey`].
+///   [`SigningKey`].
 ///
 /// # Example code
 ///

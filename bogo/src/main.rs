@@ -33,12 +33,15 @@ use rustls::client::danger::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
 use rustls::client::{
-    ClientConfig, ClientConnection, CredentialRequest, EchConfig, EchGreaseConfig, EchMode,
+    self, ClientConfig, ClientConnection, CredentialRequest, EchConfig, EchGreaseConfig, EchMode,
     EchStatus, Resumption, Tls12Resumption, WebPkiServerVerifier,
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
-use rustls::crypto::{CryptoProvider, aws_lc_rs, ring};
+use rustls::crypto::{
+    CertifiedKey, CertifiedSigner, CryptoProvider, Identity, Signer, SigningKey, SingleCertAndKey,
+    aws_lc_rs, ring,
+};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::pki_types::pem::PemObject;
@@ -47,15 +50,13 @@ use rustls::pki_types::{
 };
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{
-    ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
+    self, ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
-use rustls::sign::Identity;
-use rustls::sign::{CertifiedKey, CertifiedSigner, SingleCertAndKey};
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, CertificateType,
     Connection, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
-    SignatureScheme, client, compress, server, sign,
+    SignatureScheme, compress,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -525,12 +526,12 @@ enum OcspValidation {
 
 #[derive(Debug)]
 struct FixedSignatureSchemeSigningKey {
-    key: Box<dyn sign::SigningKey>,
+    key: Box<dyn SigningKey>,
     scheme: SignatureScheme,
 }
 
-impl sign::SigningKey for FixedSignatureSchemeSigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
+impl SigningKey for FixedSignatureSchemeSigningKey {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
             self.key.choose_scheme(&[self.scheme])
         } else {

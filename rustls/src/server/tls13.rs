@@ -13,7 +13,7 @@ use crate::common_state::{
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::crypto::signer::Identity;
+use crate::crypto::Identity;
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -43,7 +43,7 @@ use crate::{ConnectionTrafficSecrets, compress, rand, verify};
 mod client_hello {
     use super::*;
     use crate::compress::CertCompressor;
-    use crate::crypto::SupportedKxGroup;
+    use crate::crypto::{CertifiedSigner, Signer, SupportedKxGroup};
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup};
@@ -55,7 +55,6 @@ mod client_hello {
     use crate::msgs::persist::{ServerSessionValue, Tls13ServerSessionValue};
     use crate::sealed::Sealed;
     use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello, ServerHandler};
-    use crate::sign::{CertifiedSigner, Signer};
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };

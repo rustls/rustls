@@ -3,8 +3,7 @@ use alloc::vec::Vec;
 
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
-use crate::crypto::SupportedKxGroup;
-use crate::crypto::signer::Identity;
+use crate::crypto::{Identity, SupportedKxGroup};
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;

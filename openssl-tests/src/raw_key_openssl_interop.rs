@@ -14,12 +14,12 @@ mod client {
         HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
     };
     use rustls::crypto::{
-        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
+        CertifiedKey, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
+        verify_tls13_signature,
     };
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
-    use rustls::sign::{CertifiedKey, Identity};
     use rustls::{
         ApiMisuse, CertificateError, CertificateType, ClientConfig, ClientConnection, Error,
         InconsistentKeys, PeerIncompatible, SignatureScheme, Stream,
@@ -144,7 +144,8 @@ mod server {
 
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{
-        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
+        CertifiedKey, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
+        verify_tls13_signature,
     };
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
@@ -152,8 +153,6 @@ mod server {
     use rustls::server::danger::{
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
-    use rustls::sign::CertifiedKey;
-    use rustls::sign::Identity;
     use rustls::{
         ApiMisuse, CertificateError, CertificateType, DistinguishedName, Error, InconsistentKeys,
         PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
@@ -294,9 +293,9 @@ mod tests {
     use std::sync::mpsc::channel;
     use std::thread;
 
+    use rustls::crypto::Identity;
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-    use rustls::sign::Identity;
 
     use super::{client, server};
     use crate::utils::verify_openssl3_available;

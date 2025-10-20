@@ -5,10 +5,10 @@ use pki_types::PrivateKeyDer;
 pub(crate) use ring as ring_like;
 use webpki::ring as webpki_algs;
 
+use super::signer::SigningKey;
 use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
-use crate::sign::SigningKey;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Error, Tls12CipherSuite, Tls13CipherSuite};
 
