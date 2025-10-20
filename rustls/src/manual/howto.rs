@@ -5,10 +5,10 @@ By default rustls supports PKCS#8-format[^1] RSA or ECDSA keys, plus PKCS#1-form
 However, if your private key resides in a HSM, or in another process, or perhaps
 another machine, rustls has some extension points to support this:
 
-The main trait you must implement is [`sign::SigningKey`][signing_key]. The primary method here
+The main trait you must implement is [`SigningKey`][signing_key]. The primary method here
 is [`choose_scheme()`][choose_scheme] where you are given a set of [`SignatureScheme`s][sig_scheme] the client says
 it supports: you must choose one (or return `None` -- this aborts the handshake). Having
-done that, you return an implementation of the [`sign::Signer`][signer] trait.
+done that, you return an implementation of the [`Signer`][signer] trait.
 The [`sign()`][sign_method] performs the signature and returns it.
 
 (Unfortunately this is currently designed for keys with low latency access, like in a
@@ -17,19 +17,19 @@ It's a TODO to make these and other extension points async.)
 
 Once you have these two pieces, configuring a server to use them involves, briefly:
 
-- packaging your [`sign::SigningKey`][signing_key] with the matching certificate chain into a [`sign::CertifiedKey`][certified_key]
-- making a [`ServerNameResolver`][cert_using_sni] and feeding in your [`sign::CertifiedKey`][certified_key] for all SNI hostnames you want to use it for,
+- packaging your [`SigningKey`][signing_key] with the matching certificate chain into a [`CertifiedKey`][certified_key]
+- making a [`ServerNameResolver`][cert_using_sni] and feeding in your [`CertifiedKey`][certified_key] for all SNI hostnames you want to use it for,
 - setting that as your `ServerConfig`'s [`cert_resolver`][cert_resolver]
 
-For a complete example of implementing a custom [`sign::SigningKey`][signing_key] and
-[`sign::Signer`][signer] see the [`signer` module in the `rustls-cng` crate][rustls-cng-signer].
+For a complete example of implementing a custom [`SigningKey`][signing_key] and
+[`Signer`][signer] see the [`signer` module in the `rustls-cng` crate][rustls-cng-signer].
 
-[signing_key]: crate::crypto::signer::SigningKey
-[choose_scheme]: crate::crypto::signer::SigningKey::choose_scheme
+[signing_key]: crate::crypto::SigningKey
+[choose_scheme]: crate::crypto::SigningKey::choose_scheme
 [sig_scheme]: crate::SignatureScheme
-[signer]: crate::crypto::signer::Signer
-[sign_method]: crate::crypto::signer::Signer::sign
-[certified_key]: crate::crypto::signer::CertifiedKey
+[signer]: crate::crypto::Signer
+[sign_method]: crate::crypto::Signer::sign
+[certified_key]: crate::crypto::CertifiedKey
 [cert_using_sni]: crate::server::ServerNameResolver
 [cert_resolver]: crate::ServerConfig::cert_resolver
 [rustls-cng-signer]: https://github.com/rustls/rustls-cng/blob/dev/src/signer.rs

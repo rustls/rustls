@@ -23,19 +23,18 @@ use rustls::crypto::cipher::{
     Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use rustls::crypto::{
-    CipherSuiteCommon, GetRandomFailed, KeyExchangeAlgorithm, StartedKeyExchange,
-    WebPkiSupportedAlgorithms, hash, tls12, tls13,
+    self, CertifiedKey, CertifiedSigner, CipherSuiteCommon, GetRandomFailed, Identity,
+    KeyExchangeAlgorithm, StartedKeyExchange, WebPkiSupportedAlgorithms, hash, tls12, tls13,
 };
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
     SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
-use rustls::server::ProducesTickets;
-use rustls::sign::{CertifiedSigner, Identity};
+use rustls::server::{self, ProducesTickets};
 use rustls::{
     CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerIncompatible,
     PeerMisbehaved, ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme,
-    Tls12CipherSuite, Tls13CipherSuite, crypto, server, sign,
+    Tls12CipherSuite, Tls13CipherSuite,
 };
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
@@ -72,7 +71,7 @@ pub fn server_verifier() -> Arc<dyn ServerVerifier> {
 
 pub fn server_cert_resolver() -> Arc<dyn server::ServerCredentialResolver> {
     let cert = CertificateDer::from(&include_bytes!("../../test-ca/ecdsa-p256/end.der")[..]);
-    let certified_key = sign::CertifiedKey::new_unchecked(
+    let certified_key = CertifiedKey::new_unchecked(
         Arc::new(Identity::from_cert_chain(vec![cert]).unwrap()),
         Box::new(SigningKey),
     );
@@ -80,7 +79,7 @@ pub fn server_cert_resolver() -> Arc<dyn server::ServerCredentialResolver> {
 }
 
 #[derive(Debug)]
-struct DummyCert(Arc<sign::CertifiedKey>);
+struct DummyCert(Arc<CertifiedKey>);
 
 impl server::ServerCredentialResolver for DummyCert {
     fn resolve(&self, client_hello: &server::ClientHello<'_>) -> Result<CertifiedSigner, Error> {
@@ -113,7 +112,7 @@ impl crypto::KeyProvider for Provider {
     fn load_private_key(
         &self,
         _key_der: PrivateKeyDer<'static>,
-    ) -> Result<Box<dyn sign::SigningKey>, Error> {
+    ) -> Result<Box<dyn crypto::SigningKey>, Error> {
         Ok(Box::new(SigningKey))
     }
 }
@@ -489,8 +488,8 @@ impl SignatureVerificationAlgorithm for VerifyAlgorithm {
 #[derive(Debug)]
 pub struct SigningKey;
 
-impl sign::SigningKey for SigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
+impl crypto::SigningKey for SigningKey {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn crypto::Signer>> {
         match offered.contains(&SIGNATURE_SCHEME) {
             true => Some(Box::new(Self)),
             false => None,
@@ -506,7 +505,7 @@ impl sign::SigningKey for SigningKey {
     }
 }
 
-impl sign::Signer for SigningKey {
+impl crypto::Signer for SigningKey {
     fn sign(self: Box<Self>, _message: &[u8]) -> Result<Vec<u8>, Error> {
         Ok(SIGNATURE.to_vec())
     }

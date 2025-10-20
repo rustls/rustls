@@ -15,9 +15,9 @@ use std::{fs, thread};
 use clap::Parser;
 use rcgen::{Issuer, KeyPair, SerialNumber};
 use rustls::RootCertStore;
+use rustls::crypto::Identity;
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
-use rustls::sign::Identity;
 
 fn main() {
     let args = Args::parse();

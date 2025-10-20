@@ -2,11 +2,11 @@ use alloc::vec::Vec;
 
 use super::{ClientCredentialResolver, CredentialRequest};
 use crate::compress;
+use crate::crypto::CertifiedSigner;
 use crate::enums::{CertificateType, SignatureScheme};
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtensions};
-use crate::sign::CertifiedSigner;
 
 #[derive(Debug)]
 pub(super) struct ServerCertDetails {

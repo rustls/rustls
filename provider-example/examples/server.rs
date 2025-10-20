@@ -2,9 +2,9 @@ use std::io::Write;
 use std::sync::Arc;
 
 use rustls::ServerConfig;
+use rustls::crypto::Identity;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::Acceptor;
-use rustls::sign::Identity;
 
 fn main() {
     env_logger::init();

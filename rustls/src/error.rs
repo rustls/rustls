@@ -101,14 +101,14 @@ pub enum Error {
     BadMaxFragmentSize,
 
     /// Specific failure cases from [`CertifiedKey::new()`] or a
-    /// [`crate::crypto::signer::SigningKey`] that cannot produce a corresponding public key.
+    /// [`crate::crypto::SigningKey`] that cannot produce a corresponding public key.
     ///
     /// If encountered while building a [`CertifiedKey`], consider if
     /// [`CertifiedKey::new_unchecked()`] might be appropriate for your use case.
     ///
-    /// [`CertifiedKey::new()`]: crate::crypto::signer::CertifiedKey::new()
-    /// [`CertifiedKey`]: crate::crypto::signer::CertifiedKey
-    /// [`CertifiedKey::new_unchecked()`]: crate::crypto::signer::CertifiedKey::new_unchecked()
+    /// [`CertifiedKey::new()`]: crate::crypto::CertifiedKey::new()
+    /// [`CertifiedKey`]: crate::crypto::CertifiedKey
+    /// [`CertifiedKey::new_unchecked()`]: crate::crypto::CertifiedKey::new_unchecked()
     InconsistentKeys(InconsistentKeys),
 
     /// The server rejected encrypted client hello (ECH) negotiation
@@ -147,20 +147,20 @@ pub enum Error {
     Other(OtherError),
 }
 
-/// Specific failure cases from [`CertifiedKey::new()`] or a [`crate::crypto::signer::SigningKey`] that cannot produce a corresponding public key.
+/// Specific failure cases from [`CertifiedKey::new()`] or a [`crate::crypto::SigningKey`] that cannot produce a corresponding public key.
 ///
-/// [`CertifiedKey::new()`]: crate::crypto::signer::CertifiedKey::new()
+/// [`CertifiedKey::new()`]: crate::crypto::CertifiedKey::new()
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InconsistentKeys {
     /// The public key returned by the [`SigningKey`] does not match the public key information in the certificate.
     ///
-    /// [`SigningKey`]: crate::crypto::signer::SigningKey
+    /// [`SigningKey`]: crate::crypto::SigningKey
     KeyMismatch,
 
     /// The [`SigningKey`] cannot produce its corresponding public key.
     ///
-    /// [`SigningKey`]: crate::crypto::signer::SigningKey
+    /// [`SigningKey`]: crate::crypto::SigningKey
     Unknown,
 }
 

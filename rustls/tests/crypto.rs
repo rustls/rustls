@@ -6,8 +6,7 @@ use std::borrow::Cow;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
-use rustls::crypto::CryptoProvider;
-use rustls::sign::CertifiedKey;
+use rustls::crypto::{CertifiedKey, CryptoProvider};
 use rustls::{
     ClientConfig, ClientConnection, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
     ServerConnection, SupportedCipherSuite,

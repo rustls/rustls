@@ -25,8 +25,7 @@ use std::prelude::v1::*;
 use pki_types::{CertificateDer, ServerName, UnixTime};
 use webpki_roots;
 
-use crate::crypto::CryptoProvider;
-use crate::sign::{CertificateIdentity, Identity};
+use crate::crypto::{CertificateIdentity, CryptoProvider, Identity};
 use crate::verify::{ServerIdentity, ServerVerifier};
 use crate::webpki::{RootCertStore, WebPkiServerVerifier};
 

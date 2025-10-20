@@ -27,7 +27,10 @@ use rustls::client::{
     WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
-use rustls::crypto::{CryptoProvider, WebPkiSupportedAlgorithms, verify_tls13_signature};
+use rustls::crypto::{
+    CertifiedKey, CertifiedSigner, CryptoProvider, Identity, SigningKey, WebPkiSupportedAlgorithms,
+    verify_tls13_signature,
+};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::pki_types::pem::PemObject;
@@ -40,8 +43,6 @@ use rustls::server::{
     ClientHello, ClientVerifierBuilder, ServerCredentialResolver, SingleRawPublicKeyResolver,
     UnbufferedServerConnection, WebPkiClientVerifier,
 };
-use rustls::sign::Identity;
-use rustls::sign::{CertifiedKey, CertifiedSigner, SigningKey};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };

@@ -18,8 +18,10 @@ use crate::common_state::{
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::hash::Hash;
-use crate::crypto::signer::Identity;
-use crate::crypto::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
+use crate::crypto::{
+    ActiveKeyExchange, CertifiedSigner, HybridKeyExchange, Identity, SharedSecret, Signer,
+    StartedKeyExchange,
+};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
@@ -38,7 +40,6 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::{self, Retrieved};
 use crate::sealed::Sealed;
-use crate::sign::{CertifiedSigner, Signer};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{

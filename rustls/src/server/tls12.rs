@@ -12,8 +12,7 @@ use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::crypto::ActiveKeyExchange;
-use crate::crypto::signer::Identity;
+use crate::crypto::{ActiveKeyExchange, Identity};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -38,7 +37,7 @@ use crate::{ConnectionTrafficSecrets, verify};
 mod client_hello {
     use super::*;
     use crate::common_state::KxState;
-    use crate::crypto::SupportedKxGroup;
+    use crate::crypto::{CertifiedSigner, Signer, SupportedKxGroup};
     use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::{
         CertificateRequestPayload, CertificateStatus, ClientHelloPayload, ClientSessionTicket,
@@ -47,7 +46,6 @@ mod client_hello {
     };
     use crate::sealed::Sealed;
     use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler};
-    use crate::sign::{CertifiedSigner, Signer};
     use crate::verify::DigitallySignedStruct;
 
     pub(crate) static TLS12_HANDLER: &dyn ServerHandler<Tls12CipherSuite> = &Handler;

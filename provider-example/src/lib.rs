@@ -20,7 +20,7 @@ extern crate std;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::{CryptoProvider, SigningKey};
 use rustls::pki_types::PrivateKeyDer;
 use rustls::{Error, OtherError};
 
@@ -59,7 +59,7 @@ impl rustls::crypto::KeyProvider for Provider {
     fn load_private_key(
         &self,
         key_der: PrivateKeyDer<'static>,
-    ) -> Result<Box<dyn rustls::sign::SigningKey>, Error> {
+    ) -> Result<Box<dyn SigningKey>, Error> {
         let PrivateKeyDer::Pkcs8(key_der) = key_der else {
             return Err(Error::General(
                 "only PKCS#8 private keys are supported".into(),

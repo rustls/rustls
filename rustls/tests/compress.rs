@@ -8,9 +8,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(feature = "zlib")]
 use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
-use rustls::pki_types::CertificateDer;
+use rustls::crypto::{CertifiedKey, Identity, SingleCertAndKey};
 #[cfg(feature = "zlib")]
-use rustls::sign::{self, Identity};
+use rustls::pki_types::CertificateDer;
 use rustls::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls_test::make_pair_for_arc_configs;
@@ -248,12 +248,11 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .key_provider
         .load_private_key(KeyType::Rsa2048.client_key())
         .unwrap();
-    let big_cert_and_key = sign::CertifiedKey::new_unchecked(
+    let big_cert_and_key = CertifiedKey::new_unchecked(
         Arc::new(Identity::from_cert_chain(vec![big_cert]).unwrap()),
         key,
     );
-    client_config.client_auth_cert_resolver =
-        Arc::new(sign::SingleCertAndKey::from(big_cert_and_key));
+    client_config.client_auth_cert_resolver = Arc::new(SingleCertAndKey::from(big_cert_and_key));
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert_eq!(

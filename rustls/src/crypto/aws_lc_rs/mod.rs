@@ -9,10 +9,10 @@ pub(crate) use aws_lc_rs as ring_like;
 use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
 
+use super::signer::SigningKey;
 use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
-use crate::sign::SigningKey;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Error, OtherError, Tls12CipherSuite, Tls13CipherSuite};
 

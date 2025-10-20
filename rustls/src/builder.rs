@@ -90,7 +90,7 @@ use crate::{ClientConfig, ServerConfig};
 /// # #[cfg(feature = "aws-lc-rs")] {
 /// # use std::sync::Arc;
 /// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
-/// # use rustls::sign::Identity;
+/// # use rustls::crypto::Identity;
 /// # use rustls::ServerConfig;
 /// # let certs = vec![];
 /// # let private_key = pki_types::PrivateKeyDer::from(

@@ -52,15 +52,14 @@ mod tests {
     use super::super::*;
     use crate::common_state::KxState;
     use crate::crypto::{
-        ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm, StartedKeyExchange,
-        SupportedKxGroup,
+        ActiveKeyExchange, CertifiedKey, CryptoProvider, Identity, KeyExchangeAlgorithm,
+        StartedKeyExchange, SupportedKxGroup,
     };
     use crate::enums::CertificateType;
     use crate::ffdhe_groups::FfdheGroup;
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{ServerConfig, ServerConnection, SingleRawPublicKeyResolver};
-    use crate::sign::{CertifiedKey, Identity};
     use crate::sync::Arc;
     use crate::{CipherSuiteCommon, Tls12CipherSuite};
 
