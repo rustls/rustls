@@ -108,3 +108,4 @@ lto = true
 # against the latest _published_ copy.
 [patch.crates-io]
 rustls = { path = "rustls" }
+rustls-pki-types = { git = "https://github.com/rustls/pki-types", branch = "jbp-cert-hash" }

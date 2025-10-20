@@ -2618,9 +2618,8 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "229a4a4c221013e7e1f1a043678c5cc39fe5171437c88fb47151a21e6f5b5c79"
+version = "1.13.0"
+source = "git+https://github.com/rustls/pki-types?branch=jbp-cert-hash#add35475041bfe3ad621eae679e13e5a16e463dd"
 dependencies = [
  "zeroize",
 ]
