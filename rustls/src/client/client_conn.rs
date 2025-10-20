@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
-use core::hash::Hasher;
+use core::any::Any;
+use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
@@ -14,7 +15,7 @@ use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CryptoProvider, SelectedCredential};
+use crate::crypto::{CryptoProvider, SelectedCredential, hash};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -206,8 +207,11 @@ pub struct ClientConfig {
     ///
     /// However, resumption is only allowed between two `ClientConfig`s if their
     /// `client_auth_cert_resolver` (ie, potential client authentication credentials)
-    /// and `verifier` (ie, server certificate verification settings) are
-    /// the same (according to `Arc::ptr_eq`).
+    /// and `verifier` (ie, server certificate verification settings):
+    ///
+    /// - are the same type (determined by hashing their `TypeId`), and
+    /// - input the same data into [`verify::ServerVerifier::hash_config()`] and
+    ///   [`ClientCredentialResolver::hash_config()`].
     ///
     /// To illustrate, imagine two `ClientConfig`s `A` and `B`.  `A` fully validates
     /// the server certificate, `B` does not.  If `A` and `B` shared a resumption store,
@@ -398,9 +402,36 @@ impl ClientConfig {
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
     }
+
+    /// A hash which partitions this config's use of the [`Self::resumption`] store.
+    pub(super) fn config_hash(&self) -> [u8; 32] {
+        self.domain.config_hash
+    }
+}
+
+struct HashAdapter<'a>(&'a mut dyn hash::Context);
+
+impl Hasher for HashAdapter<'_> {
+    fn finish(&self) -> u64 {
+        // SAFETY: this is private to `SecurityDomain::new`, which guarantees `hash::Output`
+        // is at least 32 bytes.
+        u64::from_be_bytes(
+            self.0.fork_finish().as_ref()[..8]
+                .try_into()
+                .unwrap(),
+        )
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        self.0.update(bytes)
+    }
 }
 
 /// Items that affect the fundamental security properties of a connection.
+///
+/// This is its own type because `config_hash` depends on the other fields:
+/// fields therefore should not be mutated, but an entire object created
+/// through [`Self::new`] for any edits.
 #[derive(Clone, Debug)]
 pub(super) struct SecurityDomain {
     /// Provides the current system time
@@ -414,6 +445,8 @@ pub(super) struct SecurityDomain {
 
     /// How to decide what client auth certificate/keys to use.
     client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
+
+    config_hash: [u8; 32],
 }
 
 impl SecurityDomain {
@@ -423,12 +456,59 @@ impl SecurityDomain {
         verifier: Arc<dyn verify::ServerVerifier + 'static>,
         time_provider: Arc<dyn TimeProvider + 'static>,
     ) -> Self {
+        // Use a hash function that outputs at least 32 bytes.
+        let hash = provider
+            .iter_cipher_suites()
+            .map(|cs| cs.hash_provider())
+            .find(|h| h.output_len() >= 32)
+            .expect("no suitable cipher suite available (with |H| >= 32)"); // this is -- in practice -- all cipher suites
+
+        let mut h = hash.start();
+        let mut adapter = HashAdapter(h.as_mut());
+
+        // Include TypeId of impl, so two different types with different non-configured
+        // behavior do not collide even if their `hash_config()`s are the same.
+        client_auth_cert_resolver
+            .type_id()
+            .hash(&mut DynHasher(&mut adapter));
+        client_auth_cert_resolver.hash_config(&mut adapter);
+
+        verifier
+            .type_id()
+            .hash(&mut DynHasher(&mut adapter));
+        verifier.hash_config(&mut adapter);
+
+        time_provider
+            .type_id()
+            .hash(&mut DynHasher(&mut adapter));
+
+        let config_hash = h.finish().as_ref()[..32]
+            .try_into()
+            .unwrap();
+
         Self {
             time_provider,
             provider,
             verifier,
             client_auth_cert_resolver,
+            config_hash,
         }
+    }
+
+    fn with_verifier(&self, verifier: Arc<dyn verify::ServerVerifier + 'static>) -> Self {
+        let Self {
+            time_provider,
+            provider,
+            verifier: _,
+            client_auth_cert_resolver,
+            config_hash: _,
+        } = self;
+        Self::new(
+            provider.clone(),
+            client_auth_cert_resolver.clone(),
+            verifier,
+            time_provider.clone(),
+        )
     }
 }
 
@@ -531,7 +611,7 @@ pub(super) mod danger {
     impl DangerousClientConfig<'_> {
         /// Overrides the default `ServerVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerVerifier>) {
-            self.cfg.domain.verifier = verifier;
+            self.cfg.domain = self.cfg.domain.with_verifier(verifier);
         }
     }
 }
