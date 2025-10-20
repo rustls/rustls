@@ -1,4 +1,6 @@
 use alloc::vec::Vec;
+use core::any::Any;
+use core::hash::Hasher;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
@@ -116,7 +118,7 @@ impl ClientSessionKey<'_> {
 
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
+pub trait ClientCredentialResolver: fmt::Debug + Any + Send + Sync {
     /// Resolve a client certificate chain/private key to use as the client's identity.
     ///
     /// The `SelectedCredential` returned from this method contains an identity and a
@@ -143,6 +145,9 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     ///
     /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
     fn supported_certificate_types(&self) -> &'static [CertificateType];
+
+    /// Instance configuration should be input to `h`.
+    fn hash_config(&self, h: &mut dyn Hasher);
 }
 
 /// Context from the server to inform client credential selection.

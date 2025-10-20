@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::hash::{Hash, Hasher};
 
 use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
@@ -291,6 +292,10 @@ impl ServerVerifier for WebPkiServerVerifier {
 
     fn request_ocsp_response(&self) -> bool {
         false
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.hash(&mut crate::core_hash_polyfill::DynHasher(h));
     }
 }
 

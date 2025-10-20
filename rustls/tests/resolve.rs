@@ -285,6 +285,8 @@ impl ClientCredentialResolver for ClientCheckCertResolve {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::X509]
     }
+
+    fn hash_config(&self, _: &mut dyn std::hash::Hasher) {}
 }
 
 fn test_client_cert_resolve(

@@ -514,6 +514,10 @@ impl ServerVerifier for DummyServerAuth {
     fn request_ocsp_response(&self) -> bool {
         true
     }
+
+    fn hash_config(&self, h: &mut dyn core::hash::Hasher) {
+        self.parent.hash_config(h)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -645,6 +649,8 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
             false => &[],
         }
     }
+
+    fn hash_config(&self, _: &mut dyn core::hash::Hasher) {}
 }
 
 #[derive(Debug)]

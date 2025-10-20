@@ -45,6 +45,10 @@ impl ClientCredentialResolver for SingleCredential {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::X509]
     }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.hash(&mut crate::core_hash_polyfill::DynHasher(h));
+    }
 }
 
 impl ServerCredentialResolver for SingleCredential {

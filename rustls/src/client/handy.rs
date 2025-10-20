@@ -1,3 +1,5 @@
+use core::hash::Hash;
+
 use super::{ClientSessionKey, CredentialRequest};
 use crate::crypto::{Credentials, SelectedCredential};
 use crate::enums::CertificateType;
@@ -200,6 +202,8 @@ impl client::ClientCredentialResolver for FailResolveClientCert {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[]
     }
+
+    fn hash_config(&self, _: &mut dyn core::hash::Hasher) {}
 }
 
 /// An exemplar `ClientCredentialResolver` implementation that always resolves to a single
@@ -228,6 +232,11 @@ impl client::ClientCredentialResolver for AlwaysResolvesClientRawPublicKeys {
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::RawPublicKey]
+    }
+
+    fn hash_config(&self, h: &mut dyn core::hash::Hasher) {
+        self.0
+            .hash(&mut crate::core_hash_polyfill::DynHasher(h));
     }
 }
 
@@ -350,6 +359,9 @@ mod tests {
         fn request_ocsp_response(&self) -> bool {
             unreachable!()
         }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn hash_config(&self, _: &mut dyn core::hash::Hasher) {}
     }
 
     #[derive(Debug)]
@@ -365,5 +377,8 @@ mod tests {
         fn supported_certificate_types(&self) -> &'static [CertificateType] {
             unreachable!()
         }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn hash_config(&self, _: &mut dyn core::hash::Hasher) {}
     }
 }

@@ -444,6 +444,8 @@ mod danger {
         fn request_ocsp_response(&self) -> bool {
             false
         }
+
+        fn hash_config(&self, _: &mut dyn core::hash::Hasher) {}
     }
 }
 

@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use core::hash::Hasher;
 
 use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 
@@ -96,6 +97,9 @@ pub trait ServerVerifier: Debug + Send + Sync {
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         None
     }
+
+    /// Instance configuration should be input to `h`.
+    fn hash_config(&self, h: &mut dyn Hasher);
 }
 
 /// Data required to verify a server's identity.

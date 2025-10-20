@@ -673,3 +673,18 @@ mod sealed {
     #[expect(unnameable_types)]
     pub trait Sealed {}
 }
+
+mod core_hash_polyfill {
+    /// Working around the garbage design of `core::hash::Hash`
+    pub(crate) struct DynHasher<'a>(pub(crate) &'a mut dyn core::hash::Hasher);
+
+    impl core::hash::Hasher for DynHasher<'_> {
+        fn finish(&self) -> u64 {
+            self.0.finish()
+        }
+
+        fn write(&mut self, bytes: &[u8]) {
+            self.0.write(bytes)
+        }
+    }
+}

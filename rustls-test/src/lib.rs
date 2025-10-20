@@ -1177,6 +1177,8 @@ impl ServerVerifier for MockServerVerifier {
             true => &[CertificateType::RawPublicKey],
         }
     }
+
+    fn hash_config(&self, _: &mut dyn core::hash::Hasher) {}
 }
 
 impl MockServerVerifier {

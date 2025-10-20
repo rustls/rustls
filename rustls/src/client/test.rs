@@ -23,6 +23,7 @@ use crate::sync::Arc;
 
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
+    use core::hash::Hasher;
     use std::sync::OnceLock;
 
     use super::super::*;
@@ -331,6 +332,8 @@ mod tests {
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             vec![SignatureScheme::ECDSA_SHA1_Legacy]
         }
+
+        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 
     #[test]
@@ -525,6 +528,8 @@ mod tests {
         fn request_ocsp_response(&self) -> bool {
             false
         }
+
+        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 
     #[derive(Debug)]
@@ -563,6 +568,8 @@ mod tests {
         fn supported_certificate_types(&self) -> &'static [CertificateType] {
             &[CertificateType::RawPublicKey]
         }
+
+        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 
     #[derive(Debug)]
