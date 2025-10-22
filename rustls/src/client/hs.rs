@@ -9,7 +9,6 @@ use core::ops::Deref;
 use pki_types::ServerName;
 
 use super::{ClientCredentialResolver, Tls12Resumption};
-#[cfg(feature = "log")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::client::client_conn::ClientConnectionData;

@@ -449,15 +449,12 @@ impl State<ClientConnectionData> for ExpectServerKx {
         kx.params.encode(&mut kx_params);
         let server_kx = ServerKxDetails::new(kx_params, kx.dss);
 
-        #[cfg_attr(not(feature = "log"), allow(unused_variables))]
-        {
-            match &kx.params {
-                ServerKeyExchangeParams::Ecdh(ecdhe) => {
-                    debug!("ECDHE curve is {:?}", ecdhe.curve_params)
-                }
-                ServerKeyExchangeParams::Dh(dhe) => {
-                    debug!("DHE params are p = {:?}, g = {:?}", dhe.dh_p, dhe.dh_g)
-                }
+        match &kx.params {
+            ServerKeyExchangeParams::Ecdh(ecdhe) => {
+                debug!("ECDHE curve is {:?}", ecdhe.curve_params)
+            }
+            ServerKeyExchangeParams::Dh(dhe) => {
+                debug!("DHE params are p = {:?}, g = {:?}", dhe.dh_p, dhe.dh_g)
             }
         }
 
