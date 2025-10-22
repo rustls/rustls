@@ -695,15 +695,11 @@ enum_builder! {
     /// [RFC 6091 Section 5]: <https://datatracker.ietf.org/doc/html/rfc6091#section-5>
     /// [RFC 7250 Section 7]: <https://datatracker.ietf.org/doc/html/rfc7250#section-7>
     #[repr(u8)]
+    #[derive(Default)]
     pub enum CertificateType {
+        #[default]
         X509 => 0x00,
         RawPublicKey => 0x02,
-    }
-}
-
-impl Default for CertificateType {
-    fn default() -> Self {
-        Self::X509
     }
 }
 
