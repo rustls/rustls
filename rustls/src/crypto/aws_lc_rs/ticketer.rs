@@ -37,6 +37,7 @@ impl Ticketer {
     ///
     /// [RFC 5077 §4]: https://www.rfc-editor.org/rfc/rfc5077#section-4
     #[cfg(feature = "std")]
+    #[expect(clippy::new_ret_no_self)]
     pub fn new() -> Result<Arc<dyn ProducesTickets>, Error> {
         Ok(Arc::new(crate::ticketer::TicketRotator::new(
             crate::ticketer::TicketRotator::SIX_HOURS,

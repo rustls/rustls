@@ -29,6 +29,7 @@ impl Ticketer {
     ///
     /// The encryption mechanism used is Chacha20Poly1305.
     #[cfg(feature = "std")]
+    #[expect(clippy::new_ret_no_self)]
     pub fn new() -> Result<Arc<dyn ProducesTickets>, Error> {
         Ok(Arc::new(crate::ticketer::TicketRotator::new(
             crate::ticketer::TicketRotator::SIX_HOURS,
