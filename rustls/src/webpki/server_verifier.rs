@@ -131,7 +131,6 @@ impl ServerVerifierBuilder {
 }
 
 /// Default `ServerVerifier`, see the trait impl for more information.
-#[allow(unreachable_pub)]
 #[derive(Debug)]
 pub struct WebPkiServerVerifier {
     roots: Arc<RootCertStore>,
@@ -142,7 +141,6 @@ pub struct WebPkiServerVerifier {
     supported: WebPkiSupportedAlgorithms,
 }
 
-#[allow(unreachable_pub)]
 impl WebPkiServerVerifier {
     /// Create a builder for the `webpki` server certificate verifier configuration using
     /// the [process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider].

@@ -2028,7 +2028,6 @@ impl Codec<'_> for ServerDhParams {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) enum ServerKeyExchangeParams {
     Ecdh(ServerEcdhParams),
@@ -2802,7 +2801,6 @@ impl TlsListElement for HpkeSymmetricCipherSuite {
     };
 }
 
-#[allow(clippy::exhaustive_structs)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HpkeKeyConfig {
     pub config_id: u8,
@@ -2831,7 +2829,6 @@ impl Codec<'_> for HpkeKeyConfig {
     }
 }
 
-#[allow(clippy::exhaustive_structs)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct EchConfigContents {
     pub key_config: HpkeKeyConfig,

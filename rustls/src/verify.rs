@@ -23,7 +23,6 @@ use crate::sync::Arc;
 
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
-#[allow(unreachable_pub)]
 pub trait ServerVerifier: Debug + Send + Sync {
     /// Verify the server's identity.
     ///
@@ -100,7 +99,6 @@ pub trait ServerVerifier: Debug + Send + Sync {
 }
 
 /// Data required to verify a server's identity.
-#[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct ServerIdentity<'a> {
@@ -118,7 +116,6 @@ pub struct ServerIdentity<'a> {
 }
 
 /// Something that can verify a client certificate chain
-#[allow(unreachable_pub)]
 pub trait ClientVerifier: Debug + Send + Sync {
     /// Verify the client's identity.
     ///
@@ -219,7 +216,6 @@ pub trait ClientVerifier: Debug + Send + Sync {
 }
 
 /// Data required to verify a client's identity.
-#[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct ClientIdentity<'a> {
@@ -230,7 +226,6 @@ pub struct ClientIdentity<'a> {
 }
 
 /// Input for message signature verification.
-#[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct SignatureVerificationInput<'a> {
@@ -247,7 +242,6 @@ pub struct SignatureVerificationInput<'a> {
 /// Public key used to verify a signature.
 ///
 /// Used as part of [`SignatureVerificationInput`].
-#[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum SignerPublicKey<'a> {

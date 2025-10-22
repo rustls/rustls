@@ -547,7 +547,6 @@ pub enum CertificateError {
 impl PartialEq<Self> for CertificateError {
     fn eq(&self, other: &Self) -> bool {
         use CertificateError::*;
-        #[allow(clippy::match_like_matches_macro)]
         match (self, other) {
             (BadEncoding, BadEncoding) => true,
             (Expired, Expired) => true,
@@ -895,7 +894,6 @@ pub enum CertRevocationListError {
 impl PartialEq<Self> for CertRevocationListError {
     fn eq(&self, other: &Self) -> bool {
         use CertRevocationListError::*;
-        #[allow(clippy::match_like_matches_macro)]
         match (self, other) {
             (BadSignature, BadSignature) => true,
             (
@@ -1243,7 +1241,6 @@ mod other_error {
     /// exposing a provider specific error.
     ///
     /// Enums holding this type will never compare equal to each other.
-    #[allow(clippy::exhaustive_structs)]
     #[derive(Debug, Clone)]
     pub struct OtherError(Arc<dyn StdError + Send + Sync>);
 

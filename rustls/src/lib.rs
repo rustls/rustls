@@ -436,7 +436,6 @@ mod webpki;
 
 /// Internal classes that are used in integration tests.
 /// The contents of this section DO NOT form part of the stable interface.
-#[allow(missing_docs, unnameable_types)]
 #[doc(hidden)]
 pub mod internal {
     /// Low-level TLS message parsing and encoding functions.

@@ -168,7 +168,6 @@ pub struct SelectedCredential {
 }
 
 /// A peer's identity, depending on the negotiated certificate type.
-#[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Identity<'a> {
@@ -313,7 +312,6 @@ where
 }
 
 /// Data required to verify the peer's identity.
-#[allow(unreachable_pub)]
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CertificateIdentity<'a> {

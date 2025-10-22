@@ -161,7 +161,6 @@ pub(crate) struct DeframerVecBuffer {
 impl DeframerVecBuffer {
     /// Discard `taken` bytes from the start of our buffer.
     pub(crate) fn discard(&mut self, taken: usize) {
-        #[allow(clippy::comparison_chain)]
         if taken < self.used {
             /* Before:
              * +----------+----------+----------+

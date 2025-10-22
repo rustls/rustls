@@ -1255,7 +1255,6 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":CANNOT_PARSE_LEAF_CERT:")
         }
         Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
-        #[allow(deprecated)]
         Error::InvalidCertificate(
             CertificateError::UnsupportedSignatureAlgorithm { .. }
             | CertificateError::UnsupportedSignatureAlgorithmForPublicKey { .. },
