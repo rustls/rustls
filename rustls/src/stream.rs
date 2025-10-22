@@ -9,7 +9,7 @@ use crate::conn::{ConnectionCommon, SideData};
 /// Relies on [`ConnectionCommon::complete_io()`] to perform the necessary I/O.
 ///
 /// This allows you to use a rustls Connection like a normal stream.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
     /// Our TLS connection
@@ -155,7 +155,7 @@ where
 /// Relies on [`ConnectionCommon::complete_io()`] to perform the necessary I/O.
 ///
 /// This allows you to use a rustls Connection like a normal stream.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
     /// Our connection

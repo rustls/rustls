@@ -180,7 +180,7 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// You can verify the configuration at runtime by checking
 /// [`ServerConfig::fips()`]/[`ClientConfig::fips()`] return `true`.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Debug, Clone)]
 pub struct CryptoProvider {
     /// List of supported TLS1.2 cipher suites, in preference order -- the first element
@@ -778,7 +778,7 @@ pub trait HybridKeyExchange: ActiveKeyExchange {
 }
 
 /// The result from [`SupportedKxGroup::start_and_complete()`].
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 pub struct CompletedKeyExchange {
     /// Which group was used.
     pub group: NamedGroup,

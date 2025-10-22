@@ -10,7 +10,7 @@ use crate::record_layer::RecordLayer;
 ///
 /// This outbound type borrows its "to be encrypted" payload from the "user".
 /// It is used for fragmenting and is consumed by encryption.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct OutboundPlainMessage<'a> {
     pub typ: ContentType,
@@ -154,7 +154,7 @@ impl<'a> From<&'a [u8]> for OutboundChunks<'a> {
 ///
 /// This outbound type owns all memory for its interior parts.
 /// It results from encryption and is used for io write.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Clone, Debug)]
 pub struct OutboundOpaqueMessage {
     pub typ: ContentType,

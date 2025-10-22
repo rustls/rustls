@@ -10,7 +10,7 @@ use crate::{DistinguishedName, Error};
 
 /// A container for root certificates able to provide a root-of-trust
 /// for connection authentication.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Clone)]
 pub struct RootCertStore {
     /// The list of roots.

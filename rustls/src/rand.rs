@@ -22,6 +22,6 @@ pub(crate) fn random_u16(secure_random: &dyn SecureRandom) -> Result<u16, GetRan
 }
 
 /// Random material generation failed.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct GetRandomFailed;

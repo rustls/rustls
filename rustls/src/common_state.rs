@@ -858,7 +858,7 @@ pub(crate) struct Context<'a, Data> {
 }
 
 /// Side of the connection.
-#[allow(clippy::exhaustive_enums)]
+#[expect(clippy::exhaustive_enums)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Side {
     /// A client initiates the connection.

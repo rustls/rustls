@@ -5,7 +5,7 @@ use crate::enums::ProtocolVersion;
 use crate::error::Error;
 
 /// Implements [`Prf`] using a [`hmac::Hmac`].
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 pub struct PrfUsingHmac<'a>(pub &'a dyn hmac::Hmac);
 
 impl Prf for PrfUsingHmac<'_> {

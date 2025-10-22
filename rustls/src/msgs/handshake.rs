@@ -2771,7 +2771,7 @@ impl<'a> HandshakeMessagePayload<'a> {
     }
 }
 
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct HpkeSymmetricCipherSuite {
     pub kdf_id: HpkeKdf,
