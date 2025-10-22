@@ -1111,19 +1111,15 @@ impl State<ServerConnectionData> for Accepting {
     }
 }
 
+#[derive(Default)]
 pub(super) enum EarlyDataState {
+    #[default]
     New,
     Accepted {
         received: ChunkVecBuffer,
         left: usize,
     },
     Rejected,
-}
-
-impl Default for EarlyDataState {
-    fn default() -> Self {
-        Self::New
-    }
 }
 
 impl EarlyDataState {
