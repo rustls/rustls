@@ -1093,7 +1093,7 @@ fn sample_dhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
         params: ServerKeyExchangeParams::Dh(ServerDhParams {
             dh_p: PayloadU16::new(vec![1, 2, 3]),
             dh_g: PayloadU16::new(vec![2]),
-            dh_Ys: PayloadU16::new(vec![1, 2]),
+            dh_ys: PayloadU16::new(vec![1, 2]),
         }),
         dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
