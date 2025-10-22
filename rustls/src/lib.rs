@@ -377,11 +377,12 @@ use log;
 
 #[cfg(not(feature = "log"))]
 mod log {
-    macro_rules! trace    ( ($($tt:tt)*) => {{}} );
-    macro_rules! debug    ( ($($tt:tt)*) => {{}} );
-    macro_rules! error    ( ($($tt:tt)*) => {{}} );
-    macro_rules! _warn    ( ($($tt:tt)*) => {{}} );
-    pub(crate) use {_warn as warn, debug, error, trace};
+    macro_rules! trace    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
+    macro_rules! debug    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
+    macro_rules! error    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
+    macro_rules! _warn    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
+    macro_rules! _used    ( ($($tt:tt)*) => { { let _ = format_args!($($tt)*); } } );
+    pub(crate) use {_used, _warn as warn, debug, error, trace};
 }
 
 #[cfg(test)]
@@ -423,7 +424,6 @@ mod verifybench;
 mod x509;
 #[macro_use]
 mod check;
-#[cfg(feature = "log")]
 mod bs_debug;
 mod builder;
 pub mod enums;

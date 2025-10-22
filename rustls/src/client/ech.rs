@@ -155,20 +155,11 @@ impl EchConfig {
         ech_configs: Vec<EchConfigPayload>,
         hpke_suites: &[&'static dyn Hpke],
     ) -> Result<Self, Error> {
-        // Note: we name the index var _i because if the log feature is disabled
-        //       it is unused.
-        #[cfg_attr(not(feature = "log"), allow(clippy::unused_enumerate_index))]
-        for (_i, config) in ech_configs.iter().enumerate() {
+        for (i, config) in ech_configs.iter().enumerate() {
             let contents = match config {
                 EchConfigPayload::V18(contents) => contents,
-                EchConfigPayload::Unknown {
-                    version: _version, ..
-                } => {
-                    warn!(
-                        "ECH config {} has unsupported version {:?}",
-                        _i + 1,
-                        _version
-                    );
+                EchConfigPayload::Unknown { version, .. } => {
+                    warn!("ECH config {} has unsupported version {:?}", i + 1, version);
                     continue; // Unsupported version.
                 }
             };
