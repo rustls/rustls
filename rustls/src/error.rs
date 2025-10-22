@@ -265,7 +265,7 @@ impl From<InvalidMessage> for AlertDescription {
 ///
 /// Please file a bug against rustls if you see `Error::PeerMisbehaved` in
 /// the wild.
-#[allow(missing_docs)]
+#[expect(missing_docs)]
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Clone)]
 pub enum PeerMisbehaved {
@@ -358,7 +358,7 @@ impl From<PeerMisbehaved> for Error {
 ///
 /// This is `non_exhaustive`: we might add or stop using items here in minor
 /// versions.
-#[allow(missing_docs)]
+#[expect(missing_docs)]
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Clone)]
 pub enum PeerIncompatible {

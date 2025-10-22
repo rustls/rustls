@@ -367,7 +367,7 @@ use crate::crypto::CryptoProvider;
 
 // Import `test` sysroot crate for `Bencher` definitions.
 #[cfg(bench)]
-#[allow(unused_extern_crates)]
+#[expect(unused_extern_crates)]
 extern crate test;
 
 // log for logging (optional).
@@ -393,13 +393,13 @@ mod test_macros;
 /// of rustls targeting architectures without atomic pointers to replace the implementation
 /// with another implementation such as `portable_atomic_util::Arc` in one central location.
 mod sync {
-    #[allow(clippy::disallowed_types)]
+    #[expect(clippy::disallowed_types)]
     pub(crate) type Arc<T> = alloc::sync::Arc<T>;
-    #[allow(clippy::disallowed_types)]
+    #[expect(clippy::disallowed_types)]
     pub(crate) type Weak<T> = alloc::sync::Weak<T>;
 }
 
-#[allow(unnameable_types)]
+#[expect(unnameable_types)]
 #[macro_use]
 mod msgs;
 mod common_state;
@@ -670,6 +670,6 @@ mod hash_map {
 }
 
 mod sealed {
-    #[allow(unnameable_types)]
+    #[expect(unnameable_types)]
     pub trait Sealed {}
 }

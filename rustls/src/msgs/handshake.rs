@@ -2966,7 +2966,7 @@ impl Codec<'_> for EchConfigExtension {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
 
-        #[allow(clippy::match_single_binding)] // Future-proofing.
+        #[expect(clippy::match_single_binding)] // Future-proofing.
         let ext = match typ {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };

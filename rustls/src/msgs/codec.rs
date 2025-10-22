@@ -156,7 +156,7 @@ impl Codec<'_> for u16 {
 }
 
 // Make a distinct type for u24, even though it's a u32 underneath
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types)]
 #[derive(Debug, Copy, Clone)]
 pub struct u24(pub u32);
 
