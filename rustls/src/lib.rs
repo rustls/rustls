@@ -339,22 +339,11 @@
     unused_qualifications
 )]
 // Relax these clippy lints:
-// - ptr_arg: this triggers on references to type aliases that are Vec
-//   underneath.
 // - too_many_arguments: some things just need a lot of state, wrapping it
 //   doesn't necessarily make it easier to follow what's going on
-// - new_ret_no_self: we sometimes return `Arc<Self>`, which seems fine
-// - single_component_path_imports: our top-level `use log` import causes
-//   a false positive, https://github.com/rust-lang/rust-clippy/issues/5210
 // - new_without_default: for internal constructors, the indirection is not
 //   helpful
-#![allow(
-    clippy::too_many_arguments,
-    clippy::new_ret_no_self,
-    clippy::ptr_arg,
-    clippy::single_component_path_imports,
-    clippy::new_without_default
-)]
+#![expect(clippy::too_many_arguments, clippy::new_without_default)]
 // Enable documentation for all features on docs.rs
 #![cfg_attr(rustls_docsrs, feature(doc_cfg))]
 // Enable coverage() attr for nightly coverage builds, see
@@ -383,6 +372,7 @@ extern crate test;
 
 // log for logging (optional).
 #[cfg(feature = "log")]
+#[expect(clippy::single_component_path_imports)]
 use log;
 
 #[cfg(not(feature = "log"))]
