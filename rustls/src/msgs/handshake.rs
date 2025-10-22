@@ -1983,14 +1983,13 @@ impl Codec<'_> for ServerEcdhParams {
 }
 
 #[derive(Debug)]
-#[allow(non_snake_case)]
 pub(crate) struct ServerDhParams {
     /// RFC5246: `opaque dh_p<1..2^16-1>;`
     pub(crate) dh_p: PayloadU16<NonEmpty>,
     /// RFC5246: `opaque dh_g<1..2^16-1>;`
     pub(crate) dh_g: PayloadU16<NonEmpty>,
     /// RFC5246: `opaque dh_Ys<1..2^16-1>;`
-    pub(crate) dh_Ys: PayloadU16<NonEmpty>,
+    pub(crate) dh_ys: PayloadU16<NonEmpty>,
 }
 
 impl ServerDhParams {
@@ -2002,7 +2001,7 @@ impl ServerDhParams {
         Self {
             dh_p: PayloadU16::new(params.p.to_vec()),
             dh_g: PayloadU16::new(params.g.to_vec()),
-            dh_Ys: PayloadU16::new(kx.pub_key().to_vec()),
+            dh_ys: PayloadU16::new(kx.pub_key().to_vec()),
         }
     }
 
@@ -2015,14 +2014,14 @@ impl Codec<'_> for ServerDhParams {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.dh_p.encode(bytes);
         self.dh_g.encode(bytes);
-        self.dh_Ys.encode(bytes);
+        self.dh_ys.encode(bytes);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             dh_p: PayloadU16::read(r)?,
             dh_g: PayloadU16::read(r)?,
-            dh_Ys: PayloadU16::read(r)?,
+            dh_ys: PayloadU16::read(r)?,
         })
     }
 }
@@ -2044,7 +2043,7 @@ impl ServerKeyExchangeParams {
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
             Self::Ecdh(ecdh) => &ecdh.public.0,
-            Self::Dh(dh) => &dh.dh_Ys.0,
+            Self::Dh(dh) => &dh.dh_ys.0,
         }
     }
 
