@@ -6,7 +6,6 @@ It does this from a few aspects: how rustls attempts to avoid construction error
 that occurred in other TLS libraries, how rustls attempts to avoid past TLS
 protocol vulnerabilities, and assorted advice for achieving common tasks with rustls.
 */
-#![allow(non_snake_case)]
 
 /// This section discusses vulnerabilities in other TLS implementations, theorising their
 /// root cause and how we aim to avoid them in rustls.

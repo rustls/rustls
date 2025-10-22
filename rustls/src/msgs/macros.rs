@@ -59,8 +59,6 @@ macro_rules! enum_builder {
         }
 
         impl Codec<'_> for $enum_name {
-            // NOTE(allow) fully qualified Vec is only needed in no-std mode
-            #[allow(unused_qualifications)]
             fn encode(&self, bytes: &mut alloc::vec::Vec<u8>) {
                 <$uint>::from(*self).encode(bytes);
             }
