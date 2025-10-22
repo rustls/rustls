@@ -109,3 +109,4 @@ lto = true
 [patch.crates-io]
 rustls = { path = "rustls" }
 rustls-pki-types = { git = "https://github.com/rustls/pki-types", branch = "jbp-cert-hash" }
+rustls-webpki = { git = "https://github.com/rustls/webpki", branch = "jbp-hash-types" }

@@ -1733,7 +1733,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.53.5",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -2619,7 +2619,7 @@ dependencies = [
 [[package]]
 name = "rustls-pki-types"
 version = "1.13.0"
-source = "git+https://github.com/rustls/pki-types?branch=jbp-cert-hash#add35475041bfe3ad621eae679e13e5a16e463dd"
+source = "git+https://github.com/rustls/pki-types?branch=jbp-cert-hash#545cd18195e0266f2d84ab00b9cee8285cd31aa9"
 dependencies = [
  "zeroize",
 ]
@@ -2695,8 +2695,7 @@ dependencies = [
 [[package]]
 name = "rustls-webpki"
 version = "0.104.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9655b87b6a80dd6577dc97b247eb2e52bc2a8479e65e31f233f1e0a8ef14b3bc"
+source = "git+https://github.com/rustls/webpki?branch=jbp-hash-types#969b1346c8d828bdf25ea8048b88db219dcd2ce8"
 dependencies = [
  "aws-lc-rs",
  "ring",
