@@ -1,5 +1,5 @@
 #![cfg(feature = "ring")]
-#![allow(clippy::disallowed_types)]
+#![expect(clippy::disallowed_types)]
 
 use std::sync::Arc;
 

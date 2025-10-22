@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+#![expect(missing_docs)]
 //! <https://langsec.org> cat says:
 //!
 //! ```text

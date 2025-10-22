@@ -8,7 +8,7 @@ pub(crate) fn wrap_in_sequence(bytes: &[u8]) -> Vec<u8> {
 }
 
 /// Prepend stuff to `bytes_a` + `bytes_b` to put it in a DER SEQUENCE.
-#[cfg_attr(not(feature = "ring"), allow(dead_code))]
+#[cfg_attr(not(feature = "ring"), expect(dead_code))]
 pub(crate) fn wrap_concat_in_sequence(bytes_a: &[u8], bytes_b: &[u8]) -> Vec<u8> {
     asn1_wrap(DER_SEQUENCE_TAG, bytes_a, bytes_b)
 }
@@ -19,7 +19,7 @@ pub(crate) fn wrap_in_bit_string(bytes: &[u8]) -> Vec<u8> {
 }
 
 /// Prepend stuff to `bytes` to put it in a DER OCTET STRING.
-#[cfg_attr(not(feature = "ring"), allow(dead_code))]
+#[cfg_attr(not(feature = "ring"), expect(dead_code))]
 pub(crate) fn wrap_in_octet_string(bytes: &[u8]) -> Vec<u8> {
     asn1_wrap(DER_OCTET_STRING_TAG, bytes, &[])
 }

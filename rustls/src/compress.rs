@@ -431,7 +431,7 @@ impl Default for CompressionCache {
     }
 }
 
-#[cfg_attr(not(feature = "std"), allow(dead_code))]
+#[cfg_attr(not(feature = "std"), expect(dead_code))]
 #[derive(Debug)]
 pub(crate) struct CompressionCacheEntry {
     // cache key is algorithm + original:
