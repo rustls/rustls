@@ -3,17 +3,18 @@ macro_rules! enum_builder {
     (
         $(#[doc = $comment:literal])*
         #[repr($uint:ty)]
+        $(#[$metas:meta])*
         $enum_vis:vis enum $enum_name:ident
         {
           $(
-              $(#[doc = $enum_comment:literal])*
+              $(#[$enum_metas:meta])*
               $enum_var:ident => $enum_val:literal
           ),*
           $(,)?
           $(
               !Debug:
               $(
-                  $(#[doc = $enum_comment_no_debug:literal])*
+                  $(#[$enum_metas_no_debug:meta])*
                   $enum_var_no_debug:ident => $enum_val_no_debug:literal
               ),*
               $(,)?
@@ -21,17 +22,18 @@ macro_rules! enum_builder {
         }
     ) => {
         $(#[doc = $comment])*
+        $(#[$metas])*
         #[non_exhaustive]
         #[derive(PartialEq, Eq, Clone, Copy)]
         $enum_vis enum $enum_name {
             $(
-                $(#[doc = $enum_comment])*
+                $(#[$enum_metas])*
                 $enum_var
             ),*
             $(
                 ,
                 $(
-                    $(#[doc = $enum_comment_no_debug])*
+                    $(#[$enum_metas_no_debug])*
                     $enum_var_no_debug
                 ),*
             )?
