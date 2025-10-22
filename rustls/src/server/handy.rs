@@ -8,7 +8,7 @@ use crate::server;
 use crate::server::ClientHello;
 
 /// Something which never stores sessions.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct NoServerSessionStorage {}
 

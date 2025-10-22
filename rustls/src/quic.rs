@@ -41,7 +41,7 @@ mod connection {
     use crate::vecbuf::ChunkVecBuffer;
 
     /// A QUIC client or server connection.
-    #[allow(clippy::exhaustive_enums)]
+    #[expect(clippy::exhaustive_enums)]
     #[derive(Debug)]
     pub enum Connection {
         /// A client connection
@@ -615,7 +615,7 @@ impl Secrets {
 }
 
 /// Keys used to communicate in a single direction
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 pub struct DirectionalKeys {
     /// Encrypts or decrypts a packet's headers
     pub header: Box<dyn HeaderProtectionKey>,
@@ -808,7 +808,7 @@ pub trait PacketKey: Send + Sync {
 }
 
 /// Packet protection keys for bidirectional 1-RTT communication
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 pub struct PacketKeySet {
     /// Encrypts outgoing packets
     pub local: Box<dyn PacketKey>,
@@ -900,7 +900,7 @@ impl Suite {
 }
 
 /// Complete set of keys used to communicate with the peer
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 pub struct Keys {
     /// Encrypts outgoing packets
     pub local: DirectionalKeys,
@@ -957,7 +957,7 @@ impl Keys {
 /// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
 /// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that
 /// only packet keys are updated by key updates; header protection keys remain the same.
-#[allow(clippy::exhaustive_enums)]
+#[expect(clippy::exhaustive_enums)]
 pub enum KeyChange {
     /// Keys for the handshake space
     Handshake {

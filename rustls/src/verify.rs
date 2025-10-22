@@ -257,7 +257,7 @@ pub enum SignerPublicKey<'a> {
 /// `WebPkiClientVerifier::builder(roots).allow_unauthenticated().build()`, the `NoClientAuth`
 /// `ClientVerifier` will not offer client authentication at all, vs offering but not
 /// requiring it.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct NoClientAuth;
 

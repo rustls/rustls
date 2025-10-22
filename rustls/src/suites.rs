@@ -8,7 +8,7 @@ use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 pub struct CipherSuiteCommon {
     /// The TLS enumeration naming this cipher suite.
     pub suite: CipherSuite,
@@ -128,7 +128,7 @@ pub(crate) trait Suite: fmt::Debug {
 /// After performing a handshake with rustls, these secrets can be extracted
 /// to configure kTLS for a socket, and have the kernel take over encryption
 /// and/or decryption.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 pub struct ExtractedSecrets {
     /// sequence number and secrets for the "tx" (transmit) direction
     pub tx: (u64, ConnectionTrafficSecrets),

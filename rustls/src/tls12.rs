@@ -17,7 +17,7 @@ use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, Support
 use crate::version::Tls12Version;
 
 /// A TLS 1.2 cipher suite supported by rustls.
-#[allow(clippy::exhaustive_structs)]
+#[expect(clippy::exhaustive_structs)]
 pub struct Tls12CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
