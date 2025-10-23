@@ -8,12 +8,12 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-use super::config::{ClientConfig, ClientCredentialResolver, ClientSessionKey, Tls12Resumption};
-use super::connection::ClientConnectionData;
-use super::ech::{EchMode, EchState, EchStatus};
-use super::{ClientHelloDetails, tls13};
-use crate::bs_debug;
+use super::Tls12Resumption;
 use crate::check::inappropriate_handshake_message;
+use crate::client::ech::EchState;
+use crate::client::{
+    ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
+};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange};
@@ -38,7 +38,7 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarly;
-use crate::verify::ServerVerifier;
+use crate::{ClientConfig, bs_debug};
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
@@ -1016,7 +1016,6 @@ impl ClientSessionValue {
                     .tls12_session(key)
                     .map(ClientSessionValue::Tls12)
             })
-            .and_then(|resuming| resuming.compatible_config(config.verifier(), config.resolver()))
             .and_then(|resuming| {
                 let now = config
                     .current_time()
@@ -1056,21 +1055,6 @@ impl ClientSessionValue {
         match self {
             Self::Tls13(v) => Some(v),
             Self::Tls12(_) => None,
-        }
-    }
-
-    fn compatible_config(
-        self,
-        server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ClientCredentialResolver>,
-    ) -> Option<Self> {
-        match &self {
-            Self::Tls13(v) => v
-                .compatible_config(server_cert_verifier, client_creds)
-                .then_some(self),
-            Self::Tls12(v) => v
-                .compatible_config(server_cert_verifier, client_creds)
-                .then_some(self),
         }
     }
 }

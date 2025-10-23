@@ -17,6 +17,7 @@ use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt,
     do_handshake, do_handshake_until_error, make_client_config, make_client_config_with_auth,
     make_pair, make_pair_for_arc_configs, make_pair_for_configs, make_server_config, transfer,
+    webpki_server_verifier_builder,
 };
 
 use super::{ALL_VERSIONS, provider};
@@ -65,7 +66,12 @@ fn client_only_attempts_resumption_with_compatible_security() {
         // disallowed case: unmatching `verifier`
         let mut client_config = ClientConfig::builder(Arc::new(version_provider.clone()))
             .dangerous()
-            .with_custom_certificate_verifier(client_config.verifier().clone())
+            .with_custom_certificate_verifier(
+                webpki_server_verifier_builder(kt.client_root_store(), &version_provider)
+                    .allow_unknown_revocation_status()
+                    .build()
+                    .unwrap(),
+            )
             .with_client_credential_resolver(client_config.resolver().clone())
             .unwrap();
         client_config.resumption = base_client_config.resumption.clone();

@@ -1486,8 +1486,6 @@ impl ExpectTraffic {
             cx.peer_identity
                 .unwrap() // should be Some() if we got this far
                 .clone(),
-            self.config.verifier(),
-            self.config.resolver(),
             now,
             nst.lifetime,
             nst.age_add,
