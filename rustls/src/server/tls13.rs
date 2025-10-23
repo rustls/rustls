@@ -312,7 +312,10 @@ mod client_hello {
                     .handshake_kind
                     .get_or_insert(HandshakeKind::Full);
             } else {
-                cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+                cx.common.handshake_kind = match st.done_retry {
+                    true => Some(HandshakeKind::ResumedWithHelloRetryRequest),
+                    false => Some(HandshakeKind::Resumed),
+                };
             }
 
             let mut ocsp_response = signer.ocsp.as_deref();

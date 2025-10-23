@@ -597,7 +597,12 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 }
 
                 cx.common.peer_identity = Some(resuming_session.peer_identity().clone());
-                cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+                cx.common.handshake_kind = Some(match cx.common.handshake_kind {
+                    Some(HandshakeKind::FullWithHelloRetryRequest) => {
+                        HandshakeKind::ResumedWithHelloRetryRequest
+                    }
+                    _ => HandshakeKind::Resumed,
+                });
 
                 // We *don't* reverify the certificate chain here: resumption is a
                 // continuation of the previous session in terms of security policy.
