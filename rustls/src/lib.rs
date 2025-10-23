@@ -371,8 +371,6 @@ mod test_macros;
 mod sync {
     #[expect(clippy::disallowed_types)]
     pub(crate) type Arc<T> = alloc::sync::Arc<T>;
-    #[expect(clippy::disallowed_types)]
-    pub(crate) type Weak<T> = alloc::sync::Weak<T>;
 }
 
 #[expect(unnameable_types)]

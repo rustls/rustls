@@ -210,7 +210,6 @@ impl client::ClientCredentialResolver for FailResolveClientCert {
 
 #[cfg(test)]
 mod tests {
-    use core::hash::Hasher;
     use core::time::Duration;
     use std::prelude::v1::*;
 
@@ -218,21 +217,13 @@ mod tests {
 
     use super::NoClientSessionStorage;
     use crate::TEST_PROVIDERS;
-    use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
-    use crate::client::{
-        ClientCredentialResolver, ClientSessionKey, ClientSessionStore, CredentialRequest,
-    };
-    use crate::crypto::{
-        CertificateIdentity, CipherSuite, Identity, SelectedCredential, SignatureScheme,
-        tls12_suite, tls13_suite,
-    };
-    use crate::enums::CertificateType;
-    use crate::error::Error;
+    use crate::client::{ClientSessionKey, ClientSessionStore};
+    use crate::crypto::kx::NamedGroup;
+    use crate::crypto::{CertificateIdentity, CipherSuite, Identity, tls12_suite, tls13_suite};
     use crate::msgs::base::PayloadU16;
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     use crate::sync::Arc;
-    use crate::verify::{ServerIdentity, SignatureVerificationInput};
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
@@ -243,9 +234,6 @@ mod tests {
             server_name,
         };
         let now = UnixTime::now();
-        let server_cert_verifier: Arc<dyn ServerVerifier> = Arc::new(DummyServerVerifier);
-        let resolves_client_cert: Arc<dyn ClientCredentialResolver> =
-            Arc::new(DummyClientCredentialResolver);
 
         c.set_kx_hint(key.clone(), NamedGroup::X25519);
         assert_eq!(None, c.kx_hint(&key));
@@ -266,8 +254,6 @@ mod tests {
                             end_entity: CertificateDer::from(&[][..]),
                             intermediates: Vec::new(),
                         }),
-                        &server_cert_verifier,
-                        &resolves_client_cert,
                         now,
                         Duration::ZERO,
                         true,
@@ -287,8 +273,6 @@ mod tests {
                         end_entity: CertificateDer::from(&[][..]),
                         intermediates: Vec::new(),
                     }),
-                    &server_cert_verifier,
-                    &resolves_client_cert,
                     now,
                     Duration::ZERO,
                     0,
@@ -298,62 +282,5 @@ mod tests {
 
             assert!(c.take_tls13_ticket(&key).is_none());
         }
-    }
-
-    #[derive(Debug)]
-    struct DummyServerVerifier;
-
-    impl ServerVerifier for DummyServerVerifier {
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_identity(&self, _identity: &ServerIdentity<'_>) -> Result<PeerVerified, Error> {
-            unreachable!()
-        }
-
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_tls12_signature(
-            &self,
-            _input: &SignatureVerificationInput<'_>,
-        ) -> Result<HandshakeSignatureValid, Error> {
-            unreachable!()
-        }
-
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn verify_tls13_signature(
-            &self,
-            _input: &SignatureVerificationInput<'_>,
-        ) -> Result<HandshakeSignatureValid, Error> {
-            unreachable!()
-        }
-
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-            unreachable!()
-        }
-
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn request_ocsp_response(&self) -> bool {
-            unreachable!()
-        }
-
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn hash_config(&self, _: &mut dyn Hasher) {}
-    }
-
-    #[derive(Debug)]
-    struct DummyClientCredentialResolver;
-
-    impl ClientCredentialResolver for DummyClientCredentialResolver {
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn resolve(&self, _: &CredentialRequest<'_>) -> Option<SelectedCredential> {
-            unreachable!()
-        }
-
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn supported_certificate_types(&self) -> &'static [CertificateType] {
-            unreachable!()
-        }
-
-        #[cfg_attr(coverage_nightly, coverage(off))]
-        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 }
