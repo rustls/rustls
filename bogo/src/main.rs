@@ -1535,7 +1535,10 @@ fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize
 
         if let Some(curve_id) = &opts.on_resume_expect_curve_id {
             if !sess.is_handshaking() && count > 0 {
-                assert_eq!(sess.handshake_kind().unwrap(), HandshakeKind::Resumed);
+                assert!(matches!(
+                    sess.handshake_kind().unwrap(),
+                    HandshakeKind::Resumed | HandshakeKind::ResumedWithHelloRetryRequest
+                ));
                 assert_eq!(
                     sess.negotiated_key_exchange_group()
                         .expect("no kx with -on-resume-expect-curve-id")
@@ -1723,8 +1726,6 @@ pub fn main() {
             "-expect-signed-cert-timestamps" |
             "-expect-certificate-types" |
             "-expect-client-ca-list" |
-            "-on-retry-expect-early-data-reason" |
-            "-on-resume-expect-early-data-reason" |
             "-on-initial-expect-early-data-reason" |
             "-on-initial-expect-cipher" |
             "-on-resume-expect-cipher" |
@@ -1751,9 +1752,15 @@ pub fn main() {
             }
             "-expect-hrr" => {
                 opts.expect_handshake_kind = Some(vec![HandshakeKind::FullWithHelloRetryRequest]);
+                opts.expect_handshake_kind_resumed = Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
             }
             "-expect-no-hrr" => {
                 opts.expect_handshake_kind = Some(vec![HandshakeKind::Full]);
+            }
+            "-on-retry-expect-early-data-reason" | "-on-resume-expect-early-data-reason" => {
+                if args.remove(0) == "hello_retry_request" {
+                    opts.expect_handshake_kind_resumed = Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
+                }
             }
             "-expect-session-miss" => {
                 opts.expect_handshake_kind_resumed = Some(vec![
@@ -2040,6 +2047,14 @@ pub fn main() {
                 process::exit(1);
             }
         }
+    }
+
+    if opts.side == Side::Client
+        && opts.on_initial_expect_curve_id != opts.on_resume_expect_curve_id
+    {
+        // expecting server to HRR us to its desired curve
+        opts.expect_handshake_kind_resumed =
+            Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
     }
 
     println!("opts {opts:?}");

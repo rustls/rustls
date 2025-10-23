@@ -778,7 +778,7 @@ pub enum HandshakeKind {
     /// A full TLS1.3 handshake, with an extra round-trip for a `HelloRetryRequest`.
     ///
     /// The server can respond with a `HelloRetryRequest` if the initial `ClientHello`
-    /// is unacceptable for several reasons, the most likely if no supported key
+    /// is unacceptable for several reasons, the most likely being if no supported key
     /// shares were offered by the client.
     FullWithHelloRetryRequest,
 
@@ -788,6 +788,13 @@ pub enum HandshakeKind {
     /// full ones, but can only happen when the peers have previously done a full
     /// handshake together, and then remember data about it.
     Resumed,
+
+    /// A resumed handshake, with an extra round-trip for a `HelloRetryRequest`.
+    ///
+    /// The server can respond with a `HelloRetryRequest` if the initial `ClientHello`
+    /// is unacceptable for several reasons, but this does not prevent the client
+    /// from resuming.
+    ResumedWithHelloRetryRequest,
 }
 
 /// Values of this structure are returned from [`Connection::process_new_packets`]
