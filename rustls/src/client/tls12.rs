@@ -1099,8 +1099,6 @@ impl ExpectFinished {
                 .as_ref()
                 .unwrap() // must be Some if we got this far
                 .clone(),
-            self.config.verifier(),
-            self.config.resolver(),
             now,
             lifetime,
             self.using_ems,
