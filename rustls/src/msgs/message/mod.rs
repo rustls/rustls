@@ -13,8 +13,10 @@ pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
 mod outbound;
 use alloc::vec::Vec;
 
-pub(crate) use outbound::read_opaque_message_header;
+#[allow(unused_imports)]
+pub(crate) use outbound::PrefixedPayloadBorrowed;
 pub use outbound::{OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
+pub(crate) use outbound::{OutboundOpaqueMessageBorrowed, read_opaque_message_header};
 
 #[non_exhaustive]
 #[derive(Debug)]
