@@ -4,17 +4,15 @@ use core::cmp;
 use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
-use crate::client::ClientCredentialResolver;
 use crate::crypto::Identity;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{ProtocolName, SessionId};
-use crate::sync::{Arc, Weak};
+use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-use crate::verify::ServerVerifier;
 
 pub(crate) struct Retrieved<T> {
     pub(crate) value: T,
@@ -83,8 +81,6 @@ impl Tls13ClientSessionValue {
         ticket: Arc<PayloadU16>,
         secret: &[u8],
         peer_identity: Identity<'static>,
-        server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
         lifetime_secs: u32,
         age_add: u32,
@@ -95,14 +91,7 @@ impl Tls13ClientSessionValue {
             secret: Zeroizing::new(PayloadU8::new(secret.to_vec())),
             age_add,
             max_early_data_size,
-            common: ClientSessionCommon::new(
-                ticket,
-                time_now,
-                lifetime_secs,
-                peer_identity,
-                server_cert_verifier,
-                client_creds,
-            ),
+            common: ClientSessionCommon::new(ticket, time_now, lifetime_secs, peer_identity),
             quic_params: PayloadU16::new(Vec::new()),
         }
     }
@@ -165,8 +154,6 @@ impl Tls12ClientSessionValue {
         ticket: Arc<PayloadU16>,
         master_secret: &[u8; 48],
         peer_identity: Identity<'static>,
-        server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
         lifetime_secs: u32,
         extended_ms: bool,
@@ -176,14 +163,7 @@ impl Tls12ClientSessionValue {
             session_id,
             master_secret: Zeroizing::new(*master_secret),
             extended_ms,
-            common: ClientSessionCommon::new(
-                ticket,
-                time_now,
-                lifetime_secs,
-                peer_identity,
-                server_cert_verifier,
-                client_creds,
-            ),
+            common: ClientSessionCommon::new(ticket, time_now, lifetime_secs, peer_identity),
         }
     }
 
@@ -224,8 +204,6 @@ pub struct ClientSessionCommon {
     epoch: u64,
     lifetime_secs: u32,
     peer_identity: Arc<Identity<'static>>,
-    server_cert_verifier: Weak<dyn ServerVerifier>,
-    client_creds: Weak<dyn ClientCredentialResolver>,
 }
 
 impl ClientSessionCommon {
@@ -234,42 +212,12 @@ impl ClientSessionCommon {
         time_now: UnixTime,
         lifetime_secs: u32,
         peer_identity: Identity<'static>,
-        server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ClientCredentialResolver>,
     ) -> Self {
         Self {
             ticket,
             epoch: time_now.as_secs(),
             lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
             peer_identity: Arc::new(peer_identity),
-            server_cert_verifier: Arc::downgrade(server_cert_verifier),
-            client_creds: Arc::downgrade(client_creds),
-        }
-    }
-
-    pub(crate) fn compatible_config(
-        &self,
-        server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ClientCredentialResolver>,
-    ) -> bool {
-        let same_verifier = Weak::ptr_eq(
-            &Arc::downgrade(server_cert_verifier),
-            &self.server_cert_verifier,
-        );
-        let same_creds = Weak::ptr_eq(&Arc::downgrade(client_creds), &self.client_creds);
-
-        match (same_verifier, same_creds) {
-            (true, true) => true,
-            (false, _) => {
-                crate::log::trace!("resumption not allowed between different ServerVerifiers");
-                false
-            }
-            (_, _) => {
-                crate::log::trace!(
-                    "resumption not allowed between different ClientCredentialResolver values"
-                );
-                false
-            }
         }
     }
 

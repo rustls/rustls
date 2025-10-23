@@ -18,6 +18,7 @@ use rustls_test::{
     ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt, do_handshake,
     do_handshake_until_error, make_client_config, make_client_config_with_auth, make_pair,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config, transfer,
+    webpki_server_verifier_builder,
 };
 
 use super::{ALL_VERSIONS, provider};
@@ -51,7 +52,8 @@ fn client_only_attempts_resumption_with_compatible_security() {
         // disallowed case: unmatching `client_auth_cert_resolver`
         let mut client_config = ClientConfig::clone(&base_client_config);
         client_config.client_auth_cert_resolver =
-            make_client_config_with_auth(kt, &version_provider).client_auth_cert_resolver;
+            make_client_config_with_auth(KeyType::EcdsaP256, &version_provider)
+                .client_auth_cert_resolver;
 
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());
@@ -61,9 +63,14 @@ fn client_only_attempts_resumption_with_compatible_security() {
         // disallowed case: unmatching `verifier`
         let mut client_config = make_client_config_with_auth(kt, &version_provider);
         client_config.resumption = base_client_config.resumption.clone();
-        client_config.client_auth_cert_resolver = base_client_config
-            .client_auth_cert_resolver
-            .clone();
+        client_config
+            .dangerous()
+            .set_certificate_verifier(
+                webpki_server_verifier_builder(kt.client_root_store(), &version_provider)
+                    .allow_unknown_revocation_status()
+                    .build()
+                    .unwrap(),
+            );
 
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());

@@ -8,7 +8,7 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-use super::{ClientCredentialResolver, Tls12Resumption};
+use super::Tls12Resumption;
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::client::client_conn::{ClientConnectionData, ClientSessionKey};
@@ -40,7 +40,6 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarly;
-use crate::verify::ServerVerifier;
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
@@ -1016,9 +1015,6 @@ impl ClientSessionValue {
                     .map(ClientSessionValue::Tls12)
             })
             .and_then(|resuming| {
-                resuming.compatible_config(&config.verifier, &config.client_auth_cert_resolver)
-            })
-            .and_then(|resuming| {
                 let now = config
                     .current_time()
                     .map_err(|_err| debug!("Could not get current time: {_err}"))
@@ -1057,21 +1053,6 @@ impl ClientSessionValue {
         match self {
             Self::Tls13(v) => Some(v),
             Self::Tls12(_) => None,
-        }
-    }
-
-    fn compatible_config(
-        self,
-        server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ClientCredentialResolver>,
-    ) -> Option<Self> {
-        match &self {
-            Self::Tls13(v) => v
-                .compatible_config(server_cert_verifier, client_creds)
-                .then_some(self),
-            Self::Tls12(v) => v
-                .compatible_config(server_cert_verifier, client_creds)
-                .then_some(self),
         }
     }
 }
