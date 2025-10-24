@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use rustls::client::danger::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
-use rustls::client::{ServerVerifierBuilder, UnbufferedClientConnection, WebPkiServerVerifier};
+use rustls::client::{
+    ServerVerifierBuilder, UnbufferedClientConnection, WantsClientCert, WebPkiServerVerifier,
+};
 use rustls::crypto::cipher::{
     InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage, PlainMessage,
 };
@@ -35,8 +37,8 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    ClientConfig, ClientConnection, Connection, ConnectionCommon, DistinguishedName, RootCertStore,
-    ServerConfig, ServerConnection, SideData, SupportedCipherSuite,
+    ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionCommon, DistinguishedName,
+    RootCertStore, ServerConfig, ServerConnection, SideData, SupportedCipherSuite, WantsVerifier,
 };
 
 macro_rules! embed_files {
@@ -497,7 +499,7 @@ pub trait ServerConfigExt {
     fn finish(self, kt: KeyType) -> ServerConfig;
 }
 
-impl ServerConfigExt for rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
+impl ServerConfigExt for ConfigBuilder<ServerConfig, WantsVerifier> {
     fn finish(self, kt: KeyType) -> ServerConfig {
         self.with_no_client_auth()
             .with_single_cert(kt.identity(), kt.key())
@@ -611,29 +613,29 @@ pub fn make_client_config_with_raw_key_support(
 pub trait ClientConfigExt {
     fn finish(self, kt: KeyType) -> ClientConfig;
     fn finish_with_creds(self, kt: KeyType) -> ClientConfig;
+    fn add_root_certs(self, kt: KeyType) -> ConfigBuilder<ClientConfig, WantsClientCert>;
 }
 
-impl ClientConfigExt for rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
+impl ClientConfigExt for ConfigBuilder<ClientConfig, WantsVerifier> {
     fn finish(self, kt: KeyType) -> ClientConfig {
-        let mut root_store = RootCertStore::empty();
-        root_store.add_parsable_certificates(
-            CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
-        );
-
-        self.with_root_certificates(root_store)
+        self.add_root_certs(kt)
             .with_no_client_auth()
             .unwrap()
     }
 
     fn finish_with_creds(self, kt: KeyType) -> ClientConfig {
+        self.add_root_certs(kt)
+            .with_client_auth_cert(kt.client_identity(), kt.client_key())
+            .unwrap()
+    }
+
+    fn add_root_certs(self, kt: KeyType) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         let mut root_store = RootCertStore::empty();
         root_store.add_parsable_certificates(
             CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
         );
 
         self.with_root_certificates(root_store)
-            .with_client_auth_cert(kt.client_identity(), kt.client_key())
-            .unwrap()
     }
 }
 
