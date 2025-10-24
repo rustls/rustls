@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 
 use pki_types::PrivateKeyDer;
 
-use super::client_conn::Resumption;
+use super::client_conn::{Resumption, SecurityDomain};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{ClientConfig, ClientCredentialResolver, EchMode, handy};
 use crate::crypto::{Credentials, Identity, SingleCredential};
@@ -173,18 +173,20 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         }
 
         Ok(ClientConfig {
-            provider: self.provider,
+            domain: SecurityDomain::new(
+                self.provider,
+                client_auth_cert_resolver,
+                self.state.verifier,
+                self.time_provider,
+            ),
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
             max_fragment_size: None,
-            client_auth_cert_resolver,
             enable_sni: true,
-            verifier: self.state.verifier,
             key_log: Arc::new(NoKeyLog {}),
             enable_secret_extraction: false,
             enable_early_data: false,
             require_ems: cfg!(feature = "fips"),
-            time_provider: self.time_provider,
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
