@@ -624,29 +624,35 @@ pub fn make_client_config_with_raw_key_support(
 pub trait ClientConfigExt {
     fn finish(self, kt: KeyType) -> ClientConfig;
     fn finish_with_creds(self, kt: KeyType) -> ClientConfig;
+    fn add_root_certs(
+        self,
+        kt: KeyType,
+    ) -> rustls::ConfigBuilder<ClientConfig, rustls::client::WantsClientCert>;
 }
 
 impl ClientConfigExt for rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     fn finish(self, kt: KeyType) -> ClientConfig {
-        let mut root_store = RootCertStore::empty();
-        root_store.add_parsable_certificates(
-            CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
-        );
-
-        self.with_root_certificates(root_store)
+        self.add_root_certs(kt)
             .with_no_client_auth()
             .unwrap()
     }
 
     fn finish_with_creds(self, kt: KeyType) -> ClientConfig {
+        self.add_root_certs(kt)
+            .with_client_auth_cert(kt.client_identity(), kt.client_key())
+            .unwrap()
+    }
+
+    fn add_root_certs(
+        self,
+        kt: KeyType,
+    ) -> rustls::ConfigBuilder<ClientConfig, rustls::client::WantsClientCert> {
         let mut root_store = RootCertStore::empty();
         root_store.add_parsable_certificates(
             CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
         );
 
         self.with_root_certificates(root_store)
-            .with_client_auth_cert(kt.client_identity(), kt.client_key())
-            .unwrap()
     }
 }
 

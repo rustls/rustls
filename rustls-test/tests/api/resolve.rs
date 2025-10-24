@@ -297,12 +297,14 @@ fn test_client_cert_resolve(
     ] {
         println!("{version:?} {key_type:?}:");
 
-        let mut client_config = make_client_config(key_type, version_provider);
-        client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(
-            1,
-            expected_root_hint_subjects.clone(),
-            default_signature_schemes(version),
-        ));
+        let client_config = ClientConfig::builder(version_provider.clone().into())
+            .add_root_certs(key_type)
+            .with_client_credential_resolver(Arc::new(ClientCheckCertResolve::new(
+                1,
+                expected_root_hint_subjects.clone(),
+                default_signature_schemes(version),
+            )))
+            .unwrap();
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
