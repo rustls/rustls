@@ -290,17 +290,8 @@ pub struct ClientConfig {
     /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
     pub require_ems: bool,
 
-    /// Provides the current system time
-    pub(super) time_provider: Arc<dyn TimeProvider>,
-
-    /// Source of randomness and other crypto.
-    pub(super) provider: Arc<CryptoProvider>,
-
-    /// How to verify the server certificate chain.
-    pub(super) verifier: Arc<dyn verify::ServerVerifier>,
-
-    /// How to decide what client auth certificate/keys to use.
-    pub(super) client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
+    /// Items that affect the fundamental security properties of a connection.
+    pub(super) domain: SecurityDomain,
 
     /// How to decompress the server's certificate chain.
     ///
@@ -389,7 +380,7 @@ impl ClientConfig {
     /// is concerned only with cryptography, whereas this _also_ covers TLS-level
     /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
     pub fn fips(&self) -> bool {
-        let mut is_fips = self.provider.fips() && self.require_ems;
+        let mut is_fips = self.domain.provider.fips() && self.require_ems;
 
         if let Some(ech_mode) = &self.ech_mode {
             is_fips = is_fips && ech_mode.fips();
@@ -400,7 +391,7 @@ impl ClientConfig {
 
     /// Return the crypto provider used to construct this client configuration.
     pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
-        &self.provider
+        &self.domain.provider
     }
 
     /// Return the resolver for this client configuration.
@@ -408,7 +399,7 @@ impl ClientConfig {
     /// This is the object that determines which credentials to use for client
     /// authentication.
     pub fn resolver(&self) -> &Arc<dyn ClientCredentialResolver> {
-        &self.client_auth_cert_resolver
+        &self.domain.client_auth_cert_resolver
     }
 
     /// Alter the resolver for this client configuration.
@@ -416,7 +407,7 @@ impl ClientConfig {
     /// This is the object that determines which credentials to use for client
     /// authentication.
     pub fn set_resolver(&mut self, resolver: Arc<dyn ClientCredentialResolver>) {
-        self.client_auth_cert_resolver = resolver;
+        self.domain.client_auth_cert_resolver = resolver;
     }
 
     /// Access configuration options whose use is dangerous and requires
@@ -430,29 +421,32 @@ impl ClientConfig {
     }
 
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.provider.supports_version(v)
+        self.domain.provider.supports_version(v)
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
-        self.provider
+        self.domain
+            .provider
             .iter_cipher_suites()
             .find(|&scs| scs.suite() == suite)
     }
 
     pub(super) fn current_time(&self) -> Result<UnixTime, Error> {
-        self.time_provider
+        self.domain
+            .time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
     }
 
     pub(super) fn verifier(&self) -> &Arc<dyn verify::ServerVerifier> {
-        &self.verifier
+        &self.domain.verifier
     }
 
     /// A token which partitions this config's use of the [`Self::resumption`] store.
     pub(super) fn partition(&self) -> [u8; 32] {
         // Use a hash function that outputs at least 32 bytes.
         let hash = self
+            .domain
             .provider
             .iter_cipher_suites()
             .map(|cs| cs.hash_provider())
@@ -464,16 +458,21 @@ impl ClientConfig {
 
         // Include TypeId of impl, so two different types with different non-configured
         // behaviour do not collide even if their `hash_config()`s are the same.
-        self.client_auth_cert_resolver
+        self.domain
+            .client_auth_cert_resolver
             .type_id()
             .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
-        self.client_auth_cert_resolver
+        self.domain
+            .client_auth_cert_resolver
             .hash_config(&mut adapter);
 
-        self.verifier
+        self.domain
+            .verifier
             .type_id()
             .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
-        self.verifier.hash_config(&mut adapter);
+        self.domain
+            .verifier
+            .hash_config(&mut adapter);
 
         h.finish().as_ref()[..32]
             .try_into()
@@ -490,6 +489,38 @@ impl Hasher for HashAdapter<'_> {
 
     fn write(&mut self, bytes: &[u8]) {
         self.0.update(bytes)
+    }
+}
+
+/// Items that affect the fundamental security properties of a connection.
+#[derive(Clone, Debug)]
+pub(super) struct SecurityDomain {
+    /// Provides the current system time
+    time_provider: Arc<dyn TimeProvider>,
+
+    /// Source of randomness and other crypto.
+    provider: Arc<CryptoProvider>,
+
+    /// How to verify the server certificate chain.
+    verifier: Arc<dyn verify::ServerVerifier>,
+
+    /// How to decide what client auth certificate/keys to use.
+    client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
+}
+
+impl SecurityDomain {
+    pub(crate) fn new(
+        provider: Arc<CryptoProvider>,
+        client_auth_cert_resolver: Arc<dyn ClientCredentialResolver + 'static>,
+        verifier: Arc<dyn verify::ServerVerifier + 'static>,
+        time_provider: Arc<dyn TimeProvider + 'static>,
+    ) -> Self {
+        Self {
+            time_provider,
+            provider,
+            verifier,
+            client_auth_cert_resolver,
+        }
     }
 }
 
@@ -592,7 +623,7 @@ pub(super) mod danger {
     impl DangerousClientConfig<'_> {
         /// Overrides the default `ServerVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerVerifier>) {
-            self.cfg.verifier = verifier;
+            self.cfg.domain.verifier = verifier;
         }
     }
 }
