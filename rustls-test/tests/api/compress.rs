@@ -5,6 +5,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(feature = "zlib")]
 use std::sync::Arc;
 
+use rustls::ClientConfig;
 #[cfg(feature = "zlib")]
 use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
@@ -16,8 +17,8 @@ use rustls::pki_types::CertificateDer;
 #[cfg(feature = "zlib")]
 use rustls_test::make_pair_for_arc_configs;
 use rustls_test::{
-    ErrorFromPeer, KeyType, do_handshake, do_handshake_until_error, make_client_config,
-    make_client_config_with_auth, make_pair_for_configs, make_server_config,
+    ClientConfigExt, ErrorFromPeer, KeyType, do_handshake, do_handshake_until_error,
+    make_client_config, make_client_config_with_auth, make_pair_for_configs, make_server_config,
     make_server_config_with_mandatory_client_auth, transfer,
 };
 
@@ -242,7 +243,6 @@ fn test_cert_decompression_by_server_fails() {
 fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
     let provider = provider::DEFAULT_PROVIDER;
     let server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
-    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, &provider);
 
     let big_cert = CertificateDer::from(vec![0u8; 0xffff]);
     let key = provider::DEFAULT_PROVIDER
@@ -253,7 +253,10 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         Arc::new(Identity::from_cert_chain(vec![big_cert]).unwrap()),
         key,
     );
-    client_config.client_auth_cert_resolver = Arc::new(SingleCredential::from(big_cert_and_key));
+    let client_config = ClientConfig::builder(Arc::new(provider))
+        .add_root_certs(KeyType::Rsa2048)
+        .with_client_credential_resolver(Arc::new(SingleCredential::from(big_cert_and_key)))
+        .unwrap();
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert_eq!(

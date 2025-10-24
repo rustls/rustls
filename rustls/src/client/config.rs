@@ -94,9 +94,6 @@ pub struct ClientConfig {
     /// [ClientConnection::new]: crate::client::ClientConnection::new
     pub max_fragment_size: Option<usize>,
 
-    /// How to decide what client auth certificate/keys to use.
-    pub client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
-
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.
     ///
@@ -139,6 +136,9 @@ pub struct ClientConfig {
 
     /// How to verify the server certificate chain.
     pub(super) verifier: Arc<dyn verify::ServerVerifier>,
+
+    /// How to decide what client auth certificate/keys to use.
+    pub(super) client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
 
     /// How to decompress the server's certificate chain.
     ///
@@ -227,6 +227,22 @@ impl ClientConfig {
     /// Return the crypto provider used to construct this client configuration.
     pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
         &self.provider
+    }
+
+    /// Return the resolver for this client configuration.
+    ///
+    /// This is the object that determines which credentials to use for client
+    /// authentication.
+    pub fn resolver(&self) -> &Arc<dyn ClientCredentialResolver> {
+        &self.client_auth_cert_resolver
+    }
+
+    /// Return the resolver for this client configuration.
+    ///
+    /// This is the object that determines which credentials to use for client
+    /// authentication.
+    pub fn verifier(&self) -> &Arc<dyn verify::ServerVerifier> {
+        &self.verifier
     }
 
     /// Access configuration options whose use is dangerous and requires

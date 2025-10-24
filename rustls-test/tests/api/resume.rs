@@ -14,9 +14,9 @@ use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::{ClientConfig, ClientConnection, HandshakeKind, ServerConfig, ServerConnection};
 use rustls_test::{
-    ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt, do_handshake,
-    do_handshake_until_error, make_client_config, make_client_config_with_auth, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config, transfer,
+    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt,
+    do_handshake, do_handshake_until_error, make_client_config, make_client_config_with_auth,
+    make_pair, make_pair_for_arc_configs, make_pair_for_configs, make_server_config, transfer,
 };
 
 use super::{ALL_VERSIONS, provider};
@@ -48,9 +48,14 @@ fn client_only_attempts_resumption_with_compatible_security() {
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
 
         // disallowed case: unmatching `client_auth_cert_resolver`
-        let mut client_config = ClientConfig::clone(&base_client_config);
-        client_config.client_auth_cert_resolver =
-            make_client_config_with_auth(kt, &version_provider).client_auth_cert_resolver;
+        let client_config = ClientConfig::builder(Arc::new(version_provider.clone()))
+            .add_root_certs(kt)
+            .with_client_credential_resolver(
+                make_client_config_with_auth(KeyType::EcdsaP256, &version_provider)
+                    .resolver()
+                    .clone(),
+            )
+            .unwrap();
 
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());
@@ -58,11 +63,12 @@ fn client_only_attempts_resumption_with_compatible_security() {
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 
         // disallowed case: unmatching `verifier`
-        let mut client_config = make_client_config_with_auth(kt, &version_provider);
+        let mut client_config = ClientConfig::builder(Arc::new(version_provider.clone()))
+            .dangerous()
+            .with_custom_certificate_verifier(client_config.verifier().clone())
+            .with_client_credential_resolver(client_config.resolver().clone())
+            .unwrap();
         client_config.resumption = base_client_config.resumption.clone();
-        client_config.client_auth_cert_resolver = base_client_config
-            .client_auth_cert_resolver
-            .clone();
 
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());
