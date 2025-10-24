@@ -132,10 +132,10 @@ impl EchConfig {
             self,
             server_name.clone(),
             !config
-                .client_auth_cert_resolver
+                .resolver()
                 .supported_certificate_types()
                 .is_empty(),
-            config.provider.secure_random,
+            config.crypto_provider().secure_random,
             config.enable_sni,
         )
     }

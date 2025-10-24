@@ -144,7 +144,7 @@ mod tests {
                 .with_root_certificates(roots())
                 .with_no_client_auth()
                 .unwrap();
-        if config.provider.fips() {
+        if config.crypto_provider().fips() {
             assert!(config.require_ems);
         } else {
             config.require_ems = true;
@@ -161,7 +161,7 @@ mod tests {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHello(ServerHelloPayload {
-                    random: Random::new(config.provider.secure_random).unwrap(),
+                    random: Random::new(config.crypto_provider().secure_random).unwrap(),
                     compression_method: Compression::Null,
                     cipher_suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                     legacy_version: ProtocolVersion::TLSv1_2,

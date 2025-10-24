@@ -284,7 +284,10 @@ impl KeyExchangeChoice {
         }
 
         let (hybrid_key_share, actual_skxg) = our_key_share
-            .as_hybrid_checked(&config.provider.kx_groups, ProtocolVersion::TLSv1_3)
+            .as_hybrid_checked(
+                &config.crypto_provider().kx_groups,
+                ProtocolVersion::TLSv1_3,
+            )
             .ok_or(())?;
 
         if hybrid_key_share.component().0 != their_key_share.group {
@@ -335,12 +338,12 @@ pub(super) fn initial_key_share(
         .kx_hint(session_key)
         .and_then(|group_name| {
             config
-                .provider
+                .crypto_provider()
                 .find_kx_group(group_name, ProtocolVersion::TLSv1_3)
         })
         .unwrap_or_else(|| {
             config
-                .provider
+                .crypto_provider()
                 .kx_groups
                 .iter()
                 .copied()
@@ -533,7 +536,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         check_cert_type(
             cx.common,
             self.config
-                .client_auth_cert_resolver
+                .resolver()
                 .supported_certificate_types(),
             exts.client_certificate_type,
         )?;
@@ -541,7 +544,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         check_cert_type(
             cx.common,
             self.config
-                .verifier
+                .verifier()
                 .supported_certificate_types(),
             exts.server_certificate_type,
         )?;
@@ -946,9 +949,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         let client_auth = ClientAuthDetails::resolve(
             self.negotiated_client_type
                 .unwrap_or(CertificateType::X509),
-            self.config
-                .client_auth_cert_resolver
-                .as_ref(),
+            self.config.resolver().as_ref(),
             certreq
                 .extensions
                 .authority_names
@@ -1187,7 +1188,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
 
         let cert_verified = self
             .config
-            .verifier
+            .verifier()
             .verify_identity(&ServerIdentity {
                 identity: &identity,
                 server_name: &self.session_key.server_name,
@@ -1203,7 +1204,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
         let handshake_hash = self.transcript.current_hash();
         let sig_verified = self
             .config
-            .verifier
+            .verifier()
             .verify_tls13_signature(&SignatureVerificationInput {
                 message: construct_server_verify_message(&handshake_hash).as_ref(),
                 signer: &identity.as_signer(),

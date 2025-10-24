@@ -153,7 +153,9 @@ mod connection {
             params: Vec<u8>,
             alpn_protocols: Vec<Vec<u8>>,
         ) -> Result<Self, Error> {
-            let suites = &config.provider.tls13_cipher_suites;
+            let suites = &config
+                .crypto_provider()
+                .tls13_cipher_suites;
             if suites.is_empty() {
                 return Err(ApiMisuse::QuicRequiresTls13Support.into());
             }
