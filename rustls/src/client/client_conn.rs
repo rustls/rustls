@@ -260,10 +260,10 @@ pub struct ClientConfig {
     pub require_ems: bool,
 
     /// Provides the current system time
-    pub time_provider: Arc<dyn TimeProvider>,
+    pub(super) time_provider: Arc<dyn TimeProvider>,
 
     /// Source of randomness and other crypto.
-    pub(crate) provider: Arc<CryptoProvider>,
+    pub(super) provider: Arc<CryptoProvider>,
 
     /// How to verify the server certificate chain.
     pub(super) verifier: Arc<dyn verify::ServerVerifier>,
@@ -356,7 +356,7 @@ impl ClientConfig {
     }
 
     /// Return the crypto provider used to construct this client configuration.
-    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+    pub fn provider(&self) -> &Arc<CryptoProvider> {
         &self.provider
     }
 
