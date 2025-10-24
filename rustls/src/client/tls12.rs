@@ -699,9 +699,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         let client_auth = ClientAuthDetails::resolve(
             self.negotiated_client_type
                 .unwrap_or(CertificateType::X509),
-            self.config
-                .client_auth_cert_resolver
-                .as_ref(),
+            self.config.resolver().as_ref(),
             Some(&certreq.canames),
             &certreq.sigschemes,
             NO_CONTEXT,
@@ -793,7 +791,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
 
         let cert_verified = st
             .config
-            .verifier
+            .verifier()
             .verify_identity(&ServerIdentity {
                 identity: &identity,
                 server_name: &st.server_name,
@@ -826,7 +824,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             }
 
             st.config
-                .verifier
+                .verifier()
                 .verify_tls12_signature(&SignatureVerificationInput {
                     message: &message,
                     signer: &identity.as_signer(),
@@ -859,13 +857,13 @@ impl State<ClientConnectionData> for ExpectServerDone {
         let maybe_skxg = match &kx_params {
             ServerKeyExchangeParams::Ecdh(ecdh) => st
                 .config
-                .provider
+                .provider()
                 .find_kx_group(ecdh.curve_params.named_group, ProtocolVersion::TLSv1_2),
             ServerKeyExchangeParams::Dh(dh) => {
                 let ffdhe_group = dh.as_ffdhe_group();
 
                 st.config
-                    .provider
+                    .provider()
                     .kx_groups
                     .iter()
                     .find(|kxg| kxg.ffdhe_group() == Some(ffdhe_group))
