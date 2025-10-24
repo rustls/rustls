@@ -51,9 +51,11 @@ fn client_only_attempts_resumption_with_compatible_security() {
 
         // disallowed case: unmatching `client_auth_cert_resolver`
         let mut client_config = ClientConfig::clone(&base_client_config);
-        client_config.client_auth_cert_resolver =
+        client_config.set_resolver(
             make_client_config_with_auth(KeyType::EcdsaP256, &version_provider)
-                .client_auth_cert_resolver;
+                .resolver()
+                .clone(),
+        );
 
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());
