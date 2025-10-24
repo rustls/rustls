@@ -128,17 +128,8 @@ pub struct ClientConfig {
     /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
     pub require_ems: bool,
 
-    /// Provides the current system time
-    pub(super) time_provider: Arc<dyn TimeProvider>,
-
-    /// Source of randomness and other crypto.
-    pub(super) provider: Arc<CryptoProvider>,
-
-    /// How to verify the server certificate chain.
-    pub(super) verifier: Arc<dyn verify::ServerVerifier>,
-
-    /// How to decide what client auth certificate/keys to use.
-    pub(super) client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
+    /// Items that affect the fundamental security properties of a connection.
+    pub(super) domain: SecurityDomain,
 
     /// How to decompress the server's certificate chain.
     ///
@@ -221,7 +212,7 @@ impl ClientConfig {
     /// is concerned only with cryptography, whereas this _also_ covers TLS-level
     /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
     pub fn fips(&self) -> bool {
-        let mut is_fips = self.provider.fips() && self.require_ems;
+        let mut is_fips = self.domain.provider.fips() && self.require_ems;
 
         if let Some(ech_mode) = &self.ech_mode {
             is_fips = is_fips && ech_mode.fips();
@@ -232,7 +223,7 @@ impl ClientConfig {
 
     /// Return the crypto provider used to construct this client configuration.
     pub fn provider(&self) -> &Arc<CryptoProvider> {
-        &self.provider
+        &self.domain.provider
     }
 
     /// Return the resolver for this client configuration.
@@ -240,7 +231,7 @@ impl ClientConfig {
     /// This is the object that determines which credentials to use for client
     /// authentication.
     pub fn resolver(&self) -> &Arc<dyn ClientCredentialResolver> {
-        &self.client_auth_cert_resolver
+        &self.domain.client_auth_cert_resolver
     }
 
     /// Return the resolver for this client configuration.
@@ -248,7 +239,7 @@ impl ClientConfig {
     /// This is the object that determines which credentials to use for client
     /// authentication.
     pub fn verifier(&self) -> &Arc<dyn verify::ServerVerifier> {
-        &self.verifier
+        &self.domain.verifier
     }
 
     pub(super) fn needs_key_share(&self) -> bool {
@@ -256,17 +247,19 @@ impl ClientConfig {
     }
 
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.provider.supports_version(v)
+        self.domain.provider.supports_version(v)
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
-        self.provider
+        self.domain
+            .provider
             .iter_cipher_suites()
             .find(|&scs| scs.suite() == suite)
     }
 
     pub(super) fn current_time(&self) -> Result<UnixTime, Error> {
-        self.time_provider
+        self.domain
+            .time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
     }
@@ -399,6 +392,38 @@ impl CredentialRequest<'_> {
     /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
     pub fn negotiated_type(&self) -> CertificateType {
         self.negotiated_type
+    }
+}
+
+/// Items that affect the fundamental security properties of a connection.
+#[derive(Clone, Debug)]
+pub(super) struct SecurityDomain {
+    /// Provides the current system time
+    time_provider: Arc<dyn TimeProvider>,
+
+    /// Source of randomness and other crypto.
+    provider: Arc<CryptoProvider>,
+
+    /// How to verify the server certificate chain.
+    verifier: Arc<dyn verify::ServerVerifier>,
+
+    /// How to decide what client auth certificate/keys to use.
+    client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
+}
+
+impl SecurityDomain {
+    pub(crate) fn new(
+        provider: Arc<CryptoProvider>,
+        client_auth_cert_resolver: Arc<dyn ClientCredentialResolver + 'static>,
+        verifier: Arc<dyn verify::ServerVerifier + 'static>,
+        time_provider: Arc<dyn TimeProvider + 'static>,
+    ) -> Self {
+        Self {
+            time_provider,
+            provider,
+            verifier,
+            client_auth_cert_resolver,
+        }
     }
 }
 
@@ -609,18 +634,20 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         }
 
         Ok(ClientConfig {
-            provider: self.provider,
+            domain: SecurityDomain::new(
+                self.provider,
+                client_auth_cert_resolver,
+                self.state.verifier,
+                self.time_provider,
+            ),
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
             max_fragment_size: None,
-            client_auth_cert_resolver,
             enable_sni: true,
-            verifier: self.state.verifier,
             key_log: Arc::new(NoKeyLog {}),
             enable_secret_extraction: false,
             enable_early_data: false,
             require_ems: cfg!(feature = "fips"),
-            time_provider: self.time_provider,
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
@@ -649,7 +676,7 @@ pub(super) mod danger {
     impl DangerousClientConfig<'_> {
         /// Overrides the default `ServerVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerVerifier>) {
-            self.cfg.verifier = verifier;
+            self.cfg.domain.verifier = verifier;
         }
     }
 
