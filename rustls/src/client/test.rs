@@ -135,7 +135,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             .with_root_certificates(roots())
             .with_no_client_auth()
             .unwrap();
-        if config.provider.fips() {
+        if config.provider().fips() {
             assert!(config.require_ems);
         } else {
             config.require_ems = true;
@@ -152,7 +152,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHello(ServerHelloPayload {
-                    random: Random::new(config.provider.secure_random).unwrap(),
+                    random: Random::new(config.provider().secure_random).unwrap(),
                     compression_method: Compression::Null,
                     cipher_suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                     legacy_version: ProtocolVersion::TLSv1_2,
