@@ -718,4 +718,8 @@ impl ServerVerifier for ServerVerifierWithCasExt {
         println!("ServerVerifierWithCasExt::root_hint_subjects() called!");
         Some(self.ca_names.clone())
     }
+
+    fn hash_config(&self, h: &mut dyn std::hash::Hasher) {
+        self.verifier.hash_config(h)
+    }
 }

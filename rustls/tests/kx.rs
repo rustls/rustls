@@ -311,6 +311,7 @@ fn test_client_sends_share_for_less_preferred_group() {
     ));
 
     // second handshake; HRR'd from secp384r1 to X25519
+    // (but resuming is possible, since the session storage is shared)
     let (mut client_2, mut server) = make_pair_for_configs(client_config_2, server_config);
     do_handshake(&mut client_2, &mut server);
     assert_eq!(
@@ -321,7 +322,7 @@ fn test_client_sends_share_for_less_preferred_group() {
     );
     assert_eq!(
         client_2.handshake_kind(),
-        Some(HandshakeKind::FullWithHelloRetryRequest)
+        Some(HandshakeKind::ResumedWithHelloRetryRequest)
     );
 }
 

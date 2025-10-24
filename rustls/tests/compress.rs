@@ -253,7 +253,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         Arc::new(Identity::from_cert_chain(vec![big_cert]).unwrap()),
         key,
     );
-    client_config.client_auth_cert_resolver = Arc::new(SingleCredential::from(big_cert_and_key));
+    client_config.set_resolver(Arc::new(SingleCredential::from(big_cert_and_key)));
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert_eq!(

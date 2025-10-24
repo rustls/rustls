@@ -23,6 +23,7 @@ use crate::sync::Arc;
 
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
+    use core::hash::Hasher;
     use std::sync::OnceLock;
 
     use super::super::*;
@@ -143,7 +144,7 @@ mod tests {
                 .with_root_certificates(roots())
                 .with_no_client_auth()
                 .unwrap();
-        if config.provider.fips() {
+        if config.crypto_provider().fips() {
             assert!(config.require_ems);
         } else {
             config.require_ems = true;
@@ -160,7 +161,7 @@ mod tests {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHello(ServerHelloPayload {
-                    random: Random::new(config.provider.secure_random).unwrap(),
+                    random: Random::new(config.crypto_provider().secure_random).unwrap(),
                     compression_method: Compression::Null,
                     cipher_suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                     legacy_version: ProtocolVersion::TLSv1_2,
@@ -331,6 +332,8 @@ mod tests {
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             vec![SignatureScheme::ECDSA_SHA1_Legacy]
         }
+
+        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 
     #[test]
@@ -525,6 +528,8 @@ mod tests {
         fn request_ocsp_response(&self) -> bool {
             false
         }
+
+        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 
     #[derive(Debug)]
@@ -563,6 +568,8 @@ mod tests {
         fn supported_certificate_types(&self) -> &'static [CertificateType] {
             &[CertificateType::RawPublicKey]
         }
+
+        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 
     #[derive(Debug)]

@@ -8,10 +8,10 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-use super::{ClientCredentialResolver, Tls12Resumption};
+use super::Tls12Resumption;
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
-use crate::client::client_conn::ClientConnectionData;
+use crate::client::client_conn::{ClientConnectionData, ClientSessionKey};
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
@@ -40,7 +40,6 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarly;
-use crate::verify::ServerVerifier;
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
@@ -119,15 +118,16 @@ impl ExpectServerHello {
             }
         }
 
-        let suite = <CryptoProvider as Borrow<[&'static T]>>::borrow(&self.input.config.provider)
-            .iter()
-            .find(|cs| cs.common().suite == server_hello.cipher_suite)
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerMisbehaved::SelectedUnofferedCipherSuite,
-                )
-            })?;
+        let suite =
+            <CryptoProvider as Borrow<[&'static T]>>::borrow(self.input.config.crypto_provider())
+                .iter()
+                .find(|cs| cs.common().suite == server_hello.cipher_suite)
+                .ok_or_else(|| {
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerMisbehaved::SelectedUnofferedCipherSuite,
+                    )
+                })?;
 
         match self.suite {
             Some(prev_suite) if prev_suite.suite() != suite.common().suite => {
@@ -239,7 +239,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         if let (None, Some(req_group)) = (&hrr.cookie, hrr.key_share) {
             let offered_hybrid = offered_key_share
-                .as_hybrid_checked(&config.provider.kx_groups, ProtocolVersion::TLSv1_3)
+                .as_hybrid_checked(
+                    &config.crypto_provider().kx_groups,
+                    ProtocolVersion::TLSv1_3,
+                )
                 .map(|(hybrid, _)| hybrid.component().0);
 
             if req_group == offered_key_share.group() || Some(req_group) == offered_hybrid {
@@ -373,7 +376,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         let key_share = match hrr.key_share {
             Some(group) if group != offered_key_share.group() => {
                 let Some(skxg) = config
-                    .provider
+                    .crypto_provider()
                     .find_kx_group(group, ProtocolVersion::TLSv1_3)
                 else {
                     return Err(cx.common.send_fatal_alert(
@@ -430,7 +433,7 @@ pub(crate) struct ClientHelloInput {
     pub(super) sent_tls13_fake_ccs: bool,
     pub(super) hello: ClientHelloDetails,
     pub(super) session_id: SessionId,
-    pub(super) server_name: ServerName<'static>,
+    pub(super) session_key: ClientSessionKey<'static>,
     pub(super) prev_ech_ext: Option<EncryptedClientHello>,
 }
 
@@ -441,7 +444,11 @@ impl ClientHelloInput {
         cx: &mut ClientContext<'_>,
         config: Arc<ClientConfig>,
     ) -> Result<Self, Error> {
-        let mut resuming = ClientSessionValue::retrieve(&server_name, &config, cx);
+        let session_key = ClientSessionKey {
+            partition: config.partition(),
+            server_name,
+        };
+        let mut resuming = ClientSessionValue::retrieve(&session_key, &config, cx);
         let session_id = match &mut resuming {
             Some(resuming) => {
                 debug!("Resuming session");
@@ -451,7 +458,8 @@ impl ClientHelloInput {
                         // we're  doing an abbreviated handshake.  See section 3.4 in
                         // RFC5077.
                         if !inner.ticket().0.is_empty() {
-                            inner.session_id = SessionId::random(config.provider.secure_random)?;
+                            inner.session_id =
+                                SessionId::random(config.crypto_provider().secure_random)?;
                         }
                         Some(inner.session_id)
                     }
@@ -470,7 +478,7 @@ impl ClientHelloInput {
             Some(session_id) => session_id,
             None if cx.common.is_quic() => SessionId::empty(),
             None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
-            None => SessionId::random(config.provider.secure_random)?,
+            None => SessionId::random(config.crypto_provider().secure_random)?,
         };
 
         let hello = ClientHelloDetails::new(
@@ -478,16 +486,16 @@ impl ClientHelloInput {
                 .protocols
                 .clone()
                 .unwrap_or_default(),
-            crate::rand::random_u16(config.provider.secure_random)?,
+            crate::rand::random_u16(config.crypto_provider().secure_random)?,
         );
 
         Ok(Self {
             resuming,
-            random: Random::new(config.provider.secure_random)?,
+            random: Random::new(config.crypto_provider().secure_random)?,
             sent_tls13_fake_ccs: false,
             hello,
             session_id,
-            server_name,
+            session_key,
             prev_ech_ext: None,
             config,
         })
@@ -501,7 +509,7 @@ impl ClientHelloInput {
         let mut transcript_buffer = HandshakeHashBuffer::new();
         if !self
             .config
-            .client_auth_cert_resolver
+            .resolver()
             .supported_certificate_types()
             .is_empty()
         {
@@ -511,7 +519,7 @@ impl ClientHelloInput {
         let key_share = if self.config.needs_key_share() {
             Some(tls13::initial_key_share(
                 &self.config,
-                &self.server_name,
+                &self.session_key,
                 &mut cx.common.kx_state,
             )?)
         } else {
@@ -520,7 +528,7 @@ impl ClientHelloInput {
 
         let ech_state = match self.config.ech_mode.as_ref() {
             Some(EchMode::Enable(ech_config)) => {
-                Some(ech_config.state(self.server_name.clone(), &self.config)?)
+                Some(ech_config.state(self.session_key.server_name.clone(), &self.config)?)
             }
             _ => None,
         };
@@ -570,7 +578,7 @@ fn emit_client_hello_for_retry(
         // offer groups which are usable for any offered version
         named_groups: Some(
             config
-                .provider
+                .crypto_provider()
                 .kx_groups
                 .iter()
                 .filter_map(|skxg| {
@@ -584,11 +592,14 @@ fn emit_client_hello_for_retry(
         supported_versions: Some(supported_versions),
         signature_schemes: Some(
             config
-                .verifier
+                .verifier()
                 .supported_verify_schemes(),
         ),
         extended_master_secret_request: Some(()),
-        certificate_status_request: match config.verifier.request_ocsp_response() {
+        certificate_status_request: match config
+            .verifier()
+            .request_ocsp_response()
+        {
             true => Some(CertificateStatusRequest::build_ocsp()),
             false => None,
         },
@@ -601,14 +612,14 @@ fn emit_client_hello_for_retry(
     }
 
     if supported_versions.tls13 {
-        if let Some(cas_extension) = config.verifier.root_hint_subjects() {
+        if let Some(cas_extension) = config.verifier().root_hint_subjects() {
             exts.certificate_authority_names = Some(cas_extension.to_vec());
         }
     }
 
     // Send the ECPointFormat extension only if we are proposing ECDHE
     if config
-        .provider
+        .crypto_provider()
         .kx_groups
         .iter()
         .any(|skxg| skxg.name().key_exchange_algorithm() == KeyExchangeAlgorithm::ECDHE)
@@ -625,7 +636,7 @@ fn emit_client_hello_for_retry(
 
         // If we have no ECH state, and SNI is enabled, try to use the input server_name
         // for the SNI domain name.
-        (None, true) => match &input.server_name {
+        (None, true) => match &input.session_key.server_name {
             ServerName::DnsName(dns_name) => Some(ServerNamePayload::from(dns_name)),
             _ => None,
         },
@@ -646,9 +657,10 @@ fn emit_client_hello_for_retry(
             // see if we can send a second KeyShare for "free".  We only do this if the same
             // algorithm is also supported separately by our provider for this version
             // (via `component_separately_supported`).
-            if let Some((hybrid, _)) =
-                key_share.as_hybrid_checked(&config.provider.kx_groups, ProtocolVersion::TLSv1_3)
-            {
+            if let Some((hybrid, _)) = key_share.as_hybrid_checked(
+                &config.crypto_provider().kx_groups,
+                ProtocolVersion::TLSv1_3,
+            ) {
                 let (component_group, component_share) = hybrid.component();
                 shares.push(KeyShareEntry::new(component_group, component_share));
             }
@@ -685,7 +697,7 @@ fn emit_client_hello_for_retry(
         };
 
     let client_certificate_types = config
-        .client_auth_cert_resolver
+        .resolver()
         .supported_certificate_types();
     match client_certificate_types {
         &[] | &[CertificateType::X509] => {}
@@ -695,7 +707,7 @@ fn emit_client_hello_for_retry(
     }
 
     let server_certificate_types = config
-        .verifier
+        .verifier()
         .supported_certificate_types();
     match server_certificate_types {
         [] => return Err(ApiMisuse::NoSupportedCertificateTypes.into()),
@@ -722,7 +734,7 @@ fn emit_client_hello_for_retry(
     exts.order_seed = input.hello.extension_order_seed;
 
     let mut cipher_suites: Vec<_> = config
-        .provider
+        .crypto_provider()
         .iter_cipher_suites()
         .filter_map(|cs| match cs.usable_for_protocol(cx.common.protocol) {
             true => Some(cs.suite()),
@@ -749,8 +761,8 @@ fn emit_client_hello_for_retry(
         .as_ref()
         .and_then(|mode| match mode {
             EchMode::Grease(cfg) => Some(cfg.grease_ext(
-                config.provider.secure_random,
-                input.server_name.clone(),
+                config.crypto_provider().secure_random,
+                input.session_key.server_name.clone(),
                 &chp_payload,
             )),
             _ => None,
@@ -995,24 +1007,21 @@ pub(super) enum ClientSessionValue {
 
 impl ClientSessionValue {
     fn retrieve(
-        server_name: &ServerName<'static>,
+        key: &ClientSessionKey<'static>,
         config: &ClientConfig,
         cx: &mut ClientContext<'_>,
     ) -> Option<persist::Retrieved<Self>> {
         let found = config
             .resumption
             .store
-            .take_tls13_ticket(server_name)
+            .take_tls13_ticket(key)
             .map(ClientSessionValue::Tls13)
             .or_else(|| {
                 config
                     .resumption
                     .store
-                    .tls12_session(server_name)
+                    .tls12_session(key)
                     .map(ClientSessionValue::Tls12)
-            })
-            .and_then(|resuming| {
-                resuming.compatible_config(&config.verifier, &config.client_auth_cert_resolver)
             })
             .and_then(|resuming| {
                 let now = config
@@ -1027,7 +1036,7 @@ impl ClientSessionValue {
                 }
             })
             .or_else(|| {
-                debug!("No cached session for {server_name:?}");
+                debug!("No cached session for {key:?}");
                 None
             });
 
@@ -1053,21 +1062,6 @@ impl ClientSessionValue {
         match self {
             Self::Tls13(v) => Some(v),
             Self::Tls12(_) => None,
-        }
-    }
-
-    fn compatible_config(
-        self,
-        server_cert_verifier: &Arc<dyn ServerVerifier>,
-        client_creds: &Arc<dyn ClientCredentialResolver>,
-    ) -> Option<Self> {
-        match &self {
-            Self::Tls13(v) => v
-                .compatible_config(server_cert_verifier, client_creds)
-                .then_some(self),
-            Self::Tls12(v) => v
-                .compatible_config(server_cert_verifier, client_creds)
-                .then_some(self),
         }
     }
 }

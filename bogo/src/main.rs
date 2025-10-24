@@ -33,8 +33,8 @@ use rustls::client::danger::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
 use rustls::client::{
-    self, ClientConfig, ClientConnection, CredentialRequest, EchConfig, EchGreaseConfig, EchMode,
-    EchStatus, Resumption, Tls12Resumption, WebPkiServerVerifier,
+    self, ClientConfig, ClientConnection, ClientSessionKey, CredentialRequest, EchConfig,
+    EchGreaseConfig, EchMode, EchStatus, Resumption, Tls12Resumption, WebPkiServerVerifier,
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
@@ -514,6 +514,10 @@ impl ServerVerifier for DummyServerAuth {
     fn request_ocsp_response(&self) -> bool {
         true
     }
+
+    fn hash_config(&self, h: &mut dyn core::hash::Hasher) {
+        self.parent.hash_config(h)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -645,6 +649,8 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
             false => &[],
         }
     }
+
+    fn hash_config(&self, _: &mut dyn core::hash::Hasher) {}
 }
 
 #[derive(Debug)]
@@ -866,49 +872,44 @@ impl ClientCacheWithoutKxHints {
 }
 
 impl client::ClientSessionStore for ClientCacheWithoutKxHints {
-    fn set_kx_hint(&self, _: ServerName<'static>, _: NamedGroup) {}
-    fn kx_hint(&self, _: &ServerName<'_>) -> Option<NamedGroup> {
+    fn set_kx_hint(&self, _: ClientSessionKey<'static>, _: NamedGroup) {}
+    fn kx_hint(&self, _: &ClientSessionKey<'_>) -> Option<NamedGroup> {
         None
     }
 
     fn set_tls12_session(
         &self,
-        server_name: ServerName<'static>,
+        key: ClientSessionKey<'static>,
         mut value: client::Tls12ClientSessionValue,
     ) {
         value.rewind_epoch(self.delay);
         self.storage
-            .set_tls12_session(server_name, value);
+            .set_tls12_session(key, value);
     }
 
-    fn tls12_session(
-        &self,
-        server_name: &ServerName<'_>,
-    ) -> Option<client::Tls12ClientSessionValue> {
-        self.storage.tls12_session(server_name)
+    fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<client::Tls12ClientSessionValue> {
+        self.storage.tls12_session(key)
     }
 
-    fn remove_tls12_session(&self, server_name: &ServerName<'static>) {
-        self.storage
-            .remove_tls12_session(server_name);
+    fn remove_tls12_session(&self, key: &ClientSessionKey<'static>) {
+        self.storage.remove_tls12_session(key);
     }
 
     fn insert_tls13_ticket(
         &self,
-        server_name: ServerName<'static>,
+        key: ClientSessionKey<'static>,
         mut value: client::Tls13ClientSessionValue,
     ) {
         value.rewind_epoch(self.delay);
         self.storage
-            .insert_tls13_ticket(server_name, value)
+            .insert_tls13_ticket(key, value)
     }
 
     fn take_tls13_ticket(
         &self,
-        server_name: &ServerName<'static>,
+        key: &ClientSessionKey<'static>,
     ) -> Option<client::Tls13ClientSessionValue> {
-        self.storage
-            .take_tls13_ticket(server_name)
+        self.storage.take_tls13_ticket(key)
     }
 }
 

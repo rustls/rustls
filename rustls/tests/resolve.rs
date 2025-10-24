@@ -285,6 +285,8 @@ impl ClientCredentialResolver for ClientCheckCertResolve {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::X509]
     }
+
+    fn hash_config(&self, _: &mut dyn std::hash::Hasher) {}
 }
 
 fn test_client_cert_resolve(
@@ -299,11 +301,11 @@ fn test_client_cert_resolve(
         println!("{version:?} {key_type:?}:");
 
         let mut client_config = make_client_config(key_type, version_provider);
-        client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(
+        client_config.set_resolver(Arc::new(ClientCheckCertResolve::new(
             1,
             expected_root_hint_subjects.clone(),
             default_signature_schemes(version),
-        ));
+        )));
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);

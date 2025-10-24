@@ -1,4 +1,6 @@
 use alloc::vec::Vec;
+use core::any::Any;
+use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
@@ -13,7 +15,7 @@ use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CryptoProvider, SelectedCredential};
+use crate::crypto::{CryptoProvider, SelectedCredential, hash};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -41,33 +43,31 @@ use crate::{DistinguishedName, KeyLog, WantsVerifier, compress, verify};
 /// how to achieve interior mutability.  `Mutex` is a common choice.
 pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// Remember what `NamedGroup` the given server chose.
-    fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup);
+    fn set_kx_hint(&self, key: ClientSessionKey<'static>, group: NamedGroup);
 
     /// This should return the value most recently passed to `set_kx_hint`
-    /// for the given `server_name`.
+    /// for the given `key`.
     ///
     /// If `None` is returned, the caller chooses the first configured group,
     /// and an extra round trip might happen if that choice is unsatisfactory
     /// to the server.
-    fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup>;
+    fn kx_hint(&self, key: &ClientSessionKey<'_>) -> Option<NamedGroup>;
 
     /// Remember a TLS1.2 session.
     ///
     /// At most one of these can be remembered at a time, per `server_name`.
     fn set_tls12_session(
         &self,
-        server_name: ServerName<'static>,
+        key: ClientSessionKey<'static>,
         value: persist::Tls12ClientSessionValue,
     );
 
     /// Get the most recently saved TLS1.2 session for `server_name` provided to `set_tls12_session`.
-    fn tls12_session(
-        &self,
-        server_name: &ServerName<'_>,
-    ) -> Option<persist::Tls12ClientSessionValue>;
+    fn tls12_session(&self, key: &ClientSessionKey<'_>)
+    -> Option<persist::Tls12ClientSessionValue>;
 
     /// Remove and forget any saved TLS1.2 session for `server_name`.
-    fn remove_tls12_session(&self, server_name: &ServerName<'static>);
+    fn remove_tls12_session(&self, key: &ClientSessionKey<'static>);
 
     /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
     /// resumption of this session.
@@ -78,7 +78,7 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// simultaneously.
     fn insert_tls13_ticket(
         &self,
-        server_name: ServerName<'static>,
+        key: ClientSessionKey<'static>,
         value: persist::Tls13ClientSessionValue,
     );
 
@@ -87,13 +87,38 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// Implementations of this trait must return each value provided to `add_tls13_ticket` _at most once_.
     fn take_tls13_ticket(
         &self,
-        server_name: &ServerName<'static>,
+        key: &ClientSessionKey<'static>,
     ) -> Option<persist::Tls13ClientSessionValue>;
+}
+
+/// Identifies a security context and server in the [`ClientSessionStore`] interface.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub struct ClientSessionKey<'a> {
+    /// A key to partition the client storage between different security requirements.
+    pub partition: [u8; 32],
+
+    /// Transport-level identity of the server.
+    pub server_name: ServerName<'a>,
+}
+
+impl ClientSessionKey<'_> {
+    /// Copy the value to own its contents.
+    pub fn to_owned(&self) -> ClientSessionKey<'static> {
+        let Self {
+            partition,
+            server_name,
+        } = self;
+        ClientSessionKey {
+            partition: *partition,
+            server_name: server_name.to_owned(),
+        }
+    }
 }
 
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
+pub trait ClientCredentialResolver: fmt::Debug + Any + Send + Sync {
     /// Resolve a client certificate chain/private key to use as the client's identity.
     ///
     /// The `SelectedCredential` returned from this method contains an identity and a
@@ -120,6 +145,9 @@ pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
     ///
     /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
     fn supported_certificate_types(&self) -> &'static [CertificateType];
+
+    /// Instance configuration should be input to `h`.
+    fn hash_config(&self, h: &mut dyn Hasher);
 }
 
 /// Context from the server to inform client credential selection.
@@ -202,8 +230,11 @@ pub struct ClientConfig {
     ///
     /// However, resumption is only allowed between two `ClientConfig`s if their
     /// `client_auth_cert_resolver` (ie, potential client authentication credentials)
-    /// and `verifier` (ie, server certificate verification settings) are
-    /// the same (according to `Arc::ptr_eq`).
+    /// and `verifier` (ie, server certificate verification settings):
+    ///
+    /// - are the same type (determined by hashing their `TypeId`), and
+    /// - input the same data into [`verify::ServerVerifier::hash_config()`] and
+    ///   [`ClientCredentialResolver::hash_config()`].
     ///
     /// To illustrate, imagine two `ClientConfig`s `A` and `B`.  `A` fully validates
     /// the server certificate, `B` does not.  If `A` and `B` shared a resumption store,
@@ -224,9 +255,6 @@ pub struct ClientConfig {
     /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
     /// [ClientConnection::new]: crate::client::ClientConnection::new
     pub max_fragment_size: Option<usize>,
-
-    /// How to decide what client auth certificate/keys to use.
-    pub client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
 
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.
@@ -262,14 +290,8 @@ pub struct ClientConfig {
     /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
     pub require_ems: bool,
 
-    /// Provides the current system time
-    pub time_provider: Arc<dyn TimeProvider>,
-
-    /// Source of randomness and other crypto.
-    pub(crate) provider: Arc<CryptoProvider>,
-
-    /// How to verify the server certificate chain.
-    pub(super) verifier: Arc<dyn verify::ServerVerifier>,
+    /// Items that affect the fundamental security properties of a connection.
+    pub(super) domain: SecurityDomain,
 
     /// How to decompress the server's certificate chain.
     ///
@@ -358,7 +380,7 @@ impl ClientConfig {
     /// is concerned only with cryptography, whereas this _also_ covers TLS-level
     /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
     pub fn fips(&self) -> bool {
-        let mut is_fips = self.provider.fips() && self.require_ems;
+        let mut is_fips = self.domain.provider.fips() && self.require_ems;
 
         if let Some(ech_mode) = &self.ech_mode {
             is_fips = is_fips && ech_mode.fips();
@@ -369,7 +391,23 @@ impl ClientConfig {
 
     /// Return the crypto provider used to construct this client configuration.
     pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
-        &self.provider
+        &self.domain.provider
+    }
+
+    /// Return the resolver for this client configuration.
+    ///
+    /// This is the object that determines which credentials to use for client
+    /// authentication.
+    pub fn resolver(&self) -> &Arc<dyn ClientCredentialResolver> {
+        &self.domain.client_auth_cert_resolver
+    }
+
+    /// Alter the resolver for this client configuration.
+    ///
+    /// This is the object that determines which credentials to use for client
+    /// authentication.
+    pub fn set_resolver(&mut self, resolver: Arc<dyn ClientCredentialResolver>) {
+        self.domain = self.domain.with_resolver(resolver);
     }
 
     /// Access configuration options whose use is dangerous and requires
@@ -383,19 +421,142 @@ impl ClientConfig {
     }
 
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
-        self.provider.supports_version(v)
+        self.domain.provider.supports_version(v)
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
-        self.provider
+        self.domain
+            .provider
             .iter_cipher_suites()
             .find(|&scs| scs.suite() == suite)
     }
 
     pub(super) fn current_time(&self) -> Result<UnixTime, Error> {
-        self.time_provider
+        self.domain
+            .time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
+    }
+
+    pub(super) fn verifier(&self) -> &Arc<dyn verify::ServerVerifier> {
+        &self.domain.verifier
+    }
+
+    /// A token which partitions this config's use of the [`Self::resumption`] store.
+    pub(super) fn partition(&self) -> [u8; 32] {
+        self.domain.partition
+    }
+}
+
+struct HashAdapter<'a>(&'a mut dyn hash::Context);
+
+impl Hasher for HashAdapter<'_> {
+    fn finish(&self) -> u64 {
+        unimplemented!()
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        self.0.update(bytes)
+    }
+}
+
+/// Items that affect the fundamental security properties of a connection.
+#[derive(Clone, Debug)]
+pub(super) struct SecurityDomain {
+    /// Provides the current system time
+    time_provider: Arc<dyn TimeProvider>,
+
+    /// Source of randomness and other crypto.
+    provider: Arc<CryptoProvider>,
+
+    /// How to verify the server certificate chain.
+    verifier: Arc<dyn verify::ServerVerifier>,
+
+    /// How to decide what client auth certificate/keys to use.
+    client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
+
+    partition: [u8; 32],
+}
+
+impl SecurityDomain {
+    pub(crate) fn new(
+        provider: Arc<CryptoProvider>,
+        client_auth_cert_resolver: Arc<dyn ClientCredentialResolver + 'static>,
+        verifier: Arc<dyn verify::ServerVerifier + 'static>,
+        time_provider: Arc<dyn TimeProvider + 'static>,
+    ) -> Self {
+        // Use a hash function that outputs at least 32 bytes.
+        let hash = provider
+            .iter_cipher_suites()
+            .map(|cs| cs.hash_provider())
+            .find(|h| h.output_len() >= 32)
+            .expect("no suitable cipher suite available (with |H| >= 32)"); // this is -- in practice -- all cipher suites
+
+        let mut h = hash.start();
+        let mut adapter = HashAdapter(h.as_mut());
+
+        // Include TypeId of impl, so two different types with different non-configured
+        // behaviour do not collide even if their `hash_config()`s are the same.
+        client_auth_cert_resolver
+            .type_id()
+            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
+        client_auth_cert_resolver.hash_config(&mut adapter);
+
+        verifier
+            .type_id()
+            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
+        verifier.hash_config(&mut adapter);
+
+        time_provider
+            .type_id()
+            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
+
+        let partition = h.finish().as_ref()[..32]
+            .try_into()
+            .unwrap();
+
+        Self {
+            time_provider,
+            provider,
+            verifier,
+            client_auth_cert_resolver,
+            partition,
+        }
+    }
+
+    fn with_verifier(&self, verifier: Arc<dyn verify::ServerVerifier + 'static>) -> Self {
+        let Self {
+            time_provider,
+            provider,
+            verifier: _,
+            client_auth_cert_resolver,
+            partition: _,
+        } = self;
+        Self::new(
+            provider.clone(),
+            client_auth_cert_resolver.clone(),
+            verifier,
+            time_provider.clone(),
+        )
+    }
+
+    fn with_resolver(
+        &self,
+        client_auth_cert_resolver: Arc<dyn ClientCredentialResolver + 'static>,
+    ) -> Self {
+        let Self {
+            time_provider,
+            provider,
+            verifier,
+            client_auth_cert_resolver: _,
+            partition: _,
+        } = self;
+        Self::new(
+            provider.clone(),
+            client_auth_cert_resolver,
+            verifier.clone(),
+            time_provider.clone(),
+        )
     }
 }
 
@@ -498,7 +659,7 @@ pub(super) mod danger {
     impl DangerousClientConfig<'_> {
         /// Overrides the default `ServerVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerVerifier>) {
-            self.cfg.verifier = verifier;
+            self.cfg.domain = self.cfg.domain.with_verifier(verifier);
         }
     }
 }

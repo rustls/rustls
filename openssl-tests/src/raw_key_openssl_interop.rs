@@ -133,6 +133,10 @@ mod client {
         fn supported_certificate_types(&self) -> &'static [CertificateType] {
             &[CertificateType::RawPublicKey]
         }
+
+        fn hash_config(&self, _: &mut dyn core::hash::Hasher) {
+            // XXX: a non-test implementation would hash its configuration here.
+        }
     }
 }
 

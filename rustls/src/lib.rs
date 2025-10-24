@@ -395,8 +395,6 @@ mod test_macros;
 mod sync {
     #[expect(clippy::disallowed_types)]
     pub(crate) type Arc<T> = alloc::sync::Arc<T>;
-    #[expect(clippy::disallowed_types)]
-    pub(crate) type Weak<T> = alloc::sync::Weak<T>;
 }
 
 #[expect(unnameable_types)]
@@ -545,9 +543,9 @@ pub mod client {
 
     pub use builder::WantsClientCert;
     pub use client_conn::{
-        ClientConfig, ClientConnectionData, ClientCredentialResolver, ClientSessionStore,
-        CredentialRequest, EarlyDataError, MayEncryptEarlyData, Resumption, Tls12Resumption,
-        UnbufferedClientConnection,
+        ClientConfig, ClientConnectionData, ClientCredentialResolver, ClientSessionKey,
+        ClientSessionStore, CredentialRequest, EarlyDataError, MayEncryptEarlyData, Resumption,
+        Tls12Resumption, UnbufferedClientConnection,
     };
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
@@ -672,4 +670,19 @@ mod hash_map {
 mod sealed {
     #[expect(unnameable_types)]
     pub trait Sealed {}
+}
+
+mod core_hash_polyfill {
+    /// Working around the garbage design of `core::hash::Hash`
+    pub(crate) struct DynHasher<'a>(pub(crate) &'a mut dyn core::hash::Hasher);
+
+    impl core::hash::Hasher for DynHasher<'_> {
+        fn finish(&self) -> u64 {
+            self.0.finish()
+        }
+
+        fn write(&mut self, bytes: &[u8]) {
+            self.0.write(bytes)
+        }
+    }
 }

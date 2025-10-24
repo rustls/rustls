@@ -123,6 +123,30 @@ impl fmt::Debug for WebPkiSupportedAlgorithms {
     }
 }
 
+impl core::hash::Hash for WebPkiSupportedAlgorithms {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        let Self { all, mapping } = self;
+
+        write_algs(state, all);
+        state.write_usize(mapping.len());
+        for (scheme, algs) in *mapping {
+            state.write_u16(u16::from(*scheme));
+            write_algs(state, algs);
+        }
+
+        fn write_algs<H: core::hash::Hasher>(
+            state: &mut H,
+            algs: &[&'static dyn SignatureVerificationAlgorithm],
+        ) {
+            state.write_usize(algs.len());
+            for alg in algs {
+                state.write(alg.public_key_alg_id().as_ref());
+                state.write(alg.signature_alg_id().as_ref());
+            }
+        }
+    }
+}
+
 /// Wrapper around internal representation of a parsed certificate.
 ///
 /// This is used in order to avoid parsing twice when specifying custom verification
