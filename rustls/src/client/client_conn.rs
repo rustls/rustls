@@ -407,7 +407,7 @@ impl ClientConfig {
     /// This is the object that determines which credentials to use for client
     /// authentication.
     pub fn set_resolver(&mut self, resolver: Arc<dyn ClientCredentialResolver>) {
-        self.domain.client_auth_cert_resolver = resolver;
+        self.domain = self.domain.with_resolver(resolver);
     }
 
     /// Access configuration options whose use is dangerous and requires
@@ -444,39 +444,7 @@ impl ClientConfig {
 
     /// A token which partitions this config's use of the [`Self::resumption`] store.
     pub(super) fn partition(&self) -> [u8; 32] {
-        // Use a hash function that outputs at least 32 bytes.
-        let hash = self
-            .domain
-            .provider
-            .iter_cipher_suites()
-            .map(|cs| cs.hash_provider())
-            .find(|h| h.output_len() >= 32)
-            .expect("no suitable cipher suite available (with |H| >= 32)"); // this is -- in practice -- all cipher suites
-
-        let mut h = hash.start();
-        let mut adapter = HashAdapter(h.as_mut());
-
-        // Include TypeId of impl, so two different types with different non-configured
-        // behaviour do not collide even if their `hash_config()`s are the same.
-        self.domain
-            .client_auth_cert_resolver
-            .type_id()
-            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
-        self.domain
-            .client_auth_cert_resolver
-            .hash_config(&mut adapter);
-
-        self.domain
-            .verifier
-            .type_id()
-            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
-        self.domain
-            .verifier
-            .hash_config(&mut adapter);
-
-        h.finish().as_ref()[..32]
-            .try_into()
-            .unwrap()
+        self.domain.partition
     }
 }
 
@@ -506,6 +474,8 @@ pub(super) struct SecurityDomain {
 
     /// How to decide what client auth certificate/keys to use.
     client_auth_cert_resolver: Arc<dyn ClientCredentialResolver>,
+
+    partition: [u8; 32],
 }
 
 impl SecurityDomain {
@@ -515,12 +485,74 @@ impl SecurityDomain {
         verifier: Arc<dyn verify::ServerVerifier + 'static>,
         time_provider: Arc<dyn TimeProvider + 'static>,
     ) -> Self {
+        // Use a hash function that outputs at least 32 bytes.
+        let hash = provider
+            .iter_cipher_suites()
+            .map(|cs| cs.hash_provider())
+            .find(|h| h.output_len() >= 32)
+            .expect("no suitable cipher suite available (with |H| >= 32)"); // this is -- in practice -- all cipher suites
+
+        let mut h = hash.start();
+        let mut adapter = HashAdapter(h.as_mut());
+
+        // Include TypeId of impl, so two different types with different non-configured
+        // behaviour do not collide even if their `hash_config()`s are the same.
+        client_auth_cert_resolver
+            .type_id()
+            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
+        client_auth_cert_resolver.hash_config(&mut adapter);
+
+        verifier
+            .type_id()
+            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
+        verifier.hash_config(&mut adapter);
+
+        let partition = h.finish().as_ref()[..32]
+            .try_into()
+            .unwrap();
+
         Self {
             time_provider,
             provider,
             verifier,
             client_auth_cert_resolver,
+            partition,
         }
+    }
+
+    fn with_verifier(&self, verifier: Arc<dyn verify::ServerVerifier + 'static>) -> Self {
+        let Self {
+            time_provider,
+            provider,
+            verifier: _,
+            client_auth_cert_resolver,
+            partition: _,
+        } = self;
+        Self::new(
+            provider.clone(),
+            client_auth_cert_resolver.clone(),
+            verifier,
+            time_provider.clone(),
+        )
+    }
+
+    fn with_resolver(
+        &self,
+        client_auth_cert_resolver: Arc<dyn ClientCredentialResolver + 'static>,
+    ) -> Self {
+        let Self {
+            time_provider,
+            provider,
+            verifier,
+            client_auth_cert_resolver: _,
+            partition: _,
+        } = self;
+        Self::new(
+            provider.clone(),
+            client_auth_cert_resolver,
+            verifier.clone(),
+            time_provider.clone(),
+        )
     }
 }
 
@@ -623,7 +655,7 @@ pub(super) mod danger {
     impl DangerousClientConfig<'_> {
         /// Overrides the default `ServerVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerVerifier>) {
-            self.cfg.domain.verifier = verifier;
+            self.cfg.domain = self.cfg.domain.with_verifier(verifier);
         }
     }
 }
