@@ -507,6 +507,10 @@ impl SecurityDomain {
             .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
         verifier.hash_config(&mut adapter);
 
+        time_provider
+            .type_id()
+            .hash(&mut crate::core_hash_polyfill::DynHasher(&mut adapter));
+
         let partition = h.finish().as_ref()[..32]
             .try_into()
             .unwrap();
