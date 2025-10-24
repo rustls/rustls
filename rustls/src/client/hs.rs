@@ -1012,9 +1012,7 @@ impl ClientSessionValue {
                     .tls12_session(server_name)
                     .map(ClientSessionValue::Tls12)
             })
-            .and_then(|resuming| {
-                resuming.compatible_config(&config.verifier, &config.client_auth_cert_resolver)
-            })
+            .and_then(|resuming| resuming.compatible_config(config.verifier(), config.resolver()))
             .and_then(|resuming| {
                 let now = config
                     .current_time()
