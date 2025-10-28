@@ -552,7 +552,6 @@ pub mod client {
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
     pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
-    pub use handy::AlwaysResolvesClientRawPublicKeys;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ClientSessionMemoryCache;
 

@@ -1,7 +1,7 @@
 use pki_types::ServerName;
 
 use super::CredentialRequest;
-use crate::crypto::{Credentials, SelectedCredential};
+use crate::crypto::SelectedCredential;
 use crate::enums::CertificateType;
 use crate::msgs::persist;
 use crate::{NamedGroup, client};
@@ -195,35 +195,6 @@ impl client::ClientCredentialResolver for FailResolveClientCert {
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[]
-    }
-}
-
-/// An exemplar `ClientCredentialResolver` implementation that always resolves to a single
-/// [RFC 7250] raw public key.
-///
-/// [RFC 7250]: https://tools.ietf.org/html/rfc7250
-#[derive(Debug)]
-pub struct AlwaysResolvesClientRawPublicKeys(Credentials);
-
-impl AlwaysResolvesClientRawPublicKeys {
-    /// Create a new `AlwaysResolvesClientRawPublicKeys` instance.
-    pub fn new(credentials: Credentials) -> Self {
-        Self(credentials)
-    }
-}
-
-impl client::ClientCredentialResolver for AlwaysResolvesClientRawPublicKeys {
-    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential> {
-        match request.negotiated_type() {
-            CertificateType::RawPublicKey => self
-                .0
-                .signer(request.signature_schemes()),
-            _ => None,
-        }
-    }
-
-    fn supported_certificate_types(&self) -> &'static [CertificateType] {
-        &[CertificateType::RawPublicKey]
     }
 }
 
