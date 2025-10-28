@@ -461,15 +461,9 @@ mod tests {
             .key_provider
             .load_private_key(client_key())
             .unwrap();
-        let identity = Arc::from(
-            Identity::from_cert_chain(vec![CertificateDer::from(
-                key.public_key()
-                    .unwrap()
-                    .as_ref()
-                    .to_vec(),
-            )])
-            .unwrap(),
-        );
+        let identity = Arc::from(Identity::RawPublicKey(
+            key.public_key().unwrap().into_owned(),
+        ));
         Credentials::new_unchecked(identity, key)
     }
 
