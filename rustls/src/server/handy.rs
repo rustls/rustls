@@ -1,11 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::crypto::{Credentials, SelectedCredential};
-use crate::enums::CertificateType;
-use crate::error::{Error, PeerIncompatible};
 use crate::server;
-use crate::server::ClientHello;
 
 /// Something which never stores sessions.
 #[expect(clippy::exhaustive_structs)]
@@ -166,34 +162,6 @@ impl server::ProducesTickets for NeverProducesTickets {
     }
     fn decrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> {
         None
-    }
-}
-
-/// An exemplar `ServerCredentialResolver` implementation that always resolves to a single
-/// [RFC 7250] raw public key.
-///
-/// [RFC 7250]: https://tools.ietf.org/html/rfc7250
-#[derive(Debug)]
-pub struct SingleRawPublicKeyResolver(Credentials);
-
-impl SingleRawPublicKeyResolver {
-    /// Create a new `AlwaysResolvesServerRawPublicKeys` instance.
-    pub fn new(credentials: Credentials) -> Self {
-        Self(credentials)
-    }
-}
-
-impl server::ServerCredentialResolver for SingleRawPublicKeyResolver {
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
-        self.0
-            .signer(client_hello.signature_schemes)
-            .ok_or(Error::PeerIncompatible(
-                PeerIncompatible::NoSignatureSchemesInCommon,
-            ))
-    }
-
-    fn supported_certificate_types(&self) -> &'static [CertificateType] {
-        &[CertificateType::RawPublicKey]
     }
 }
 

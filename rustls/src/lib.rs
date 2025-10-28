@@ -592,11 +592,11 @@ pub mod server {
     mod tls13;
 
     pub use builder::WantsServerCert;
+    pub use handy::NoServerSessionStorage;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ServerNameResolver;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ServerSessionMemoryCache;
-    pub use handy::{NoServerSessionStorage, SingleRawPublicKeyResolver};
     #[cfg(feature = "std")]
     pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
     pub use server_conn::{

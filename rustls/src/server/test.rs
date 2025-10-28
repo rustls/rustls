@@ -54,13 +54,13 @@ mod tests {
     use crate::common_state::KxState;
     use crate::crypto::{
         ActiveKeyExchange, Credentials, CryptoProvider, Identity, KeyExchangeAlgorithm,
-        StartedKeyExchange, SupportedKxGroup,
+        SingleCredential, StartedKeyExchange, SupportedKxGroup,
     };
     use crate::enums::CertificateType;
     use crate::ffdhe_groups::FfdheGroup;
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
-    use crate::server::{ServerConfig, ServerConnection, SingleRawPublicKeyResolver};
+    use crate::server::{ServerConfig, ServerConnection};
     use crate::sync::Arc;
     use crate::{CipherSuiteCommon, Tls12CipherSuite};
 
@@ -249,9 +249,7 @@ mod tests {
             .into(),
         )
         .with_no_client_auth()
-        .with_server_credential_resolver(Arc::new(SingleRawPublicKeyResolver::new(
-            server_credentials(),
-        )))
+        .with_server_credential_resolver(Arc::new(SingleCredential::from(server_credentials())))
         .unwrap()
     }
 
