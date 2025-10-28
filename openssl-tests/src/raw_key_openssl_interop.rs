@@ -140,14 +140,13 @@ mod server {
 
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{
-        Credentials, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
+        Credentials, Identity, SingleCredential, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
         verify_tls13_signature,
     };
     use rustls::enums::{CertificateType, SignatureScheme};
     use rustls::error::{ApiMisuse, CertificateError, Error, InconsistentKeys, PeerIncompatible};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
-    use rustls::server::SingleRawPublicKeyResolver;
     use rustls::server::danger::{
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
@@ -176,7 +175,7 @@ mod server {
         );
 
         let client_cert_verifier = Arc::new(SimpleRpkClientVerifier::new(vec![client_raw_key]));
-        let server_cert_resolver = Arc::new(SingleRawPublicKeyResolver::new(credentials));
+        let server_cert_resolver = Arc::new(SingleCredential::from(credentials));
 
         ServerConfig::builder()
             .with_client_cert_verifier(client_cert_verifier)

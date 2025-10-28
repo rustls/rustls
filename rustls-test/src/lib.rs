@@ -39,8 +39,8 @@ use rustls::pki_types::{
 };
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{
-    ClientHello, ClientVerifierBuilder, ServerCredentialResolver, SingleRawPublicKeyResolver,
-    UnbufferedServerConnection, WebPkiClientVerifier,
+    ClientHello, ClientVerifierBuilder, ServerCredentialResolver, UnbufferedServerConnection,
+    WebPkiClientVerifier,
 };
 use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
@@ -592,7 +592,7 @@ pub fn make_server_config_with_raw_key_support(
 ) -> ServerConfig {
     let mut client_verifier =
         MockClientVerifier::new(|| Ok(PeerVerified::assertion()), kt, provider);
-    let server_cert_resolver = Arc::new(SingleRawPublicKeyResolver::new(
+    let server_cert_resolver = Arc::new(SingleCredential::from(
         kt.credentials_with_raw_pub_key(provider)
             .unwrap(),
     ));
