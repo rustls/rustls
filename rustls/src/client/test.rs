@@ -26,10 +26,9 @@ mod tests {
     use std::sync::OnceLock;
 
     use super::super::*;
-    use crate::client::AlwaysResolvesClientRawPublicKeys;
     use crate::crypto::cipher::MessageEncrypter;
     use crate::crypto::tls13::OkmBlock;
-    use crate::crypto::{Credentials, Identity};
+    use crate::crypto::{Credentials, Identity, SingleCredential};
     use crate::enums::CertificateType;
     use crate::msgs::base::PayloadU8;
     use crate::msgs::enums::ECCurveType;
@@ -448,9 +447,7 @@ mod tests {
         )
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
-        .with_client_credential_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-            client_credentials(),
-        )))
+        .with_client_credential_resolver(Arc::new(SingleCredential::from(client_credentials())))
         .unwrap();
         config.key_log = key_log;
         config

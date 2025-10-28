@@ -22,13 +22,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 use rustls::client::danger::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
-use rustls::client::{
-    AlwaysResolvesClientRawPublicKeys, ServerVerifierBuilder, UnbufferedClientConnection,
-    WebPkiServerVerifier,
-};
+use rustls::client::{ServerVerifierBuilder, UnbufferedClientConnection, WebPkiServerVerifier};
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use rustls::crypto::{
-    Credentials, CryptoProvider, Identity, SelectedCredential, SigningKey,
+    Credentials, CryptoProvider, Identity, SelectedCredential, SigningKey, SingleCredential,
     WebPkiSupportedAlgorithms, verify_tls13_signature,
 };
 use rustls::enums::{CertificateType, CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
@@ -612,7 +609,7 @@ pub fn make_client_config_with_raw_key_support(
     provider: &CryptoProvider,
 ) -> ClientConfig {
     let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(provider));
-    let client_cert_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
+    let client_cert_resolver = Arc::new(SingleCredential::from(
         kt.certified_client_key(provider)
             .unwrap(),
     ));

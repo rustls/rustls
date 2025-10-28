@@ -9,12 +9,11 @@ mod client {
     use std::net::TcpStream;
     use std::sync::Arc;
 
-    use rustls::client::AlwaysResolvesClientRawPublicKeys;
     use rustls::client::danger::{
         HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
     };
     use rustls::crypto::{
-        Credentials, Identity, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
+        Credentials, Identity, SingleCredential, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
         verify_tls13_signature,
     };
     use rustls::enums::{CertificateType, SignatureScheme};
@@ -51,9 +50,7 @@ mod client {
             .with_custom_certificate_verifier(Arc::new(SimpleRpkServerVerifier::new(vec![
                 server_raw_key,
             ])))
-            .with_client_credential_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-                credentials,
-            )))
+            .with_client_credential_resolver(Arc::new(SingleCredential::from(credentials)))
             .unwrap()
     }
 
