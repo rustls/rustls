@@ -23,36 +23,53 @@ use crate::{SignerPublicKey, x509};
 /// [`ConfigBuilder::with_server_credential_resolver()`]: crate::ConfigBuilder::with_server_credential_resolver
 /// [`ConfigBuilder::with_client_credential_resolver()`]: crate::ConfigBuilder::with_client_credential_resolver
 #[derive(Debug)]
-pub struct SingleCredential(Credentials);
+pub struct SingleCredential {
+    credentials: Credentials,
+    types: &'static [CertificateType],
+}
 
 impl From<Credentials> for SingleCredential {
     fn from(credentials: Credentials) -> Self {
-        Self(credentials)
+        match &*credentials.identity {
+            Identity::X509(_) => Self {
+                credentials,
+                types: &[CertificateType::X509],
+            },
+            Identity::RawPublicKey(_) => Self {
+                credentials,
+                types: &[CertificateType::RawPublicKey],
+            },
+        }
     }
 }
 
 impl ClientCredentialResolver for SingleCredential {
     fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential> {
-        match request.negotiated_type() {
-            CertificateType::X509 => self
-                .0
+        match (&*self.credentials.identity, request.negotiated_type()) {
+            (Identity::X509(_), CertificateType::X509)
+            | (Identity::RawPublicKey(_), CertificateType::RawPublicKey) => self
+                .credentials
                 .signer(request.signature_schemes()),
             _ => None,
         }
     }
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
-        &[CertificateType::X509]
+        self.types
     }
 }
 
 impl ServerCredentialResolver for SingleCredential {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
-        self.0
+        self.credentials
             .signer(client_hello.signature_schemes())
             .ok_or(Error::PeerIncompatible(
                 PeerIncompatible::NoSignatureSchemesInCommon,
             ))
+    }
+
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        self.types
     }
 }
 
