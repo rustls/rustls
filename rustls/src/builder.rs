@@ -11,7 +11,7 @@ use crate::{ClientConfig, ServerConfig};
 
 /// A [builder] for [`ServerConfig`] or [`ClientConfig`] values.
 ///
-/// To get one of these, call [`ServerConfig::builder_with_provider()`] or [`ClientConfig::builder_with_provider()`].
+/// To get one of these, call [`ServerConfig::builder()`] or [`ClientConfig::builder()`].
 ///
 /// To build a config, you must make at least three decisions (in order):
 ///
@@ -30,11 +30,11 @@ use crate::{ClientConfig, ServerConfig};
 /// # use std::sync::Arc;
 /// use rustls::{ClientConfig, ServerConfig};
 /// use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
-/// ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+/// ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
 /// //  ...
 /// # ;
 ///
-/// ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+/// ServerConfig::builder(Arc::new(DEFAULT_PROVIDER))
 /// //  ...
 /// # ;
 /// # }
@@ -68,7 +68,7 @@ use crate::{ClientConfig, ServerConfig};
 /// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
-/// ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+/// ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
 ///     .with_root_certificates(root_certs)
 ///     .with_no_client_auth()
 ///     .unwrap();
@@ -98,7 +98,7 @@ use crate::{ClientConfig, ServerConfig};
 /// # let private_key = pki_types::PrivateKeyDer::from(
 /// #    pki_types::PrivatePkcs8KeyDer::from(vec![])
 /// # );
-/// ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+/// ServerConfig::builder(Arc::new(DEFAULT_PROVIDER))
 ///     .with_no_client_auth()
 ///     .with_single_cert(Arc::new(Identity::from_cert_chain(certs).unwrap()), private_key)
 ///     .expect("bad certificate/key/provider");
@@ -125,8 +125,8 @@ use crate::{ClientConfig, ServerConfig};
 /// mentioning some of these types.
 ///
 /// Additionally, ServerConfig and ClientConfig carry a private field containing a
-/// [`CryptoProvider`], from [`ClientConfig::builder_with_provider()`] or
-/// [`ServerConfig::builder_with_provider()`]. This determines which cryptographic backend
+/// [`CryptoProvider`], from [`ClientConfig::builder()`] or
+/// [`ServerConfig::builder()`]. This determines which cryptographic backend
 /// is used.
 ///
 /// [builder]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
@@ -136,8 +136,8 @@ use crate::{ClientConfig, ServerConfig};
 /// [`ClientConfig`]: crate::ClientConfig
 /// [`ClientConfig::builder()`]: crate::ClientConfig::builder()
 /// [`ServerConfig::builder()`]: crate::ServerConfig::builder()
-/// [`ClientConfig::builder_with_provider()`]: crate::ClientConfig::builder_with_provider()
-/// [`ServerConfig::builder_with_provider()`]: crate::ServerConfig::builder_with_provider()
+/// [`ClientConfig::builder()`]: crate::ClientConfig::builder()
+/// [`ServerConfig::builder()`]: crate::ServerConfig::builder()
 /// [`ConfigBuilder<ClientConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-3
 /// [`ConfigBuilder<ServerConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-6
 /// [`WantsClientCert`]: crate::client::WantsClientCert

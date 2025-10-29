@@ -465,8 +465,8 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         );
     }
 
-    let config = rustls::ClientConfig::builder_with_provider(args.provider().into())
-        .with_root_certificates(root_store);
+    let config =
+        rustls::ClientConfig::builder(args.provider().into()).with_root_certificates(root_store);
 
     let mut config = match (&args.auth_key, &args.auth_certs) {
         (Some(key_file), Some(certs_file)) => {

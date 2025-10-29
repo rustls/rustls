@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .next()
         .expect("missing private key file argument");
 
-    let mut config = ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+    let mut config = ServerConfig::builder(Arc::new(DEFAULT_PROVIDER))
         .with_no_client_auth()
         .with_single_cert(
             Arc::new(Identity::from_cert_chain(load_certs(cert_file)?)?),

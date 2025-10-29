@@ -540,7 +540,7 @@ struct ClientSideStepper<'a> {
 
 impl ClientSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
-        let cfg = ClientConfig::builder_with_provider(params.provider.clone());
+        let cfg = ClientConfig::builder(params.provider.clone());
 
         let mut cfg = match params.auth_key {
             AuthKeySource::KeyType(key_type) => {
@@ -627,7 +627,7 @@ struct ServerSideStepper<'a> {
 
 impl ServerSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
-        let cfg = ServerConfig::builder_with_provider(params.provider.clone());
+        let cfg = ServerConfig::builder(params.provider.clone());
 
         let mut cfg = match params.auth_key {
             AuthKeySource::KeyType(key_type) => cfg

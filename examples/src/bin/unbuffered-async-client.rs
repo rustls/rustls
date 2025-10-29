@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let config = ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+    let config = ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
         .with_root_certificates(root_store)
         .with_no_client_auth()?;
 

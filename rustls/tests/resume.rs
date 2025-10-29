@@ -181,13 +181,11 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     let client_config = Arc::new(client_config);
 
     let server_config_1 = Arc::new(
-        ServerConfig::builder_with_provider(provider::DEFAULT_TLS13_PROVIDER.into())
-            .finish(KeyType::Ed25519),
+        ServerConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into()).finish(KeyType::Ed25519),
     );
 
     let mut server_config_2 =
-        ServerConfig::builder_with_provider(provider::DEFAULT_TLS12_PROVIDER.into())
-            .finish(KeyType::Ed25519);
+        ServerConfig::builder(provider::DEFAULT_TLS12_PROVIDER.into()).finish(KeyType::Ed25519);
     server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
 
     dbg!("handshake 1");

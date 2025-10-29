@@ -166,7 +166,7 @@ impl CredentialRequest<'_> {
 /// (the rustls-native-certs crate is often used for this) may take on the order of a few hundred
 /// milliseconds.
 ///
-/// These must be created via the [`ClientConfig::builder()`] or [`ClientConfig::builder_with_provider()`]
+/// These must be created via the [`ClientConfig::builder()`] or [`ClientConfig::builder()`]
 /// function.
 ///
 /// Note that using [`ConfigBuilder<ClientConfig, WantsVersions>::with_ech()`] will produce a common
@@ -312,11 +312,10 @@ impl ClientConfig {
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     #[cfg(feature = "std")]
-    pub fn builder_with_provider(
-        provider: Arc<CryptoProvider>,
-    ) -> ConfigBuilder<Self, WantsVerifier> {
+    pub fn builder(provider: Arc<CryptoProvider>) -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
+
     /// Create a builder for a client configuration with no default implementation details.
     ///
     /// This API must be used by `no_std` users.

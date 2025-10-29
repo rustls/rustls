@@ -808,14 +808,14 @@ impl Parameters {
                         .unwrap();
                 }
 
-                WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), &provider)
+                WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
                     .build()
                     .unwrap()
             }
             ClientAuth::No => WebPkiClientVerifier::no_client_auth(),
         };
 
-        let mut cfg = ServerConfig::builder_with_provider(provider)
+        let mut cfg = ServerConfig::builder(provider)
             .with_client_cert_verifier(client_auth)
             .with_single_cert(self.proto.key_type.identity(), self.proto.key_type.key())
             .expect("bad certs/private key?");
@@ -842,7 +842,7 @@ impl Parameters {
             .add(self.proto.key_type.ca_cert())
             .unwrap();
 
-        let cfg = ClientConfig::builder_with_provider(
+        let cfg = ClientConfig::builder(
             self.provider
                 .build_with_cipher_suite(self.proto.ciphersuite)
                 .into(),

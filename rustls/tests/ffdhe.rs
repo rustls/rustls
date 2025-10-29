@@ -32,7 +32,7 @@ fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups(
         ..provider::DEFAULT_PROVIDER
     };
 
-    let build_err = ClientConfig::builder_with_provider(bad_crypto_provider.into())
+    let build_err = ClientConfig::builder(bad_crypto_provider.into())
         .with_root_certificates(KeyType::EcdsaP256.client_root_store())
         .with_no_client_auth()
         .unwrap_err()
@@ -67,9 +67,8 @@ fn ffdhe_ciphersuite() {
             expected_cipher_suite,
         ));
         let client_config =
-            rustls::ClientConfig::builder_with_provider(provider.clone()).finish(KeyType::Rsa2048);
-        let server_config =
-            rustls::ServerConfig::builder_with_provider(provider).finish(KeyType::Rsa2048);
+            rustls::ClientConfig::builder(provider.clone()).finish(KeyType::Rsa2048);
+        let server_config = rustls::ServerConfig::builder(provider).finish(KeyType::Rsa2048);
         do_suite_and_kx_test(
             client_config,
             server_config,
@@ -82,7 +81,7 @@ fn ffdhe_ciphersuite() {
 
 #[test]
 fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() {
-    let client_config = rustls::ClientConfig::builder_with_provider(
+    let client_config = rustls::ClientConfig::builder(
         CryptoProvider {
             tls12_cipher_suites: Cow::Owned(vec![
                 &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -96,7 +95,7 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
     )
     .finish(KeyType::Rsa2048);
 
-    let server_config = rustls::ServerConfig::builder_with_provider(
+    let server_config = rustls::ServerConfig::builder(
         CryptoProvider {
             tls12_cipher_suites: Cow::Owned(vec![
                 &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -129,7 +128,7 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
 
 #[test]
 fn server_avoids_cipher_suite_with_no_common_kx_groups() {
-    let server_config = rustls::ServerConfig::builder_with_provider(
+    let server_config = rustls::ServerConfig::builder(
         CryptoProvider {
             tls12_cipher_suites: Cow::Owned(vec![
                 provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -230,7 +229,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
             },
             _ => unreachable!(),
         };
-        let client_config = rustls::ClientConfig::builder_with_provider(provider.into())
+        let client_config = rustls::ClientConfig::builder(provider.into())
             .finish(KeyType::Rsa2048)
             .into();
 

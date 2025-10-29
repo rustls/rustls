@@ -162,7 +162,7 @@
 //! # #[cfg(feature = "aws-lc-rs")] {
 //! # use std::sync::Arc;
 //! # let root_store: rustls::RootCertStore = panic!();
-//! let config = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER))
+//! let config = rustls::ClientConfig::builder(Arc::new(rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER))
 //!     .with_root_certificates(root_store)
 //!     .with_no_client_auth()
 //!     .unwrap();
@@ -183,7 +183,7 @@
 //! #      .iter()
 //! #      .cloned(),
 //! # );
-//! # let config = rustls::ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+//! # let config = rustls::ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
 //! #     .with_root_certificates(root_store)
 //! #     .with_no_client_auth()
 //! #     .unwrap();

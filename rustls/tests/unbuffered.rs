@@ -744,9 +744,9 @@ fn refresh_traffic_keys_automatically() {
     const CONFIDENTIALITY_LIMIT: usize = 1024;
     const CONFIDENTIALITY_LIMIT_PLUS_ONE: usize = CONFIDENTIALITY_LIMIT + 1;
 
-    let client_config = ClientConfig::builder_with_provider(
-        aes_128_gcm_with_1024_confidentiality_limit(provider::DEFAULT_PROVIDER),
-    )
+    let client_config = ClientConfig::builder(aes_128_gcm_with_1024_confidentiality_limit(
+        provider::DEFAULT_PROVIDER,
+    ))
     .finish(KeyType::Rsa2048);
 
     let server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
@@ -819,7 +819,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         )))
     });
 
-    let client_config = ClientConfig::builder_with_provider(provider).finish(KeyType::Ed25519);
+    let client_config = ClientConfig::builder(provider).finish(KeyType::Ed25519);
 
     let server_config = make_server_config(KeyType::Ed25519, &provider::DEFAULT_PROVIDER);
     let mut outcome = run(
@@ -892,15 +892,14 @@ fn tls13_packed_handshake() {
     }
 
     // regression test for https://github.com/rustls/rustls/issues/2040
-    let client_config = ClientConfig::builder_with_provider(unsafe_plaintext_crypto_provider(
-        provider::DEFAULT_PROVIDER,
-    ))
-    .dangerous()
-    .with_custom_certificate_verifier(Arc::new(MockServerVerifier::rejects_certificate(
-        CertificateError::UnknownIssuer.into(),
-    )))
-    .with_no_client_auth()
-    .unwrap();
+    let client_config =
+        ClientConfig::builder(unsafe_plaintext_crypto_provider(provider::DEFAULT_PROVIDER))
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(MockServerVerifier::rejects_certificate(
+                CertificateError::UnknownIssuer.into(),
+            )))
+            .with_no_client_auth()
+            .unwrap();
 
     let mut client =
         UnbufferedClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
@@ -1538,7 +1537,7 @@ fn test_secret_extraction_enabled() {
 
         // Only offer the cipher suite (and protocol version) that we're testing
         let mut server_config =
-            ServerConfig::builder_with_provider(provider_with_one_suite(&provider, suite).into())
+            ServerConfig::builder(provider_with_one_suite(&provider, suite).into())
                 .with_no_client_auth()
                 .with_single_cert(kt.identity(), kt.key())
                 .unwrap();

@@ -303,7 +303,7 @@ impl<'a> ClientHello<'a> {
 /// from the operating system to add to the [`RootCertStore`] passed to a `ClientVerifier`
 /// builder may take on the order of a few hundred milliseconds.
 ///
-/// These must be created via the [`ServerConfig::builder()`] or [`ServerConfig::builder_with_provider()`]
+/// These must be created via the [`ServerConfig::builder()`] or [`ServerConfig::builder()`]
 /// function.
 ///
 /// # Defaults
@@ -512,9 +512,7 @@ impl ServerConfig {
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     #[cfg(feature = "std")]
-    pub fn builder_with_provider(
-        provider: Arc<CryptoProvider>,
-    ) -> ConfigBuilder<Self, WantsVerifier> {
+    pub fn builder(provider: Arc<CryptoProvider>) -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
 
