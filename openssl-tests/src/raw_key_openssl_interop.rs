@@ -25,7 +25,8 @@ mod client {
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
     pub(super) fn make_config(client_private_key: &str, server_pub_key: &str) -> ClientConfig {
-        let client_private_key = Arc::new(provider::DEFAULT_PROVIDER)
+        let provider = Arc::new(provider::DEFAULT_PROVIDER);
+        let client_private_key = provider
             .key_provider
             .load_private_key(
                 PrivateKeyDer::from_pem_file(client_private_key)
@@ -45,7 +46,7 @@ mod client {
             client_private_key,
         );
 
-        ClientConfig::builder()
+        ClientConfig::builder_with_provider(provider)
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(SimpleRpkServerVerifier::new(vec![
                 server_raw_key,
@@ -157,7 +158,8 @@ mod server {
         let client_raw_key = SubjectPublicKeyInfoDer::from_pem_file(client_pub_key)
             .expect("cannot open pub key file");
 
-        let server_private_key = provider::DEFAULT_PROVIDER
+        let provider = Arc::new(provider::DEFAULT_PROVIDER);
+        let server_private_key = provider
             .key_provider
             .load_private_key(
                 PrivateKeyDer::from_pem_file(server_private_key)
@@ -177,7 +179,7 @@ mod server {
         let client_cert_verifier = Arc::new(SimpleRpkClientVerifier::new(vec![client_raw_key]));
         let server_cert_resolver = Arc::new(SingleCredential::from(credentials));
 
-        ServerConfig::builder()
+        ServerConfig::builder_with_provider(provider)
             .with_client_cert_verifier(client_cert_verifier)
             .with_server_credential_resolver(server_cert_resolver)
             .unwrap()
@@ -287,7 +289,7 @@ mod tests {
     use std::sync::mpsc::channel;
     use std::thread;
 
-    use rustls::crypto::Identity;
+    use rustls::crypto::{Identity, aws_lc_rs as provider};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
@@ -362,13 +364,14 @@ mod tests {
             .map(|cert| cert.unwrap())
             .collect();
         let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
-        let config = rustls::ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(
-                Arc::new(Identity::from_cert_chain(certs).unwrap()),
-                private_key,
-            )
-            .unwrap();
+        let config =
+            rustls::ServerConfig::builder_with_provider(Arc::new(provider::DEFAULT_PROVIDER))
+                .with_no_client_auth()
+                .with_single_cert(
+                    Arc::new(Identity::from_cert_chain(certs).unwrap()),
+                    private_key,
+                )
+                .unwrap();
         let server_thread = thread::spawn(move || {
             server::run_server(config, listener).expect("failed to run server to completion")
         });

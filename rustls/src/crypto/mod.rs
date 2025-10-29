@@ -248,27 +248,6 @@ impl CryptoProvider {
         static_default::get_default()
     }
 
-    /// An internal function that:
-    ///
-    /// - gets the pre-installed default, or
-    /// - installs one `from_crate_features()`, or else
-    /// - panics about the need to call [`CryptoProvider::install_default()`]
-    pub(crate) fn get_default_or_install_from_crate_features() -> &'static Arc<Self> {
-        if let Some(provider) = Self::get_default() {
-            return provider;
-        }
-
-        let provider = Self::from_crate_features()
-            .expect(r###"
-Could not automatically determine the process-level CryptoProvider from Rustls crate features.
-Call CryptoProvider::install_default() before this point to select a provider manually, or make sure exactly one of the 'aws-lc-rs' and 'ring' features is enabled.
-See the documentation of the CryptoProvider type for more information.
-            "###);
-        // Ignore the error resulting from us losing a race, and accept the outcome.
-        let _ = provider.install_default();
-        Self::get_default().unwrap()
-    }
-
     /// Returns a provider named unambiguously by rustls crate features.
     ///
     /// This function returns `None` if the crate features are ambiguous (ie, specify two

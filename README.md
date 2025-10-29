@@ -76,9 +76,8 @@ Since Rustls 0.22 it has been possible to choose the provider of the cryptograph
 that Rustls uses. This may be appealing if you have specific platform, compliance or feature
 requirements.
 
-Users that wish to customize the provider in use can do so when constructing `ClientConfig`
-and `ServerConfig` instances using the `with_crypto_provider` method on the respective config
-builder types. See the [`crypto::CryptoProvider`] documentation for more details.
+From 0.24, users must explicitly provide a crypto provider when constructing `ClientConfig` or
+`ServerConfig` instances. See the [`crypto::CryptoProvider`] documentation for more details.
 
 #### Built-in providers
 

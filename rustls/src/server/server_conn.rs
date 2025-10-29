@@ -502,23 +502,6 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    /// Create a builder for a server configuration with
-    /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider].
-    ///
-    /// This will use the provider's configured ciphersuites.  This implies which TLS
-    /// protocol versions are enabled.
-    ///
-    /// This function always succeeds.  Any internal consistency problems with `provider`
-    /// are reported at the end of the builder process.
-    ///
-    /// For more information, see the [`ConfigBuilder`] documentation.
-    #[cfg(feature = "std")]
-    pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
-        Self::builder_with_provider(
-            CryptoProvider::get_default_or_install_from_crate_features().clone(),
-        )
-    }
-
     /// Create a builder for a server configuration with a specific [`CryptoProvider`].
     ///
     /// This will use the provider's configured ciphersuites.  This implies which TLS

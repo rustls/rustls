@@ -16,19 +16,8 @@ use rustls_test::{ClientConfigExt, KeyType};
 
 mod common;
 
+#[cfg(any(feature = "ring", feature = "aws-lc-rs"))]
 #[test]
-fn test_process_provider() {
-    if dbg!(cfg!(all(feature = "ring", feature = "aws-lc-rs"))) {
-        test_explicit_choice_required();
-    } else if dbg!(cfg!(all(feature = "ring", not(feature = "aws-lc-rs")))) {
-        test_ring_used_as_implicit_provider();
-    } else if dbg!(cfg!(all(feature = "aws-lc-rs", not(feature = "ring")))) {
-        test_aws_lc_rs_used_as_implicit_provider();
-    } else {
-        panic!("fix feature combinations");
-    }
-}
-
 fn test_explicit_choice_required() {
     assert!(CryptoProvider::get_default().is_none());
     provider::DEFAULT_PROVIDER
@@ -38,36 +27,8 @@ fn test_explicit_choice_required() {
     provider::DEFAULT_PROVIDER
         .install_default()
         .expect_err("install succeeded a second time");
-    CryptoProvider::get_default().expect("provider missing");
+    let provider = CryptoProvider::get_default().expect("provider missing");
 
     // does not panic
-    ClientConfig::builder().finish(KeyType::Rsa2048);
-}
-
-fn test_ring_used_as_implicit_provider() {
-    assert!(CryptoProvider::get_default().is_none());
-
-    // implicitly installs ring provider
-    ClientConfig::builder().finish(KeyType::Rsa2048);
-
-    let default = CryptoProvider::get_default().expect("provider missing");
-    let debug = format!("{default:?}");
-    assert!(debug.contains("secure_random: Ring"));
-
-    let builder = ClientConfig::builder();
-    assert_eq!(format!("{:?}", builder.crypto_provider()), debug);
-}
-
-fn test_aws_lc_rs_used_as_implicit_provider() {
-    assert!(CryptoProvider::get_default().is_none());
-
-    // implicitly installs aws-lc-rs provider
-    ClientConfig::builder().finish(KeyType::Rsa2048);
-
-    let default = CryptoProvider::get_default().expect("provider missing");
-    let debug = format!("{default:?}");
-    assert!(debug.contains("secure_random: AwsLcRs"));
-
-    let builder = ClientConfig::builder();
-    assert_eq!(format!("{:?}", builder.crypto_provider()), debug);
+    ClientConfig::builder_with_provider(provider.clone()).finish(KeyType::Rsa2048);
 }

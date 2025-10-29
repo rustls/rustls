@@ -195,8 +195,7 @@ impl ClientVerifierBuilder {
 /// A client certificate verifier that uses the `webpki` crate[^1] to perform client certificate
 /// validation.
 ///
-/// It must be created via the [`WebPkiClientVerifier::builder()`] or
-/// [`WebPkiClientVerifier::builder_with_provider()`] functions.
+/// It must be created via [`WebPkiClientVerifier::builder_with_provider()`].
 ///
 /// Once built, the provided `Arc<dyn ClientVerifier>` can be used with a Rustls [`ServerConfig`]
 /// to configure client certificate validation using [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
@@ -205,11 +204,12 @@ impl ClientVerifierBuilder {
 ///
 /// To require all clients present a client certificate issued by a trusted CA:
 /// ```no_run
-/// # #[cfg(any(feature = "ring", feature = "aws-lc-rs"))] {
+/// # #[cfg(feature = "aws-lc-rs")] {
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
+/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 /// # let roots = RootCertStore::empty();
-/// let client_verifier = WebPkiClientVerifier::builder(roots.into())
+/// let client_verifier = WebPkiClientVerifier::builder_with_provider(roots.into(), &DEFAULT_PROVIDER)
 ///   .build()
 ///   .unwrap();
 /// # }
@@ -221,8 +221,12 @@ impl ClientVerifierBuilder {
 /// # #[cfg(any(feature = "ring", feature = "aws-lc-rs"))] {
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
+/// # #[cfg(feature = "aws-lc-rs")]
+/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
+/// # #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
+/// # use rustls::crypto::ring::DEFAULT_PROVIDER;
 /// # let roots = RootCertStore::empty();
-/// let client_verifier = WebPkiClientVerifier::builder(roots.into())
+/// let client_verifier = WebPkiClientVerifier::builder_with_provider(roots.into(), &DEFAULT_PROVIDER)
 ///   .allow_unauthenticated()
 ///   .build()
 ///   .unwrap();
@@ -241,11 +245,15 @@ impl ClientVerifierBuilder {
 /// client certificate revocation lists (CRLs):
 /// ```no_run
 /// # #[cfg(any(feature = "ring", feature = "aws-lc-rs"))] {
+/// # #[cfg(feature = "aws-lc-rs")]
+/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
+/// # #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
+/// # use rustls::crypto::ring::DEFAULT_PROVIDER;
 /// # use rustls::RootCertStore;
 /// # use rustls::server::{WebPkiClientVerifier};
 /// # let roots = RootCertStore::empty();
 /// # let crls = Vec::new();
-/// let client_verifier = WebPkiClientVerifier::builder(roots.into())
+/// let client_verifier = WebPkiClientVerifier::builder_with_provider(roots.into(), &DEFAULT_PROVIDER)
 ///   .with_crls(crls)
 ///   .build()
 ///   .unwrap();
@@ -267,23 +275,6 @@ pub struct WebPkiClientVerifier {
 }
 
 impl WebPkiClientVerifier {
-    /// Create a builder for the `webpki` client certificate verifier configuration using
-    /// the [process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider].
-    ///
-    /// Client certificate authentication will be offered by the server, and client certificates
-    /// will be verified using the trust anchors found in the provided `roots`. If you
-    /// wish to disable client authentication use [`WebPkiClientVerifier::no_client_auth()`] instead.
-    ///
-    /// Use [`Self::builder_with_provider`] if you wish to specify an explicit provider.
-    ///
-    /// For more information, see the [`ClientVerifierBuilder`] documentation.
-    pub fn builder(roots: Arc<RootCertStore>) -> ClientVerifierBuilder {
-        Self::builder_with_provider(
-            roots,
-            CryptoProvider::get_default_or_install_from_crate_features(),
-        )
-    }
-
     /// Create a builder for the `webpki` client certificate verifier configuration using
     /// a specified [`CryptoProvider`].
     ///

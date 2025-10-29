@@ -7,6 +7,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
+use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus, WriteTraffic,
@@ -18,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let mut config = ClientConfig::builder()
+    let mut config = ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
         .with_root_certificates(root_store)
         .with_no_client_auth()?;
     config.enable_early_data = SEND_EARLY_DATA;

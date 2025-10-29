@@ -11,29 +11,30 @@ use crate::{ClientConfig, ServerConfig};
 
 /// A [builder] for [`ServerConfig`] or [`ClientConfig`] values.
 ///
-/// To get one of these, call [`ServerConfig::builder()`] or [`ClientConfig::builder()`].
+/// To get one of these, call [`ServerConfig::builder_with_provider()`] or [`ClientConfig::builder_with_provider()`].
 ///
-/// To build a config, you must make at least two decisions (in order):
+/// To build a config, you must make at least three decisions (in order):
 ///
+/// - What crypto provider do you want to use?
 /// - How should this client or server verify certificates provided by its peer?
 /// - What certificates should this client or server present to its peer?
 ///
 /// For settings besides these, see the fields of [`ServerConfig`] and [`ClientConfig`].
 ///
-/// The usual choice for protocol primitives is to call
-/// [`ClientConfig::builder`]/[`ServerConfig::builder`]
-/// which will use rustls' default cryptographic provider and safe defaults for ciphersuites and
-/// protocol versions.
+/// The rustls project recommends the crypto provider based on aws-lc-rs for production use.
+/// This can be selected by passing in [`crate::crypto::aws_lc_rs::DEFAULT_PROVIDER`],
+/// which includes safe defaults for cipher suites and protocol versions.
 ///
 /// ```
 /// # #[cfg(feature = "aws-lc-rs")] {
-/// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
+/// # use std::sync::Arc;
 /// use rustls::{ClientConfig, ServerConfig};
-/// ClientConfig::builder()
+/// use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
+/// ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
 /// //  ...
 /// # ;
 ///
-/// ServerConfig::builder()
+/// ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
 /// //  ...
 /// # ;
 /// # }
@@ -63,10 +64,11 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// ```
 /// # #[cfg(feature = "aws-lc-rs")] {
-/// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
+/// # use std::sync::Arc;
+/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
-/// ClientConfig::builder()
+/// ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
 ///     .with_root_certificates(root_certs)
 ///     .with_no_client_auth()
 ///     .unwrap();
@@ -89,14 +91,14 @@ use crate::{ClientConfig, ServerConfig};
 /// ```no_run
 /// # #[cfg(feature = "aws-lc-rs")] {
 /// # use std::sync::Arc;
-/// # rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.install_default();
+/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 /// # use rustls::crypto::Identity;
 /// # use rustls::ServerConfig;
 /// # let certs = vec![];
 /// # let private_key = pki_types::PrivateKeyDer::from(
 /// #    pki_types::PrivatePkcs8KeyDer::from(vec![])
 /// # );
-/// ServerConfig::builder()
+/// ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
 ///     .with_no_client_auth()
 ///     .with_single_cert(Arc::new(Identity::from_cert_chain(certs).unwrap()), private_key)
 ///     .expect("bad certificate/key/provider");
@@ -125,7 +127,7 @@ use crate::{ClientConfig, ServerConfig};
 /// Additionally, ServerConfig and ClientConfig carry a private field containing a
 /// [`CryptoProvider`], from [`ClientConfig::builder_with_provider()`] or
 /// [`ServerConfig::builder_with_provider()`]. This determines which cryptographic backend
-/// is used. The default is [the process-default provider](`CryptoProvider::get_default`).
+/// is used.
 ///
 /// [builder]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 /// [typestate]: http://cliffle.com/blog/rust-typestate/
