@@ -13,22 +13,14 @@ pub fn webpki_client_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
 ) -> ClientVerifierBuilder {
-    if exactly_one_provider() {
-        WebPkiClientVerifier::builder(roots)
-    } else {
-        WebPkiClientVerifier::builder_with_provider(roots, provider)
-    }
+    WebPkiClientVerifier::builder_with_provider(roots, provider)
 }
 
 pub fn webpki_server_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
 ) -> ServerVerifierBuilder {
-    if exactly_one_provider() {
-        WebPkiServerVerifier::builder(roots)
-    } else {
-        WebPkiServerVerifier::builder_with_provider(roots, provider)
-    }
+    WebPkiServerVerifier::builder_with_provider(roots, provider)
 }
 
 fn exactly_one_provider() -> bool {

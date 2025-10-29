@@ -6,6 +6,7 @@ use std::error::Error;
 use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, UnbufferedClientConnection};
+use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus, WriteTraffic,
@@ -20,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let config = ClientConfig::builder()
+    let config = ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
         .with_root_certificates(root_store)
         .with_no_client_auth()?;
 

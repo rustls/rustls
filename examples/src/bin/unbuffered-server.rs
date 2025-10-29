@@ -9,6 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use rustls::crypto::Identity;
+use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::{ServerConfig, UnbufferedServerConnection};
@@ -27,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .next()
         .expect("missing private key file argument");
 
-    let mut config = ServerConfig::builder()
+    let mut config = ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
         .with_no_client_auth()
         .with_single_cert(
             Arc::new(Identity::from_cert_chain(load_certs(cert_file)?)?),

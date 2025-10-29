@@ -597,6 +597,7 @@ fn load_crls(
 }
 
 fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
+    let (versions, provider) = args.provider();
     let client_auth = if let Some(auth) = &args.auth {
         let roots = load_certs(auth);
         let mut client_auth_roots = RootCertStore::empty();
@@ -605,12 +606,12 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         }
         let crls = load_crls(args.crl.iter());
         if args.require_auth {
-            WebPkiClientVerifier::builder(client_auth_roots.into())
+            WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), &provider)
                 .with_crls(crls)
                 .build()
                 .unwrap()
         } else {
-            WebPkiClientVerifier::builder(client_auth_roots.into())
+            WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), &provider)
                 .with_crls(crls)
                 .allow_unauthenticated()
                 .build()
@@ -624,7 +625,6 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let privkey = load_private_key(&args.key);
     let ocsp = load_ocsp(args.ocsp.as_deref());
 
-    let (versions, provider) = args.provider();
     let mut config = rustls::ServerConfig::builder_with_provider(provider.into())
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp(

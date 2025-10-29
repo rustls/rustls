@@ -15,7 +15,8 @@ use std::{fs, thread};
 use clap::Parser;
 use rcgen::{Issuer, KeyPair, SerialNumber};
 use rustls::RootCertStore;
-use rustls::crypto::Identity;
+use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
+use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
 
@@ -111,6 +112,7 @@ fn main() {
 
 /// A test PKI with a CA certificate, server certificate, and client certificate.
 struct TestPki {
+    provider: Arc<CryptoProvider>,
     roots: Arc<RootCertStore>,
     ca_cert: (Issuer<'static, rcgen::KeyPair>, rcgen::Certificate),
     client_cert: (rcgen::CertifiedKey<KeyPair>, SerialNumber),
@@ -169,6 +171,7 @@ impl TestPki {
             .add(ca_cert.der().clone())
             .unwrap();
         Self {
+            provider: Arc::new(DEFAULT_PROVIDER),
             roots: roots.into(),
             ca_cert: (ca, ca_cert),
             client_cert: (
@@ -200,15 +203,16 @@ impl TestPki {
         crl_file.read_to_end(&mut crl).unwrap();
 
         // Construct a fresh verifier using the test PKI roots, and the updated CRL.
-        let verifier = WebPkiClientVerifier::builder(self.roots.clone())
-            .with_crls([CertificateRevocationListDer::from(crl)])
-            .build()
-            .unwrap();
+        let verifier =
+            WebPkiClientVerifier::builder_with_provider(self.roots.clone(), &self.provider)
+                .with_crls([CertificateRevocationListDer::from(crl)])
+                .build()
+                .unwrap();
 
         // Build a server config using the fresh verifier. If necessary, this could be customized
         // based on the ClientHello (e.g. selecting a different certificate, or customizing
         // supported algorithms/protocol versions).
-        let mut server_config = ServerConfig::builder()
+        let mut server_config = ServerConfig::builder_with_provider(self.provider.clone())
             .with_client_cert_verifier(verifier)
             .with_single_cert(
                 Arc::from(
