@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
         let provider = super::provider::DEFAULT_TLS12_PROVIDER;
-        let mut config = ServerConfig::builder_with_provider(provider.into())
+        let mut config = ServerConfig::builder(provider.into())
             .with_no_client_auth()
             .with_single_cert(server_identity(), server_key())
             .unwrap();
@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
-        let config = ServerConfig::builder_with_provider(
+        let config = ServerConfig::builder(
             CryptoProvider {
                 tls13_cipher_suites: Default::default(),
                 ..ffdhe_provider()
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
-        let config = ServerConfig::builder_with_provider(
+        let config = ServerConfig::builder(
             CryptoProvider {
                 tls13_cipher_suites: Default::default(),
                 ..ffdhe_provider()
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites() {
-        let config = ServerConfig::builder_with_provider(
+        let config = ServerConfig::builder(
             CryptoProvider {
                 tls13_cipher_suites: Default::default(),
                 ..ffdhe_provider()
@@ -241,7 +241,7 @@ mod tests {
     }
 
     fn server_config_for_rpk() -> ServerConfig {
-        ServerConfig::builder_with_provider(
+        ServerConfig::builder(
             CryptoProvider {
                 kx_groups: Cow::Owned(vec![super::provider::kx_group::X25519]),
                 ..super::provider::DEFAULT_TLS12_PROVIDER

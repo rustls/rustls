@@ -39,7 +39,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// ```diff
     /// - .with_root_certificates(root_store)
     /// + .with_webpki_verifier(
-    /// +   WebPkiServerVerifier::builder_with_provider(root_store, crypto_provider)
+    /// +   WebPkiServerVerifier::builder(root_store, crypto_provider)
     /// +   .with_crls(...)
     /// +   .build()?
     /// + )
@@ -59,7 +59,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify server certificates using a webpki verifier.
     ///
     /// See [`webpki::WebPkiServerVerifier::builder`] and
-    /// [`webpki::WebPkiServerVerifier::builder_with_provider`] for more information.
+    /// [`webpki::WebPkiServerVerifier::builder`] for more information.
     pub fn with_webpki_verifier(
         self,
         verifier: Arc<WebPkiServerVerifier>,

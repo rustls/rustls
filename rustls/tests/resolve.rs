@@ -120,7 +120,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
     suite: CipherSuite,
     expected_sigalgs: Vec<SignatureScheme>,
 ) {
-    let client_config = ClientConfig::builder_with_provider(
+    let client_config = ClientConfig::builder(
         provider_with_one_suite(&provider::DEFAULT_PROVIDER, find_suite(suite)).into(),
     )
     .finish(kt);

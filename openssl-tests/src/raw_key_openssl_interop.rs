@@ -46,7 +46,7 @@ mod client {
             client_private_key,
         );
 
-        ClientConfig::builder_with_provider(provider)
+        ClientConfig::builder(provider)
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(SimpleRpkServerVerifier::new(vec![
                 server_raw_key,
@@ -179,7 +179,7 @@ mod server {
         let client_cert_verifier = Arc::new(SimpleRpkClientVerifier::new(vec![client_raw_key]));
         let server_cert_resolver = Arc::new(SingleCredential::from(credentials));
 
-        ServerConfig::builder_with_provider(provider)
+        ServerConfig::builder(provider)
             .with_client_cert_verifier(client_cert_verifier)
             .with_server_credential_resolver(server_cert_resolver)
             .unwrap()
@@ -364,14 +364,13 @@ mod tests {
             .map(|cert| cert.unwrap())
             .collect();
         let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
-        let config =
-            rustls::ServerConfig::builder_with_provider(Arc::new(provider::DEFAULT_PROVIDER))
-                .with_no_client_auth()
-                .with_single_cert(
-                    Arc::new(Identity::from_cert_chain(certs).unwrap()),
-                    private_key,
-                )
-                .unwrap();
+        let config = rustls::ServerConfig::builder(Arc::new(provider::DEFAULT_PROVIDER))
+            .with_no_client_auth()
+            .with_single_cert(
+                Arc::new(Identity::from_cert_chain(certs).unwrap()),
+                private_key,
+            )
+            .unwrap();
         let server_thread = thread::spawn(move || {
             server::run_server(config, listener).expect("failed to run server to completion")
         });

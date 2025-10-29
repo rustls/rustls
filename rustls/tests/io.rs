@@ -1552,15 +1552,13 @@ fn test_acceptor_rejected_handshake() {
     use rustls::server::Acceptor;
 
     let client_config =
-        ClientConfig::builder_with_provider(provider::DEFAULT_TLS13_PROVIDER.into())
-            .finish(KeyType::Ed25519);
+        ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into()).finish(KeyType::Ed25519);
     let mut client = ClientConnection::new(client_config.into(), server_name("localhost")).unwrap();
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
 
     let server_config =
-        ServerConfig::builder_with_provider(provider::DEFAULT_TLS12_PROVIDER.into())
-            .finish(KeyType::Ed25519);
+        ServerConfig::builder(provider::DEFAULT_TLS12_PROVIDER.into()).finish(KeyType::Ed25519);
     let mut acceptor = Acceptor::default();
     acceptor
         .read_tls(&mut buf.as_slice())
@@ -1597,7 +1595,7 @@ fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
     let provider = provider::DEFAULT_PROVIDER;
 
     let server_config = Arc::new(
-        ServerConfig::builder_with_provider(
+        ServerConfig::builder(
             CryptoProvider {
                 tls13_cipher_suites: Cow::Owned(vec![
                     provider::cipher_suite::TLS13_AES_128_GCM_SHA256,

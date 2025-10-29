@@ -19,7 +19,7 @@ fuzz_target!(|data: &[u8]| {
 });
 
 fn client(data: &mut [u8]) {
-    let config = ClientConfig::builder_with_provider(rustls_fuzzing_provider::PROVIDER.into())
+    let config = ClientConfig::builder(rustls_fuzzing_provider::PROVIDER.into())
         .dangerous()
         .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
         .with_no_client_auth()
@@ -30,7 +30,7 @@ fn client(data: &mut [u8]) {
 }
 
 fn server(data: &mut [u8]) {
-    let config = ServerConfig::builder_with_provider(rustls_fuzzing_provider::PROVIDER.into())
+    let config = ServerConfig::builder(rustls_fuzzing_provider::PROVIDER.into())
         .with_no_client_auth()
         .with_server_credential_resolver(rustls_fuzzing_provider::server_cert_resolver())
         .unwrap();

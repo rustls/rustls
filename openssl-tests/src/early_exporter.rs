@@ -22,7 +22,7 @@ fn test_early_exporter() {
     let port = listener.local_addr().unwrap().port();
 
     let server_thread = thread::spawn(move || {
-        let mut config = ServerConfig::builder_with_provider(provider::DEFAULT_PROVIDER.into())
+        let mut config = ServerConfig::builder(provider::DEFAULT_PROVIDER.into())
             .with_no_client_auth()
             .with_single_cert(
                 Arc::new(Identity::from_cert_chain(load_certs()).unwrap()),

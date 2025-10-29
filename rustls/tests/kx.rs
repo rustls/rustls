@@ -365,7 +365,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
                 vec![provider::kx_group::X25519],
                 &version_provider,
             ),
-            ServerConfig::builder_with_provider(
+            ServerConfig::builder(
                 CryptoProvider {
                     kx_groups: Cow::Owned(vec![provider::kx_group::SECP384R1]),
                     ..version_provider
@@ -392,7 +392,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
 #[test]
 fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
     let kt = KeyType::Rsa2048;
-    let client_config = ClientConfig::builder_with_provider(
+    let client_config = ClientConfig::builder(
         CryptoProvider {
             kx_groups: Cow::Owned(vec![&FakeHybrid, provider::kx_group::SECP384R1]),
             ..provider::DEFAULT_PROVIDER

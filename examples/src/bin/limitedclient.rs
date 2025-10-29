@@ -16,7 +16,7 @@ fn main() {
             .cloned(),
     );
 
-    let config = rustls::ClientConfig::builder_with_provider(PROVIDER.into())
+    let config = rustls::ClientConfig::builder(PROVIDER.into())
         .with_root_certificates(root_store)
         .with_no_client_auth()
         .unwrap();

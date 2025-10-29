@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
         .map(|cert| cert.unwrap())
         .collect();
     let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
-    let config = rustls::ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+    let config = rustls::ServerConfig::builder(Arc::new(DEFAULT_PROVIDER))
         .with_no_client_auth()
         .with_single_cert(Arc::new(Identity::from_cert_chain(certs)?), private_key)?;
 

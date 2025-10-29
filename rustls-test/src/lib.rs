@@ -519,7 +519,7 @@ impl ServerConfigExt for rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifi
 }
 
 pub fn make_server_config(kt: KeyType, provider: &CryptoProvider) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider.clone().into()).finish(kt)
+    ServerConfig::builder(provider.clone().into()).finish(kt)
 }
 
 pub fn make_server_config_with_kx_groups(
@@ -527,7 +527,7 @@ pub fn make_server_config_with_kx_groups(
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
     provider: &CryptoProvider,
 ) -> ServerConfig {
-    ServerConfig::builder_with_provider(
+    ServerConfig::builder(
         CryptoProvider {
             kx_groups: Cow::Owned(kx_groups),
             ..provider.clone()
@@ -580,7 +580,7 @@ pub fn make_server_config_with_client_verifier(
     verifier_builder: ClientVerifierBuilder,
     provider: &CryptoProvider,
 ) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider.clone().into())
+    ServerConfig::builder(provider.clone().into())
         .with_client_cert_verifier(verifier_builder.build().unwrap())
         .with_single_cert(kt.identity(), kt.key())
         .unwrap()
@@ -598,7 +598,7 @@ pub fn make_server_config_with_raw_key_support(
     ));
     client_verifier.expect_raw_public_keys = true;
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    ServerConfig::builder_with_provider(provider.clone().into())
+    ServerConfig::builder(provider.clone().into())
         .with_client_cert_verifier(Arc::new(client_verifier))
         .with_server_credential_resolver(server_cert_resolver)
         .unwrap()
@@ -614,7 +614,7 @@ pub fn make_client_config_with_raw_key_support(
             .unwrap(),
     ));
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    ClientConfig::builder_with_provider(provider.clone().into())
+    ClientConfig::builder(provider.clone().into())
         .dangerous()
         .with_custom_certificate_verifier(server_verifier)
         .with_client_credential_resolver(client_cert_resolver)
@@ -651,7 +651,7 @@ impl ClientConfigExt for rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifi
 }
 
 pub fn make_client_config(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    ClientConfig::builder_with_provider(provider.clone().into()).finish(kt)
+    ClientConfig::builder(provider.clone().into()).finish(kt)
 }
 
 pub fn make_client_config_with_kx_groups(
@@ -659,7 +659,7 @@ pub fn make_client_config_with_kx_groups(
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
     provider: &CryptoProvider,
 ) -> ClientConfig {
-    ClientConfig::builder_with_provider(
+    ClientConfig::builder(
         CryptoProvider {
             kx_groups: Cow::Owned(kx_groups),
             ..provider.clone()
@@ -670,14 +670,14 @@ pub fn make_client_config_with_kx_groups(
 }
 
 pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    ClientConfig::builder_with_provider(provider.clone().into()).finish_with_creds(kt)
+    ClientConfig::builder(provider.clone().into()).finish_with_creds(kt)
 }
 
 pub fn make_client_config_with_verifier(
     verifier_builder: ServerVerifierBuilder,
     provider: &CryptoProvider,
 ) -> ClientConfig {
-    ClientConfig::builder_with_provider(provider.clone().into())
+    ClientConfig::builder(provider.clone().into())
         .dangerous()
         .with_custom_certificate_verifier(verifier_builder.build().unwrap())
         .with_no_client_auth()
@@ -688,14 +688,14 @@ pub fn webpki_client_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
 ) -> ClientVerifierBuilder {
-    WebPkiClientVerifier::builder_with_provider(roots, provider)
+    WebPkiClientVerifier::builder(roots, provider)
 }
 
 pub fn webpki_server_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
 ) -> ServerVerifierBuilder {
-    WebPkiServerVerifier::builder_with_provider(roots, provider)
+    WebPkiServerVerifier::builder(roots, provider)
 }
 
 pub fn make_pair(kt: KeyType, provider: &CryptoProvider) -> (ClientConnection, ServerConnection) {
@@ -734,7 +734,7 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
             .collect(),
         ..provider.clone()
     };
-    let server_config = ServerConfig::builder_with_provider(client_provider.into()).finish(kt);
+    let server_config = ServerConfig::builder(client_provider.into()).finish(kt);
 
     let server_provider = CryptoProvider {
         tls13_cipher_suites: provider
@@ -745,7 +745,7 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
             .collect(),
         ..provider
     };
-    let client_config = ClientConfig::builder_with_provider(server_provider.into()).finish(kt);
+    let client_config = ClientConfig::builder(server_provider.into()).finish(kt);
 
     (client_config, server_config)
 }

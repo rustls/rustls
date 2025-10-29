@@ -95,14 +95,14 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// Supply the provider when constructing your [`ClientConfig`] or [`ServerConfig`]:
 ///
-/// - [`ClientConfig::builder_with_provider()`]
-/// - [`ServerConfig::builder_with_provider()`]
+/// - [`ClientConfig::builder()`]
+/// - [`ServerConfig::builder()`]
 ///
 /// When creating and configuring a webpki-backed client or server certificate verifier, a choice of
 /// provider is also needed to start the configuration process:
 ///
-/// - [`client::WebPkiServerVerifier::builder_with_provider()`]
-/// - [`server::WebPkiClientVerifier::builder_with_provider()`]
+/// - [`client::WebPkiServerVerifier::builder()`]
+/// - [`server::WebPkiClientVerifier::builder()`]
 ///
 /// If you install a custom provider and want to avoid any accidental use of a built-in provider, the feature
 /// `custom-provider` can be activated to ensure your custom provider is used everywhere
@@ -216,8 +216,8 @@ pub struct CryptoProvider {
     /// These are used for both certificate chain verification and handshake signature verification.
     ///
     /// This is called by [`ConfigBuilder::with_root_certificates()`],
-    /// [`server::WebPkiClientVerifier::builder_with_provider()`] and
-    /// [`client::WebPkiServerVerifier::builder_with_provider()`].
+    /// [`server::WebPkiClientVerifier::builder()`] and
+    /// [`client::WebPkiServerVerifier::builder()`].
     pub signature_verification_algorithms: WebPkiSupportedAlgorithms,
 
     /// Source of cryptographically secure random numbers.
@@ -841,7 +841,7 @@ impl From<Vec<u8>> for SharedSecret {
 /// ```rust
 /// # #[cfg(feature = "fips")] {
 /// # let root_store = rustls::RootCertStore::empty();
-/// let config = rustls::ClientConfig::builder_with_provider(
+/// let config = rustls::ClientConfig::builder(
 ///         rustls::crypto::default_fips_provider().into()
 ///     )
 ///     .with_root_certificates(root_store)

@@ -182,12 +182,12 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     let provider = provider::DEFAULT_PROVIDER;
 
     for version_provider in ALL_VERSIONS {
-        let server_config = ServerConfig::builder_with_provider(provider.clone().into())
+        let server_config = ServerConfig::builder(provider.clone().into())
             .with_no_client_auth()
             .with_single_cert_with_ocsp(kt.identity(), kt.key(), Arc::from(&ocsp_response[..]))
             .unwrap();
 
-        let client_config = ClientConfig::builder_with_provider(version_provider.into())
+        let client_config = ClientConfig::builder(version_provider.into())
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(MockServerVerifier::expects_ocsp_response(
                 ocsp_response,
@@ -220,7 +220,7 @@ fn client_can_request_certain_trusted_cas() {
     );
 
     let server_config = Arc::new(
-        ServerConfig::builder_with_provider(provider.clone().into())
+        ServerConfig::builder(provider.clone().into())
             .with_no_client_auth()
             .with_server_credential_resolver(Arc::new(cert_resolver))
             .unwrap(),
@@ -233,33 +233,30 @@ fn client_can_request_certain_trusted_cas() {
         root_store
             .add(key_type.ca_cert())
             .unwrap();
-        let server_verifier =
-            WebPkiServerVerifier::builder_with_provider(Arc::new(root_store), &provider)
-                .build()
-                .unwrap();
+        let server_verifier = WebPkiServerVerifier::builder(Arc::new(root_store), &provider)
+            .build()
+            .unwrap();
 
         let cas_sending_server_verifier = Arc::new(ServerVerifierWithCasExt {
             verifier: server_verifier.clone(),
             ca_names: Arc::from(vec![key_type.ca_distinguished_name()]),
         });
 
-        let cas_sending_client_config =
-            ClientConfig::builder_with_provider(provider.clone().into())
-                .dangerous()
-                .with_custom_certificate_verifier(cas_sending_server_verifier)
-                .with_no_client_auth()
-                .unwrap();
+        let cas_sending_client_config = ClientConfig::builder(provider.clone().into())
+            .dangerous()
+            .with_custom_certificate_verifier(cas_sending_server_verifier)
+            .with_no_client_auth()
+            .unwrap();
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(cas_sending_client_config), &server_config);
         do_handshake(&mut client, &mut server);
 
-        let cas_unaware_client_config =
-            ClientConfig::builder_with_provider(provider.clone().into())
-                .dangerous()
-                .with_custom_certificate_verifier(server_verifier)
-                .with_no_client_auth()
-                .unwrap();
+        let cas_unaware_client_config = ClientConfig::builder(provider.clone().into())
+            .dangerous()
+            .with_custom_certificate_verifier(server_verifier)
+            .with_no_client_auth()
+            .unwrap();
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(cas_unaware_client_config), &server_config);

@@ -13,14 +13,14 @@ pub fn webpki_client_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
 ) -> ClientVerifierBuilder {
-    WebPkiClientVerifier::builder_with_provider(roots, provider)
+    WebPkiClientVerifier::builder(roots, provider)
 }
 
 pub fn webpki_server_verifier_builder(
     roots: Arc<RootCertStore>,
     provider: &CryptoProvider,
 ) -> ServerVerifierBuilder {
-    WebPkiServerVerifier::builder_with_provider(roots, provider)
+    WebPkiServerVerifier::builder(roots, provider)
 }
 
 fn exactly_one_provider() -> bool {

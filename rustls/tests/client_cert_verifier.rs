@@ -37,7 +37,7 @@ fn server_config_with_verifier(
     kt: KeyType,
     client_cert_verifier: MockClientVerifier,
 ) -> ServerConfig {
-    ServerConfig::builder_with_provider(provider::DEFAULT_PROVIDER.into())
+    ServerConfig::builder(provider::DEFAULT_PROVIDER.into())
         .with_client_cert_verifier(Arc::new(client_cert_verifier))
         .with_single_cert(kt.identity(), kt.key())
         .unwrap()
@@ -155,7 +155,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
             .build()
             .unwrap();
 
-        let server_config = ServerConfig::builder_with_provider(provider.clone())
+        let server_config = ServerConfig::builder(provider.clone())
             .with_client_cert_verifier(client_auth)
             .with_single_cert(kt.identity(), kt.key())
             .unwrap();

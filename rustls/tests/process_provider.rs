@@ -30,5 +30,5 @@ fn test_explicit_choice_required() {
     let provider = CryptoProvider::get_default().expect("provider missing");
 
     // does not panic
-    ClientConfig::builder_with_provider(provider.clone()).finish(KeyType::Rsa2048);
+    ClientConfig::builder(provider.clone()).finish(KeyType::Rsa2048);
 }

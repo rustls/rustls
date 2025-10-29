@@ -415,7 +415,7 @@ impl DummyClientAuth {
         Self {
             mandatory,
             root_hint_subjects,
-            parent: WebPkiClientVerifier::builder_with_provider(
+            parent: WebPkiClientVerifier::builder(
                 load_root_certs(trusted_cert_file),
                 &SelectedProvider::from_env().provider(),
             )
@@ -472,7 +472,7 @@ struct DummyServerAuth {
 impl DummyServerAuth {
     fn new(trusted_cert_file: &str, ocsp: OcspValidation) -> Self {
         Self {
-            parent: WebPkiServerVerifier::builder_with_provider(
+            parent: WebPkiServerVerifier::builder(
                 load_root_certs(trusted_cert_file),
                 &SelectedProvider::from_env().provider(),
             )
@@ -796,7 +796,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
         None => Arc::new(SingleCredential::from(credentials)),
     };
 
-    let mut cfg = ServerConfig::builder_with_provider(Arc::new(provider))
+    let mut cfg = ServerConfig::builder(Arc::new(provider))
         .with_client_cert_verifier(client_auth)
         .with_server_credential_resolver(cert_resolver)
         .unwrap();
@@ -923,10 +923,10 @@ impl Debug for ClientCacheWithoutKxHints {
 
 fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfig> {
     let provider = Arc::new(opts.provider());
-    let cfg = ClientConfig::builder_with_provider(provider.clone());
+    let cfg = ClientConfig::builder(provider.clone());
 
     let cfg = if opts.selected_provider.supports_ech() {
-        let ech_cfg = ClientConfig::builder_with_provider(
+        let ech_cfg = ClientConfig::builder(
             CryptoProvider {
                 tls12_cipher_suites: Default::default(),
                 ..opts.provider()

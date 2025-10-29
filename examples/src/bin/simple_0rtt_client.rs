@@ -100,7 +100,7 @@ fn main() {
         )
     }
 
-    let mut config = rustls::ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+    let mut config = rustls::ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
         .with_root_certificates(root_store)
         .with_no_client_auth()
         .unwrap();
