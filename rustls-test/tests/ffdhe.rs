@@ -15,11 +15,10 @@ use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{ClientConfig, NamedGroup, SupportedCipherSuite, Tls12CipherSuite, ffdhe_groups};
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, do_handshake, do_suite_and_kx_test,
-    make_pair_for_arc_configs, make_pair_for_configs,
+    make_pair_for_arc_configs, make_pair_for_configs, provider_with_one_suite,
 };
 
 use super::provider;
-use crate::common::provider_with_one_suite;
 
 #[test]
 fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups() {

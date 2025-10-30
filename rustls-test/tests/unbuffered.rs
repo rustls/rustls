@@ -17,13 +17,12 @@ use rustls::{
 };
 use rustls_test::{
     ClientConfigExt, KeyType, MockServerVerifier, aes_128_gcm_with_1024_confidentiality_limit,
-    do_unbuffered_handshake, make_client_config, make_server_config, server_name,
-    unsafe_plaintext_crypto_provider,
+    do_unbuffered_handshake, make_client_config, make_server_config, provider_with_one_suite,
+    server_name, unsafe_plaintext_crypto_provider,
 };
 
 use super::provider::cipher_suite;
 use super::{ALL_VERSIONS, provider, provider_is_aws_lc_rs, provider_is_fips};
-use crate::common::provider_with_one_suite;
 
 const MAX_ITERATIONS: usize = 100;
 

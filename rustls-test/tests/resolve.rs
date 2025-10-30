@@ -20,11 +20,10 @@ use rustls_test::{
     certificate_error_expecting_name, do_handshake_until_error, make_client_config,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_client_verifier, make_server_config_with_mandatory_client_auth,
-    server_name, transfer, webpki_client_verifier_builder,
+    provider_with_one_suite, server_name, transfer, webpki_client_verifier_builder,
 };
 
 use super::{ALL_VERSIONS, provider, provider_is_aws_lc_rs};
-use crate::common::provider_with_one_suite;
 
 #[test]
 fn server_cert_resolve_with_sni() {

@@ -14,8 +14,6 @@ use rustls::crypto::ring as provider;
 use rustls::crypto::ring as provider;
 use rustls_test::{ClientConfigExt, KeyType};
 
-mod common;
-
 #[cfg(any(feature = "ring", feature = "aws-lc-rs"))]
 #[test]
 fn test_explicit_choice_required() {

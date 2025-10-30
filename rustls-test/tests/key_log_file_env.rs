@@ -34,8 +34,6 @@ use rustls_test::{
 
 use super::{ALL_VERSIONS, provider, serialized};
 
-mod common;
-
 #[test]
 fn exercise_key_log_file_for_client() {
     serialized(|| {
