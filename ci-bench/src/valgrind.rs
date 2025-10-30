@@ -22,7 +22,7 @@ pub(crate) struct CallgrindRunner {
 impl CallgrindRunner {
     /// Returns a new callgrind-based benchmark runner
     pub(crate) fn new(executable: String, output_dir: PathBuf) -> anyhow::Result<Self> {
-        Self::ensure_callgrind_available()?;
+        ensure_valgrind_tool_available("--tool=callgrind")?;
 
         let callgrind_output_dir = output_dir.join(CALLGRIND_OUTPUT_SUBDIR);
         std::fs::create_dir_all(&callgrind_output_dir)
@@ -69,30 +69,6 @@ impl CallgrindRunner {
             server: server.wait_and_get_instr_count()?,
             client: client.wait_and_get_instr_count()?,
         })
-    }
-
-    /// Returns an error if callgrind is not available
-    fn ensure_callgrind_available() -> anyhow::Result<()> {
-        let result = Command::new("valgrind")
-            .arg("--tool=callgrind")
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-
-        match result {
-            Err(e) => anyhow::bail!("Unexpected error while launching callgrind. Error: {}", e),
-            Ok(status) => {
-                if status.success() {
-                    Ok(())
-                } else {
-                    anyhow::bail!(
-                        "Failed to launch callgrind. Error: {}. Please ensure that valgrind is installed and on the $PATH.",
-                        status
-                    )
-                }
-            }
-        }
     }
 
     /// See docs for [`Self::run_bench`]
@@ -145,6 +121,33 @@ impl CallgrindRunner {
 
 /// The subdirectory in which the callgrind output should be stored
 const CALLGRIND_OUTPUT_SUBDIR: &str = "callgrind";
+
+/// Returns an error if valgrind is not available
+fn ensure_valgrind_tool_available(tool: &str) -> anyhow::Result<()> {
+    let result = Command::new("valgrind")
+        .arg(tool)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+
+    match result {
+        Err(e) => anyhow::bail!(
+            "Unexpected error while launching valgrind {tool}. Error: {}",
+            e
+        ),
+        Ok(status) => {
+            if status.success() {
+                Ok(())
+            } else {
+                anyhow::bail!(
+                    "Failed to launch valgrind {tool}. Error: {}. Please ensure that valgrind is installed and on the $PATH.",
+                    status
+                )
+            }
+        }
+    }
+}
 
 /// A running subprocess for one of the sides of the benchmark (client or server)
 struct BenchSubprocess {
