@@ -36,11 +36,10 @@ use rustls_test::{
     MockServerVerifier, RawTls, ServerConfigExt, do_handshake, do_handshake_until_error,
     do_suite_and_kx_test, encoding, make_client_config, make_client_config_with_auth, make_pair,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
-    make_server_config_with_mandatory_client_auth, server_name, transfer, transfer_altered,
-    unsafe_plaintext_crypto_provider,
+    make_server_config_with_mandatory_client_auth, provider_with_one_suite, provider_with_suites,
+    server_name, transfer, transfer_altered, unsafe_plaintext_crypto_provider,
 };
 
-use super::common::{provider_with_one_suite, provider_with_suites};
 use super::{
     ALL_VERSIONS, COUNTS, CountingLogger, provider, provider_is_aws_lc_rs, provider_is_fips,
     provider_is_ring,

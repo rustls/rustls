@@ -14,10 +14,9 @@ use rustls::{
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, aes_128_gcm_with_1024_confidentiality_limit,
     do_handshake, make_client_config, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
-    make_server_config, transfer,
+    make_server_config, provider_with_one_suite, transfer,
 };
 
-use super::common::provider_with_one_suite;
 use super::provider;
 use super::provider::cipher_suite;
 
