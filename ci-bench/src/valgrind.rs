@@ -211,7 +211,11 @@ impl Sub for InstructionCounts {
 }
 
 /// Returns the detailed instruction diff between the baseline and the candidate
-pub(crate) fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result<String> {
+pub(crate) fn callgrind_diff(
+    baseline: &Path,
+    candidate: &Path,
+    scenario: &str,
+) -> anyhow::Result<String> {
     // callgrind_annotate formats the callgrind output file, suitable for comparison with
     // callgrind_differ
     let callgrind_annotate_base = Command::new("callgrind_annotate")

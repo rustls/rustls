@@ -6,7 +6,7 @@ use rustls::enums::ProtocolVersion;
 use rustls_test::KeyType;
 
 use crate::Side;
-use crate::callgrind::InstructionCounts;
+use crate::valgrind::InstructionCounts;
 
 /// Validates a benchmark collection, returning an error if the provided benchmarks are invalid
 ///

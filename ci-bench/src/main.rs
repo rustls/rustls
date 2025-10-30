@@ -42,16 +42,16 @@ use crate::benchmark::{
     AuthKeySource, Benchmark, BenchmarkKind, BenchmarkParams, ResumptionKind,
     get_reported_instr_count, validate_benchmarks,
 };
-use crate::callgrind::{CallgrindRunner, CountInstructions};
 use crate::util::async_io::{self, AsyncRead, AsyncWrite};
 use crate::util::transport::{
     read_handshake_message, read_plaintext_to_end_bounded, send_handshake_message,
     write_all_plaintext_bounded,
 };
+use crate::valgrind::{CallgrindRunner, CountInstructions};
 
 mod benchmark;
-mod callgrind;
 mod util;
+mod valgrind;
 
 /// The size in bytes of the plaintext sent in the transfer benchmark
 const TRANSFER_PLAINTEXT_SIZE: usize = 1024 * 1024 * 10; // 10 MB
@@ -832,7 +832,7 @@ fn compare_results(
 
     let mut diffs_with_callgrind_diff = Vec::new();
     for diff in diffs {
-        let detailed_diff = callgrind::diff(baseline_dir, candidate_dir, &diff.scenario)?;
+        let detailed_diff = valgrind::callgrind_diff(baseline_dir, candidate_dir, &diff.scenario)?;
         diffs_with_callgrind_diff.push((diff, detailed_diff));
     }
 
