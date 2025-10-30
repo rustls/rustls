@@ -34,7 +34,7 @@ path = "tests/bogo.rs"
 
 [[test]]
 name = "key_log_file_env"
-path = "tests/runners/key_log_file_env.rs"
+path = "tests/key_log_file_env.rs"
 
 [[test]]
 name = "process_provider"
