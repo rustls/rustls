@@ -47,7 +47,7 @@ use crate::util::transport::{
     read_handshake_message, read_plaintext_to_end_bounded, send_handshake_message,
     write_all_plaintext_bounded,
 };
-use crate::valgrind::{CallgrindRunner, CountInstructions};
+use crate::valgrind::{CallgrindRunner, CountInstructions, DhatRunner, MemoryDetails};
 
 mod benchmark;
 mod util;
@@ -72,6 +72,9 @@ const RESUMED_HANDSHAKE_RUNS: usize = 30;
 
 /// The name of the file where the instruction counts are stored after a `run-all` run
 const ICOUNTS_FILENAME: &str = "icounts.csv";
+
+/// The name of the file where the memory data are stored after a `run-all` run
+const MEMORY_FILENAME: &str = "memory.csv";
 
 /// Default size in bytes for internal buffers (256 KB)
 const DEFAULT_BUFFER_SIZE: usize = 262144;
@@ -134,8 +137,21 @@ fn main() -> anyhow::Result<()> {
             // Output results in CSV (note: not using a library here to avoid extra dependencies)
             let mut csv_file = File::create(output_dir.join(ICOUNTS_FILENAME))
                 .context("cannot create output csv file")?;
-            for (name, instr_count) in results {
-                writeln!(csv_file, "{name},{instr_count}")?;
+            for (name, combined) in &results {
+                writeln!(csv_file, "{name},{}", combined.instructions)?;
+            }
+
+            let mut csv_file = File::create(output_dir.join(MEMORY_FILENAME))
+                .context("cannot create output csv file")?;
+            for (name, combined) in results {
+                writeln!(
+                    csv_file,
+                    "{name},{},{},{},{}",
+                    combined.memory.heap_total_bytes,
+                    combined.memory.heap_total_blocks,
+                    combined.memory.heap_peak_bytes,
+                    combined.memory.heap_peak_blocks,
+                )?;
             }
         }
         Command::RunSingle { index, side } => {
@@ -488,7 +504,7 @@ pub fn run_all(
     executable: String,
     output_dir: PathBuf,
     benches: &[Benchmark],
-) -> anyhow::Result<Vec<(String, u64)>> {
+) -> anyhow::Result<Vec<(String, CombinedMeasurement)>> {
     for bench in benches {
         if let Some(warm_up) = bench.params.warm_up {
             warm_up();
@@ -496,16 +512,23 @@ pub fn run_all(
     }
 
     // Run the benchmarks in parallel
-    let runner = CallgrindRunner::new(executable, output_dir)?;
-    let results: Vec<_> = benches
+    let cg_runner = CallgrindRunner::new(executable.clone(), output_dir.clone())?;
+    let cg_results: Vec<_> = benches
         .par_iter()
         .enumerate()
-        .map(|(i, bench)| (bench, runner.run_bench(i as u32, bench)))
+        .map(|(i, bench)| (bench, cg_runner.run_bench(i as u32, bench)))
+        .collect();
+
+    let dh_runner = DhatRunner::new(executable, output_dir)?;
+    let dh_results: Vec<_> = benches
+        .par_iter()
+        .enumerate()
+        .map(|(i, bench)| (bench, dh_runner.run_bench(i as u32, bench)))
         .collect();
 
     // Report possible errors
-    let (errors, results): (Vec<_>, FxHashMap<_, _>) =
-        results
+    let (errors, cg_results): (Vec<_>, FxHashMap<_, _>) =
+        cg_results
             .into_iter()
             .partition_map(|(bench, result)| match result {
                 Err(_) => Either::Left(()),
@@ -517,16 +540,47 @@ pub fn run_all(
         // crashing
         anyhow::bail!("One or more benchmarks crashed");
     }
+    let (errors, dh_results): (Vec<_>, FxHashMap<_, _>) =
+        dh_results
+            .into_iter()
+            .partition_map(|(bench, result)| match result {
+                Err(_) => Either::Left(()),
+                Ok(heap_profile) => Either::Right((bench.name(), heap_profile)),
+            });
+    if !errors.is_empty() {
+        // Note: there is no need to explicitly report the names of each crashed benchmark, because
+        // names and other details are automatically printed to stderr by the child process upon
+        // crashing
+        anyhow::bail!("One or more benchmarks crashed");
+    }
 
     // Gather results keeping the original order of the benchmarks
     let mut measurements = Vec::new();
     for bench in benches {
-        let instr_counts = get_reported_instr_count(bench, &results);
-        measurements.push((bench.name_with_side(Side::Server), instr_counts.server));
-        measurements.push((bench.name_with_side(Side::Client), instr_counts.client));
+        let instr_counts = get_reported_instr_count(bench, &cg_results);
+        let memory = &dh_results[bench.name()];
+        measurements.push((
+            bench.name_with_side(Side::Server),
+            CombinedMeasurement {
+                instructions: instr_counts.server,
+                memory: memory.server,
+            },
+        ));
+        measurements.push((
+            bench.name_with_side(Side::Client),
+            CombinedMeasurement {
+                instructions: instr_counts.client,
+                memory: memory.client,
+            },
+        ));
     }
 
     Ok(measurements)
+}
+
+pub struct CombinedMeasurement {
+    instructions: u64,
+    memory: MemoryDetails,
 }
 
 /// Drives the different steps in a benchmark.
