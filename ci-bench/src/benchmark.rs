@@ -95,6 +95,8 @@ pub struct BenchmarkParams {
     pub version: &'static rustls::SupportedProtocolVersion,
     /// A user-facing label that identifies these params
     pub label: String,
+    /// Call this once this BenchmarkParams is sure to be used
+    pub warm_up: Option<fn()>,
 }
 
 impl BenchmarkParams {
@@ -106,6 +108,7 @@ impl BenchmarkParams {
         ciphersuite: rustls::SupportedCipherSuite,
         version: &'static rustls::SupportedProtocolVersion,
         label: String,
+        warm_up: Option<fn()>,
     ) -> Self {
         Self {
             provider,
@@ -114,6 +117,7 @@ impl BenchmarkParams {
             ciphersuite,
             version,
             label,
+            warm_up,
         }
     }
 }

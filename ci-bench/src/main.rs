@@ -150,6 +150,10 @@ fn main() -> anyhow::Result<()> {
                 .get(index as usize)
                 .ok_or(anyhow::anyhow!("Benchmark not found: {index}"))?;
 
+            if let Some(warm_up) = bench.params.warm_up {
+                warm_up();
+            }
+
             let stdin_lock = io::stdin().lock();
             let stdout_lock = io::stdout().lock();
 
@@ -310,13 +314,14 @@ fn all_benchmarks() -> anyhow::Result<Vec<Benchmark>> {
 fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     let mut all = Vec::new();
 
-    for (provider, suites, ticketer, provider_name) in [
+    for (provider, suites, ticketer, provider_name, warm_up) in [
         (
             derandomize(ring::default_provider()),
             ring::ALL_CIPHER_SUITES,
             #[allow(trivial_casts)]
             &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "ring",
+            None,
         ),
         (
             derandomize(aws_lc_rs::default_provider()),
@@ -324,6 +329,8 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
             #[allow(trivial_casts)]
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "aws_lc_rs",
+            #[expect(trivial_casts)]
+            Some(warm_up_aws_lc_rs as fn()),
         ),
     ] {
         for (key_type, suite_name, version, name) in [
@@ -377,6 +384,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
                 find_suite(suites, suite_name),
                 version,
                 format!("{provider_name}_{name}"),
+                warm_up,
             ));
         }
     }
@@ -392,6 +400,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         rustls_fuzzing_provider::TLS13_FUZZING_SUITE,
         &rustls::version::TLS13,
         "1.3_no_crypto".to_string(),
+        None,
     ));
 
     all.push(BenchmarkParams::new(
@@ -401,6 +410,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         rustls_fuzzing_provider::TLS_FUZZING_SUITE,
         &rustls::version::TLS12,
         "1.2_no_crypto".to_string(),
+        None,
     ));
 
     all
@@ -424,17 +434,20 @@ fn aws_lc_rs_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
 }
 
 fn derandomize(base: CryptoProvider) -> CryptoProvider {
-    // "Warm up" provider's actual entropy source.  aws-lc-rs particularly
-    // has an expensive process here, which is one-time (per calling thread)
-    // so not useful to include in benchmark measurements.
-    base.secure_random
-        .fill(&mut [0u8])
-        .unwrap();
-
     CryptoProvider {
         secure_random: &NotRandom,
         ..base
     }
+}
+
+fn warm_up_aws_lc_rs() {
+    // "Warm up" provider's actual entropy source.  aws-lc-rs particularly
+    // has an expensive process here, which is one-time (per calling thread)
+    // so not useful to include in benchmark measurements.
+    aws_lc_rs::default_provider()
+        .secure_random
+        .fill(&mut [0u8])
+        .unwrap();
 }
 
 #[derive(Debug)]
@@ -483,6 +496,12 @@ pub fn run_all(
     output_dir: PathBuf,
     benches: &[Benchmark],
 ) -> anyhow::Result<Vec<(String, u64)>> {
+    for bench in benches {
+        if let Some(warm_up) = bench.params.warm_up {
+            warm_up();
+        }
+    }
+
     // Run the benchmarks in parallel
     let runner = CallgrindRunner::new(executable, output_dir)?;
     let results: Vec<_> = benches
