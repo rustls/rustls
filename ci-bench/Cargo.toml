@@ -18,8 +18,5 @@ rustls = { path = "../rustls", features = ["ring", "aws-lc-rs"] }
 rustls-test = { workspace = true }
 rustls-fuzzing-provider = { workspace = true }
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = { workspace = true }
-
 [target.'cfg(target_os = "linux")'.dependencies]
 crabgrind = { workspace = true }

@@ -2557,7 +2557,6 @@ dependencies = [
  "rustls 0.24.0-dev.0",
  "rustls-fuzzing-provider",
  "rustls-test",
- "tikv-jemallocator",
 ]
 
 [[package]]
