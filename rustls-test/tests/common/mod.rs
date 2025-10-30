@@ -2,33 +2,9 @@
 #![allow(clippy::disallowed_types)]
 
 use std::borrow::Cow;
-pub use std::sync::Arc;
 
-use rustls::client::{ServerVerifierBuilder, WebPkiServerVerifier};
+use rustls::SupportedCipherSuite;
 use rustls::crypto::CryptoProvider;
-use rustls::server::{ClientVerifierBuilder, WebPkiClientVerifier};
-use rustls::{RootCertStore, SupportedCipherSuite};
-
-pub fn webpki_client_verifier_builder(
-    roots: Arc<RootCertStore>,
-    provider: &CryptoProvider,
-) -> ClientVerifierBuilder {
-    WebPkiClientVerifier::builder(roots, provider)
-}
-
-pub fn webpki_server_verifier_builder(
-    roots: Arc<RootCertStore>,
-    provider: &CryptoProvider,
-) -> ServerVerifierBuilder {
-    WebPkiServerVerifier::builder(roots, provider)
-}
-
-fn exactly_one_provider() -> bool {
-    cfg!(any(
-        all(feature = "ring", not(feature = "aws-lc-rs")),
-        all(feature = "aws-lc-rs", not(feature = "ring"))
-    ))
-}
 
 pub fn provider_with_one_suite(
     provider: &CryptoProvider,
