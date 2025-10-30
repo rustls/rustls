@@ -96,6 +96,8 @@ pub struct BenchmarkParams {
     pub version: ProtocolVersion,
     /// A user-facing label that identifies these params
     pub label: String,
+    /// Call this once this BenchmarkParams is sure to be used
+    pub warm_up: Option<fn()>,
 }
 
 impl BenchmarkParams {
@@ -106,6 +108,7 @@ impl BenchmarkParams {
         auth_key: AuthKeySource,
         version: ProtocolVersion,
         label: String,
+        warm_up: Option<fn()>,
     ) -> Self {
         Self {
             provider,
@@ -113,6 +116,7 @@ impl BenchmarkParams {
             auth_key,
             version,
             label,
+            warm_up,
         }
     }
 }
