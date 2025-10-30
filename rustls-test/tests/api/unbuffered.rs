@@ -906,11 +906,11 @@ fn tls13_packed_handshake() {
     let (_hello, _) = encode_tls_data(client.process_tls_records(&mut []));
     confirm_transmit_tls_data(client.process_tls_records(&mut []));
 
-    let mut first_flight = include_bytes!("data/bug2040-message-1.bin").to_vec();
+    let mut first_flight = include_bytes!("../data/bug2040-message-1.bin").to_vec();
     let (_ccs, discard) = encode_tls_data(client.process_tls_records(&mut first_flight[..]));
     assert_eq!(discard, first_flight.len());
 
-    let mut second_flight = include_bytes!("data/bug2040-message-2.bin").to_vec();
+    let mut second_flight = include_bytes!("../data/bug2040-message-2.bin").to_vec();
     let UnbufferedStatus { state, .. } = client.process_tls_records(&mut second_flight[..]);
     assert_eq!(
         state.unwrap_err(),

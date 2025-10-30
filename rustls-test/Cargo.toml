@@ -26,7 +26,7 @@ webpki = { workspace = true }
 
 [[test]]
 name = "api"
-path = "tests/runners/api.rs"
+path = "tests/api.rs"
 
 [[test]]
 name = "bogo"
