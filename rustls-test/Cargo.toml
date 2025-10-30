@@ -3,6 +3,39 @@ name = "rustls-test"
 version = "0.1.0"
 edition = "2021"
 publish = false
+autotests = false
+
+[features]
+aws-lc-rs = ["rustls/aws-lc-rs"]
+brotli = ["rustls/brotli"]
+fips = ["rustls/fips"]
+log = ["rustls/log"]
+ring = ["rustls/ring"]
+zlib = ["rustls/zlib"]
 
 [dependencies]
 rustls = { path = "../rustls", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+env_logger = { workspace = true }
+log = { workspace = true }
+num-bigint = { workspace = true }
+pki-types = { workspace = true }
+x509-parser = { workspace = true }
+webpki = { workspace = true }
+
+[[test]]
+name = "api"
+path = "tests/runners/api.rs"
+
+[[test]]
+name = "bogo"
+path = "tests/bogo.rs"
+
+[[test]]
+name = "key_log_file_env"
+path = "tests/runners/key_log_file_env.rs"
+
+[[test]]
+name = "process_provider"
+path = "tests/process_provider.rs"

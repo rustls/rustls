@@ -46,14 +46,12 @@ env_logger = { workspace = true }
 hex = { workspace = true }
 log = { workspace = true }
 macro_rules_attribute = { workspace = true }
-num-bigint = { workspace = true }
 rcgen = { workspace = true }
 rustls-test = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true }
 webpki-roots = { workspace = true }
-x509-parser = { workspace = true }
 
 [[bench]]
 name = "benchmarks"
@@ -64,22 +62,6 @@ required-features = ["ring"]
 [[example]]
 name = "test_ca"
 path = "examples/internal/test_ca.rs"
-
-[[test]]
-name = "api"
-path = "tests/runners/api.rs"
-
-[[test]]
-name = "bogo"
-path = "tests/bogo.rs"
-
-[[test]]
-name = "key_log_file_env"
-path = "tests/runners/key_log_file_env.rs"
-
-[[test]]
-name = "process_provider"
-path = "tests/process_provider.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)

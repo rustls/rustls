@@ -2514,7 +2514,6 @@ dependencies = [
  "hex",
  "log",
  "macro_rules_attribute",
- "num-bigint",
  "once_cell",
  "rcgen",
  "ring",
@@ -2526,7 +2525,6 @@ dependencies = [
  "subtle",
  "time",
  "webpki-roots 1.0.3",
- "x509-parser",
  "zeroize",
  "zlib-rs",
 ]
@@ -2677,7 +2675,13 @@ dependencies = [
 name = "rustls-test"
 version = "0.1.0"
 dependencies = [
+ "env_logger",
+ "log",
+ "num-bigint",
  "rustls 0.24.0-dev.0",
+ "rustls-pki-types",
+ "rustls-webpki 0.104.0-alpha.1",
+ "x509-parser",
 ]
 
 [[package]]

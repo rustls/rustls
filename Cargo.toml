@@ -36,6 +36,7 @@ default-members = [
   # ---
   "examples",
   "rustls",
+  "rustls-test",
 ]
 resolver = "2"
 
