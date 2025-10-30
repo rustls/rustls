@@ -1,15 +1,11 @@
 use std::cell::RefCell;
 
-#[macro_use]
-#[path = "runners/macros.rs"]
-mod macros;
-
 #[cfg(feature = "ring")]
 #[path = "."]
 mod tests_with_ring {
     use super::*;
 
-    provider_ring!();
+    rustls_test::provider_ring!();
 
     #[path = "api/client_cert_verifier.rs"]
     mod client_cert_verifier;
@@ -44,7 +40,7 @@ mod tests_with_ring {
 mod tests_with_aws_lc_rs {
     use super::*;
 
-    provider_aws_lc_rs!();
+    rustls_test::provider_aws_lc_rs!();
 
     #[path = "api/client_cert_verifier.rs"]
     mod client_cert_verifier;
