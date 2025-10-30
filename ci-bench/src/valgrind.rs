@@ -9,9 +9,6 @@ use anyhow::Context;
 use crate::Side;
 use crate::benchmark::Benchmark;
 
-/// The subdirectory in which the callgrind output should be stored
-const CALLGRIND_OUTPUT_SUBDIR: &str = "callgrind";
-
 /// A callgrind-based benchmark runner
 pub(crate) struct CallgrindRunner {
     /// The path to the ci-bench executable
@@ -145,6 +142,9 @@ impl CallgrindRunner {
         })
     }
 }
+
+/// The subdirectory in which the callgrind output should be stored
+const CALLGRIND_OUTPUT_SUBDIR: &str = "callgrind";
 
 /// A running subprocess for one of the sides of the benchmark (client or server)
 struct BenchSubprocess {
