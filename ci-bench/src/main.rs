@@ -155,12 +155,6 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Command::RunSingle { index, side } => {
-            // `u32::MAX` is used as a signal to do nothing and return. By "running" an empty
-            // benchmark we can measure the startup overhead.
-            if index == u32::MAX {
-                return Ok(());
-            }
-
             let bench = benchmarks
                 .get(index as usize)
                 .ok_or(anyhow::anyhow!("Benchmark not found: {index}"))?;
