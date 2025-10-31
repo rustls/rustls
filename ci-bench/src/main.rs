@@ -94,7 +94,11 @@ pub enum Command {
         output_dir: PathBuf,
     },
     /// Run a single benchmark at the provided index (used by the bench runner to start each benchmark in its own process)
-    RunSingle { index: u32, side: Side },
+    RunSingle {
+        index: u32,
+        side: Side,
+        measurement_mode: Mode,
+    },
     /// Run all benchmarks in walltime mode and print the measured timings in CSV format
     Walltime {
         #[arg(short, long)]
@@ -113,6 +117,12 @@ pub enum Command {
 pub enum Side {
     Server,
     Client,
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+pub enum Mode {
+    Instruction,
+    Memory,
 }
 
 impl Side {
@@ -154,7 +164,11 @@ fn main() -> anyhow::Result<()> {
                 )?;
             }
         }
-        Command::RunSingle { index, side } => {
+        Command::RunSingle {
+            index,
+            side,
+            measurement_mode,
+        } => {
             let bench = benchmarks
                 .get(index as usize)
                 .ok_or(anyhow::anyhow!("Benchmark not found: {index}"))?;
@@ -177,6 +191,13 @@ fn main() -> anyhow::Result<()> {
             let mut stdin = unsafe { File::from_raw_fd(stdin_lock.as_raw_fd()) };
             let mut stdout = unsafe { File::from_raw_fd(stdout_lock.as_raw_fd()) };
 
+            // When measuring instructions, we do multiple resumed handshakes, for
+            // reasons explained in the comments to `RESUMED_HANDSHAKE_RUNS`.
+            let resumed_reps = match measurement_mode {
+                Mode::Instruction => RESUMED_HANDSHAKE_RUNS,
+                _ => 1,
+            };
+
             let handshake_buf = &mut [0u8; DEFAULT_BUFFER_SIZE];
             let resumption_kind = bench.kind.resumption_kind();
             let io = StepperIo {
@@ -196,6 +217,7 @@ fn main() -> anyhow::Result<()> {
                                 ),
                             },
                             bench.kind,
+                            resumed_reps,
                         )
                         .await
                     }
@@ -210,6 +232,7 @@ fn main() -> anyhow::Result<()> {
                                 ),
                             },
                             bench.kind,
+                            resumed_reps,
                         )
                         .await
                     }
@@ -253,6 +276,7 @@ fn main() -> anyhow::Result<()> {
                                 config: ServerSideStepper::make_config(params, resumption_kind),
                             },
                             bench.kind,
+                            RESUMED_HANDSHAKE_RUNS,
                         )
                         .await
                     };
@@ -270,6 +294,7 @@ fn main() -> anyhow::Result<()> {
                                 config: ClientSideStepper::make_config(params, resumption_kind),
                             },
                             bench.kind,
+                            RESUMED_HANDSHAKE_RUNS,
                         )
                         .await
                     };
@@ -753,7 +778,11 @@ impl BenchStepper for ServerSideStepper<'_> {
 }
 
 /// Runs the benchmark using the provided stepper
-async fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyhow::Result<()> {
+async fn run_bench<T: BenchStepper>(
+    mut stepper: T,
+    kind: BenchmarkKind,
+    resumed_reps: usize,
+) -> anyhow::Result<()> {
     match kind {
         BenchmarkKind::Handshake(ResumptionKind::No) => {
             // Just count instructions for one handshake.
@@ -765,10 +794,8 @@ async fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyh
             // session ID / ticket.  This is not measured.
             stepper.handshake().await?;
 
-            // From now on we can perform resumed handshakes. We do it multiple
-            // times, for reasons explained in the comments to `RESUMED_HANDSHAKE_RUNS`.
             let _count = CountInstructions::start();
-            for _ in 0..RESUMED_HANDSHAKE_RUNS {
+            for _ in 0..resumed_reps {
                 // Wait for the endpoints to sync (i.e. the server must have discarded the previous
                 // connection and be ready for a new handshake, otherwise the client will start a
                 // handshake before the server is ready and the bytes will be fed to the old
