@@ -104,13 +104,41 @@ pub enum Command {
         #[arg(short, long)]
         iterations_per_scenario: usize,
     },
-    /// Compare the results from two previous benchmark runs and print a user-friendly markdown overview
+    /// Compare the icount results from two previous benchmark runs and print a user-friendly markdown overview
     Compare {
         /// Path to the directory with the results of a previous `run-all` execution
         baseline_dir: PathBuf,
         /// Path to the directory with the results of a previous `run-all` execution
         candidate_dir: PathBuf,
     },
+    /// Compare the memory results from two previous benchmark runs and print a user-friendly markdown overview
+    CompareMemory {
+        comparator: CompareMemoryOperand,
+        /// Path to the directory with the results of a previous `run-all` execution
+        baseline_dir: PathBuf,
+        /// Path to the directory with the results of a previous `run-all` execution
+        candidate_dir: PathBuf,
+    },
+}
+
+#[derive(Copy, Clone, Debug, Default, ValueEnum)]
+pub enum CompareMemoryOperand {
+    #[default]
+    TotalBytes,
+    TotalBlocks,
+    PeakBytes,
+    PeakBlocks,
+}
+
+impl CompareMemoryOperand {
+    fn choose(&self, memory: MemoryDetails) -> u64 {
+        match self {
+            Self::TotalBytes => memory.heap_total_bytes,
+            Self::TotalBlocks => memory.heap_total_blocks,
+            Self::PeakBytes => memory.heap_peak_bytes,
+            Self::PeakBlocks => memory.heap_peak_blocks,
+        }
+    }
 }
 
 #[derive(Copy, Clone, ValueEnum)]
@@ -323,10 +351,21 @@ fn main() -> anyhow::Result<()> {
             baseline_dir,
             candidate_dir,
         } => {
-            let baseline = read_results(&baseline_dir.join(ICOUNTS_FILENAME))?;
-            let candidate = read_results(&candidate_dir.join(ICOUNTS_FILENAME))?;
-            let result = compare_results(&baseline_dir, &candidate_dir, &baseline, &candidate)?;
-            print_report(&result);
+            let baseline = read_icount_results(&baseline_dir.join(ICOUNTS_FILENAME))?;
+            let candidate = read_icount_results(&candidate_dir.join(ICOUNTS_FILENAME))?;
+            let result =
+                compare_icount_results(&baseline_dir, &candidate_dir, &baseline, &candidate)?;
+            print_icount_report(&result);
+        }
+        Command::CompareMemory {
+            comparator,
+            baseline_dir,
+            candidate_dir,
+        } => {
+            let baseline = read_memory_results(&baseline_dir.join(MEMORY_FILENAME))?;
+            let candidate = read_memory_results(&candidate_dir.join(MEMORY_FILENAME))?;
+
+            print_memory_report(&compare_memory_results(&baseline, &candidate, comparator)?);
         }
     }
 
@@ -830,6 +869,13 @@ struct CompareResult {
     missing_in_baseline: Vec<String>,
 }
 
+/// The results of a comparison between two `run-all` executions
+struct MemoryCompareResult {
+    diffs: Vec<MemoryDiff>,
+    /// Benchmark scenarios present in the candidate but missing in the baseline
+    missing_in_baseline: Vec<String>,
+}
+
 /// Contains information about instruction counts and their difference for a specific scenario
 #[derive(Clone)]
 struct Diff {
@@ -840,8 +886,19 @@ struct Diff {
     diff_ratio: f64,
 }
 
+/// Contains information about memory usage and a difference for a specific scenario & comparator
+#[derive(Clone)]
+struct MemoryDiff {
+    scenario: String,
+    baseline: MemoryDetails,
+    candidate: MemoryDetails,
+    comparator: CompareMemoryOperand,
+    diff: i64,
+    diff_ratio: f64,
+}
+
 /// Reads the (benchmark, instruction count) pairs from previous CSV output
-fn read_results(path: &Path) -> anyhow::Result<HashMap<String, u64>> {
+fn read_icount_results(path: &Path) -> anyhow::Result<HashMap<String, u64>> {
     let file = File::open(path).context(format!(
         "CSV file for comparison not found: {}",
         path.display()
@@ -868,9 +925,54 @@ fn read_results(path: &Path) -> anyhow::Result<HashMap<String, u64>> {
     Ok(measurements)
 }
 
+/// Reads the (benchmark, instruction count) pairs from previous CSV output
+fn read_memory_results(path: &Path) -> anyhow::Result<HashMap<String, MemoryDetails>> {
+    let file = File::open(path).context(format!(
+        "CSV file for comparison not found: {}",
+        path.display()
+    ))?;
+
+    let mut measurements = HashMap::new();
+    for line in BufReader::new(file).lines() {
+        let line = line.context("Unable to read results from CSV file")?;
+        let line = line.trim();
+        let mut parts = line.split(',');
+        measurements.insert(
+            parts
+                .next()
+                .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                .to_string(),
+            MemoryDetails {
+                heap_total_bytes: parts
+                    .next()
+                    .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                    .parse()
+                    .context("Unable to parse heap total bytes from CSV")?,
+                heap_total_blocks: parts
+                    .next()
+                    .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                    .parse()
+                    .context("Unable to parse heap total blocks from CSV")?,
+                heap_peak_bytes: parts
+                    .next()
+                    .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                    .parse()
+                    .context("Unable to parse heap peak bytes from CSV")?,
+                heap_peak_blocks: parts
+                    .next()
+                    .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                    .parse()
+                    .context("Unable to parse heap peak blocks from CSV")?,
+            },
+        );
+    }
+
+    Ok(measurements)
+}
+
 /// Returns an internal representation of the comparison between the baseline and the candidate
 /// measurements
-fn compare_results(
+fn compare_icount_results(
     baseline_dir: &Path,
     candidate_dir: &Path,
     baseline: &HashMap<String, u64>,
@@ -917,8 +1019,54 @@ fn compare_results(
     })
 }
 
+/// Returns an internal representation of the comparison between the baseline and the candidate
+/// measurements
+fn compare_memory_results(
+    baseline: &HashMap<String, MemoryDetails>,
+    candidate: &HashMap<String, MemoryDetails>,
+    comparator: CompareMemoryOperand,
+) -> anyhow::Result<MemoryCompareResult> {
+    let mut diffs = Vec::new();
+    let mut missing = Vec::new();
+
+    for (scenario, &candidate_memory) in candidate {
+        let Some(&baseline_memory) = baseline.get(scenario) else {
+            missing.push(scenario.clone());
+            continue;
+        };
+
+        let candidate_count = comparator.choose(candidate_memory);
+        let baseline_count = comparator.choose(baseline_memory);
+
+        let diff = candidate_count as i64 - baseline_count as i64;
+        let diff_ratio = diff as f64 / baseline_count as f64;
+        let diff = MemoryDiff {
+            scenario: scenario.clone(),
+            baseline: baseline_memory,
+            candidate: candidate_memory,
+            comparator,
+            diff,
+            diff_ratio,
+        };
+
+        diffs.push(diff);
+    }
+
+    diffs.sort_by(|diff1, diff2| {
+        diff2
+            .diff_ratio
+            .abs()
+            .total_cmp(&diff1.diff_ratio.abs())
+    });
+
+    Ok(MemoryCompareResult {
+        diffs,
+        missing_in_baseline: missing,
+    })
+}
+
 /// Prints a report of the comparison to stdout, using GitHub-flavored markdown
-fn print_report(result: &CompareResult) {
+fn print_icount_report(result: &CompareResult) {
     println!("# Benchmark results");
 
     if !result.missing_in_baseline.is_empty() {
@@ -956,6 +1104,29 @@ fn print_report(result: &CompareResult) {
     }
 }
 
+fn print_memory_report(result: &MemoryCompareResult) {
+    println!("# Memory measurement results");
+
+    if !result.missing_in_baseline.is_empty() {
+        println!("### ⚠️ Warning: missing benchmarks");
+        println!();
+        println!(
+            "The following benchmark scenarios are present in the candidate but not in the baseline:"
+        );
+        println!();
+        for scenario in &result.missing_in_baseline {
+            println!("* {scenario}");
+        }
+    }
+
+    println!("## Memory measurement differences");
+    if result.diffs.is_empty() {
+        println!("_There are no memory measurement differences_");
+    } else {
+        memory_table(&result.diffs, true);
+    }
+}
+
 /// Renders the diffs as a markdown table
 fn table<'a>(diffs: impl Iterator<Item = &'a Diff>, emoji_feedback: bool) {
     println!("| Scenario | Baseline | Candidate | Diff |");
@@ -972,6 +1143,36 @@ fn table<'a>(diffs: impl Iterator<Item = &'a Diff>, emoji_feedback: bool) {
             diff.scenario,
             diff.baseline,
             diff.candidate,
+            emoji,
+            diff.diff,
+            diff.diff_ratio * 100.0
+        )
+    }
+}
+
+/// Renders the diffs as a markdown table
+fn memory_table(diffs: &[MemoryDiff], emoji_feedback: bool) {
+    println!("| Scenario | Baseline | Candidate | Diff |");
+    println!("| --- | ---: | ---: | ---: |");
+    for diff in diffs {
+        let emoji = match emoji_feedback {
+            true if diff.diff_ratio > 0.01 => "⚠️ ",
+            true if diff.diff_ratio < -0.01 => "✅ ",
+            _ => "",
+        };
+
+        println!(
+            "| {} | Total {}B / {}# <br/> Peak {}B / {}# | Total {}B / {}# <br/> Peak {}B / {}# | {:?} {}{} ({:.2}%) |",
+            diff.scenario,
+            diff.baseline.heap_total_bytes,
+            diff.baseline.heap_total_blocks,
+            diff.baseline.heap_peak_bytes,
+            diff.baseline.heap_peak_blocks,
+            diff.candidate.heap_total_bytes,
+            diff.candidate.heap_total_blocks,
+            diff.candidate.heap_peak_bytes,
+            diff.candidate.heap_peak_blocks,
+            diff.comparator,
             emoji,
             diff.diff,
             diff.diff_ratio * 100.0
