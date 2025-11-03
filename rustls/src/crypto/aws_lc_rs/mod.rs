@@ -25,13 +25,9 @@ pub(crate) mod pq;
 pub mod sign;
 use sign::{EcdsaSigner, Ed25519Signer, RsaSigningKey};
 
-#[path = "../ring/hash.rs"]
 pub(crate) mod hash;
-#[path = "../ring/hmac.rs"]
 pub(crate) mod hmac;
-#[path = "../ring/kx.rs"]
 pub(crate) mod kx;
-#[path = "../ring/quic.rs"]
 pub(crate) mod quic;
 #[cfg(feature = "std")]
 pub(crate) mod ticketer;
