@@ -672,3 +672,11 @@ mod sealed {
     #[expect(unnameable_types)]
     pub trait Sealed {}
 }
+
+#[cfg(test)]
+const TEST_PROVIDERS: &[&crypto::CryptoProvider] = &[
+    #[cfg(feature = "aws-lc-rs")]
+    &crypto::aws_lc_rs::DEFAULT_PROVIDER,
+    #[cfg(feature = "ring")]
+    &crypto::ring::DEFAULT_PROVIDER,
+];
