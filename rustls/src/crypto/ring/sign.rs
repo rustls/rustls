@@ -1,5 +1,3 @@
-#![allow(clippy::duplicate_mod)]
-
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::vec::Vec;
