@@ -248,50 +248,6 @@ impl CryptoProvider {
         static_default::get_default()
     }
 
-    /// Returns a provider named unambiguously by rustls crate features.
-    ///
-    /// This function returns `None` if the crate features are ambiguous (ie, specify two
-    /// providers), or specify no providers, or the feature `custom-provider` is activated.
-    /// In all cases the application should explicitly specify the provider to use
-    /// with [`CryptoProvider::install_default`].
-    ///
-    /// This can be used to check if a default provider is available before
-    /// invoking functions that require an installed `CryptoProvider`, like
-    /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
-    ///
-    /// ```rust,no_run
-    /// # use rustls::crypto::CryptoProvider;
-    /// if CryptoProvider::get_default().is_some() || CryptoProvider::from_crate_features().is_some() {
-    ///     // A default provider is available, either from the
-    ///     // process-level default or from the crate features.
-    /// }
-    /// ```
-    ///
-    /// [`ClientConfig::builder()`]: crate::ClientConfig::builder
-    /// [`ServerConfig::builder()`]: crate::ServerConfig::builder
-    pub fn from_crate_features() -> Option<Self> {
-        #[cfg(all(
-            feature = "ring",
-            not(feature = "aws-lc-rs"),
-            not(feature = "custom-provider")
-        ))]
-        {
-            return Some(ring::DEFAULT_PROVIDER);
-        }
-
-        #[cfg(all(
-            feature = "aws-lc-rs",
-            not(feature = "ring"),
-            not(feature = "custom-provider")
-        ))]
-        {
-            return Some(aws_lc_rs::DEFAULT_PROVIDER);
-        }
-
-        #[allow(unreachable_code)]
-        None
-    }
-
     /// Returns `true` if this `CryptoProvider` is operating in FIPS mode.
     ///
     /// This covers only the cryptographic parts of FIPS approval.  There are
