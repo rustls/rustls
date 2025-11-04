@@ -2,6 +2,7 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
 use pki_types::PrivateKeyDer;
+#[cfg(test)]
 pub(crate) use ring as ring_like;
 use webpki::ring as webpki_algs;
 
@@ -57,9 +58,8 @@ struct Ring;
 
 impl SecureRandom for Ring {
     fn fill(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed> {
-        use ring_like::rand::SecureRandom;
-
-        ring_like::rand::SystemRandom::new()
+        use ring::rand::SecureRandom;
+        ring::rand::SystemRandom::new()
             .fill(buf)
             .map_err(|_| GetRandomFailed)
     }
@@ -214,17 +214,16 @@ pub use ticketer::Ticketer;
 
 /// Compatibility shims between ring 0.16.x and 0.17.x API
 mod ring_shim {
-    use super::ring_like;
+    use ring::agreement::{self, EphemeralPrivateKey, UnparsedPublicKey};
+
     use crate::crypto::SharedSecret;
 
     pub(super) fn agree_ephemeral(
-        priv_key: ring_like::agreement::EphemeralPrivateKey,
-        peer_key: &ring_like::agreement::UnparsedPublicKey<&[u8]>,
+        priv_key: EphemeralPrivateKey,
+        peer_key: &UnparsedPublicKey<&[u8]>,
     ) -> Result<SharedSecret, ()> {
-        ring_like::agreement::agree_ephemeral(priv_key, peer_key, |secret| {
-            SharedSecret::from(secret)
-        })
-        .map_err(|_| ())
+        agreement::agree_ephemeral(priv_key, peer_key, |secret| SharedSecret::from(secret))
+            .map_err(|_| ())
     }
 }
 

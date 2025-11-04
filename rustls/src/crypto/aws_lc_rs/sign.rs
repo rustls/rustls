@@ -4,10 +4,10 @@ use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::fmt::{self, Debug, Formatter};
 
+use aws_lc_rs::rand::SystemRandom;
+use aws_lc_rs::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
 use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id};
 
-use super::ring_like::rand::SystemRandom;
-use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
 #[cfg(any(test, bench))]
 use crate::crypto::CryptoProvider;
 use crate::crypto::signer::{Signer, SigningKey, public_key_to_spki};

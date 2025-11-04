@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
-use super::ring_like::aead;
+use ring::aead;
+
 use crate::crypto::cipher::{AeadKey, Iv, Nonce};
 use crate::error::{ApiMisuse, Error};
 use crate::quic;

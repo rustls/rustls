@@ -1,8 +1,9 @@
 use alloc::boxed::Box;
 use core::fmt;
 
-use super::ring_like::agreement;
-use super::ring_like::rand::SystemRandom;
+use ring::agreement;
+use ring::rand::SystemRandom;
+
 use crate::crypto::{ActiveKeyExchange, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;

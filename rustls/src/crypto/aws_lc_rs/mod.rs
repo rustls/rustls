@@ -5,6 +5,7 @@ use alloc::boxed::Box;
 // glue here.  The shared files should always use `super::ring_like` to access a
 // ring-compatible crate, and `super::ring_shim` to bridge the gaps where they are
 // small.
+#[cfg(test)]
 pub(crate) use aws_lc_rs as ring_like;
 use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
@@ -69,9 +70,9 @@ struct AwsLcRs;
 
 impl SecureRandom for AwsLcRs {
     fn fill(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed> {
-        use ring_like::rand::SecureRandom;
+        use aws_lc_rs::rand::SecureRandom;
 
-        ring_like::rand::SystemRandom::new()
+        aws_lc_rs::rand::SystemRandom::new()
             .fill(buf)
             .map_err(|_| GetRandomFailed)
     }
@@ -277,14 +278,15 @@ pub use ticketer::Ticketer;
 
 /// Compatibility shims between ring 0.16.x and 0.17.x API
 mod ring_shim {
-    use super::ring_like;
+    use aws_lc_rs::agreement::{self, EphemeralPrivateKey, UnparsedPublicKey};
+
     use crate::crypto::SharedSecret;
 
     pub(super) fn agree_ephemeral(
-        priv_key: ring_like::agreement::EphemeralPrivateKey,
-        peer_key: &ring_like::agreement::UnparsedPublicKey<&[u8]>,
+        priv_key: EphemeralPrivateKey,
+        peer_key: &UnparsedPublicKey<&[u8]>,
     ) -> Result<SharedSecret, ()> {
-        ring_like::agreement::agree_ephemeral(priv_key, peer_key, (), |secret| {
+        agreement::agree_ephemeral(priv_key, peer_key, (), |secret| {
             Ok(SharedSecret::from(secret))
         })
     }

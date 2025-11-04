@@ -4,10 +4,10 @@ use core::fmt;
 use core::fmt::{Debug, Formatter};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+use ring::aead;
+use ring::rand::{SecureRandom, SystemRandom};
 use subtle::ConstantTimeEq;
 
-use super::ring_like::aead;
-use super::ring_like::rand::{SecureRandom, SystemRandom};
 use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
