@@ -117,9 +117,12 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                         }
                     };
 
-                match self.core.process_msg(msg, state, None) {
+                match self
+                    .core
+                    .common_state
+                    .process_main_protocol(msg, state, &mut self.core.side, None)
+                {
                     Ok(new) => state = new,
-
                     Err(e) => {
                         buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Err(e.clone());

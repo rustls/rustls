@@ -10,12 +10,13 @@ use kernel::KernelConnection;
 use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
-use crate::log::trace;
 use crate::msgs::deframer::DeframerIter;
 use crate::msgs::deframer::buffers::{BufferProgress, DeframerVecBuffer, Delocator, Locator};
 use crate::msgs::deframer::handshake::HandshakeDeframer;
 use crate::msgs::handshake::Random;
-use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
+use crate::msgs::message::InboundPlainMessage;
+#[cfg(feature = "std")]
+use crate::msgs::message::Message;
 use crate::record_layer::Decrypted;
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
@@ -956,7 +957,12 @@ impl<Side: SideData> ConnectionCore<Side> {
                 break;
             };
 
-            match self.process_msg(msg, state, Some(sendable_plaintext)) {
+            match self.common_state.process_main_protocol(
+                msg,
+                state,
+                &mut self.side,
+                Some(sendable_plaintext),
+            ) {
                 Ok(new) => state = new,
                 Err(e) => {
                     self.state = Err(e.clone());
@@ -1177,55 +1183,6 @@ impl<Side: SideData> ConnectionCore<Side> {
 
             error => error,
         }
-    }
-
-    fn process_msg(
-        &mut self,
-        msg: InboundPlainMessage<'_>,
-        state: Box<dyn State<Side>>,
-        sendable_plaintext: Option<&mut ChunkVecBuffer>,
-    ) -> Result<Box<dyn State<Side>>, Error> {
-        // Drop CCS messages during handshake in TLS1.3
-        if msg.typ == ContentType::ChangeCipherSpec
-            && !self
-                .common_state
-                .may_receive_application_data
-            && self.common_state.is_tls13()
-        {
-            if !msg.is_valid_ccs() {
-                // "An implementation which receives any other change_cipher_spec value or
-                //  which receives a protected change_cipher_spec record MUST abort the
-                //  handshake with an "unexpected_message" alert."
-                return Err(self.common_state.send_fatal_alert(
-                    AlertDescription::UnexpectedMessage,
-                    PeerMisbehaved::IllegalMiddleboxChangeCipherSpec,
-                ));
-            }
-
-            self.common_state
-                .received_tls13_change_cipher_spec()?;
-            trace!("Dropping CCS");
-            return Ok(state);
-        }
-
-        // Now we can fully parse the message payload.
-        let msg = match Message::try_from(msg) {
-            Ok(msg) => msg,
-            Err(err) => {
-                return Err(self
-                    .common_state
-                    .send_fatal_alert(AlertDescription::from(err), err));
-            }
-        };
-
-        // For alerts, we have separate logic.
-        if let MessagePayload::Alert(alert) = &msg.payload {
-            self.common_state.process_alert(alert)?;
-            return Ok(state);
-        }
-
-        self.common_state
-            .process_main_protocol(msg, state, &mut self.side, sendable_plaintext)
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {

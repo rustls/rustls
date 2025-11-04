@@ -7,7 +7,7 @@ use crate::crypto::{Identity, SupportedKxGroup};
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
-use crate::log::{debug, error, warn};
+use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
@@ -15,8 +15,8 @@ use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
 use crate::msgs::message::{
-    Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage,
-    PlainMessage,
+    InboundPlainMessage, Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage,
+    OutboundPlainMessage, PlainMessage,
 };
 use crate::record_layer::PreEncryptAction;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
@@ -38,7 +38,7 @@ pub struct CommonState {
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) aligned_handshake: bool,
     pub(crate) may_send_application_data: bool,
-    pub(crate) may_receive_application_data: bool,
+    may_receive_application_data: bool,
     pub(crate) early_traffic: bool,
     sent_fatal_alert: bool,
     /// If we signaled end of stream.
@@ -184,11 +184,46 @@ impl CommonState {
 
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
-        msg: Message<'_>,
+        msg: InboundPlainMessage<'_>,
         state: Box<dyn State<Data>>,
         data: &mut Data,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
     ) -> Result<Box<dyn State<Data>>, Error> {
+        // Drop CCS messages during handshake in TLS1.3
+        if msg.typ == ContentType::ChangeCipherSpec
+            && !self.may_receive_application_data
+            && self.is_tls13()
+        {
+            if !msg.is_valid_ccs() {
+                // "An implementation which receives any other change_cipher_spec value or
+                //  which receives a protected change_cipher_spec record MUST abort the
+                //  handshake with an "unexpected_message" alert."
+                return Err(self.send_fatal_alert(
+                    AlertDescription::UnexpectedMessage,
+                    PeerMisbehaved::IllegalMiddleboxChangeCipherSpec,
+                ));
+            }
+
+            self.temper_counters
+                .received_tls13_change_cipher_spec()?;
+            trace!("Dropping CCS");
+            return Ok(state);
+        }
+
+        // Now we can fully parse the message payload.
+        let msg = match Message::try_from(msg) {
+            Ok(msg) => msg,
+            Err(err) => {
+                return Err(self.send_fatal_alert(AlertDescription::from(err), err));
+            }
+        };
+
+        // For alerts, we have separate logic.
+        if let MessagePayload::Alert(alert) = &msg.payload {
+            self.process_alert(alert)?;
+            return Ok(state);
+        }
+
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
         if self.may_receive_application_data && !self.is_tls13() {
@@ -704,11 +739,6 @@ impl CommonState {
                 .encrypt_outgoing(message.borrow_outbound())
                 .encode(),
         );
-    }
-
-    pub(crate) fn received_tls13_change_cipher_spec(&mut self) -> Result<(), Error> {
-        self.temper_counters
-            .received_tls13_change_cipher_spec()
     }
 }
 
