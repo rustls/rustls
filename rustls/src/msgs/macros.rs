@@ -3,20 +3,36 @@ macro_rules! enum_builder {
     (
         $(#[doc = $comment:literal])*
         #[repr($uint:ty)]
+        $(#[$metas:meta])*
         $enum_vis:vis enum $enum_name:ident
         {
-          $( $enum_var:ident => $enum_val:literal),* $(,)?
+          $(
+            $(#[$enum_metas:meta])*
+            $enum_var:ident => $enum_val:literal),* $(,)?
           $( !Debug:
-            $( $enum_var_nd:ident => $enum_val_nd:literal),* $(,)?
+            $(
+                $(#[$enum_metas_nd:meta])*
+                $enum_var_nd:ident => $enum_val_nd:literal
+            ),* $(,)?
           )?
         }
     ) => {
         $(#[doc = $comment])*
+        $(#[$metas])*
         #[non_exhaustive]
         #[derive(PartialEq, Eq, Clone, Copy)]
         $enum_vis enum $enum_name {
-            $( $enum_var),*
-            $(, $($enum_var_nd),* )?
+            $(
+                $(#[$enum_metas])*
+                $enum_var
+            ),*
+            $(
+                ,
+                $(
+                    $(#[$enum_metas_nd])*
+                    $enum_var_nd
+                ),*
+            )?
             ,Unknown($uint)
         }
 
