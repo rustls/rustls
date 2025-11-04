@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
-use super::ring_like::digest;
+use ring::digest;
+
 use crate::crypto;
 use crate::msgs::enums::HashAlgorithm;
 

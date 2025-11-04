@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
-use super::ring_like::aead;
+use ring::aead;
+
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::crypto::cipher::{
     AeadKey, InboundOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,

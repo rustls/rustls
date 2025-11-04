@@ -5,9 +5,9 @@ use alloc::{format, vec};
 use core::fmt::{self, Debug, Formatter};
 
 use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id};
+use ring::rand::{SecureRandom, SystemRandom};
+use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
 
-use super::ring_like::rand::{SecureRandom, SystemRandom};
-use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
 #[cfg(any(test, bench))]
 use crate::crypto::CryptoProvider;
 use crate::crypto::signer::{Signer, SigningKey, public_key_to_spki};

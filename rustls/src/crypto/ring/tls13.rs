@@ -1,7 +1,8 @@
 use alloc::boxed::Box;
 
-use super::ring_like::hkdf::KeyType;
-use super::ring_like::{aead, hkdf, hmac};
+use ring::hkdf::{self, KeyType};
+use ring::{aead, hmac};
+
 use crate::crypto;
 use crate::crypto::cipher::{
     AeadKey, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce,

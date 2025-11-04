@@ -8,9 +8,9 @@ use aws_lc_rs::cipher::{
     AES_256, AES_256_KEY_LEN, AES_CBC_IV_LEN, DecryptionContext, PaddedBlockDecryptingKey,
     PaddedBlockEncryptingKey, UnboundCipherKey,
 };
+use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use aws_lc_rs::{hmac, iv};
 
-use super::ring_like::rand::{SecureRandom, SystemRandom};
 use super::unspecified_err;
 use crate::error::Error;
 #[cfg(debug_assertions)]
