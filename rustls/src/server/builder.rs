@@ -90,7 +90,9 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         ocsp: Arc<[u8]>,
     ) -> Result<ServerConfig, Error> {
         let mut credentials = Credentials::from_der(identity, key_der, self.crypto_provider())?;
-        credentials.ocsp = Some(ocsp);
+        if !ocsp.is_empty() {
+            credentials.ocsp = Some(ocsp);
+        }
         self.with_server_credential_resolver(Arc::new(SingleCredential::from(credentials)))
     }
 
