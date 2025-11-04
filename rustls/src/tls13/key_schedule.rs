@@ -589,6 +589,7 @@ impl KeyScheduleTraffic {
             &secret,
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
+            self.ks.suite.aead_alg.iv_len(),
         );
         Ok(self
             .ks
@@ -602,11 +603,13 @@ impl KeyScheduleTraffic {
             &self.current_client_traffic_secret,
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
+            self.ks.suite.aead_alg.iv_len(),
         );
         let (server_key, server_iv) = expand_secret(
             &self.current_server_traffic_secret,
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
+            self.ks.suite.aead_alg.iv_len(),
         );
         let client_secrets = self
             .ks
@@ -651,12 +654,17 @@ impl KeyScheduleResumption {
     }
 }
 
-fn expand_secret(secret: &OkmBlock, hkdf: &'static dyn Hkdf, aead_key_len: usize) -> (AeadKey, Iv) {
+fn expand_secret(
+    secret: &OkmBlock,
+    hkdf: &'static dyn Hkdf,
+    aead_key_len: usize,
+    iv_len: usize,
+) -> (AeadKey, Iv) {
     let expander = hkdf.expander_for_okm(secret);
 
     (
         hkdf_expand_label_aead_key(expander.as_ref(), aead_key_len, b"key", &[]),
-        hkdf_expand_label(expander.as_ref(), b"iv", &[]),
+        derive_traffic_iv(expander.as_ref(), iv_len),
     )
 }
 
@@ -784,7 +792,7 @@ impl KeyScheduleSuite {
             .hkdf_provider
             .expander_for_okm(secret);
         let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
-        let iv = derive_traffic_iv(expander.as_ref());
+        let iv = derive_traffic_iv(expander.as_ref(), self.suite.aead_alg.iv_len());
 
         common
             .record_layer
@@ -806,7 +814,7 @@ impl KeyScheduleSuite {
             .hkdf_provider
             .expander_for_okm(secret);
         let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
-        let iv = derive_traffic_iv(expander.as_ref());
+        let iv = derive_traffic_iv(expander.as_ref(), self.suite.aead_alg.iv_len());
         self.suite.aead_alg.decrypter(key, iv)
     }
 
@@ -907,11 +915,11 @@ pub fn derive_traffic_key(
     hkdf_expand_label_aead_key(expander, aead_alg.key_len(), b"key", &[])
 }
 
-/// [HKDF-Expand-Label] where the output is an IV.
+/// [HKDF-Expand-Label] where the output is an IV with a specified length.
 ///
 /// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
-pub fn derive_traffic_iv(expander: &dyn HkdfExpander) -> Iv {
-    hkdf_expand_label(expander, b"iv", &[])
+pub fn derive_traffic_iv(expander: &dyn HkdfExpander, iv_len: usize) -> Iv {
+    hkdf_expand_label_iv(expander, b"iv", &[], iv_len)
 }
 
 /// [HKDF-Expand-Label] where the output length is a compile-time constant, and therefore
@@ -947,6 +955,21 @@ pub(crate) fn hkdf_expand_label_aead_key(
     hkdf_expand_label_inner(expander, label, context, key_len, |e, info| {
         let key: AeadKey = expand(e, info);
         key.with_length(key_len)
+    })
+}
+
+/// [HKDF-Expand-Label] where the output is an IV.
+pub(crate) fn hkdf_expand_label_iv(
+    expander: &dyn HkdfExpander,
+    label: &[u8],
+    context: &[u8],
+    iv_len: usize,
+) -> Iv {
+    hkdf_expand_label_inner(expander, label, context, iv_len, |e, info| {
+        let mut buf = [0u8; Iv::MAX_LEN];
+        e.expand_slice(info, &mut buf[..iv_len])
+            .unwrap();
+        Iv::new(&buf[..iv_len]).expect("IV length from cipher suite must be within MAX_LEN")
     })
 }
 
@@ -1270,7 +1293,7 @@ mod tests {
 
         let actual_key = derive_traffic_key(expander.as_ref(), aes_128_gcm.aead_alg);
         assert_eq!(actual_key.as_ref(), expected_key);
-        let actual_iv = derive_traffic_iv(expander.as_ref());
+        let actual_iv = derive_traffic_iv(expander.as_ref(), aes_128_gcm.aead_alg.iv_len());
         assert_eq!(actual_iv.as_ref(), expected_iv);
     }
 
@@ -1312,7 +1335,12 @@ mod benchmarks {
                 traffic_secret_expander.as_ref(),
                 TLS13_CHACHA20_POLY1305_SHA256.aead_alg,
             ));
-            test::black_box(derive_traffic_iv(traffic_secret_expander.as_ref()));
+            test::black_box(derive_traffic_iv(
+                traffic_secret_expander.as_ref(),
+                TLS13_CHACHA20_POLY1305_SHA256
+                    .aead_alg
+                    .iv_len(),
+            ));
         }
 
         b.iter(|| {

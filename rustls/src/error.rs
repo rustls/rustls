@@ -1212,6 +1212,31 @@ pub enum ApiMisuse {
 
     /// A verifier or resolver implementation signalled that it does not support any certificate types.
     NoSupportedCertificateTypes,
+
+    /// [`Nonce::to_array()`][] called with incorrect array size.
+    ///
+    /// The nonce length does not match the requested array size `N`.
+    ///
+    /// [`Nonce::to_array()`]: crate::crypto::cipher::Nonce::to_array()
+    NonceArraySizeMismatch {
+        /// The expected array size (type parameter N)
+        expected: usize,
+        /// The actual nonce length
+        actual: usize,
+    },
+
+    /// [`Iv::new()`][] called with a value that exceeds the maximum IV length.
+    ///
+    /// The IV length must not exceed [`Iv::MAX_LEN`][].
+    ///
+    /// [`Iv::new()`]: crate::crypto::cipher::Iv::new()
+    /// [`Iv::MAX_LEN`]: crate::crypto::cipher::Iv::MAX_LEN
+    IvLengthExceedsMaximum {
+        /// The actual IV length provided
+        actual: usize,
+        /// The maximum allowed IV length
+        maximum: usize,
+    },
 }
 
 impl fmt::Display for ApiMisuse {

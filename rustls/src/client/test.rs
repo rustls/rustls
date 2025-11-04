@@ -580,7 +580,7 @@ mod tests {
 
             // Derive Encrypter
             let key = derive_traffic_key(expander.as_ref(), cipher_suite.aead_alg);
-            let iv = derive_traffic_iv(expander.as_ref());
+            let iv = derive_traffic_iv(expander.as_ref(), cipher_suite.aead_alg.iv_len());
             cipher_suite.aead_alg.encrypter(key, iv)
         }
     }
