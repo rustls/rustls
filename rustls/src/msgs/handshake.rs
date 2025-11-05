@@ -2403,7 +2403,8 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
 /// Only supports OCSP
 #[derive(Clone, Debug)]
 pub(crate) struct CertificateStatus<'a> {
-    pub(crate) ocsp_response: PayloadU24<'a>,
+    /// `opaque OCSPResponse<1..2^24-1>;`
+    pub(crate) ocsp_response: PayloadU24<'a, NonEmpty>,
 }
 
 impl<'a> Codec<'a> for CertificateStatus<'a> {
