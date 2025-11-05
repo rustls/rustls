@@ -2,8 +2,6 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
 use pki_types::PrivateKeyDer;
-#[cfg(test)]
-pub(crate) use ring as ring_like;
 use webpki::ring as webpki_algs;
 
 use super::signer::SigningKey;
