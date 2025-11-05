@@ -864,6 +864,34 @@ pub(crate) fn tls13_suite(
 }
 
 #[cfg(test)]
+pub(crate) fn tls12_suite(
+    suite: CipherSuite,
+    provider: &CryptoProvider,
+) -> &'static Tls12CipherSuite {
+    provider
+        .tls12_cipher_suites
+        .iter()
+        .find(|cs| cs.common.suite == suite)
+        .unwrap()
+}
+
+#[cfg(test)]
+pub(crate) fn tls13_only(provider: CryptoProvider) -> CryptoProvider {
+    CryptoProvider {
+        tls12_cipher_suites: Cow::default(),
+        ..provider
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn tls12_only(provider: CryptoProvider) -> CryptoProvider {
+    CryptoProvider {
+        tls13_cipher_suites: Cow::default(),
+        ..provider
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::vec;
 
