@@ -1754,6 +1754,11 @@ impl<'a> CertificatePayloadTls13<'a> {
         certs: impl Iterator<Item = CertificateDer<'a>>,
         ocsp_response: Option<&'a [u8]>,
     ) -> Self {
+        let ocsp_response = match ocsp_response {
+            Some([]) | None => None,
+            Some(bytes) => Some(bytes),
+        };
+
         Self {
             context: PayloadU8::empty(),
             entries: certs

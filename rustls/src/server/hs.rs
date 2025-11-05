@@ -133,7 +133,7 @@ impl ExtensionProcessing {
                 .certificate_status_request
                 .is_some()
         {
-            if ocsp_response.is_some() && !cx.common.is_tls13() {
+            if let (Some([_, ..]), false) = (ocsp_response, cx.common.is_tls13()) {
                 // Only TLS1.2 sends confirmation in ServerHello
                 self.extensions
                     .certificate_status_request_ack = Some(());
