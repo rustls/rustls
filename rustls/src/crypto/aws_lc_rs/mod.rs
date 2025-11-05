@@ -1,12 +1,6 @@
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
-// aws-lc-rs has a -- roughly -- ring-compatible API, so we just reuse all that
-// glue here.  The shared files should always use `super::ring_like` to access a
-// ring-compatible crate, and `super::ring_shim` to bridge the gaps where they are
-// small.
-#[cfg(test)]
-pub(crate) use aws_lc_rs as ring_like;
 use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
 
