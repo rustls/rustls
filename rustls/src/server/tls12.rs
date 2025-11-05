@@ -211,8 +211,9 @@ mod client_hello {
                 st.extra_exts,
             )?;
             emit_certificate(&mut flight, &credentials);
-            if let Some(ocsp_response) = ocsp_response {
-                emit_cert_status(&mut flight, ocsp_response);
+            match ocsp_response {
+                None | Some([]) => {}
+                Some(response) => emit_cert_status(&mut flight, response),
             }
             let server_kx = emit_server_kx(&mut flight, kx_group, credentials.signer, &randoms)?;
             let doing_client_auth = emit_certificate_req(&mut flight, &st.config)?;
