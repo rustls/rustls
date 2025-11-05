@@ -1081,8 +1081,7 @@ mod tests {
     use super::provider::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256};
     use super::{KeySchedule, SecretKind, derive_traffic_iv, derive_traffic_key};
     use crate::TEST_PROVIDERS;
-    use crate::crypto::CryptoProvider;
-    use crate::crypto::hash::Hash;
+    use crate::crypto::tls13_suite;
     use crate::enums::CipherSuite;
     use crate::key_log::KeyLog;
     use crate::msgs::enums::HashAlgorithm;
@@ -1090,8 +1089,12 @@ mod tests {
     #[test]
     fn empty_hash() {
         for provider in TEST_PROVIDERS {
-            let sha256 = hash_provider(CipherSuite::TLS13_AES_128_GCM_SHA256, provider);
-            let sha384 = hash_provider(CipherSuite::TLS13_AES_256_GCM_SHA384, provider);
+            let sha256 = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, provider)
+                .common
+                .hash_provider;
+            let sha384 = tls13_suite(CipherSuite::TLS13_AES_256_GCM_SHA384, provider)
+                .common
+                .hash_provider;
 
             assert!(
                 sha256.start().finish().as_ref()
@@ -1115,16 +1118,6 @@ mod tests {
                     .is_none()
             );
         }
-    }
-
-    fn hash_provider(suite: CipherSuite, provider: &CryptoProvider) -> &'static dyn Hash {
-        provider
-            .tls13_cipher_suites
-            .iter()
-            .find(|cs| cs.common.suite == suite)
-            .unwrap()
-            .common
-            .hash_provider
     }
 
     #[test]
