@@ -8,6 +8,8 @@ use core::ops::Deref;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+#[cfg(test)]
+use crate::enums::CipherSuite;
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::ffdhe_groups::FfdheGroup;
@@ -847,6 +849,18 @@ mod static_default {
     static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
     #[cfg(not(feature = "std"))]
     static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
+}
+
+#[cfg(test)]
+pub(crate) fn tls13_suite(
+    suite: CipherSuite,
+    provider: &CryptoProvider,
+) -> &'static Tls13CipherSuite {
+    provider
+        .tls13_cipher_suites
+        .iter()
+        .find(|cs| cs.common.suite == suite)
+        .unwrap()
 }
 
 #[cfg(test)]
