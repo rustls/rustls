@@ -79,3 +79,49 @@ pub trait Context: Send + Sync {
     /// Add `data` to computation.
     fn update(&mut self, data: &[u8]);
 }
+
+#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+pub(crate) struct FakeHash;
+
+#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+impl Hash for FakeHash {
+    fn algorithm(&self) -> HashAlgorithm {
+        todo!()
+    }
+
+    fn fips(&self) -> bool {
+        false
+    }
+
+    fn hash(&self, _bytes: &[u8]) -> Output {
+        todo!()
+    }
+
+    fn output_len(&self) -> usize {
+        todo!()
+    }
+
+    fn start(&self) -> Box<dyn Context> {
+        Box::new(FakeHashContext)
+    }
+}
+
+#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+struct FakeHashContext;
+
+#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+impl Context for FakeHashContext {
+    fn fork_finish(&self) -> Output {
+        todo!()
+    }
+
+    fn fork(&self) -> Box<dyn Context> {
+        todo!()
+    }
+
+    fn finish(self: Box<Self>) -> Output {
+        todo!()
+    }
+
+    fn update(&mut self, _data: &[u8]) {}
+}

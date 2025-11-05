@@ -432,6 +432,38 @@ impl MessageDecrypter for InvalidMessageDecrypter {
         Err(Error::DecryptError)
     }
 }
+
+#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+pub(crate) struct FakeAead;
+
+#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+impl Tls12AeadAlgorithm for FakeAead {
+    fn encrypter(&self, _: AeadKey, _: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+        todo!()
+    }
+
+    fn decrypter(&self, _: AeadKey, _: &[u8]) -> Box<dyn MessageDecrypter> {
+        todo!()
+    }
+
+    fn key_block_shape(&self) -> KeyBlockShape {
+        todo!()
+    }
+
+    fn extract_keys(
+        &self,
+        _: AeadKey,
+        _: &[u8],
+        _: &[u8],
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
+        Err(UnsupportedOperationError)
+    }
+
+    fn fips(&self) -> bool {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

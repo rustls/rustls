@@ -52,6 +52,9 @@ mod tests {
 
     use super::super::*;
     use crate::common_state::KxState;
+    use crate::crypto::cipher::FakeAead;
+    use crate::crypto::hash::FakeHash;
+    use crate::crypto::tls12::FakePrf;
     use crate::crypto::{
         ActiveKeyExchange, Credentials, CryptoProvider, Identity, KeyExchangeAlgorithm,
         SingleCredential, StartedKeyExchange, SupportedKxGroup,
@@ -62,6 +65,7 @@ mod tests {
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{ServerConfig, ServerConnection};
     use crate::sync::Arc;
+    use crate::version::TLS12_VERSION;
     use crate::{CipherSuiteCommon, Tls12CipherSuite};
 
     #[test]
@@ -336,10 +340,14 @@ mod tests {
     static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-            ..super::provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256.common
+            hash_provider: &FakeHash,
+            confidentiality_limit: 1,
         },
         kx: KeyExchangeAlgorithm::DHE,
-        ..*super::provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        protocol_version: TLS12_VERSION,
+        prf_provider: &FakePrf,
+        sign: &[SignatureScheme::RSA_PKCS1_SHA256],
+        aead_alg: &FakeAead,
     };
 }
 
