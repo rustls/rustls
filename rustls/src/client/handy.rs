@@ -199,23 +199,24 @@ impl client::ClientCredentialResolver for FailResolveClientCert {
 }
 
 #[cfg(test)]
-#[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
     use std::prelude::v1::*;
 
     use pki_types::{CertificateDer, ServerName, UnixTime};
 
     use super::NoClientSessionStorage;
-    use super::provider::cipher_suite;
+    use crate::TEST_PROVIDERS;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
     use crate::client::{ClientCredentialResolver, ClientSessionStore, CredentialRequest};
-    use crate::crypto::{CertificateIdentity, Identity, SelectedCredential};
-    use crate::enums::{CertificateType, SignatureScheme};
+    use crate::crypto::{
+        CertificateIdentity, Identity, SelectedCredential, tls12_suite, tls13_suite,
+    };
+    use crate::enums::{CertificateType, CipherSuite, SignatureScheme};
     use crate::error::Error;
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
     use crate::msgs::handshake::SessionId;
-    use crate::msgs::persist::Tls13ClientSessionValue;
+    use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     use crate::sync::Arc;
     use crate::verify::{ServerIdentity, SignatureVerificationInput};
 
@@ -231,16 +232,39 @@ mod tests {
         c.set_kx_hint(name.clone(), NamedGroup::X25519);
         assert_eq!(None, c.kx_hint(&name));
 
-        {
-            use crate::msgs::persist::Tls12ClientSessionValue;
+        for provider in TEST_PROVIDERS {
+            {
+                c.set_tls12_session(
+                    name.clone(),
+                    Tls12ClientSessionValue::new(
+                        tls12_suite(
+                            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+                            provider,
+                        ),
+                        SessionId::empty(),
+                        Arc::new(PayloadU16::empty()),
+                        &[0u8; 48],
+                        Identity::X509(CertificateIdentity {
+                            end_entity: CertificateDer::from(&[][..]),
+                            intermediates: Vec::new(),
+                        }),
+                        &server_cert_verifier,
+                        &resolves_client_cert,
+                        now,
+                        0,
+                        true,
+                    ),
+                );
+                assert!(c.tls12_session(&name).is_none());
+                c.remove_tls12_session(&name);
+            }
 
-            c.set_tls12_session(
+            c.insert_tls13_ticket(
                 name.clone(),
-                Tls12ClientSessionValue::new(
-                    cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-                    SessionId::empty(),
+                Tls13ClientSessionValue::new(
+                    tls13_suite(CipherSuite::TLS13_AES_256_GCM_SHA384, provider),
                     Arc::new(PayloadU16::empty()),
-                    &[0u8; 48],
+                    &[],
                     Identity::X509(CertificateIdentity {
                         end_entity: CertificateDer::from(&[][..]),
                         intermediates: Vec::new(),
@@ -249,32 +273,13 @@ mod tests {
                     &resolves_client_cert,
                     now,
                     0,
-                    true,
+                    0,
+                    0,
                 ),
             );
-            assert!(c.tls12_session(&name).is_none());
-            c.remove_tls12_session(&name);
-        }
 
-        c.insert_tls13_ticket(
-            name.clone(),
-            Tls13ClientSessionValue::new(
-                cipher_suite::TLS13_AES_256_GCM_SHA384,
-                Arc::new(PayloadU16::empty()),
-                &[],
-                Identity::X509(CertificateIdentity {
-                    end_entity: CertificateDer::from(&[][..]),
-                    intermediates: Vec::new(),
-                }),
-                &server_cert_verifier,
-                &resolves_client_cert,
-                now,
-                0,
-                0,
-                0,
-            ),
-        );
-        assert!(c.take_tls13_ticket(&name).is_none());
+            assert!(c.take_tls13_ticket(&name).is_none());
+        }
     }
 
     #[derive(Debug)]
