@@ -1078,43 +1078,53 @@ mod tests {
     use std::vec;
 
     use super::provider::ring_like::aead;
-    use super::provider::tls13::{
-        TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
-    };
+    use super::provider::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256};
     use super::{KeySchedule, SecretKind, derive_traffic_iv, derive_traffic_key};
-    use crate::KeyLog;
+    use crate::TEST_PROVIDERS;
+    use crate::crypto::CryptoProvider;
+    use crate::crypto::hash::Hash;
+    use crate::enums::CipherSuite;
+    use crate::key_log::KeyLog;
     use crate::msgs::enums::HashAlgorithm;
 
     #[test]
     fn empty_hash() {
-        let sha256 = TLS13_AES_128_GCM_SHA256
-            .common
-            .hash_provider;
-        let sha384 = TLS13_AES_256_GCM_SHA384
-            .common
-            .hash_provider;
+        for provider in TEST_PROVIDERS {
+            let sha256 = hash_provider(CipherSuite::TLS13_AES_128_GCM_SHA256, provider);
+            let sha384 = hash_provider(CipherSuite::TLS13_AES_256_GCM_SHA384, provider);
 
-        assert!(
-            sha256.start().finish().as_ref()
-                == HashAlgorithm::SHA256
-                    .hash_for_empty_input()
-                    .unwrap()
-                    .as_ref()
-        );
-        assert!(
-            sha384.start().finish().as_ref()
-                == HashAlgorithm::SHA384
-                    .hash_for_empty_input()
-                    .unwrap()
-                    .as_ref()
-        );
+            assert!(
+                sha256.start().finish().as_ref()
+                    == HashAlgorithm::SHA256
+                        .hash_for_empty_input()
+                        .unwrap()
+                        .as_ref()
+            );
+            assert!(
+                sha384.start().finish().as_ref()
+                    == HashAlgorithm::SHA384
+                        .hash_for_empty_input()
+                        .unwrap()
+                        .as_ref()
+            );
 
-        // a theoretical example of unsupported hash
-        assert!(
-            HashAlgorithm::SHA1
-                .hash_for_empty_input()
-                .is_none()
-        );
+            // a theoretical example of unsupported hash
+            assert!(
+                HashAlgorithm::SHA1
+                    .hash_for_empty_input()
+                    .is_none()
+            );
+        }
+    }
+
+    fn hash_provider(suite: CipherSuite, provider: &CryptoProvider) -> &'static dyn Hash {
+        provider
+            .tls13_cipher_suites
+            .iter()
+            .find(|cs| cs.common.suite == suite)
+            .unwrap()
+            .common
+            .hash_provider
     }
 
     #[test]
