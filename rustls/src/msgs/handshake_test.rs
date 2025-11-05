@@ -1060,7 +1060,7 @@ fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
             cert: CertificateDer::from(vec![3, 4, 5]),
             extensions: CertificateExtensions {
                 status: Some(CertificateStatus {
-                    ocsp_response: PayloadU24(Payload::new(vec![1, 2, 3])),
+                    ocsp_response: PayloadU24::from(Payload::new(vec![1, 2, 3])),
                 }),
             },
         }],
@@ -1071,7 +1071,7 @@ fn sample_compressed_certificate() -> CompressedCertificatePayload<'static> {
     CompressedCertificatePayload {
         alg: CertificateCompressionAlgorithm::Brotli,
         uncompressed_len: 123,
-        compressed: PayloadU24(Payload::new(vec![1, 2, 3])),
+        compressed: PayloadU24::from(Payload::new(vec![1, 2, 3])),
     }
 }
 
@@ -1147,7 +1147,7 @@ fn sample_encrypted_extensions() -> Box<ServerExtensions<'static>> {
 
 fn sample_certificate_status() -> CertificateStatus<'static> {
     CertificateStatus {
-        ocsp_response: PayloadU24(Payload::new(vec![1, 2, 3])),
+        ocsp_response: PayloadU24::from(Payload::new(vec![1, 2, 3])),
     }
 }
 

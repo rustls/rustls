@@ -1800,13 +1800,7 @@ impl<'a> CertificatePayloadTls13<'a> {
             .extensions
             .status
             .as_ref()
-            .map(|status| {
-                status
-                    .ocsp_response
-                    .0
-                    .clone()
-                    .into_vec()
-            })
+            .map(|status| status.ocsp_response.as_ref().to_vec())
             .unwrap_or_default()
     }
 
@@ -2433,12 +2427,12 @@ impl<'a> Codec<'a> for CertificateStatus<'a> {
 impl<'a> CertificateStatus<'a> {
     pub(crate) fn new(ocsp: &'a [u8]) -> Self {
         CertificateStatus {
-            ocsp_response: PayloadU24(Payload::Borrowed(ocsp)),
+            ocsp_response: PayloadU24::from(Payload::Borrowed(ocsp)),
         }
     }
 
     pub(crate) fn into_inner(self) -> Vec<u8> {
-        self.ocsp_response.0.into_vec()
+        self.ocsp_response.into_vec()
     }
 
     pub(crate) fn into_owned(self) -> CertificateStatus<'static> {
@@ -2485,7 +2479,7 @@ impl CompressedCertificatePayload<'_> {
         CompressedCertificatePayload {
             alg: self.alg,
             uncompressed_len: self.uncompressed_len,
-            compressed: PayloadU24(Payload::Borrowed(self.compressed.0.bytes())),
+            compressed: PayloadU24::from(Payload::Borrowed(self.compressed.as_ref())),
         }
     }
 }

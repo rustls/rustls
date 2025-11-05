@@ -105,11 +105,15 @@ impl<'a> Codec<'a> for SubjectPublicKeyInfoDer<'a> {
 
 /// An arbitrary, unknown-content, u24-length-prefixed payload
 #[derive(Clone, Eq, PartialEq)]
-pub(crate) struct PayloadU24<'a>(pub(crate) Payload<'a>);
+pub(crate) struct PayloadU24<'a>(Payload<'a>);
 
 impl PayloadU24<'_> {
     pub(crate) fn into_owned(self) -> PayloadU24<'static> {
         PayloadU24(self.0.into_owned())
+    }
+
+    pub(crate) fn into_vec(self) -> Vec<u8> {
+        self.0.into_owned().into_vec()
     }
 }
 
@@ -124,6 +128,18 @@ impl<'a> Codec<'a> for PayloadU24<'a> {
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
         Ok(Self(Payload::read(&mut sub)))
+    }
+}
+
+impl<'a> From<Payload<'a>> for PayloadU24<'a> {
+    fn from(value: Payload<'a>) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<[u8]> for PayloadU24<'_> {
+    fn as_ref(&self) -> &[u8] {
+        self.0.bytes()
     }
 }
 
