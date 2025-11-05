@@ -377,7 +377,7 @@ impl CompressionCache {
             compressed: CompressedCertificatePayload {
                 alg: algorithm,
                 uncompressed_len,
-                compressed: PayloadU24(Payload::new(compressed)),
+                compressed: PayloadU24::from(Payload::new(compressed)),
             },
         });
 
@@ -410,7 +410,7 @@ impl CompressionCache {
             compressed: CompressedCertificatePayload {
                 alg: algorithm,
                 uncompressed_len,
-                compressed: PayloadU24(Payload::new(compressed)),
+                compressed: PayloadU24::from(Payload::new(compressed)),
             },
         }))
     }
