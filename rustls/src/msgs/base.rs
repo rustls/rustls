@@ -105,11 +105,11 @@ impl<'a> Codec<'a> for SubjectPublicKeyInfoDer<'a> {
 
 /// An arbitrary, unknown-content, u24-length-prefixed payload
 #[derive(Clone, Eq, PartialEq)]
-pub(crate) struct PayloadU24<'a>(Payload<'a>);
+pub(crate) struct PayloadU24<'a, C: Cardinality = MaybeEmpty>(Payload<'a>, PhantomData<C>);
 
-impl PayloadU24<'_> {
-    pub(crate) fn into_owned(self) -> PayloadU24<'static> {
-        PayloadU24(self.0.into_owned())
+impl<C: Cardinality> PayloadU24<'_, C> {
+    pub(crate) fn into_owned(self) -> PayloadU24<'static, C> {
+        PayloadU24(self.0.into_owned(), PhantomData)
     }
 
     pub(crate) fn into_vec(self) -> Vec<u8> {
@@ -117,33 +117,38 @@ impl PayloadU24<'_> {
     }
 }
 
-impl<'a> Codec<'a> for PayloadU24<'a> {
+impl<'a, C: Cardinality> Codec<'a> for PayloadU24<'a, C> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let inner = self.0.bytes();
+        debug_assert!(inner.len() >= C::MIN);
         codec::u24(inner.len() as u32).encode(bytes);
         bytes.extend_from_slice(inner);
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let len = codec::u24::read(r)?.0 as usize;
+        if len < C::MIN {
+            return Err(InvalidMessage::IllegalEmptyList("PayloadU24"));
+        }
         let mut sub = r.sub(len)?;
-        Ok(Self(Payload::read(&mut sub)))
+        Ok(Self(Payload::read(&mut sub), PhantomData))
     }
 }
 
-impl<'a> From<Payload<'a>> for PayloadU24<'a> {
+impl<'a, C: Cardinality> From<Payload<'a>> for PayloadU24<'a, C> {
     fn from(value: Payload<'a>) -> Self {
-        Self(value)
+        debug_assert!(value.bytes().len() >= C::MIN);
+        Self(value, PhantomData)
     }
 }
 
-impl AsRef<[u8]> for PayloadU24<'_> {
+impl<C: Cardinality> AsRef<[u8]> for PayloadU24<'_, C> {
     fn as_ref(&self) -> &[u8] {
         self.0.bytes()
     }
 }
 
-impl fmt::Debug for PayloadU24<'_> {
+impl<C: Cardinality> fmt::Debug for PayloadU24<'_, C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }

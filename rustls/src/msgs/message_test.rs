@@ -110,7 +110,10 @@ fn debug_payload() {
     );
     assert_eq!(
         "01020304",
-        format!("{:?}", PayloadU24::from(Payload::new(vec![1, 2, 3, 4])))
+        format!(
+            "{:?}",
+            PayloadU24::<'static, NonEmpty>::from(Payload::new(vec![1, 2, 3, 4]))
+        )
     );
 }
 
