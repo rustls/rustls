@@ -2449,7 +2449,8 @@ impl<'a> CertificateStatus<'a> {
 pub(crate) struct CompressedCertificatePayload<'a> {
     pub(crate) alg: CertificateCompressionAlgorithm,
     pub(crate) uncompressed_len: u32,
-    pub(crate) compressed: PayloadU24<'a>,
+    /// `opaque compressed_certificate_message<1..2^24-1>;`
+    pub(crate) compressed: PayloadU24<'a, NonEmpty>,
 }
 
 impl<'a> Codec<'a> for CompressedCertificatePayload<'a> {
