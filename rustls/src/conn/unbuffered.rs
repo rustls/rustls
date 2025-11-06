@@ -9,8 +9,9 @@ use core::{fmt, mem};
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
 use crate::conn::SideData;
+use crate::crypto::cipher::Payload;
 use crate::error::Error;
-use crate::msgs::deframer::buffers::DeframerSliceBuffer;
+use crate::msgs::deframer::buffers::{DeframerSliceBuffer, Delocator, Locator};
 use crate::server::ServerConnectionData;
 
 impl UnbufferedConnectionCommon<ClientConnectionData> {
@@ -46,6 +47,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
         mut early_data_available: impl FnMut(&mut Self) -> bool,
         early_data_state: impl FnOnce(&'c mut Self, &'i mut [u8]) -> ConnectionState<'c, 'i, Side>,
     ) -> UnbufferedStatus<'c, 'i, Side> {
+        let plaintext_locator = Locator::new(incoming_tls);
         let mut buffer = DeframerSliceBuffer::new(incoming_tls);
         let mut buffer_progress = self.core.hs_deframer.progress();
 
@@ -54,18 +56,6 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                 break (
                     buffer.pending_discard(),
                     early_data_state(self, incoming_tls),
-                );
-            }
-
-            if !self
-                .core
-                .common_state
-                .received_plaintext
-                .is_empty()
-            {
-                break (
-                    buffer.pending_discard(),
-                    ReadTraffic::new(self, incoming_tls).into(),
                 );
             }
 
@@ -104,7 +94,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
             };
 
             if let Some(msg) = deframer_output {
-                let mut state =
+                let state =
                     match mem::replace(&mut self.core.state, Err(Error::HandshakeNotComplete)) {
                         Ok(state) => state,
                         Err(e) => {
@@ -117,12 +107,28 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                         }
                     };
 
+                let mut received_plaintext = None;
                 match self
                     .core
                     .common_state
-                    .process_main_protocol(msg, state, &mut self.core.side, None)
-                {
-                    Ok(new) => state = new,
+                    .process_main_protocol(
+                        msg,
+                        state,
+                        &mut self.core.side,
+                        &plaintext_locator,
+                        &mut received_plaintext,
+                        None,
+                    ) {
+                    Ok(new) => {
+                        buffer.queue_discard(buffer_progress.take_discard());
+                        self.core.state = Ok(new);
+
+                        if let Some(payload) = received_plaintext {
+                            let discard = buffer.pending_discard();
+                            let payload = payload.reborrow(&Delocator::new(incoming_tls));
+                            break (discard, ReadTraffic::new(self, payload).into());
+                        }
+                    }
                     Err(e) => {
                         buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Err(e.clone());
@@ -132,10 +138,6 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                         };
                     }
                 }
-
-                buffer.queue_discard(buffer_progress.take_discard());
-
-                self.core.state = Ok(state);
             } else if self.wants_write {
                 break (
                     buffer.pending_discard(),
@@ -331,51 +333,45 @@ impl<Side: SideData> fmt::Debug for ConnectionState<'_, '_, Side> {
 
 /// Application data is available
 pub struct ReadTraffic<'c, 'i, Side: SideData> {
-    conn: &'c mut UnbufferedConnectionCommon<Side>,
-    // for forwards compatibility; to support in-place decryption in the future
-    _incoming_tls: &'i mut [u8],
+    _conn: &'c mut UnbufferedConnectionCommon<Side>,
 
-    // owner of the latest chunk obtained in `next_record`, as borrowed by
-    // `AppDataRecord`
-    chunk: Option<Vec<u8>>,
+    payload: Payload<'i>,
+
+    // `payload` needs to remain allocated in order to meet lifetime
+    // requirements of `next_record`
+    is_terminated: bool,
 }
 
 impl<'c, 'i, Side: SideData> ReadTraffic<'c, 'i, Side> {
-    fn new(conn: &'c mut UnbufferedConnectionCommon<Side>, _incoming_tls: &'i mut [u8]) -> Self {
+    fn new(_conn: &'c mut UnbufferedConnectionCommon<Side>, payload: Payload<'i>) -> Self {
         Self {
-            conn,
-            _incoming_tls,
-            chunk: None,
+            _conn,
+            payload,
+            is_terminated: false,
         }
     }
 
     /// Decrypts and returns the next available app-data record
     // TODO deprecate in favor of `Iterator` implementation, which requires in-place decryption
     pub fn next_record(&mut self) -> Option<Result<AppDataRecord<'_>, Error>> {
-        self.chunk = self
-            .conn
-            .core
-            .common_state
-            .received_plaintext
-            .pop();
-        self.chunk.as_ref().map(|chunk| {
-            Ok(AppDataRecord {
-                discard: 0,
-                payload: chunk,
-            })
-        })
+        if self.is_terminated {
+            return None;
+        }
+        self.is_terminated = true;
+        Some(Ok(AppDataRecord {
+            discard: 0,
+            payload: self.payload.bytes(),
+        }))
     }
 
     /// Returns the payload size of the next app-data record *without* decrypting it
     ///
     /// Returns `None` if there are no more app-data records
     pub fn peek_len(&self) -> Option<NonZeroUsize> {
-        self.conn
-            .core
-            .common_state
-            .received_plaintext
-            .peek()
-            .and_then(|ch| NonZeroUsize::new(ch.len()))
+        if self.is_terminated {
+            return None;
+        }
+        NonZeroUsize::new(self.payload.bytes().len())
     }
 }
 
