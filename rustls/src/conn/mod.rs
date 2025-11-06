@@ -7,7 +7,7 @@ use std::io;
 
 use kernel::KernelConnection;
 
-use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
+use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::crypto::cipher::InboundPlainMessage;
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
@@ -459,7 +459,7 @@ impl ConnectionRandoms {
 pub struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
     deframer_buffer: DeframerVecBuffer,
-    sendable_plaintext: ChunkVecBuffer,
+    pub(crate) sendable_plaintext: ChunkVecBuffer,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
@@ -833,16 +833,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 }
 
-impl<'a, Side: SideData> From<&'a mut ConnectionCommon<Side>> for Context<'a, Side> {
-    fn from(conn: &'a mut ConnectionCommon<Side>) -> Self {
-        Self {
-            common: &mut conn.core.common_state,
-            data: &mut conn.core.side,
-            sendable_plaintext: Some(&mut conn.sendable_plaintext),
-        }
-    }
-}
-
 impl<Side: SideData> Deref for ConnectionCommon<Side> {
     type Target = CommonState;
 
@@ -935,14 +925,19 @@ impl<Side: SideData> ConnectionCore<Side> {
             }
         };
 
+        // Should `InboundPlainMessage` resolve to plaintext application
+        // data it will be allocated within `plaintext` and written to
+        // `CommonState.received_plaintext` buffer.
+        //
+        // TODO `CommonState.received_plaintext` should be hoisted into
+        // `ConnectionCommon`
+        let mut plaintext = None;
         let mut buffer_progress = self.hs_deframer.progress();
 
         loop {
-            let res = self.deframe(
-                Some(&*state),
-                deframer_buffer.filled_mut(),
-                &mut buffer_progress,
-            );
+            let buffer = deframer_buffer.filled_mut();
+            let locator = Locator::new(buffer);
+            let res = self.deframe(Some(&*state), buffer, &mut buffer_progress);
 
             let opt_msg = match res {
                 Ok(opt_msg) => opt_msg,
@@ -961,6 +956,8 @@ impl<Side: SideData> ConnectionCore<Side> {
                 msg,
                 state,
                 &mut self.side,
+                &locator,
+                &mut plaintext,
                 Some(sendable_plaintext),
             ) {
                 Ok(new) => state = new,
@@ -980,6 +977,13 @@ impl<Side: SideData> ConnectionCore<Side> {
                 // This is data that has already been accepted in `read_tls`.
                 buffer_progress.add_discard(deframer_buffer.filled().len());
                 break;
+            }
+
+            if let Some(payload) = plaintext.take() {
+                let payload = payload.reborrow(&Delocator::new(buffer));
+                self.common_state
+                    .received_plaintext
+                    .append(payload.into_vec());
             }
 
             deframer_buffer.discard(buffer_progress.take_discard());
