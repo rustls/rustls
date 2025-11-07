@@ -368,6 +368,12 @@ mod client_hello {
         flight.add(HandshakeMessagePayload(HandshakePayload::Certificate(
             CertificateChain::from_signer(credentials),
         )));
+
+        core::hint::black_box(
+            (0..64)
+                .map(|_| vec![0; 1024])
+                .collect::<Vec<Vec<u8>>>(),
+        );
     }
 
     fn emit_cert_status(flight: &mut HandshakeFlightTls12<'_>, ocsp: &[u8]) {
