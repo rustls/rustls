@@ -80,29 +80,23 @@ fn handle(
         } = conn.process_tls_records(&mut incoming_tls[..incoming_used]);
 
         match dbg!(state.unwrap()) {
-            ConnectionState::ReadTraffic(mut state) => {
-                while let Some(res) = state.next_record() {
-                    let AppDataRecord {
-                        discard: new_discard,
-                        payload,
-                        ..
-                    } = res?;
-                    discard += new_discard;
+            ConnectionState::ReadTraffic(state) => {
+                let record = state.record();
+                discard += record.discard;
 
-                    if payload.starts_with(b"GET") {
-                        let response = core::str::from_utf8(payload)?;
-                        let header = response
-                            .lines()
-                            .next()
-                            .unwrap_or(response);
+                if record.payload.starts_with(b"GET") {
+                    let response = core::str::from_utf8(record.payload)?;
+                    let header = response
+                        .lines()
+                        .next()
+                        .unwrap_or(response);
 
-                        println!("{header}");
-                    } else {
-                        println!("(.. continued HTTP request ..)");
-                    }
-
-                    received_request = true;
+                    println!("{header}");
+                } else {
+                    println!("(.. continued HTTP request ..)");
                 }
+
+                received_request = true;
             }
 
             ConnectionState::ReadEarlyData(mut state) => {

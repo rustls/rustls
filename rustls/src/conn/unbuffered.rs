@@ -336,42 +336,19 @@ pub struct ReadTraffic<'c, 'i, Side: SideData> {
     _conn: &'c mut UnbufferedConnectionCommon<Side>,
 
     payload: Payload<'i>,
-
-    // `payload` needs to remain allocated in order to meet lifetime
-    // requirements of `next_record`
-    is_terminated: bool,
 }
 
 impl<'c, 'i, Side: SideData> ReadTraffic<'c, 'i, Side> {
     fn new(_conn: &'c mut UnbufferedConnectionCommon<Side>, payload: Payload<'i>) -> Self {
-        Self {
-            _conn,
-            payload,
-            is_terminated: false,
-        }
+        Self { _conn, payload }
     }
 
     /// Decrypts and returns the next available app-data record
-    // TODO deprecate in favor of `Iterator` implementation, which requires in-place decryption
-    pub fn next_record(&mut self) -> Option<Result<AppDataRecord<'_>, Error>> {
-        if self.is_terminated {
-            return None;
-        }
-        self.is_terminated = true;
-        Some(Ok(AppDataRecord {
+    pub fn record(&self) -> AppDataRecord<'_> {
+        AppDataRecord {
             discard: 0,
             payload: self.payload.bytes(),
-        }))
-    }
-
-    /// Returns the payload size of the next app-data record *without* decrypting it
-    ///
-    /// Returns `None` if there are no more app-data records
-    pub fn peek_len(&self) -> Option<NonZeroUsize> {
-        if self.is_terminated {
-            return None;
         }
-        NonZeroUsize::new(self.payload.bytes().len())
     }
 }
 

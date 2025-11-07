@@ -1289,12 +1289,12 @@ impl UnbufferedConnection {
         while expected > 0 {
             match client.process_tls_records(&mut input[input_used..]) {
                 UnbufferedStatus {
-                    state: Ok(ConnectionState::ReadTraffic(mut rt)),
+                    state: Ok(ConnectionState::ReadTraffic(rt)),
                     discard,
                     ..
                 } => {
                     input_used += discard;
-                    let record = rt.next_record().unwrap().unwrap();
+                    let record = rt.record();
                     input_used += record.discard;
                     expected -= record.payload.len();
                 }

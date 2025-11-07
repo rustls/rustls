@@ -340,10 +340,10 @@ fn run(
 
                 client_handshake_done = true;
             }
-            State::ReceivedAppData { records } => {
+            State::ReceivedAppData { record } => {
                 outcome
                     .client_received_app_data
-                    .extend(records);
+                    .push(record);
             }
             State::PeerClosed => {
                 outcome.client_saw_peer_closed_state = true;
@@ -396,10 +396,10 @@ fn run(
                     .server_received_early_data
                     .extend(records);
             }
-            State::ReceivedAppData { records } => {
+            State::ReceivedAppData { record } => {
                 outcome
                     .server_received_app_data
-                    .extend(records);
+                    .push(record);
             }
             State::PeerClosed => {
                 outcome.server_saw_peer_closed_state = true;
@@ -498,9 +498,8 @@ fn full_closure_server_to_client() {
             },
         );
 
-        let (_, discard) = read_traffic(client.process_tls_records(buf.filled()), |mut rt| {
-            assert_eq!(rt.peek_len(), NonZeroUsize::new(5));
-            let app_data = rt.next_record().unwrap().unwrap();
+        let (_, discard) = read_traffic(client.process_tls_records(buf.filled()), |rt| {
+            let app_data = rt.record();
             assert_eq!(app_data.payload, b"hello");
         });
         buf.discard(discard);
@@ -515,9 +514,8 @@ fn full_closure_server_to_client() {
             queue_close_notify(&mut wt, &mut buf);
         });
 
-        let (_, discard) = read_traffic(server.process_tls_records(buf.filled()), |mut rt| {
-            assert_eq!(rt.peek_len(), NonZeroUsize::new(7));
-            let app_data = rt.next_record().unwrap().unwrap();
+        let (_, discard) = read_traffic(server.process_tls_records(buf.filled()), |rt| {
+            let app_data = rt.record();
             assert_eq!(app_data.payload, b"goodbye");
         });
         buf.discard(discard);
@@ -688,11 +686,11 @@ fn refresh_traffic_keys_manually() {
     match client.process_tls_records(&mut buffer[..used]) {
         UnbufferedStatus {
             discard: actual_used,
-            state: Ok(ConnectionState::ReadTraffic(mut rt)),
+            state: Ok(ConnectionState::ReadTraffic(rt)),
             ..
         } => {
             assert_eq!(used, actual_used);
-            let app_data = rt.next_record().unwrap().unwrap();
+            let app_data = rt.record();
             assert_eq!(app_data.payload, b"hello");
         }
         st => {
@@ -717,11 +715,11 @@ fn refresh_traffic_keys_manually() {
     match server.process_tls_records(&mut buffer[..used]) {
         UnbufferedStatus {
             discard: actual_used,
-            state: Ok(ConnectionState::ReadTraffic(mut rt)),
+            state: Ok(ConnectionState::ReadTraffic(rt)),
             ..
         } => {
             assert_eq!(used, actual_used);
-            let app_data = rt.next_record().unwrap().unwrap();
+            let app_data = rt.record();
             assert_eq!(app_data.payload, b"world");
         }
         st => {
@@ -788,11 +786,11 @@ fn refresh_traffic_keys_automatically() {
                 match server.process_tls_records(&mut buffer[..used]) {
                     UnbufferedStatus {
                         discard: actual_used,
-                        state: Ok(ConnectionState::ReadTraffic(mut rt)),
+                        state: Ok(ConnectionState::ReadTraffic(rt)),
                         ..
                     } => {
                         assert_eq!(used, actual_used);
-                        let record = rt.next_record().unwrap().unwrap();
+                        let record = rt.record();
                         assert_eq!(record.payload, message.as_bytes());
                     }
                     st => {
@@ -851,11 +849,11 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
                 match server.process_tls_records(&mut buffer[..used]) {
                     UnbufferedStatus {
                         discard: actual_used,
-                        state: Ok(ConnectionState::ReadTraffic(mut rt)),
+                        state: Ok(ConnectionState::ReadTraffic(rt)),
                         ..
                     } => {
                         assert_eq!(used, actual_used);
-                        let record = rt.next_record().unwrap().unwrap();
+                        let record = rt.record();
                         assert_eq!(record.payload, message.as_bytes());
                     }
                     st => {
@@ -1040,7 +1038,7 @@ enum State {
     },
     BlockedHandshake,
     ReceivedAppData {
-        records: Vec<Vec<u8>>,
+        record: Vec<u8>,
     },
     ReceivedEarlyData {
         records: Vec<Vec<u8>>,
@@ -1242,20 +1240,9 @@ fn handle_state<Side: SideData>(
             }
         }
 
-        ConnectionState::ReadTraffic(mut state) => {
-            let mut records = vec![];
-            let mut peeked_len = state.peek_len();
-
-            while let Some(res) = state.next_record() {
-                let payload = res.unwrap().payload.to_vec();
-                assert_eq!(NonZeroUsize::new(payload.len()), peeked_len);
-                records.push(payload);
-                peeked_len = state.peek_len();
-            }
-
-            assert_eq!(None, peeked_len);
-
-            State::ReceivedAppData { records }
+        ConnectionState::ReadTraffic(state) => {
+            let record = state.record().payload.to_vec();
+            State::ReceivedAppData { record }
         }
 
         ConnectionState::PeerClosed => State::PeerClosed,
