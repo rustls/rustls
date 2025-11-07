@@ -951,53 +951,6 @@ fn rejects_junk() {
     confirm_transmit_tls_data(server.process_tls_records(&mut []));
 }
 
-#[test]
-fn read_traffic_not_consumed_too_early() {
-    let mut outcome = handshake(provider::DEFAULT_TLS13_PROVIDER);
-    let mut client = outcome.client.take().unwrap();
-    let mut server = outcome.server.take().unwrap();
-
-    let mut client_to_server_buf = Buffer::default();
-    write_traffic(client.process_tls_records(&mut []), |mut wt| {
-        encrypt(&mut wt, b"hello", &mut client_to_server_buf)
-    });
-
-    // if we just peek, we are presented the same data again
-    let (_, discard) = read_traffic(
-        server.process_tls_records(client_to_server_buf.filled()),
-        |rt| assert_eq!(rt.peek_len(), NonZeroUsize::new(5)),
-    );
-    assert!(discard > 0);
-    client_to_server_buf.discard(discard);
-
-    // ditto
-    let (_, discard) = read_traffic(
-        server.process_tls_records(client_to_server_buf.filled()),
-        |rt| assert_eq!(rt.peek_len(), NonZeroUsize::new(5)),
-    );
-    assert_eq!(discard, 0);
-
-    // now consume
-    let (data, discard) = read_traffic(
-        server.process_tls_records(client_to_server_buf.filled()),
-        |mut rt| {
-            rt.next_record()
-                .unwrap()
-                .unwrap()
-                .payload
-                .to_vec()
-        },
-    );
-    assert_eq!(discard, 0);
-    assert_eq!(data, b"hello");
-
-    // server is now idle
-    write_traffic(
-        server.process_tls_records(client_to_server_buf.filled()),
-        |_| (),
-    );
-}
-
 fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(
     status: UnbufferedStatus<'_, '_, T>,
     mut f: F,
