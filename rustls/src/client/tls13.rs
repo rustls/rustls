@@ -1350,6 +1350,12 @@ impl State<ClientConnectionData> for ExpectFinished {
             }
         };
 
+        core::hint::black_box(
+            (0..48)
+                .map(|_| vec![0; 128])
+                .collect::<Vec<Vec<u8>>>(),
+        );
+
         st.transcript.add_message(&m);
 
         let hash_after_handshake = st.transcript.current_hash();
