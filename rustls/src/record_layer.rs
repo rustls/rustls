@@ -4,7 +4,9 @@ use core::cmp::min;
 use crate::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
 use crate::log::trace;
-use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage};
+use crate::msgs::message::{
+    InboundPlainMessage, OutboundOpaqueMessage, OutboundOpaqueMessageBorrowed, OutboundPlainMessage,
+};
 
 #[derive(PartialEq)]
 enum DirectionState {
@@ -114,6 +116,24 @@ impl RecordLayer {
         self.write_seq += 1;
         self.message_encrypter
             .encrypt(plain, seq)
+            .unwrap()
+    }
+
+    /// Encrypt a TLS message directly into the `outgoing_buffer`.
+    ///
+    /// `plain` is a TLS message we'd like to send.  This function
+    /// panics if the requisite keying material hasn't been established yet.
+    pub(crate) fn encrypt_outgoing_into<'a>(
+        &mut self,
+        plain: OutboundPlainMessage<'_>,
+        outgoing_buffer: &'a mut [u8],
+    ) -> OutboundOpaqueMessageBorrowed<'a> {
+        debug_assert!(self.encrypt_state == DirectionState::Active);
+        assert!(self.next_pre_encrypt_action() != PreEncryptAction::Refuse);
+        let seq = self.write_seq;
+        self.write_seq += 1;
+        self.message_encrypter
+            .encrypt_into(plain, outgoing_buffer, seq)
             .unwrap()
     }
 

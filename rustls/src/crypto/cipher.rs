@@ -7,6 +7,7 @@ use zeroize::Zeroize;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::codec;
+use crate::msgs::message::OutboundOpaqueMessageBorrowed;
 pub use crate::msgs::message::{
     BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage, OutboundChunks,
     OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage, PrefixedPayload,
@@ -160,6 +161,23 @@ pub trait MessageEncrypter: Send + Sync {
         msg: OutboundPlainMessage<'_>,
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, Error>;
+
+    /// Encrypt the given TLS message `msg` directly into the outgoing
+    /// buffer, using the sequence number `seq` which can
+    /// be used to derive a unique [`Nonce`].
+    ///
+    /// Can be overridden by the provider to provide zero-allocation and
+    /// zero-copy encrypt.
+    fn encrypt_into<'a>(
+        &mut self,
+        msg: OutboundPlainMessage<'_>,
+        outgoing_buffer: &'a mut [u8],
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessageBorrowed<'a>, Error> {
+        let em = self.encrypt(msg, seq)?;
+        em.copy_to_borrowed(outgoing_buffer)
+            .ok_or(Error::EncryptError)
+    }
 
     /// Return the length of the ciphertext that results from encrypting plaintext of
     /// length `payload_len`
