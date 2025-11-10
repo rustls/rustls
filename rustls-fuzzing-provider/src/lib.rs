@@ -24,7 +24,7 @@ use rustls::crypto::cipher::{
 };
 use rustls::crypto::{
     self, CipherSuiteCommon, Credentials, GetRandomFailed, Identity, KeyExchangeAlgorithm,
-    ProducesTickets, SelectedCredential, StartedKeyExchange, WebPkiSupportedAlgorithms, hash,
+    TicketProducer, SelectedCredential, StartedKeyExchange, WebPkiSupportedAlgorithms, hash,
     tls12, tls13,
 };
 use rustls::enums::{CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
@@ -146,7 +146,7 @@ pub const TLS_FUZZING_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
 #[derive(Debug, Default)]
 pub struct Ticketer;
 
-impl ProducesTickets for Ticketer {
+impl TicketProducer for Ticketer {
     fn enabled(&self) -> bool {
         true
     }

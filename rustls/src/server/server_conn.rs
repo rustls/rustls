@@ -20,7 +20,7 @@ use crate::conn::ConnectionCommon;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CryptoProvider, ProducesTickets, SelectedCredential};
+use crate::crypto::{CryptoProvider, SelectedCredential, TicketProducer};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::{Error, PeerMisbehaved};
 use crate::kernel::KernelConnection;
@@ -348,7 +348,7 @@ pub struct ServerConfig {
     ///
     /// See [ServerConfig#sharing-resumption-storage-between-serverconfigs]
     /// for a warning related to this field.
-    pub ticketer: Arc<dyn ProducesTickets>,
+    pub ticketer: Arc<dyn TicketProducer>,
 
     /// How to choose a server cert and key. This is usually set by
     /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_server_credential_resolver].

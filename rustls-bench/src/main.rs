@@ -28,7 +28,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
-use rustls::crypto::{CryptoProvider, Identity, ProducesTickets};
+use rustls::crypto::{CryptoProvider, Identity, TicketProducer};
 use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::server::{
     NoServerSessionStorage, ServerSessionMemoryCache, UnbufferedServerConnection,
@@ -975,7 +975,7 @@ impl Provider {
         }
     }
 
-    fn ticketer(self) -> Result<Arc<dyn ProducesTickets>, Error> {
+    fn ticketer(self) -> Result<Arc<dyn TicketProducer>, Error> {
         match self {
             #[cfg(feature = "aws-lc-rs")]
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::Ticketer::new(),

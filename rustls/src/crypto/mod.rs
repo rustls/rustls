@@ -416,7 +416,7 @@ pub trait KeyProvider: Send + Sync + Debug {
 }
 
 /// A trait for the ability to encrypt and decrypt tickets.
-pub trait ProducesTickets: Debug + Send + Sync {
+pub trait TicketProducer: Debug + Send + Sync {
     /// Returns true if this implementation will encrypt/decrypt
     /// tickets.  Should return false if this is a dummy
     /// implementation: the server will not send the SessionTicket
