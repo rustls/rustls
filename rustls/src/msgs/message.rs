@@ -117,15 +117,6 @@ pub struct Message<'a> {
 }
 
 impl Message<'_> {
-    pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
-        // Bit of a layering violation, but OK.
-        if let MessagePayload::Handshake { parsed, .. } = &self.payload {
-            parsed.0.handshake_type() == hstyp
-        } else {
-            false
-        }
-    }
-
     pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
         Self {
             version: ProtocolVersion::TLSv1_2,
@@ -168,6 +159,13 @@ impl Message<'_> {
         PlainMessage::from(self)
             .into_unencrypted_opaque()
             .encode()
+    }
+
+    pub(crate) fn handshake_type(&self) -> Option<HandshakeType> {
+        match &self.payload {
+            MessagePayload::Handshake { parsed, .. } => Some(parsed.0.handshake_type()),
+            _ => None,
+        }
     }
 }
 
