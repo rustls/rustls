@@ -13,7 +13,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
-use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
+use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload, ProtocolName};
 use crate::msgs::message::{
     InboundPlainMessage, Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage,
     OutboundPlainMessage, PlainMessage,
@@ -51,7 +51,7 @@ pub struct CommonState {
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
-    queued_key_update_message: Option<Vec<u8>>,
+    queued_key_update_message: bool,
 
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub(crate) protocol: Protocol,
@@ -88,7 +88,7 @@ impl CommonState {
             message_fragmenter: MessageFragmenter::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
-            queued_key_update_message: None,
+            queued_key_update_message: false,
             protocol: Protocol::Tcp,
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
@@ -460,7 +460,19 @@ impl CommonState {
     }
 
     pub(crate) fn perhaps_write_key_update(&mut self) {
-        if let Some(message) = self.queued_key_update_message.take() {
+        if self.queued_key_update_message {
+            self.queued_key_update_message = false;
+
+            let message = PlainMessage::from(Message {
+                version: ProtocolVersion::TLSv1_3,
+                payload: MessagePayload::handshake(HandshakeMessagePayload(
+                    HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
+                )),
+            });
+            let message = self
+                .record_layer
+                .encrypt_outgoing(message.borrow_outbound())
+                .encode();
             self.sendable_tls.append(message);
         }
     }
@@ -724,7 +736,7 @@ impl CommonState {
 
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => Ok(false),
-            KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
+            KeyUpdateRequest::UpdateRequested => Ok(!self.queued_key_update_message),
             _ => Err(self.send_fatal_alert(
                 AlertDescription::IllegalParameter,
                 InvalidMessage::InvalidKeyUpdate,
@@ -733,12 +745,7 @@ impl CommonState {
     }
 
     pub(crate) fn enqueue_key_update_notification(&mut self) {
-        let message = PlainMessage::from(Message::build_key_update_notify());
-        self.queued_key_update_message = Some(
-            self.record_layer
-                .encrypt_outgoing(message.borrow_outbound())
-                .encode(),
-        );
+        self.queued_key_update_message = true
     }
 }
 

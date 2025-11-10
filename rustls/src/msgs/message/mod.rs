@@ -181,15 +181,6 @@ impl Message<'_> {
         }
     }
 
-    pub fn build_key_update_notify() -> Self {
-        Self {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
-            )),
-        }
-    }
-
     pub fn build_key_update_request() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
