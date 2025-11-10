@@ -112,7 +112,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             session_storage: handy::ServerSessionMemoryCache::new(256),
             #[cfg(not(feature = "std"))]
             session_storage: Arc::new(handy::NoServerSessionStorage {}),
-            ticketer: Arc::new(handy::NeverProducesTickets {}),
+            ticketer: None,
             alpn_protocols: Vec::new(),
             key_log: Arc::new(NoKeyLog {}),
             enable_secret_extraction: false,

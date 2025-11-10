@@ -158,10 +158,6 @@ impl TicketProducer for Ticketer {
     fn lifetime(&self) -> u32 {
         60 * 60 * 6
     }
-
-    fn enabled(&self) -> bool {
-        true
-    }
 }
 
 struct Hash;

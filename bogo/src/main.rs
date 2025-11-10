@@ -39,8 +39,8 @@ use rustls::client::{
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::{
-    Credentials, CryptoProvider, Identity, TicketProducer, SelectedCredential, Signer, SigningKey,
-    SingleCredential, aws_lc_rs, ring,
+    Credentials, CryptoProvider, Identity, SelectedCredential, Signer, SigningKey,
+    SingleCredential, TicketProducer, aws_lc_rs, ring,
 };
 use rustls::enums::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
@@ -805,7 +805,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     }
 
     if opts.tickets {
-        cfg.ticketer = opts.selected_provider.ticketer();
+        cfg.ticketer = Some(opts.selected_provider.ticketer());
     } else if opts.resumes == 0 {
         cfg.session_storage = Arc::new(server::NoServerSessionStorage {});
     }

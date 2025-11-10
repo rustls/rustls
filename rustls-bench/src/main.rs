@@ -825,7 +825,7 @@ impl Parameters {
                 cfg.session_storage = ServerSessionMemoryCache::new(128);
             }
             ResumptionParam::Tickets => {
-                cfg.ticketer = self.provider.ticketer().unwrap();
+                cfg.ticketer = Some(self.provider.ticketer().unwrap());
             }
             ResumptionParam::No => {
                 cfg.session_storage = Arc::new(NoServerSessionStorage {});

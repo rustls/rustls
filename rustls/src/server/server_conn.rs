@@ -348,7 +348,7 @@ pub struct ServerConfig {
     ///
     /// See [ServerConfig#sharing-resumption-storage-between-serverconfigs]
     /// for a warning related to this field.
-    pub ticketer: Arc<dyn TicketProducer>,
+    pub ticketer: Option<Arc<dyn TicketProducer>>,
 
     /// How to choose a server cert and key. This is usually set by
     /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_server_credential_resolver].

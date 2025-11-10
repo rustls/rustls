@@ -360,7 +360,7 @@ fn tls13_stateless_resumption() {
     let client_config = Arc::new(client_config);
 
     let mut server_config = make_server_config(kt, &provider);
-    server_config.ticketer = provider::Ticketer::new().unwrap();
+    server_config.ticketer = Some(provider::Ticketer::new().unwrap());
     let storage = Arc::new(ServerStorage::new());
     server_config.session_storage = storage.clone();
     let server_config = Arc::new(server_config);
