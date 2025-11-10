@@ -8,10 +8,12 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::codec;
 pub use crate::msgs::message::{
-    BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage, OutboundChunks,
-    OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage, PrefixedPayload,
+    OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage, PrefixedPayload,
 };
 use crate::suites::ConnectionTrafficSecrets;
+
+mod inbound;
+pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {

@@ -4,17 +4,16 @@ use aws_lc_rs::{aead, tls_prf};
 use zeroize::Zeroizing;
 
 use crate::crypto::cipher::{
-    AeadKey, InboundOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    NONCE_LEN, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
+    AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape, MessageDecrypter,
+    MessageEncrypter, NONCE_LEN, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError,
+    make_tls12_aad,
 };
 use crate::crypto::tls12::{Prf, PrfSecret};
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{
-    InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
-};
+use crate::msgs::message::{OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
 use crate::tls12::Tls12CipherSuite;
 use crate::version::TLS12_VERSION;

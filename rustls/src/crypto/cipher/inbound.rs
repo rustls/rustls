@@ -10,8 +10,11 @@ use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 /// It is used for joining and is consumed by decryption.
 #[expect(clippy::exhaustive_structs)]
 pub struct InboundOpaqueMessage<'a> {
+    /// The content type of the message.
     pub typ: ContentType,
+    /// The protocol version of the message.
     pub version: ProtocolVersion,
+    /// The encrypted payload of the message.
     pub payload: BorrowedPayload<'a>,
 }
 
@@ -79,6 +82,7 @@ impl<'a> InboundOpaqueMessage<'a> {
     }
 }
 
+/// A borrowed payload buffer.
 pub struct BorrowedPayload<'a>(&'a mut [u8]);
 
 impl Deref for BorrowedPayload<'_> {
@@ -96,6 +100,7 @@ impl DerefMut for BorrowedPayload<'_> {
 }
 
 impl<'a> BorrowedPayload<'a> {
+    /// Truncate the payload to `len` bytes.
     pub fn truncate(&mut self, len: usize) {
         if len >= self.len() {
             return;
@@ -129,8 +134,11 @@ impl<'a> BorrowedPayload<'a> {
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct InboundPlainMessage<'a> {
+    /// The content type of the message.
     pub typ: ContentType,
+    /// The protocol version of the message.
     pub version: ProtocolVersion,
+    /// The decrypted payload of the message.
     pub payload: &'a [u8],
 }
 

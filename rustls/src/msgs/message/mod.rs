@@ -1,3 +1,4 @@
+use crate::crypto::cipher::InboundPlainMessage;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::alert::AlertMessagePayload;
@@ -6,9 +7,6 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
-
-mod inbound;
-pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
 
 mod outbound;
 use alloc::vec::Vec;
@@ -250,6 +248,8 @@ impl TryFrom<PlainMessage> for Message<'static> {
 ///
 /// A [`PlainMessage`] must contain plaintext content. Encrypted content should be stored in an
 /// [`InboundOpaqueMessage`] and decrypted before being stored into a [`PlainMessage`].
+///
+/// [`InboundOpaqueMessage`]: crate::crypto::cipher::InboundOpaqueMessage
 impl<'a> TryFrom<InboundPlainMessage<'a>> for Message<'a> {
     type Error = InvalidMessage;
 
