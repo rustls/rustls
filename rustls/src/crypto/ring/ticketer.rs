@@ -8,10 +8,10 @@ use ring::aead;
 use ring::rand::{SecureRandom, SystemRandom};
 use subtle::ConstantTimeEq;
 
+use crate::crypto::ProducesTickets;
 use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
-use crate::server::ProducesTickets;
 use crate::sync::Arc;
 
 /// A concrete, safe ticket creation mechanism.

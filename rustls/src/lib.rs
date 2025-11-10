@@ -600,7 +600,7 @@ pub mod server {
     #[cfg(feature = "std")]
     pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
     pub use server_conn::{
-        ClientHello, InvalidSniPolicy, ProducesTickets, ServerConfig, ServerConnectionData,
+        ClientHello, InvalidSniPolicy, ServerConfig, ServerConnectionData,
         ServerCredentialResolver, StoresServerSessions, UnbufferedServerConnection,
     };
 

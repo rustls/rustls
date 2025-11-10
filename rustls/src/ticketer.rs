@@ -5,8 +5,8 @@ use std::sync::{RwLock, RwLockReadGuard};
 
 use pki_types::UnixTime;
 
-use crate::Error;
-use crate::server::ProducesTickets;
+use crate::crypto::ProducesTickets;
+use crate::error::Error;
 
 #[derive(Debug)]
 pub(crate) struct TicketRotatorState {
