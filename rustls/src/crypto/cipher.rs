@@ -7,13 +7,14 @@ use zeroize::Zeroize;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::codec;
-pub use crate::msgs::message::{
-    OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage, PrefixedPayload,
-};
+pub use crate::msgs::message::PlainMessage;
 use crate::suites::ConnectionTrafficSecrets;
 
 mod inbound;
 pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
+
+mod outbound;
+pub use outbound::{OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {

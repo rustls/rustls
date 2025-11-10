@@ -3,10 +3,10 @@ use core::cmp::min;
 
 use crate::crypto::cipher::{
     InboundOpaqueMessage, InboundPlainMessage, MessageDecrypter, MessageEncrypter,
+    OutboundOpaqueMessage, OutboundPlainMessage,
 };
 use crate::error::Error;
 use crate::log::trace;
-use crate::msgs::message::{OutboundOpaqueMessage, OutboundPlainMessage};
 
 #[derive(PartialEq)]
 enum DirectionState {

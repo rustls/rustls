@@ -34,8 +34,8 @@ mod connection {
 
     use crate::common_state::{CommonState, IoState};
     use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData};
+    use crate::crypto::cipher::OutboundChunks;
     use crate::error::Error;
-    use crate::msgs::message::OutboundChunks;
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
 

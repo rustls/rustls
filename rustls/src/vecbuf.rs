@@ -7,7 +7,7 @@ use std::io;
 use std::io::Read;
 
 #[cfg(feature = "std")]
-use crate::msgs::message::OutboundChunks;
+use crate::crypto::cipher::OutboundChunks;
 
 /// This is a byte buffer that is built from a deque of byte vectors.
 ///
