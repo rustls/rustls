@@ -55,8 +55,8 @@ mod message_test;
 #[cfg(test)]
 mod tests {
     use super::codec::Reader;
-    use super::message::{Message, PlainMessage};
-    use crate::crypto::cipher::{OutboundOpaqueMessage, PrefixedPayload};
+    use super::message::Message;
+    use crate::crypto::cipher::{OutboundOpaqueMessage, PlainMessage, PrefixedPayload};
 
     #[test]
     fn smoketest() {

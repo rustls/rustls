@@ -1,6 +1,4 @@
-use crate::crypto::cipher::{
-    InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
-};
+use crate::crypto::cipher::{InboundPlainMessage, PlainMessage};
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::alert::AlertMessagePayload;
@@ -107,62 +105,6 @@ impl From<Message<'_>> for PlainMessage {
             typ,
             version: msg.version,
             payload,
-        }
-    }
-}
-
-/// A decrypted TLS frame
-///
-/// This type owns all memory for its interior parts. It can be decrypted from an OpaqueMessage
-/// or encrypted into an OpaqueMessage, and it is also used for joining and fragmenting.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Clone, Debug)]
-pub struct PlainMessage {
-    pub typ: ContentType,
-    pub version: ProtocolVersion,
-    pub payload: Payload<'static>,
-}
-
-impl PlainMessage {
-    /// Construct by decoding from a [`Reader`].
-    ///
-    /// `MessageError` allows callers to distinguish between valid prefixes (might
-    /// become valid if we read more data) and invalid data.
-    pub fn read(r: &mut Reader<'_>) -> Result<Self, MessageError> {
-        let (typ, version, len) = read_opaque_message_header(r)?;
-
-        let content = r
-            .take(len as usize)
-            .ok_or(MessageError::TooShortForLength)?;
-
-        Ok(Self {
-            typ,
-            version,
-            payload: Payload::Owned(content.to_vec()),
-        })
-    }
-
-    pub fn into_unencrypted_opaque(self) -> OutboundOpaqueMessage {
-        OutboundOpaqueMessage {
-            version: self.version,
-            typ: self.typ,
-            payload: PrefixedPayload::from(self.payload.bytes()),
-        }
-    }
-
-    pub fn borrow_inbound(&self) -> InboundPlainMessage<'_> {
-        InboundPlainMessage {
-            version: self.version,
-            typ: self.typ,
-            payload: self.payload.bytes(),
-        }
-    }
-
-    pub fn borrow_outbound(&self) -> OutboundPlainMessage<'_> {
-        OutboundPlainMessage {
-            version: self.version,
-            typ: self.typ,
-            payload: self.payload.bytes().into(),
         }
     }
 }
