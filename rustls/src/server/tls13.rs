@@ -43,8 +43,9 @@ use crate::{ConnectionTrafficSecrets, compress, rand, verify};
 mod client_hello {
     use super::*;
     use crate::compress::CertCompressor;
+    use crate::crypto::cipher::Payload;
     use crate::crypto::{SelectedCredential, Signer, SupportedKxGroup};
-    use crate::msgs::base::{Payload, PayloadU8};
+    use crate::msgs::base::PayloadU8;
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup};
     use crate::msgs::handshake::{

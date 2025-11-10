@@ -16,6 +16,7 @@ use crate::client::{ClientConfig, hs};
 use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
+use crate::crypto::cipher::Payload;
 use crate::crypto::{Identity, KeyExchangeAlgorithm, Signer};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
@@ -23,7 +24,7 @@ use crate::enums::{
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::{Payload, PayloadU8, PayloadU16};
+use crate::msgs::base::{PayloadU8, PayloadU16};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::handshake::{
     CertificateChain, ClientDhParams, ClientEcdhParams, ClientKeyExchangeParams,

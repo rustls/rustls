@@ -8,6 +8,7 @@ use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
 
+use crate::crypto::cipher::Payload;
 use crate::crypto::{ActiveKeyExchange, SecureRandom, SelectedCredential};
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, CipherSuite, EchClientHelloType,
@@ -16,7 +17,7 @@ use crate::enums::{
 use crate::error::InvalidMessage;
 use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
-use crate::msgs::base::{MaybeEmpty, NonEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
+use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec::{
     self, CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, Reader,
     TlsListElement, TlsListIter,

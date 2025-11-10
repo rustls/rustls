@@ -109,9 +109,8 @@ mod tests {
     use std::vec;
 
     use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use crate::crypto::cipher::{OutboundChunks, OutboundPlainMessage, PlainMessage};
+    use crate::crypto::cipher::{OutboundChunks, OutboundPlainMessage, Payload, PlainMessage};
     use crate::enums::{ContentType, ProtocolVersion};
-    use crate::msgs::base::Payload;
 
     fn msg_eq(
         m: &OutboundPlainMessage<'_>,
