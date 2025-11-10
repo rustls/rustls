@@ -15,6 +15,7 @@ itertools = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 rustls = { path = "../rustls", features = ["ring", "aws-lc-rs"] }
+rustls-ring = { path = "../rustls-ring" }
 rustls-test = { workspace = true }
 rustls-fuzzing-provider = { workspace = true }
 

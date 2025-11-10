@@ -91,7 +91,8 @@ pub trait PrfSecret: Send + Sync {
     fn prf(&self, output: &mut [u8], label: &[u8], seed: &[u8]);
 }
 
-pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: &[u8]) {
+#[doc(hidden)]
+pub fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: &[u8]) {
     let mut previous_a: Option<hmac::Tag> = None;
 
     let chunk_size = hmac_key.tag_len();

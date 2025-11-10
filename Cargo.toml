@@ -14,6 +14,8 @@ members = [
   "provider-example",
   # the main library and tests
   "rustls",
+  # the ring crypto provider
+  "rustls-ring",
   # common code for testing the core crate
   "rustls-test",
   # benchmarking tool
@@ -36,6 +38,7 @@ default-members = [
   # ---
   "examples",
   "rustls",
+  "rustls-ring",
   "rustls-test",
 ]
 resolver = "2"

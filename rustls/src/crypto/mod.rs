@@ -23,10 +23,6 @@ pub use crate::webpki::{
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};
 use crate::{NamedGroup, SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite};
 
-/// *ring* based CryptoProvider.
-#[cfg(feature = "ring")]
-pub mod ring;
-
 /// aws-lc-rs-based CryptoProvider.
 #[cfg(feature = "aws-lc-rs")]
 pub mod aws_lc_rs;
