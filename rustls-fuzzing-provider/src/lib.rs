@@ -28,7 +28,7 @@ use rustls::crypto::{
     SelectedCredential, StartedKeyExchange, TicketProducer, WebPkiSupportedAlgorithms, hash, tls12,
     tls13,
 };
-use rustls::enums::{CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
+use rustls::enums::{CipherSuite, ContentType, HashAlgorithm, ProtocolVersion, SignatureScheme};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
@@ -173,8 +173,8 @@ impl hash::Hash for Hash {
         hash::Output::new(HASH_OUTPUT)
     }
 
-    fn algorithm(&self) -> hash::HashAlgorithm {
-        hash::HashAlgorithm::from(0xff)
+    fn algorithm(&self) -> HashAlgorithm {
+        HashAlgorithm::from(0xff)
     }
 
     fn output_len(&self) -> usize {

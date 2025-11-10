@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
 use rustls::crypto::hash;
+use rustls::enums::HashAlgorithm;
 use sha2::Digest;
 
 pub(crate) struct Sha256;
@@ -14,8 +15,8 @@ impl hash::Hash for Sha256 {
         hash::Output::new(&sha2::Sha256::digest(data)[..])
     }
 
-    fn algorithm(&self) -> hash::HashAlgorithm {
-        hash::HashAlgorithm::SHA256
+    fn algorithm(&self) -> HashAlgorithm {
+        HashAlgorithm::SHA256
     }
 
     fn output_len(&self) -> usize {
