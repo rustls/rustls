@@ -908,7 +908,7 @@ impl From<&'static Tls13CipherSuite> for KeyScheduleSuite {
 /// [HKDF-Expand-Label] where the output is an AEAD key.
 ///
 /// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
-pub fn derive_traffic_key(
+pub(crate) fn derive_traffic_key(
     expander: &dyn HkdfExpander,
     aead_alg: &dyn Tls13AeadAlgorithm,
 ) -> AeadKey {
@@ -918,7 +918,7 @@ pub fn derive_traffic_key(
 /// [HKDF-Expand-Label] where the output is an IV with a specified length.
 ///
 /// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
-pub fn derive_traffic_iv(expander: &dyn HkdfExpander, iv_len: usize) -> Iv {
+pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander, iv_len: usize) -> Iv {
     hkdf_expand_label_iv(expander, b"iv", &[], iv_len)
 }
 

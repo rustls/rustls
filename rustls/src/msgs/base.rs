@@ -159,10 +159,10 @@ impl<C: Cardinality> fmt::Debug for PayloadU24<'_, C> {
 /// The `C` type parameter controls whether decoded values may
 /// be empty.
 #[derive(Clone, Eq, PartialEq)]
-pub struct PayloadU16<C: Cardinality = MaybeEmpty>(pub(crate) Vec<u8>, PhantomData<C>);
+pub(crate) struct PayloadU16<C: Cardinality = MaybeEmpty>(pub(crate) Vec<u8>, PhantomData<C>);
 
 impl<C: Cardinality> PayloadU16<C> {
-    pub fn new(bytes: Vec<u8>) -> Self {
+    pub(crate) fn new(bytes: Vec<u8>) -> Self {
         debug_assert!(bytes.len() >= C::MIN);
         Self(bytes, PhantomData)
     }
@@ -252,12 +252,12 @@ impl<C: Cardinality> fmt::Debug for PayloadU8<C> {
     }
 }
 
-pub trait Cardinality: Clone + Eq + PartialEq {
+pub(crate) trait Cardinality: Clone + Eq + PartialEq {
     const MIN: usize;
 }
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct MaybeEmpty;
+pub(crate) struct MaybeEmpty;
 
 impl Cardinality for MaybeEmpty {
     const MIN: usize = 0;

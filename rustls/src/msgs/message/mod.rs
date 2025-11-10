@@ -28,7 +28,7 @@ pub enum MessagePayload<'a> {
 }
 
 impl<'a> MessagePayload<'a> {
-    pub fn encode(&self, bytes: &mut Vec<u8>) {
+    pub(crate) fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Self::Alert(x) => x.encode(bytes),
             Self::Handshake { encoded, .. } => bytes.extend(encoded.bytes()),
@@ -38,14 +38,14 @@ impl<'a> MessagePayload<'a> {
         }
     }
 
-    pub fn handshake(parsed: HandshakeMessagePayload<'a>) -> Self {
+    pub(crate) fn handshake(parsed: HandshakeMessagePayload<'a>) -> Self {
         Self::Handshake {
             encoded: Payload::new(parsed.get_encoding()),
             parsed,
         }
     }
 
-    pub fn new(
+    pub(crate) fn new(
         typ: ContentType,
         vers: ProtocolVersion,
         payload: &'a [u8],
@@ -67,7 +67,7 @@ impl<'a> MessagePayload<'a> {
         }
     }
 
-    pub fn content_type(&self) -> ContentType {
+    pub(crate) fn content_type(&self) -> ContentType {
         match self {
             Self::Alert(_) => ContentType::Alert,
             Self::Handshake { .. } | Self::HandshakeFlight(_) => ContentType::Handshake,
