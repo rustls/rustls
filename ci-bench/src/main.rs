@@ -30,9 +30,7 @@ use rayon::iter::Either;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
-use rustls::crypto::{
-    CryptoProvider, GetRandomFailed, SecureRandom, TicketProducer, aws_lc_rs, ring,
-};
+use rustls::crypto::{CryptoProvider, GetRandomFailed, SecureRandom, TicketProducer, aws_lc_rs};
 use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
@@ -391,7 +389,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 
     for (provider, ticketer, provider_name, warm_up) in [
         (
-            derandomize(ring::DEFAULT_PROVIDER),
+            derandomize(rustls_ring::DEFAULT_PROVIDER),
             &(ring_ticketer as fn() -> Arc<dyn TicketProducer>),
             "ring",
             None,
@@ -483,7 +481,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 }
 
 fn ring_ticketer() -> Arc<dyn TicketProducer> {
-    ring::DEFAULT_PROVIDER
+    rustls_ring::DEFAULT_PROVIDER
         .ticketer_factory
         .ticketer()
         .unwrap()

@@ -1097,9 +1097,8 @@ fn test_no_warning_logging_during_successful_sessions() {
 #[cfg(all(feature = "ring", feature = "aws-lc-rs"))]
 #[test]
 fn test_explicit_provider_selection() {
-    let client_config =
-        rustls::ClientConfig::builder(rustls::crypto::ring::DEFAULT_PROVIDER.into())
-            .finish(KeyType::Rsa2048);
+    let client_config = rustls::ClientConfig::builder(rustls_ring::DEFAULT_PROVIDER.into())
+        .finish(KeyType::Rsa2048);
 
     let server_config =
         rustls::ServerConfig::builder(rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.into())

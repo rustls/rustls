@@ -975,7 +975,7 @@ impl Provider {
             #[cfg(feature = "graviola")]
             Self::Graviola => rustls_graviola::default_provider(),
             #[cfg(feature = "ring")]
-            Self::Ring => rustls::crypto::ring::DEFAULT_PROVIDER,
+            Self::Ring => rustls_ring::DEFAULT_PROVIDER,
             Self::_None => unreachable!(),
         }
     }

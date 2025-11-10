@@ -1,4 +1,4 @@
-#![cfg(any(feature = "aws-lc-rs", feature = "ring"))]
+#![cfg(feature = "aws-lc-rs")]
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;

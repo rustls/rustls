@@ -7,12 +7,9 @@ use core::time::Duration;
 
 use ring::aead;
 use ring::rand::{SecureRandom, SystemRandom};
+use rustls::crypto::TicketProducer;
+use rustls::error::Error;
 use subtle::ConstantTimeEq;
-
-use crate::crypto::TicketProducer;
-use crate::error::Error;
-#[cfg(debug_assertions)]
-use crate::log::debug;
 
 /// A [`TicketProducer`] implementation which can use any *ring* `aead::Algorithm`.
 ///
@@ -105,8 +102,6 @@ impl TicketProducer for AeadTicketer {
                 .maximum_ciphertext_len
                 .load(Ordering::SeqCst)
         {
-            #[cfg(debug_assertions)]
-            debug!("rejected over-length ticket");
             return None;
         }
 
@@ -126,8 +121,6 @@ impl TicketProducer for AeadTicketer {
         // [^2]: "Authenticated Encryption with Key Identification", fig 6
         //       <https://eprint.iacr.org/2022/1680.pdf>
         if ConstantTimeEq::ct_ne(&self.key_name[..], alleged_key_name).into() {
-            #[cfg(debug_assertions)]
-            debug!("rejected ticket with wrong ticket_name");
             return None;
         }
 
@@ -166,8 +159,9 @@ static TICKETER_AEAD: &aead::Algorithm = &aead::CHACHA20_POLY1305;
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto::TicketerFactory;
-    use crate::crypto::ring::Ring;
+    use rustls::crypto::TicketerFactory;
+
+    use crate::Ring;
 
     #[test]
     fn basic_pairwise_test() {

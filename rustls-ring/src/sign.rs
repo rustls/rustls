@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::fmt::{self, Debug, Formatter};
@@ -7,14 +8,11 @@ use core::fmt::{self, Debug, Formatter};
 use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
-
 #[cfg(any(test, bench))]
-use crate::crypto::CryptoProvider;
-use crate::crypto::signer::{Signer, SigningKey, public_key_to_spki};
-use crate::enums::SignatureScheme;
-use crate::error::Error;
-use crate::sync::Arc;
-use crate::x509::{wrap_concat_in_sequence, wrap_in_octet_string};
+use rustls::crypto::CryptoProvider;
+use rustls::crypto::{Signer, SigningKey, public_key_to_spki};
+use rustls::enums::SignatureScheme;
+use rustls::error::Error;
 
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS.
 pub(super) struct RsaSigningKey {
@@ -367,6 +365,52 @@ fn load_key(
         .load_private_key(der)
 }
 
+/// Prepend stuff to `bytes_a` + `bytes_b` to put it in a DER SEQUENCE.
+pub(crate) fn wrap_concat_in_sequence(bytes_a: &[u8], bytes_b: &[u8]) -> Vec<u8> {
+    asn1_wrap(DER_SEQUENCE_TAG, bytes_a, bytes_b)
+}
+
+/// Prepend stuff to `bytes` to put it in a DER OCTET STRING.
+pub(crate) fn wrap_in_octet_string(bytes: &[u8]) -> Vec<u8> {
+    asn1_wrap(DER_OCTET_STRING_TAG, bytes, &[])
+}
+
+fn asn1_wrap(tag: u8, bytes_a: &[u8], bytes_b: &[u8]) -> Vec<u8> {
+    let len = bytes_a.len() + bytes_b.len();
+
+    if len <= 0x7f {
+        // Short form
+        let mut ret = Vec::with_capacity(2 + len);
+        ret.push(tag);
+        ret.push(len as u8);
+        ret.extend_from_slice(bytes_a);
+        ret.extend_from_slice(bytes_b);
+        ret
+    } else {
+        // Long form
+        let size = len.to_be_bytes();
+        let leading_zero_bytes = size
+            .iter()
+            .position(|&x| x != 0)
+            .unwrap_or(size.len());
+        assert!(leading_zero_bytes < size.len());
+        let encoded_bytes = size.len() - leading_zero_bytes;
+
+        let mut ret = Vec::with_capacity(2 + encoded_bytes + len);
+        ret.push(tag);
+
+        ret.push(0x80 + encoded_bytes as u8);
+        ret.extend_from_slice(&size[leading_zero_bytes..]);
+
+        ret.extend_from_slice(bytes_a);
+        ret.extend_from_slice(bytes_b);
+        ret
+    }
+}
+
+const DER_SEQUENCE_TAG: u8 = 0x30;
+const DER_OCTET_STRING_TAG: u8 = 0x04;
+
 #[cfg(test)]
 mod tests {
     use alloc::format;
@@ -374,12 +418,13 @@ mod tests {
     use pki_types::{PrivatePkcs1KeyDer, PrivateSec1KeyDer};
 
     use super::*;
-    use crate::crypto::ring::DEFAULT_PROVIDER;
+    use crate::DEFAULT_PROVIDER;
 
     #[test]
     fn can_load_ecdsa_nistp256_pkcs8() {
-        let key =
-            PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/nistp256key.pkcs8.der")[..]);
+        let key = PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../rustls/src/testdata/nistp256key.pkcs8.der")[..],
+        );
         assert!(Ed25519Signer::try_from(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&DEFAULT_PROVIDER, key.clone_key()).is_ok());
@@ -389,7 +434,7 @@ mod tests {
     #[test]
     fn can_load_ecdsa_nistp256_sec1() {
         let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
-            &include_bytes!("../../testdata/nistp256key.der")[..],
+            &include_bytes!("../../rustls/src/testdata/nistp256key.der")[..],
         ));
         assert!(load_key(&DEFAULT_PROVIDER, key.clone_key()).is_ok());
         assert!(EcdsaSigner::try_from(&key).is_ok());
@@ -398,7 +443,7 @@ mod tests {
     #[test]
     fn can_sign_ecdsa_nistp256() {
         let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
-            &include_bytes!("../../testdata/nistp256key.der")[..],
+            &include_bytes!("../../rustls/src/testdata/nistp256key.der")[..],
         ));
 
         let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
@@ -433,8 +478,9 @@ mod tests {
 
     #[test]
     fn can_load_ecdsa_nistp384_pkcs8() {
-        let key =
-            PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/nistp384key.pkcs8.der")[..]);
+        let key = PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../rustls/src/testdata/nistp384key.pkcs8.der")[..],
+        );
         assert!(Ed25519Signer::try_from(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&DEFAULT_PROVIDER, key.clone_key()).is_ok());
@@ -444,7 +490,7 @@ mod tests {
     #[test]
     fn can_load_ecdsa_nistp384_sec1() {
         let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
-            &include_bytes!("../../testdata/nistp384key.der")[..],
+            &include_bytes!("../../rustls/src/testdata/nistp384key.der")[..],
         ));
         assert!(load_key(&DEFAULT_PROVIDER, key.clone_key()).is_ok());
         assert!(EcdsaSigner::try_from(&key).is_ok());
@@ -453,7 +499,7 @@ mod tests {
     #[test]
     fn can_sign_ecdsa_nistp384() {
         let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
-            &include_bytes!("../../testdata/nistp384key.der")[..],
+            &include_bytes!("../../rustls/src/testdata/nistp384key.der")[..],
         ));
 
         let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
@@ -488,7 +534,8 @@ mod tests {
 
     #[test]
     fn can_load_eddsa_pkcs8() {
-        let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
+        let key =
+            PrivatePkcs8KeyDer::from(&include_bytes!("../../rustls/src/testdata/eddsakey.der")[..]);
         assert!(Ed25519Signer::try_from(&key).is_ok());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&DEFAULT_PROVIDER, key.clone_key()).is_ok());
@@ -497,7 +544,8 @@ mod tests {
 
     #[test]
     fn can_sign_eddsa() {
-        let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
+        let key =
+            PrivatePkcs8KeyDer::from(&include_bytes!("../../rustls/src/testdata/eddsakey.der")[..]);
 
         let k = Ed25519Signer::try_from(&key).unwrap();
         assert_eq!(format!("{k:?}"), "Ed25519Signer { scheme: ED25519 }");
@@ -520,8 +568,9 @@ mod tests {
 
     #[test]
     fn can_load_rsa2048_pkcs8() {
-        let key =
-            PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..]);
+        let key = PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../rustls/src/testdata/rsa2048key.pkcs8.der")[..],
+        );
         assert!(Ed25519Signer::try_from(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(load_key(&DEFAULT_PROVIDER, key.clone_key()).is_ok());
@@ -531,7 +580,7 @@ mod tests {
     #[test]
     fn can_load_rsa2048_pkcs1() {
         let key = PrivateKeyDer::Pkcs1(PrivatePkcs1KeyDer::from(
-            &include_bytes!("../../testdata/rsa2048key.pkcs1.der")[..],
+            &include_bytes!("../../rustls/src/testdata/rsa2048key.pkcs1.der")[..],
         ));
         assert!(load_key(&DEFAULT_PROVIDER, key.clone_key()).is_ok());
         assert!(EcdsaSigner::try_from(&key).is_err());
@@ -540,7 +589,7 @@ mod tests {
     #[test]
     fn can_sign_rsa2048() {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
+            &include_bytes!("../../rustls/src/testdata/rsa2048key.pkcs8.der")[..],
         ));
 
         let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
@@ -601,12 +650,12 @@ mod tests {
 #[cfg(bench)]
 mod benchmarks {
     use super::*;
-    use crate::crypto::ring::DEFAULT_PROVIDER;
+    use crate::DEFAULT_PROVIDER;
 
     #[bench]
     fn bench_rsa2048_pkcs1_sha256(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
+            &include_bytes!("../../rustls/src/testdata/rsa2048key.pkcs8.der")[..],
         ));
 
         let signer = RsaSigningKey::try_from(&key)
@@ -625,7 +674,7 @@ mod benchmarks {
     #[bench]
     fn bench_rsa2048_pss_sha256(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
+            &include_bytes!("../../rustls/src/testdata/rsa2048key.pkcs8.der")[..],
         ));
 
         let signer = RsaSigningKey::try_from(&key)
@@ -643,7 +692,8 @@ mod benchmarks {
 
     #[bench]
     fn bench_eddsa(b: &mut test::Bencher) {
-        let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
+        let key =
+            PrivatePkcs8KeyDer::from(&include_bytes!("../../rustls/src/testdata/eddsakey.der")[..]);
         let signer = Ed25519Signer::try_from(&key).unwrap();
 
         b.iter(|| {
@@ -658,7 +708,7 @@ mod benchmarks {
     #[bench]
     fn bench_ecdsa_p256_sha256(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/nistp256key.pkcs8.der")[..],
+            &include_bytes!("../../rustls/src/testdata/nistp256key.pkcs8.der")[..],
         ));
 
         let signer = EcdsaSigner::try_from(&key).unwrap();
@@ -674,7 +724,7 @@ mod benchmarks {
     #[bench]
     fn bench_ecdsa_p384_sha384(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/nistp384key.pkcs8.der")[..],
+            &include_bytes!("../../rustls/src/testdata/nistp384key.pkcs8.der")[..],
         ));
 
         let signer = EcdsaSigner::try_from(&key).unwrap();
@@ -690,7 +740,7 @@ mod benchmarks {
     #[bench]
     fn bench_load_and_validate_rsa2048(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
+            &include_bytes!("../../rustls/src/testdata/rsa2048key.pkcs8.der")[..],
         ));
 
         b.iter(|| {
@@ -701,7 +751,7 @@ mod benchmarks {
     #[bench]
     fn bench_load_and_validate_rsa4096(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/rsa4096key.pkcs8.der")[..],
+            &include_bytes!("../../rustls/src/testdata/rsa4096key.pkcs8.der")[..],
         ));
 
         b.iter(|| {
@@ -712,7 +762,7 @@ mod benchmarks {
     #[bench]
     fn bench_load_and_validate_p256(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/nistp256key.pkcs8.der")[..],
+            &include_bytes!("../../rustls/src/testdata/nistp256key.pkcs8.der")[..],
         ));
 
         b.iter(|| {
@@ -723,7 +773,7 @@ mod benchmarks {
     #[bench]
     fn bench_load_and_validate_p384(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            &include_bytes!("../../testdata/nistp384key.pkcs8.der")[..],
+            &include_bytes!("../../rustls/src/testdata/nistp384key.pkcs8.der")[..],
         ));
 
         b.iter(|| {
@@ -733,7 +783,8 @@ mod benchmarks {
 
     #[bench]
     fn bench_load_and_validate_eddsa(b: &mut test::Bencher) {
-        let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
+        let key =
+            PrivatePkcs8KeyDer::from(&include_bytes!("../../rustls/src/testdata/eddsakey.der")[..]);
 
         b.iter(|| {
             test::black_box(Ed25519Signer::try_from(&key).unwrap());
