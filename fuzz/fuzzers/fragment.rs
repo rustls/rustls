@@ -6,15 +6,15 @@ extern crate rustls;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::fragmenter::MessageFragmenter;
-use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
+use rustls::internal::msgs::message::{Message, PlainMessage};
 
 fuzz_target!(|data: &[u8]| {
     let mut rdr = Reader::init(data);
-    let Ok(msg) = OutboundOpaqueMessage::read(&mut rdr) else {
+    let Ok(msg) = PlainMessage::read(&mut rdr) else {
         return;
     };
 
-    let Ok(msg) = Message::try_from(msg.into_plain_message()) else {
+    let Ok(msg) = Message::try_from(msg) else {
         return;
     };
 

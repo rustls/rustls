@@ -128,6 +128,24 @@ pub struct PlainMessage {
 }
 
 impl PlainMessage {
+    /// Construct by decoding from a [`Reader`].
+    ///
+    /// `MessageError` allows callers to distinguish between valid prefixes (might
+    /// become valid if we read more data) and invalid data.
+    pub fn read(r: &mut Reader<'_>) -> Result<Self, MessageError> {
+        let (typ, version, len) = read_opaque_message_header(r)?;
+
+        let content = r
+            .take(len as usize)
+            .ok_or(MessageError::TooShortForLength)?;
+
+        Ok(Self {
+            typ,
+            version,
+            payload: Payload::Owned(content.to_vec()),
+        })
+    }
+
     pub fn into_unencrypted_opaque(self) -> OutboundOpaqueMessage {
         OutboundOpaqueMessage {
             version: self.version,

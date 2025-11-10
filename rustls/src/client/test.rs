@@ -23,7 +23,7 @@ use crate::msgs::handshake::{
     ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
     ServerKeyExchangePayload, SessionId,
 };
-use crate::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage, PlainMessage};
+use crate::msgs::message::{Message, MessagePayload, PlainMessage};
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
 use crate::sync::Arc;
@@ -678,10 +678,7 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
     let mut bytes = Vec::new();
     conn.write_tls(&mut bytes).unwrap();
 
-    let message = OutboundOpaqueMessage::read(&mut Reader::init(&bytes))
-        .unwrap()
-        .into_plain_message();
-
+    let message = PlainMessage::read(&mut Reader::init(&bytes)).unwrap();
     match Message::try_from(message).unwrap() {
         Message {
             payload:
