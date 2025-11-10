@@ -453,9 +453,7 @@ pub mod internal {
             pub use crate::msgs::fragmenter::MessageFragmenter;
         }
         pub mod message {
-            pub use crate::msgs::message::{
-                Message, MessagePayload, OutboundOpaqueMessage, PlainMessage,
-            };
+            pub use crate::msgs::message::{Message, MessagePayload, PlainMessage};
         }
         pub mod persist {
             pub use crate::msgs::persist::ServerSessionValue;

@@ -1,8 +1,7 @@
 use alloc::vec::Vec;
 
-use super::{HEADER_SIZE, MAX_PAYLOAD, MessageError};
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::message::HEADER_SIZE;
 use crate::record_layer::RecordLayer;
 
 /// A TLS frame, named `TLSPlaintext` in the standard.
@@ -12,8 +11,11 @@ use crate::record_layer::RecordLayer;
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct OutboundPlainMessage<'a> {
+    /// The content type of this message.
     pub typ: ContentType,
+    /// The protocol version of this message.
     pub version: ProtocolVersion,
+    /// The payload of this message.
     pub payload: OutboundChunks<'a>,
 }
 
@@ -40,14 +42,17 @@ impl OutboundPlainMessage<'_> {
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum OutboundChunks<'a> {
-    /// A single byte slice. Contrary to `Multiple`, this uses a single pointer indirection
+    /// A single byte slice.
+    ///
+    /// Contrary to `Multiple`, this uses a single pointer indirection
     Single(&'a [u8]),
-    /// A collection of chunks (byte slices)
-    /// and cursors to single out a fragmented range of bytes.
-    /// OutboundChunks assumes that start <= end
+    /// A collection of chunks (byte slices).
     Multiple {
+        /// A collection of byte slices that hold the buffered data.
         chunks: &'a [&'a [u8]],
+        /// The start cursor into the first chunk.
         start: usize,
+        /// The end cursor into the last chunk.
         end: usize,
     },
 }
@@ -105,7 +110,7 @@ impl<'a> OutboundChunks<'a> {
 
     /// Split self in two, around an index
     /// Works similarly to `split_at` in the core library, except it doesn't panic if out of bound
-    pub fn split_at(&self, mid: usize) -> (Self, Self) {
+    pub(crate) fn split_at(&self, mid: usize) -> (Self, Self) {
         match *self {
             Self::Single(chunk) => {
                 let mid = Ord::min(mid, chunk.len());
@@ -130,11 +135,12 @@ impl<'a> OutboundChunks<'a> {
     }
 
     /// Returns true if the payload is empty
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Returns the cumulative length of all chunks
+    #[expect(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         match self {
             Self::Single(chunk) => chunk.len(),
@@ -156,12 +162,16 @@ impl<'a> From<&'a [u8]> for OutboundChunks<'a> {
 #[expect(clippy::exhaustive_structs)]
 #[derive(Clone, Debug)]
 pub struct OutboundOpaqueMessage {
+    /// The content type of this message.
     pub typ: ContentType,
+    /// The protocol version of this message.
     pub version: ProtocolVersion,
+    /// The payload of this message.
     pub payload: PrefixedPayload,
 }
 
 impl OutboundOpaqueMessage {
+    /// Encode this message to a vector of bytes.
     pub fn encode(self) -> Vec<u8> {
         let length = self.payload.len() as u16;
         let mut encoded_payload = self.payload.0;
@@ -172,24 +182,31 @@ impl OutboundOpaqueMessage {
     }
 }
 
+/// A byte buffer with space reserved at the front for a TLS message header.
 #[derive(Clone, Debug)]
 pub struct PrefixedPayload(Vec<u8>);
 
 impl PrefixedPayload {
+    /// Create a new value with the given payload capacity.
+    ///
+    /// (The actual capacity of the returned value will be at least `HEADER_SIZE + capacity`.)
     pub fn with_capacity(capacity: usize) -> Self {
         let mut prefixed_payload = Vec::with_capacity(HEADER_SIZE + capacity);
         prefixed_payload.resize(HEADER_SIZE, 0);
         Self(prefixed_payload)
     }
 
+    /// Append bytes from a slice.
     pub fn extend_from_slice(&mut self, slice: &[u8]) {
         self.0.extend_from_slice(slice)
     }
 
+    /// Append bytes from an `OutboundChunks`.
     pub fn extend_from_chunks(&mut self, chunks: &OutboundChunks<'_>) {
         chunks.copy_to_vec(&mut self.0)
     }
 
+    /// Truncate the payload to the given length (plus header).
     pub fn truncate(&mut self, len: usize) {
         self.0.truncate(len + HEADER_SIZE)
     }
@@ -230,41 +247,6 @@ impl<const N: usize> From<&[u8; N]> for PrefixedPayload {
     fn from(content: &[u8; N]) -> Self {
         Self::from(&content[..])
     }
-}
-
-pub(crate) fn read_opaque_message_header(
-    r: &mut Reader<'_>,
-) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
-    let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
-    // Don't accept any new content-types.
-    if let ContentType::Unknown(_) = typ {
-        return Err(MessageError::InvalidContentType);
-    }
-
-    let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
-    // Accept only versions 0x03XX for any XX.
-    match &version {
-        ProtocolVersion::Unknown(v) if (v & 0xff00) != 0x0300 => {
-            return Err(MessageError::UnknownProtocolVersion);
-        }
-        _ => {}
-    };
-
-    let len = u16::read(r).map_err(|_| MessageError::TooShortForHeader)?;
-
-    // Reject undersize messages
-    //  implemented per section 5.1 of RFC8446 (TLSv1.3)
-    //              per section 6.2.1 of RFC5246 (TLSv1.2)
-    if typ != ContentType::ApplicationData && len == 0 {
-        return Err(MessageError::InvalidEmptyPayload);
-    }
-
-    // Reject oversize messages
-    if len >= MAX_PAYLOAD {
-        return Err(MessageError::MessageTooLarge);
-    }
-
-    Ok((typ, version, len))
 }
 
 #[cfg(test)]

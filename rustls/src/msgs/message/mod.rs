@@ -1,4 +1,6 @@
-use crate::crypto::cipher::InboundPlainMessage;
+use crate::crypto::cipher::{
+    InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
+};
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::alert::AlertMessagePayload;
@@ -8,11 +10,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 
-mod outbound;
 use alloc::vec::Vec;
-
-pub(crate) use outbound::read_opaque_message_header;
-pub use outbound::{OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 
 #[non_exhaustive]
 #[derive(Debug)]
@@ -261,6 +259,41 @@ impl<'a> TryFrom<InboundPlainMessage<'a>> for Message<'a> {
     }
 }
 
+pub(crate) fn read_opaque_message_header(
+    r: &mut Reader<'_>,
+) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
+    let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+    // Don't accept any new content-types.
+    if let ContentType::Unknown(_) = typ {
+        return Err(MessageError::InvalidContentType);
+    }
+
+    let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+    // Accept only versions 0x03XX for any XX.
+    match &version {
+        ProtocolVersion::Unknown(v) if (v & 0xff00) != 0x0300 => {
+            return Err(MessageError::UnknownProtocolVersion);
+        }
+        _ => {}
+    };
+
+    let len = u16::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+
+    // Reject undersize messages
+    //  implemented per section 5.1 of RFC8446 (TLSv1.3)
+    //              per section 6.2.1 of RFC5246 (TLSv1.2)
+    if typ != ContentType::ApplicationData && len == 0 {
+        return Err(MessageError::InvalidEmptyPayload);
+    }
+
+    // Reject oversize messages
+    if len >= MAX_PAYLOAD {
+        return Err(MessageError::MessageTooLarge);
+    }
+
+    Ok((typ, version, len))
+}
+
 #[derive(Debug)]
 pub enum MessageError {
     TooShortForHeader,
@@ -276,7 +309,7 @@ pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
 
 /// Maximum message payload size.
 /// That's 2^14 payload bytes and a 2KB allowance for ciphertext overheads.
-const MAX_PAYLOAD: u16 = 16_384 + 2048;
+pub(crate) const MAX_PAYLOAD: u16 = 16_384 + 2048;
 
 /// Maximum on-the-wire message size.
 #[cfg(feature = "std")]

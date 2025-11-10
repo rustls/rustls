@@ -6,12 +6,12 @@ use aws_lc_rs::{aead, hkdf, hmac};
 use crate::crypto;
 use crate::crypto::cipher::{
     AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    Nonce, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm,
+    UnsupportedOperationError, make_tls13_aad,
 };
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
-use crate::msgs::message::{OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
 use crate::tls13::Tls13CipherSuite;
 use crate::version::TLS13_VERSION;

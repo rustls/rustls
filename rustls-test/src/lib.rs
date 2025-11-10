@@ -23,7 +23,9 @@ use rustls::client::danger::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
 use rustls::client::{ServerVerifierBuilder, UnbufferedClientConnection, WebPkiServerVerifier};
-use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
+use rustls::crypto::cipher::{
+    InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage,
+};
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SigningKey, SingleCredential,
     WebPkiSupportedAlgorithms, verify_tls13_signature,
@@ -31,7 +33,7 @@ use rustls::crypto::{
 use rustls::enums::{CertificateType, CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
 use rustls::error::{CertificateError, Error, InconsistentKeys};
 use rustls::internal::msgs::codec::{Codec, Reader};
-use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
+use rustls::internal::msgs::message::{Message, PlainMessage};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
     CertificateDer, CertificateRevocationListDer, DnsName, PrivateKeyDer, PrivatePkcs8KeyDer,

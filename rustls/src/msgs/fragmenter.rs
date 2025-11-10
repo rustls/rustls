@@ -1,6 +1,8 @@
 use crate::Error;
+use crate::crypto::cipher::{OutboundChunks, OutboundPlainMessage};
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::msgs::message::{OutboundChunks, OutboundPlainMessage, PlainMessage};
+use crate::msgs::message::PlainMessage;
+
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
 pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
@@ -108,9 +110,10 @@ mod tests {
     use std::vec;
 
     use super::{MessageFragmenter, PACKET_OVERHEAD};
+    use crate::crypto::cipher::{OutboundChunks, OutboundPlainMessage};
     use crate::enums::{ContentType, ProtocolVersion};
     use crate::msgs::base::Payload;
-    use crate::msgs::message::{OutboundChunks, OutboundPlainMessage, PlainMessage};
+    use crate::msgs::message::PlainMessage;
 
     fn msg_eq(
         m: &OutboundPlainMessage<'_>,
