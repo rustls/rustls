@@ -21,24 +21,11 @@ use crate::sync::Arc;
 
 /// A concrete, safe ticket creation mechanism.
 #[non_exhaustive]
-pub struct Ticketer {}
+pub(super) struct Ticketer {}
 
 impl Ticketer {
-    /// Make the recommended `Ticketer`.
-    ///
-    /// This produces tickets:
-    ///
-    /// - where each lasts for at least 6 hours,
-    /// - with randomly generated keys, and
-    /// - where keys are rotated every 6 hours.
-    ///
-    /// The `Ticketer` uses the [RFC 5077 §4] "Recommended Ticket Construction",
-    /// using AES 256 for encryption and HMAC-SHA256 for ciphertext authentication.
-    ///
-    /// [RFC 5077 §4]: https://www.rfc-editor.org/rfc/rfc5077#section-4
-    #[cfg(feature = "std")]
     #[expect(clippy::new_ret_no_self)]
-    pub fn new() -> Result<Arc<dyn TicketProducer>, Error> {
+    pub(super) fn new() -> Result<Arc<dyn TicketProducer>, Error> {
         Ok(Arc::new(crate::ticketer::TicketRotator::new(
             crate::ticketer::TicketRotator::SIX_HOURS,
             make_ticket_generator,

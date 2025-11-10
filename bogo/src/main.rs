@@ -40,7 +40,7 @@ use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, Signer, SigningKey,
-    SingleCredential, TicketProducer, aws_lc_rs, ring,
+    SingleCredential, aws_lc_rs, ring,
 };
 use rustls::enums::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
@@ -335,13 +335,6 @@ impl SelectedProvider {
             }
 
             Self::Ring => ring::DEFAULT_PROVIDER,
-        }
-    }
-
-    fn ticketer(&self) -> Arc<dyn TicketProducer> {
-        match self {
-            Self::AwsLcRs | Self::AwsLcRsFips => aws_lc_rs::Ticketer::new().unwrap(),
-            Self::Ring => ring::Ticketer::new().unwrap(),
         }
     }
 
@@ -805,7 +798,13 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     }
 
     if opts.tickets {
-        cfg.ticketer = Some(opts.selected_provider.ticketer());
+        cfg.ticketer = Some(
+            cfg.crypto_provider()
+                .ticketer_factory
+                .unwrap()
+                .ticketer()
+                .unwrap(),
+        );
     } else if opts.resumes == 0 {
         cfg.session_storage = Arc::new(server::NoServerSessionStorage {});
     }

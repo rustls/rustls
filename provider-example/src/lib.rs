@@ -41,6 +41,7 @@ pub fn provider() -> CryptoProvider {
         signature_verification_algorithms: verify::ALGORITHMS,
         secure_random: &Provider,
         key_provider: &Provider,
+        ticketer_factory: None,
     }
 }
 

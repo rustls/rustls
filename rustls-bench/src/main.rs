@@ -28,7 +28,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
-use rustls::crypto::{CryptoProvider, Identity, TicketProducer};
+use rustls::crypto::{CryptoProvider, Identity};
 use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::server::{
     NoServerSessionStorage, ServerSessionMemoryCache, UnbufferedServerConnection,
@@ -36,8 +36,8 @@ use rustls::server::{
 };
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
 use rustls::{
-    ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind, RootCertStore,
-    ServerConfig, ServerConnection, SideData,
+    ClientConfig, ClientConnection, ConnectionCommon, HandshakeKind, RootCertStore, ServerConfig,
+    ServerConnection, SideData,
 };
 use rustls_test::KeyType;
 
@@ -825,7 +825,13 @@ impl Parameters {
                 cfg.session_storage = ServerSessionMemoryCache::new(128);
             }
             ResumptionParam::Tickets => {
-                cfg.ticketer = Some(self.provider.ticketer().unwrap());
+                cfg.ticketer = Some(
+                    cfg.crypto_provider()
+                        .ticketer_factory
+                        .unwrap()
+                        .ticketer()
+                        .unwrap(),
+                );
             }
             ResumptionParam::No => {
                 cfg.session_storage = Arc::new(NoServerSessionStorage {});
@@ -971,20 +977,6 @@ impl Provider {
             Self::Graviola => rustls_graviola::default_provider(),
             #[cfg(feature = "ring")]
             Self::Ring => rustls::crypto::ring::DEFAULT_PROVIDER,
-            Self::_None => unreachable!(),
-        }
-    }
-
-    fn ticketer(self) -> Result<Arc<dyn TicketProducer>, Error> {
-        match self {
-            #[cfg(feature = "aws-lc-rs")]
-            Self::AwsLcRs => rustls::crypto::aws_lc_rs::Ticketer::new(),
-            #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
-            Self::AwsLcRsFips => rustls::crypto::aws_lc_rs::Ticketer::new(),
-            #[cfg(feature = "graviola")]
-            Self::Graviola => rustls_graviola::Ticketer::new(),
-            #[cfg(feature = "ring")]
-            Self::Ring => rustls::crypto::ring::Ticketer::new(),
             Self::_None => unreachable!(),
         }
     }
