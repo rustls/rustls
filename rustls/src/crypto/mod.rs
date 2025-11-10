@@ -23,10 +23,6 @@ pub use crate::webpki::{
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};
 use crate::{NamedGroup, SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite};
 
-/// *ring* based CryptoProvider.
-#[cfg(feature = "ring")]
-pub mod ring;
-
 /// aws-lc-rs-based CryptoProvider.
 #[cfg(feature = "aws-lc-rs")]
 pub mod aws_lc_rs;
@@ -62,14 +58,12 @@ pub use crate::suites::CipherSuiteCommon;
 
 /// Controls core cryptography used by rustls.
 ///
-/// This crate comes with two built-in options, provided as
+/// This crate comes with one built-in option, provided as
 /// `CryptoProvider` structures:
 ///
 /// - [`crypto::aws_lc_rs::DEFAULT_PROVIDER`]: (behind the `aws-lc-rs` crate feature).
 ///   This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
 ///   crate.  The `fips` crate feature makes this option use FIPS140-3-approved cryptography.
-/// - [`crypto::ring::DEFAULT_PROVIDER`]: (behind the `ring` crate feature).
-///   This provider uses the [*ring*](https://github.com/briansmith/ring) crate.
 ///
 /// This structure provides defaults. Everything in it can be overridden at
 /// runtime by replacing field values as needed.

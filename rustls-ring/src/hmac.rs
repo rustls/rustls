@@ -1,8 +1,7 @@
 use alloc::boxed::Box;
 
 use ring::hmac;
-
-use crate::crypto;
+use rustls::crypto;
 
 pub(crate) static HMAC_SHA256: Hmac = Hmac(&hmac::HMAC_SHA256);
 pub(crate) static HMAC_SHA384: Hmac = Hmac(&hmac::HMAC_SHA384);

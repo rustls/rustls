@@ -40,7 +40,7 @@ jobs:
 
       - name: cargo doc
         # keep features in sync with Cargo.toml `[package.metadata.docs.rs]` section
-        run: cargo doc --locked --features aws-lc-rs,brotli,custom-provider,hashbrown,log,ring,std,zlib --no-deps --package rustls
+        run: cargo doc --locked --features aws-lc-rs,brotli,custom-provider,hashbrown,log,std,zlib --no-deps --package rustls
         env:
           RUSTDOCFLAGS: -Dwarnings --cfg=rustls_docsrs --html-after-content tag.html
 

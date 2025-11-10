@@ -152,8 +152,8 @@ enum_builder! {
     ///
     /// This enum is used for recognizing key exchange groups advertised
     /// by a peer during a TLS handshake. It is **not** a list of groups that
-    /// Rustls supports. See [`crate::crypto::ring::kx_group`] for the list of supported
-    /// key exchange groups.
+    /// Rustls supports. The supported groups are determined via the
+    /// [`CryptoProvider`][crate::crypto::CryptoProvider] interface.
     #[repr(u16)]
     pub enum NamedGroup {
         secp256r1 => 0x0017,

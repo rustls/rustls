@@ -3,11 +3,11 @@ use core::fmt;
 
 use ring::agreement;
 use ring::rand::SystemRandom;
-
-use crate::crypto::{ActiveKeyExchange, SharedSecret, StartedKeyExchange, SupportedKxGroup};
-use crate::error::{Error, PeerMisbehaved};
-use crate::msgs::enums::NamedGroup;
-use crate::rand::GetRandomFailed;
+use rustls::NamedGroup;
+use rustls::crypto::{
+    ActiveKeyExchange, GetRandomFailed, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+};
+use rustls::error::{Error, PeerMisbehaved};
 
 /// A key-exchange group supported by *ring*.
 struct KxGroup {
@@ -144,7 +144,7 @@ impl ActiveKeyExchange for KeyExchange {
 
 #[cfg(test)]
 mod tests {
-    use std::format;
+    use alloc::format;
 
     #[test]
     fn kxgroup_fmt_yields_name() {

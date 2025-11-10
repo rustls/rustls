@@ -2,19 +2,16 @@ use alloc::boxed::Box;
 
 use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
-
-use crate::crypto;
-use crate::crypto::cipher::{
+use rustls::crypto::cipher::{
     AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
     Nonce, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm,
     UnsupportedOperationError, make_tls13_aad,
 };
-use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
-use crate::error::Error;
-use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
-use crate::tls13::Tls13CipherSuite;
-use crate::version::TLS13_VERSION;
+use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
+use rustls::enums::{CipherSuite, ContentType, ProtocolVersion};
+use rustls::error::Error;
+use rustls::version::TLS13_VERSION;
+use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite, crypto};
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: &Tls13CipherSuite = &Tls13CipherSuite {
@@ -335,9 +332,10 @@ impl KeyType for Len {
 mod tests {
     use std::prelude::v1::*;
 
+    use rustls::crypto::tls13::{HkdfUsingHmac, expand};
+
     use super::Hkdf;
-    use crate::crypto::ring::hmac;
-    use crate::crypto::tls13::{HkdfUsingHmac, expand};
+    use crate::hmac;
 
     struct ByteArray<const N: usize>([u8; N]);
 

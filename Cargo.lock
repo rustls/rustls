@@ -343,6 +343,7 @@ dependencies = [
  "env_logger",
  "nix",
  "rustls 0.24.0-dev.0",
+ "rustls-ring",
  "rustls-webpki 0.104.0-alpha.1",
 ]
 
@@ -2516,7 +2517,6 @@ dependencies = [
  "macro_rules_attribute",
  "once_cell",
  "rcgen",
- "ring",
  "rustls-pki-types",
  "rustls-test",
  "rustls-webpki 0.104.0-alpha.1",
@@ -2536,6 +2536,7 @@ dependencies = [
  "clap",
  "rustls 0.24.0-dev.0",
  "rustls-graviola",
+ "rustls-ring",
  "rustls-test",
  "tikv-jemallocator",
 ]
@@ -2554,6 +2555,7 @@ dependencies = [
  "rustc-hash",
  "rustls 0.24.0-dev.0",
  "rustls-fuzzing-provider",
+ "rustls-ring",
  "rustls-test",
 ]
 
@@ -2673,6 +2675,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls-ring"
+version = "0.1.0-dev.0"
+dependencies = [
+ "bencher",
+ "ring",
+ "rustls 0.24.0-dev.0",
+ "rustls-pki-types",
+ "rustls-test",
+ "rustls-webpki 0.104.0-alpha.1",
+ "subtle",
+]
+
+[[package]]
 name = "rustls-test"
 version = "0.1.0"
 dependencies = [
@@ -2681,6 +2696,7 @@ dependencies = [
  "num-bigint",
  "rustls 0.24.0-dev.0",
  "rustls-pki-types",
+ "rustls-ring",
  "rustls-webpki 0.104.0-alpha.1",
  "x509-parser",
 ]

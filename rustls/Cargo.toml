@@ -21,7 +21,6 @@ brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
 custom-provider = []
 fips = ["aws-lc-rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
 log = ["dep:log"]
-ring = ["dep:ring", "webpki/ring"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 zlib = ["dep:zlib-rs"]
 
@@ -33,7 +32,6 @@ hashbrown = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 # only required for no-std
 once_cell = { workspace = true }
-ring = { workspace = true, optional = true }
 subtle = { workspace = true }
 webpki = { workspace = true }
 pki-types = { workspace = true }
@@ -53,19 +51,13 @@ serde_json = { workspace = true }
 time = { workspace = true }
 webpki-roots = { workspace = true }
 
-[[bench]]
-name = "benchmarks"
-path = "benches/benchmarks.rs"
-harness = false
-required-features = ["ring"]
-
 [[example]]
 name = "test_ca"
 path = "examples/internal/test_ca.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["aws-lc-rs", "brotli", "custom-provider", "hashbrown", "log", "ring", "std", "zlib"]
+features = ["aws-lc-rs", "brotli", "custom-provider", "hashbrown", "log", "std", "zlib"]
 rustdoc-args = ["--cfg", "rustls_docsrs"]
 
 [package.metadata.cargo_check_external_types]

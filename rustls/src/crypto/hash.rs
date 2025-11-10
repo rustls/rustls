@@ -80,10 +80,10 @@ pub trait Context: Send + Sync {
     fn update(&mut self, data: &[u8]);
 }
 
-#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+#[cfg(all(test, feature = "aws-lc-rs"))]
 pub(crate) struct FakeHash;
 
-#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+#[cfg(all(test, feature = "aws-lc-rs"))]
 impl Hash for FakeHash {
     fn algorithm(&self) -> HashAlgorithm {
         todo!()
@@ -106,10 +106,10 @@ impl Hash for FakeHash {
     }
 }
 
-#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+#[cfg(all(test, feature = "aws-lc-rs"))]
 struct FakeHashContext;
 
-#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+#[cfg(all(test, feature = "aws-lc-rs"))]
 impl Context for FakeHashContext {
     fn fork_finish(&self) -> Output {
         todo!()

@@ -1,22 +1,55 @@
+//! A `CryptoProvider` implementation backed by *ring*.
+
+#![no_std]
+#![warn(
+    clippy::alloc_instead_of_core,
+    clippy::cloned_instead_of_copied,
+    clippy::exhaustive_enums,
+    clippy::exhaustive_structs,
+    clippy::manual_let_else,
+    clippy::or_fun_call,
+    clippy::std_instead_of_core,
+    clippy::use_self,
+    clippy::upper_case_acronyms,
+    elided_lifetimes_in_paths,
+    missing_docs,
+    trivial_numeric_casts,
+    unnameable_types,
+    unreachable_pub,
+    unused_import_braces,
+    unused_extern_crates,
+    unused_qualifications
+)]
+#![cfg_attr(bench, feature(test))]
+
+extern crate alloc;
+#[cfg(any(feature = "std", test))]
+extern crate std;
+
+// Import `test` sysroot crate for `Bencher` definitions.
+#[cfg(bench)]
+#[expect(unused_extern_crates)]
+extern crate test;
+
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use core::time::Duration;
+#[cfg(feature = "std")]
+use std::sync::Arc;
 
 use pki_types::PrivateKeyDer;
-use webpki::ring as webpki_algs;
-
-use super::signer::SigningKey;
-use crate::crypto::{
-    CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup, TicketProducer, TicketerFactory,
+use rustls::crypto::{
+    CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SigningKey, SupportedKxGroup,
+    WebPkiSupportedAlgorithms,
 };
-use crate::enums::SignatureScheme;
-use crate::error::Error;
-use crate::rand::GetRandomFailed;
-use crate::sync::Arc;
 #[cfg(feature = "std")]
-use crate::ticketer::TicketRotator;
-use crate::tls12::Tls12CipherSuite;
-use crate::tls13::Tls13CipherSuite;
-use crate::webpki::WebPkiSupportedAlgorithms;
+use rustls::crypto::{TicketProducer, TicketerFactory};
+use rustls::enums::SignatureScheme;
+use rustls::error::Error;
+#[cfg(feature = "std")]
+use rustls::ticketer::TicketRotator;
+use rustls::{Tls12CipherSuite, Tls13CipherSuite};
+use webpki::ring as webpki_algs;
 
 /// Using software keys for authentication.
 pub mod sign;
@@ -26,7 +59,6 @@ pub(crate) mod hash;
 pub(crate) mod hmac;
 pub(crate) mod kx;
 pub(crate) mod quic;
-#[cfg(feature = "std")]
 pub(crate) mod ticketer;
 #[cfg(feature = "std")]
 use ticketer::AeadTicketer;
@@ -111,10 +143,7 @@ impl TicketerFactory for Ring {
     fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
         #[cfg(feature = "std")]
         {
-            Ok(Arc::new(TicketRotator::new(
-                TicketRotator::SIX_HOURS,
-                AeadTicketer::new,
-            )?))
+            Ok(Arc::new(TicketRotator::new(SIX_HOURS, AeadTicketer::new)?))
         }
         #[cfg(not(feature = "std"))]
         {
@@ -251,8 +280,7 @@ pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] =
 /// Compatibility shims between ring 0.16.x and 0.17.x API
 mod ring_shim {
     use ring::agreement::{self, EphemeralPrivateKey, UnparsedPublicKey};
-
-    use crate::crypto::SharedSecret;
+    use rustls::crypto::SharedSecret;
 
     pub(super) fn agree_ephemeral(
         priv_key: EphemeralPrivateKey,
@@ -263,6 +291,9 @@ mod ring_shim {
     }
 }
 
-pub(super) fn fips() -> bool {
+/// Return `true` if this is backed by a FIPS-approved implementation.
+pub fn fips() -> bool {
     false
 }
+
+const SIX_HOURS: Duration = Duration::from_secs(6 * 60 * 60);

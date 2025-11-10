@@ -9,11 +9,12 @@ aws-lc-rs = ["rustls/aws-lc-rs"]
 brotli = ["rustls/brotli"]
 fips = ["rustls/fips"]
 log = ["rustls/log"]
-ring = ["rustls/ring"]
+ring = ["dep:rustls-ring"]
 zlib = ["rustls/zlib"]
 
 [dependencies]
 rustls = { path = "../rustls", default-features = false, features = ["std"] }
+rustls-ring = { path = "../rustls-ring", optional = true }
 
 [dev-dependencies]
 env_logger = { workspace = true }

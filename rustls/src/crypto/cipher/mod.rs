@@ -558,10 +558,10 @@ impl MessageDecrypter for InvalidMessageDecrypter {
     }
 }
 
-#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+#[cfg(all(test, feature = "aws-lc-rs"))]
 pub(crate) struct FakeAead;
 
-#[cfg(all(test, any(feature = "aws-lc-rs", feature = "ring")))]
+#[cfg(all(test, feature = "aws-lc-rs"))]
 impl Tls12AeadAlgorithm for FakeAead {
     fn encrypter(&self, _: AeadKey, _: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
         todo!()

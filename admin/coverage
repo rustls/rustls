@@ -12,7 +12,7 @@ cargo llvm-cov clean --workspace
 cargo build --locked --all-targets --all-features
 cargo test --locked --all-features
 cargo test -p rustls --locked --no-default-features --features log,aws-lc-rs,fips,std
-cargo test -p rustls --locked --no-default-features --features log,ring,std
+cargo test -p rustls-ring --locked
 
 # ensure both zlib and brotli are tested, irrespective of their order
 cargo test --locked $(admin/all-features-except zlib rustls)

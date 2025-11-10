@@ -2049,7 +2049,7 @@ pub mod macros {
     macro_rules! provider_ring {
         () => {
             #[allow(unused_imports)]
-            use rustls::crypto::ring as provider;
+            use rustls_ring as provider;
             #[allow(dead_code)]
             const fn provider_is_aws_lc_rs() -> bool {
                 false

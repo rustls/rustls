@@ -1,10 +1,9 @@
 use alloc::boxed::Box;
 
 use ring::aead;
-
-use crate::crypto::cipher::{AeadKey, Iv, Nonce};
-use crate::error::{ApiMisuse, Error};
-use crate::quic;
+use rustls::crypto::cipher::{AeadKey, Iv, Nonce};
+use rustls::error::{ApiMisuse, Error};
+use rustls::quic;
 
 pub(crate) struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
 
@@ -222,10 +221,11 @@ impl quic::Algorithm for KeyBuilder {
 mod tests {
     use std::dbg;
 
-    use crate::common_state::Side;
-    use crate::crypto::ring::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256};
-    use crate::crypto::tls13::OkmBlock;
-    use crate::quic::*;
+    use rustls::Side;
+    use rustls::crypto::tls13::OkmBlock;
+    use rustls::quic::{KeyBuilder, Keys, Version};
+
+    use crate::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256};
 
     fn test_short_packet(version: Version, expected: &[u8]) {
         const PN: u64 = 654360564;
