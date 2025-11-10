@@ -14,8 +14,7 @@ use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, Signer, SigningKey,
 };
 use rustls::enums::{
-    AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
-    SignatureScheme,
+    AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use rustls::error::{ApiMisuse, CertificateError, Error, InconsistentKeys, PeerMisbehaved};
 use rustls::internal::msgs::base::Payload;
@@ -652,10 +651,6 @@ impl SigningKey for SigningKeyNoneSpki {
     fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
         None
     }
-
-    fn algorithm(&self) -> SignatureAlgorithm {
-        unimplemented!("Not meant to be called during tests")
-    }
 }
 
 /// Represents a SigningKey that returns Some for its SPKI.
@@ -676,10 +671,6 @@ impl SigningKey for SigningKeySomeSpki {
     }
 
     fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
-        unimplemented!("Not meant to be called during tests")
-    }
-
-    fn algorithm(&self) -> SignatureAlgorithm {
         unimplemented!("Not meant to be called during tests")
     }
 }

@@ -44,7 +44,7 @@ use rustls::crypto::{
 };
 use rustls::enums::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
-    SignatureAlgorithm, SignatureScheme,
+    SignatureScheme,
 };
 use rustls::error::{CertificateError, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use rustls::internal::msgs::codec::Codec;
@@ -543,10 +543,6 @@ impl SigningKey for FixedSignatureSchemeSigningKey {
 
     fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
         self.key.public_key()
-    }
-
-    fn algorithm(&self) -> SignatureAlgorithm {
-        self.key.algorithm()
     }
 }
 
