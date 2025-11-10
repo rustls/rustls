@@ -18,12 +18,8 @@ use crate::error::Error;
 use crate::log::debug;
 use crate::rand::GetRandomFailed;
 
-pub(super) fn make_ticket_generator() -> Result<Box<dyn TicketProducer>, Error> {
-    Ok(Box::new(Rfc5077Ticketer::new()?))
-}
-
 /// An RFC 5077 "Recommended Ticket Construction" implementation of a [`TicketProducer`].
-struct Rfc5077Ticketer {
+pub(super) struct Rfc5077Ticketer {
     aes_encrypt_key: PaddedBlockEncryptingKey,
     aes_decrypt_key: PaddedBlockDecryptingKey,
     hmac_key: hmac::Key,
@@ -32,7 +28,8 @@ struct Rfc5077Ticketer {
 }
 
 impl Rfc5077Ticketer {
-    fn new() -> Result<Self, Error> {
+    #[expect(clippy::new_ret_no_self)]
+    pub(super) fn new() -> Result<Box<dyn TicketProducer>, Error> {
         let rand = SystemRandom::new();
 
         // Generate a random AES 256 key to use for AES CBC encryption.
@@ -63,13 +60,13 @@ impl Rfc5077Ticketer {
         rand.fill(&mut key_name)
             .map_err(|_| GetRandomFailed)?;
 
-        Ok(Self {
+        Ok(Box::new(Self {
             aes_encrypt_key,
             aes_decrypt_key,
             hmac_key,
             key_name,
             maximum_ciphertext_len: AtomicUsize::new(0),
-        })
+        }))
     }
 }
 
@@ -200,6 +197,7 @@ mod tests {
     use crate::crypto::TicketerFactory;
     use crate::crypto::aws_lc_rs::AwsLcRs;
     use crate::sync::Arc;
+    use crate::ticketer::TicketRotator;
 
     #[test]
     fn basic_pairwise_test() {
@@ -230,7 +228,7 @@ mod tests {
 
     #[test]
     fn ticketrotator_switching_test() {
-        let t = Arc::new(crate::ticketer::TicketRotator::new(1, make_ticket_generator).unwrap());
+        let t = Arc::new(TicketRotator::new(1, Rfc5077Ticketer::new).unwrap());
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
@@ -257,7 +255,7 @@ mod tests {
 
     #[test]
     fn ticketrotator_remains_usable_over_temporary_ticketer_creation_failure() {
-        let mut t = crate::ticketer::TicketRotator::new(1, make_ticket_generator).unwrap();
+        let mut t = TicketRotator::new(1, Rfc5077Ticketer::new).unwrap();
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
@@ -276,7 +274,7 @@ mod tests {
         assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
 
         // do the rotation for real
-        t.generator = make_ticket_generator;
+        t.generator = Rfc5077Ticketer::new;
         {
             t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
                 now.as_secs() + 20,
@@ -294,7 +292,7 @@ mod tests {
 
         use super::*;
 
-        let t = make_ticket_generator().unwrap();
+        let t = Rfc5077Ticketer::new().unwrap();
 
         assert_eq!(format!("{t:?}"), "Rfc5077Ticketer { .. }");
         assert_eq!(t.lifetime(), 0);

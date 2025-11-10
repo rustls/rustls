@@ -13,15 +13,11 @@ use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
 
-pub(super) fn make_ticket_generator() -> Result<Box<dyn TicketProducer>, Error> {
-    Ok(Box::new(AeadTicketer::new()?))
-}
-
 /// This is a `ProducesTickets` implementation which uses
 /// any *ring* `aead::Algorithm` to encrypt and authentication
 /// the ticket payload.  It does not enforce any lifetime
 /// constraint.
-struct AeadTicketer {
+pub(super) struct AeadTicketer {
     alg: &'static aead::Algorithm,
     key: aead::LessSafeKey,
     key_name: [u8; 16],
@@ -38,7 +34,8 @@ struct AeadTicketer {
 }
 
 impl AeadTicketer {
-    fn new() -> Result<Self, Error> {
+    #[expect(clippy::new_ret_no_self)]
+    pub(super) fn new() -> Result<Box<dyn TicketProducer>, Error> {
         let mut key = [0u8; 32];
         SystemRandom::new()
             .fill(&mut key)
@@ -51,12 +48,12 @@ impl AeadTicketer {
             .fill(&mut key_name)
             .map_err(|_| Error::FailedToGetRandomBytes)?;
 
-        Ok(Self {
+        Ok(Box::new(Self {
             alg: TICKETER_AEAD,
             key: aead::LessSafeKey::new(key),
             key_name,
             maximum_ciphertext_len: AtomicUsize::new(0),
-        })
+        }))
     }
 }
 
@@ -177,6 +174,7 @@ mod tests {
     use crate::crypto::TicketerFactory;
     use crate::crypto::ring::Ring;
     use crate::sync::Arc;
+    use crate::ticketer::TicketRotator;
 
     #[test]
     fn basic_pairwise_test() {
@@ -207,7 +205,7 @@ mod tests {
 
     #[test]
     fn ticketrotator_switching_test() {
-        let t = Arc::new(crate::ticketer::TicketRotator::new(1, make_ticket_generator).unwrap());
+        let t = Arc::new(TicketRotator::new(1, AeadTicketer::new).unwrap());
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
@@ -234,7 +232,7 @@ mod tests {
 
     #[test]
     fn ticketrotator_remains_usable_over_temporary_ticketer_creation_failure() {
-        let mut t = crate::ticketer::TicketRotator::new(1, make_ticket_generator).unwrap();
+        let mut t = TicketRotator::new(1, AeadTicketer::new).unwrap();
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
@@ -253,7 +251,7 @@ mod tests {
         assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
 
         // do the rotation for real
-        t.generator = make_ticket_generator;
+        t.generator = AeadTicketer::new;
         {
             t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
                 now.as_secs() + 20,
@@ -271,7 +269,7 @@ mod tests {
 
         use super::*;
 
-        let t = make_ticket_generator().unwrap();
+        let t = AeadTicketer::new().unwrap();
 
         let expect = format!("AeadTicketer {{ alg: {TICKETER_AEAD:?} }}");
         assert_eq!(format!("{t:?}"), expect);

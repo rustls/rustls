@@ -9,12 +9,15 @@ use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup}
 #[cfg(feature = "std")]
 use crate::crypto::{TicketProducer, TicketerFactory};
 use crate::enums::SignatureScheme;
+use crate::error::Error;
 use crate::rand::GetRandomFailed;
 #[cfg(feature = "std")]
 use crate::sync::Arc;
+#[cfg(feature = "std")]
 use crate::ticketer::TicketRotator;
+use crate::tls12::Tls12CipherSuite;
+use crate::tls13::Tls13CipherSuite;
 use crate::webpki::WebPkiSupportedAlgorithms;
-use crate::{Error, Tls12CipherSuite, Tls13CipherSuite};
 
 /// Using software keys for authentication.
 pub mod sign;
@@ -26,6 +29,8 @@ pub(crate) mod kx;
 pub(crate) mod quic;
 #[cfg(feature = "std")]
 pub(crate) mod ticketer;
+#[cfg(feature = "std")]
+use ticketer::AeadTicketer;
 pub(crate) mod tls12;
 pub(crate) mod tls13;
 
@@ -111,7 +116,7 @@ impl TicketerFactory for Ring {
     fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
         Ok(Arc::new(TicketRotator::new(
             TicketRotator::SIX_HOURS,
-            ticketer::make_ticket_generator,
+            AeadTicketer::new,
         )?))
     }
 
