@@ -641,7 +641,13 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     }
 
     if args.tickets {
-        config.ticketer = Some(provider::Ticketer::new().unwrap());
+        config.ticketer = Some(
+            provider::DEFAULT_PROVIDER
+                .ticketer_factory
+                .unwrap()
+                .ticketer()
+                .unwrap(),
+        );
     }
 
     if args.max_early_data > 0 {

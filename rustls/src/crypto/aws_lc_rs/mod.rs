@@ -6,9 +6,13 @@ use webpki::aws_lc_rs as webpki_algs;
 
 use super::signer::SigningKey;
 use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
+#[cfg(feature = "std")]
+use crate::crypto::{TicketProducer, TicketerFactory};
 use crate::enums::SignatureScheme;
 use crate::error::{Error, OtherError};
 use crate::rand::GetRandomFailed;
+#[cfg(feature = "std")]
+use crate::sync::Arc;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Tls12CipherSuite, Tls13CipherSuite};
 
@@ -37,6 +41,10 @@ pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
     signature_verification_algorithms: SUPPORTED_SIG_ALGS,
     secure_random: &AwsLcRs,
     key_provider: &AwsLcRs,
+    #[cfg(feature = "std")]
+    ticketer_factory: Some(&AwsLcRs),
+    #[cfg(not(feature = "std"))]
+    ticketer_factory: None,
 };
 
 /// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.3.
@@ -98,6 +106,29 @@ impl KeyProvider for AwsLcRs {
         Err(Error::General(
             "failed to parse private key as RSA, ECDSA, or EdDSA".into(),
         ))
+    }
+
+    fn fips(&self) -> bool {
+        fips()
+    }
+}
+
+#[cfg(feature = "std")]
+impl TicketerFactory for AwsLcRs {
+    /// Make the recommended `Ticketer`.
+    ///
+    /// This produces tickets:
+    ///
+    /// - where each lasts for at least 6 hours,
+    /// - with randomly generated keys, and
+    /// - where keys are rotated every 6 hours.
+    ///
+    /// The `Ticketer` uses the [RFC 5077 §4] "Recommended Ticket Construction",
+    /// using AES 256 for encryption and HMAC-SHA256 for ciphertext authentication.
+    ///
+    /// [RFC 5077 §4]: https://www.rfc-editor.org/rfc/rfc5077#section-4
+    fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
+        ticketer::Ticketer::new()
     }
 
     fn fips(&self) -> bool {
@@ -266,9 +297,6 @@ pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     kx_group::SECP384R1,
     kx_group::MLKEM768,
 ];
-
-#[cfg(feature = "std")]
-pub use ticketer::Ticketer;
 
 /// Compatibility shims between ring 0.16.x and 0.17.x API
 mod ring_shim {

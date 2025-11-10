@@ -440,7 +440,13 @@ fn test_quic_resumption_data_basic() {
     let mut server_config = make_server_config(kt, &provider);
     server_config.alpn_protocols = vec!["foo".into()];
     server_config.max_early_data_size = 0xffff_ffff;
-    server_config.ticketer = Some(provider::Ticketer::new().unwrap());
+    server_config.ticketer = Some(
+        provider
+            .ticketer_factory
+            .unwrap()
+            .ticketer()
+            .unwrap(),
+    );
     server_config.send_tls13_tickets = 2;
     let server_config = Arc::new(server_config);
 
@@ -484,7 +490,13 @@ fn test_quic_resumption_data_0rtt() {
     let mut server_config = make_server_config(kt, &provider);
     server_config.alpn_protocols = vec!["foo".into()];
     server_config.max_early_data_size = 0xffff_ffff;
-    server_config.ticketer = Some(provider::Ticketer::new().unwrap());
+    server_config.ticketer = Some(
+        provider
+            .ticketer_factory
+            .unwrap()
+            .ticketer()
+            .unwrap(),
+    );
     server_config.send_tls13_tickets = 2;
     let server_config = Arc::new(server_config);
 

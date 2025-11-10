@@ -482,6 +482,22 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     all
 }
 
+fn ring_ticketer() -> Arc<dyn TicketProducer> {
+    ring::DEFAULT_PROVIDER
+        .ticketer_factory
+        .unwrap()
+        .ticketer()
+        .unwrap()
+}
+
+fn aws_lc_rs_ticketer() -> Arc<dyn TicketProducer> {
+    aws_lc_rs::DEFAULT_PROVIDER
+        .ticketer_factory
+        .unwrap()
+        .ticketer()
+        .unwrap()
+}
+
 fn select_suite(mut provider: CryptoProvider, name: CipherSuite) -> Arc<CryptoProvider> {
     provider
         .tls12_cipher_suites
@@ -492,14 +508,6 @@ fn select_suite(mut provider: CryptoProvider, name: CipherSuite) -> Arc<CryptoPr
         .to_mut()
         .retain(|suite| suite.common.suite == name);
     provider.into()
-}
-
-fn ring_ticketer() -> Arc<dyn TicketProducer> {
-    ring::Ticketer::new().unwrap()
-}
-
-fn aws_lc_rs_ticketer() -> Arc<dyn TicketProducer> {
-    aws_lc_rs::Ticketer::new().unwrap()
 }
 
 fn derandomize(base: CryptoProvider) -> CryptoProvider {

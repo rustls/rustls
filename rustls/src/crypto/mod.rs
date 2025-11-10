@@ -227,6 +227,9 @@ pub struct CryptoProvider {
 
     /// Provider for loading private [`SigningKey`]s from [`PrivateKeyDer`].
     pub key_provider: &'static dyn KeyProvider,
+
+    /// Provider for creating [`TicketProducer`]s for stateless session resumption.
+    pub ticketer_factory: Option<&'static dyn TicketerFactory>,
 }
 
 impl CryptoProvider {
@@ -264,6 +267,7 @@ impl CryptoProvider {
             signature_verification_algorithms,
             secure_random,
             key_provider,
+            ticketer_factory,
         } = self;
         tls12_cipher_suites
             .iter()
@@ -275,6 +279,7 @@ impl CryptoProvider {
             && signature_verification_algorithms.fips()
             && secure_random.fips()
             && key_provider.fips()
+            && ticketer_factory.is_none_or(|tf| tf.fips())
     }
 
     pub(crate) fn consistency_check(&self) -> Result<(), Error> {
@@ -413,6 +418,19 @@ pub trait KeyProvider: Send + Sync + Debug {
     fn fips(&self) -> bool {
         false
     }
+}
+
+/// A factory that builds [`TicketProducer`]s.
+///
+/// These can be used in [`ServerConfig::ticketer`] to enable stateless resumption.
+///
+/// [`ServerConfig::ticketer`]: crate::server::ServerConfig::ticketer
+pub trait TicketerFactory: Debug + Send + Sync {
+    /// Build a new `TicketProducer`.
+    fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error>;
+
+    /// Return `true` if this is backed by a FIPS-approved implementation.
+    fn fips(&self) -> bool;
 }
 
 /// A trait for the ability to encrypt and decrypt tickets.

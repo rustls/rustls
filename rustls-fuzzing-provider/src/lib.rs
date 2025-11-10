@@ -46,6 +46,7 @@ pub const PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {
     signature_verification_algorithms: VERIFY_ALGORITHMS,
     secure_random: &Provider,
     key_provider: &Provider,
+    ticketer_factory: None,
 };
 
 pub const PROVIDER_TLS12: crypto::CryptoProvider = crypto::CryptoProvider {
