@@ -8,7 +8,7 @@ use ring::aead;
 use ring::rand::{SecureRandom, SystemRandom};
 use subtle::ConstantTimeEq;
 
-use crate::crypto::ProducesTickets;
+use crate::crypto::TicketProducer;
 use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
@@ -30,7 +30,7 @@ impl Ticketer {
     /// The encryption mechanism used is Chacha20Poly1305.
     #[cfg(feature = "std")]
     #[expect(clippy::new_ret_no_self)]
-    pub fn new() -> Result<Arc<dyn ProducesTickets>, Error> {
+    pub fn new() -> Result<Arc<dyn TicketProducer>, Error> {
         Ok(Arc::new(crate::ticketer::TicketRotator::new(
             crate::ticketer::TicketRotator::SIX_HOURS,
             make_ticket_generator,
@@ -38,7 +38,7 @@ impl Ticketer {
     }
 }
 
-fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, Error> {
+fn make_ticket_generator() -> Result<Box<dyn TicketProducer>, Error> {
     Ok(Box::new(AeadTicketer::new()?))
 }
 
@@ -85,7 +85,7 @@ impl AeadTicketer {
     }
 }
 
-impl ProducesTickets for AeadTicketer {
+impl TicketProducer for AeadTicketer {
     fn enabled(&self) -> bool {
         true
     }
@@ -306,7 +306,7 @@ mod tests {
         assert_eq!(t.lifetime(), 0);
     }
 
-    fn fail_generator() -> Result<Box<dyn ProducesTickets>, Error> {
+    fn fail_generator() -> Result<Box<dyn TicketProducer>, Error> {
         Err(Error::FailedToGetRandomBytes)
     }
 }

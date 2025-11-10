@@ -31,7 +31,7 @@ use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
 use rustls::crypto::{
-    CryptoProvider, GetRandomFailed, ProducesTickets, SecureRandom, aws_lc_rs, ring,
+    CryptoProvider, GetRandomFailed, TicketProducer, SecureRandom, aws_lc_rs, ring,
 };
 use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
@@ -392,13 +392,13 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     for (provider, ticketer, provider_name, warm_up) in [
         (
             derandomize(ring::DEFAULT_PROVIDER),
-            &(ring_ticketer as fn() -> Arc<dyn ProducesTickets>),
+            &(ring_ticketer as fn() -> Arc<dyn TicketProducer>),
             "ring",
             None,
         ),
         (
             derandomize(aws_lc_rs::DEFAULT_PROVIDER),
-            &(aws_lc_rs_ticketer as fn() -> Arc<dyn ProducesTickets>),
+            &(aws_lc_rs_ticketer as fn() -> Arc<dyn TicketProducer>),
             "aws_lc_rs",
             Some(warm_up_aws_lc_rs as fn()),
         ),
@@ -459,7 +459,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     }
 
     let make_ticketer =
-        &((|| Arc::new(rustls_fuzzing_provider::Ticketer)) as fn() -> Arc<dyn ProducesTickets>);
+        &((|| Arc::new(rustls_fuzzing_provider::Ticketer)) as fn() -> Arc<dyn TicketProducer>);
 
     all.push(BenchmarkParams::new(
         rustls_fuzzing_provider::PROVIDER_TLS13.into(),
@@ -494,11 +494,11 @@ fn select_suite(mut provider: CryptoProvider, name: CipherSuite) -> Arc<CryptoPr
     provider.into()
 }
 
-fn ring_ticketer() -> Arc<dyn ProducesTickets> {
+fn ring_ticketer() -> Arc<dyn TicketProducer> {
     ring::Ticketer::new().unwrap()
 }
 
-fn aws_lc_rs_ticketer() -> Arc<dyn ProducesTickets> {
+fn aws_lc_rs_ticketer() -> Arc<dyn TicketProducer> {
     aws_lc_rs::Ticketer::new().unwrap()
 }
 

@@ -12,7 +12,7 @@ use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::crypto::{ActiveKeyExchange, Identity, ProducesTickets};
+use crate::crypto::{ActiveKeyExchange, Identity, TicketProducer};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
@@ -735,7 +735,7 @@ fn emit_ticket(
     transcript: &mut HandshakeHash,
     using_ems: bool,
     cx: &mut ServerContext<'_>,
-    ticketer: &dyn ProducesTickets,
+    ticketer: &dyn TicketProducer,
     now: UnixTime,
 ) -> Result<(), Error> {
     let plain = get_server_connection_value_tls12(secrets, using_ems, cx, now).get_encoding();

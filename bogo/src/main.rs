@@ -39,7 +39,7 @@ use rustls::client::{
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::{
-    Credentials, CryptoProvider, Identity, ProducesTickets, SelectedCredential, Signer, SigningKey,
+    Credentials, CryptoProvider, Identity, TicketProducer, SelectedCredential, Signer, SigningKey,
     SingleCredential, aws_lc_rs, ring,
 };
 use rustls::enums::{
@@ -338,7 +338,7 @@ impl SelectedProvider {
         }
     }
 
-    fn ticketer(&self) -> Arc<dyn ProducesTickets> {
+    fn ticketer(&self) -> Arc<dyn TicketProducer> {
         match self {
             Self::AwsLcRs | Self::AwsLcRsFips => aws_lc_rs::Ticketer::new().unwrap(),
             Self::Ring => ring::Ticketer::new().unwrap(),

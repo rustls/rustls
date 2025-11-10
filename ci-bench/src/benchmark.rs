@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use rustls::crypto::{CryptoProvider, ProducesTickets};
+use rustls::crypto::{CryptoProvider, TicketProducer};
 use rustls::enums::ProtocolVersion;
 use rustls_test::KeyType;
 
@@ -90,7 +90,7 @@ pub struct BenchmarkParams {
     /// The choice of cipher suite is baked into this.
     pub provider: Arc<CryptoProvider>,
     /// How to make a suitable [`rustls::server::ProducesTickets`].
-    pub ticketer: &'static fn() -> Arc<dyn ProducesTickets>,
+    pub ticketer: &'static fn() -> Arc<dyn TicketProducer>,
     /// Where to get keys for server auth
     pub auth_key: AuthKeySource,
     /// TLS version
@@ -105,7 +105,7 @@ impl BenchmarkParams {
     /// Create a new set of benchmark params
     pub const fn new(
         provider: Arc<CryptoProvider>,
-        ticketer: &'static fn() -> Arc<dyn ProducesTickets>,
+        ticketer: &'static fn() -> Arc<dyn TicketProducer>,
         auth_key: AuthKeySource,
         version: ProtocolVersion,
         label: String,
