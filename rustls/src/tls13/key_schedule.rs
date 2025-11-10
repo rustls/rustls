@@ -1101,9 +1101,8 @@ mod tests {
     use super::{KeySchedule, SecretKind, derive_traffic_iv, derive_traffic_key};
     use crate::TEST_PROVIDERS;
     use crate::crypto::{CryptoProvider, tls13_suite};
-    use crate::enums::CipherSuite;
+    use crate::enums::{CipherSuite, HashAlgorithm};
     use crate::key_log::KeyLog;
-    use crate::msgs::enums::HashAlgorithm;
 
     #[test]
     fn empty_hash() {
