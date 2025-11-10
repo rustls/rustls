@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use pkcs8::{DecodePrivateKey, EncodePublicKey};
 use rustls::crypto::{Signer, SigningKey};
-use rustls::enums::{SignatureAlgorithm, SignatureScheme};
+use rustls::enums::SignatureScheme;
 use rustls::pki_types::{PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer};
 use signature::{RandomizedSigner, SignatureEncoding};
 
@@ -44,10 +44,6 @@ impl SigningKey for EcdsaSigningKeyP256 {
                 .ok()?
                 .into_vec(),
         ))
-    }
-
-    fn algorithm(&self) -> SignatureAlgorithm {
-        SignatureAlgorithm::ECDSA
     }
 }
 

@@ -8,7 +8,7 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPubli
 use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::common_state::CommonState;
-use crate::enums::{AlertDescription, CertificateType, SignatureAlgorithm, SignatureScheme};
+use crate::enums::{AlertDescription, CertificateType, SignatureScheme};
 use crate::error::{ApiMisuse, Error, InconsistentKeys, InvalidMessage, PeerIncompatible};
 use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
@@ -395,9 +395,6 @@ pub trait SigningKey: Debug + Send + Sync {
     /// If an implementation does not have the ability to derive this,
     /// it can return `None`.
     fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>>;
-
-    /// What kind of key we have.
-    fn algorithm(&self) -> SignatureAlgorithm;
 }
 
 /// A thing that can sign a message.

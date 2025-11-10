@@ -11,7 +11,7 @@ use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_
 #[cfg(any(test, bench))]
 use crate::crypto::CryptoProvider;
 use crate::crypto::signer::{Signer, SigningKey, public_key_to_spki};
-use crate::enums::{SignatureAlgorithm, SignatureScheme};
+use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::sync::Arc;
 
@@ -63,10 +63,6 @@ impl SigningKey for RsaSigningKey {
             self.key.public_key(),
         ))
     }
-
-    fn algorithm(&self) -> SignatureAlgorithm {
-        SignatureAlgorithm::RSA
-    }
 }
 
 impl TryFrom<&PrivateKeyDer<'_>> for RsaSigningKey {
@@ -96,9 +92,7 @@ impl TryFrom<&PrivateKeyDer<'_>> for RsaSigningKey {
 
 impl Debug for RsaSigningKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RsaSigningKey")
-            .field("algorithm", &self.algorithm())
-            .finish()
+        f.debug_struct("RsaSigningKey").finish()
     }
 }
 
@@ -201,10 +195,6 @@ impl SigningKey for EcdsaSigner {
 
         Some(public_key_to_spki(&id, self.key.public_key()))
     }
-
-    fn algorithm(&self) -> SignatureAlgorithm {
-        self.scheme.algorithm()
-    }
 }
 
 impl Signer for EcdsaSigner {
@@ -290,10 +280,6 @@ impl SigningKey for Ed25519Signer {
 
     fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
         Some(public_key_to_spki(&alg_id::ED25519, self.key.public_key()))
-    }
-
-    fn algorithm(&self) -> SignatureAlgorithm {
-        self.scheme.algorithm()
     }
 }
 
@@ -386,7 +372,6 @@ mod tests {
             format!("{k:?}"),
             "EcdsaSigner { scheme: ECDSA_NISTP256_SHA256 }"
         );
-        assert_eq!(k.algorithm(), SignatureAlgorithm::ECDSA);
 
         assert!(
             k.choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
@@ -442,7 +427,6 @@ mod tests {
             format!("{k:?}"),
             "EcdsaSigner { scheme: ECDSA_NISTP384_SHA384 }"
         );
-        assert_eq!(k.algorithm(), SignatureAlgorithm::ECDSA);
 
         assert!(
             k.choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
@@ -498,7 +482,6 @@ mod tests {
             format!("{k:?}"),
             "EcdsaSigner { scheme: ECDSA_NISTP521_SHA512 }"
         );
-        assert_eq!(k.algorithm(), SignatureAlgorithm::ECDSA);
 
         assert!(
             k.choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
@@ -543,7 +526,6 @@ mod tests {
 
         let k = Ed25519Signer::try_from(&key).unwrap();
         assert_eq!(format!("{k:?}"), "Ed25519Signer { scheme: ED25519 }");
-        assert_eq!(k.algorithm(), SignatureAlgorithm::ED25519);
 
         assert!(
             k.choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
@@ -587,8 +569,7 @@ mod tests {
         ));
 
         let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
-        assert_eq!(format!("{k:?}"), "RsaSigningKey { algorithm: RSA }");
-        assert_eq!(k.algorithm(), SignatureAlgorithm::RSA);
+        assert_eq!(format!("{k:?}"), "RsaSigningKey");
 
         assert!(
             k.choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])

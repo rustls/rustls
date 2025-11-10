@@ -26,9 +26,7 @@ use rustls::crypto::{
     self, CipherSuiteCommon, Credentials, GetRandomFailed, Identity, KeyExchangeAlgorithm,
     SelectedCredential, StartedKeyExchange, WebPkiSupportedAlgorithms, hash, tls12, tls13,
 };
-use rustls::enums::{
-    CipherSuite, ContentType, ProtocolVersion, SignatureAlgorithm, SignatureScheme,
-};
+use rustls::enums::{CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
@@ -500,10 +498,6 @@ impl crypto::SigningKey for SigningKey {
 
     fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
         None
-    }
-
-    fn algorithm(&self) -> SignatureAlgorithm {
-        SignatureAlgorithm::ECDSA
     }
 }
 
