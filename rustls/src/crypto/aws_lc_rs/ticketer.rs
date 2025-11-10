@@ -17,27 +17,12 @@ use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
 use crate::rand::GetRandomFailed;
-use crate::sync::Arc;
 
-/// A concrete, safe ticket creation mechanism.
-#[non_exhaustive]
-pub(super) struct Ticketer {}
-
-impl Ticketer {
-    #[expect(clippy::new_ret_no_self)]
-    pub(super) fn new() -> Result<Arc<dyn TicketProducer>, Error> {
-        Ok(Arc::new(crate::ticketer::TicketRotator::new(
-            crate::ticketer::TicketRotator::SIX_HOURS,
-            make_ticket_generator,
-        )?))
-    }
-}
-
-fn make_ticket_generator() -> Result<Box<dyn TicketProducer>, Error> {
+pub(super) fn make_ticket_generator() -> Result<Box<dyn TicketProducer>, Error> {
     Ok(Box::new(Rfc5077Ticketer::new()?))
 }
 
-/// An RFC 5077 "Recommended Ticket Construction" implementation of a [`Ticketer`].
+/// An RFC 5077 "Recommended Ticket Construction" implementation of a [`TicketProducer`].
 struct Rfc5077Ticketer {
     aes_encrypt_key: PaddedBlockEncryptingKey,
     aes_decrypt_key: PaddedBlockDecryptingKey,
@@ -212,10 +197,13 @@ mod tests {
     use pki_types::UnixTime;
 
     use super::*;
+    use crate::crypto::TicketerFactory;
+    use crate::crypto::aws_lc_rs::AwsLcRs;
+    use crate::sync::Arc;
 
     #[test]
     fn basic_pairwise_test() {
-        let t = Ticketer::new().unwrap();
+        let t = AwsLcRs.ticketer().unwrap();
         let cipher = t.encrypt(b"hello world").unwrap();
         let plain = t.decrypt(&cipher).unwrap();
         assert_eq!(plain, b"hello world");
@@ -223,13 +211,13 @@ mod tests {
 
     #[test]
     fn refuses_decrypt_before_encrypt() {
-        let t = Ticketer::new().unwrap();
+        let t = AwsLcRs.ticketer().unwrap();
         assert_eq!(t.decrypt(b"hello"), None);
     }
 
     #[test]
     fn refuses_decrypt_larger_than_largest_encryption() {
-        let t = Ticketer::new().unwrap();
+        let t = AwsLcRs.ticketer().unwrap();
         let mut cipher = t.encrypt(b"hello world").unwrap();
         assert_eq!(t.decrypt(&cipher), Some(b"hello world".to_vec()));
 

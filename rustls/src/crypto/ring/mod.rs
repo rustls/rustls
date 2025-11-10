@@ -12,6 +12,7 @@ use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 #[cfg(feature = "std")]
 use crate::sync::Arc;
+use crate::ticketer::TicketRotator;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Error, Tls12CipherSuite, Tls13CipherSuite};
 
@@ -108,7 +109,10 @@ impl TicketerFactory for Ring {
     ///
     /// The encryption mechanism used is Chacha20Poly1305.
     fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
-        ticketer::Ticketer::new()
+        Ok(Arc::new(TicketRotator::new(
+            TicketRotator::SIX_HOURS,
+            ticketer::make_ticket_generator,
+        )?))
     }
 
     fn fips(&self) -> bool {
