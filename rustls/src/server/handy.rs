@@ -151,17 +151,20 @@ pub use cache::ServerSessionMemoryCache;
 pub(super) struct NeverProducesTickets {}
 
 impl TicketProducer for NeverProducesTickets {
-    fn enabled(&self) -> bool {
-        false
-    }
-    fn lifetime(&self) -> u32 {
-        0
-    }
     fn encrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> {
         None
     }
+
     fn decrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> {
         None
+    }
+
+    fn lifetime(&self) -> u32 {
+        0
+    }
+
+    fn enabled(&self) -> bool {
+        false
     }
 }
 

@@ -108,14 +108,6 @@ impl TicketRotator {
 }
 
 impl TicketProducer for TicketRotator {
-    fn lifetime(&self) -> u32 {
-        self.lifetime
-    }
-
-    fn enabled(&self) -> bool {
-        true
-    }
-
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         self.maybe_roll(UnixTime::now())?
             .current
@@ -135,6 +127,14 @@ impl TicketProducer for TicketRotator {
                     .as_ref()
                     .and_then(|previous| previous.decrypt(ciphertext))
             })
+    }
+
+    fn lifetime(&self) -> u32 {
+        self.lifetime
+    }
+
+    fn enabled(&self) -> bool {
+        true
     }
 }
 

@@ -86,16 +86,6 @@ impl AeadTicketer {
 }
 
 impl TicketProducer for AeadTicketer {
-    fn enabled(&self) -> bool {
-        true
-    }
-
-    fn lifetime(&self) -> u32 {
-        // this is not used, as this ticketer is only used via a `TicketRotator`
-        // that is responsible for defining and managing the lifetime of tickets.
-        0
-    }
-
     /// Encrypt `message` and return the ciphertext.
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         // Random nonce, because a counter is a privacy leak.
@@ -182,6 +172,16 @@ impl TicketProducer for AeadTicketer {
         out.truncate(plain_len);
 
         Some(out)
+    }
+
+    fn lifetime(&self) -> u32 {
+        // this is not used, as this ticketer is only used via a `TicketRotator`
+        // that is responsible for defining and managing the lifetime of tickets.
+        0
+    }
+
+    fn enabled(&self) -> bool {
+        true
     }
 }
 
