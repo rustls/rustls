@@ -39,8 +39,9 @@ use core::fmt::Debug;
 #[cfg(feature = "std")]
 use std::sync::Mutex;
 
+use crate::crypto::cipher::Payload;
 use crate::enums::CertificateCompressionAlgorithm;
-use crate::msgs::base::{Payload, PayloadU24};
+use crate::msgs::base::PayloadU24;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{CertificatePayloadTls13, CompressedCertificatePayload};
 use crate::sync::Arc;

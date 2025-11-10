@@ -187,9 +187,9 @@ mod tests {
     use super::*;
     use crate::TEST_PROVIDERS;
     use crate::crypto::CryptoProvider;
+    use crate::crypto::cipher::Payload;
     use crate::crypto::hash::Hash;
     use crate::enums::ProtocolVersion;
-    use crate::msgs::base::Payload;
     use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 
     #[test]

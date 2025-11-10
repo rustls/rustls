@@ -27,10 +27,9 @@ mod connection {
     use crate::client::{ClientConfig, ClientConnectionData};
     use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
-    use crate::crypto::cipher::InboundPlainMessage;
+    use crate::crypto::cipher::{InboundPlainMessage, Payload};
     use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
-    use crate::msgs::base::Payload;
     use crate::msgs::deframer::buffers::{DeframerVecBuffer, Locator};
     use crate::msgs::handshake::{
         ClientExtensionsInput, ServerExtensionsInput, TransportParameters,

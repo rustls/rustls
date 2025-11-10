@@ -5,63 +5,12 @@ use core::marker::PhantomData;
 use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
 use zeroize::Zeroize;
 
+use crate::crypto::cipher::Payload;
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{
     self, CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, Reader,
     TlsListElement,
 };
-
-/// An externally length'd payload
-#[non_exhaustive]
-#[derive(Clone, Eq, PartialEq)]
-pub enum Payload<'a> {
-    Borrowed(&'a [u8]),
-    Owned(Vec<u8>),
-}
-
-impl<'a> Codec<'a> for Payload<'a> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(self.bytes());
-    }
-
-    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        Ok(Self::read(r))
-    }
-}
-
-impl<'a> Payload<'a> {
-    pub fn bytes(&self) -> &[u8] {
-        match self {
-            Self::Borrowed(bytes) => bytes,
-            Self::Owned(bytes) => bytes,
-        }
-    }
-
-    pub fn into_owned(self) -> Payload<'static> {
-        Payload::Owned(self.into_vec())
-    }
-
-    pub fn into_vec(self) -> Vec<u8> {
-        match self {
-            Self::Borrowed(bytes) => bytes.to_vec(),
-            Self::Owned(bytes) => bytes,
-        }
-    }
-
-    pub fn read(r: &mut Reader<'a>) -> Self {
-        Self::Borrowed(r.rest())
-    }
-}
-
-impl Payload<'static> {
-    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
-        Self::Owned(bytes.into())
-    }
-
-    pub fn empty() -> Self {
-        Self::Borrowed(&[])
-    }
-}
 
 impl<'a> Codec<'a> for CertificateDer<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -80,12 +29,6 @@ impl<'a> Codec<'a> for CertificateDer<'a> {
         let mut sub = r.sub(len)?;
         let body = sub.rest();
         Ok(Self::from(body))
-    }
-}
-
-impl fmt::Debug for Payload<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, self.bytes())
     }
 }
 
@@ -271,7 +214,7 @@ impl Cardinality for NonEmpty {
 }
 
 // Format an iterator of u8 into a hex string
-pub(super) fn hex<'a>(
+pub(crate) fn hex<'a>(
     f: &mut fmt::Formatter<'_>,
     payload: impl IntoIterator<Item = &'a u8>,
 ) -> fmt::Result {

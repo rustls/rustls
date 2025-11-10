@@ -4,7 +4,7 @@ use std::{format, println, vec};
 
 use pki_types::{CertificateDer, DnsName};
 
-use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
+use super::base::{PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
     ClientCertificateType, Compression, ECCurveType, EchVersion, ExtensionType, HpkeAead, HpkeKdf,
@@ -24,6 +24,7 @@ use super::handshake::{
     ServerKeyExchangeParams, ServerKeyExchangePayload, ServerNamePayload, SessionId,
     SingleProtocolName, SupportedEcPointFormats, SupportedProtocolVersions,
 };
+use crate::crypto::cipher::Payload;
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
     SignatureScheme,

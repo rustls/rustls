@@ -17,6 +17,7 @@ use crate::common_state::{
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
+use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::{
     ActiveKeyExchange, HybridKeyExchange, Identity, SelectedCredential, SharedSecret, Signer,
@@ -28,7 +29,7 @@ use crate::enums::{
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::{Payload, PayloadU8};
+use crate::msgs::base::PayloadU8;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};

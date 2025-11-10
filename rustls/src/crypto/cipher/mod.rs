@@ -1,13 +1,14 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use core::fmt;
 
 use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::{ApiMisuse, Error};
-use crate::msgs::base::Payload;
-use crate::msgs::codec::{self, Reader};
+use crate::error::{ApiMisuse, Error, InvalidMessage};
+use crate::msgs::base::hex;
+use crate::msgs::codec::{self, Codec, Reader};
 use crate::msgs::message::{MessageError, read_opaque_message_header};
 use crate::suites::ConnectionTrafficSecrets;
 
@@ -466,6 +467,64 @@ impl PlainMessage {
             typ: self.typ,
             payload: self.payload.bytes().into(),
         }
+    }
+}
+
+/// An externally length'd payload
+#[non_exhaustive]
+#[derive(Clone, Eq, PartialEq)]
+pub enum Payload<'a> {
+    /// Borrowed payload
+    Borrowed(&'a [u8]),
+    /// Owned payload
+    Owned(Vec<u8>),
+}
+
+impl<'a> Payload<'a> {
+    /// A reference to the payload's bytes
+    pub fn bytes(&self) -> &[u8] {
+        match self {
+            Self::Borrowed(bytes) => bytes,
+            Self::Owned(bytes) => bytes,
+        }
+    }
+
+    pub(crate) fn into_owned(self) -> Payload<'static> {
+        Payload::Owned(self.into_vec())
+    }
+
+    pub(crate) fn into_vec(self) -> Vec<u8> {
+        match self {
+            Self::Borrowed(bytes) => bytes.to_vec(),
+            Self::Owned(bytes) => bytes,
+        }
+    }
+
+    pub(crate) fn read(r: &mut Reader<'a>) -> Self {
+        Self::Borrowed(r.rest())
+    }
+}
+
+impl Payload<'static> {
+    /// Create a new owned payload from the given `bytes`.
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
+        Self::Owned(bytes.into())
+    }
+}
+
+impl<'a> Codec<'a> for Payload<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(self.bytes());
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(Self::read(r))
+    }
+}
+
+impl fmt::Debug for Payload<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        hex(f, self.bytes())
     }
 }
 

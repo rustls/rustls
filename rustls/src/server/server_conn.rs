@@ -20,13 +20,13 @@ use crate::conn::ConnectionCommon;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
+use crate::crypto::cipher::Payload;
 use crate::crypto::{CryptoProvider, SelectedCredential, TicketProducer};
 use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::{Error, PeerMisbehaved};
 use crate::kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::log::trace;
-use crate::msgs::base::Payload;
 #[cfg(feature = "std")]
 use crate::msgs::handshake::ClientHelloPayload;
 use crate::msgs::handshake::{ProtocolName, ServerExtensionsInput, ServerNamePayload};
