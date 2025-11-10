@@ -342,11 +342,11 @@ impl MessageEncrypter for Tls13Cipher {
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
 
-        Ok(OutboundOpaqueMessage::new(
-            ContentType::ApplicationData,
-            ProtocolVersion::TLSv1_2,
+        Ok(OutboundOpaqueMessage {
+            typ: ContentType::ApplicationData,
+            version: ProtocolVersion::TLSv1_2,
             payload,
-        ))
+        })
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
@@ -409,7 +409,11 @@ impl MessageEncrypter for Tls12Cipher {
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
 
-        Ok(OutboundOpaqueMessage::new(m.typ, m.version, payload))
+        Ok(OutboundOpaqueMessage {
+            typ: m.typ,
+            version: m.version,
+            payload,
+        })
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {

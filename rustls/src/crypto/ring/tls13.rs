@@ -216,13 +216,13 @@ impl MessageEncrypter for Tls13MessageEncrypter {
             .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OutboundOpaqueMessage::new(
-            ContentType::ApplicationData,
+        Ok(OutboundOpaqueMessage {
+            typ: ContentType::ApplicationData,
             // Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
             // protocol version, see https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-            ProtocolVersion::TLSv1_2,
+            version: ProtocolVersion::TLSv1_2,
             payload,
-        ))
+        })
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {

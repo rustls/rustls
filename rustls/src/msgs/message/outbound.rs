@@ -163,17 +163,6 @@ pub struct OutboundOpaqueMessage {
 }
 
 impl OutboundOpaqueMessage {
-    /// Construct a new `OpaqueMessage` from constituent fields.
-    ///
-    /// `body` is moved into the `payload` field.
-    pub fn new(typ: ContentType, version: ProtocolVersion, payload: PrefixedPayload) -> Self {
-        Self {
-            typ,
-            version,
-            payload,
-        }
-    }
-
     /// Construct by decoding from a [`Reader`].
     ///
     /// `MessageError` allows callers to distinguish between valid prefixes (might
