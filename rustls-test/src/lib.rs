@@ -1843,11 +1843,11 @@ mod plaintext {
             let mut payload = PrefixedPayload::with_capacity(msg.payload.len());
             payload.extend_from_chunks(&msg.payload);
 
-            Ok(OutboundOpaqueMessage::new(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
+            Ok(OutboundOpaqueMessage {
+                typ: ContentType::ApplicationData,
+                version: ProtocolVersion::TLSv1_2,
                 payload,
-            ))
+            })
         }
 
         fn encrypted_payload_len(&self, payload_len: usize) -> usize {

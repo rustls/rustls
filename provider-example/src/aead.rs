@@ -98,12 +98,10 @@ impl MessageEncrypter for Tls13Cipher {
         self.0
             .encrypt_in_place(&nonce, &aad, &mut EncryptBufferAdapter(&mut payload))
             .map_err(|_| rustls::Error::EncryptError)
-            .map(|_| {
-                OutboundOpaqueMessage::new(
-                    ContentType::ApplicationData,
-                    ProtocolVersion::TLSv1_2,
-                    payload,
-                )
+            .map(|_| OutboundOpaqueMessage {
+                typ: ContentType::ApplicationData,
+                version: ProtocolVersion::TLSv1_2,
+                payload,
             })
     }
 
@@ -148,7 +146,11 @@ impl MessageEncrypter for Tls12Cipher {
         self.0
             .encrypt_in_place(&nonce, &aad, &mut EncryptBufferAdapter(&mut payload))
             .map_err(|_| rustls::Error::EncryptError)
-            .map(|_| OutboundOpaqueMessage::new(m.typ, m.version, payload))
+            .map(|_| OutboundOpaqueMessage {
+                typ: m.typ,
+                version: m.version,
+                payload,
+            })
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
