@@ -75,7 +75,7 @@ fn can_read_safari_client_hello_with_ip_address_in_sni_extension() {
 #[test]
 fn alert_is_not_handshake() {
     let m = Message::build_alert(AlertLevel::Fatal, AlertDescription::DecodeError);
-    assert!(!m.is_handshake_type(HandshakeType::ClientHello));
+    assert_ne!(m.handshake_type(), Some(HandshakeType::ClientHello));
 }
 
 #[test]

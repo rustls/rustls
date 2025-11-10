@@ -231,7 +231,8 @@ impl CommonState {
                 Side::Client => HandshakeType::HelloRequest,
                 Side::Server => HandshakeType::ClientHello,
             };
-            if msg.is_handshake_type(reject_ty) {
+
+            if msg.handshake_type() == Some(reject_ty) {
                 self.temper_counters
                     .received_renegotiation_request()?;
                 self.send_warning_alert(AlertDescription::NoRenegotiation);
