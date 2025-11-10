@@ -1,7 +1,7 @@
 #![expect(non_camel_case_types)]
 #![expect(missing_docs)]
+use crate::crypto::hash;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::HashAlgorithm;
 
 enum_builder! {
     /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken
@@ -661,6 +661,48 @@ impl SignatureScheme {
 }
 
 enum_builder! {
+    /// The `HashAlgorithm` TLS protocol enum.  Values in this enum are taken
+    /// from the various RFCs covering TLS, and are listed by IANA.
+    /// The `Unknown` item is used when processing unrecognized ordinals.
+    #[repr(u8)]
+    pub enum HashAlgorithm {
+        NONE => 0x00,
+        MD5 => 0x01,
+        SHA1 => 0x02,
+        SHA224 => 0x03,
+        SHA256 => 0x04,
+        SHA384 => 0x05,
+        SHA512 => 0x06,
+    }
+}
+
+impl HashAlgorithm {
+    /// Returns the hash of the empty input.
+    ///
+    /// This returns `None` for some hash algorithms, so the caller
+    /// should be prepared to do the computation themselves in this case.
+    pub(crate) fn hash_for_empty_input(&self) -> Option<hash::Output> {
+        match self {
+            Self::SHA256 => Some(hash::Output::new(
+                b"\xe3\xb0\xc4\x42\x98\xfc\x1c\x14\
+                  \x9a\xfb\xf4\xc8\x99\x6f\xb9\x24\
+                  \x27\xae\x41\xe4\x64\x9b\x93\x4c\
+                  \xa4\x95\x99\x1b\x78\x52\xb8\x55",
+            )),
+            Self::SHA384 => Some(hash::Output::new(
+                b"\x38\xb0\x60\xa7\x51\xac\x96\x38\
+                  \x4c\xd9\x32\x7e\xb1\xb1\xe3\x6a\
+                  \x21\xfd\xb7\x11\x14\xbe\x07\x43\
+                  \x4c\x0c\xc7\xbf\x63\xf6\xe1\xda\
+                  \x27\x4e\xde\xbf\xe7\x6f\x65\xfb\
+                  \xd5\x1a\xd2\xf1\x48\x98\xb9\x5b",
+            )),
+            _ => None,
+        }
+    }
+}
+
+enum_builder! {
     /// The `SignatureAlgorithm` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognized ordinals.
@@ -723,6 +765,7 @@ mod tests {
 
     #[test]
     fn test_enums() {
+        test_enum8::<HashAlgorithm>(HashAlgorithm::NONE, HashAlgorithm::SHA512);
         test_enum8::<SignatureAlgorithm>(SignatureAlgorithm::Anonymous, SignatureAlgorithm::ECDSA);
         test_enum8::<ContentType>(ContentType::ChangeCipherSpec, ContentType::Heartbeat);
         test_enum8::<HandshakeType>(HandshakeType::HelloRequest, HandshakeType::MessageHash);

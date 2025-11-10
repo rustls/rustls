@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 use core::mem;
 
 use crate::crypto::hash;
+use crate::enums::HashAlgorithm;
 use crate::msgs::codec::Codec;
-use crate::msgs::enums::HashAlgorithm;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};
 
