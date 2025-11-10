@@ -277,12 +277,10 @@ where
 
         let mut reader = Reader::init(&buf[..sz]);
         while reader.any_left() {
-            let message = OutboundOpaqueMessage::read(&mut reader).unwrap();
-
             // this is a bit of a falsehood: we don't know whether message
             // is encrypted.  it is quite unlikely that a genuine encrypted
             // message can be decoded by `Message::try_from`.
-            let plain = message.into_plain_message();
+            let plain = PlainMessage::read(&mut reader).unwrap();
 
             let message_enc = match Message::try_from(plain.clone()) {
                 Ok(mut message) => match filter(&mut message) {

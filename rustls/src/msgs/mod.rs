@@ -55,7 +55,7 @@ mod message_test;
 #[cfg(test)]
 mod tests {
     use super::codec::Reader;
-    use super::message::{Message, OutboundOpaqueMessage};
+    use super::message::{Message, OutboundOpaqueMessage, PlainMessage, PrefixedPayload};
 
     #[test]
     fn smoketest() {
@@ -63,12 +63,17 @@ mod tests {
         let mut r = Reader::init(bytes);
 
         while r.any_left() {
-            let m = OutboundOpaqueMessage::read(&mut r).unwrap();
+            let m = PlainMessage::read(&mut r).unwrap();
 
-            let out = m.clone().encode();
+            let out = OutboundOpaqueMessage {
+                typ: m.typ,
+                version: m.version,
+                payload: PrefixedPayload::from(m.payload.bytes()),
+            }
+            .encode();
             assert!(!out.is_empty());
 
-            Message::try_from(m.into_plain_message()).unwrap();
+            Message::try_from(m).unwrap();
         }
     }
 }

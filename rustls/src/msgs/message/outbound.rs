@@ -1,8 +1,7 @@
 use alloc::vec::Vec;
 
-use super::{HEADER_SIZE, MAX_PAYLOAD, MessageError, PlainMessage};
+use super::{HEADER_SIZE, MAX_PAYLOAD, MessageError};
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::msgs::base::Payload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::record_layer::RecordLayer;
 
@@ -163,24 +162,6 @@ pub struct OutboundOpaqueMessage {
 }
 
 impl OutboundOpaqueMessage {
-    /// Construct by decoding from a [`Reader`].
-    ///
-    /// `MessageError` allows callers to distinguish between valid prefixes (might
-    /// become valid if we read more data) and invalid data.
-    pub fn read(r: &mut Reader<'_>) -> Result<Self, MessageError> {
-        let (typ, version, len) = read_opaque_message_header(r)?;
-
-        let content = r
-            .take(len as usize)
-            .ok_or(MessageError::TooShortForLength)?;
-
-        Ok(Self {
-            typ,
-            version,
-            payload: PrefixedPayload::from(content),
-        })
-    }
-
     pub fn encode(self) -> Vec<u8> {
         let length = self.payload.len() as u16;
         let mut encoded_payload = self.payload.0;
@@ -188,18 +169,6 @@ impl OutboundOpaqueMessage {
         encoded_payload[1..3].copy_from_slice(&self.version.to_array());
         encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
         encoded_payload
-    }
-
-    /// Force conversion into a plaintext message.
-    ///
-    /// This should only be used for messages that are known to be in plaintext. Otherwise, the
-    /// `OutboundOpaqueMessage` should be decrypted into a `PlainMessage` using a `MessageDecrypter`.
-    pub fn into_plain_message(self) -> PlainMessage {
-        PlainMessage {
-            version: self.version,
-            typ: self.typ,
-            payload: Payload::Owned(self.payload.as_ref().to_vec()),
-        }
     }
 }
 
