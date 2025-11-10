@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::{
-    InboundPlainMessage, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage,
+    InboundPlainMessage, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage,
 };
 use crate::crypto::{Identity, SupportedKxGroup};
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -17,7 +17,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
-use crate::msgs::message::{Message, MessagePayload, PlainMessage};
+use crate::msgs::message::{Message, MessagePayload};
 use crate::record_layer::PreEncryptAction;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;

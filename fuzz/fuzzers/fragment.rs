@@ -3,10 +3,11 @@
 extern crate libfuzzer_sys;
 extern crate rustls;
 
+use rustls::crypto::cipher::PlainMessage;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::fragmenter::MessageFragmenter;
-use rustls::internal::msgs::message::{Message, PlainMessage};
+use rustls::internal::msgs::message::Message;
 
 fuzz_target!(|data: &[u8]| {
     let mut rdr = Reader::init(data);

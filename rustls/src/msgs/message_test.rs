@@ -6,7 +6,8 @@ use std::{format, fs, println, vec};
 use super::base::Payload;
 use super::codec::Reader;
 use super::enums::AlertLevel;
-use super::message::{Message, PlainMessage};
+use super::message::Message;
+use crate::crypto::cipher::PlainMessage;
 use crate::enums::{AlertDescription, HandshakeType};
 use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, PayloadU24};
 

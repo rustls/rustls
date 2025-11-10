@@ -7,7 +7,7 @@ use std::vec;
 use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
-use crate::crypto::cipher::MessageEncrypter;
+use crate::crypto::cipher::{MessageEncrypter, PlainMessage};
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
     Credentials, CryptoProvider, Identity, SingleCredential, tls12_only, tls13_only, tls13_suite,
@@ -23,7 +23,7 @@ use crate::msgs::handshake::{
     ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
     ServerKeyExchangePayload, SessionId,
 };
-use crate::msgs::message::{Message, MessagePayload, PlainMessage};
+use crate::msgs::message::{Message, MessagePayload};
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
 use crate::sync::Arc;

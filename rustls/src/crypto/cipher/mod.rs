@@ -6,8 +6,9 @@ use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::codec;
-pub use crate::msgs::message::PlainMessage;
+use crate::msgs::base::Payload;
+use crate::msgs::codec::{self, Reader};
+use crate::msgs::message::{MessageError, read_opaque_message_header};
 use crate::suites::ConnectionTrafficSecrets;
 
 mod inbound;
@@ -402,6 +403,68 @@ impl From<[u8; Self::MAX_LEN]> for AeadKey {
         Self {
             buf: bytes,
             used: Self::MAX_LEN,
+        }
+    }
+}
+
+/// A decrypted TLS frame
+///
+/// This type owns all memory for its interior parts. It can be decrypted from an OpaqueMessage
+/// or encrypted into an OpaqueMessage, and it is also used for joining and fragmenting.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Clone, Debug)]
+pub struct PlainMessage {
+    /// The content type of this message.
+    pub typ: ContentType,
+    /// The protocol version of this message.
+    pub version: ProtocolVersion,
+    /// The payload of this message.
+    pub payload: Payload<'static>,
+}
+
+impl PlainMessage {
+    /// Construct by decoding from a [`Reader`].
+    ///
+    /// `MessageError` allows callers to distinguish between valid prefixes (might
+    /// become valid if we read more data) and invalid data.
+    pub fn read(r: &mut Reader<'_>) -> Result<Self, MessageError> {
+        let (typ, version, len) = read_opaque_message_header(r)?;
+
+        let content = r
+            .take(len as usize)
+            .ok_or(MessageError::TooShortForLength)?;
+
+        Ok(Self {
+            typ,
+            version,
+            payload: Payload::Owned(content.to_vec()),
+        })
+    }
+
+    /// Convert into an unencrypted [`OutboundOpaqueMessage`] (without decrypting).
+    pub fn into_unencrypted_opaque(self) -> OutboundOpaqueMessage {
+        OutboundOpaqueMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: PrefixedPayload::from(self.payload.bytes()),
+        }
+    }
+
+    /// Borrow as an [`InboundPlainMessage`].
+    pub fn borrow_inbound(&self) -> InboundPlainMessage<'_> {
+        InboundPlainMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: self.payload.bytes(),
+        }
+    }
+
+    /// Borrow as an [`OutboundPlainMessage`].
+    pub fn borrow_outbound(&self) -> OutboundPlainMessage<'_> {
+        OutboundPlainMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: self.payload.bytes().into(),
         }
     }
 }

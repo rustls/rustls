@@ -10,6 +10,7 @@ use std::{io, mem};
 use pki_types::{DnsName, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
 use rustls::client::Resumption;
+use rustls::crypto::cipher::PlainMessage;
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, Signer, SigningKey,
 };
@@ -18,7 +19,7 @@ use rustls::enums::{
 };
 use rustls::error::{ApiMisuse, CertificateError, Error, InconsistentKeys, PeerMisbehaved};
 use rustls::internal::msgs::base::Payload;
-use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
+use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
     ClientConfig, ClientConnection, HandshakeKind, KeyingMaterialExporter, NamedGroup,
