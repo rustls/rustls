@@ -28,10 +28,10 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
-use rustls::crypto::{CryptoProvider, Identity};
+use rustls::crypto::{CryptoProvider, Identity, ProducesTickets};
 use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::server::{
-    NoServerSessionStorage, ProducesTickets, ServerSessionMemoryCache, UnbufferedServerConnection,
+    NoServerSessionStorage, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,
 };
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};

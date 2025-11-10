@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::server;
+use crate::{crypto::ProducesTickets, server};
 
 /// Something which never stores sessions.
 #[expect(clippy::exhaustive_structs)]
@@ -150,7 +150,7 @@ pub use cache::ServerSessionMemoryCache;
 #[derive(Debug)]
 pub(super) struct NeverProducesTickets {}
 
-impl server::ProducesTickets for NeverProducesTickets {
+impl ProducesTickets for NeverProducesTickets {
     fn enabled(&self) -> bool {
         false
     }
@@ -297,7 +297,8 @@ mod tests {
     use std::vec;
 
     use super::*;
-    use crate::server::{ProducesTickets, StoresServerSessions};
+    use crate::crypto::ProducesTickets;
+    use crate::server::StoresServerSessions;
 
     #[test]
     fn test_noserversessionstorage_drops_put() {

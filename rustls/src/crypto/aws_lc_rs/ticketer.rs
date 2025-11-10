@@ -12,11 +12,11 @@ use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use aws_lc_rs::{hmac, iv};
 
 use super::unspecified_err;
+use crate::crypto::ProducesTickets;
 use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
 use crate::rand::GetRandomFailed;
-use crate::server::ProducesTickets;
 use crate::sync::Arc;
 
 /// A concrete, safe ticket creation mechanism.

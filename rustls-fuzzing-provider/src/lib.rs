@@ -24,7 +24,8 @@ use rustls::crypto::cipher::{
 };
 use rustls::crypto::{
     self, CipherSuiteCommon, Credentials, GetRandomFailed, Identity, KeyExchangeAlgorithm,
-    SelectedCredential, StartedKeyExchange, WebPkiSupportedAlgorithms, hash, tls12, tls13,
+    ProducesTickets, SelectedCredential, StartedKeyExchange, WebPkiSupportedAlgorithms, hash,
+    tls12, tls13,
 };
 use rustls::enums::{CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
@@ -32,7 +33,7 @@ use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
     SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
-use rustls::server::{self, ProducesTickets};
+use rustls::server::{ClientHello, ServerCredentialResolver};
 use rustls::{
     ConnectionTrafficSecrets, Error, NamedGroup, RootCertStore, Tls12CipherSuite, Tls13CipherSuite,
 };
@@ -69,7 +70,7 @@ pub fn server_verifier() -> Arc<dyn ServerVerifier> {
         .unwrap()
 }
 
-pub fn server_cert_resolver() -> Arc<dyn server::ServerCredentialResolver> {
+pub fn server_cert_resolver() -> Arc<dyn ServerCredentialResolver> {
     let cert = CertificateDer::from(&include_bytes!("../../test-ca/ecdsa-p256/end.der")[..]);
     let credentials = Credentials::new_unchecked(
         Arc::new(Identity::from_cert_chain(vec![cert]).unwrap()),
@@ -81,8 +82,8 @@ pub fn server_cert_resolver() -> Arc<dyn server::ServerCredentialResolver> {
 #[derive(Debug)]
 struct DummyCert(Arc<Credentials>);
 
-impl server::ServerCredentialResolver for DummyCert {
-    fn resolve(&self, client_hello: &server::ClientHello<'_>) -> Result<SelectedCredential, Error> {
+impl ServerCredentialResolver for DummyCert {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
         self.0
             .signer(client_hello.signature_schemes())
             .ok_or(Error::PeerIncompatible(

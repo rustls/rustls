@@ -30,7 +30,9 @@ use rayon::iter::Either;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
-use rustls::crypto::{CryptoProvider, GetRandomFailed, SecureRandom, aws_lc_rs, ring};
+use rustls::crypto::{
+    CryptoProvider, GetRandomFailed, ProducesTickets, SecureRandom, aws_lc_rs, ring,
+};
 use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
@@ -390,13 +392,13 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     for (provider, ticketer, provider_name, warm_up) in [
         (
             derandomize(ring::DEFAULT_PROVIDER),
-            &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
+            &(ring_ticketer as fn() -> Arc<dyn ProducesTickets>),
             "ring",
             None,
         ),
         (
             derandomize(aws_lc_rs::DEFAULT_PROVIDER),
-            &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
+            &(aws_lc_rs_ticketer as fn() -> Arc<dyn ProducesTickets>),
             "aws_lc_rs",
             Some(warm_up_aws_lc_rs as fn()),
         ),
@@ -456,8 +458,8 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         }
     }
 
-    let make_ticketer = &((|| Arc::new(rustls_fuzzing_provider::Ticketer))
-        as fn() -> Arc<dyn rustls::server::ProducesTickets>);
+    let make_ticketer =
+        &((|| Arc::new(rustls_fuzzing_provider::Ticketer)) as fn() -> Arc<dyn ProducesTickets>);
 
     all.push(BenchmarkParams::new(
         rustls_fuzzing_provider::PROVIDER_TLS13.into(),
@@ -492,11 +494,11 @@ fn select_suite(mut provider: CryptoProvider, name: CipherSuite) -> Arc<CryptoPr
     provider.into()
 }
 
-fn ring_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
+fn ring_ticketer() -> Arc<dyn ProducesTickets> {
     ring::Ticketer::new().unwrap()
 }
 
-fn aws_lc_rs_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
+fn aws_lc_rs_ticketer() -> Arc<dyn ProducesTickets> {
     aws_lc_rs::Ticketer::new().unwrap()
 }
 

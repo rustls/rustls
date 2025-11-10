@@ -7,12 +7,12 @@ use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
 use super::hs::{self, ServerContext};
-use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
+use super::server_conn::{ServerConfig, ServerConnectionData};
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::crypto::{ActiveKeyExchange, Identity};
+use crate::crypto::{ActiveKeyExchange, Identity, ProducesTickets};
 use crate::enums::{
     AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
