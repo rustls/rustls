@@ -13,8 +13,11 @@ use crate::error::{Error, OtherError};
 use crate::rand::GetRandomFailed;
 #[cfg(feature = "std")]
 use crate::sync::Arc;
+#[cfg(feature = "std")]
+use crate::ticketer::TicketRotator;
+use crate::tls12::Tls12CipherSuite;
+use crate::tls13::Tls13CipherSuite;
 use crate::webpki::WebPkiSupportedAlgorithms;
-use crate::{TicketRotator, Tls12CipherSuite, Tls13CipherSuite};
 
 /// Hybrid public key encryption (HPKE).
 pub mod hpke;
@@ -30,6 +33,8 @@ pub(crate) mod kx;
 pub(crate) mod quic;
 #[cfg(feature = "std")]
 pub(crate) mod ticketer;
+#[cfg(feature = "std")]
+use ticketer::Rfc5077Ticketer;
 pub(crate) mod tls12;
 pub(crate) mod tls13;
 
@@ -130,7 +135,7 @@ impl TicketerFactory for AwsLcRs {
     fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
         Ok(Arc::new(TicketRotator::new(
             TicketRotator::SIX_HOURS,
-            ticketer::make_ticket_generator,
+            Rfc5077Ticketer::new,
         )?))
     }
 
