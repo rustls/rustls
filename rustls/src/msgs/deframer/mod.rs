@@ -1,10 +1,9 @@
 use core::mem;
 
+use crate::crypto::cipher::InboundOpaqueMessage;
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::Reader;
-use crate::msgs::message::{
-    HEADER_SIZE, InboundOpaqueMessage, MessageError, read_opaque_message_header,
-};
+use crate::msgs::message::{HEADER_SIZE, MessageError, read_opaque_message_header};
 
 pub(crate) mod buffers;
 pub(crate) mod handshake;

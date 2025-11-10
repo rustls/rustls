@@ -5,15 +5,13 @@ use ring::{aead, hmac};
 
 use crate::crypto;
 use crate::crypto::cipher::{
-    AeadKey, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce,
-    Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
+    Nonce, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
-use crate::msgs::message::{
-    InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
-};
+use crate::msgs::message::{OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
 use crate::tls13::Tls13CipherSuite;
 use crate::version::TLS13_VERSION;
