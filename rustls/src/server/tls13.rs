@@ -488,9 +488,9 @@ mod client_hello {
         ticket: &[u8],
         config: &ServerConfig,
     ) -> Option<Tls13ServerSessionValue> {
-        let plain = match config.ticketer.enabled() {
-            true => config.ticketer.decrypt(ticket)?,
-            false => config.session_storage.take(ticket)?,
+        let plain = match config.ticketer.as_deref() {
+            Some(ticketer) => ticketer.decrypt(ticket)?,
+            None => config.session_storage.take(ticket)?,
         };
 
         match ServerSessionValue::read_bytes(&plain).ok()? {
@@ -652,7 +652,7 @@ mod client_hello {
 
         /* Non-zero max_early_data_size controls whether early_data is allowed at all.
          * We also require stateful resumption. */
-        let early_data_configured = config.max_early_data_size > 0 && !config.ticketer.enabled();
+        let early_data_configured = config.max_early_data_size > 0 && config.ticketer.is_none();
 
         /* "For PSKs provisioned via NewSessionTicket, a server MUST validate
          *  that the ticket age for the selected PSK identity (computed by
@@ -1254,12 +1254,12 @@ impl ExpectFinished {
         let plain =
             get_server_session_value(suite, resumption, cx, &nonce, now, age_add).get_encoding();
 
-        let stateless = config.ticketer.enabled();
-        let (ticket, lifetime) = if stateless {
-            let Some(ticket) = config.ticketer.encrypt(&plain) else {
+        let ticketer = config.ticketer.as_deref();
+        let (ticket, lifetime) = if let Some(ticketer) = ticketer {
+            let Some(ticket) = ticketer.encrypt(&plain) else {
                 return Ok(());
             };
-            (ticket, config.ticketer.lifetime())
+            (ticket, ticketer.lifetime())
         } else {
             let id = rand::random_array::<32>(secure_random)?.to_vec();
             let stored = config
@@ -1276,7 +1276,7 @@ impl ExpectFinished {
         let mut payload = NewSessionTicketPayloadTls13::new(lifetime, age_add, nonce, ticket);
 
         if config.max_early_data_size > 0 {
-            if !stateless {
+            if ticketer.is_none() {
                 payload.extensions.max_early_data_size = Some(config.max_early_data_size);
             } else {
                 // We implement RFC8446 section 8.1: by enforcing that 0-RTT is
@@ -1286,7 +1286,10 @@ impl ExpectFinished {
         }
 
         let t = HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(payload));
-        trace!("sending new ticket {t:?} (stateless: {stateless})");
+        trace!(
+            "sending new ticket {t:?} (stateless: {})",
+            ticketer.is_some()
+        );
         flight.add(t);
 
         Ok(())

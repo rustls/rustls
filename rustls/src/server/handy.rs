@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::{crypto::TicketProducer, server};
+use crate::server;
 
 /// Something which never stores sessions.
 #[expect(clippy::exhaustive_structs)]
@@ -146,28 +146,6 @@ mod cache {
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use cache::ServerSessionMemoryCache;
 
-/// Something which never produces tickets.
-#[derive(Debug)]
-pub(super) struct NeverProducesTickets {}
-
-impl TicketProducer for NeverProducesTickets {
-    fn encrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> {
-        None
-    }
-
-    fn decrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> {
-        None
-    }
-
-    fn lifetime(&self) -> u32 {
-        0
-    }
-
-    fn enabled(&self) -> bool {
-        false
-    }
-}
-
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod sni_resolver {
     use core::fmt::Debug;
@@ -300,7 +278,6 @@ mod tests {
     use std::vec;
 
     use super::*;
-    use crate::crypto::TicketProducer;
     use crate::server::StoresServerSessions;
 
     #[test]
@@ -324,14 +301,5 @@ mod tests {
         assert_eq!(c.take(&[]), None);
         assert_eq!(c.take(&[0x01]), None);
         assert_eq!(c.take(&[0x02]), None);
-    }
-
-    #[test]
-    fn test_neverproducestickets_does_nothing() {
-        let npt = NeverProducesTickets {};
-        assert!(!npt.enabled());
-        assert_eq!(0, npt.lifetime());
-        assert_eq!(None, npt.encrypt(&[]));
-        assert_eq!(None, npt.decrypt(&[]));
     }
 }

@@ -132,10 +132,6 @@ impl TicketProducer for TicketRotator {
     fn lifetime(&self) -> u32 {
         self.lifetime
     }
-
-    fn enabled(&self) -> bool {
-        true
-    }
 }
 
 impl core::fmt::Debug for TicketRotator {

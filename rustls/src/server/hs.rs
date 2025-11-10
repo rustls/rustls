@@ -196,7 +196,7 @@ impl ExtensionProcessing {
         // Tickets:
         // If we get any SessionTicket extension and have tickets enabled,
         // we send an ack.
-        if hello.session_ticket.is_some() && config.ticketer.enabled() {
+        if hello.session_ticket.is_some() && config.ticketer.is_some() {
             self.send_ticket = true;
             self.extensions.session_ticket_ack = Some(());
         }

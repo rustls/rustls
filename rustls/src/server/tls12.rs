@@ -139,7 +139,8 @@ mod client_hello {
                     let data = st
                         .config
                         .ticketer
-                        .decrypt(ticket.bytes());
+                        .as_ref()
+                        .and_then(|ticketer| ticketer.decrypt(ticket.bytes()));
                     if data.is_none() {
                         debug!("Ticket didn't decrypt");
                     }
@@ -301,14 +302,9 @@ mod client_hello {
         if send_ticket {
             let now = config.current_time()?;
 
-            emit_ticket(
-                &secrets,
-                &mut transcript,
-                using_ems,
-                cx,
-                &*config.ticketer,
-                now,
-            )?;
+            if let Some(ticketer) = config.ticketer.as_deref() {
+                emit_ticket(&secrets, &mut transcript, using_ems, cx, ticketer, now)?;
+            }
         }
         emit_ccs(cx.common);
         cx.common
@@ -847,14 +843,16 @@ impl State<ServerConnectionData> for ExpectFinished {
         if !self.resuming {
             if self.send_ticket {
                 let now = self.config.current_time()?;
-                emit_ticket(
-                    &self.secrets,
-                    &mut self.transcript,
-                    self.using_ems,
-                    cx,
-                    &*self.config.ticketer,
-                    now,
-                )?;
+                if let Some(ticketer) = self.config.ticketer.as_deref() {
+                    emit_ticket(
+                        &self.secrets,
+                        &mut self.transcript,
+                        self.using_ems,
+                        cx,
+                        ticketer,
+                        now,
+                    )?;
+                }
             }
             emit_ccs(cx.common);
             cx.common

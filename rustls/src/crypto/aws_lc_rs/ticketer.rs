@@ -208,10 +208,6 @@ impl TicketProducer for Rfc5077Ticketer {
         // that is responsible for defining and managing the lifetime of tickets.
         0
     }
-
-    fn enabled(&self) -> bool {
-        true
-    }
 }
 
 impl Debug for Rfc5077Ticketer {
@@ -233,7 +229,6 @@ mod tests {
     #[test]
     fn basic_pairwise_test() {
         let t = Ticketer::new().unwrap();
-        assert!(t.enabled());
         let cipher = t.encrypt(b"hello world").unwrap();
         let plain = t.decrypt(&cipher).unwrap();
         assert_eq!(plain, b"hello world");
@@ -327,7 +322,6 @@ mod tests {
         let t = make_ticket_generator().unwrap();
 
         assert_eq!(format!("{t:?}"), "Rfc5077Ticketer { .. }");
-        assert!(t.enabled());
         assert_eq!(t.lifetime(), 0);
     }
 

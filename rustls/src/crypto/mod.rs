@@ -440,12 +440,6 @@ pub trait TicketProducer: Debug + Send + Sync {
     /// The objective is to limit damage to forward secrecy caused
     /// by tickets, not just limiting their lifetime.
     fn lifetime(&self) -> u32;
-
-    /// Returns true if this implementation will encrypt/decrypt
-    /// tickets.  Should return false if this is a dummy
-    /// implementation: the server will not send the SessionTicket
-    /// extension and will not call the other functions.
-    fn enabled(&self) -> bool;
 }
 
 /// A supported key exchange group.

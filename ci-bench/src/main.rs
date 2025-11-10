@@ -31,7 +31,7 @@ use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
 use rustls::crypto::{
-    CryptoProvider, GetRandomFailed, TicketProducer, SecureRandom, aws_lc_rs, ring,
+    CryptoProvider, GetRandomFailed, SecureRandom, TicketProducer, aws_lc_rs, ring,
 };
 use rustls::enums::{CipherSuite, ProtocolVersion};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
@@ -776,7 +776,7 @@ impl ServerSideStepper<'_> {
         if resume == ResumptionKind::SessionId {
             cfg.session_storage = ServerSessionMemoryCache::new(128);
         } else if resume == ResumptionKind::Tickets {
-            cfg.ticketer = (params.ticketer)();
+            cfg.ticketer = Some((params.ticketer)());
         } else {
             cfg.session_storage = Arc::new(NoServerSessionStorage {});
         }
