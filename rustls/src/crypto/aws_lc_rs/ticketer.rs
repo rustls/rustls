@@ -102,16 +102,6 @@ impl Rfc5077Ticketer {
 }
 
 impl TicketProducer for Rfc5077Ticketer {
-    fn enabled(&self) -> bool {
-        true
-    }
-
-    fn lifetime(&self) -> u32 {
-        // this is not used, as this ticketer is only used via a `TicketRotator`
-        // that is responsible for defining and managing the lifetime of tickets.
-        0
-    }
-
     /// Encrypt `message` and return the ciphertext.
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         // Encrypt the ticket state - the cipher module handles generating a random IV of
@@ -211,6 +201,16 @@ impl TicketProducer for Rfc5077Ticketer {
             .ok()?;
 
         Some(plaintext.into())
+    }
+
+    fn lifetime(&self) -> u32 {
+        // this is not used, as this ticketer is only used via a `TicketRotator`
+        // that is responsible for defining and managing the lifetime of tickets.
+        0
+    }
+
+    fn enabled(&self) -> bool {
+        true
     }
 }
 

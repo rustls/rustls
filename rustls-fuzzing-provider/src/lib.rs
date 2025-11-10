@@ -24,8 +24,8 @@ use rustls::crypto::cipher::{
 };
 use rustls::crypto::{
     self, CipherSuiteCommon, Credentials, GetRandomFailed, Identity, KeyExchangeAlgorithm,
-    TicketProducer, SelectedCredential, StartedKeyExchange, WebPkiSupportedAlgorithms, hash,
-    tls12, tls13,
+    SelectedCredential, StartedKeyExchange, TicketProducer, WebPkiSupportedAlgorithms, hash, tls12,
+    tls13,
 };
 use rustls::enums::{CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
@@ -147,20 +147,20 @@ pub const TLS_FUZZING_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
 pub struct Ticketer;
 
 impl TicketProducer for Ticketer {
-    fn enabled(&self) -> bool {
-        true
-    }
-
-    fn lifetime(&self) -> u32 {
-        60 * 60 * 6
-    }
-
     fn encrypt(&self, plain: &[u8]) -> Option<Vec<u8>> {
         Some(plain.to_vec())
     }
 
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>> {
         Some(cipher.to_vec())
+    }
+
+    fn lifetime(&self) -> u32 {
+        60 * 60 * 6
+    }
+
+    fn enabled(&self) -> bool {
+        true
     }
 }
 
