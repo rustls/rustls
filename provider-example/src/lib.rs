@@ -19,16 +19,22 @@ extern crate std;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use alloc::sync::Arc;
 #[cfg(not(feature = "std"))]
 use core::error::Error as StdError;
 #[cfg(not(feature = "std"))]
 use core::fmt;
+#[cfg(feature = "std")]
+use core::time::Duration;
 
+#[cfg(feature = "std")]
+use rustls::TicketRotator;
 use rustls::crypto::tls12::PrfUsingHmac;
 use rustls::crypto::tls13::HkdfUsingHmac;
 use rustls::crypto::{
     CipherSuiteCommon, CryptoProvider, GetRandomFailed, KeyExchangeAlgorithm, KeyProvider,
-    SecureRandom, SigningKey,
+    SecureRandom, SigningKey, TicketProducer, TicketerFactory,
 };
 use rustls::enums::{CipherSuite, SignatureScheme};
 use rustls::error::{Error, OtherError};
@@ -42,6 +48,10 @@ mod hmac;
 pub mod hpke;
 mod kx;
 mod sign;
+#[cfg(feature = "std")]
+mod ticketer;
+#[cfg(feature = "std")]
+use ticketer::AeadTicketer;
 mod verify;
 
 pub fn provider() -> CryptoProvider {
@@ -52,7 +62,7 @@ pub fn provider() -> CryptoProvider {
         signature_verification_algorithms: verify::ALGORITHMS,
         secure_random: &Provider,
         key_provider: &Provider,
-        ticketer_factory: None,
+        ticketer_factory: Some(&Provider),
     }
 }
 
@@ -82,6 +92,25 @@ impl KeyProvider for Provider {
         Ok(Box::new(
             sign::EcdsaSigningKeyP256::try_from(key_der).map_err(other_err)?,
         ))
+    }
+}
+
+impl TicketerFactory for Provider {
+    fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
+        #[cfg(feature = "std")]
+        {
+            Ok(Arc::new(TicketRotator::new(SIX_HOURS, AeadTicketer::new)?))
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            Err(Error::General(
+                "Provider::ticketer() relies on std-only RwLock via TicketRotator".into(),
+            ))
+        }
+    }
+
+    fn fips(&self) -> bool {
+        false
     }
 }
 
@@ -146,3 +175,6 @@ fn other_err(error: impl fmt::Display + Send + Sync + 'static) -> Error {
 
     Error::Other(OtherError::new(DisplayError(error)))
 }
+
+#[cfg(feature = "std")]
+const SIX_HOURS: Duration = Duration::from_secs(6 * 60 * 60);
