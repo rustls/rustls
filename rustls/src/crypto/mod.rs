@@ -230,7 +230,7 @@ pub struct CryptoProvider {
     pub key_provider: &'static dyn KeyProvider,
 
     /// Provider for creating [`TicketProducer`]s for stateless session resumption.
-    pub ticketer_factory: Option<&'static dyn TicketerFactory>,
+    pub ticketer_factory: &'static dyn TicketerFactory,
 }
 
 impl CryptoProvider {
@@ -280,7 +280,7 @@ impl CryptoProvider {
             && signature_verification_algorithms.fips()
             && secure_random.fips()
             && key_provider.fips()
-            && ticketer_factory.is_none_or(|tf| tf.fips())
+            && ticketer_factory.fips()
     }
 
     pub(crate) fn consistency_check(&self) -> Result<(), Error> {

@@ -47,7 +47,7 @@ pub const PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {
     signature_verification_algorithms: VERIFY_ALGORITHMS,
     secure_random: &Provider,
     key_provider: &Provider,
-    ticketer_factory: None,
+    ticketer_factory: &Provider,
 };
 
 pub const PROVIDER_TLS12: crypto::CryptoProvider = crypto::CryptoProvider {
@@ -117,6 +117,16 @@ impl crypto::KeyProvider for Provider {
         _key_der: PrivateKeyDer<'static>,
     ) -> Result<Box<dyn crypto::SigningKey>, Error> {
         Ok(Box::new(SigningKey))
+    }
+}
+
+impl crypto::TicketerFactory for Provider {
+    fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
+        Ok(Arc::new(Ticketer))
+    }
+
+    fn fips(&self) -> bool {
+        false
     }
 }
 

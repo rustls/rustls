@@ -363,7 +363,6 @@ fn tls13_stateless_resumption() {
     server_config.ticketer = Some(
         provider
             .ticketer_factory
-            .unwrap()
             .ticketer()
             .unwrap(),
     );

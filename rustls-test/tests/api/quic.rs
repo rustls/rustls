@@ -443,7 +443,6 @@ fn test_quic_resumption_data_basic() {
     server_config.ticketer = Some(
         provider
             .ticketer_factory
-            .unwrap()
             .ticketer()
             .unwrap(),
     );
@@ -493,7 +492,6 @@ fn test_quic_resumption_data_0rtt() {
     server_config.ticketer = Some(
         provider
             .ticketer_factory
-            .unwrap()
             .ticketer()
             .unwrap(),
     );

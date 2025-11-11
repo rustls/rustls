@@ -22,6 +22,8 @@ use alloc::boxed::Box;
 #[cfg(feature = "std")]
 use alloc::sync::Arc;
 #[cfg(not(feature = "std"))]
+use alloc::sync::Arc;
+#[cfg(not(feature = "std"))]
 use core::error::Error as StdError;
 #[cfg(not(feature = "std"))]
 use core::fmt;
@@ -62,7 +64,7 @@ pub fn provider() -> CryptoProvider {
         signature_verification_algorithms: verify::ALGORITHMS,
         secure_random: &Provider,
         key_provider: &Provider,
-        ticketer_factory: Some(&Provider),
+        ticketer_factory: &Provider,
     }
 }
 

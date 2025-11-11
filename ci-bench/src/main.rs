@@ -485,7 +485,6 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 fn ring_ticketer() -> Arc<dyn TicketProducer> {
     ring::DEFAULT_PROVIDER
         .ticketer_factory
-        .unwrap()
         .ticketer()
         .unwrap()
 }
@@ -493,7 +492,6 @@ fn ring_ticketer() -> Arc<dyn TicketProducer> {
 fn aws_lc_rs_ticketer() -> Arc<dyn TicketProducer> {
     aws_lc_rs::DEFAULT_PROVIDER
         .ticketer_factory
-        .unwrap()
         .ticketer()
         .unwrap()
 }
