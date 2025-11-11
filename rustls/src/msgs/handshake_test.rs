@@ -1,3 +1,4 @@
+use core::time::Duration;
 use std::prelude::v1::*;
 use std::{format, println, vec};
 
@@ -1124,14 +1125,14 @@ fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 
 
 fn sample_new_session_ticket_payload() -> NewSessionTicketPayload {
     NewSessionTicketPayload {
-        lifetime_hint: 1234,
+        lifetime_hint: Duration::from_secs(1234),
         ticket: Arc::new(PayloadU16::new(vec![1, 2, 3])),
     }
 }
 
 fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
     NewSessionTicketPayloadTls13 {
-        lifetime: 123,
+        lifetime: Duration::from_secs(123),
         age_add: 1234,
         nonce: PayloadU8::new(vec![1, 2, 3]),
         ticket: Arc::new(PayloadU16::new(vec![4, 5, 6])),

@@ -200,6 +200,7 @@ impl client::ClientCredentialResolver for FailResolveClientCert {
 
 #[cfg(test)]
 mod tests {
+    use core::time::Duration;
     use std::prelude::v1::*;
 
     use pki_types::{CertificateDer, ServerName, UnixTime};
@@ -251,7 +252,7 @@ mod tests {
                         &server_cert_verifier,
                         &resolves_client_cert,
                         now,
-                        0,
+                        Duration::ZERO,
                         true,
                     ),
                 );
@@ -272,7 +273,7 @@ mod tests {
                     &server_cert_verifier,
                     &resolves_client_cert,
                     now,
-                    0,
+                    Duration::ZERO,
                     0,
                     0,
                 ),

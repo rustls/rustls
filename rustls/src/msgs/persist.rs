@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::cmp;
+use core::time::Duration;
 
 use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
@@ -51,10 +52,10 @@ impl Retrieved<&Tls13ClientSessionValue> {
 impl<T: core::ops::Deref<Target = ClientSessionCommon>> Retrieved<T> {
     pub(crate) fn has_expired(&self) -> bool {
         let common = &*self.value;
-        common.lifetime_secs != 0
+        common.lifetime != Duration::ZERO
             && common
                 .epoch
-                .saturating_add(u64::from(common.lifetime_secs))
+                .saturating_add(common.lifetime.as_secs())
                 < self.retrieved_at.as_secs()
     }
 }
@@ -86,7 +87,7 @@ impl Tls13ClientSessionValue {
         server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
-        lifetime_secs: u32,
+        lifetime: Duration,
         age_add: u32,
         max_early_data_size: u32,
     ) -> Self {
@@ -98,7 +99,7 @@ impl Tls13ClientSessionValue {
             common: ClientSessionCommon::new(
                 ticket,
                 time_now,
-                lifetime_secs,
+                lifetime,
                 peer_identity,
                 server_cert_verifier,
                 client_creds,
@@ -168,7 +169,7 @@ impl Tls12ClientSessionValue {
         server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ClientCredentialResolver>,
         time_now: UnixTime,
-        lifetime_secs: u32,
+        lifetime: Duration,
         extended_ms: bool,
     ) -> Self {
         Self {
@@ -179,7 +180,7 @@ impl Tls12ClientSessionValue {
             common: ClientSessionCommon::new(
                 ticket,
                 time_now,
-                lifetime_secs,
+                lifetime,
                 peer_identity,
                 server_cert_verifier,
                 client_creds,
@@ -222,7 +223,7 @@ impl core::ops::Deref for Tls12ClientSessionValue {
 pub struct ClientSessionCommon {
     ticket: Arc<PayloadU16>,
     epoch: u64,
-    lifetime_secs: u32,
+    lifetime: Duration,
     peer_identity: Arc<Identity<'static>>,
     server_cert_verifier: Weak<dyn ServerVerifier>,
     client_creds: Weak<dyn ClientCredentialResolver>,
@@ -232,7 +233,7 @@ impl ClientSessionCommon {
     fn new(
         ticket: Arc<PayloadU16>,
         time_now: UnixTime,
-        lifetime_secs: u32,
+        lifetime: Duration,
         peer_identity: Identity<'static>,
         server_cert_verifier: &Arc<dyn ServerVerifier>,
         client_creds: &Arc<dyn ClientCredentialResolver>,
@@ -240,7 +241,7 @@ impl ClientSessionCommon {
         Self {
             ticket,
             epoch: time_now.as_secs(),
-            lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
+            lifetime: cmp::min(lifetime, MAX_TICKET_LIFETIME),
             peer_identity: Arc::new(peer_identity),
             server_cert_verifier: Arc::downgrade(server_cert_verifier),
             client_creds: Arc::downgrade(client_creds),
@@ -282,7 +283,7 @@ impl ClientSessionCommon {
     }
 }
 
-static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
+static MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// This is the maximum allowed skew between server and client clocks, over
 /// the maximum ticket lifetime period.  This encompasses TCP retransmission

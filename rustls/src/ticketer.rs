@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
+use core::time::Duration;
 use std::sync::{RwLock, RwLockReadGuard};
 
 use pki_types::UnixTime;
@@ -21,7 +22,7 @@ pub(crate) struct TicketRotatorState {
 #[cfg(feature = "std")]
 pub struct TicketRotator {
     pub(crate) generator: fn() -> Result<Box<dyn TicketProducer>, Error>,
-    lifetime: u32,
+    lifetime: Duration,
     state: RwLock<TicketRotatorState>,
 }
 
@@ -38,7 +39,7 @@ impl TicketRotator {
     ///
     /// `generator` produces a new `ProducesTickets` implementation.
     pub fn new(
-        lifetime: u32,
+        lifetime: Duration,
         generator: fn() -> Result<Box<dyn TicketProducer>, Error>,
     ) -> Result<Self, Error> {
         Ok(Self {
@@ -49,7 +50,7 @@ impl TicketRotator {
                 previous: None,
                 next_switch_time: UnixTime::now()
                     .as_secs()
-                    .saturating_add(u64::from(lifetime)),
+                    .saturating_add(lifetime.as_secs()),
             }),
         })
     }
@@ -97,14 +98,14 @@ impl TicketRotator {
         // - confirmed we are the thread that will do it
         // - successfully made the replacement ticketer
         write.previous = Some(mem::replace(&mut write.current, next));
-        write.next_switch_time = now.saturating_add(u64::from(self.lifetime));
+        write.next_switch_time = now.saturating_add(self.lifetime.as_secs());
         drop(write);
 
         self.state.read().ok()
     }
 
     #[cfg(any(feature = "aws-lc-rs", feature = "ring"))]
-    pub(crate) const SIX_HOURS: u32 = 6 * 60 * 60;
+    pub(crate) const SIX_HOURS: Duration = Duration::from_secs(6 * 60 * 60);
 }
 
 impl TicketProducer for TicketRotator {
@@ -129,7 +130,7 @@ impl TicketProducer for TicketRotator {
             })
     }
 
-    fn lifetime(&self) -> u32 {
+    fn lifetime(&self) -> Duration {
         self.lifetime
     }
 }

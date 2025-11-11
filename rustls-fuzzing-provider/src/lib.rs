@@ -12,6 +12,7 @@
     unused_qualifications
 )]
 
+use core::time::Duration;
 use std::borrow::Cow;
 use std::sync::Arc;
 
@@ -156,8 +157,8 @@ impl TicketProducer for Ticketer {
         Some(cipher.to_vec())
     }
 
-    fn lifetime(&self) -> u32 {
-        60 * 60 * 6
+    fn lifetime(&self) -> Duration {
+        Duration::from_secs(60 * 60 * 6)
     }
 }
 

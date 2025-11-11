@@ -4,6 +4,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
+use core::time::Duration;
 use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
@@ -2280,7 +2281,7 @@ impl Codec<'_> for CertificateRequestPayloadTls13 {
 // -- NewSessionTicket --
 #[derive(Debug)]
 pub(crate) struct NewSessionTicketPayload {
-    pub(crate) lifetime_hint: u32,
+    pub(crate) lifetime_hint: Duration,
     // Tickets can be large (KB), so we deserialise this straight
     // into an Arc, so it can be passed directly into the client's
     // session object without copying.
@@ -2288,7 +2289,7 @@ pub(crate) struct NewSessionTicketPayload {
 }
 
 impl NewSessionTicketPayload {
-    pub(crate) fn new(lifetime_hint: u32, ticket: Vec<u8>) -> Self {
+    pub(crate) fn new(lifetime_hint: Duration, ticket: Vec<u8>) -> Self {
         Self {
             lifetime_hint,
             ticket: Arc::new(PayloadU16::new(ticket)),
@@ -2298,17 +2299,14 @@ impl NewSessionTicketPayload {
 
 impl Codec<'_> for NewSessionTicketPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.lifetime_hint.encode(bytes);
+        (self.lifetime_hint.as_secs() as u32).encode(bytes);
         self.ticket.encode(bytes);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let lifetime = u32::read(r)?;
-        let ticket = Arc::new(PayloadU16::read(r)?);
-
         Ok(Self {
-            lifetime_hint: lifetime,
-            ticket,
+            lifetime_hint: Duration::from_secs(u32::read(r)? as u64),
+            ticket: Arc::new(PayloadU16::read(r)?),
         })
     }
 }
@@ -2348,7 +2346,7 @@ impl Codec<'_> for NewSessionTicketExtensions {
 
 #[derive(Debug)]
 pub(crate) struct NewSessionTicketPayloadTls13 {
-    pub(crate) lifetime: u32,
+    pub(crate) lifetime: Duration,
     pub(crate) age_add: u32,
     pub(crate) nonce: PayloadU8,
     pub(crate) ticket: Arc<PayloadU16>,
@@ -2356,7 +2354,7 @@ pub(crate) struct NewSessionTicketPayloadTls13 {
 }
 
 impl NewSessionTicketPayloadTls13 {
-    pub(crate) fn new(lifetime: u32, age_add: u32, nonce: [u8; 32], ticket: Vec<u8>) -> Self {
+    pub(crate) fn new(lifetime: Duration, age_add: u32, nonce: [u8; 32], ticket: Vec<u8>) -> Self {
         Self {
             lifetime,
             age_add,
@@ -2369,7 +2367,7 @@ impl NewSessionTicketPayloadTls13 {
 
 impl Codec<'_> for NewSessionTicketPayloadTls13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.lifetime.encode(bytes);
+        (self.lifetime.as_secs() as u32).encode(bytes);
         self.age_add.encode(bytes);
         self.nonce.encode(bytes);
         self.ticket.encode(bytes);
@@ -2377,7 +2375,7 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let lifetime = u32::read(r)?;
+        let lifetime = Duration::from_secs(u32::read(r)? as u64);
         let age_add = u32::read(r)?;
         let nonce = PayloadU8::read(r)?;
         // nb. RFC8446: `opaque ticket<1..2^16-1>;`
