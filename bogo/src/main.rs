@@ -801,7 +801,6 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
         cfg.ticketer = Some(
             cfg.crypto_provider()
                 .ticketer_factory
-                .unwrap()
                 .ticketer()
                 .unwrap(),
         );

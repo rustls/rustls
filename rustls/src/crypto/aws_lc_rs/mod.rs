@@ -5,13 +5,12 @@ use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
 
 use super::signer::SigningKey;
-use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
-#[cfg(feature = "std")]
-use crate::crypto::{TicketProducer, TicketerFactory};
+use crate::crypto::{
+    CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup, TicketProducer, TicketerFactory,
+};
 use crate::enums::SignatureScheme;
 use crate::error::{Error, OtherError};
 use crate::rand::GetRandomFailed;
-#[cfg(feature = "std")]
 use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::ticketer::TicketRotator;
@@ -46,10 +45,7 @@ pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
     signature_verification_algorithms: SUPPORTED_SIG_ALGS,
     secure_random: &AwsLcRs,
     key_provider: &AwsLcRs,
-    #[cfg(feature = "std")]
-    ticketer_factory: Some(&AwsLcRs),
-    #[cfg(not(feature = "std"))]
-    ticketer_factory: None,
+    ticketer_factory: &AwsLcRs,
 };
 
 /// The default `CryptoProvider` backed by aws-lc-rs that only supports TLS1.3.
@@ -118,7 +114,6 @@ impl KeyProvider for AwsLcRs {
     }
 }
 
-#[cfg(feature = "std")]
 impl TicketerFactory for AwsLcRs {
     /// Make the recommended `Ticketer`.
     ///
@@ -133,10 +128,19 @@ impl TicketerFactory for AwsLcRs {
     ///
     /// [RFC 5077 §4]: https://www.rfc-editor.org/rfc/rfc5077#section-4
     fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
-        Ok(Arc::new(TicketRotator::new(
-            TicketRotator::SIX_HOURS,
-            Rfc5077Ticketer::new,
-        )?))
+        #[cfg(feature = "std")]
+        {
+            Ok(Arc::new(TicketRotator::new(
+                TicketRotator::SIX_HOURS,
+                Rfc5077Ticketer::new,
+            )?))
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            Err(Error::General(
+                "AwsLcRs::ticketer() relies on std-only RwLock via TicketRotator".into(),
+            ))
+        }
     }
 
     fn fips(&self) -> bool {

@@ -5,13 +5,12 @@ use pki_types::PrivateKeyDer;
 use webpki::ring as webpki_algs;
 
 use super::signer::SigningKey;
-use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
-#[cfg(feature = "std")]
-use crate::crypto::{TicketProducer, TicketerFactory};
+use crate::crypto::{
+    CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup, TicketProducer, TicketerFactory,
+};
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::rand::GetRandomFailed;
-#[cfg(feature = "std")]
 use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::ticketer::TicketRotator;
@@ -44,10 +43,7 @@ pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
     signature_verification_algorithms: SUPPORTED_SIG_ALGS,
     secure_random: &Ring,
     key_provider: &Ring,
-    #[cfg(feature = "std")]
-    ticketer_factory: Some(&Ring),
-    #[cfg(not(feature = "std"))]
-    ticketer_factory: None,
+    ticketer_factory: &Ring,
 };
 
 /// The default `CryptoProvider` backed by *ring* that only supports TLS1.3.
@@ -102,7 +98,6 @@ impl KeyProvider for Ring {
     }
 }
 
-#[cfg(feature = "std")]
 impl TicketerFactory for Ring {
     /// Make the recommended `Ticketer`.
     ///
@@ -114,10 +109,19 @@ impl TicketerFactory for Ring {
     ///
     /// The encryption mechanism used is Chacha20Poly1305.
     fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
-        Ok(Arc::new(TicketRotator::new(
-            TicketRotator::SIX_HOURS,
-            AeadTicketer::new,
-        )?))
+        #[cfg(feature = "std")]
+        {
+            Ok(Arc::new(TicketRotator::new(
+                TicketRotator::SIX_HOURS,
+                AeadTicketer::new,
+            )?))
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            Err(Error::General(
+                "Ring::ticketer() relies on std-only RwLock via TicketRotator".into(),
+            ))
+        }
     }
 
     fn fips(&self) -> bool {

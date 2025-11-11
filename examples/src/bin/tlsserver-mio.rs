@@ -644,7 +644,6 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         config.ticketer = Some(
             provider::DEFAULT_PROVIDER
                 .ticketer_factory
-                .unwrap()
                 .ticketer()
                 .unwrap(),
         );

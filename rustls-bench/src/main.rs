@@ -828,7 +828,6 @@ impl Parameters {
                 cfg.ticketer = Some(
                     cfg.crypto_provider()
                         .ticketer_factory
-                        .unwrap()
                         .ticketer()
                         .unwrap(),
                 );
