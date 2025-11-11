@@ -2656,6 +2656,7 @@ dependencies = [
  "rustls 0.24.0-dev.0",
  "sha2",
  "signature",
+ "subtle",
  "webpki-roots 1.0.3",
  "x25519-dalek",
 ]
