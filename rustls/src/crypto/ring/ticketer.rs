@@ -174,7 +174,6 @@ mod tests {
     use super::*;
     use crate::crypto::TicketerFactory;
     use crate::crypto::ring::Ring;
-    use crate::sync::Arc;
     use crate::ticketer::TicketRotator;
 
     #[test]
@@ -206,7 +205,7 @@ mod tests {
 
     #[test]
     fn ticketrotator_switching_test() {
-        let t = Arc::new(TicketRotator::new(Duration::from_secs(1), AeadTicketer::new).unwrap());
+        let t = TicketRotator::new(Duration::from_secs(1), AeadTicketer::new).unwrap();
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
