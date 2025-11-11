@@ -2,6 +2,7 @@ use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::time::Duration;
 
 use pki_types::ServerName;
 pub(crate) use server_hello::TLS12_HANDLER;
@@ -1071,7 +1072,7 @@ impl ExpectFinished {
         // original ticket again.
         let (mut ticket, lifetime) = match self.ticket.take() {
             Some(nst) => (nst.ticket, nst.lifetime_hint),
-            None => (Arc::new(PayloadU16::empty()), 0),
+            None => (Arc::new(PayloadU16::empty()), Duration::ZERO),
         };
 
         if ticket.0.is_empty() {

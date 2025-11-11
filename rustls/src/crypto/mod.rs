@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::fmt::Debug;
 use core::ops::Deref;
+use core::time::Duration;
 
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
@@ -448,7 +449,7 @@ pub trait TicketProducer: Debug + Send + Sync {
     /// fails, return None.
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
 
-    /// Returns the lifetime in seconds of tickets produced now.
+    /// Returns the lifetime of tickets produced now.
     /// The lifetime is provided as a hint to clients that the
     /// ticket will not be useful after the given time.
     ///
@@ -457,7 +458,7 @@ pub trait TicketProducer: Debug + Send + Sync {
     ///
     /// The objective is to limit damage to forward secrecy caused
     /// by tickets, not just limiting their lifetime.
-    fn lifetime(&self) -> u32;
+    fn lifetime(&self) -> Duration;
 }
 
 /// A supported key exchange group.

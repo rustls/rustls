@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::fmt::{Debug, Formatter};
 use core::sync::atomic::{AtomicUsize, Ordering};
+use core::time::Duration;
 
 use ring::aead;
 use ring::rand::{SecureRandom, SystemRandom};
@@ -146,10 +147,10 @@ impl TicketProducer for AeadTicketer {
         Some(out)
     }
 
-    fn lifetime(&self) -> u32 {
+    fn lifetime(&self) -> Duration {
         // this is not used, as this ticketer is only used via a `TicketRotator`
         // that is responsible for defining and managing the lifetime of tickets.
-        0
+        Duration::ZERO
     }
 }
 
@@ -205,7 +206,7 @@ mod tests {
 
     #[test]
     fn ticketrotator_switching_test() {
-        let t = Arc::new(TicketRotator::new(1, AeadTicketer::new).unwrap());
+        let t = Arc::new(TicketRotator::new(Duration::from_secs(1), AeadTicketer::new).unwrap());
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
@@ -232,7 +233,7 @@ mod tests {
 
     #[test]
     fn ticketrotator_remains_usable_over_temporary_ticketer_creation_failure() {
-        let mut t = TicketRotator::new(1, AeadTicketer::new).unwrap();
+        let mut t = TicketRotator::new(Duration::from_secs(1), AeadTicketer::new).unwrap();
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
@@ -273,7 +274,7 @@ mod tests {
 
         let expect = format!("AeadTicketer {{ alg: {TICKETER_AEAD:?} }}");
         assert_eq!(format!("{t:?}"), expect);
-        assert_eq!(t.lifetime(), 0);
+        assert_eq!(t.lifetime(), Duration::ZERO);
     }
 
     fn fail_generator() -> Result<Box<dyn TicketProducer>, Error> {

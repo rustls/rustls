@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec;
+use core::time::Duration;
 
 pub(crate) use client_hello::TLS13_HANDLER;
 use pki_types::UnixTime;
@@ -1269,7 +1270,7 @@ impl ExpectFinished {
                 trace!("resumption not available; not issuing ticket");
                 return Ok(());
             }
-            let stateful_lifetime = 24 * 60 * 60; // this is a bit of a punt
+            let stateful_lifetime = Duration::from_secs(24 * 60 * 60); // this is a bit of a punt
             (id, stateful_lifetime)
         };
 
