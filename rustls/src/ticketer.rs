@@ -141,3 +141,125 @@ impl core::fmt::Debug for TicketRotator {
             .finish_non_exhaustive()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use core::sync::atomic::{AtomicU8, Ordering};
+    use core::time::Duration;
+
+    use pki_types::UnixTime;
+
+    use super::*;
+
+    #[test]
+    fn ticketrotator_switching_test() {
+        let t = TicketRotator::new(Duration::from_secs(1), FakeTicketer::new).unwrap();
+        let now = UnixTime::now();
+        let cipher1 = t.encrypt(b"ticket 1").unwrap();
+        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+        {
+            // Trigger new ticketer
+            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
+                now.as_secs() + 10,
+            )));
+        }
+        let cipher2 = t.encrypt(b"ticket 2").unwrap();
+        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+        {
+            // Trigger new ticketer
+            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
+                now.as_secs() + 20,
+            )));
+        }
+        let cipher3 = t.encrypt(b"ticket 3").unwrap();
+        assert!(t.decrypt(&cipher1).is_none());
+        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+        assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
+    }
+
+    #[test]
+    fn ticketrotator_remains_usable_over_temporary_ticketer_creation_failure() {
+        let mut t = TicketRotator::new(Duration::from_secs(1), FakeTicketer::new).unwrap();
+        let now = UnixTime::now();
+        let cipher1 = t.encrypt(b"ticket 1").unwrap();
+        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+        t.generator = fail_generator;
+        {
+            // Failed new ticketer; this means we still need to
+            // rotate.
+            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
+                now.as_secs() + 10,
+            )));
+        }
+
+        // check post-failure encryption/decryption still works
+        let cipher2 = t.encrypt(b"ticket 2").unwrap();
+        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+
+        // do the rotation for real
+        t.generator = FakeTicketer::new;
+        {
+            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
+                now.as_secs() + 20,
+            )));
+        }
+        let cipher3 = t.encrypt(b"ticket 3").unwrap();
+        assert!(t.decrypt(&cipher1).is_some());
+        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+        assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
+    }
+
+    #[derive(Debug)]
+    struct FakeTicketer {
+        gen: u8,
+    }
+
+    impl FakeTicketer {
+        #[expect(clippy::new_ret_no_self)]
+        fn new() -> Result<Box<dyn TicketProducer>, Error> {
+            Ok(Box::new(Self {
+                gen: std::dbg!(FAKE_GEN.fetch_add(1, Ordering::SeqCst)),
+            }))
+        }
+    }
+
+    impl TicketProducer for FakeTicketer {
+        fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
+            let mut v = Vec::with_capacity(1 + message.len());
+            v.push(self.gen);
+            v.extend(
+                message
+                    .iter()
+                    .copied()
+                    .map(|b| b ^ self.gen),
+            );
+            Some(v)
+        }
+
+        fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
+            if ciphertext.first()? != &self.gen {
+                return None;
+            }
+
+            Some(
+                ciphertext[1..]
+                    .iter()
+                    .copied()
+                    .map(|b| b ^ self.gen)
+                    .collect(),
+            )
+        }
+
+        fn lifetime(&self) -> Duration {
+            Duration::ZERO // Left to the rotator
+        }
+    }
+
+    static FAKE_GEN: AtomicU8 = AtomicU8::new(0);
+
+    fn fail_generator() -> Result<Box<dyn TicketProducer>, Error> {
+        Err(Error::FailedToGetRandomBytes)
+    }
+}
