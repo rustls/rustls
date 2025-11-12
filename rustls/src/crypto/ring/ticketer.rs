@@ -14,10 +14,9 @@ use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
 
-/// This is a `ProducesTickets` implementation which uses
-/// any *ring* `aead::Algorithm` to encrypt and authentication
-/// the ticket payload.  It does not enforce any lifetime
-/// constraint.
+/// A [`TicketProducer`] implementation which can use any *ring* `aead::Algorithm`.
+///
+/// It does not enforce any lifetime constraint.
 pub(super) struct AeadTicketer {
     alg: &'static aead::Algorithm,
     key: aead::LessSafeKey,

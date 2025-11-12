@@ -89,7 +89,7 @@ pub struct BenchmarkParams {
     ///
     /// The choice of cipher suite is baked into this.
     pub provider: Arc<CryptoProvider>,
-    /// How to make a suitable [`rustls::server::ProducesTickets`].
+    /// How to make a suitable [`rustls::crypto::TicketProducer`].
     pub ticketer: &'static fn() -> Arc<dyn TicketProducer>,
     /// Where to get keys for server auth
     pub auth_key: AuthKeySource,
