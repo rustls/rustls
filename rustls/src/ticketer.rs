@@ -37,7 +37,7 @@ impl TicketRotator {
     /// be usable for at least one `lifetime`, and at most two `lifetime`s
     /// (depending on when its creation falls in the replacement cycle.)
     ///
-    /// `generator` produces a new `ProducesTickets` implementation.
+    /// `generator` produces a new [`TicketProducer`] implementation.
     pub fn new(
         lifetime: Duration,
         generator: fn() -> Result<Box<dyn TicketProducer>, Error>,
