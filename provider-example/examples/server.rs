@@ -92,7 +92,8 @@ impl TestPki {
     }
 
     fn server_config(self) -> Arc<ServerConfig> {
-        let mut server_config = ServerConfig::builder(rustls_provider_example::provider().into())
+        let provider = Arc::new(rustls_provider_example::provider());
+        let mut server_config = ServerConfig::builder(provider.clone())
             .with_no_client_auth()
             .with_single_cert(
                 Arc::new(Identity::from_cert_chain(vec![self.server_cert_der]).unwrap()),
@@ -101,6 +102,10 @@ impl TestPki {
             .unwrap();
 
         server_config.key_log = Arc::new(rustls::KeyLogFile::new());
+        server_config.ticketer = provider
+            .ticketer_factory
+            .ticketer()
+            .ok();
 
         Arc::new(server_config)
     }
