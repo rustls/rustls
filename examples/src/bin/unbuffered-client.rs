@@ -9,8 +9,8 @@ use std::sync::Arc;
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::unbuffered::{
-    AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
-    UnbufferedStatus, WriteTraffic,
+    ConnectionState, EncodeError, EncryptError, InsufficientSizeError, UnbufferedStatus,
+    WriteTraffic,
 };
 use rustls::{ClientConfig, RootCertStore};
 
@@ -63,29 +63,23 @@ fn converse(
         } = conn.process_tls_records(&mut incoming_tls[..incoming_used]);
 
         match dbg!(state.unwrap()) {
-            ConnectionState::ReadTraffic(mut state) => {
-                while let Some(res) = state.next_record() {
-                    let AppDataRecord {
-                        discard: new_discard,
-                        payload,
-                        ..
-                    } = res?;
-                    discard += new_discard;
+            ConnectionState::ReadTraffic(state) => {
+                let record = state.record();
+                discard += record.discard;
 
-                    if payload.starts_with(b"HTTP") {
-                        let response = core::str::from_utf8(payload)?;
-                        let header = response
-                            .lines()
-                            .next()
-                            .unwrap_or(response);
+                if record.payload.starts_with(b"HTTP") {
+                    let response = core::str::from_utf8(record.payload)?;
+                    let header = response
+                        .lines()
+                        .next()
+                        .unwrap_or(response);
 
-                        println!("{header}");
-                    } else {
-                        println!("(.. continued HTTP response ..)");
-                    }
-
-                    received_response = true;
+                    println!("{header}");
+                } else {
+                    println!("(.. continued HTTP response ..)");
                 }
+
+                received_response = true;
             }
 
             ConnectionState::EncodeTlsData(mut state) => {

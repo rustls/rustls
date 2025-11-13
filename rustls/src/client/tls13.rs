@@ -1569,9 +1569,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
         m: Message<'_>,
     ) -> hs::NextStateOrError {
         match m.payload {
-            MessagePayload::ApplicationData(payload) => cx
-                .common
-                .take_received_plaintext(payload),
+            MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
                 ..

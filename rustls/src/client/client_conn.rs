@@ -18,6 +18,7 @@ use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureSchem
 use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
+use crate::msgs::deframer::buffers::Locator;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtensionsInput;
 use crate::msgs::persist;
@@ -825,12 +826,17 @@ impl ConnectionCore<ClientConnectionData> {
         let mut cx = hs::ClientContext {
             common: &mut common_state,
             data: &mut data,
+            // `start_handshake` won't read plaintext
+            plaintext_locator: &Locator::new(&[]),
+            received_plaintext: &mut None,
             // `start_handshake` won't produce plaintext
             sendable_plaintext: None,
         };
 
         let input = ClientHelloInput::new(name, &extra_exts, &mut cx, config)?;
         let state = input.start_handshake(extra_exts, &mut cx)?;
+        debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
+
         Ok(Self::new(state, data, common_state))
     }
 

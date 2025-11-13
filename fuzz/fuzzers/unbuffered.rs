@@ -70,11 +70,7 @@ fn process<S: SideData>(status: UnbufferedStatus<'_, '_, S>) -> Option<usize> {
         Ok(ConnectionState::TransmitTlsData(xmit)) => xmit.done(),
         Ok(ConnectionState::WriteTraffic(_)) => return None,
         Ok(ConnectionState::BlockedHandshake) => return None,
-        Ok(ConnectionState::ReadTraffic(mut read)) => loop {
-            let Some(_app_data) = read.next_record() else {
-                break;
-            };
-        },
+        Ok(ConnectionState::ReadTraffic(_)) => {}
         Ok(st) => panic!("unhandled state {st:?}"),
         Err(_) => return None,
     };

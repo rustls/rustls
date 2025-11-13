@@ -28,6 +28,8 @@ use crate::kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::log::trace;
 #[cfg(feature = "std")]
+use crate::msgs::deframer::buffers::Locator;
+#[cfg(feature = "std")]
 use crate::msgs::handshake::ClientHelloPayload;
 use crate::msgs::handshake::{ProtocolName, ServerExtensionsInput, ServerNamePayload};
 #[cfg(feature = "std")]
@@ -603,10 +605,11 @@ mod connection {
 
     use super::{Accepted, Accepting, ServerConfig, ServerConnectionData, ServerExtensionsInput};
     use crate::KeyingMaterialExporter;
-    use crate::common_state::{CommonState, Context, Side};
+    use crate::common_state::{CommonState, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::{ApiMisuse, Error};
-    use crate::server::hs::ClientHelloInput;
+    use crate::msgs::deframer::buffers::Locator;
+    use crate::server::hs::{ClientHelloInput, ServerContext};
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
@@ -911,13 +914,22 @@ mod connection {
                 Err(err) => return Err((err, AcceptedAlert::from(connection))),
             };
 
-            let mut cx = Context::from(&mut connection);
+            let mut cx = ServerContext {
+                common: &mut connection.core.common_state,
+                data: &mut connection.core.side,
+                // `ClientHelloInput::from_message` won't read borrowed plaintext
+                plaintext_locator: &Locator::new(&[]),
+                received_plaintext: &mut None,
+                sendable_plaintext: Some(&mut connection.sendable_plaintext),
+            };
+
             let sig_schemes = match ClientHelloInput::from_message(&message, false, &mut cx) {
                 Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
                     return Err((err, AcceptedAlert::from(connection)));
                 }
             };
+            debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
             Ok(Some(Accepted {
                 connection,
@@ -1101,7 +1113,14 @@ impl Accepted {
         self.connection.enable_secret_extraction = config.enable_secret_extraction;
 
         let state = hs::ExpectClientHello::new(config, ServerExtensionsInput::default());
-        let mut cx = hs::ServerContext::from(&mut self.connection);
+        let mut cx = hs::ServerContext {
+            common: &mut self.connection.core.common_state,
+            data: &mut self.connection.core.side,
+            // `ExpectClientHello::with_input` won't read borrowed plaintext
+            plaintext_locator: &Locator::new(&[]),
+            received_plaintext: &mut None,
+            sendable_plaintext: Some(&mut self.connection.sendable_plaintext),
+        };
 
         let input = ClientHelloInput {
             client_hello: Self::client_hello_payload(&self.message),
@@ -1113,6 +1132,7 @@ impl Accepted {
             Ok(new) => new,
             Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
         };
+        debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
         self.connection.replace_state(new);
         Ok(ServerConnection {

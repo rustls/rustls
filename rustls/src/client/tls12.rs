@@ -1196,9 +1196,7 @@ struct ExpectTraffic {
 impl State<ClientConnectionData> for ExpectTraffic {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
         match m.payload {
-            MessagePayload::ApplicationData(payload) => cx
-                .common
-                .take_received_plaintext(payload),
+            MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
             payload => {
                 return Err(inappropriate_message(
                     &payload,
