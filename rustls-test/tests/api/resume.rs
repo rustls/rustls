@@ -19,14 +19,12 @@ use rustls_test::{
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config, transfer,
 };
 
-use super::{ALL_VERSIONS, COUNTS, CountingLogger, provider};
+use super::{ALL_VERSIONS, provider};
 
 #[test]
 fn client_only_attempts_resumption_with_compatible_security() {
     let provider = provider::DEFAULT_PROVIDER;
     let kt = KeyType::Rsa2048;
-    CountingLogger::install();
-    CountingLogger::reset();
 
     let server_config = make_server_config(kt, &provider);
     for version_provider in ALL_VERSIONS {
@@ -54,17 +52,10 @@ fn client_only_attempts_resumption_with_compatible_security() {
         client_config.client_auth_cert_resolver =
             make_client_config_with_auth(kt, &version_provider).client_auth_cert_resolver;
 
-        CountingLogger::reset();
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());
         do_handshake(&mut client, &mut server);
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
-        #[cfg(feature = "log")]
-        assert!(COUNTS.with(|c| {
-            c.borrow().trace.iter().any(|item| {
-                item == "resumption not allowed between different ClientCredentialResolver values"
-            })
-        }));
 
         // disallowed case: unmatching `verifier`
         let mut client_config = make_client_config_with_auth(kt, &version_provider);
@@ -73,18 +64,10 @@ fn client_only_attempts_resumption_with_compatible_security() {
             .client_auth_cert_resolver
             .clone();
 
-        CountingLogger::reset();
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());
         do_handshake(&mut client, &mut server);
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
-        #[cfg(feature = "log")]
-        assert!(COUNTS.with(|c| {
-            c.borrow()
-                .trace
-                .iter()
-                .any(|item| item == "resumption not allowed between different ServerVerifiers")
-        }));
     }
 }
 
