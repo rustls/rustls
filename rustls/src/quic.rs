@@ -826,14 +826,16 @@ impl PacketKeySet {
     }
 }
 
-pub(crate) struct KeyBuilder<'a> {
+/// Helper for building QUIC packet and header protection keys
+pub struct KeyBuilder<'a> {
     expander: Box<dyn HkdfExpander>,
     version: Version,
     alg: &'a dyn Algorithm,
 }
 
 impl<'a> KeyBuilder<'a> {
-    pub(crate) fn new(
+    /// Create a new KeyBuilder
+    pub fn new(
         secret: &OkmBlock,
         version: Version,
         alg: &'a dyn Algorithm,
@@ -847,7 +849,7 @@ impl<'a> KeyBuilder<'a> {
     }
 
     /// Derive packet keys
-    pub(crate) fn packet_key(&self) -> Box<dyn PacketKey> {
+    pub fn packet_key(&self) -> Box<dyn PacketKey> {
         let aead_key_len = self.alg.aead_key_len();
         let packet_key = hkdf_expand_label_aead_key(
             self.expander.as_ref(),
@@ -863,7 +865,7 @@ impl<'a> KeyBuilder<'a> {
     }
 
     /// Derive header protection keys
-    pub(crate) fn header_protection_key(&self) -> Box<dyn HeaderProtectionKey> {
+    pub fn header_protection_key(&self) -> Box<dyn HeaderProtectionKey> {
         let header_key = hkdf_expand_label_aead_key(
             self.expander.as_ref(),
             self.alg.aead_key_len(),
