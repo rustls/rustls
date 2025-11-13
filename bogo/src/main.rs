@@ -40,7 +40,7 @@ use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, Signer, SigningKey,
-    SingleCredential, aws_lc_rs, ring,
+    SingleCredential, aws_lc_rs,
 };
 use rustls::enums::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
@@ -334,7 +334,7 @@ impl SelectedProvider {
                 }
             }
 
-            Self::Ring => ring::DEFAULT_PROVIDER,
+            Self::Ring => rustls_ring::DEFAULT_PROVIDER,
         }
     }
 
@@ -2278,7 +2278,7 @@ impl compress::CertCompressor for RandomAlgorithm {
         let random_byte = {
             let mut bytes = [0];
             // nb. provider is irrelevant for this use
-            ring::DEFAULT_PROVIDER
+            rustls_ring::DEFAULT_PROVIDER
                 .secure_random
                 .fill(&mut bytes)
                 .unwrap();

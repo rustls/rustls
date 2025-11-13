@@ -343,6 +343,7 @@ dependencies = [
  "env_logger",
  "nix",
  "rustls 0.24.0-dev.0",
+ "rustls-ring",
  "rustls-webpki 0.104.0-alpha.1",
 ]
 
@@ -2518,6 +2519,7 @@ dependencies = [
  "rcgen",
  "ring",
  "rustls-pki-types",
+ "rustls-ring",
  "rustls-test",
  "rustls-webpki 0.104.0-alpha.1",
  "serde",
@@ -2554,6 +2556,7 @@ dependencies = [
  "rustc-hash",
  "rustls 0.24.0-dev.0",
  "rustls-fuzzing-provider",
+ "rustls-ring",
  "rustls-test",
 ]
 
@@ -2670,6 +2673,19 @@ dependencies = [
  "rustls-provider-example",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rustls-ring"
+version = "0.1.0-dev.0"
+dependencies = [
+ "bencher",
+ "ring",
+ "rustls 0.24.0-dev.0",
+ "rustls-pki-types",
+ "rustls-test",
+ "rustls-webpki 0.104.0-alpha.1",
+ "subtle",
 ]
 
 [[package]]

@@ -2,19 +2,19 @@ use alloc::boxed::Box;
 
 use ring::aead;
 
-use crate::crypto::KeyExchangeAlgorithm;
-use crate::crypto::cipher::{
-    AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape, MessageDecrypter,
-    MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaqueMessage, OutboundPlainMessage,
-    PrefixedPayload, Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
+use rustls::crypto::KeyExchangeAlgorithm;
+use rustls::crypto::cipher::{
+    AeadKey, InboundOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
+    NONCE_LEN, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
 };
-use crate::crypto::tls12::PrfUsingHmac;
-use crate::enums::{CipherSuite, SignatureScheme};
-use crate::error::Error;
-use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
-use crate::tls12::Tls12CipherSuite;
-use crate::version::TLS12_VERSION;
+use rustls::crypto::cipher::{
+    InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
+};
+use rustls::crypto::tls12::PrfUsingHmac;
+use rustls::enums::{CipherSuite, SignatureScheme};
+use rustls::error::Error;
+use rustls::version::TLS12_VERSION;
+use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls12CipherSuite};
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: &Tls12CipherSuite = &Tls12CipherSuite {
@@ -413,4 +413,89 @@ fn gcm_iv(write_iv: &[u8], explicit: &[u8]) -> Iv {
     iv[4..].copy_from_slice(explicit);
 
     Iv::new(&iv).expect("IV length is NONCE_LEN, which is within MAX_LEN")
+}
+
+const MAX_FRAGMENT_LEN: usize = 16384;
+
+#[cfg(test)]
+mod tests {
+    use crate::hmac;
+    use rustls::crypto::hmac::Hmac;
+    use rustls::crypto::tls12::prf;
+
+    // Below known answer tests come from https://mailarchive.ietf.org/arch/msg/tls/fzVCzk-z3FShgGJ6DOXqM1ydxms/
+
+    #[test]
+    fn check_sha256() {
+        let secret = b"\x9b\xbe\x43\x6b\xa9\x40\xf0\x17\xb1\x76\x52\x84\x9a\x71\xdb\x35";
+        let seed = b"\xa0\xba\x9f\x93\x6c\xda\x31\x18\x27\xa6\xf7\x96\xff\xd5\x19\x8c";
+        let label = b"test label";
+        let expect = include_bytes!("test-data/prf-result.1.bin");
+        let mut output = [0u8; 100];
+
+        prf(
+            &mut output,
+            &*hmac::HMAC_SHA256.with_key(secret),
+            label,
+            seed,
+        );
+        assert_eq!(expect.len(), output.len());
+        assert_eq!(expect.to_vec(), output.to_vec());
+    }
+
+    #[test]
+    fn check_sha512() {
+        let secret = b"\xb0\x32\x35\x23\xc1\x85\x35\x99\x58\x4d\x88\x56\x8b\xbb\x05\xeb";
+        let seed = b"\xd4\x64\x0e\x12\xe4\xbc\xdb\xfb\x43\x7f\x03\xe6\xae\x41\x8e\xe5";
+        let label = b"test label";
+        let expect = include_bytes!("test-data/prf-result.2.bin");
+        let mut output = [0u8; 196];
+
+        prf(
+            &mut output,
+            &*hmac::HMAC_SHA512.with_key(secret),
+            label,
+            seed,
+        );
+        assert_eq!(expect.len(), output.len());
+        assert_eq!(expect.to_vec(), output.to_vec());
+    }
+
+    #[test]
+    fn check_sha384() {
+        let secret = b"\xb8\x0b\x73\x3d\x6c\xee\xfc\xdc\x71\x56\x6e\xa4\x8e\x55\x67\xdf";
+        let seed = b"\xcd\x66\x5c\xf6\xa8\x44\x7d\xd6\xff\x8b\x27\x55\x5e\xdb\x74\x65";
+        let label = b"test label";
+        let expect = include_bytes!("test-data/prf-result.3.bin");
+        let mut output = [0u8; 148];
+
+        prf(
+            &mut output,
+            &*hmac::HMAC_SHA384.with_key(secret),
+            label,
+            seed,
+        );
+        assert_eq!(expect.len(), output.len());
+        assert_eq!(expect.to_vec(), output.to_vec());
+    }
+}
+
+#[cfg(bench)]
+mod benchmarks {
+    use crate::crypto::hmac::Hmac;
+    use crate::crypto::ring::hmac;
+    use crate::crypto::tls12::prf;
+
+    #[bench]
+    fn bench_sha256(b: &mut test::Bencher) {
+        let label = &b"extended master secret"[..];
+        let seed = [0u8; 32];
+        let key = &b"secret"[..];
+
+        b.iter(|| {
+            let mut out = [0u8; 48];
+            prf(&mut out, &*hmac::HMAC_SHA256.with_key(key), &label, &seed);
+            test::black_box(out);
+        });
+    }
 }

@@ -8,7 +8,8 @@ publish = false
 base64 = { workspace = true }
 env_logger = { workspace = true }
 nix = { version = "0.30", default-features = false, features = ["signal"] }
-rustls = { path = "../rustls", features = ["aws-lc-rs", "ring"] }
+rustls = { path = "../rustls", features = ["aws-lc-rs"] }
+rustls-ring = { path = "../rustls-ring" }
 webpki = { workspace = true }
 
 [features]
