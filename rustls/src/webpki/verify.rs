@@ -266,14 +266,16 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "ring")]
     #[test]
     fn webpki_supported_algorithms_is_debug() {
         assert_eq!(
-            "WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }",
+            "WebPkiSupportedAlgorithms { all: [ .. ], mapping: [] }",
             format!(
                 "{:?}",
-                crate::crypto::ring::DEFAULT_PROVIDER.signature_verification_algorithms
+                WebPkiSupportedAlgorithms {
+                    all: &[],
+                    mapping: &[]
+                }
             )
         );
     }
