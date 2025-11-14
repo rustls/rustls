@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use core::hash::{Hash, Hasher};
 use core::iter;
 
 use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
@@ -13,7 +14,7 @@ use crate::error::{ApiMisuse, Error, InconsistentKeys, InvalidMessage, PeerIncom
 use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
-use crate::{SignerPublicKey, x509};
+use crate::{DynHasher, SignerPublicKey, x509};
 
 /// Server certificate resolver which always resolves to the same identity and key.
 ///
@@ -22,7 +23,7 @@ use crate::{SignerPublicKey, x509};
 ///
 /// [`ConfigBuilder::with_server_credential_resolver()`]: crate::ConfigBuilder::with_server_credential_resolver
 /// [`ConfigBuilder::with_client_credential_resolver()`]: crate::ConfigBuilder::with_client_credential_resolver
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub struct SingleCredential {
     credentials: Credentials,
     types: &'static [CertificateType],
@@ -56,6 +57,10 @@ impl ClientCredentialResolver for SingleCredential {
 
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         self.types
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.hash(&mut DynHasher(h));
     }
 }
 
@@ -168,6 +173,13 @@ impl Credentials {
     }
 }
 
+impl Hash for Credentials {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.identity.hash(state);
+        self.ocsp.hash(state);
+    }
+}
+
 /// A packaged-together certificate chain and one-time-use signer.
 ///
 /// This is used in the [`ClientCredentialResolver`] and [`ServerCredentialResolver`] traits
@@ -186,7 +198,7 @@ pub struct SelectedCredential {
 
 /// A peer's identity, depending on the negotiated certificate type.
 #[non_exhaustive]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Identity<'a> {
     /// A standard X.509 certificate chain.
     ///
@@ -330,7 +342,7 @@ where
 
 /// Data required to verify the peer's identity.
 #[non_exhaustive]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CertificateIdentity<'a> {
     /// Certificate for the entity being verified.
     pub end_entity: CertificateDer<'a>,

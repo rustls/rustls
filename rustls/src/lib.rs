@@ -395,8 +395,6 @@ mod test_macros;
 mod sync {
     #[expect(clippy::disallowed_types)]
     pub(crate) type Arc<T> = alloc::sync::Arc<T>;
-    #[expect(clippy::disallowed_types)]
-    pub(crate) type Weak<T> = alloc::sync::Weak<T>;
 }
 
 #[expect(unnameable_types)]
@@ -538,9 +536,9 @@ pub mod client {
 
     pub use builder::WantsClientCert;
     pub use client_conn::{
-        ClientConfig, ClientConnectionData, ClientCredentialResolver, ClientSessionStore,
-        CredentialRequest, EarlyDataError, MayEncryptEarlyData, Resumption, Tls12Resumption,
-        UnbufferedClientConnection,
+        ClientConfig, ClientConnectionData, ClientCredentialResolver, ClientSessionKey,
+        ClientSessionStore, CredentialRequest, EarlyDataError, MayEncryptEarlyData, Resumption,
+        Tls12Resumption, UnbufferedClientConnection,
     };
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
@@ -673,3 +671,22 @@ const TEST_PROVIDERS: &[&crypto::CryptoProvider] = &[
     #[cfg(feature = "ring")]
     &crypto::ring::DEFAULT_PROVIDER,
 ];
+
+mod core_hash_polyfill {
+    use core::hash::Hasher;
+
+    /// Working around `core::hash::Hasher` not being dyn-compatible
+    pub(super) struct DynHasher<'a>(pub(crate) &'a mut dyn Hasher);
+
+    impl Hasher for DynHasher<'_> {
+        fn finish(&self) -> u64 {
+            self.0.finish()
+        }
+
+        fn write(&mut self, bytes: &[u8]) {
+            self.0.write(bytes)
+        }
+    }
+}
+
+pub(crate) use core_hash_polyfill::DynHasher;

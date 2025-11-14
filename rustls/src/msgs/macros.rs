@@ -24,7 +24,7 @@ macro_rules! enum_builder {
         $(#[doc = $comment])*
         $(#[$metas])*
         #[non_exhaustive]
-        #[derive(PartialEq, Eq, Clone, Copy)]
+        #[derive(PartialEq, Eq, Clone, Copy, Hash)]
         $enum_vis enum $enum_name {
             $(
                 $(#[$enum_metas])*

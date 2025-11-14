@@ -5,6 +5,7 @@
 //! pre-configured raw public keys for the verification of the peer.
 
 mod client {
+    use core::hash::Hasher;
     use std::io::{self, Read, Write};
     use std::net::TcpStream;
     use std::sync::Arc;
@@ -130,6 +131,10 @@ mod client {
 
         fn supported_certificate_types(&self) -> &'static [CertificateType] {
             &[CertificateType::RawPublicKey]
+        }
+
+        fn hash_config(&self, _: &mut dyn Hasher) {
+            // XXX: a non-test implementation would hash its configuration here.
         }
     }
 }

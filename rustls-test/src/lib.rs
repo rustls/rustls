@@ -13,6 +13,7 @@
 )]
 #![allow(clippy::new_without_default)]
 
+use core::hash::Hasher;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 use std::borrow::Cow;
@@ -22,7 +23,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use rustls::client::danger::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
-use rustls::client::{ServerVerifierBuilder, UnbufferedClientConnection, WebPkiServerVerifier};
+use rustls::client::{
+    ClientSessionKey, ServerVerifierBuilder, UnbufferedClientConnection, WebPkiServerVerifier,
+};
 use rustls::crypto::cipher::{
     InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage, PlainMessage,
 };
@@ -624,29 +627,35 @@ pub fn make_client_config_with_raw_key_support(
 pub trait ClientConfigExt {
     fn finish(self, kt: KeyType) -> ClientConfig;
     fn finish_with_creds(self, kt: KeyType) -> ClientConfig;
+    fn add_root_certs(
+        self,
+        kt: KeyType,
+    ) -> rustls::ConfigBuilder<ClientConfig, rustls::client::WantsClientCert>;
 }
 
 impl ClientConfigExt for rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     fn finish(self, kt: KeyType) -> ClientConfig {
-        let mut root_store = RootCertStore::empty();
-        root_store.add_parsable_certificates(
-            CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
-        );
-
-        self.with_root_certificates(root_store)
+        self.add_root_certs(kt)
             .with_no_client_auth()
             .unwrap()
     }
 
     fn finish_with_creds(self, kt: KeyType) -> ClientConfig {
+        self.add_root_certs(kt)
+            .with_client_auth_cert(kt.client_identity(), kt.client_key())
+            .unwrap()
+    }
+
+    fn add_root_certs(
+        self,
+        kt: KeyType,
+    ) -> rustls::ConfigBuilder<ClientConfig, rustls::client::WantsClientCert> {
         let mut root_store = RootCertStore::empty();
         root_store.add_parsable_certificates(
             CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
         );
 
         self.with_root_certificates(root_store)
-            .with_client_auth_cert(kt.client_identity(), kt.client_key())
-            .unwrap()
     }
 }
 
@@ -1174,6 +1183,8 @@ impl ServerVerifier for MockServerVerifier {
             true => &[CertificateType::RawPublicKey],
         }
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 impl MockServerVerifier {
@@ -1871,13 +1882,13 @@ mod plaintext {
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // complete mock, but not 100% used in tests
 pub enum ClientStorageOp {
-    SetKxHint(ServerName<'static>, NamedGroup),
-    GetKxHint(ServerName<'static>, Option<NamedGroup>),
-    SetTls12Session(ServerName<'static>),
-    GetTls12Session(ServerName<'static>, bool),
-    RemoveTls12Session(ServerName<'static>),
-    InsertTls13Ticket(ServerName<'static>),
-    TakeTls13Ticket(ServerName<'static>, bool),
+    SetKxHint(ClientSessionKey<'static>, NamedGroup),
+    GetKxHint(ClientSessionKey<'static>, Option<NamedGroup>),
+    SetTls12Session(ClientSessionKey<'static>),
+    GetTls12Session(ClientSessionKey<'static>, bool),
+    RemoveTls12Session(ClientSessionKey<'static>),
+    InsertTls13Ticket(ClientSessionKey<'static>),
+    TakeTls13Ticket(ClientSessionKey<'static>, bool),
 }
 
 pub struct ClientStorage {
@@ -1915,64 +1926,62 @@ impl fmt::Debug for ClientStorage {
 }
 
 impl rustls::client::ClientSessionStore for ClientStorage {
-    fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup) {
+    fn set_kx_hint(&self, key: ClientSessionKey<'static>, group: NamedGroup) {
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::SetKxHint(server_name.clone(), group));
-        self.storage
-            .set_kx_hint(server_name, group)
+            .push(ClientStorageOp::SetKxHint(key.clone(), group));
+        self.storage.set_kx_hint(key, group)
     }
 
-    fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup> {
-        let rc = self.storage.kx_hint(server_name);
+    fn kx_hint(&self, key: &ClientSessionKey<'_>) -> Option<NamedGroup> {
+        let rc = self.storage.kx_hint(key);
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::GetKxHint(server_name.to_owned(), rc));
+            .push(ClientStorageOp::GetKxHint(key.to_owned(), rc));
         rc
     }
 
     fn set_tls12_session(
         &self,
-        server_name: ServerName<'static>,
+        key: ClientSessionKey<'static>,
         value: rustls::client::Tls12ClientSessionValue,
     ) {
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::SetTls12Session(server_name.clone()));
+            .push(ClientStorageOp::SetTls12Session(key.clone()));
         self.storage
-            .set_tls12_session(server_name, value)
+            .set_tls12_session(key, value)
     }
 
     fn tls12_session(
         &self,
-        server_name: &ServerName<'_>,
+        key: &ClientSessionKey<'_>,
     ) -> Option<rustls::client::Tls12ClientSessionValue> {
-        let rc = self.storage.tls12_session(server_name);
+        let rc = self.storage.tls12_session(key);
         self.ops
             .lock()
             .unwrap()
             .push(ClientStorageOp::GetTls12Session(
-                server_name.to_owned(),
+                key.to_owned(),
                 rc.is_some(),
             ));
         rc
     }
 
-    fn remove_tls12_session(&self, server_name: &ServerName<'static>) {
+    fn remove_tls12_session(&self, key: &ClientSessionKey<'static>) {
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::RemoveTls12Session(server_name.clone()));
-        self.storage
-            .remove_tls12_session(server_name);
+            .push(ClientStorageOp::RemoveTls12Session(key.clone()));
+        self.storage.remove_tls12_session(key);
     }
 
     fn insert_tls13_ticket(
         &self,
-        server_name: ServerName<'static>,
+        key: ClientSessionKey<'static>,
         mut value: rustls::client::Tls13ClientSessionValue,
     ) {
         if let Some((expected, desired)) = self.alter_max_early_data_size {
@@ -1983,25 +1992,20 @@ impl rustls::client::ClientSessionStore for ClientStorage {
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::InsertTls13Ticket(server_name.clone()));
+            .push(ClientStorageOp::InsertTls13Ticket(key.clone()));
         self.storage
-            .insert_tls13_ticket(server_name, value);
+            .insert_tls13_ticket(key, value);
     }
 
     fn take_tls13_ticket(
         &self,
-        server_name: &ServerName<'static>,
+        key: &ClientSessionKey<'static>,
     ) -> Option<rustls::client::Tls13ClientSessionValue> {
-        let rc = self
-            .storage
-            .take_tls13_ticket(server_name);
+        let rc = self.storage.take_tls13_ticket(key);
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::TakeTls13Ticket(
-                server_name.clone(),
-                rc.is_some(),
-            ));
+            .push(ClientStorageOp::TakeTls13Ticket(key.clone(), rc.is_some()));
         rc
     }
 }

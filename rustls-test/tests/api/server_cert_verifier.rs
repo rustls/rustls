@@ -2,6 +2,7 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use core::hash::Hasher;
 use std::sync::Arc;
 
 use pki_types::UnixTime;
@@ -714,5 +715,9 @@ impl ServerVerifier for ServerVerifierWithCasExt {
     fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         println!("ServerVerifierWithCasExt::root_hint_subjects() called!");
         Some(self.ca_names.clone())
+    }
+
+    fn hash_config(&self, h: &mut dyn Hasher) {
+        self.verifier.hash_config(h)
     }
 }

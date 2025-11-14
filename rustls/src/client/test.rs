@@ -1,4 +1,5 @@
 use alloc::borrow::Cow;
+use core::hash::Hasher;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::prelude::v1::*;
 use std::sync::OnceLock;
@@ -133,7 +134,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             .with_root_certificates(roots())
             .with_no_client_auth()
             .unwrap();
-        if config.provider.fips() {
+        if config.provider().fips() {
             assert!(config.require_ems);
         } else {
             config.require_ems = true;
@@ -150,7 +151,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHello(ServerHelloPayload {
-                    random: Random::new(config.provider.secure_random).unwrap(),
+                    random: Random::new(config.provider().secure_random).unwrap(),
                     compression_method: Compression::Null,
                     cipher_suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                     legacy_version: ProtocolVersion::TLSv1_2,
@@ -330,6 +331,8 @@ impl ServerVerifier for ExpectSha1EcdsaVerifier {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         vec![SignatureScheme::ECDSA_SHA1_Legacy]
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 #[test]
@@ -539,6 +542,8 @@ impl ServerVerifier for ServerVerifierWithAuthorityNames {
     fn request_ocsp_response(&self) -> bool {
         false
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 #[derive(Debug)]
@@ -577,6 +582,8 @@ impl ServerVerifier for ServerVerifierRequiringRpk {
     fn supported_certificate_types(&self) -> &'static [CertificateType] {
         &[CertificateType::RawPublicKey]
     }
+
+    fn hash_config(&self, _: &mut dyn Hasher) {}
 }
 
 #[derive(Debug)]

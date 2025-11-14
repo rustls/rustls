@@ -397,6 +397,8 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 }
 
 mod danger {
+    use core::hash::Hasher;
+
     use rustls::Error;
     use rustls::client::danger::{
         HandshakeSignatureValid, ServerIdentity, SignatureVerificationInput,
@@ -444,6 +446,8 @@ mod danger {
         fn request_ocsp_response(&self) -> bool {
             false
         }
+
+        fn hash_config(&self, _: &mut dyn Hasher) {}
     }
 }
 
