@@ -34,6 +34,7 @@
     "BadRSAClientKeyExchange-*": "no rsa kem",
     "Basic-Server-RSA-*": "no rsa kem",
     "CBCRecordSplitting*": "no cbc suites",
+    "CertificateCipherMismatch-PSS": "no rsa kem",
     "CertificateSelection-*ClientCertificateTypes-*": "no support for CertificateRequest::certificate_types",
     "CertificateSelection-*TrustAnchorIDs-*": "no support for trust anchor IDs draft",
     "CertificateSelection-Client-SignatureAlgorithmECDSACurve-TLS-TLS12": "ClientCredentialResolver does not receive protocol version",
