@@ -94,6 +94,7 @@ struct Options {
     max_version: Option<ProtocolVersion>,
     server_ocsp_response: Vec<u8>,
     groups: Option<Vec<NamedGroup>>,
+    server_supported_group_hint: Option<NamedGroup>,
     export_keying_material: usize,
     export_keying_material_label: String,
     export_keying_material_context: String,
@@ -168,6 +169,7 @@ impl Options {
             max_version: None,
             server_ocsp_response: vec![],
             groups: None,
+            server_supported_group_hint: None,
             export_keying_material: 0,
             export_keying_material_label: "".to_string(),
             export_keying_material_context: "".to_string(),
@@ -902,24 +904,26 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     Arc::new(cfg)
 }
 
-struct ClientCacheWithoutKxHints {
+struct ClientCacheWithSpecificKxHints {
     delay: u32,
+    kx_hint: Option<NamedGroup>,
     storage: Arc<client::ClientSessionMemoryCache>,
 }
 
-impl ClientCacheWithoutKxHints {
-    fn new(delay: u32) -> Arc<Self> {
+impl ClientCacheWithSpecificKxHints {
+    fn new(delay: u32, kx_hint: Option<NamedGroup>) -> Arc<Self> {
         Arc::new(Self {
             delay,
+            kx_hint,
             storage: Arc::new(client::ClientSessionMemoryCache::new(32)),
         })
     }
 }
 
-impl client::ClientSessionStore for ClientCacheWithoutKxHints {
+impl client::ClientSessionStore for ClientCacheWithSpecificKxHints {
     fn set_kx_hint(&self, _: ServerName<'static>, _: NamedGroup) {}
     fn kx_hint(&self, _: &ServerName<'_>) -> Option<NamedGroup> {
-        None
+        self.kx_hint
     }
 
     fn set_tls12_session(
@@ -963,7 +967,7 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
     }
 }
 
-impl Debug for ClientCacheWithoutKxHints {
+impl Debug for ClientCacheWithSpecificKxHints {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         // Note: we omit self.storage here as it may contain sensitive data.
         f.debug_struct("ClientCacheWithoutKxHints")
@@ -1050,11 +1054,14 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
         false => cfg.with_no_client_auth(),
     };
 
-    cfg.resumption = Resumption::store(ClientCacheWithoutKxHints::new(opts.resumption_delay))
-        .tls12_resumption(match opts.tickets {
-            true => Tls12Resumption::SessionIdOrTickets,
-            false => Tls12Resumption::SessionIdOnly,
-        });
+    cfg.resumption = Resumption::store(ClientCacheWithSpecificKxHints::new(
+        opts.resumption_delay,
+        opts.server_supported_group_hint,
+    ))
+    .tls12_resumption(match opts.tickets {
+        true => Tls12Resumption::SessionIdOrTickets,
+        false => Tls12Resumption::SessionIdOnly,
+    });
     cfg.enable_sni = opts.use_sni;
     cfg.max_fragment_size = opts.max_fragment;
     cfg.require_ems = opts.require_ems;
@@ -1887,6 +1894,10 @@ pub fn main() {
                         .kx_groups
                         .insert(0, rustls_post_quantum::X25519MLKEM768);
                 }
+            }
+            "-server-supported-groups-hint" => {
+                let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
+                opts.server_supported_group_hint = Some(group);
             }
             "-resumption-delay" => {
                 opts.resumption_delay = args.remove(0).parse::<u32>().unwrap();
