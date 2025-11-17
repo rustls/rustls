@@ -1997,7 +1997,9 @@ pub fn main() {
             "-handshake-twice" |
             "-ignore-tls13-downgrade" |
             "-install-ddos-callback" |
+            "-key-shares" |
             "-no-op-extra-handshake" |
+            "-no-key-shares" |
             "-no-rsa-pss-rsae-certs" |
             "-on-initial-expect-peer-cert-file" |
             "-on-initial-tls13-variant" |
