@@ -245,6 +245,445 @@ impl Options {
             _ => panic!("nonsense version constraint"),
         }
     }
+
+    fn parse_one(&mut self, args: &mut Vec<String>) {
+        let arg = args.remove(0);
+        match arg.as_ref() {
+            "-port" => {
+                self.port = args.remove(0).parse::<u16>().unwrap();
+            }
+            "-shim-id" => {
+                self.shim_id = args.remove(0).parse::<u64>().unwrap();
+            }
+            "-server" => {
+                self.side = Side::Server;
+            }
+            "-key-file" => {
+                self.credentials.last_mut().key_file = args.remove(0);
+            }
+            "-new-x509-credential" => {
+                self.credentials.additional.push(Credential::default());
+            }
+            "-expect-selected-credential" => {
+                self.credentials.expect_selected = args.remove(0).parse::<isize>().ok();
+            }
+            "-cert-file" => {
+                self.credentials.last_mut().cert_file = args.remove(0);
+            }
+            "-trust-cert" => {
+                self.trusted_cert_file = args.remove(0);
+            }
+            "-resume-count" => {
+                self.resumes = args.remove(0).parse::<usize>().unwrap();
+            }
+            "-no-tls13" => {
+                self.support_tls13 = false;
+            }
+            "-no-tls12" => {
+                self.support_tls12 = false;
+            }
+            "-min-version" => {
+                let min = args.remove(0).parse::<u16>().unwrap();
+                self.min_version = Some(ProtocolVersion::Unknown(min));
+            }
+            "-max-version" => {
+                let max = args.remove(0).parse::<u16>().unwrap();
+                self.max_version = Some(ProtocolVersion::Unknown(max));
+            }
+            "-max-send-fragment" => {
+                let max_fragment = args.remove(0).parse::<usize>().unwrap();
+                self.max_fragment = Some(max_fragment + 5); // ours includes header
+            }
+            "-read-size" => {
+                let rdsz = args.remove(0).parse::<usize>().unwrap();
+                self.read_size = rdsz;
+            }
+            "-tls13-variant" => {
+                let variant = args.remove(0).parse::<u16>().unwrap();
+                if variant != 1 {
+                    println!("NYI TLS1.3 variant selection: {arg:?} {variant:?}");
+                    process::exit(BOGO_NACK);
+                }
+            }
+            "-no-ticket" => {
+                self.tickets = false;
+            }
+            "-on-resume-no-ticket" => {
+                self.resume_with_tickets_disabled = true;
+            }
+            "-signing-prefs" => {
+                let alg = args.remove(0).parse::<u16>().unwrap();
+                self.credentials.last_mut().use_signing_scheme = Some(alg);
+            }
+            "-must-match-issuer" => {
+                self.credentials.last_mut().must_match_issuer = true;
+            }
+            "-use-client-ca-list" => {
+                match args.remove(0).as_ref() {
+                    "<EMPTY>" | "<NULL>" => {
+                        self.root_hint_subjects = vec![];
+                    }
+                    list => {
+                        self.root_hint_subjects = list.split(',')
+                            .map(|entry| DistinguishedName::from(decode_hex(entry)))
+                            .collect();
+                    }
+                }
+            }
+            "-verify-prefs" => {
+                lookup_scheme(args.remove(0).parse::<u16>().unwrap());
+            }
+            "-expect-curve-id" => {
+                self.expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
+            }
+            "-on-initial-expect-curve-id" => {
+                self.on_initial_expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
+            }
+            "-on-resume-expect-curve-id" => {
+                self.on_resume_expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
+            }
+            "-max-cert-list" |
+            "-expect-peer-signature-algorithm" |
+            "-expect-peer-verify-pref" |
+            "-expect-advertised-alpn" |
+            "-expect-alpn" |
+            "-on-initial-expect-alpn" |
+            "-on-resume-expect-alpn" |
+            "-on-retry-expect-alpn" |
+            "-expect-server-name" |
+            "-expect-ocsp-response" |
+            "-expect-signed-cert-timestamps" |
+            "-expect-certificate-types" |
+            "-expect-client-ca-list" |
+            "-on-initial-expect-early-data-reason" |
+            "-on-initial-expect-cipher" |
+            "-on-resume-expect-cipher" |
+            "-on-retry-expect-cipher" |
+            "-expect-ticket-age-skew" |
+            "-handshaker-path" |
+            "-application-settings" |
+            "-expect-msg-callback" => {
+                println!("not checking {} {}; NYI", arg, args.remove(0));
+            }
+
+            "-expect-secure-renegotiation" |
+            "-expect-no-session-id" |
+            "-enable-ed25519" |
+            "-on-resume-expect-no-offer-early-data" |
+            "-expect-tls13-downgrade" |
+            "-enable-signed-cert-timestamps" |
+            "-expect-session-id" => {
+                println!("not checking {arg}; NYI");
+            }
+
+            "-key-update" => {
+                self.send_key_update = true;
+            }
+            "-expect-hrr" => {
+                self.expect_handshake_kind = Some(vec![HandshakeKind::FullWithHelloRetryRequest]);
+                self.expect_handshake_kind_resumed = Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
+            }
+            "-expect-no-hrr" => {
+                self.expect_handshake_kind = Some(vec![HandshakeKind::Full]);
+            }
+            "-on-retry-expect-early-data-reason" | "-on-resume-expect-early-data-reason" => {
+                if args.remove(0) == "hello_retry_request" {
+                    self.expect_handshake_kind_resumed = Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
+                }
+            }
+            "-expect-session-miss" => {
+                self.expect_handshake_kind_resumed = Some(vec![
+                    HandshakeKind::Full,
+                    HandshakeKind::FullWithHelloRetryRequest
+                ]);
+            }
+            "-export-keying-material" => {
+                self.export_keying_material = args.remove(0).parse::<usize>().unwrap();
+            }
+            "-export-label" => {
+                self.export_keying_material_label = args.remove(0);
+            }
+            "-export-context" => {
+                self.export_keying_material_context = args.remove(0);
+            }
+            "-use-export-context" => {
+                self.export_keying_material_context_used = true;
+            }
+            "-export-traffic-secrets" => {
+                self.export_traffic_secrets = true;
+            }
+            "-quic-transport-params" => {
+                self.quic_transport_params = BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                    .expect("invalid base64");
+            }
+            "-expect-quic-transport-params" => {
+                self.expect_quic_transport_params = BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                    .expect("invalid base64");
+            }
+
+            "-ocsp-response" => {
+                self.server_ocsp_response = Arc::from(BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                    .expect("invalid base64"));
+            }
+            "-select-alpn" => {
+                self.protocols.push(args.remove(0));
+            }
+            "-require-any-client-certificate" => {
+                self.require_any_client_cert = true;
+            }
+            "-verify-peer" => {
+                self.verify_peer = true;
+            }
+            "-shim-writes-first" => {
+                self.queue_data = true;
+            }
+            "-read-with-unfinished-write" => {
+                self.queue_data = true;
+                self.only_write_one_byte_after_handshake = true;
+            }
+            "-shim-shuts-down" => {
+                self.shut_down_after_handshake = true;
+            }
+            "-check-close-notify" => {
+                self.check_close_notify = true;
+            }
+            "-host-name" => {
+                self.host_name = args.remove(0);
+                self.use_sni = true;
+            }
+            "-advertise-alpn" => {
+                self.protocols = split_protocols(&args.remove(0));
+            }
+            "-reject-alpn" => {
+                self.reject_alpn = true;
+            }
+            "-use-null-client-ca-list" => {
+                self.offer_no_client_cas = true;
+            }
+            "-enable-early-data" => {
+                self.tickets = false;
+                self.enable_early_data = true;
+            }
+            "-on-resume-shim-writes-first" => {
+                self.queue_data_on_resume = true;
+            }
+            "-on-resume-read-with-unfinished-write" => {
+                self.queue_data_on_resume = true;
+                self.only_write_one_byte_after_handshake_on_resume = true;
+            }
+            "-on-resume-early-write-after-message" => {
+                self.queue_early_data_after_received_messages= match args.remove(0).parse::<u8>().unwrap() {
+                    // estimate where these messages appear in the server's first flight.
+                    2 => vec![5 + 128 + 5 + 32],
+                    8 => vec![5 + 128 + 5 + 32, 5 + 64],
+                    _ => {
+                        panic!("unhandled -on-resume-early-write-after-message");
+                    }
+                };
+                self.queue_data_on_resume = true;
+            }
+            "-expect-ticket-supports-early-data" => {
+                self.expect_ticket_supports_early_data = true;
+            }
+            "-expect-accept-early-data" |
+            "-on-resume-expect-accept-early-data" => {
+                self.expect_accept_early_data = true;
+            }
+            "-expect-early-data-reason" |
+            "-on-resume-expect-reject-early-data-reason" => {
+                let reason = args.remove(0);
+                match reason.as_str() {
+                    "disabled" | "protocol_version" => {
+                        self.expect_reject_early_data = true;
+                    }
+                    _ => {
+                        println!("NYI early data reason: {reason}");
+                        process::exit(1);
+                    }
+                }
+            }
+            "-expect-reject-early-data" |
+            "-on-resume-expect-reject-early-data" => {
+                self.expect_reject_early_data = true;
+            }
+            "-expect-version" => {
+                self.expect_version = args.remove(0).parse::<u16>().unwrap();
+            }
+            "-curves" => {
+                let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
+                self.groups.get_or_insert(Vec::new()).push(group);
+            }
+            "-server-supported-groups-hint" => {
+                let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
+                self.server_supported_group_hint = Some(group);
+            }
+            "-resumption-delay" => {
+                self.resumption_delay = args.remove(0).parse::<u32>().unwrap();
+                align_time();
+            }
+            "-expect-extended-master-secret" => {
+                self.require_ems = true;
+            }
+            "-install-cert-compression-algs" => {
+                self.install_cert_compression_algs = CompressionAlgs::All;
+            }
+            "-install-one-cert-compression-alg" => {
+                self.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
+            }
+            #[cfg(feature = "fips")]
+            "-fips-202205" if self.selected_provider == SelectedProvider::AwsLcRsFips => {
+                self.provider = rustls::crypto::default_fips_provider();
+            }
+            "-fips-202205" => {
+                println!("Not a FIPS build");
+                process::exit(BOGO_NACK);
+            }
+            "-ech-config-list" => {
+                self.ech_config_list = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                    .expect("invalid ECH config base64").into());
+            }
+            "-expect-ech-accept" => {
+                self.expect_ech_accept = true;
+            }
+            "-expect-ech-retry-configs" => {
+                self.expect_ech_retry_configs = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                    .expect("invalid ECH config base64").into());
+            }
+            "-on-resume-ech-config-list" => {
+                self.on_resume_ech_config_list = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                    .expect("invalid on resume ECH config base64").into());
+            }
+            "-on-resume-expect-ech-accept" => {
+                self.on_resume_expect_ech_accept = true;
+            }
+            "-expect-no-ech-retry-configs" => {
+                self.expect_ech_retry_configs = None;
+            }
+            "-on-initial-expect-ech-accept" => {
+                self.on_initial_expect_ech_accept = true;
+            }
+            "-on-retry-expect-ech-retry-configs" => {
+                // Note: we treat this the same as -expect-ech-retry-configs
+                self.expect_ech_retry_configs = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                    .expect("invalid retry ECH config base64").into());
+            }
+            "-enable-ech-grease" => {
+                self.enable_ech_grease = true;
+            }
+            "-server-preference" => {
+                self.server_preference = true;
+            }
+            "-fail-ocsp-callback" => {
+                self.ocsp = OcspValidation::Reject;
+            }
+            "-wait-for-debugger" => {
+                #[cfg(windows)]
+                {
+                    panic("-wait-for-debugger not supported on Windows");
+                }
+                #[cfg(unix)]
+                {
+                    self.wait_for_debugger = true;
+                }
+            }
+
+            // defaults:
+            "-decline-alpn" |
+            "-enable-all-curves" |
+            "-enable-ocsp-stapling" |
+            "-expect-no-session" |
+            "-expect-ticket-renewal" |
+            "-forbid-renegotiation-after-handshake" |
+            "-handoff" |
+            "-ipv6" |
+            "-no-ssl3" |
+            "-no-tls1" |
+            "-no-tls11" |
+            "-permute-extensions" |
+            "-renegotiate-ignore" |
+            "-use-ocsp-callback" |
+            // internal openssl details:
+            "-async" |
+            "-implicit-handshake" |
+            "-use-old-client-cert-callback" |
+            "-use-early-callback" => {}
+
+            // Not implemented things
+            "-advertise-empty-npn" |
+            "-advertise-npn" |
+            "-allow-hint-mismatch" |
+            "-allow-unknown-alpn-protos" |
+            "-cipher" |
+            "-cnsa-202407" |
+            "-digest-prefs" |
+            "-dtls" |
+            "-enable-channel-id" |
+            "-enable-client-custom-extension" |
+            "-enable-grease" |
+            "-enable-server-custom-extension" |
+            "-expect-channel-id" |
+            "-expect-cipher-aes" |
+            "-expect-dhe-group-size" |
+            "-expect-draft-downgrade" |
+            "-expect-early-data-info" |
+            "-expect-not-resumable-across-names" |
+            "-expect-peer-cert-file" |
+            "-expect-resumable-across-names" |
+            "-expect-verify-result" |
+            "-export-early-keying-material" |
+            "-fail-cert-callback" |
+            "-fail-early-callback" |
+            "-fallback-scsv" |
+            "-false-start" |
+            "-handshake-twice" |
+            "-ignore-tls13-downgrade" |
+            "-install-ddos-callback" |
+            "-key-shares" |
+            "-no-op-extra-handshake" |
+            "-no-key-shares" |
+            "-no-server-name-ack" |
+            "-no-rsa-pss-rsae-certs" |
+            "-on-initial-expect-peer-cert-file" |
+            "-on-initial-tls13-variant" |
+            "-on-resume-enable-early-data" |
+            "-on-resume-export-early-keying-material" |
+            "-on-resume-verify-fail" |
+            "-psk" |
+            "-renegotiate-freely" |
+            "-resumption-across-names-enabled" |
+            "-retain-only-sha256-client-cert-initial" |
+            "-reverify-on-resume" |
+            "-select-empty-next-proto" |
+            "-select-next-proto" |
+            "-send-alert" |
+            "-send-channel-id" |
+            "-signed-cert-timestamps" |
+            "-srtp-profiles" |
+            "-ticket-key" |
+            "-tls-unique" |
+            "-use-custom-verify-callback" |
+            "-use-exporter-between-reads" |
+            "-use-ticket-aead-callback" |
+            "-use-ticket-callback" |
+            "-verify-fail" |
+            "-wpa-202304"  => {
+                println!("NYI option {arg:?}");
+                process::exit(BOGO_NACK);
+            }
+
+            "-print-rustls-provider" => {
+                println!("{}", "*".repeat(66));
+                println!("rustls provider is {:?}", self.selected_provider);
+                println!("{}", "*".repeat(66));
+                process::exit(0);
+            }
+
+            _ => {
+                println!("unhandled option {arg:?}");
+                process::exit(1);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -1623,442 +2062,7 @@ pub fn main() {
     let mut opts = Options::new();
 
     while !args.is_empty() {
-        let arg = args.remove(0);
-        match arg.as_ref() {
-            "-port" => {
-                opts.port = args.remove(0).parse::<u16>().unwrap();
-            }
-            "-shim-id" => {
-                opts.shim_id = args.remove(0).parse::<u64>().unwrap();
-            }
-            "-server" => {
-                opts.side = Side::Server;
-            }
-            "-key-file" => {
-                opts.credentials.last_mut().key_file = args.remove(0);
-            }
-            "-new-x509-credential" => {
-                opts.credentials.additional.push(Credential::default());
-            }
-            "-expect-selected-credential" => {
-                opts.credentials.expect_selected = args.remove(0).parse::<isize>().ok();
-            }
-            "-cert-file" => {
-                opts.credentials.last_mut().cert_file = args.remove(0);
-            }
-            "-trust-cert" => {
-                opts.trusted_cert_file = args.remove(0);
-            }
-            "-resume-count" => {
-                opts.resumes = args.remove(0).parse::<usize>().unwrap();
-            }
-            "-no-tls13" => {
-                opts.support_tls13 = false;
-            }
-            "-no-tls12" => {
-                opts.support_tls12 = false;
-            }
-            "-min-version" => {
-                let min = args.remove(0).parse::<u16>().unwrap();
-                opts.min_version = Some(ProtocolVersion::Unknown(min));
-            }
-            "-max-version" => {
-                let max = args.remove(0).parse::<u16>().unwrap();
-                opts.max_version = Some(ProtocolVersion::Unknown(max));
-            }
-            "-max-send-fragment" => {
-                let max_fragment = args.remove(0).parse::<usize>().unwrap();
-                opts.max_fragment = Some(max_fragment + 5); // ours includes header
-            }
-            "-read-size" => {
-                let rdsz = args.remove(0).parse::<usize>().unwrap();
-                opts.read_size = rdsz;
-            }
-            "-tls13-variant" => {
-                let variant = args.remove(0).parse::<u16>().unwrap();
-                if variant != 1 {
-                    println!("NYI TLS1.3 variant selection: {arg:?} {variant:?}");
-                    process::exit(BOGO_NACK);
-                }
-            }
-            "-no-ticket" => {
-                opts.tickets = false;
-            }
-            "-on-resume-no-ticket" => {
-                opts.resume_with_tickets_disabled = true;
-            }
-            "-signing-prefs" => {
-                let alg = args.remove(0).parse::<u16>().unwrap();
-                opts.credentials.last_mut().use_signing_scheme = Some(alg);
-            }
-            "-must-match-issuer" => {
-                opts.credentials.last_mut().must_match_issuer = true;
-            }
-            "-use-client-ca-list" => {
-                match args.remove(0).as_ref() {
-                    "<EMPTY>" | "<NULL>" => {
-                        opts.root_hint_subjects = vec![];
-                    }
-                    list => {
-                        opts.root_hint_subjects = list.split(',')
-                            .map(|entry| DistinguishedName::from(decode_hex(entry)))
-                            .collect();
-                    }
-                }
-            }
-            "-verify-prefs" => {
-                lookup_scheme(args.remove(0).parse::<u16>().unwrap());
-            }
-            "-expect-curve-id" => {
-                opts.expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
-            }
-            "-on-initial-expect-curve-id" => {
-                opts.on_initial_expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
-            }
-            "-on-resume-expect-curve-id" => {
-                opts.on_resume_expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
-            }
-            "-max-cert-list" |
-            "-expect-peer-signature-algorithm" |
-            "-expect-peer-verify-pref" |
-            "-expect-advertised-alpn" |
-            "-expect-alpn" |
-            "-on-initial-expect-alpn" |
-            "-on-resume-expect-alpn" |
-            "-on-retry-expect-alpn" |
-            "-expect-server-name" |
-            "-expect-ocsp-response" |
-            "-expect-signed-cert-timestamps" |
-            "-expect-certificate-types" |
-            "-expect-client-ca-list" |
-            "-on-initial-expect-early-data-reason" |
-            "-on-initial-expect-cipher" |
-            "-on-resume-expect-cipher" |
-            "-on-retry-expect-cipher" |
-            "-expect-ticket-age-skew" |
-            "-handshaker-path" |
-            "-application-settings" |
-            "-expect-msg-callback" => {
-                println!("not checking {} {}; NYI", arg, args.remove(0));
-            }
-
-            "-expect-secure-renegotiation" |
-            "-expect-no-session-id" |
-            "-enable-ed25519" |
-            "-on-resume-expect-no-offer-early-data" |
-            "-expect-tls13-downgrade" |
-            "-enable-signed-cert-timestamps" |
-            "-expect-session-id" => {
-                println!("not checking {arg}; NYI");
-            }
-
-            "-key-update" => {
-                opts.send_key_update = true;
-            }
-            "-expect-hrr" => {
-                opts.expect_handshake_kind = Some(vec![HandshakeKind::FullWithHelloRetryRequest]);
-                opts.expect_handshake_kind_resumed = Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
-            }
-            "-expect-no-hrr" => {
-                opts.expect_handshake_kind = Some(vec![HandshakeKind::Full]);
-            }
-            "-on-retry-expect-early-data-reason" | "-on-resume-expect-early-data-reason" => {
-                if args.remove(0) == "hello_retry_request" {
-                    opts.expect_handshake_kind_resumed = Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
-                }
-            }
-            "-expect-session-miss" => {
-                opts.expect_handshake_kind_resumed = Some(vec![
-                    HandshakeKind::Full,
-                    HandshakeKind::FullWithHelloRetryRequest
-                ]);
-            }
-            "-export-keying-material" => {
-                opts.export_keying_material = args.remove(0).parse::<usize>().unwrap();
-            }
-            "-export-label" => {
-                opts.export_keying_material_label = args.remove(0);
-            }
-            "-export-context" => {
-                opts.export_keying_material_context = args.remove(0);
-            }
-            "-use-export-context" => {
-                opts.export_keying_material_context_used = true;
-            }
-            "-export-traffic-secrets" => {
-                opts.export_traffic_secrets = true;
-            }
-            "-quic-transport-params" => {
-                opts.quic_transport_params = BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid base64");
-            }
-            "-expect-quic-transport-params" => {
-                opts.expect_quic_transport_params = BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid base64");
-            }
-
-            "-ocsp-response" => {
-                opts.server_ocsp_response = Arc::from(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid base64"));
-            }
-            "-select-alpn" => {
-                opts.protocols.push(args.remove(0));
-            }
-            "-require-any-client-certificate" => {
-                opts.require_any_client_cert = true;
-            }
-            "-verify-peer" => {
-                opts.verify_peer = true;
-            }
-            "-shim-writes-first" => {
-                opts.queue_data = true;
-            }
-            "-read-with-unfinished-write" => {
-                opts.queue_data = true;
-                opts.only_write_one_byte_after_handshake = true;
-            }
-            "-shim-shuts-down" => {
-                opts.shut_down_after_handshake = true;
-            }
-            "-check-close-notify" => {
-                opts.check_close_notify = true;
-            }
-            "-host-name" => {
-                opts.host_name = args.remove(0);
-                opts.use_sni = true;
-            }
-            "-advertise-alpn" => {
-                opts.protocols = split_protocols(&args.remove(0));
-            }
-            "-reject-alpn" => {
-                opts.reject_alpn = true;
-            }
-            "-use-null-client-ca-list" => {
-                opts.offer_no_client_cas = true;
-            }
-            "-enable-early-data" => {
-                opts.tickets = false;
-                opts.enable_early_data = true;
-            }
-            "-on-resume-shim-writes-first" => {
-                opts.queue_data_on_resume = true;
-            }
-            "-on-resume-read-with-unfinished-write" => {
-                opts.queue_data_on_resume = true;
-                opts.only_write_one_byte_after_handshake_on_resume = true;
-            }
-            "-on-resume-early-write-after-message" => {
-                opts.queue_early_data_after_received_messages= match args.remove(0).parse::<u8>().unwrap() {
-                    // estimate where these messages appear in the server's first flight.
-                    2 => vec![5 + 128 + 5 + 32],
-                    8 => vec![5 + 128 + 5 + 32, 5 + 64],
-                    _ => {
-                        panic!("unhandled -on-resume-early-write-after-message");
-                    }
-                };
-                opts.queue_data_on_resume = true;
-            }
-            "-expect-ticket-supports-early-data" => {
-                opts.expect_ticket_supports_early_data = true;
-            }
-            "-expect-accept-early-data" |
-            "-on-resume-expect-accept-early-data" => {
-                opts.expect_accept_early_data = true;
-            }
-            "-expect-early-data-reason" |
-            "-on-resume-expect-reject-early-data-reason" => {
-                let reason = args.remove(0);
-                match reason.as_str() {
-                    "disabled" | "protocol_version" => {
-                        opts.expect_reject_early_data = true;
-                    }
-                    _ => {
-                        println!("NYI early data reason: {reason}");
-                        process::exit(1);
-                    }
-                }
-            }
-            "-expect-reject-early-data" |
-            "-on-resume-expect-reject-early-data" => {
-                opts.expect_reject_early_data = true;
-            }
-            "-expect-version" => {
-                opts.expect_version = args.remove(0).parse::<u16>().unwrap();
-            }
-            "-curves" => {
-                let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
-                opts.groups.get_or_insert(Vec::new()).push(group);
-            }
-            "-server-supported-groups-hint" => {
-                let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
-                opts.server_supported_group_hint = Some(group);
-            }
-            "-resumption-delay" => {
-                opts.resumption_delay = args.remove(0).parse::<u32>().unwrap();
-                align_time();
-            }
-            "-expect-extended-master-secret" => {
-                opts.require_ems = true;
-            }
-            "-install-cert-compression-algs" => {
-                opts.install_cert_compression_algs = CompressionAlgs::All;
-            }
-            "-install-one-cert-compression-alg" => {
-                opts.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
-            }
-            #[cfg(feature = "fips")]
-            "-fips-202205" if opts.selected_provider == SelectedProvider::AwsLcRsFips => {
-                opts.provider = rustls::crypto::default_fips_provider();
-            }
-            "-fips-202205" => {
-                println!("Not a FIPS build");
-                process::exit(BOGO_NACK);
-            }
-            "-ech-config-list" => {
-                opts.ech_config_list = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid ECH config base64").into());
-            }
-            "-expect-ech-accept" => {
-                opts.expect_ech_accept = true;
-            }
-            "-expect-ech-retry-configs" => {
-                opts.expect_ech_retry_configs = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid ECH config base64").into());
-            }
-            "-on-resume-ech-config-list" => {
-                opts.on_resume_ech_config_list = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid on resume ECH config base64").into());
-            }
-            "-on-resume-expect-ech-accept" => {
-                opts.on_resume_expect_ech_accept = true;
-            }
-            "-expect-no-ech-retry-configs" => {
-                opts.expect_ech_retry_configs = None;
-            }
-            "-on-initial-expect-ech-accept" => {
-                opts.on_initial_expect_ech_accept = true;
-            }
-            "-on-retry-expect-ech-retry-configs" => {
-                // Note: we treat this the same as -expect-ech-retry-configs
-                opts.expect_ech_retry_configs = Some(BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid retry ECH config base64").into());
-            }
-            "-enable-ech-grease" => {
-                opts.enable_ech_grease = true;
-            }
-            "-server-preference" => {
-                opts.server_preference = true;
-            }
-            "-fail-ocsp-callback" => {
-                opts.ocsp = OcspValidation::Reject;
-            }
-            "-wait-for-debugger" => {
-                #[cfg(windows)]
-                {
-                    panic("-wait-for-debugger not supported on Windows");
-                }
-                #[cfg(unix)]
-                {
-                    opts.wait_for_debugger = true;
-                }
-            }
-
-            // defaults:
-            "-decline-alpn" |
-            "-enable-all-curves" |
-            "-enable-ocsp-stapling" |
-            "-expect-no-session" |
-            "-expect-ticket-renewal" |
-            "-forbid-renegotiation-after-handshake" |
-            "-handoff" |
-            "-ipv6" |
-            "-no-ssl3" |
-            "-no-tls1" |
-            "-no-tls11" |
-            "-permute-extensions" |
-            "-renegotiate-ignore" |
-            "-use-ocsp-callback" |
-            // internal openssl details:
-            "-async" |
-            "-implicit-handshake" |
-            "-use-old-client-cert-callback" |
-            "-use-early-callback" => {}
-
-            // Not implemented things
-            "-advertise-empty-npn" |
-            "-advertise-npn" |
-            "-allow-hint-mismatch" |
-            "-allow-unknown-alpn-protos" |
-            "-cipher" |
-            "-cnsa-202407" |
-            "-digest-prefs" |
-            "-dtls" |
-            "-enable-channel-id" |
-            "-enable-client-custom-extension" |
-            "-enable-grease" |
-            "-enable-server-custom-extension" |
-            "-expect-channel-id" |
-            "-expect-cipher-aes" |
-            "-expect-dhe-group-size" |
-            "-expect-draft-downgrade" |
-            "-expect-early-data-info" |
-            "-expect-not-resumable-across-names" |
-            "-expect-peer-cert-file" |
-            "-expect-resumable-across-names" |
-            "-expect-verify-result" |
-            "-export-early-keying-material" |
-            "-fail-cert-callback" |
-            "-fail-early-callback" |
-            "-fallback-scsv" |
-            "-false-start" |
-            "-handshake-twice" |
-            "-ignore-tls13-downgrade" |
-            "-install-ddos-callback" |
-            "-key-shares" |
-            "-no-op-extra-handshake" |
-            "-no-key-shares" |
-            "-no-server-name-ack" |
-            "-no-rsa-pss-rsae-certs" |
-            "-on-initial-expect-peer-cert-file" |
-            "-on-initial-tls13-variant" |
-            "-on-resume-enable-early-data" |
-            "-on-resume-export-early-keying-material" |
-            "-on-resume-verify-fail" |
-            "-psk" |
-            "-renegotiate-freely" |
-            "-resumption-across-names-enabled" |
-            "-retain-only-sha256-client-cert-initial" |
-            "-reverify-on-resume" |
-            "-select-empty-next-proto" |
-            "-select-next-proto" |
-            "-send-alert" |
-            "-send-channel-id" |
-            "-signed-cert-timestamps" |
-            "-srtp-profiles" |
-            "-ticket-key" |
-            "-tls-unique" |
-            "-use-custom-verify-callback" |
-            "-use-exporter-between-reads" |
-            "-use-ticket-aead-callback" |
-            "-use-ticket-callback" |
-            "-verify-fail" |
-            "-wpa-202304"  => {
-                println!("NYI option {arg:?}");
-                process::exit(BOGO_NACK);
-            }
-
-            "-print-rustls-provider" => {
-                println!("{}", "*".repeat(66));
-                println!("rustls provider is {:?}", opts.selected_provider);
-                println!("{}", "*".repeat(66));
-                process::exit(0);
-            }
-
-            _ => {
-                println!("unhandled option {arg:?}");
-                process::exit(1);
-            }
-        }
+        opts.parse_one(&mut args);
     }
 
     if opts.side == Side::Client
