@@ -643,11 +643,7 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
         for sig_scheme in sig_schemes.iter().copied() {
             for (i, cert) in self.additional.iter().enumerate() {
                 // if the server sends any issuer hints, respect them
-                if cert.must_match_issuer
-                    && !root_hint_subjects
-                        .iter()
-                        .any(|dn| *dn == cert.issuer_dn.as_ref())
-                {
+                if cert.must_match_issuer && !cert.any_issuer_matches_hints(root_hint_subjects) {
                     continue;
                 }
 
@@ -699,14 +695,17 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
 #[derive(Debug)]
 struct ClientCert {
     certkey: Arc<sign::CertifiedKey>,
-    issuer_dn: DistinguishedName,
+    issuer_names: Vec<DistinguishedName>,
     must_match_issuer: bool,
 }
 
 impl ClientCert {
     fn new(mut certkey: sign::CertifiedKey, meta: &Credential) -> Self {
-        let parsed_cert = webpki::EndEntityCert::try_from(certkey.cert.last().unwrap()).unwrap();
-        let issuer_dn = DistinguishedName::in_sequence(parsed_cert.issuer());
+        let mut issuer_names = Vec::new();
+        for cert in &certkey.cert {
+            let parsed_cert = webpki::EndEntityCert::try_from(cert).unwrap();
+            issuer_names.push(DistinguishedName::in_sequence(parsed_cert.issuer()));
+        }
 
         if let Some(scheme) = meta.use_signing_scheme {
             certkey.key = Arc::new(FixedSignatureSchemeSigningKey {
@@ -717,9 +716,17 @@ impl ClientCert {
 
         Self {
             certkey: Arc::new(certkey),
-            issuer_dn,
+            issuer_names,
             must_match_issuer: meta.must_match_issuer,
         }
+    }
+
+    fn any_issuer_matches_hints(&self, hints: &[&[u8]]) -> bool {
+        hints.iter().any(|dn| {
+            self.issuer_names
+                .iter()
+                .any(|issuer| *dn == issuer.as_ref())
+        })
     }
 }
 
