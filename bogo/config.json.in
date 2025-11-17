@@ -80,6 +80,7 @@
     "BadRSAClientKeyExchange-*": "no rsa kem",
     "SendClientVersion-RSA": "no rsa kem",
     "Basic-Server-RSA-*": "no rsa kem",
+    "CertificateCipherMismatch-PSS": "no rsa kem",
     "RSAKeyUsage-*": "no rsa kem",
     "*-RSA_WITH_3DES_EDE_CBC_SHA-*": "no cbc suites",
     "*_WITH_AES_128_CBC_*": "no cbc suites",
