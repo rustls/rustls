@@ -59,7 +59,91 @@ use rustls::{
     Connection, DistinguishedName, HandshakeKind, NamedGroup, RootCertStore, Side, compress,
 };
 
-static BOGO_NACK: i32 = 89;
+pub fn main() {
+    let mut args: Vec<_> = env::args().collect();
+    env_logger::init();
+
+    args.remove(0);
+
+    if !args.is_empty() && args[0] == "-is-handshaker-supported" {
+        println!("No");
+        process::exit(0);
+    }
+    println!("options: {args:?}");
+
+    let mut opts = Options::new();
+
+    while !args.is_empty() {
+        opts.parse_one(&mut args);
+    }
+
+    if opts.side == Side::Client
+        && opts.on_initial_expect_curve_id != opts.on_resume_expect_curve_id
+    {
+        // expecting server to HRR us to its desired curve
+        opts.expect_handshake_kind_resumed =
+            Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
+    }
+
+    println!("opts {opts:?}");
+
+    #[cfg(unix)]
+    if opts.wait_for_debugger {
+        // On Unix systems when -wait-for-debugger is passed from the BoGo runner
+        // we should SIGSTOP ourselves to allow a debugger to attach to the shim to
+        // continue the testing process.
+        signal::kill(Pid::from_raw(process::id() as i32), Signal::SIGSTOP).unwrap();
+    }
+
+    let key_log = Arc::new(KeyLogMemo::default());
+    let mut config = match opts.side {
+        Side::Client => SideConfig::Client(make_client_cfg(&opts, &key_log)),
+        Side::Server => SideConfig::Server(make_server_cfg(&opts, &key_log)),
+    };
+
+    for i in 0..opts.resumes + 1 {
+        assert!(opts.quic_transport_params.is_empty());
+        assert!(
+            opts.expect_quic_transport_params
+                .is_empty()
+        );
+
+        match &config {
+            SideConfig::Client(config) => {
+                let server_name = ServerName::try_from(opts.host_name.as_str())
+                    .unwrap()
+                    .to_owned();
+                let sess = ClientConnection::new(config.clone(), server_name).unwrap();
+                exec(&opts, Connection::Client(sess), &key_log, i);
+            }
+            SideConfig::Server(config) => {
+                let sess = ServerConnection::new(config.clone()).unwrap();
+                exec(&opts, Connection::Server(sess), &key_log, i);
+            }
+        }
+
+        if opts.resume_with_tickets_disabled {
+            opts.tickets = false;
+
+            match &mut config {
+                SideConfig::Server(server) => *server = make_server_cfg(&opts, &key_log),
+                SideConfig::Client(client) => *client = make_client_cfg(&opts, &key_log),
+            };
+        }
+
+        if opts.on_resume_ech_config_list.is_some() {
+            opts.ech_config_list
+                .clone_from(&opts.on_resume_ech_config_list);
+            opts.expect_ech_accept = opts.on_resume_expect_ech_accept;
+            if let SideConfig::Client(client_cfg) = &mut config {
+                *client_cfg = make_client_cfg(&opts, &key_log);
+            }
+        }
+
+        opts.expect_handshake_kind
+            .clone_from(&opts.expect_handshake_kind_resumed);
+    }
+}
 
 #[derive(Debug)]
 struct Options {
@@ -2041,92 +2125,6 @@ fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize
     }
 }
 
-pub fn main() {
-    let mut args: Vec<_> = env::args().collect();
-    env_logger::init();
-
-    args.remove(0);
-
-    if !args.is_empty() && args[0] == "-is-handshaker-supported" {
-        println!("No");
-        process::exit(0);
-    }
-    println!("options: {args:?}");
-
-    let mut opts = Options::new();
-
-    while !args.is_empty() {
-        opts.parse_one(&mut args);
-    }
-
-    if opts.side == Side::Client
-        && opts.on_initial_expect_curve_id != opts.on_resume_expect_curve_id
-    {
-        // expecting server to HRR us to its desired curve
-        opts.expect_handshake_kind_resumed =
-            Some(vec![HandshakeKind::ResumedWithHelloRetryRequest]);
-    }
-
-    println!("opts {opts:?}");
-
-    #[cfg(unix)]
-    if opts.wait_for_debugger {
-        // On Unix systems when -wait-for-debugger is passed from the BoGo runner
-        // we should SIGSTOP ourselves to allow a debugger to attach to the shim to
-        // continue the testing process.
-        signal::kill(Pid::from_raw(process::id() as i32), Signal::SIGSTOP).unwrap();
-    }
-
-    let key_log = Arc::new(KeyLogMemo::default());
-    let mut config = match opts.side {
-        Side::Client => SideConfig::Client(make_client_cfg(&opts, &key_log)),
-        Side::Server => SideConfig::Server(make_server_cfg(&opts, &key_log)),
-    };
-
-    for i in 0..opts.resumes + 1 {
-        assert!(opts.quic_transport_params.is_empty());
-        assert!(
-            opts.expect_quic_transport_params
-                .is_empty()
-        );
-
-        match &config {
-            SideConfig::Client(config) => {
-                let server_name = ServerName::try_from(opts.host_name.as_str())
-                    .unwrap()
-                    .to_owned();
-                let sess = ClientConnection::new(config.clone(), server_name).unwrap();
-                exec(&opts, Connection::Client(sess), &key_log, i);
-            }
-            SideConfig::Server(config) => {
-                let sess = ServerConnection::new(config.clone()).unwrap();
-                exec(&opts, Connection::Server(sess), &key_log, i);
-            }
-        }
-
-        if opts.resume_with_tickets_disabled {
-            opts.tickets = false;
-
-            match &mut config {
-                SideConfig::Server(server) => *server = make_server_cfg(&opts, &key_log),
-                SideConfig::Client(client) => *client = make_client_cfg(&opts, &key_log),
-            };
-        }
-
-        if opts.on_resume_ech_config_list.is_some() {
-            opts.ech_config_list
-                .clone_from(&opts.on_resume_ech_config_list);
-            opts.expect_ech_accept = opts.on_resume_expect_ech_accept;
-            if let SideConfig::Client(client_cfg) = &mut config {
-                *client_cfg = make_client_cfg(&opts, &key_log);
-            }
-        }
-
-        opts.expect_handshake_kind
-            .clone_from(&opts.expect_handshake_kind_resumed);
-    }
-}
-
 enum SideConfig {
     Client(Arc<ClientConfig>),
     Server(Arc<ServerConfig>),
@@ -2331,3 +2329,5 @@ static ALL_HPKE_SUITES: &[&dyn Hpke] = &[
     hpke::DH_KEM_X25519_HKDF_SHA256_AES_256,
     hpke::DH_KEM_X25519_HKDF_SHA256_CHACHA20_POLY1305,
 ];
+
+static BOGO_NACK: i32 = 89;
