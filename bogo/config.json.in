@@ -149,9 +149,11 @@
     "Compliance-fips-202205-TLS-Client-ECDSA_P521_SHA512": "fips approved in aws-lc-rs",
     "Compliance-fips-202205-TLS-Client-Ed25519": "fips approved in aws-lc-rs",
     "Compliance-fips-202205-TLS-Client-MLKEM": "fips pending in aws-lc-rs",
+    "Compliance-fips-202205-TLS-Client-X25519MLKEM768": "ml-kem fips pending in aws-lc-rs",
     "Compliance-fips-202205-TLS-Server-ECDSA_P521_SHA512": "fips approved in aws-lc-rs",
     "Compliance-fips-202205-TLS-Server-Ed25519": "fips approved in aws-lc-rs",
     "Compliance-fips-202205-TLS-Server-MLKEM": "fips pending in aws-lc-rs",
+    "Compliance-fips-202205-TLS-Server-X25519MLKEM768": "ml-kem fips pending in aws-lc-rs",
 #endif
 
     "__LAST__": ""
