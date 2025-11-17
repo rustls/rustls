@@ -1947,20 +1947,20 @@ pub fn main() {
             }
 
             // defaults:
-            "-enable-all-curves" |
-            "-renegotiate-ignore" |
-            "-no-tls11" |
-            "-no-tls1" |
-            "-no-ssl3" |
-            "-handoff" |
-            "-ipv6" |
             "-decline-alpn" |
-            "-permute-extensions" |
+            "-enable-all-curves" |
+            "-enable-ocsp-stapling" |
             "-expect-no-session" |
             "-expect-ticket-renewal" |
-            "-enable-ocsp-stapling" |
-            "-use-ocsp-callback" |
             "-forbid-renegotiation-after-handshake" |
+            "-handoff" |
+            "-ipv6" |
+            "-no-ssl3" |
+            "-no-tls1" |
+            "-no-tls11" |
+            "-permute-extensions" |
+            "-renegotiate-ignore" |
+            "-use-ocsp-callback" |
             // internal openssl details:
             "-async" |
             "-implicit-handshake" |
@@ -1968,61 +1968,61 @@ pub fn main() {
             "-use-early-callback" => {}
 
             // Not implemented things
-            "-dtls" |
+            "-advertise-empty-npn" |
+            "-advertise-npn" |
+            "-allow-hint-mismatch" |
+            "-allow-unknown-alpn-protos" |
             "-cipher" |
+            "-cnsa-202407" |
+            "-digest-prefs" |
+            "-dtls" |
+            "-enable-channel-id" |
+            "-enable-client-custom-extension" |
+            "-enable-grease" |
+            "-enable-server-custom-extension" |
+            "-expect-channel-id" |
+            "-expect-cipher-aes" |
+            "-expect-dhe-group-size" |
+            "-expect-draft-downgrade" |
+            "-expect-early-data-info" |
+            "-expect-not-resumable-across-names" |
+            "-expect-peer-cert-file" |
+            "-expect-resumable-across-names" |
+            "-expect-verify-result" |
+            "-export-early-keying-material" |
+            "-fail-cert-callback" |
+            "-fail-early-callback" |
+            "-fallback-scsv" |
+            "-false-start" |
+            "-handshake-twice" |
+            "-ignore-tls13-downgrade" |
+            "-install-ddos-callback" |
+            "-no-op-extra-handshake" |
+            "-no-rsa-pss-rsae-certs" |
+            "-on-initial-expect-peer-cert-file" |
+            "-on-initial-tls13-variant" |
+            "-on-resume-enable-early-data" |
+            "-on-resume-export-early-keying-material" |
+            "-on-resume-verify-fail" |
             "-psk" |
             "-renegotiate-freely" |
-            "-false-start" |
-            "-fallback-scsv" |
-            "-fail-early-callback" |
-            "-fail-cert-callback" |
-            "-install-ddos-callback" |
-            "-advertise-npn" |
-            "-advertise-empty-npn" |
-            "-verify-fail" |
-            "-expect-channel-id" |
-            "-send-channel-id" |
-            "-select-next-proto" |
+            "-resumption-across-names-enabled" |
+            "-retain-only-sha256-client-cert-initial" |
+            "-reverify-on-resume" |
             "-select-empty-next-proto" |
-            "-expect-verify-result" |
+            "-select-next-proto" |
             "-send-alert" |
-            "-digest-prefs" |
-            "-use-exporter-between-reads" |
+            "-send-channel-id" |
+            "-signed-cert-timestamps" |
+            "-srtp-profiles" |
             "-ticket-key" |
             "-tls-unique" |
-            "-enable-server-custom-extension" |
-            "-enable-client-custom-extension" |
-            "-expect-dhe-group-size" |
-            "-use-ticket-callback" |
-            "-enable-grease" |
-            "-enable-channel-id" |
-            "-expect-early-data-info" |
-            "-expect-cipher-aes" |
-            "-retain-only-sha256-client-cert-initial" |
-            "-expect-draft-downgrade" |
-            "-allow-unknown-alpn-protos" |
-            "-on-initial-tls13-variant" |
-            "-on-resume-export-early-keying-material" |
-            "-on-resume-enable-early-data" |
-            "-export-early-keying-material" |
-            "-handshake-twice" |
-            "-on-resume-verify-fail" |
-            "-reverify-on-resume" |
-            "-no-op-extra-handshake" |
-            "-expect-peer-cert-file" |
-            "-no-rsa-pss-rsae-certs" |
-            "-ignore-tls13-downgrade" |
-            "-allow-hint-mismatch" |
-            "-wpa-202304" |
-            "-cnsa-202407" |
-            "-srtp-profiles" |
+            "-use-custom-verify-callback" |
+            "-use-exporter-between-reads" |
             "-use-ticket-aead-callback" |
-            "-signed-cert-timestamps" |
-            "-on-initial-expect-peer-cert-file" |
-            "-resumption-across-names-enabled" |
-            "-expect-resumable-across-names" |
-            "-expect-not-resumable-across-names" |
-            "-use-custom-verify-callback" => {
+            "-use-ticket-callback" |
+            "-verify-fail" |
+            "-wpa-202304"  => {
                 println!("NYI option {arg:?}");
                 process::exit(BOGO_NACK);
             }
