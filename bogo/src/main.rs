@@ -61,12 +61,6 @@ use rustls::{
 
 static BOGO_NACK: i32 = 89;
 
-macro_rules! println_err(
-  ($($arg:tt)*) => { {
-    writeln!(&mut ::std::io::stderr(), $($arg)*).unwrap();
-  } }
-);
-
 #[derive(Debug)]
 struct Options {
     port: u16,
@@ -1131,7 +1125,7 @@ fn lookup_scheme(scheme: u16) -> SignatureScheme {
         // TODO: add support for Ed448
         // 0x0808 => SignatureScheme::ED448,
         _ => {
-            println_err!("Unsupported signature scheme {:04x}", scheme);
+            eprintln!("Unsupported signature scheme {:04x}", scheme);
             process::exit(BOGO_NACK);
         }
     }
@@ -1469,12 +1463,12 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
 }
 
 fn quit(why: &str) -> ! {
-    println_err!("{}", why);
+    eprintln!("{}", why);
     process::exit(0)
 }
 
 fn quit_err(why: &str) -> ! {
-    println_err!("{}", why);
+    eprintln!("{}", why);
     process::exit(1)
 }
 
@@ -1710,7 +1704,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidCertificate(e) => quit(&format!(":BAD_CERT: ({e:?})")),
         Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
         _ => {
-            println_err!("unhandled error: {:?}", err);
+            eprintln!("unhandled error: {:?}", err);
             quit(":FIXME:")
         }
     }
