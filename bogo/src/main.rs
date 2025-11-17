@@ -2000,6 +2000,7 @@ pub fn main() {
             "-key-shares" |
             "-no-op-extra-handshake" |
             "-no-key-shares" |
+            "-no-server-name-ack" |
             "-no-rsa-pss-rsae-certs" |
             "-on-initial-expect-peer-cert-file" |
             "-on-initial-tls13-variant" |
