@@ -2045,6 +2045,7 @@ pub fn main() {
             | "-on-retry-verify-fail"
             | "-key-shares"
             | "-no-key-shares"
+            | "-no-server-name-ack"
             | "-no-op-extra-handshake"
             | "-expect-peer-cert-file"
             | "-no-rsa-pss-rsae-certs"
