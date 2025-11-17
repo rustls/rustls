@@ -2043,6 +2043,8 @@ pub fn main() {
             | "-handshake-twice"
             | "-on-resume-verify-fail"
             | "-on-retry-verify-fail"
+            | "-key-shares"
+            | "-no-key-shares"
             | "-no-op-extra-handshake"
             | "-expect-peer-cert-file"
             | "-no-rsa-pss-rsae-certs"
