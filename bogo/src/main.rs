@@ -588,11 +588,7 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
         for sig_scheme in sig_schemes.iter().copied() {
             for (i, cert) in self.additional.iter().enumerate() {
                 // if the server sends any issuer hints, respect them
-                if cert.must_match_issuer
-                    && !root_hint_subjects
-                        .iter()
-                        .any(|dn| dn.as_ref() == cert.issuer_dn.as_ref())
-                {
+                if cert.must_match_issuer && !cert.any_issuer_matches_hints(root_hint_subjects) {
                     continue;
                 }
 
@@ -637,7 +633,7 @@ impl client::ClientCredentialResolver for MultipleClientCredentialResolver {
 #[derive(Debug)]
 struct ClientCert {
     certkey: Credentials,
-    issuer_dn: DistinguishedName,
+    issuer_names: Vec<DistinguishedName>,
     must_match_issuer: bool,
 }
 
@@ -647,12 +643,14 @@ impl ClientCert {
             panic!("only X.509 client certs supported");
         };
 
-        let parsed_cert = webpki::EndEntityCert::try_from(match id.intermediates.last() {
-            Some(root) => root,
-            None => &id.end_entity,
-        })
-        .unwrap();
-        let issuer_dn = DistinguishedName::in_sequence(parsed_cert.issuer());
+        let mut issuer_names = Vec::new();
+        for cert in [&id.end_entity]
+            .into_iter()
+            .chain(id.intermediates.iter())
+        {
+            let parsed_cert = webpki::EndEntityCert::try_from(cert).unwrap();
+            issuer_names.push(DistinguishedName::in_sequence(parsed_cert.issuer()));
+        }
 
         if let Some(scheme) = meta.use_signing_scheme {
             certkey.key = Box::new(FixedSignatureSchemeSigningKey {
@@ -663,9 +661,17 @@ impl ClientCert {
 
         Self {
             certkey,
-            issuer_dn,
+            issuer_names,
             must_match_issuer: meta.must_match_issuer,
         }
+    }
+
+    fn any_issuer_matches_hints(&self, hints: &[DistinguishedName]) -> bool {
+        hints.iter().any(|dn| {
+            self.issuer_names
+                .iter()
+                .any(|issuer| dn.as_ref() == issuer.as_ref())
+        })
     }
 }
 
