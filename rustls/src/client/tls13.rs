@@ -49,22 +49,6 @@ use crate::tls13::{
 use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
 
-// Extensions we expect in plaintext in the ServerHello.
-static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
-    ExtensionType::KeyShare,
-    ExtensionType::PreSharedKey,
-    ExtensionType::SupportedVersions,
-];
-
-// Only the intersection of things we offer, and those disallowed
-// in TLS1.3
-static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
-    ExtensionType::ECPointFormats,
-    ExtensionType::SessionTicket,
-    ExtensionType::RenegotiationInfo,
-    ExtensionType::ExtendedMasterSecret,
-];
-
 pub(crate) static TLS13_HANDLER: &dyn ClientHandler<Tls13CipherSuite> = &Handler;
 
 #[derive(Debug)]
@@ -1557,3 +1541,19 @@ impl KernelState for ExpectQuicTraffic {
         self.0.handle_new_ticket_impl(cx, nst)
     }
 }
+
+// Extensions we expect in plaintext in the ServerHello.
+static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
+    ExtensionType::KeyShare,
+    ExtensionType::PreSharedKey,
+    ExtensionType::SupportedVersions,
+];
+
+// Only the intersection of things we offer, and those disallowed
+// in TLS1.3
+static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
+    ExtensionType::ECPointFormats,
+    ExtensionType::SessionTicket,
+    ExtensionType::RenegotiationInfo,
+    ExtensionType::ExtendedMasterSecret,
+];
