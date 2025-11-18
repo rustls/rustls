@@ -1543,7 +1543,7 @@ impl KernelState for ExpectQuicTraffic {
 }
 
 // Extensions we expect in plaintext in the ServerHello.
-static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
+const ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
     ExtensionType::KeyShare,
     ExtensionType::PreSharedKey,
     ExtensionType::SupportedVersions,
@@ -1551,7 +1551,7 @@ static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
 
 // Only the intersection of things we offer, and those disallowed
 // in TLS1.3
-static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
+const DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ECPointFormats,
     ExtensionType::SessionTicket,
     ExtensionType::RenegotiationInfo,
