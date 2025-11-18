@@ -633,31 +633,19 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 let expected_certificate_type = exts
                     .server_certificate_type
                     .unwrap_or_default();
-                Ok(if self.hello.offered_cert_compression {
-                    Box::new(ExpectCertificateOrCompressedCertificateOrCertReq {
-                        config: self.config,
-                        server_name: self.server_name,
-                        randoms: self.randoms,
-                        suite: self.suite,
-                        transcript: self.transcript,
-                        key_schedule: self.key_schedule,
-                        ech_retry_configs,
-                        expected_certificate_type,
-                        negotiated_client_type: exts.client_certificate_type,
-                    })
-                } else {
-                    Box::new(ExpectCertificateOrCertReq {
-                        config: self.config,
-                        server_name: self.server_name,
-                        randoms: self.randoms,
-                        suite: self.suite,
-                        transcript: self.transcript,
-                        key_schedule: self.key_schedule,
-                        ech_retry_configs,
-                        expected_certificate_type,
-                        negotiated_client_type: exts.client_certificate_type,
-                    })
-                })
+                Ok(Box::new(ExpectAuthDecision {
+                    config: self.config,
+                    server_name: self.server_name,
+                    randoms: self.randoms,
+                    suite: self.suite,
+                    transcript: self.transcript,
+                    key_schedule: self.key_schedule,
+                    ech_retry_configs,
+                    expected_certificate_type,
+                    negotiated_client_type: exts.client_certificate_type,
+                    offered_cert_compression: self.hello.offered_cert_compression,
+                    client_auth: None,
+                }))
             }
         }
     }
@@ -682,7 +670,7 @@ fn check_cert_type(
     }
 }
 
-struct ExpectCertificateOrCompressedCertificateOrCertReq {
+struct ExpectAuthDecision {
     config: Arc<ClientConfig>,
     server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
@@ -692,86 +680,32 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
     expected_certificate_type: CertificateType,
     negotiated_client_type: Option<CertificateType>,
+    offered_cert_compression: bool,
+
+    /// Top level indicates whether `CertificateRequest` has been received.
+    client_auth: Option<Option<ClientAuthDetails>>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
+impl State<ClientConnectionData> for ExpectAuthDecision {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::Handshake {
-                parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
-                ..
-            } => Box::new(ExpectCertificate {
-                config: self.config,
-                server_name: self.server_name,
-                randoms: self.randoms,
-                suite: self.suite,
-                transcript: self.transcript,
-                key_schedule: self.key_schedule,
-                client_auth: None,
-                message_already_in_transcript: false,
-                ech_retry_configs: self.ech_retry_configs,
-                expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, m),
-            MessagePayload::Handshake {
-                parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
-                ..
-            } => Box::new(ExpectCompressedCertificate {
-                config: self.config,
-                server_name: self.server_name,
-                randoms: self.randoms,
-                suite: self.suite,
-                transcript: self.transcript,
-                key_schedule: self.key_schedule,
-                client_auth: None,
-                ech_retry_configs: self.ech_retry_configs,
-                expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, m),
-            MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
                 ..
-            } => Box::new(ExpectCertificateRequest {
+            } if self.client_auth.is_none() => Box::new(ExpectCertificateRequest {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
-                offered_cert_compression: true,
+                offered_cert_compression: self.offered_cert_compression,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
             })
             .handle(cx, m),
-            payload => Err(inappropriate_handshake_message(
-                &payload,
-                &[ContentType::Handshake],
-                &[
-                    HandshakeType::Certificate,
-                    HandshakeType::CertificateRequest,
-                    HandshakeType::CompressedCertificate,
-                ],
-            )),
-        }
-    }
-}
 
-struct ExpectCertificateOrCompressedCertificate {
-    config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
-    randoms: ConnectionRandoms,
-    suite: &'static Tls13CipherSuite,
-    transcript: HandshakeHash,
-    key_schedule: KeyScheduleHandshake,
-    client_auth: Option<ClientAuthDetails>,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
-    expected_certificate_type: CertificateType,
-}
-
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
-        match m.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
@@ -782,93 +716,48 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
-                client_auth: self.client_auth,
+                client_auth: self.client_auth.unwrap_or_default(),
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
+
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
                 ..
-            } => Box::new(ExpectCompressedCertificate {
+            } if self.offered_cert_compression => Box::new(ExpectCompressedCertificate {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
                 suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
-                client_auth: self.client_auth,
+                client_auth: self.client_auth.unwrap_or_default(),
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, m),
+
             payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::Handshake],
-                &[
-                    HandshakeType::Certificate,
-                    HandshakeType::CompressedCertificate,
-                ],
-            )),
-        }
-    }
-}
-
-struct ExpectCertificateOrCertReq {
-    config: Arc<ClientConfig>,
-    server_name: ServerName<'static>,
-    randoms: ConnectionRandoms,
-    suite: &'static Tls13CipherSuite,
-    transcript: HandshakeHash,
-    key_schedule: KeyScheduleHandshake,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
-    expected_certificate_type: CertificateType,
-    negotiated_client_type: Option<CertificateType>,
-}
-
-impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
-        match m.payload {
-            MessagePayload::Handshake {
-                parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
-                ..
-            } => Box::new(ExpectCertificate {
-                config: self.config,
-                server_name: self.server_name,
-                randoms: self.randoms,
-                suite: self.suite,
-                transcript: self.transcript,
-                key_schedule: self.key_schedule,
-                client_auth: None,
-                message_already_in_transcript: false,
-                ech_retry_configs: self.ech_retry_configs,
-                expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, m),
-            MessagePayload::Handshake {
-                parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
-                ..
-            } => Box::new(ExpectCertificateRequest {
-                config: self.config,
-                server_name: self.server_name,
-                randoms: self.randoms,
-                suite: self.suite,
-                transcript: self.transcript,
-                key_schedule: self.key_schedule,
-                offered_cert_compression: false,
-                ech_retry_configs: self.ech_retry_configs,
-                expected_certificate_type: self.expected_certificate_type,
-                negotiated_client_type: self.negotiated_client_type,
-            })
-            .handle(cx, m),
-            payload => Err(inappropriate_handshake_message(
-                &payload,
-                &[ContentType::Handshake],
-                &[
-                    HandshakeType::Certificate,
-                    HandshakeType::CertificateRequest,
-                ],
+                match (self.offered_cert_compression, self.client_auth.is_none()) {
+                    (true, true) => &[
+                        HandshakeType::CompressedCertificate,
+                        HandshakeType::Certificate,
+                        HandshakeType::CertificateRequest,
+                    ],
+                    (true, false) => &[
+                        HandshakeType::CompressedCertificate,
+                        HandshakeType::Certificate,
+                    ],
+                    (false, true) => &[
+                        HandshakeType::Certificate,
+                        HandshakeType::CertificateRequest,
+                    ],
+                    (false, false) => &[HandshakeType::Certificate],
+                },
             )),
         }
     }
@@ -960,32 +849,19 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             compat_compressor,
         );
 
-        Ok(if self.offered_cert_compression {
-            Box::new(ExpectCertificateOrCompressedCertificate {
-                config: self.config,
-                server_name: self.server_name,
-                randoms: self.randoms,
-                suite: self.suite,
-                transcript: self.transcript,
-                key_schedule: self.key_schedule,
-                client_auth: Some(client_auth),
-                ech_retry_configs: self.ech_retry_configs,
-                expected_certificate_type: self.expected_certificate_type,
-            })
-        } else {
-            Box::new(ExpectCertificate {
-                config: self.config,
-                server_name: self.server_name,
-                randoms: self.randoms,
-                suite: self.suite,
-                transcript: self.transcript,
-                key_schedule: self.key_schedule,
-                client_auth: Some(client_auth),
-                message_already_in_transcript: false,
-                ech_retry_configs: self.ech_retry_configs,
-                expected_certificate_type: self.expected_certificate_type,
-            })
-        })
+        Ok(Box::new(ExpectAuthDecision {
+            config: self.config,
+            server_name: self.server_name,
+            randoms: self.randoms,
+            suite: self.suite,
+            transcript: self.transcript,
+            key_schedule: self.key_schedule,
+            client_auth: Some(Some(client_auth)),
+            ech_retry_configs: self.ech_retry_configs,
+            expected_certificate_type: self.expected_certificate_type,
+            negotiated_client_type: self.negotiated_client_type,
+            offered_cert_compression: self.offered_cert_compression,
+        }))
     }
 }
 
