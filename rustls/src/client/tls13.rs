@@ -692,7 +692,7 @@ impl State<ClientConnectionData> for ExpectAuthDecision {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
                 ..
-            } if self.client_auth.is_none() => Box::new(ExpectCertificateRequest {
+            } if self.client_auth.is_none() => ExpectCertificateRequest {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -703,8 +703,8 @@ impl State<ClientConnectionData> for ExpectAuthDecision {
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
-            })
-            .handle(cx, m),
+            }
+            .handle_move(cx, m),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -779,12 +779,8 @@ struct ExpectCertificateRequest {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateRequest {
-    fn handle(
-        mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
-        m: Message<'_>,
-    ) -> hs::NextStateOrError {
+impl ExpectCertificateRequest {
+    fn handle_move(mut self, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
         let certreq = &require_handshake_msg!(
             m,
             HandshakeType::CertificateRequest,
@@ -862,6 +858,12 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             negotiated_client_type: self.negotiated_client_type,
             offered_cert_compression: self.offered_cert_compression,
         }))
+    }
+}
+
+impl State<ClientConnectionData> for ExpectCertificateRequest {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
+        self.handle_move(cx, m)
     }
 }
 
