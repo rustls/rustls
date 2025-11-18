@@ -726,7 +726,7 @@ impl State<ClientConnectionData> for ExpectAuthDecision {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
                 ..
-            } if self.offered_cert_compression => Box::new(ExpectCompressedCertificate {
+            } if self.offered_cert_compression => ExpectCompressedCertificate {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -736,8 +736,8 @@ impl State<ClientConnectionData> for ExpectAuthDecision {
                 client_auth: self.client_auth.unwrap_or_default(),
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, m),
+            }
+            .handle_move(cx, m),
 
             payload => Err(inappropriate_handshake_message(
                 &payload,
@@ -877,12 +877,8 @@ struct ExpectCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCompressedCertificate {
-    fn handle(
-        mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
-        m: Message<'_>,
-    ) -> hs::NextStateOrError {
+impl ExpectCompressedCertificate {
+    fn handle_move(mut self, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
         let compressed_cert = require_handshake_msg_move!(
             m,
@@ -959,6 +955,12 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             expected_certificate_type: self.expected_certificate_type,
         }
         .handle_move(cx, m)
+    }
+}
+
+impl State<ClientConnectionData> for ExpectCompressedCertificate {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
+        self.handle_move(cx, m)
     }
 }
 
