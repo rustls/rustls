@@ -709,7 +709,7 @@ impl State<ClientConnectionData> for ExpectAuthDecision {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
-            } => Box::new(ExpectCertificate {
+            } => ExpectCertificate {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -720,8 +720,8 @@ impl State<ClientConnectionData> for ExpectAuthDecision {
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, m),
+            }
+            .handle_move(cx, m),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
@@ -946,7 +946,7 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             )),
         };
 
-        Box::new(ExpectCertificate {
+        ExpectCertificate {
             config: self.config,
             server_name: self.server_name,
             randoms: self.randoms,
@@ -957,8 +957,8 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             message_already_in_transcript: true,
             ech_retry_configs: self.ech_retry_configs,
             expected_certificate_type: self.expected_certificate_type,
-        })
-        .handle(cx, m)
+        }
+        .handle_move(cx, m)
     }
 }
 
@@ -975,12 +975,8 @@ struct ExpectCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificate {
-    fn handle(
-        mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
-        m: Message<'_>,
-    ) -> hs::NextStateOrError {
+impl ExpectCertificate {
+    fn handle_move(mut self, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
         if !self.message_already_in_transcript {
             self.transcript.add_message(&m);
         }
@@ -1018,6 +1014,12 @@ impl State<ClientConnectionData> for ExpectCertificate {
             ech_retry_configs: self.ech_retry_configs,
             expected_certificate_type: self.expected_certificate_type,
         }))
+    }
+}
+
+impl State<ClientConnectionData> for ExpectCertificate {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
+        self.handle_move(cx, m)
     }
 }
 
