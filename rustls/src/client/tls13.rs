@@ -745,7 +745,6 @@ impl ExpectCertificateOrCompressedCertificateOrCertReq {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
-                message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             }
@@ -823,7 +822,6 @@ impl ExpectCertificateOrCompressedCertificate {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
-                message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             }
@@ -883,7 +881,6 @@ impl ExpectCertificateOrCertReq {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
-                message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             }
@@ -1021,7 +1018,6 @@ impl ExpectCertificateRequest {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
-                message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             })
@@ -1099,13 +1095,6 @@ impl ExpectCompressedCertificate {
             compressed_cert.uncompressed_len,
         );
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::CertificateTls13(cert_payload.into_owned()),
-            )),
-        };
-
         ExpectCertificate {
             config: self.config,
             server_name: self.server_name,
@@ -1114,11 +1103,10 @@ impl ExpectCompressedCertificate {
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
-            message_already_in_transcript: true,
             ech_retry_configs: self.ech_retry_configs,
             expected_certificate_type: self.expected_certificate_type,
         }
-        .handle(cx, m)
+        .handle_cert_payload(cx, cert_payload)
     }
 }
 
@@ -1130,22 +1118,29 @@ struct ExpectCertificate {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
-    message_already_in_transcript: bool,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
     expected_certificate_type: CertificateType,
 }
 
 impl ExpectCertificate {
     fn handle(mut self, cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
-        if !self.message_already_in_transcript {
-            self.transcript.add_message(&m);
-        }
-        let cert_chain = require_handshake_msg_move!(
-            m,
-            HandshakeType::Certificate,
-            HandshakePayload::CertificateTls13
-        )?;
+        self.transcript.add_message(&m);
 
+        self.handle_cert_payload(
+            cx,
+            require_handshake_msg_move!(
+                m,
+                HandshakeType::Certificate,
+                HandshakePayload::CertificateTls13
+            )?,
+        )
+    }
+
+    fn handle_cert_payload(
+        self,
+        cx: &mut ClientContext<'_>,
+        cert_chain: CertificatePayloadTls13<'_>,
+    ) -> Result<Expect, Error> {
         // This is only non-empty for client auth.
         if !cert_chain.context.0.is_empty() {
             return Err(cx.common.send_fatal_alert(
