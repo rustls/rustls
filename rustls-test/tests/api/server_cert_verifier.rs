@@ -11,9 +11,9 @@ use rustls::client::danger::{
 };
 use rustls::client::{WebPkiServerVerifier, verify_identity_signed_by_trust_anchor};
 use rustls::crypto::{Credentials, Identity, SelectedCredential};
-use rustls::enums::{AlertDescription, CertificateType, SignatureScheme};
+use rustls::enums::{CertificateType, SignatureScheme};
 use rustls::error::{
-    CertificateError, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible,
+    AlertDescription, CertificateError, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible,
 };
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{

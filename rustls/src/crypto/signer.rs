@@ -8,8 +8,8 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPubli
 use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::common_state::CommonState;
-use crate::enums::{AlertDescription, CertificateType, SignatureScheme};
-use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
+use crate::enums::{CertificateType, SignatureScheme};
+use crate::error::{AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;

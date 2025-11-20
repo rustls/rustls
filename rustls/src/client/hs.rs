@@ -18,10 +18,8 @@ use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::{CryptoProvider, KeyExchangeAlgorithm, StartedKeyExchange};
-use crate::enums::{
-    AlertDescription, CertificateType, CipherSuite, ContentType, HandshakeType, ProtocolVersion,
-};
-use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
+use crate::enums::{CertificateType, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
+use crate::error::{AlertDescription, ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
 use crate::msgs::enums::{Compression, ExtensionType};

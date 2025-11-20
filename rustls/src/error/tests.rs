@@ -188,7 +188,7 @@ fn other_error_equality() {
 
 #[test]
 fn smoke() {
-    use crate::enums::{AlertDescription, ContentType, HandshakeType};
+    use crate::enums::{ContentType, HandshakeType};
 
     let all = vec![
         Error::InappropriateMessage {
@@ -276,6 +276,14 @@ impl core::fmt::Display for TestError {
 }
 
 impl core::error::Error for TestError {}
+
+#[test]
+fn alert_description_traits() {
+    test_enum8_display::<AlertDescription>(
+        AlertDescription::CloseNotify,
+        AlertDescription::EncryptedClientHelloRequired,
+    );
+}
 
 #[test]
 fn alert_display() {

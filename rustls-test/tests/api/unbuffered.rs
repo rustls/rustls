@@ -5,8 +5,7 @@ use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
-use rustls::enums::AlertDescription;
-use rustls::error::{CertificateError, Error, InvalidMessage};
+use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage};
 use rustls::server::{ServerConnectionData, UnbufferedServerConnection};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, ReadTraffic,

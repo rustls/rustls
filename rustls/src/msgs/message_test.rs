@@ -7,7 +7,8 @@ use super::codec::Reader;
 use super::enums::AlertLevel;
 use super::message::Message;
 use crate::crypto::cipher::{Payload, PlainMessage};
-use crate::enums::{AlertDescription, HandshakeType};
+use crate::enums::HandshakeType;
+use crate::error::AlertDescription;
 use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, PayloadU24};
 
 #[test]

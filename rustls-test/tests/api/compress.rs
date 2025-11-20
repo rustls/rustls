@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
 use rustls::crypto::{Credentials, Identity, SingleCredential};
-use rustls::enums::{AlertDescription, CertificateCompressionAlgorithm};
-use rustls::error::{Error, InvalidMessage, PeerMisbehaved};
+use rustls::enums::CertificateCompressionAlgorithm;
+use rustls::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls::pki_types::CertificateDer;
 #[cfg(feature = "zlib")]

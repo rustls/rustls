@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
 use crate::crypto::cipher::{InboundPlainMessage, Payload, PlainMessage};
-use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::InvalidMessage;
+use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
+use crate::error::{AlertDescription, InvalidMessage};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};

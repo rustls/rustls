@@ -11,8 +11,10 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::hpke::{EncapsulatedSecret, Hpke, HpkePublicKey, HpkeSealer, HpkeSuite};
 use crate::enums::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
-use crate::enums::{AlertDescription, ProtocolVersion};
-use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch};
+use crate::enums::ProtocolVersion;
+use crate::error::{
+    AlertDescription, EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch,
+};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::PayloadU16;

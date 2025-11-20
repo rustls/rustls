@@ -43,10 +43,11 @@ use rustls::crypto::{
     SingleCredential, aws_lc_rs,
 };
 use rustls::enums::{
-    AlertDescription, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
-    SignatureScheme,
+    CertificateCompressionAlgorithm, CertificateType, ProtocolVersion, SignatureScheme,
 };
-use rustls::error::{CertificateError, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use rustls::error::{
+    AlertDescription, CertificateError, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
+};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::pki_types::pem::PemObject;

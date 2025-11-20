@@ -4,8 +4,7 @@
 
 use std::sync::Arc;
 
-use rustls::enums::AlertDescription;
-use rustls::error::{CertificateError, Error, InvalidMessage, PeerMisbehaved};
+use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use rustls::server::danger::PeerVerified;
 use rustls::{ClientConnection, ServerConfig, ServerConnection};
 use rustls_test::{

@@ -15,10 +15,8 @@ use crate::common_state::{
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::Identity;
-use crate::enums::{
-    AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
-};
-use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
+use crate::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
