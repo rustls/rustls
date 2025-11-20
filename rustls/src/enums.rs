@@ -1,7 +1,6 @@
 #![expect(non_camel_case_types)]
 #![expect(missing_docs)]
 use crate::crypto::hash;
-use crate::msgs::codec::{Codec, Reader};
 
 enum_builder! {
     /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken

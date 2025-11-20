@@ -2,7 +2,6 @@
 #![allow(non_camel_case_types)]
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::ProtocolVersion;
-use crate::msgs::codec::{Codec, Reader};
 
 enum_builder! {
     /// The `ClientCertificateType` TLS protocol enum.  Values in this enum are taken
@@ -364,9 +363,10 @@ pub(crate) mod tests {
     // These tests are intended to provide coverage and
     // check panic-safety of relatively unused values.
 
-    use std::prelude::v1::*;
+    use alloc::vec::Vec;
 
     use super::*;
+    use crate::msgs::codec::Codec;
 
     #[test]
     fn test_enums() {
