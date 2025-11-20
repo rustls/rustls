@@ -14,10 +14,8 @@ use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
 use crate::crypto::{ActiveKeyExchange, Identity, TicketProducer};
-use crate::enums::{
-    AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion,
-};
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
+use crate::error::{AlertDescription, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
 use crate::msgs::ccs::ChangeCipherSpecPayload;

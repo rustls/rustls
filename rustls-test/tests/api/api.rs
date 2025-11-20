@@ -14,10 +14,8 @@ use rustls::crypto::cipher::{Payload, PlainMessage};
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential, Signer, SigningKey,
 };
-use rustls::enums::{
-    AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
-};
-use rustls::error::{ApiMisuse, CertificateError, Error, PeerMisbehaved};
+use rustls::enums::{CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme};
+use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
 use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{

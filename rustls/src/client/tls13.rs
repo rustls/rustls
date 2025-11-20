@@ -23,10 +23,8 @@ use crate::crypto::{
     ActiveKeyExchange, HybridKeyExchange, Identity, SelectedCredential, SharedSecret, Signer,
     StartedKeyExchange,
 };
-use crate::enums::{
-    AlertDescription, CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
-};
-use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::PayloadU8;

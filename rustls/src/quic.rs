@@ -8,8 +8,7 @@ use core::fmt::Debug;
 use crate::common_state::Side;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
-use crate::enums::AlertDescription;
-use crate::error::Error;
+use crate::error::{AlertDescription, Error};
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
@@ -28,8 +27,8 @@ mod connection {
     use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{InboundPlainMessage, Payload};
-    use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
-    use crate::error::{ApiMisuse, Error};
+    use crate::enums::{ContentType, ProtocolVersion};
+    use crate::error::{AlertDescription, ApiMisuse, Error};
     use crate::msgs::deframer::buffers::{DeframerVecBuffer, Locator};
     use crate::msgs::handshake::{
         ClientExtensionsInput, ServerExtensionsInput, TransportParameters,

@@ -23,6 +23,7 @@ macro_rules! enum_builder {
     ) => {
         $(#[doc = $comment])*
         $(#[$metas])*
+        #[allow(missing_docs)]
         #[non_exhaustive]
         #[derive(PartialEq, Eq, Clone, Copy)]
         $enum_vis enum $enum_name {
@@ -40,6 +41,7 @@ macro_rules! enum_builder {
             ,Unknown($uint)
         }
 
+        #[allow(missing_docs)]
         impl $enum_name {
             // NOTE(allow) generated irrespective if there are callers
             #[allow(dead_code)]

@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use pki_types::DnsName;
 use rustls::crypto::CryptoProvider;
-use rustls::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
-use rustls::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
+use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
+use rustls::error::{AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use rustls::{
     ClientConfig, ClientConnection, NamedGroup, ServerConfig, ServerConnection, Stream, StreamOwned,
 };

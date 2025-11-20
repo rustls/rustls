@@ -9,8 +9,8 @@ use kernel::KernelConnection;
 
 use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::crypto::cipher::InboundPlainMessage;
-use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
-use crate::error::{ApiMisuse, Error, PeerMisbehaved};
+use crate::enums::{ContentType, ProtocolVersion};
+use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::deframer::DeframerIter;
 use crate::msgs::deframer::buffers::{BufferProgress, DeframerVecBuffer, Delocator, Locator};
 use crate::msgs::deframer::handshake::HandshakeDeframer;

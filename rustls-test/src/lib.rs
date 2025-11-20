@@ -2100,8 +2100,9 @@ pub mod macros {
 pub mod encoding {
     use rustls::NamedGroup;
     use rustls::enums::{
-        AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
+        CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
     };
+    use rustls::error::AlertDescription;
     use rustls::internal::msgs::codec::Codec;
     use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
 

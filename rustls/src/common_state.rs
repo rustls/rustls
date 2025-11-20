@@ -9,8 +9,8 @@ use crate::crypto::cipher::{
     PlainMessage,
 };
 use crate::crypto::{Identity, SupportedKxGroup};
-use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, InvalidMessage, PeerMisbehaved};
+use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
+use crate::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
