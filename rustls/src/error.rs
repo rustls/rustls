@@ -149,6 +149,158 @@ pub enum Error {
     Other(OtherError),
 }
 
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InappropriateMessage {
+                expect_types,
+                got_type,
+            } => write!(
+                f,
+                "received unexpected message: got {:?} when expecting {}",
+                got_type,
+                join::<ContentType>(expect_types)
+            ),
+            Self::InappropriateHandshakeMessage {
+                expect_types,
+                got_type,
+            } => write!(
+                f,
+                "received unexpected handshake message: got {:?} when expecting {}",
+                got_type,
+                join::<HandshakeType>(expect_types)
+            ),
+            Self::InvalidMessage(typ) => {
+                write!(f, "received corrupt message of type {typ:?}")
+            }
+            Self::PeerIncompatible(why) => write!(f, "peer is incompatible: {why:?}"),
+            Self::PeerMisbehaved(why) => write!(f, "peer misbehaved: {why:?}"),
+            Self::AlertReceived(alert) => write!(f, "received fatal alert: the peer {alert}"),
+            Self::InvalidCertificate(err) => {
+                write!(f, "invalid peer certificate: {err}")
+            }
+            Self::InvalidCertRevocationList(err) => {
+                write!(f, "invalid certificate revocation list: {err:?}")
+            }
+            Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
+            Self::DecryptError => write!(f, "cannot decrypt peer's message"),
+            Self::InvalidEncryptedClientHello(err) => {
+                write!(f, "encrypted client hello failure: {err:?}")
+            }
+            Self::EncryptError => write!(f, "cannot encrypt message"),
+            Self::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
+            Self::HandshakeNotComplete => write!(f, "handshake not complete"),
+            Self::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
+            Self::NoSuitableCertificate => write!(f, "no suitable certificate found"),
+            Self::FailedToGetCurrentTime => write!(f, "failed to get current time"),
+            Self::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
+            Self::BadMaxFragmentSize => {
+                write!(f, "the supplied max_fragment_size was too small or large")
+            }
+            Self::InconsistentKeys(why) => {
+                write!(f, "keys may not be consistent: {why:?}")
+            }
+            Self::RejectedEch(why) => {
+                write!(
+                    f,
+                    "server rejected encrypted client hello (ECH) {} retry configs",
+                    if why.can_retry() { "with" } else { "without" }
+                )
+            }
+            Self::General(err) => write!(f, "unexpected error: {err}"),
+            Self::Unreachable(err) => write!(
+                f,
+                "unreachable condition: {err} (please file a bug in rustls)"
+            ),
+            Self::ApiMisuse(why) => write!(f, "API misuse: {why:?}"),
+            Self::Other(err) => write!(f, "other error: {err}"),
+        }
+    }
+}
+
+impl From<InconsistentKeys> for Error {
+    #[inline]
+    fn from(e: InconsistentKeys) -> Self {
+        Self::InconsistentKeys(e)
+    }
+}
+
+impl From<InvalidMessage> for Error {
+    #[inline]
+    fn from(e: InvalidMessage) -> Self {
+        Self::InvalidMessage(e)
+    }
+}
+
+impl From<PeerMisbehaved> for Error {
+    #[inline]
+    fn from(e: PeerMisbehaved) -> Self {
+        Self::PeerMisbehaved(e)
+    }
+}
+
+impl From<PeerIncompatible> for Error {
+    #[inline]
+    fn from(e: PeerIncompatible) -> Self {
+        Self::PeerIncompatible(e)
+    }
+}
+
+impl From<CertificateError> for Error {
+    #[inline]
+    fn from(e: CertificateError) -> Self {
+        Self::InvalidCertificate(e)
+    }
+}
+
+impl From<CertRevocationListError> for Error {
+    #[inline]
+    fn from(e: CertRevocationListError) -> Self {
+        Self::InvalidCertRevocationList(e)
+    }
+}
+
+impl From<EncryptedClientHelloError> for Error {
+    #[inline]
+    fn from(e: EncryptedClientHelloError) -> Self {
+        Self::InvalidEncryptedClientHello(e)
+    }
+}
+
+impl From<RejectedEch> for Error {
+    fn from(rejected_error: RejectedEch) -> Self {
+        Self::RejectedEch(rejected_error)
+    }
+}
+
+impl From<ApiMisuse> for Error {
+    fn from(e: ApiMisuse) -> Self {
+        Self::ApiMisuse(e)
+    }
+}
+
+impl From<OtherError> for Error {
+    fn from(value: OtherError) -> Self {
+        Self::Other(value)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<SystemTimeError> for Error {
+    #[inline]
+    fn from(_: SystemTimeError) -> Self {
+        Self::FailedToGetCurrentTime
+    }
+}
+
+impl From<rand::GetRandomFailed> for Error {
+    fn from(_: rand::GetRandomFailed) -> Self {
+        Self::FailedToGetRandomBytes
+    }
+}
+
+impl core::error::Error for Error {}
+
 /// Specific failure cases from [`Credentials::new()`] or a [`crate::crypto::SigningKey`] that cannot produce a corresponding public key.
 ///
 /// [`Credentials::new()`]: crate::crypto::Credentials::new()
@@ -164,13 +316,6 @@ pub enum InconsistentKeys {
     ///
     /// [`SigningKey`]: crate::crypto::SigningKey
     Unknown,
-}
-
-impl From<InconsistentKeys> for Error {
-    #[inline]
-    fn from(e: InconsistentKeys) -> Self {
-        Self::InconsistentKeys(e)
-    }
 }
 
 /// A corrupt TLS message payload that resulted in an error.
@@ -235,13 +380,6 @@ pub enum InvalidMessage {
     UnknownHelloRetryRequestExtension,
     /// The peer sent a TLS1.3 Certificate with an unknown extension
     UnknownCertificateExtension,
-}
-
-impl From<InvalidMessage> for Error {
-    #[inline]
-    fn from(e: InvalidMessage) -> Self {
-        Self::InvalidMessage(e)
-    }
 }
 
 impl From<InvalidMessage> for AlertDescription {
@@ -346,13 +484,6 @@ pub enum PeerMisbehaved {
     UnsolicitedEchExtension,
 }
 
-impl From<PeerMisbehaved> for Error {
-    #[inline]
-    fn from(e: PeerMisbehaved) -> Self {
-        Self::PeerMisbehaved(e)
-    }
-}
-
 /// The set of cases where we failed to make a connection because a peer
 /// doesn't support a TLS version/feature we require.
 ///
@@ -386,13 +517,6 @@ pub enum PeerIncompatible {
     UncompressedEcPointsRequired,
     UnknownCertificateType(u8),
     UnsolicitedCertificateTypeExtension,
-}
-
-impl From<PeerIncompatible> for Error {
-    #[inline]
-    fn from(e: PeerIncompatible) -> Self {
-        Self::PeerIncompatible(e)
-    }
 }
 
 /// The ways in which certificate validators can express errors.
@@ -778,13 +902,6 @@ impl fmt::Display for CertificateError {
     }
 }
 
-impl From<CertificateError> for Error {
-    #[inline]
-    fn from(e: CertificateError) -> Self {
-        Self::InvalidCertificate(e)
-    }
-}
-
 /// Extended Key Usage (EKU) purpose values.
 ///
 /// These are usually represented as OID values in the certificate's extension (if present), but
@@ -936,13 +1053,6 @@ impl PartialEq<Self> for CertRevocationListError {
     }
 }
 
-impl From<CertRevocationListError> for Error {
-    #[inline]
-    fn from(e: CertRevocationListError) -> Self {
-        Self::InvalidCertRevocationList(e)
-    }
-}
-
 /// An error that occurred while handling Encrypted Client Hello (ECH).
 #[non_exhaustive]
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -953,13 +1063,6 @@ pub enum EncryptedClientHelloError {
     NoCompatibleConfig,
     /// The client configuration has server name indication (SNI) disabled.
     SniRequired,
-}
-
-impl From<EncryptedClientHelloError> for Error {
-    #[inline]
-    fn from(e: EncryptedClientHelloError) -> Self {
-        Self::InvalidEncryptedClientHello(e)
-    }
 }
 
 /// The server rejected the request to enable Encrypted Client Hello (ECH)
@@ -996,103 +1099,12 @@ impl RejectedEch {
     }
 }
 
-impl From<RejectedEch> for Error {
-    fn from(rejected_error: RejectedEch) -> Self {
-        Self::RejectedEch(rejected_error)
-    }
-}
-
 fn join<T: fmt::Debug>(items: &[T]) -> String {
     items
         .iter()
         .map(|x| format!("{x:?}"))
         .collect::<Vec<String>>()
         .join(" or ")
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InappropriateMessage {
-                expect_types,
-                got_type,
-            } => write!(
-                f,
-                "received unexpected message: got {:?} when expecting {}",
-                got_type,
-                join::<ContentType>(expect_types)
-            ),
-            Self::InappropriateHandshakeMessage {
-                expect_types,
-                got_type,
-            } => write!(
-                f,
-                "received unexpected handshake message: got {:?} when expecting {}",
-                got_type,
-                join::<HandshakeType>(expect_types)
-            ),
-            Self::InvalidMessage(typ) => {
-                write!(f, "received corrupt message of type {typ:?}")
-            }
-            Self::PeerIncompatible(why) => write!(f, "peer is incompatible: {why:?}"),
-            Self::PeerMisbehaved(why) => write!(f, "peer misbehaved: {why:?}"),
-            Self::AlertReceived(alert) => write!(f, "received fatal alert: the peer {alert}"),
-            Self::InvalidCertificate(err) => {
-                write!(f, "invalid peer certificate: {err}")
-            }
-            Self::InvalidCertRevocationList(err) => {
-                write!(f, "invalid certificate revocation list: {err:?}")
-            }
-            Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
-            Self::DecryptError => write!(f, "cannot decrypt peer's message"),
-            Self::InvalidEncryptedClientHello(err) => {
-                write!(f, "encrypted client hello failure: {err:?}")
-            }
-            Self::EncryptError => write!(f, "cannot encrypt message"),
-            Self::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
-            Self::HandshakeNotComplete => write!(f, "handshake not complete"),
-            Self::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
-            Self::NoSuitableCertificate => write!(f, "no suitable certificate found"),
-            Self::FailedToGetCurrentTime => write!(f, "failed to get current time"),
-            Self::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
-            Self::BadMaxFragmentSize => {
-                write!(f, "the supplied max_fragment_size was too small or large")
-            }
-            Self::InconsistentKeys(why) => {
-                write!(f, "keys may not be consistent: {why:?}")
-            }
-            Self::RejectedEch(why) => {
-                write!(
-                    f,
-                    "server rejected encrypted client hello (ECH) {} retry configs",
-                    if why.can_retry() { "with" } else { "without" }
-                )
-            }
-            Self::General(err) => write!(f, "unexpected error: {err}"),
-            Self::Unreachable(err) => write!(
-                f,
-                "unreachable condition: {err} (please file a bug in rustls)"
-            ),
-            Self::ApiMisuse(why) => write!(f, "API misuse: {why:?}"),
-            Self::Other(err) => write!(f, "other error: {err}"),
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl From<SystemTimeError> for Error {
-    #[inline]
-    fn from(_: SystemTimeError) -> Self {
-        Self::FailedToGetCurrentTime
-    }
-}
-
-impl core::error::Error for Error {}
-
-impl From<rand::GetRandomFailed> for Error {
-    fn from(_: rand::GetRandomFailed) -> Self {
-        Self::FailedToGetRandomBytes
-    }
 }
 
 /// Describes cases of API misuse
@@ -1247,20 +1259,14 @@ impl fmt::Display for ApiMisuse {
 
 impl core::error::Error for ApiMisuse {}
 
-impl From<ApiMisuse> for Error {
-    fn from(e: ApiMisuse) -> Self {
-        Self::ApiMisuse(e)
-    }
-}
-
 mod other_error {
     use core::error::Error as StdError;
     use core::fmt;
 
-    use super::Error;
     use crate::sync::Arc;
 
-    /// Any other error that cannot be expressed by a more specific [`Error`] variant.
+    /// Any other error that cannot be expressed by a more specific [`Error`][super::Error]
+    /// variant.
     ///
     /// For example, an `OtherError` could be produced by a custom crypto provider
     /// exposing a provider specific error.
@@ -1279,12 +1285,6 @@ mod other_error {
     impl PartialEq<Self> for OtherError {
         fn eq(&self, _other: &Self) -> bool {
             false
-        }
-    }
-
-    impl From<OtherError> for Error {
-        fn from(value: OtherError) -> Self {
-            Self::Other(value)
         }
     }
 
