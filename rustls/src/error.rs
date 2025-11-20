@@ -220,6 +220,13 @@ impl fmt::Display for Error {
     }
 }
 
+impl From<CertificateError> for Error {
+    #[inline]
+    fn from(e: CertificateError) -> Self {
+        Self::InvalidCertificate(e)
+    }
+}
+
 impl From<InvalidMessage> for Error {
     #[inline]
     fn from(e: InvalidMessage) -> Self {
@@ -238,13 +245,6 @@ impl From<PeerIncompatible> for Error {
     #[inline]
     fn from(e: PeerIncompatible) -> Self {
         Self::PeerIncompatible(e)
-    }
-}
-
-impl From<CertificateError> for Error {
-    #[inline]
-    fn from(e: CertificateError) -> Self {
-        Self::InvalidCertificate(e)
     }
 }
 
@@ -302,207 +302,6 @@ impl From<rand::GetRandomFailed> for Error {
 }
 
 impl core::error::Error for Error {}
-
-/// A corrupt TLS message payload that resulted in an error.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum InvalidMessage {
-    /// A certificate payload exceeded rustls's 64KB limit
-    CertificatePayloadTooLarge,
-    /// An advertised message was larger then expected.
-    HandshakePayloadTooLarge,
-    /// The peer sent us a syntactically incorrect ChangeCipherSpec payload.
-    InvalidCcs,
-    /// An unknown content type was encountered during message decoding.
-    InvalidContentType,
-    /// A peer sent an invalid certificate status type
-    InvalidCertificateStatusType,
-    /// Context was incorrectly attached to a certificate request during a handshake.
-    InvalidCertRequest,
-    /// A peer's DH params could not be decoded
-    InvalidDhParams,
-    /// A message was zero-length when its record kind forbids it.
-    InvalidEmptyPayload,
-    /// A peer sent an unexpected key update request.
-    InvalidKeyUpdate,
-    /// A peer's server name could not be decoded
-    InvalidServerName,
-    /// A TLS message payload was larger then allowed by the specification.
-    MessageTooLarge,
-    /// Message is shorter than the expected length
-    MessageTooShort,
-    /// Missing data for the named handshake payload value
-    MissingData(&'static str),
-    /// A peer did not advertise its supported key exchange groups.
-    MissingKeyExchange,
-    /// A peer sent an empty list of signature schemes
-    NoSignatureSchemes,
-    /// Trailing data found for the named handshake payload value
-    TrailingData(&'static str),
-    /// A peer sent an unexpected message type.
-    UnexpectedMessage(&'static str),
-    /// An unknown TLS protocol was encountered during message decoding.
-    UnknownProtocolVersion,
-    /// A peer sent a non-null compression method.
-    UnsupportedCompression,
-    /// A peer sent an unknown elliptic curve type.
-    UnsupportedCurveType,
-    /// A peer sent an unsupported key exchange algorithm.
-    UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
-    /// A server sent an empty ticket
-    EmptyTicketValue,
-    /// A peer sent an empty list of items, but a non-empty list is required.
-    ///
-    /// The argument names the context.
-    IllegalEmptyList(&'static str),
-    /// A peer sent an empty value, but a non-empty value is required.
-    IllegalEmptyValue,
-    /// A peer sent a message where a given extension type was repeated
-    DuplicateExtension(u16),
-    /// A peer sent a message with a PSK offer extension in wrong position
-    PreSharedKeyIsNotFinalExtension,
-    /// A server sent a HelloRetryRequest with an unknown extension
-    UnknownHelloRetryRequestExtension,
-    /// The peer sent a TLS1.3 Certificate with an unknown extension
-    UnknownCertificateExtension,
-}
-
-impl From<InvalidMessage> for AlertDescription {
-    fn from(e: InvalidMessage) -> Self {
-        match e {
-            InvalidMessage::PreSharedKeyIsNotFinalExtension => Self::IllegalParameter,
-            InvalidMessage::DuplicateExtension(_) => Self::IllegalParameter,
-            InvalidMessage::UnknownHelloRetryRequestExtension => Self::UnsupportedExtension,
-            _ => Self::DecodeError,
-        }
-    }
-}
-
-/// The set of cases where we failed to make a connection because we thought
-/// the peer was misbehaving.
-///
-/// This is `non_exhaustive`: we might add or stop using items here in minor
-/// versions.  We also don't document what they mean.  Generally a user of
-/// rustls shouldn't vary its behaviour on these error codes, and there is
-/// nothing it can do to improve matters.
-///
-/// Please file a bug against rustls if you see `Error::PeerMisbehaved` in
-/// the wild.
-#[expect(missing_docs)]
-#[non_exhaustive]
-#[derive(Debug, PartialEq, Clone)]
-pub enum PeerMisbehaved {
-    AttemptedDowngradeToTls12WhenTls13IsSupported,
-    BadCertChainExtensions,
-    DisallowedEncryptedExtension,
-    DuplicateClientHelloExtensions,
-    DuplicateEncryptedExtensions,
-    DuplicateHelloRetryRequestExtensions,
-    DuplicateNewSessionTicketExtensions,
-    DuplicateServerHelloExtensions,
-    DuplicateServerNameTypes,
-    EarlyDataAttemptedInSecondClientHello,
-    EarlyDataExtensionWithoutResumption,
-    EarlyDataOfferedWithVariedCipherSuite,
-    HandshakeHashVariedAfterRetry,
-    IllegalHelloRetryRequestWithEmptyCookie,
-    IllegalHelloRetryRequestWithNoChanges,
-    IllegalHelloRetryRequestWithOfferedGroup,
-    IllegalHelloRetryRequestWithUnofferedCipherSuite,
-    IllegalHelloRetryRequestWithUnofferedNamedGroup,
-    IllegalHelloRetryRequestWithUnsupportedVersion,
-    IllegalHelloRetryRequestWithWrongSessionId,
-    IllegalHelloRetryRequestWithInvalidEch,
-    IllegalMiddleboxChangeCipherSpec,
-    IllegalTlsInnerPlaintext,
-    IncorrectBinder,
-    InvalidCertCompression,
-    InvalidMaxEarlyDataSize,
-    InvalidKeyShare,
-    KeyEpochWithPendingFragment,
-    KeyUpdateReceivedInQuicConnection,
-    MessageInterleavedWithHandshakeMessage,
-    MissingBinderInPskExtension,
-    MissingKeyShare,
-    MissingPskModesExtension,
-    MissingQuicTransportParameters,
-    NoCertificatesPresented,
-    OfferedDuplicateCertificateCompressions,
-    OfferedDuplicateKeyShares,
-    OfferedEarlyDataWithOldProtocolVersion,
-    OfferedEmptyApplicationProtocol,
-    OfferedIncorrectCompressions,
-    PskExtensionMustBeLast,
-    PskExtensionWithMismatchedIdsAndBinders,
-    RefusedToFollowHelloRetryRequest,
-    RejectedEarlyDataInterleavedWithHandshakeMessage,
-    ResumptionAttemptedWithVariedEms,
-    ResumptionOfferedWithVariedCipherSuite,
-    ResumptionOfferedWithVariedEms,
-    ResumptionOfferedWithIncompatibleCipherSuite,
-    SelectedDifferentCipherSuiteAfterRetry,
-    SelectedInvalidPsk,
-    SelectedTls12UsingTls13VersionExtension,
-    SelectedUnofferedApplicationProtocol,
-    SelectedUnofferedCertCompression,
-    SelectedUnofferedCipherSuite,
-    SelectedUnofferedCompression,
-    SelectedUnofferedKxGroup,
-    SelectedUnofferedPsk,
-    ServerEchoedCompatibilitySessionId,
-    ServerHelloMustOfferUncompressedEcPoints,
-    ServerNameDifferedOnRetry,
-    ServerNameMustContainOneHostName,
-    SignedKxWithWrongAlgorithm,
-    SignedHandshakeWithUnadvertisedSigScheme,
-    TooManyEmptyFragments,
-    TooManyKeyUpdateRequests,
-    TooManyRenegotiationRequests,
-    TooManyWarningAlertsReceived,
-    TooMuchEarlyDataReceived,
-    UnexpectedCleartextExtension,
-    UnsolicitedCertExtension,
-    UnsolicitedEncryptedExtension,
-    UnsolicitedSctList,
-    UnsolicitedServerHelloExtension,
-    WrongGroupForKeyShare,
-    UnsolicitedEchExtension,
-}
-
-/// The set of cases where we failed to make a connection because a peer
-/// doesn't support a TLS version/feature we require.
-///
-/// This is `non_exhaustive`: we might add or stop using items here in minor
-/// versions.
-#[expect(missing_docs)]
-#[non_exhaustive]
-#[derive(Debug, PartialEq, Clone)]
-pub enum PeerIncompatible {
-    EcPointsExtensionRequired,
-    ExtendedMasterSecretExtensionRequired,
-    IncorrectCertificateTypeExtension,
-    KeyShareExtensionRequired,
-    MultipleRawKeys,
-    NamedGroupsExtensionRequired,
-    NoCertificateRequestSignatureSchemesInCommon,
-    NoCipherSuitesInCommon,
-    NoEcPointFormatsInCommon,
-    NoKxGroupsInCommon,
-    NoSignatureSchemesInCommon,
-    NoServerNameProvided,
-    NullCompressionRequired,
-    ServerDoesNotSupportTls12Or13,
-    ServerSentHelloRetryRequestWithUnknownExtension,
-    ServerTlsVersionIsDisabledByOurConfig,
-    SignatureAlgorithmsExtensionRequired,
-    SupportedVersionsExtensionRequired,
-    Tls12NotOffered,
-    Tls12NotOfferedOrEnabled,
-    Tls13RequiredForQuic,
-    UncompressedEcPointsRequired,
-    UnknownCertificateType(u8),
-    UnsolicitedCertificateTypeExtension,
-}
 
 /// The ways in which certificate validators can express errors.
 ///
@@ -885,6 +684,207 @@ impl fmt::Display for CertificateError {
             other => write!(f, "{other:?}"),
         }
     }
+}
+
+/// A corrupt TLS message payload that resulted in an error.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InvalidMessage {
+    /// A certificate payload exceeded rustls's 64KB limit
+    CertificatePayloadTooLarge,
+    /// An advertised message was larger then expected.
+    HandshakePayloadTooLarge,
+    /// The peer sent us a syntactically incorrect ChangeCipherSpec payload.
+    InvalidCcs,
+    /// An unknown content type was encountered during message decoding.
+    InvalidContentType,
+    /// A peer sent an invalid certificate status type
+    InvalidCertificateStatusType,
+    /// Context was incorrectly attached to a certificate request during a handshake.
+    InvalidCertRequest,
+    /// A peer's DH params could not be decoded
+    InvalidDhParams,
+    /// A message was zero-length when its record kind forbids it.
+    InvalidEmptyPayload,
+    /// A peer sent an unexpected key update request.
+    InvalidKeyUpdate,
+    /// A peer's server name could not be decoded
+    InvalidServerName,
+    /// A TLS message payload was larger then allowed by the specification.
+    MessageTooLarge,
+    /// Message is shorter than the expected length
+    MessageTooShort,
+    /// Missing data for the named handshake payload value
+    MissingData(&'static str),
+    /// A peer did not advertise its supported key exchange groups.
+    MissingKeyExchange,
+    /// A peer sent an empty list of signature schemes
+    NoSignatureSchemes,
+    /// Trailing data found for the named handshake payload value
+    TrailingData(&'static str),
+    /// A peer sent an unexpected message type.
+    UnexpectedMessage(&'static str),
+    /// An unknown TLS protocol was encountered during message decoding.
+    UnknownProtocolVersion,
+    /// A peer sent a non-null compression method.
+    UnsupportedCompression,
+    /// A peer sent an unknown elliptic curve type.
+    UnsupportedCurveType,
+    /// A peer sent an unsupported key exchange algorithm.
+    UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
+    /// A server sent an empty ticket
+    EmptyTicketValue,
+    /// A peer sent an empty list of items, but a non-empty list is required.
+    ///
+    /// The argument names the context.
+    IllegalEmptyList(&'static str),
+    /// A peer sent an empty value, but a non-empty value is required.
+    IllegalEmptyValue,
+    /// A peer sent a message where a given extension type was repeated
+    DuplicateExtension(u16),
+    /// A peer sent a message with a PSK offer extension in wrong position
+    PreSharedKeyIsNotFinalExtension,
+    /// A server sent a HelloRetryRequest with an unknown extension
+    UnknownHelloRetryRequestExtension,
+    /// The peer sent a TLS1.3 Certificate with an unknown extension
+    UnknownCertificateExtension,
+}
+
+impl From<InvalidMessage> for AlertDescription {
+    fn from(e: InvalidMessage) -> Self {
+        match e {
+            InvalidMessage::PreSharedKeyIsNotFinalExtension => Self::IllegalParameter,
+            InvalidMessage::DuplicateExtension(_) => Self::IllegalParameter,
+            InvalidMessage::UnknownHelloRetryRequestExtension => Self::UnsupportedExtension,
+            _ => Self::DecodeError,
+        }
+    }
+}
+
+/// The set of cases where we failed to make a connection because we thought
+/// the peer was misbehaving.
+///
+/// This is `non_exhaustive`: we might add or stop using items here in minor
+/// versions.  We also don't document what they mean.  Generally a user of
+/// rustls shouldn't vary its behaviour on these error codes, and there is
+/// nothing it can do to improve matters.
+///
+/// Please file a bug against rustls if you see `Error::PeerMisbehaved` in
+/// the wild.
+#[expect(missing_docs)]
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Clone)]
+pub enum PeerMisbehaved {
+    AttemptedDowngradeToTls12WhenTls13IsSupported,
+    BadCertChainExtensions,
+    DisallowedEncryptedExtension,
+    DuplicateClientHelloExtensions,
+    DuplicateEncryptedExtensions,
+    DuplicateHelloRetryRequestExtensions,
+    DuplicateNewSessionTicketExtensions,
+    DuplicateServerHelloExtensions,
+    DuplicateServerNameTypes,
+    EarlyDataAttemptedInSecondClientHello,
+    EarlyDataExtensionWithoutResumption,
+    EarlyDataOfferedWithVariedCipherSuite,
+    HandshakeHashVariedAfterRetry,
+    IllegalHelloRetryRequestWithEmptyCookie,
+    IllegalHelloRetryRequestWithNoChanges,
+    IllegalHelloRetryRequestWithOfferedGroup,
+    IllegalHelloRetryRequestWithUnofferedCipherSuite,
+    IllegalHelloRetryRequestWithUnofferedNamedGroup,
+    IllegalHelloRetryRequestWithUnsupportedVersion,
+    IllegalHelloRetryRequestWithWrongSessionId,
+    IllegalHelloRetryRequestWithInvalidEch,
+    IllegalMiddleboxChangeCipherSpec,
+    IllegalTlsInnerPlaintext,
+    IncorrectBinder,
+    InvalidCertCompression,
+    InvalidMaxEarlyDataSize,
+    InvalidKeyShare,
+    KeyEpochWithPendingFragment,
+    KeyUpdateReceivedInQuicConnection,
+    MessageInterleavedWithHandshakeMessage,
+    MissingBinderInPskExtension,
+    MissingKeyShare,
+    MissingPskModesExtension,
+    MissingQuicTransportParameters,
+    NoCertificatesPresented,
+    OfferedDuplicateCertificateCompressions,
+    OfferedDuplicateKeyShares,
+    OfferedEarlyDataWithOldProtocolVersion,
+    OfferedEmptyApplicationProtocol,
+    OfferedIncorrectCompressions,
+    PskExtensionMustBeLast,
+    PskExtensionWithMismatchedIdsAndBinders,
+    RefusedToFollowHelloRetryRequest,
+    RejectedEarlyDataInterleavedWithHandshakeMessage,
+    ResumptionAttemptedWithVariedEms,
+    ResumptionOfferedWithVariedCipherSuite,
+    ResumptionOfferedWithVariedEms,
+    ResumptionOfferedWithIncompatibleCipherSuite,
+    SelectedDifferentCipherSuiteAfterRetry,
+    SelectedInvalidPsk,
+    SelectedTls12UsingTls13VersionExtension,
+    SelectedUnofferedApplicationProtocol,
+    SelectedUnofferedCertCompression,
+    SelectedUnofferedCipherSuite,
+    SelectedUnofferedCompression,
+    SelectedUnofferedKxGroup,
+    SelectedUnofferedPsk,
+    ServerEchoedCompatibilitySessionId,
+    ServerHelloMustOfferUncompressedEcPoints,
+    ServerNameDifferedOnRetry,
+    ServerNameMustContainOneHostName,
+    SignedKxWithWrongAlgorithm,
+    SignedHandshakeWithUnadvertisedSigScheme,
+    TooManyEmptyFragments,
+    TooManyKeyUpdateRequests,
+    TooManyRenegotiationRequests,
+    TooManyWarningAlertsReceived,
+    TooMuchEarlyDataReceived,
+    UnexpectedCleartextExtension,
+    UnsolicitedCertExtension,
+    UnsolicitedEncryptedExtension,
+    UnsolicitedSctList,
+    UnsolicitedServerHelloExtension,
+    WrongGroupForKeyShare,
+    UnsolicitedEchExtension,
+}
+
+/// The set of cases where we failed to make a connection because a peer
+/// doesn't support a TLS version/feature we require.
+///
+/// This is `non_exhaustive`: we might add or stop using items here in minor
+/// versions.
+#[expect(missing_docs)]
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Clone)]
+pub enum PeerIncompatible {
+    EcPointsExtensionRequired,
+    ExtendedMasterSecretExtensionRequired,
+    IncorrectCertificateTypeExtension,
+    KeyShareExtensionRequired,
+    MultipleRawKeys,
+    NamedGroupsExtensionRequired,
+    NoCertificateRequestSignatureSchemesInCommon,
+    NoCipherSuitesInCommon,
+    NoEcPointFormatsInCommon,
+    NoKxGroupsInCommon,
+    NoSignatureSchemesInCommon,
+    NoServerNameProvided,
+    NullCompressionRequired,
+    ServerDoesNotSupportTls12Or13,
+    ServerSentHelloRetryRequestWithUnknownExtension,
+    ServerTlsVersionIsDisabledByOurConfig,
+    SignatureAlgorithmsExtensionRequired,
+    SupportedVersionsExtensionRequired,
+    Tls12NotOffered,
+    Tls12NotOfferedOrEnabled,
+    Tls13RequiredForQuic,
+    UncompressedEcPointsRequired,
+    UnknownCertificateType(u8),
+    UnsolicitedCertificateTypeExtension,
 }
 
 /// Extended Key Usage (EKU) purpose values.
