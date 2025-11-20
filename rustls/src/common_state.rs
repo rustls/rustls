@@ -357,7 +357,13 @@ impl CommonState {
             .message_fragmenter
             .fragment_message(&m);
         for m in iter {
-            self.send_single_fragment(m);
+            if m.typ == ContentType::Alert {
+                // Alerts are always sendable -- never quashed by a PreEncryptAction.
+                let em = self.encrypt_state.encrypt_outgoing(m);
+                self.queue_tls_message(em);
+            } else {
+                self.send_single_fragment(m);
+            }
         }
     }
 
@@ -379,13 +385,6 @@ impl CommonState {
     }
 
     fn send_single_fragment(&mut self, m: EncodedMessage<OutboundPlain<'_>>) {
-        if m.typ == ContentType::Alert {
-            // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            let em = self.encrypt_state.encrypt_outgoing(m);
-            self.queue_tls_message(em);
-            return;
-        }
-
         match self
             .encrypt_state
             .next_pre_encrypt_action()
