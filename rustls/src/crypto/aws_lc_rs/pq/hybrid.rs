@@ -2,11 +2,11 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::INVALID_KEY_SHARE;
+use crate::Error;
 use crate::crypto::{
-    ActiveKeyExchange, CompletedKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange,
-    SupportedKxGroup,
+    ActiveKeyExchange, CompletedKeyExchange, HybridKeyExchange, NamedGroup, SharedSecret,
+    StartedKeyExchange, SupportedKxGroup,
 };
-use crate::{Error, NamedGroup};
 
 /// A generalization of hybrid key exchange.
 #[derive(Debug)]

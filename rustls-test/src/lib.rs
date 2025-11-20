@@ -27,8 +27,8 @@ use rustls::crypto::cipher::{
     InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage, PlainMessage,
 };
 use rustls::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential,
-    SignatureScheme, SigningKey, SingleCredential, WebPkiSupportedAlgorithms,
+    CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, NamedGroup,
+    SelectedCredential, SignatureScheme, SigningKey, SingleCredential, WebPkiSupportedAlgorithms,
     verify_tls13_signature,
 };
 use rustls::enums::{CertificateType, ContentType, ProtocolVersion};
@@ -49,8 +49,8 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    ClientConfig, ClientConnection, Connection, ConnectionCommon, DistinguishedName, NamedGroup,
-    RootCertStore, ServerConfig, ServerConnection, SideData, SupportedCipherSuite,
+    ClientConfig, ClientConnection, Connection, ConnectionCommon, DistinguishedName, RootCertStore,
+    ServerConfig, ServerConnection, SideData, SupportedCipherSuite,
 };
 
 macro_rules! embed_files {
@@ -2099,8 +2099,7 @@ pub mod macros {
 
 /// Deeply inefficient, test-only TLS encoding helpers
 pub mod encoding {
-    use rustls::NamedGroup;
-    use rustls::crypto::{CipherSuite, SignatureScheme};
+    use rustls::crypto::{CipherSuite, NamedGroup, SignatureScheme};
     use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
     use rustls::error::AlertDescription;
     use rustls::internal::msgs::codec::Codec;

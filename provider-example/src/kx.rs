@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 
-use rustls::crypto::{self, StartedKeyExchange, SupportedKxGroup};
+use rustls::crypto::{self, NamedGroup, StartedKeyExchange, SupportedKxGroup};
 use rustls::error::PeerMisbehaved;
 
 pub(crate) struct KeyExchange {
@@ -22,7 +22,7 @@ impl crypto::ActiveKeyExchange for KeyExchange {
         self.pub_key.as_bytes()
     }
 
-    fn group(&self) -> rustls::NamedGroup {
+    fn group(&self) -> NamedGroup {
         X25519.name()
     }
 }
@@ -41,7 +41,7 @@ impl SupportedKxGroup for X25519 {
         })))
     }
 
-    fn name(&self) -> rustls::NamedGroup {
-        rustls::NamedGroup::X25519
+    fn name(&self) -> NamedGroup {
+        NamedGroup::X25519
     }
 }

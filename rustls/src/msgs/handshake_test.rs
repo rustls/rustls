@@ -8,7 +8,6 @@ use super::base::{PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
     ClientCertificateType, Compression, ECCurveType, EchVersion, ExtensionType, KeyUpdateRequest,
-    NamedGroup,
 };
 use super::handshake::{
     CertificateChain, CertificateEntry, CertificateExtensions, CertificatePayloadTls13,
@@ -26,7 +25,7 @@ use super::handshake::{
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeAead, HpkeKdf, HpkeKem, HpkeSymmetricCipherSuite};
-use crate::crypto::{CipherSuite, SignatureScheme};
+use crate::crypto::{CipherSuite, NamedGroup, SignatureScheme};
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, HandshakeType, ProtocolVersion,
 };

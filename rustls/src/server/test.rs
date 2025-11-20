@@ -12,15 +12,15 @@ use crate::crypto::hash::FakeHash;
 use crate::crypto::tls12::FakePrf;
 use crate::crypto::{
     ActiveKeyExchange, CipherSuite, Credentials, CryptoProvider, Identity, KeyExchangeAlgorithm,
-    SharedSecret, SignatureScheme, SingleCredential, StartedKeyExchange, SupportedKxGroup,
-    tls12_only,
+    NamedGroup, SharedSecret, SignatureScheme, SingleCredential, StartedKeyExchange,
+    SupportedKxGroup, tls12_only,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
 use crate::ffdhe_groups::FfdheGroup;
 use crate::msgs::base::PayloadU16;
 use crate::msgs::deframer::buffers::Locator;
-use crate::msgs::enums::{Compression, NamedGroup};
+use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
     ClientExtensions, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, KeyShareEntry,
     Random, SessionId, SupportedProtocolVersions,

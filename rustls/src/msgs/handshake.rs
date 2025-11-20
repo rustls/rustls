@@ -12,7 +12,7 @@ use pki_types::{CertificateDer, DnsName};
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::crypto::{
-    ActiveKeyExchange, CipherSuite, SecureRandom, SelectedCredential, SignatureScheme,
+    ActiveKeyExchange, CipherSuite, NamedGroup, SecureRandom, SelectedCredential, SignatureScheme,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, EchClientHelloType, HandshakeType,
@@ -28,7 +28,7 @@ use crate::msgs::codec::{
 };
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
-    EchVersion, ExtensionType, KeyUpdateRequest, NamedGroup, PskKeyExchangeMode, ServerNameType,
+    EchVersion, ExtensionType, KeyUpdateRequest, PskKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
 use crate::sync::Arc;

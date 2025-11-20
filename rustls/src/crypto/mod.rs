@@ -19,7 +19,7 @@ pub use crate::webpki::{
 };
 #[cfg(doc)]
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};
-use crate::{NamedGroup, SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite};
+use crate::{SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite};
 
 /// aws-lc-rs-based CryptoProvider.
 #[cfg(feature = "aws-lc-rs")]
@@ -29,7 +29,7 @@ pub mod aws_lc_rs;
 pub mod cipher;
 
 mod enums;
-pub use enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
+pub use enums::{CipherSuite, HashAlgorithm, NamedGroup, SignatureAlgorithm, SignatureScheme};
 
 /// Hashing interfaces.
 pub mod hash;

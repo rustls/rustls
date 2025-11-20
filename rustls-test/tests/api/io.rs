@@ -8,12 +8,10 @@ use std::io::{self, BufRead, IoSlice, Read, Write};
 use std::sync::Arc;
 
 use pki_types::DnsName;
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::{CryptoProvider, NamedGroup};
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible};
-use rustls::{
-    ClientConfig, ClientConnection, NamedGroup, ServerConfig, ServerConnection, Stream, StreamOwned,
-};
+use rustls::{ClientConfig, ClientConnection, ServerConfig, ServerConnection, Stream, StreamOwned};
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo,
     check_fill_buf, check_fill_buf_err, check_read, check_read_and_close, check_read_err,
