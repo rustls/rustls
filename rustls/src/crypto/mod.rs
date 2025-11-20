@@ -48,8 +48,8 @@ pub mod hpke;
 // Message signing interfaces.
 mod signer;
 pub use signer::{
-    CertificateIdentity, Credentials, Identity, SelectedCredential, Signer, SigningKey,
-    SingleCredential, public_key_to_spki,
+    CertificateIdentity, Credentials, Identity, InconsistentKeys, SelectedCredential, Signer,
+    SigningKey, SingleCredential, public_key_to_spki,
 };
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;

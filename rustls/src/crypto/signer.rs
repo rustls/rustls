@@ -9,7 +9,7 @@ use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::common_state::CommonState;
 use crate::enums::{AlertDescription, CertificateType, SignatureScheme};
-use crate::error::{ApiMisuse, Error, InconsistentKeys, InvalidMessage, PeerIncompatible};
+use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
@@ -437,4 +437,21 @@ pub fn public_key_to_spki(
     let spki = x509::wrap_in_sequence(&spki_inner);
 
     SubjectPublicKeyInfoDer::from(spki)
+}
+
+/// Specific failure cases from [`Credentials::new()`] or a [`crate::crypto::SigningKey`] that cannot produce a corresponding public key.
+///
+/// [`Credentials::new()`]: crate::crypto::Credentials::new()
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InconsistentKeys {
+    /// The public key returned by the [`SigningKey`] does not match the public key information in the certificate.
+    ///
+    /// [`SigningKey`]: crate::crypto::SigningKey
+    KeyMismatch,
+
+    /// The [`SigningKey`] cannot produce its corresponding public key.
+    ///
+    /// [`SigningKey`]: crate::crypto::SigningKey
+    Unknown,
 }

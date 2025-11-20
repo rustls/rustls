@@ -13,11 +13,11 @@ mod client {
         HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
     };
     use rustls::crypto::{
-        Credentials, Identity, SingleCredential, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
-        verify_tls13_signature,
+        Credentials, Identity, InconsistentKeys, SingleCredential, WebPkiSupportedAlgorithms,
+        aws_lc_rs as provider, verify_tls13_signature,
     };
     use rustls::enums::{CertificateType, SignatureScheme};
-    use rustls::error::{ApiMisuse, CertificateError, InconsistentKeys, PeerIncompatible};
+    use rustls::error::{ApiMisuse, CertificateError, PeerIncompatible};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
@@ -141,11 +141,11 @@ mod server {
 
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{
-        Credentials, Identity, SingleCredential, WebPkiSupportedAlgorithms, aws_lc_rs as provider,
-        verify_tls13_signature,
+        Credentials, Identity, InconsistentKeys, SingleCredential, WebPkiSupportedAlgorithms,
+        aws_lc_rs as provider, verify_tls13_signature,
     };
     use rustls::enums::{CertificateType, SignatureScheme};
-    use rustls::error::{ApiMisuse, CertificateError, Error, InconsistentKeys, PeerIncompatible};
+    use rustls::error::{ApiMisuse, CertificateError, Error, PeerIncompatible};
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::{

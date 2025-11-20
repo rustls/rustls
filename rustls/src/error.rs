@@ -10,6 +10,7 @@ use std::time::SystemTimeError;
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 use webpki::ExtendedKeyUsage;
 
+use crate::crypto::InconsistentKeys;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{EchConfigPayload, KeyExchangeAlgorithm};
@@ -219,13 +220,6 @@ impl fmt::Display for Error {
     }
 }
 
-impl From<InconsistentKeys> for Error {
-    #[inline]
-    fn from(e: InconsistentKeys) -> Self {
-        Self::InconsistentKeys(e)
-    }
-}
-
 impl From<InvalidMessage> for Error {
     #[inline]
     fn from(e: InvalidMessage) -> Self {
@@ -286,6 +280,13 @@ impl From<OtherError> for Error {
     }
 }
 
+impl From<InconsistentKeys> for Error {
+    #[inline]
+    fn from(e: InconsistentKeys) -> Self {
+        Self::InconsistentKeys(e)
+    }
+}
+
 #[cfg(feature = "std")]
 impl From<SystemTimeError> for Error {
     #[inline]
@@ -301,23 +302,6 @@ impl From<rand::GetRandomFailed> for Error {
 }
 
 impl core::error::Error for Error {}
-
-/// Specific failure cases from [`Credentials::new()`] or a [`crate::crypto::SigningKey`] that cannot produce a corresponding public key.
-///
-/// [`Credentials::new()`]: crate::crypto::Credentials::new()
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum InconsistentKeys {
-    /// The public key returned by the [`SigningKey`] does not match the public key information in the certificate.
-    ///
-    /// [`SigningKey`]: crate::crypto::SigningKey
-    KeyMismatch,
-
-    /// The [`SigningKey`] cannot produce its corresponding public key.
-    ///
-    /// [`SigningKey`]: crate::crypto::SigningKey
-    Unknown,
-}
 
 /// A corrupt TLS message payload that resulted in an error.
 #[non_exhaustive]
