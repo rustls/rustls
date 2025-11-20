@@ -269,6 +269,8 @@ impl CommonState {
             return Ok(0);
         }
 
+        self.perhaps_write_key_update();
+
         let fragments = self
             .message_fragmenter
             .fragment_payload(
@@ -301,8 +303,6 @@ impl CommonState {
                 }
             }
         }
-
-        self.perhaps_write_key_update();
 
         self.check_required_size(outgoing_tls, fragments)?;
 
