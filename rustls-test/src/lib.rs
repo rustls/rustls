@@ -27,11 +27,11 @@ use rustls::crypto::cipher::{
     InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage, PlainMessage,
 };
 use rustls::crypto::{
-    Credentials, CryptoProvider, Identity, SelectedCredential, SigningKey, SingleCredential,
-    WebPkiSupportedAlgorithms, verify_tls13_signature,
+    Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential, SigningKey,
+    SingleCredential, WebPkiSupportedAlgorithms, verify_tls13_signature,
 };
 use rustls::enums::{CertificateType, CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
-use rustls::error::{CertificateError, Error, InconsistentKeys};
+use rustls::error::{CertificateError, Error};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::Message;
 use rustls::pki_types::pem::PemObject;

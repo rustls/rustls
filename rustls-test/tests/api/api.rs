@@ -12,12 +12,12 @@ use provider::cipher_suite;
 use rustls::client::Resumption;
 use rustls::crypto::cipher::{Payload, PlainMessage};
 use rustls::crypto::{
-    Credentials, CryptoProvider, Identity, SelectedCredential, Signer, SigningKey,
+    Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential, Signer, SigningKey,
 };
 use rustls::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
-use rustls::error::{ApiMisuse, CertificateError, Error, InconsistentKeys, PeerMisbehaved};
+use rustls::error::{ApiMisuse, CertificateError, Error, PeerMisbehaved};
 use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
