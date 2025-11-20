@@ -35,10 +35,9 @@ use rustls::TicketRotator;
 use rustls::crypto::tls12::PrfUsingHmac;
 use rustls::crypto::tls13::HkdfUsingHmac;
 use rustls::crypto::{
-    CipherSuiteCommon, CryptoProvider, GetRandomFailed, KeyExchangeAlgorithm, KeyProvider,
-    SecureRandom, SigningKey, TicketProducer, TicketerFactory,
+    CipherSuite, CipherSuiteCommon, CryptoProvider, GetRandomFailed, KeyExchangeAlgorithm,
+    KeyProvider, SecureRandom, SignatureScheme, SigningKey, TicketProducer, TicketerFactory,
 };
-use rustls::enums::{CipherSuite, SignatureScheme};
 use rustls::error::{Error, OtherError};
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::{TLS12_VERSION, TLS13_VERSION};

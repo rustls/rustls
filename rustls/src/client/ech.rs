@@ -6,11 +6,11 @@ use pki_types::{DnsName, EchConfigListBytes, ServerName};
 use subtle::ConstantTimeEq;
 
 use crate::client::tls13;
+use crate::crypto::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::crypto::SecureRandom;
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::hpke::{EncapsulatedSecret, Hpke, HpkePublicKey, HpkeSealer, HpkeSuite};
-use crate::enums::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::enums::ProtocolVersion;
 use crate::error::{
     AlertDescription, EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch,
@@ -857,7 +857,7 @@ pub(crate) fn fatal_alert_required(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enums::CipherSuite;
+    use crate::crypto::CipherSuite;
     use crate::msgs::handshake::{Random, ServerExtensions, SessionId};
 
     #[test]

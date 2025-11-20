@@ -28,8 +28,8 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
-use rustls::crypto::{CryptoProvider, Identity};
-use rustls::enums::{CipherSuite, ProtocolVersion};
+use rustls::crypto::{CipherSuite, CryptoProvider, Identity};
+use rustls::enums::ProtocolVersion;
 use rustls::server::{
     NoServerSessionStorage, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,

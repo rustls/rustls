@@ -1039,8 +1039,8 @@ mod tests {
     use std::prelude::v1::*;
 
     use super::PacketKey;
+    use crate::crypto::CipherSuite;
     use crate::crypto::tls13::OkmBlock;
-    use crate::enums::CipherSuite;
     use crate::quic::{HeaderProtectionKey, Secrets, Version};
     use crate::{Side, TEST_PROVIDERS};
 

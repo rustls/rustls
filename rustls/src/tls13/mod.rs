@@ -1,8 +1,8 @@
 use core::fmt;
 
 use crate::common_state::Protocol;
-use crate::crypto::{self, hash};
-use crate::enums::{ProtocolVersion, SignatureScheme};
+use crate::crypto::{self, SignatureScheme, hash};
+use crate::enums::ProtocolVersion;
 use crate::suites::{CipherSuiteCommon, Suite, SupportedCipherSuite};
 use crate::version::Tls13Version;
 
@@ -173,8 +173,7 @@ const MAX_VERIFY_MSG: usize = 64 + CLIENT_CONSTANT.len() + hash::Output::MAX_LEN
 #[cfg(test)]
 mod tests {
     use crate::TEST_PROVIDERS;
-    use crate::crypto::tls13_suite;
-    use crate::enums::CipherSuite;
+    use crate::crypto::{CipherSuite, tls13_suite};
 
     #[test]
     fn test_can_resume_to() {

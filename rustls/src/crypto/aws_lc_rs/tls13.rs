@@ -9,8 +9,9 @@ use crate::crypto::cipher::{
     Nonce, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm,
     UnsupportedOperationError, make_tls13_aad,
 };
+use crate::crypto::enums::CipherSuite;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
+use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
 use crate::tls13::Tls13CipherSuite;

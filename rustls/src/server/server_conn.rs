@@ -21,8 +21,10 @@ use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::cipher::Payload;
-use crate::crypto::{CryptoProvider, SelectedCredential, TicketProducer};
-use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::crypto::{
+    CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme, TicketProducer,
+};
+use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::kernel::KernelConnection;
 #[cfg(feature = "std")]

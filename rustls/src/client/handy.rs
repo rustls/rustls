@@ -210,9 +210,10 @@ mod tests {
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
     use crate::client::{ClientCredentialResolver, ClientSessionStore, CredentialRequest};
     use crate::crypto::{
-        CertificateIdentity, Identity, SelectedCredential, tls12_suite, tls13_suite,
+        CertificateIdentity, CipherSuite, Identity, SelectedCredential, SignatureScheme,
+        tls12_suite, tls13_suite,
     };
-    use crate::enums::{CertificateType, CipherSuite, SignatureScheme};
+    use crate::enums::CertificateType;
     use crate::error::Error;
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;

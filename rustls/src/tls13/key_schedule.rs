@@ -1100,8 +1100,7 @@ mod tests {
 
     use super::{KeySchedule, SecretKind, derive_traffic_iv, derive_traffic_key};
     use crate::TEST_PROVIDERS;
-    use crate::crypto::{CryptoProvider, tls13_suite};
-    use crate::enums::{CipherSuite, HashAlgorithm};
+    use crate::crypto::{CipherSuite, CryptoProvider, HashAlgorithm, tls13_suite};
     use crate::key_log::KeyLog;
 
     #[test]

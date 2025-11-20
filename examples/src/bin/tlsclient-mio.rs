@@ -401,8 +401,9 @@ mod danger {
     use rustls::client::danger::{
         HandshakeSignatureValid, ServerIdentity, SignatureVerificationInput,
     };
-    use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
-    use rustls::enums::SignatureScheme;
+    use rustls::crypto::{
+        CryptoProvider, SignatureScheme, verify_tls12_signature, verify_tls13_signature,
+    };
 
     #[derive(Debug)]
     pub struct NoCertificateVerification(CryptoProvider);

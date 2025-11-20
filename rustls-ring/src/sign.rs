@@ -10,8 +10,7 @@ use ring::rand::{SecureRandom, SystemRandom};
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
 #[cfg(any(test, bench))]
 use rustls::crypto::CryptoProvider;
-use rustls::crypto::{Signer, SigningKey, public_key_to_spki};
-use rustls::enums::SignatureScheme;
+use rustls::crypto::{SignatureScheme, Signer, SigningKey, public_key_to_spki};
 use rustls::error::Error;
 
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS.

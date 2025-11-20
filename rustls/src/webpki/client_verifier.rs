@@ -11,8 +11,7 @@ use super::{VerifierBuilderError, pki_error};
 use crate::ConfigBuilder;
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CryptoProvider, Identity, WebPkiSupportedAlgorithms};
-use crate::enums::SignatureScheme;
+use crate::crypto::{CryptoProvider, Identity, SignatureScheme, WebPkiSupportedAlgorithms};
 use crate::error::ApiMisuse;
 #[cfg(doc)]
 use crate::server::ServerConfig;

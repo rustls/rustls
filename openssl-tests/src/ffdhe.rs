@@ -1,9 +1,8 @@
 use num_bigint::BigUint;
 use rustls::crypto::{
-    ActiveKeyExchange, CipherSuiteCommon, KeyExchangeAlgorithm, SharedSecret, StartedKeyExchange,
-    SupportedKxGroup, aws_lc_rs as provider,
+    ActiveKeyExchange, CipherSuite, CipherSuiteCommon, KeyExchangeAlgorithm, SharedSecret,
+    StartedKeyExchange, SupportedKxGroup, aws_lc_rs as provider,
 };
-use rustls::enums::CipherSuite;
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{NamedGroup, Tls12CipherSuite};
 

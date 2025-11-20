@@ -2,8 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
 
-use crate::crypto::hash;
-use crate::enums::HashAlgorithm;
+use crate::crypto::{HashAlgorithm, hash};
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};

@@ -6,9 +6,10 @@ use core::iter;
 use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
 use super::CryptoProvider;
+use super::enums::SignatureScheme;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::common_state::CommonState;
-use crate::enums::{CertificateType, SignatureScheme};
+use crate::enums::CertificateType;
 use crate::error::{AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};

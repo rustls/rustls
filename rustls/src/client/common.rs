@@ -2,8 +2,8 @@ use alloc::vec::Vec;
 
 use super::{ClientCredentialResolver, CredentialRequest};
 use crate::compress;
-use crate::crypto::SelectedCredential;
-use crate::enums::{CertificateType, SignatureScheme};
+use crate::crypto::{SelectedCredential, SignatureScheme};
+use crate::enums::CertificateType;
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtensions};

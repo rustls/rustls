@@ -3,8 +3,8 @@ use core::fmt::Debug;
 
 use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 
-use crate::crypto::Identity;
-use crate::enums::{CertificateType, SignatureScheme};
+use crate::crypto::{Identity, SignatureScheme};
+use crate::enums::CertificateType;
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};

@@ -30,8 +30,10 @@ use rayon::iter::Either;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
-use rustls::crypto::{CryptoProvider, GetRandomFailed, SecureRandom, TicketProducer, aws_lc_rs};
-use rustls::enums::{CipherSuite, ProtocolVersion};
+use rustls::crypto::{
+    CipherSuite, CryptoProvider, GetRandomFailed, SecureRandom, TicketProducer, aws_lc_rs,
+};
+use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, HandshakeKind, RootCertStore, ServerConfig, ServerConnection,
