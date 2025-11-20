@@ -10,8 +10,10 @@ use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
-use crate::crypto::{CryptoProvider, SelectedCredential, SupportedKxGroup};
-use crate::enums::{CertificateType, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::crypto::{
+    CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme, SupportedKxGroup,
+};
+use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};

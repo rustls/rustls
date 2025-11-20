@@ -1,8 +1,7 @@
 use alloc::boxed::Box;
 
 use ring::digest;
-use rustls::crypto;
-use rustls::enums::HashAlgorithm;
+use rustls::crypto::{self, HashAlgorithm};
 
 pub(crate) static SHA256: Hash = Hash(&digest::SHA256, HashAlgorithm::SHA256);
 pub(crate) static SHA384: Hash = Hash(&digest::SHA384, HashAlgorithm::SHA384);

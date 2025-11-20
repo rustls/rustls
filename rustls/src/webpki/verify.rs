@@ -8,7 +8,7 @@ use webpki::ExtendedKeyUsage;
 
 use super::anchors::RootCertStore;
 use super::pki_error;
-use crate::enums::SignatureScheme;
+use crate::crypto::SignatureScheme;
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::verify::{HandshakeSignatureValid, SignatureVerificationInput, SignerPublicKey};
 

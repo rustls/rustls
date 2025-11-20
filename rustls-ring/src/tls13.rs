@@ -2,13 +2,14 @@ use alloc::boxed::Box;
 
 use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
+use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
     AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
     Nonce, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm,
     UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use rustls::enums::{CipherSuite, ContentType, ProtocolVersion};
+use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite, crypto};

@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 
-use crate::enums::HashAlgorithm;
+use super::enums::HashAlgorithm;
 
 /// Describes a single cryptographic hash function.
 ///

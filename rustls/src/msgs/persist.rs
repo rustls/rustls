@@ -6,8 +6,8 @@ use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
 use crate::client::ClientCredentialResolver;
-use crate::crypto::Identity;
-use crate::enums::{CipherSuite, ProtocolVersion};
+use crate::crypto::{CipherSuite, Identity};
+use crate::enums::ProtocolVersion;
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};

@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 use aws_lc_rs::digest;
 
 use crate::crypto;
-use crate::enums::HashAlgorithm;
+use crate::crypto::enums::HashAlgorithm;
 
 pub(crate) static SHA256: Hash = Hash(&digest::SHA256, HashAlgorithm::SHA256);
 pub(crate) static SHA384: Hash = Hash(&digest::SHA384, HashAlgorithm::SHA384);

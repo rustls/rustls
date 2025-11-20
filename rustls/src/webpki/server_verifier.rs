@@ -3,8 +3,7 @@ use alloc::vec::Vec;
 use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
-use crate::crypto::{CryptoProvider, Identity, WebPkiSupportedAlgorithms};
-use crate::enums::SignatureScheme;
+use crate::crypto::{CryptoProvider, Identity, SignatureScheme, WebPkiSupportedAlgorithms};
 use crate::error::ApiMisuse;
 use crate::sync::Arc;
 use crate::verify::{

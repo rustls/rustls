@@ -20,10 +20,10 @@ use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::{
-    ActiveKeyExchange, HybridKeyExchange, Identity, SelectedCredential, SharedSecret, Signer,
-    StartedKeyExchange,
+    ActiveKeyExchange, HybridKeyExchange, Identity, SelectedCredential, SharedSecret,
+    SignatureScheme, Signer, StartedKeyExchange,
 };
-use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};

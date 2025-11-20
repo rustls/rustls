@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 
-use rustls::crypto::hash;
-use rustls::enums::HashAlgorithm;
+use rustls::crypto::{HashAlgorithm, hash};
 use sha2::Digest;
 
 pub(crate) struct Sha256;

@@ -24,11 +24,11 @@ use rustls::crypto::cipher::{
     Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use rustls::crypto::{
-    self, CipherSuiteCommon, Credentials, GetRandomFailed, Identity, KeyExchangeAlgorithm,
-    SelectedCredential, StartedKeyExchange, TicketProducer, WebPkiSupportedAlgorithms, hash, tls12,
-    tls13,
+    self, CipherSuite, CipherSuiteCommon, Credentials, GetRandomFailed, HashAlgorithm, Identity,
+    KeyExchangeAlgorithm, SelectedCredential, SignatureScheme, StartedKeyExchange, TicketProducer,
+    WebPkiSupportedAlgorithms, hash, tls12, tls13,
 };
-use rustls::enums::{CipherSuite, ContentType, HashAlgorithm, ProtocolVersion, SignatureScheme};
+use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,

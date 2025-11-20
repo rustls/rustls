@@ -9,8 +9,6 @@ use core::time::Duration;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
-#[cfg(test)]
-use crate::enums::CipherSuite;
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::ffdhe_groups::FfdheGroup;
@@ -29,6 +27,9 @@ pub mod aws_lc_rs;
 
 /// TLS message encryption/decryption interfaces.
 pub mod cipher;
+
+mod enums;
+pub use enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
 
 /// Hashing interfaces.
 pub mod hash;

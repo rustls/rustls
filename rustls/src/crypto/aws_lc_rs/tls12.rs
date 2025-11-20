@@ -8,9 +8,10 @@ use crate::crypto::cipher::{
     MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaqueMessage, OutboundPlainMessage,
     PrefixedPayload, Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
 };
+use crate::crypto::enums::{CipherSuite, SignatureScheme};
 use crate::crypto::tls12::{Prf, PrfSecret};
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};

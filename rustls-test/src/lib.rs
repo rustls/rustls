@@ -27,10 +27,11 @@ use rustls::crypto::cipher::{
     InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage, PlainMessage,
 };
 use rustls::crypto::{
-    Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential, SigningKey,
-    SingleCredential, WebPkiSupportedAlgorithms, verify_tls13_signature,
+    CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential,
+    SignatureScheme, SigningKey, SingleCredential, WebPkiSupportedAlgorithms,
+    verify_tls13_signature,
 };
-use rustls::enums::{CertificateType, CipherSuite, ContentType, ProtocolVersion, SignatureScheme};
+use rustls::enums::{CertificateType, ContentType, ProtocolVersion};
 use rustls::error::{CertificateError, Error};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::Message;
@@ -2099,9 +2100,8 @@ pub mod macros {
 /// Deeply inefficient, test-only TLS encoding helpers
 pub mod encoding {
     use rustls::NamedGroup;
-    use rustls::enums::{
-        CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
-    };
+    use rustls::crypto::{CipherSuite, SignatureScheme};
+    use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
     use rustls::error::AlertDescription;
     use rustls::internal::msgs::codec::Codec;
     use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};

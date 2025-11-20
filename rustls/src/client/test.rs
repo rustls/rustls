@@ -10,9 +10,10 @@ use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption}
 use crate::crypto::cipher::{MessageEncrypter, PlainMessage};
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
-    Credentials, CryptoProvider, Identity, SingleCredential, tls12_only, tls13_only, tls13_suite,
+    CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
+    tls12_only, tls13_only, tls13_suite,
 };
-use crate::enums::{CertificateType, CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::base::{PayloadU8, PayloadU16};
 use crate::msgs::codec::Reader;

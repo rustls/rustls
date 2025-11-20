@@ -10,8 +10,8 @@ use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_
 
 #[cfg(any(test, bench))]
 use crate::crypto::CryptoProvider;
+use crate::crypto::enums::SignatureScheme;
 use crate::crypto::signer::{Signer, SigningKey, public_key_to_spki};
-use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::sync::Arc;
 

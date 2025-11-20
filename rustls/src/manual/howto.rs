@@ -26,7 +26,7 @@ For a complete example of implementing a custom [`SigningKey`][signing_key] and
 
 [signing_key]: crate::crypto::SigningKey
 [choose_scheme]: crate::crypto::SigningKey::choose_scheme
-[sig_scheme]: crate::enums::SignatureScheme
+[sig_scheme]: crate::crypto::SignatureScheme
 [signer]: crate::crypto::Signer
 [sign_method]: crate::crypto::Signer::sign
 [credentials]: crate::crypto::Credentials

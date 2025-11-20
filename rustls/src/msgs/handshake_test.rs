@@ -25,9 +25,9 @@ use super::handshake::{
     SingleProtocolName, SupportedEcPointFormats, SupportedProtocolVersions,
 };
 use crate::crypto::cipher::Payload;
+use crate::crypto::{CipherSuite, SignatureScheme};
 use crate::enums::{
-    CertificateCompressionAlgorithm, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
-    SignatureScheme,
+    CertificateCompressionAlgorithm, CertificateType, HandshakeType, ProtocolVersion,
 };
 use crate::error::InvalidMessage;
 use crate::sync::Arc;

@@ -2,8 +2,8 @@ use core::fmt;
 
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
-use crate::crypto::{self, KeyExchangeAlgorithm};
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::crypto::{self, CipherSuite, KeyExchangeAlgorithm, SignatureScheme};
+use crate::enums::ProtocolVersion;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
@@ -184,8 +184,7 @@ mod tests {
 
     use super::SupportedCipherSuite;
     use crate::TEST_PROVIDERS;
-    use crate::crypto::tls13_suite;
-    use crate::enums::CipherSuite;
+    use crate::crypto::{CipherSuite, tls13_suite};
 
     #[test]
     fn test_scs_is_debug() {

@@ -39,12 +39,11 @@ use std::sync::Arc;
 
 use pki_types::PrivateKeyDer;
 use rustls::crypto::{
-    CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SigningKey, SupportedKxGroup,
-    WebPkiSupportedAlgorithms,
+    CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SignatureScheme, SigningKey,
+    SupportedKxGroup, WebPkiSupportedAlgorithms,
 };
 #[cfg(feature = "std")]
 use rustls::crypto::{TicketProducer, TicketerFactory};
-use rustls::enums::SignatureScheme;
 use rustls::error::Error;
 #[cfg(feature = "std")]
 use rustls::ticketer::TicketRotator;
