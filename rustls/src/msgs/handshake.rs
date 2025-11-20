@@ -10,7 +10,7 @@ use core::{fmt, iter};
 use pki_types::{CertificateDer, DnsName};
 
 use crate::crypto::cipher::Payload;
-use crate::crypto::hpke::{HpkeAead, HpkeKdf, HpkeKem};
+use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::crypto::{
     ActiveKeyExchange, CipherSuite, SecureRandom, SelectedCredential, SignatureScheme,
 };
@@ -2773,34 +2773,6 @@ impl<'a> HandshakeMessagePayload<'a> {
     }
 }
 
-#[expect(clippy::exhaustive_structs)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct HpkeSymmetricCipherSuite {
-    pub kdf_id: HpkeKdf,
-    pub aead_id: HpkeAead,
-}
-
-impl Codec<'_> for HpkeSymmetricCipherSuite {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.kdf_id.encode(bytes);
-        self.aead_id.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        Ok(Self {
-            kdf_id: HpkeKdf::read(r)?,
-            aead_id: HpkeAead::read(r)?,
-        })
-    }
-}
-
-/// draft-ietf-tls-esni-24: `HpkeSymmetricCipherSuite cipher_suites<4..2^16-4>;`
-impl TlsListElement for HpkeSymmetricCipherSuite {
-    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
-        empty_error: InvalidMessage::IllegalEmptyList("HpkeSymmetricCipherSuites"),
-    };
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HpkeKeyConfig {
     pub config_id: u8,
@@ -3138,6 +3110,7 @@ fn low_quality_integer_hash(mut x: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::hpke::{HpkeAead, HpkeKdf};
 
     #[test]
     fn test_ech_config_dupe_exts() {

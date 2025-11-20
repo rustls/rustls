@@ -5,7 +5,8 @@ use core::fmt::Debug;
 use zeroize::Zeroize;
 
 use crate::Error;
-pub use crate::msgs::handshake::HpkeSymmetricCipherSuite;
+use crate::error::InvalidMessage;
+use crate::msgs::codec::{Codec, ListLength, Reader, TlsListElement};
 
 /// An HPKE suite, specifying a key encapsulation mechanism and a symmetric cipher suite.
 #[expect(clippy::exhaustive_structs)]
@@ -131,6 +132,37 @@ impl Drop for HpkePrivateKey {
     fn drop(&mut self) {
         self.0.zeroize();
     }
+}
+
+/// An HPKE symmetric cipher suite, combining a KDF and an AEAD algorithm.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct HpkeSymmetricCipherSuite {
+    /// The KDF to use for this cipher suite.
+    pub kdf_id: HpkeKdf,
+    /// The AEAD to use for this cipher suite.
+    pub aead_id: HpkeAead,
+}
+
+impl Codec<'_> for HpkeSymmetricCipherSuite {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.kdf_id.encode(bytes);
+        self.aead_id.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            kdf_id: HpkeKdf::read(r)?,
+            aead_id: HpkeAead::read(r)?,
+        })
+    }
+}
+
+/// draft-ietf-tls-esni-24: `HpkeSymmetricCipherSuite cipher_suites<4..2^16-4>;`
+impl TlsListElement for HpkeSymmetricCipherSuite {
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("HpkeSymmetricCipherSuites"),
+    };
 }
 
 enum_builder! {
