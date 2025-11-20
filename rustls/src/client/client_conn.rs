@@ -27,7 +27,8 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
-use crate::{DistinguishedName, KeyLog, WantsVerifier, compress, verify};
+use crate::verify::DistinguishedName;
+use crate::{KeyLog, WantsVerifier, compress, verify};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.

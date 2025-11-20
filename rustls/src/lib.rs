@@ -507,7 +507,6 @@ pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
 #[cfg(feature = "std")]
 pub use crate::key_log_file::KeyLogFile;
-pub use crate::msgs::handshake::DistinguishedName;
 #[cfg(feature = "std")]
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
@@ -517,7 +516,7 @@ pub use crate::suites::{
 pub use crate::ticketer::TicketRotator;
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
-pub use crate::verify::{DigitallySignedStruct, SignerPublicKey};
+pub use crate::verify::{DigitallySignedStruct, DistinguishedName, SignerPublicKey};
 pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersion};
 pub use crate::webpki::RootCertStore;
 

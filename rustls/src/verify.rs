@@ -6,10 +6,10 @@ use pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 use crate::crypto::{Identity, SignatureScheme};
 use crate::enums::CertificateType;
 use crate::error::{Error, InvalidMessage};
-use crate::msgs::base::PayloadU16;
-use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::handshake::DistinguishedName;
+use crate::msgs::base::{NonEmpty, PayloadU16};
+use crate::msgs::codec::{Codec, ListLength, Reader, TlsListElement};
 use crate::sync::Arc;
+use crate::x509::wrap_in_sequence;
 
 // Marker types.  These are used to bind the fact some verification
 // (certificate chain or handshake signature) has taken place into
@@ -327,6 +327,51 @@ impl Codec<'_> for DigitallySignedStruct {
 
         Ok(Self { scheme, sig })
     }
+}
+
+wrapped_payload!(
+    /// A `DistinguishedName` is a `Vec<u8>` wrapped in internal types.
+    ///
+    /// It contains the DER or BER encoded [`Subject` field from RFC 5280](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6)
+    /// for a single certificate. The Subject field is [encoded as an RFC 5280 `Name`](https://datatracker.ietf.org/doc/html/rfc5280#page-116).
+    /// It can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
+    ///
+    /// ```ignore
+    /// for name in distinguished_names {
+    ///     use x509_parser::prelude::FromDer;
+    ///     println!("{}", x509_parser::x509::X509Name::from_der(&name.0)?.1);
+    /// }
+    /// ```
+    ///
+    /// The TLS encoding is defined in RFC5246: `opaque DistinguishedName<1..2^16-1>;`
+    pub struct DistinguishedName,
+    PayloadU16<NonEmpty>,
+);
+
+impl DistinguishedName {
+    /// Create a [`DistinguishedName`] after prepending its outer SEQUENCE encoding.
+    ///
+    /// This can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
+    ///
+    /// ```ignore
+    /// use x509_parser::prelude::FromDer;
+    /// println!("{}", x509_parser::x509::X509Name::from_der(dn.as_ref())?.1);
+    /// ```
+    pub fn in_sequence(bytes: &[u8]) -> Self {
+        Self(PayloadU16::new(wrap_in_sequence(bytes)))
+    }
+}
+
+impl PartialEq for DistinguishedName {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.0 == other.0.0
+    }
+}
+
+/// RFC8446: `DistinguishedName authorities<3..2^16-1>;` however,
+/// RFC5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
+impl TlsListElement for DistinguishedName {
+    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 /// Zero-sized marker type representing verification of a signature.
