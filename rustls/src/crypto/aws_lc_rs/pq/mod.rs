@@ -1,6 +1,5 @@
-use crate::NamedGroup;
-use crate::crypto::SupportedKxGroup;
 use crate::crypto::aws_lc_rs::kx_group;
+use crate::crypto::{NamedGroup, SupportedKxGroup};
 use crate::error::{Error, PeerMisbehaved};
 
 mod hybrid;

@@ -405,9 +405,10 @@ pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::TEST_PROVIDERS;
     use crate::common_state::{CommonState, Side};
+    use crate::crypto::NamedGroup;
     use crate::msgs::handshake::{ServerEcdhParams, ServerKeyExchangeParams};
-    use crate::{NamedGroup, TEST_PROVIDERS};
 
     #[test]
     fn server_ecdhe_remaining_bytes() {

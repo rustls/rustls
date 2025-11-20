@@ -507,7 +507,6 @@ pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
 #[cfg(feature = "std")]
 pub use crate::key_log_file::KeyLogFile;
-pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::ffdhe_groups;
 pub use crate::msgs::handshake::DistinguishedName;
 #[cfg(feature = "std")]

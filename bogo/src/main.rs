@@ -39,8 +39,8 @@ use rustls::client::{
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::{
-    Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
-    SingleCredential, aws_lc_rs,
+    Credentials, CryptoProvider, Identity, NamedGroup, SelectedCredential, SignatureScheme, Signer,
+    SigningKey, SingleCredential, aws_lc_rs,
 };
 use rustls::enums::{CertificateCompressionAlgorithm, CertificateType, ProtocolVersion};
 use rustls::error::{
@@ -54,9 +54,7 @@ use rustls::pki_types::{
 };
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{self, ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
-use rustls::{
-    Connection, DistinguishedName, HandshakeKind, NamedGroup, RootCertStore, Side, compress,
-};
+use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, Side, compress};
 
 pub fn main() {
     let mut args: Vec<_> = env::args().collect();

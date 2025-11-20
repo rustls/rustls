@@ -1,6 +1,7 @@
 use base64::prelude::*;
+use rustls::crypto::NamedGroup;
+use rustls::ffdhe_groups;
 use rustls::ffdhe_groups::FfdheGroup;
-use rustls::{NamedGroup, ffdhe_groups};
 
 use crate::utils::verify_openssl3_available;
 

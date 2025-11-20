@@ -22,7 +22,7 @@ use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto;
 use crate::crypto::cipher::Payload;
 use crate::crypto::{
-    CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme, TicketProducer,
+    CipherSuite, CryptoProvider, NamedGroup, SelectedCredential, SignatureScheme, TicketProducer,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
@@ -43,7 +43,7 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{DistinguishedName, KeyLog, NamedGroup, WantsVerifier, compress, verify};
+use crate::{DistinguishedName, KeyLog, WantsVerifier, compress, verify};
 
 /// A trait for the ability to store server session data.
 ///

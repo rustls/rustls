@@ -25,8 +25,8 @@ use rustls::crypto::cipher::{
 };
 use rustls::crypto::{
     self, CipherSuite, CipherSuiteCommon, Credentials, GetRandomFailed, HashAlgorithm, Identity,
-    KeyExchangeAlgorithm, SelectedCredential, SignatureScheme, StartedKeyExchange, TicketProducer,
-    WebPkiSupportedAlgorithms, hash, tls12, tls13,
+    KeyExchangeAlgorithm, NamedGroup, SelectedCredential, SignatureScheme, StartedKeyExchange,
+    TicketProducer, WebPkiSupportedAlgorithms, hash, tls12, tls13,
 };
 use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
@@ -35,9 +35,7 @@ use rustls::pki_types::{
     SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
 use rustls::server::{ClientHello, ServerCredentialResolver};
-use rustls::{
-    ConnectionTrafficSecrets, Error, NamedGroup, RootCertStore, Tls12CipherSuite, Tls13CipherSuite,
-};
+use rustls::{ConnectionTrafficSecrets, Error, RootCertStore, Tls12CipherSuite, Tls13CipherSuite};
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
 pub const PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {

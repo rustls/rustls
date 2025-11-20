@@ -3,9 +3,9 @@ use core::fmt;
 
 use ring::agreement;
 use ring::rand::SystemRandom;
-use rustls::NamedGroup;
 use rustls::crypto::{
-    ActiveKeyExchange, GetRandomFailed, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+    ActiveKeyExchange, GetRandomFailed, NamedGroup, SharedSecret, StartedKeyExchange,
+    SupportedKxGroup,
 };
 use rustls::error::{Error, PeerMisbehaved};
 

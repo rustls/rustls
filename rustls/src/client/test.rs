@@ -10,14 +10,14 @@ use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption}
 use crate::crypto::cipher::{MessageEncrypter, PlainMessage};
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
-    tls12_only, tls13_only, tls13_suite,
+    CipherSuite, Credentials, CryptoProvider, Identity, NamedGroup, SignatureScheme,
+    SingleCredential, tls12_only, tls13_only, tls13_suite,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::base::{PayloadU8, PayloadU16};
 use crate::msgs::codec::Reader;
-use crate::msgs::enums::{Compression, ECCurveType, NamedGroup};
+use crate::msgs::enums::{Compression, ECCurveType};
 use crate::msgs::handshake::{
     CertificateChain, ClientHelloPayload, EcParameters, HandshakeMessagePayload, HandshakePayload,
     HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random, ServerEcdhParams,

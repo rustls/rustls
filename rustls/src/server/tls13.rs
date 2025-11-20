@@ -14,7 +14,7 @@ use crate::common_state::{
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::crypto::Identity;
+use crate::crypto::{Identity, NamedGroup};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -46,7 +46,7 @@ mod client_hello {
     use crate::crypto::{SelectedCredential, Signer, SupportedKxGroup};
     use crate::msgs::base::PayloadU8;
     use crate::msgs::ccs::ChangeCipherSpecPayload;
-    use crate::msgs::enums::{Compression, NamedGroup};
+    use crate::msgs::enums::Compression;
     use crate::msgs::handshake::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
         ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
