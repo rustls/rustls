@@ -11,7 +11,6 @@ use zeroize::Zeroize;
 
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;
 use crate::sync::Arc;
 pub use crate::webpki::{
@@ -30,6 +29,9 @@ pub mod cipher;
 
 mod enums;
 pub use enums::{CipherSuite, HashAlgorithm, NamedGroup, SignatureAlgorithm, SignatureScheme};
+
+pub mod ffdhe_groups;
+use ffdhe_groups::FfdheGroup;
 
 /// Hashing interfaces.
 pub mod hash;
@@ -505,9 +507,8 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     /// The default implementation returns `None`, so non-FFDHE groups (the
     /// most common) do not need to do anything.
     ///
-    /// FFDHE groups must implement this. `rustls::ffdhe_groups` contains
-    /// suitable values to return, for example
-    /// [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
+    /// FFDHE groups must implement this. [`ffdhe_groups`] contains
+    /// suitable values to return, for example [`ffdhe_groups::FFDHE2048`].
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
         None
     }
@@ -663,9 +664,8 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// The default implementation returns `None`, so non-FFDHE groups (the
     /// most common) do not need to do anything.
     ///
-    /// FFDHE groups must implement this. `rustls::ffdhe_groups` contains
-    /// suitable values to return, for example
-    /// [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
+    /// FFDHE groups must implement this. [`ffdhe_groups`] contains
+    /// suitable values to return, for example [`ffdhe_groups::FFDHE2048`].
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
         None
     }

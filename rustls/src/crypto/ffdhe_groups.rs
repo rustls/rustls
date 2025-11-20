@@ -2,7 +2,7 @@
 //! in [RFC 7919 Appendix A](https://datatracker.ietf.org/doc/html/rfc7919#appendix-A).
 
 /// Parameters of an FFDHE group, with Big-endian byte order
-#[expect(clippy::exhaustive_structs)]
+#[expect(missing_docs, clippy::exhaustive_structs)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FfdheGroup<'a> {
     pub p: &'a [u8],
