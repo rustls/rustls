@@ -11,6 +11,7 @@ use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 use webpki::ExtendedKeyUsage;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
+use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{EchConfigPayload, KeyExchangeAlgorithm};
 use crate::rand;
 
@@ -1309,8 +1310,6 @@ mod other_error {
 }
 
 pub use other_error::OtherError;
-
-use crate::msgs::codec::Codec;
 
 #[cfg(test)]
 mod tests {
