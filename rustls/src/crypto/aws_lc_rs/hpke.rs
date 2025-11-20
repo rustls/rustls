@@ -15,11 +15,10 @@ use crate::crypto::aws_lc_rs::hmac::{HMAC_SHA256, HMAC_SHA384, HMAC_SHA512};
 use crate::crypto::aws_lc_rs::unspecified_err;
 use crate::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeAead, HpkeKdf, HpkeKem, HpkeOpener, HpkePrivateKey,
-    HpkePublicKey, HpkeSealer, HpkeSuite,
+    HpkePublicKey, HpkeSealer, HpkeSuite, HpkeSymmetricCipherSuite,
 };
 use crate::crypto::tls13::{HkdfExpander, HkdfPrkExtract, HkdfUsingHmac, expand};
 use crate::error::{Error, OtherError};
-use crate::msgs::handshake::HpkeSymmetricCipherSuite;
 
 /// Default [RFC 9180] Hybrid Public Key Encryption (HPKE) suites supported by aws-lc-rs cryptography.
 pub static ALL_SUPPORTED_SUITES: &[&dyn Hpke] = &[
