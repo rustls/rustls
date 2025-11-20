@@ -6,13 +6,13 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use num_bigint::BigUint;
+use rustls::crypto::ffdhe_groups::{self, FfdheGroup};
 use rustls::crypto::{
     ActiveKeyExchange, CipherSuite, CipherSuiteCommon, CryptoProvider, KeyExchangeAlgorithm,
     NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
 };
 use rustls::enums::ProtocolVersion;
-use rustls::ffdhe_groups::FfdheGroup;
-use rustls::{ClientConfig, SupportedCipherSuite, Tls12CipherSuite, ffdhe_groups};
+use rustls::{ClientConfig, SupportedCipherSuite, Tls12CipherSuite};
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, do_handshake, do_suite_and_kx_test,
     make_pair_for_arc_configs, make_pair_for_configs, provider_with_one_suite,

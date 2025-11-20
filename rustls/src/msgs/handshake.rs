@@ -10,6 +10,7 @@ use core::{fmt, iter};
 use pki_types::{CertificateDer, DnsName};
 
 use crate::crypto::cipher::Payload;
+use crate::crypto::ffdhe_groups::FfdheGroup;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::crypto::{
     ActiveKeyExchange, CipherSuite, NamedGroup, SecureRandom, SelectedCredential, SignatureScheme,
@@ -19,7 +20,6 @@ use crate::enums::{
     ProtocolVersion,
 };
 use crate::error::InvalidMessage;
-use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
 use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec::{

@@ -48,7 +48,6 @@ pub(crate) mod persist;
 #[cfg(test)]
 mod handshake_test;
 
-pub mod ffdhe_groups;
 #[cfg(test)]
 mod message_test;
 

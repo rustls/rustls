@@ -6,8 +6,10 @@ use std::vec;
 
 use super::ServerConnectionData;
 use super::hs::ClientHelloInput;
+use crate::TEST_PROVIDERS;
 use crate::common_state::{CommonState, Context, KxState, Side};
 use crate::crypto::cipher::FakeAead;
+use crate::crypto::ffdhe_groups::{FFDHE2048, FfdheGroup};
 use crate::crypto::hash::FakeHash;
 use crate::crypto::tls12::FakePrf;
 use crate::crypto::{
@@ -17,7 +19,6 @@ use crate::crypto::{
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
-use crate::ffdhe_groups::FfdheGroup;
 use crate::msgs::base::PayloadU16;
 use crate::msgs::deframer::buffers::Locator;
 use crate::msgs::enums::Compression;
@@ -33,7 +34,6 @@ use crate::suites::CipherSuiteCommon;
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::version::TLS12_VERSION;
-use crate::{TEST_PROVIDERS, ffdhe_groups};
 
 #[test]
 fn null_compression_required() {
@@ -316,7 +316,7 @@ struct FakeFfdheGroup;
 
 impl SupportedKxGroup for FakeFfdheGroup {
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        Some(ffdhe_groups::FFDHE2048)
+        Some(FFDHE2048)
     }
 
     fn name(&self) -> NamedGroup {
@@ -342,7 +342,7 @@ impl ActiveKeyExchange for ActiveFakeFfdhe {
     }
 
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        Some(ffdhe_groups::FFDHE2048)
+        Some(FFDHE2048)
     }
 
     fn group(&self) -> NamedGroup {
