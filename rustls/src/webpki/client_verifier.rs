@@ -17,12 +17,12 @@ use crate::error::ApiMisuse;
 use crate::server::ServerConfig;
 use crate::sync::Arc;
 use crate::verify::{
-    ClientIdentity, ClientVerifier, HandshakeSignatureValid, NoClientAuth, PeerVerified,
-    SignatureVerificationInput,
+    ClientIdentity, ClientVerifier, DistinguishedName, HandshakeSignatureValid, NoClientAuth,
+    PeerVerified, SignatureVerificationInput,
 };
 use crate::webpki::parse_crls;
 use crate::webpki::verify::{ParsedCertificate, verify_tls12_signature, verify_tls13_signature};
-use crate::{DistinguishedName, Error, RootCertStore};
+use crate::{Error, RootCertStore};
 
 /// A builder for configuring a `webpki` client certificate verifier.
 ///

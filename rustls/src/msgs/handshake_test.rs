@@ -13,9 +13,9 @@ use super::handshake::{
     CertificateChain, CertificateEntry, CertificateExtensions, CertificatePayloadTls13,
     CertificateRequestExtensions, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
-    ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
-    EchConfigContents, EchConfigPayload, EncryptedClientHello, HandshakeMessagePayload,
-    HandshakePayload, HelloRetryRequest, HelloRetryRequestExtensions, HpkeKeyConfig, KeyShareEntry,
+    ClientSessionTicket, CompressedCertificatePayload, EcParameters, EchConfigContents,
+    EchConfigPayload, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
+    HelloRetryRequest, HelloRetryRequestExtensions, HpkeKeyConfig, KeyShareEntry,
     NewSessionTicketExtensions, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
     PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, PskKeyExchangeModes,
     Random, ServerDhParams, ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions,
@@ -31,7 +31,7 @@ use crate::enums::{
 };
 use crate::error::InvalidMessage;
 use crate::sync::Arc;
-use crate::verify::DigitallySignedStruct;
+use crate::verify::{DigitallySignedStruct, DistinguishedName};
 
 #[test]
 fn rejects_short_random() {

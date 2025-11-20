@@ -41,6 +41,7 @@ pub(crate) mod codec;
 pub(crate) mod deframer;
 pub(crate) mod enums;
 pub(crate) mod fragmenter;
+#[macro_use]
 pub(crate) mod handshake;
 pub(crate) mod message;
 pub(crate) mod persist;

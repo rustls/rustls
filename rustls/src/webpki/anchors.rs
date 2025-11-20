@@ -5,8 +5,9 @@ use pki_types::{CertificateDer, TrustAnchor};
 use webpki::anchor_from_trusted_cert;
 
 use super::pki_error;
+use crate::Error;
 use crate::log::{debug, trace};
-use crate::{DistinguishedName, Error};
+use crate::verify::DistinguishedName;
 
 /// A container for root certificates able to provide a root-of-trust
 /// for connection authentication.

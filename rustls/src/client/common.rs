@@ -6,7 +6,8 @@ use crate::crypto::{SelectedCredential, SignatureScheme};
 use crate::enums::CertificateType;
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
-use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtensions};
+use crate::msgs::handshake::{CertificateChain, ProtocolName, ServerExtensions};
+use crate::verify::DistinguishedName;
 
 #[derive(Debug)]
 pub(super) struct ServerCertDetails {
