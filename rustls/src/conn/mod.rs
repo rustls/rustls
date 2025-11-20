@@ -10,7 +10,7 @@ use kernel::KernelConnection;
 use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::{ApiMisuse, Error, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::deframer::{
     BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
 };
@@ -759,7 +759,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         let res = self
             .core
             .deframe(self.deframer_buffer.filled_mut(), &mut buffer_progress)
-            .map(|opt| opt.map(|pm| Message::try_from(&pm).map(|m| m.into_owned())));
+            .map(|opt| opt.map(|m| m.map(Message::into_owned)));
 
         match res? {
             Some(Ok(msg)) => {
@@ -1002,7 +1002,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
+    ) -> Result<Option<Result<Message<'b>, InvalidMessage>>, Error> {
         // before processing any more of `buffer`, return any extant messages from `hs_deframer`
         if self.hs_deframer.has_message_ready() {
             Ok(self.take_handshake_message(buffer, buffer_progress))
@@ -1015,7 +1015,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Option<EncodedMessage<&'b [u8]>> {
+    ) -> Option<Result<Message<'b>, InvalidMessage>> {
         self.hs_deframer
             .iter(buffer)
             .next()
@@ -1029,7 +1029,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
+    ) -> Result<Option<Result<Message<'b>, InvalidMessage>>, Error> {
         let version_is_tls13 = matches!(
             self.common_state.negotiated_version,
             Some(ProtocolVersion::TLSv1_3)
@@ -1143,7 +1143,7 @@ impl<Side: SideData> ConnectionCore<Side> {
             if unborrowed.typ != ContentType::Handshake {
                 let message = unborrowed.reborrow(&Delocator::new(buffer));
                 buffer_progress.add_discard(processed);
-                return Ok(Some(message));
+                return Ok(Some(Message::try_from(&message)));
             }
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));

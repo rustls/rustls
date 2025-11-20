@@ -7,6 +7,7 @@ use crate::crypto::cipher::EncodedMessage;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, u24};
+use crate::msgs::message::Message;
 
 #[derive(Debug)]
 pub(crate) struct HandshakeDeframer {
@@ -305,7 +306,7 @@ pub(crate) struct HandshakeIter<'a, 'b> {
 }
 
 impl<'b> Iterator for HandshakeIter<'_, 'b> {
-    type Item = (EncodedMessage<&'b [u8]>, usize);
+    type Item = (Result<Message<'b>, InvalidMessage>, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
         let next_span = self.deframer.spans.get(self.index)?;
@@ -325,13 +326,13 @@ impl<'b> Iterator for HandshakeIter<'_, 'b> {
 
         self.index += 1;
         Some((
-            EncodedMessage {
+            Message::try_from(&EncodedMessage {
                 typ: ContentType::Handshake,
                 version: next_span.version,
                 payload: self
                     .containing_buffer
                     .slice_from_range(&next_span.bounds),
-            },
+            }),
             discard,
         ))
     }
@@ -388,7 +389,11 @@ mod tests {
     use std::vec;
 
     use super::*;
+    use crate::crypto::cipher::Payload;
+    use crate::enums::HandshakeType;
     use crate::msgs::deframer::DeframerIter;
+    use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
+    use crate::msgs::message::MessagePayload;
 
     fn add_bytes(hs: &mut HandshakeDeframer, slice: &[u8], within: &[u8]) {
         let msg = EncodedMessage {
@@ -419,9 +424,19 @@ mod tests {
 
         let (msg, discard) = hs.iter(&input).next().unwrap();
         std::println!("msg {msg:?} discard {discard:?}");
-        assert_eq!(msg.typ, ContentType::Handshake);
-        assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
-        assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xff]);
+        assert!(matches!(
+            msg,
+            Ok(Message {
+                version: ProtocolVersion::TLSv1_3,
+                payload: MessagePayload::Handshake {
+                    parsed: HandshakeMessagePayload(HandshakePayload::Unknown((
+                        HandshakeType::Unknown(0x21),
+                        Payload::Borrowed(&[0xff])
+                    ))),
+                    ..
+                },
+            })
+        ));
 
         input.drain(..discard);
         assert_eq!(input, &[0, 1]);
@@ -440,9 +455,19 @@ mod tests {
         assert_eq!(hs.spans.len(), 1);
 
         let (msg, discard) = std::dbg!(hs.iter(&input).next().unwrap());
-        assert_eq!(msg.typ, ContentType::Handshake);
-        assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
-        assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
+        assert!(matches!(
+            msg,
+            Ok(Message {
+                version: ProtocolVersion::TLSv1_3,
+                payload: MessagePayload::Handshake {
+                    parsed: HandshakeMessagePayload(HandshakePayload::Unknown((
+                        HandshakeType::Unknown(0x21),
+                        Payload::Borrowed(&[0x01, 0x02, 0x03, 0x04, 0x05])
+                    ))),
+                    ..
+                },
+            })
+        ));
 
         input.drain(..discard);
         assert_eq!(input, &[0]);
@@ -478,9 +503,19 @@ mod tests {
         let (msg, discard) = iter.next().unwrap();
         assert!(iter.next().is_none());
 
-        assert_eq!(msg.typ, ContentType::Handshake);
-        assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
-        assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xab]);
+        assert!(matches!(
+            msg,
+            Ok(Message {
+                version: ProtocolVersion::TLSv1_3,
+                payload: MessagePayload::Handshake {
+                    parsed: HandshakeMessagePayload(HandshakePayload::Unknown((
+                        HandshakeType::Unknown(0x21),
+                        Payload::Borrowed(&[0xab])
+                    ))),
+                    ..
+                },
+            })
+        ));
         assert_eq!(discard, 0);
     }
 
@@ -508,10 +543,10 @@ mod tests {
             let (msg, discard) = iter.next().unwrap();
             assert!(matches!(
                 msg,
-                EncodedMessage {
-                    typ: ContentType::Handshake,
+                Ok(Message {
+                    payload: MessagePayload::Handshake { .. },
                     ..
-                }
+                })
             ));
             assert_eq!(discard, 0);
         }
@@ -519,10 +554,10 @@ mod tests {
         let (msg, discard) = iter.next().unwrap();
         assert!(matches!(
             msg,
-            EncodedMessage {
-                typ: ContentType::Handshake,
+            Ok(Message {
+                payload: MessagePayload::Handshake { .. },
                 ..
-            }
+            })
         ));
         assert_eq!(discard, 4280);
         drop(iter);

@@ -170,10 +170,10 @@ impl Message<'_> {
     }
 }
 
-impl<'a> TryFrom<&'a EncodedMessage<&'a [u8]>> for Message<'a> {
+impl<'a, 'b> TryFrom<&'b EncodedMessage<&'a [u8]>> for Message<'a> {
     type Error = InvalidMessage;
 
-    fn try_from(plain: &'a EncodedMessage<&'a [u8]>) -> Result<Self, Self::Error> {
+    fn try_from(plain: &'b EncodedMessage<&'a [u8]>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
             payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
