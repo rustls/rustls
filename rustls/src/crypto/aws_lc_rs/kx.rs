@@ -5,10 +5,10 @@ use aws_lc_rs::agreement;
 use aws_lc_rs::rand::SystemRandom;
 
 use crate::crypto::{
-    ActiveKeyExchange, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+    ActiveKeyExchange, GetRandomFailed, NamedGroup, SharedSecret, StartedKeyExchange,
+    SupportedKxGroup,
 };
 use crate::error::{Error, PeerMisbehaved};
-use crate::rand::GetRandomFailed;
 
 /// A key-exchange group supported by *ring*.
 struct KxGroup {

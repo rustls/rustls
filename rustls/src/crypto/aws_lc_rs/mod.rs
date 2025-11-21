@@ -6,11 +6,10 @@ use webpki::aws_lc_rs as webpki_algs;
 
 use super::signer::SigningKey;
 use crate::crypto::{
-    CryptoProvider, KeyProvider, SecureRandom, SignatureScheme, SupportedKxGroup, TicketProducer,
-    TicketerFactory,
+    CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SignatureScheme, SupportedKxGroup,
+    TicketProducer, TicketerFactory,
 };
 use crate::error::{Error, OtherError};
-use crate::rand::GetRandomFailed;
 use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::ticketer::TicketRotator;

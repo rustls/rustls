@@ -56,7 +56,6 @@ pub use signer::{
 };
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;
-pub use crate::rand::GetRandomFailed;
 pub use crate::suites::CipherSuiteCommon;
 
 /// Controls core cryptography used by rustls.
@@ -367,6 +366,34 @@ impl Borrow<[&'static Tls13CipherSuite]> for CryptoProvider {
         &self.tls13_cipher_suites
     }
 }
+
+pub(crate) mod rand {
+    use super::{GetRandomFailed, SecureRandom};
+
+    /// Make an array of size `N` containing random material.
+    pub(crate) fn random_array<const N: usize>(
+        secure_random: &dyn SecureRandom,
+    ) -> Result<[u8; N], GetRandomFailed> {
+        let mut v = [0; N];
+        secure_random.fill(&mut v)?;
+        Ok(v)
+    }
+
+    /// Return a uniformly random [`u32`].
+    pub(crate) fn random_u32(secure_random: &dyn SecureRandom) -> Result<u32, GetRandomFailed> {
+        Ok(u32::from_be_bytes(random_array(secure_random)?))
+    }
+
+    /// Return a uniformly random [`u16`].
+    pub(crate) fn random_u16(secure_random: &dyn SecureRandom) -> Result<u16, GetRandomFailed> {
+        Ok(u16::from_be_bytes(random_array(secure_random)?))
+    }
+}
+
+/// Random material generation failed.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct GetRandomFailed;
 
 /// A source of cryptographically secure randomness.
 pub trait SecureRandom: Send + Sync + Debug {

@@ -13,11 +13,10 @@ use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use aws_lc_rs::{hmac, iv};
 
 use super::unspecified_err;
-use crate::crypto::TicketProducer;
+use crate::crypto::{GetRandomFailed, TicketProducer};
 use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
-use crate::rand::GetRandomFailed;
 
 /// An RFC 5077 "Recommended Ticket Construction" implementation of a [`TicketProducer`].
 pub(super) struct Rfc5077Ticketer {

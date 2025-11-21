@@ -8,6 +8,7 @@ use super::{
     AlertDescription, CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError,
     UnixTime,
 };
+use crate::crypto::GetRandomFailed;
 use crate::msgs::enums::tests::test_enum8_display;
 
 #[test]
@@ -298,8 +299,7 @@ fn alert_display() {
 
 #[test]
 fn rand_error_mapping() {
-    use super::rand;
-    let err: Error = rand::GetRandomFailed.into();
+    let err: Error = GetRandomFailed.into();
     assert_eq!(err, Error::FailedToGetRandomBytes);
 }
 

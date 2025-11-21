@@ -13,7 +13,8 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::ffdhe_groups::FfdheGroup;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::crypto::{
-    ActiveKeyExchange, CipherSuite, NamedGroup, SecureRandom, SelectedCredential, SignatureScheme,
+    ActiveKeyExchange, CipherSuite, GetRandomFailed, NamedGroup, SecureRandom, SelectedCredential,
+    SignatureScheme,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, EchClientHelloType, HandshakeType,
@@ -30,7 +31,6 @@ use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
     EchVersion, ExtensionType, KeyUpdateRequest, PskKeyExchangeMode, ServerNameType,
 };
-use crate::rand;
 use crate::sync::Arc;
 use crate::verify::{DigitallySignedStruct, DistinguishedName};
 
@@ -102,7 +102,7 @@ impl Codec<'_> for Random {
 }
 
 impl Random {
-    pub(crate) fn new(secure_random: &dyn SecureRandom) -> Result<Self, rand::GetRandomFailed> {
+    pub(crate) fn new(secure_random: &dyn SecureRandom) -> Result<Self, GetRandomFailed> {
         let mut data = [0u8; 32];
         secure_random.fill(&mut data)?;
         Ok(Self(data))
@@ -167,7 +167,7 @@ impl Codec<'_> for SessionId {
 }
 
 impl SessionId {
-    pub(crate) fn random(secure_random: &dyn SecureRandom) -> Result<Self, rand::GetRandomFailed> {
+    pub(crate) fn random(secure_random: &dyn SecureRandom) -> Result<Self, GetRandomFailed> {
         let mut data = [0u8; 32];
         secure_random.fill(&mut data)?;
         Ok(Self { data, len: 32 })
