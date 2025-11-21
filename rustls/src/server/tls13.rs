@@ -47,6 +47,7 @@ mod client_hello {
     use crate::crypto::{SelectedCredential, Signer};
     use crate::msgs::base::PayloadU8;
     use crate::msgs::ccs::ChangeCipherSpecPayload;
+    use crate::msgs::deframer::HandshakeAlignedProof;
     use crate::msgs::enums::Compression;
     use crate::msgs::handshake::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
@@ -385,7 +386,7 @@ mod client_hello {
             }
 
             let key_schedule_traffic =
-                emit_finished_tls13(flight, &randoms, cx, key_schedule, &st.config);
+                emit_finished_tls13(flight, &randoms, cx, key_schedule, &st.config, &proof);
 
             if !doing_client_auth && st.config.send_half_rtt_data {
                 // Application data can be sent immediately after Finished, in one
@@ -821,9 +822,10 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         key_schedule: KeyScheduleHandshake,
         config: &ServerConfig,
+        proof: &HandshakeAlignedProof,
     ) -> KeyScheduleTrafficWithClientFinishedPending {
         let handshake_hash = flight.transcript.current_hash();
-        let verify_data = key_schedule.sign_server_finish(&handshake_hash);
+        let verify_data = key_schedule.sign_server_finish(&handshake_hash, proof);
         let verify_data_payload = Payload::new(verify_data.as_ref());
 
         let fin = HandshakeMessagePayload(HandshakePayload::Finished(verify_data_payload));

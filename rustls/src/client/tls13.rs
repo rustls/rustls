@@ -1333,10 +1333,11 @@ impl State<ClientConnectionData> for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
+        let proof = cx.common.check_aligned_handshake()?;
         let handshake_hash = st.transcript.current_hash();
         let expect_verify_data = st
             .key_schedule
-            .sign_server_finish(&handshake_hash);
+            .sign_server_finish(&handshake_hash, &proof);
 
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
         {
@@ -1421,7 +1422,6 @@ impl State<ClientConnectionData> for ExpectFinished {
             .remove_tls12_session(&st.server_name);
 
         /* Now move to our application traffic keys. */
-        let proof = cx.common.check_aligned_handshake()?;
         let (key_schedule, exporter, resumption) =
             key_schedule_pre_finished.into_traffic(cx.common, st.transcript.current_hash(), &proof);
         cx.common
