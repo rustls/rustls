@@ -55,7 +55,6 @@ pub use signer::{
     SigningKey, SingleCredential, public_key_to_spki,
 };
 
-pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 pub use crate::suites::CipherSuiteCommon;
 
 /// Controls core cryptography used by rustls.
@@ -841,6 +840,18 @@ impl From<Vec<u8>> for SharedSecret {
     fn from(buf: Vec<u8>) -> Self {
         Self { buf, offset: 0 }
     }
+}
+
+/// Describes supported key exchange mechanisms.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum KeyExchangeAlgorithm {
+    /// Diffie-Hellman Key exchange (with only known parameters as defined in [RFC 7919]).
+    ///
+    /// [RFC 7919]: https://datatracker.ietf.org/doc/html/rfc7919
+    DHE,
+    /// Key exchange performed via elliptic curve Diffie-Hellman.
+    ECDHE,
 }
 
 /// This function returns a [`CryptoProvider`] that uses

@@ -13,8 +13,8 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::ffdhe_groups::FfdheGroup;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::crypto::{
-    ActiveKeyExchange, CipherSuite, GetRandomFailed, NamedGroup, SecureRandom, SelectedCredential,
-    SignatureScheme,
+    ActiveKeyExchange, CipherSuite, GetRandomFailed, KeyExchangeAlgorithm, NamedGroup,
+    SecureRandom, SelectedCredential, SignatureScheme,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, EchClientHelloType, HandshakeType,
@@ -1829,18 +1829,6 @@ impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
             entries: Vec::read(r)?,
         })
     }
-}
-
-/// Describes supported key exchange mechanisms.
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[non_exhaustive]
-pub enum KeyExchangeAlgorithm {
-    /// Diffie-Hellman Key exchange (with only known parameters as defined in [RFC 7919]).
-    ///
-    /// [RFC 7919]: https://datatracker.ietf.org/doc/html/rfc7919
-    DHE,
-    /// Key exchange performed via elliptic curve Diffie-Hellman.
-    ECDHE,
 }
 
 pub(crate) static ALL_KEY_EXCHANGE_ALGORITHMS: &[KeyExchangeAlgorithm] =
