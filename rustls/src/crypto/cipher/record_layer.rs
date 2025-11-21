@@ -7,6 +7,7 @@ use crate::crypto::cipher::{
 };
 use crate::error::Error;
 use crate::log::trace;
+use crate::msgs::deframer::HandshakeAlignedProof;
 
 #[derive(PartialEq)]
 enum DirectionState {
@@ -149,7 +150,7 @@ impl RecordLayer {
 
     /// Start using the `MessageDecrypter` previously provided to the previous
     /// call to `prepare_message_decrypter`.
-    pub(crate) fn start_decrypting(&mut self) {
+    pub(crate) fn start_decrypting(&mut self, _proof: &HandshakeAlignedProof) {
         debug_assert!(self.decrypt_state == DirectionState::Prepared);
         self.decrypt_state = DirectionState::Active;
     }
@@ -167,9 +168,13 @@ impl RecordLayer {
 
     /// Set and start using the given `MessageDecrypter` for future incoming
     /// message decryption.
-    pub(crate) fn set_message_decrypter(&mut self, cipher: Box<dyn MessageDecrypter>) {
+    pub(crate) fn set_message_decrypter(
+        &mut self,
+        cipher: Box<dyn MessageDecrypter>,
+        proof: &HandshakeAlignedProof,
+    ) {
         self.prepare_message_decrypter(cipher);
-        self.start_decrypting();
+        self.start_decrypting(proof);
         self.trial_decryption_len = None;
     }
 
@@ -180,9 +185,10 @@ impl RecordLayer {
         &mut self,
         cipher: Box<dyn MessageDecrypter>,
         max_length: usize,
+        proof: &HandshakeAlignedProof,
     ) {
         self.prepare_message_decrypter(cipher);
-        self.start_decrypting();
+        self.start_decrypting(proof);
         self.trial_decryption_len = Some(max_length);
     }
 
@@ -275,6 +281,7 @@ const SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;
 mod tests {
     use super::*;
     use crate::enums::{ContentType, ProtocolVersion};
+    use crate::msgs::deframer::HandshakeDeframer;
 
     #[test]
     fn test_has_decrypted() {
@@ -309,7 +316,8 @@ mod tests {
         assert!(!record_layer.has_decrypted());
 
         // Starting decryption should update the decrypt state, but not affect whether it has decrypted.
-        record_layer.start_decrypting();
+        let deframer = HandshakeDeframer::default();
+        record_layer.start_decrypting(&deframer.aligned().unwrap());
         assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
         assert_eq!(record_layer.read_seq, 0);
         assert!(!record_layer.has_decrypted());
@@ -329,7 +337,8 @@ mod tests {
 
         // Resetting the record layer message decrypter (as if a key update occurred) should reset
         // the read_seq number, but not our knowledge of whether we have decrypted previously.
-        record_layer.set_message_decrypter(Box::new(PassThroughDecrypter));
+        record_layer
+            .set_message_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
         assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
         assert_eq!(record_layer.read_seq, 0);
         assert!(record_layer.has_decrypted());
