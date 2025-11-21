@@ -28,8 +28,6 @@ pub mod cipher;
 mod enums;
 pub use enums::{CipherSuite, HashAlgorithm, NamedGroup, SignatureAlgorithm, SignatureScheme};
 
-pub mod ffdhe_groups;
-
 /// Hashing interfaces.
 pub mod hash;
 
