@@ -5,7 +5,7 @@ use core::time::Duration;
 use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
-use crate::client::ClientCredentialResolver;
+use crate::client::config::ClientCredentialResolver;
 use crate::crypto::{CipherSuite, Identity};
 use crate::enums::ProtocolVersion;
 use crate::error::InvalidMessage;
