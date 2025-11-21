@@ -8,8 +8,8 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-use super::client_conn::ClientConnectionData;
 use super::config::{ClientConfig, ClientCredentialResolver, Tls12Resumption};
+use super::connection::ClientConnectionData;
 use super::ech::{EchMode, EchState, EchStatus};
 use super::{ClientHelloDetails, tls13};
 use crate::bs_debug;

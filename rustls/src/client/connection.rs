@@ -21,7 +21,7 @@ use crate::sync::Arc;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
 
 #[cfg(feature = "std")]
-mod connection {
+mod buffered {
     use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
@@ -259,7 +259,7 @@ mod connection {
 }
 
 #[cfg(feature = "std")]
-pub use connection::{ClientConnection, WriteEarlyData};
+pub use buffered::{ClientConnection, WriteEarlyData};
 
 impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(

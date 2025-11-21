@@ -5,8 +5,8 @@ use alloc::vec::Vec;
 use pki_types::ServerName;
 use subtle::ConstantTimeEq;
 
-use super::client_conn::ClientConnectionData;
 use super::config::{ClientConfig, ClientSessionStore};
+use super::connection::ClientConnectionData;
 use super::ech::{self, EchStatus};
 use super::hs::{
     self, ClientContext, ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello,

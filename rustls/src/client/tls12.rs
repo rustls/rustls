@@ -8,8 +8,8 @@ use pki_types::ServerName;
 pub(crate) use server_hello::TLS12_HANDLER;
 use subtle::ConstantTimeEq;
 
-use super::client_conn::ClientConnectionData;
 use super::config::ClientConfig;
+use super::connection::ClientConnectionData;
 use super::hs::{self, ClientContext};
 use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;

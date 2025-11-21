@@ -13,17 +13,17 @@ pub use crate::webpki::{
     verify_identity_signed_by_trust_anchor, verify_server_name,
 };
 
-mod client_conn;
-#[cfg(feature = "std")]
-pub use client_conn::{ClientConnection, WriteEarlyData};
-pub use client_conn::{
-    ClientConnectionData, EarlyDataError, MayEncryptEarlyData, UnbufferedClientConnection,
-};
-
 mod config;
 pub use config::{
     ClientConfig, ClientCredentialResolver, ClientSessionStore, CredentialRequest, Resumption,
     Tls12Resumption, WantsClientCert,
+};
+
+mod connection;
+#[cfg(feature = "std")]
+pub use connection::{ClientConnection, WriteEarlyData};
+pub use connection::{
+    ClientConnectionData, EarlyDataError, MayEncryptEarlyData, UnbufferedClientConnection,
 };
 
 mod ech;
