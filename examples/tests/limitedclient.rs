@@ -11,60 +11,33 @@
 use std::process::Command;
 
 #[test]
-fn simpleclient_contains_aes_symbols() {
+fn limited_no_aes_symbols() {
+    let aws_aes =
+        |sym: &str| sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13");
+    let expected = find_symbols_in_executable(aws_aes, env!("CARGO_BIN_EXE_simpleclient"));
+    assert!(!expected.is_empty());
+
+    let limited = env!("CARGO_BIN_EXE_limitedclient");
+    let mut unexpected = find_symbols_in_executable(aws_aes, limited);
+    unexpected.retain(|sym| !sym.starts_with("aws_lc_fips_"));
     assert!(
-        !find_symbols_in_executable(
-            |sym| sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13"),
-            env!("CARGO_BIN_EXE_simpleclient")
-        )
-        .is_empty()
+        unexpected.is_empty(),
+        "found unexpected symbols in {limited}: {unexpected:#?}",
     );
 }
 
 #[test]
-fn simpleclient_contains_tls12_code() {
+fn limited_no_tls12_symbols() {
+    let tls12 =
+        |sym: &str| sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug");
+    let expected = find_symbols_in_executable(tls12, env!("CARGO_BIN_EXE_simpleclient"));
+    assert!(!expected.is_empty());
+
+    let limited = env!("CARGO_BIN_EXE_limitedclient");
+    let unexpected = find_symbols_in_executable(tls12, limited);
     assert!(
-        !find_symbols_in_executable(
-            |sym| sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug"),
-            env!("CARGO_BIN_EXE_simpleclient")
-        )
-        .is_empty()
-    );
-}
-
-#[test]
-fn limitedclient_does_not_contain_aes_symbols() {
-    let limitedclient = env!("CARGO_BIN_EXE_limitedclient");
-    if fips_mode(limitedclient) {
-        println!("FIPS mode includes the entirety of the fipsmodule due to dynamic linking");
-        return;
-    }
-
-    assert_no_symbols_in_executable(
-        |sym| sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13"),
-        limitedclient,
-    );
-}
-
-#[test]
-fn limitedclient_does_not_contain_tls12_code() {
-    assert_no_symbols_in_executable(
-        |sym| sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug"),
-        env!("CARGO_BIN_EXE_limitedclient"),
-    );
-}
-
-fn fips_mode(exe: &str) -> bool {
-    symbols_in_executable(exe)
-        .lines()
-        .any(|sym| sym.starts_with("aws_lc_fips_"))
-}
-
-fn assert_no_symbols_in_executable(f: impl Fn(&str) -> bool, exe: &str) {
-    let offending = find_symbols_in_executable(f, exe);
-    assert!(
-        offending.is_empty(),
-        "found unexpected symbols in {exe}: {offending:#?}",
+        unexpected.is_empty(),
+        "found unexpected symbols in {limited}: {unexpected:#?}",
     );
 }
 
