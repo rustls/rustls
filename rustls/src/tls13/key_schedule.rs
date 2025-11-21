@@ -38,8 +38,39 @@ impl KeyScheduleEarly {
         }
     }
 
-    /// Computes the `client_early_traffic_secret` and writes it
-    /// to `common`.
+    /// Computes the `client_early_traffic_secret` and installs it as encrypter.
+    pub(crate) fn client_early_traffic_secret_for_client(
+        &self,
+        hs_hash: &hash::Output,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+        common: &mut CommonState,
+    ) {
+        debug_assert_eq!(common.side, Side::Client);
+
+        self.ks.set_encrypter(
+            &self.client_early_traffic_secret(hs_hash, key_log, client_random, common),
+            common,
+        );
+    }
+
+    /// Computes the `client_early_traffic_secret` and installs it as decrypter.
+    pub(crate) fn client_early_traffic_secret_for_server(
+        &self,
+        hs_hash: &hash::Output,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+        common: &mut CommonState,
+    ) {
+        debug_assert_eq!(common.side, Side::Server);
+
+        self.ks.set_decrypter(
+            &self.client_early_traffic_secret(hs_hash, key_log, client_random, common),
+            common,
+        );
+    }
+
+    /// Computes the `client_early_traffic_secret` and returns it.
     ///
     /// `hs_hash` is `Transcript-Hash(ClientHello)`.
     ///
@@ -47,13 +78,13 @@ impl KeyScheduleEarly {
     /// Derive-Secret(., "c e traffic", ClientHello)
     ///               = client_early_traffic_secret
     /// ```
-    pub(crate) fn client_early_traffic_secret(
+    fn client_early_traffic_secret(
         &self,
         hs_hash: &hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
         common: &mut CommonState,
-    ) {
+    ) -> OkmBlock {
         let client_early_traffic_secret = self.ks.derive_logged_secret(
             SecretKind::ClientEarlyTrafficSecret,
             hs_hash.as_ref(),
@@ -61,20 +92,13 @@ impl KeyScheduleEarly {
             client_random,
         );
 
-        match common.side {
-            Side::Client => self
-                .ks
-                .set_encrypter(&client_early_traffic_secret, common),
-            Side::Server => self
-                .ks
-                .set_decrypter(&client_early_traffic_secret, common),
-        }
-
         if common.is_quic() {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
             // before the application can see.
-            common.quic.early_secret = Some(client_early_traffic_secret);
+            common.quic.early_secret = Some(client_early_traffic_secret.clone());
         }
+
+        client_early_traffic_secret
     }
 
     pub(crate) fn resumption_psk_binder_key_and_sign_verify_data(

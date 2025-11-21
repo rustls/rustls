@@ -441,7 +441,7 @@ pub(super) fn derive_early_traffic_secret(
     emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
 
     let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
-    early_key_schedule.client_early_traffic_secret(
+    early_key_schedule.client_early_traffic_secret_for_client(
         &client_hello_hash,
         key_log,
         client_random,
