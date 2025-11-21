@@ -5,18 +5,19 @@ pub use crate::webpki::{
 };
 
 mod client_conn;
-pub use client_conn::{
-    ClientConfig, ClientConnectionData, ClientCredentialResolver, ClientSessionStore,
-    CredentialRequest, EarlyDataError, MayEncryptEarlyData, Resumption, Tls12Resumption,
-    UnbufferedClientConnection,
-};
 #[cfg(feature = "std")]
 pub use client_conn::{ClientConnection, WriteEarlyData};
+pub use client_conn::{
+    ClientConnectionData, EarlyDataError, MayEncryptEarlyData, UnbufferedClientConnection,
+};
 
 mod common;
 
 pub(super) mod config;
-pub use config::WantsClientCert;
+pub use config::{
+    ClientConfig, ClientCredentialResolver, ClientSessionStore, CredentialRequest, Resumption,
+    Tls12Resumption, WantsClientCert,
+};
 
 mod ech;
 pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
@@ -36,8 +37,7 @@ pub(crate) use tls13::TLS13_HANDLER;
 
 /// Dangerous configuration that should be audited and used with extreme care.
 pub mod danger {
-    pub use super::client_conn::danger::DangerousClientConfig;
-    pub use super::config::danger::DangerousClientConfigBuilder;
+    pub use super::config::danger::{DangerousClientConfig, DangerousClientConfigBuilder};
     pub use crate::verify::{
         HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
         SignatureVerificationInput,
