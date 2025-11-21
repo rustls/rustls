@@ -558,7 +558,6 @@ impl KeyScheduleTraffic {
         &mut self,
         common: &mut CommonState,
     ) -> Result<(), Error> {
-        common.check_aligned_handshake()?;
         common.send_msg_encrypt(Message::build_key_update_request().into());
         let secret = self.next_application_traffic_secret(common.side);
         self.ks.set_encrypter(&secret, common);
