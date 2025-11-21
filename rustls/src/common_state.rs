@@ -351,7 +351,7 @@ impl CommonState {
                 let em = self.record_layer.encrypt_outgoing(m);
                 self.queue_tls_message(em);
             } else {
-                self.send_single_fragment(m);
+                let _ = self.send_single_fragment(m);
             }
         }
     }
@@ -367,13 +367,16 @@ impl CommonState {
                 payload.split_at(len).0,
             );
         for m in iter {
-            self.send_single_fragment(m);
+            let _ = self.send_single_fragment(m);
         }
 
         len
     }
 
-    fn send_single_fragment(&mut self, m: EncodedMessage<OutboundPlain<'_>>) {
+    fn send_single_fragment(
+        &mut self,
+        m: EncodedMessage<OutboundPlain<'_>>,
+    ) -> Result<(), EncryptError> {
         match self
             .record_layer
             .next_pre_encrypt_action()
@@ -393,7 +396,7 @@ impl CommonState {
                             "traffic keys exhausted, closing connection to prevent security failure"
                         );
                         self.send_close_notify();
-                        return;
+                        return Err(EncryptError::EncryptExhausted);
                     }
                 }
             }
@@ -401,12 +404,13 @@ impl CommonState {
             // Refuse to wrap counter at all costs.  This
             // is basically untestable unfortunately.
             PreEncryptAction::Refuse => {
-                return;
+                return Err(EncryptError::EncryptExhausted);
             }
         };
 
         let em = self.record_layer.encrypt_outgoing(m);
         self.queue_tls_message(em);
+        Ok(())
     }
 
     /// Send plaintext application data, fragmenting and
