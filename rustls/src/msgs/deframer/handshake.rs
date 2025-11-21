@@ -93,10 +93,11 @@ impl HandshakeDeframer {
 
     /// We are "aligned" if there is no partial fragment of a handshake
     /// message.
-    pub(crate) fn is_aligned(&self) -> bool {
+    pub(crate) fn aligned(&self) -> Option<HandshakeAlignedProof> {
         self.spans
             .iter()
             .all(|span| span.is_complete())
+            .then_some(HandshakeAlignedProof(()))
     }
 
     /// Iterate over the complete messages.
@@ -367,6 +368,12 @@ impl FragmentSpan {
         }
     }
 }
+
+/// Proof type that the handshake deframer is aligned.
+///
+/// See [`HandshakeDeframer::aligned()`] for more details.
+#[derive(Clone, Copy)]
+pub(crate) struct HandshakeAlignedProof(());
 
 const HANDSHAKE_HEADER_LEN: usize = 1 + 3;
 

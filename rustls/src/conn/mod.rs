@@ -1079,7 +1079,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 {
                     // failed decryption during trial decryption is not allowed to be
                     // interleaved with partial handshake data.
-                    Ok(None) if !self.hs_deframer.is_aligned() => {
+                    Ok(None) if self.hs_deframer.aligned().is_none() => {
                         return Err(
                             PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
                         );
@@ -1105,7 +1105,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 break (plaintext, iter.bytes_consumed());
             };
 
-            if !self.hs_deframer.is_aligned() && message.typ != ContentType::Handshake {
+            if self.hs_deframer.aligned().is_none() && message.typ != ContentType::Handshake {
                 // "Handshake messages MUST NOT be interleaved with other record
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
@@ -1149,7 +1149,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 .input_message(message, &locator, buffer_progress.processed());
             self.hs_deframer.coalesce(buffer)?;
 
-            self.common_state.aligned_handshake = self.hs_deframer.is_aligned();
+            self.common_state.aligned_handshake = self.hs_deframer.aligned();
 
             if self.hs_deframer.has_message_ready() {
                 // trial decryption finishes with the first handshake message after it started.
