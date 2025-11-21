@@ -6,7 +6,7 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::{
     InboundPlainMessage, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, Payload,
-    PlainMessage,
+    PlainMessage, PreEncryptAction, RecordLayer,
 };
 use crate::crypto::{Identity, SupportedKxGroup};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -20,19 +20,18 @@ use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
 use crate::msgs::message::{Message, MessagePayload};
-use crate::record_layer::PreEncryptAction;
+use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{quic, record_layer};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
     pub(crate) handshake_kind: Option<HandshakeKind>,
     pub(crate) side: Side,
-    pub(crate) record_layer: record_layer::RecordLayer,
+    pub(crate) record_layer: RecordLayer,
     pub(crate) suite: Option<SupportedCipherSuite>,
     pub(crate) kx_state: KxState,
     pub(crate) alpn_protocol: Option<ProtocolName>,
@@ -71,7 +70,7 @@ impl CommonState {
             negotiated_version: None,
             handshake_kind: None,
             side,
-            record_layer: record_layer::RecordLayer::new(),
+            record_layer: RecordLayer::new(),
             suite: None,
             kx_state: KxState::default(),
             alpn_protocol: None,

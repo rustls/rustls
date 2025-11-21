@@ -18,6 +18,9 @@ pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
 mod outbound;
 pub use outbound::{OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 
+mod record_layer;
+pub(crate) use record_layer::{Decrypted, PreEncryptAction, RecordLayer};
+
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
     /// Build a `MessageEncrypter` for the given key/iv.

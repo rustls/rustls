@@ -412,7 +412,6 @@ mod hash_hs;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod limited_cache;
 mod rand;
-mod record_layer;
 #[cfg(feature = "std")]
 mod stream;
 mod tls12;
