@@ -4,6 +4,7 @@ use core::mem;
 
 use crate::crypto::{HashAlgorithm, hash};
 use crate::msgs::codec::Codec;
+use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};
 
@@ -128,7 +129,7 @@ impl HandshakeHash {
         ctx.finish()
     }
 
-    pub(crate) fn into_hrr_buffer(self) -> HandshakeHashBuffer {
+    pub(crate) fn into_hrr_buffer(self, _proof: &HandshakeAlignedProof) -> HandshakeHashBuffer {
         let old_hash = self.ctx.finish();
         let old_handshake_hash_msg =
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());

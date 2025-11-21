@@ -22,6 +22,7 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{
     ClientExtensions, ClientHelloPayload, EchConfigContents, EchConfigPayload, Encoding,
@@ -566,7 +567,12 @@ impl EchState {
     ///
     /// This will start the in-progress transcript using the given `hash`, convert it into an HRR
     /// buffer, and then add the hello retry message `m`.
-    pub(crate) fn transcript_hrr_update(&mut self, hash: &'static dyn Hash, m: &Message<'_>) {
+    pub(crate) fn transcript_hrr_update(
+        &mut self,
+        hash: &'static dyn Hash,
+        m: &Message<'_>,
+        proof: &HandshakeAlignedProof,
+    ) {
         trace!("Updating ECH inner transcript for HRR");
 
         let inner_transcript = self
@@ -574,7 +580,7 @@ impl EchState {
             .clone()
             .start_hash(hash);
 
-        let mut inner_transcript_buffer = inner_transcript.into_hrr_buffer();
+        let mut inner_transcript_buffer = inner_transcript.into_hrr_buffer(proof);
         inner_transcript_buffer.add_message(m);
         self.inner_hello_transcript = inner_transcript_buffer;
     }
