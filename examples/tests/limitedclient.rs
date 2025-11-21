@@ -48,7 +48,7 @@ fn count_aes_symbols_in_executable(exe: &str) -> usize {
     let mut count = 0;
 
     for sym in symbols_in_executable(exe).lines() {
-        println!("candidate symbol {sym:?}");
+        //println!("candidate symbol {sym:?}");
 
         if sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13") {
             println!("found aes symbol {sym:?}");
@@ -63,7 +63,7 @@ fn count_tls12_client_symbols_in_executable(exe: &str) -> usize {
     let mut count = 0;
 
     for sym in symbols_in_executable(exe).lines() {
-        println!("candidate symbol {sym:?}");
+        //println!("candidate symbol {sym:?}");
 
         if sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug") {
             println!("found tls12 symbol {sym:?}");
