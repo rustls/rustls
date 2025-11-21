@@ -8,11 +8,11 @@ use zeroize::Zeroizing;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
-use crate::crypto::{self, SignatureScheme, hash};
+use crate::crypto::{self, KeyExchangeAlgorithm, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ApiMisuse, Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::handshake::{KeyExchangeAlgorithm, KxDecode};
+use crate::msgs::handshake::KxDecode;
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
 use crate::version::Tls12Version;
 
