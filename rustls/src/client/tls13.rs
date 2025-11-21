@@ -6,12 +6,12 @@ use pki_types::ServerName;
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
-use super::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use super::config::{ClientConfig, ClientSessionStore};
 use super::ech::{self, EchStatus};
 use super::hs::{
     self, ClientContext, ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello,
 };
+use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
