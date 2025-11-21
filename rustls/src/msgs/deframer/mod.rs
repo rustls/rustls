@@ -11,7 +11,7 @@ pub(crate) use buffers::{
 };
 
 mod handshake;
-pub(crate) use handshake::HandshakeDeframer;
+pub(crate) use handshake::{HandshakeAlignedProof, HandshakeDeframer};
 
 /// A deframer of TLS wire messages.
 ///
