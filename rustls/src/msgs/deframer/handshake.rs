@@ -372,6 +372,7 @@ impl FragmentSpan {
 /// Proof type that the handshake deframer is aligned.
 ///
 /// See [`HandshakeDeframer::aligned()`] for more details.
+#[must_use]
 #[derive(Clone, Copy)]
 pub(crate) struct HandshakeAlignedProof(());
 
