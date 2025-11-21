@@ -28,8 +28,6 @@ fn limited_no_aes_symbols() {
 
 #[test]
 fn limited_no_tls12_symbols() {
-    let tls12 =
-        |sym: &str| sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug");
     let expected = find_symbols_in_executable(tls12, env!("CARGO_BIN_EXE_simpleclient"));
     assert!(!expected.is_empty());
 
@@ -39,6 +37,16 @@ fn limited_no_tls12_symbols() {
         unexpected.is_empty(),
         "found unexpected symbols in {limited}: {unexpected:#?}",
     );
+}
+
+fn tls12(sym: &str) -> bool {
+    sym.contains("rustls::client::tls12")
+        && !sym.contains("core::fmt::Debug")
+        // Exclude some trivial `State` default method implementations that
+        // appear to sometimes get inlined even if no TLS 1.2 code is used.
+        && !sym.ends_with("::send_key_update_request")
+        && !sym.ends_with("::handle_decrypt_error")
+        && !sym.ends_with("::into_external_state")
 }
 
 fn find_symbols_in_executable(f: impl Fn(&str) -> bool, exe: &str) -> Vec<String> {
