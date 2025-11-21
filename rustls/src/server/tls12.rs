@@ -6,8 +6,9 @@ pub(crate) use client_hello::TLS12_HANDLER;
 use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
+use super::config::ServerConfig;
 use super::hs::{self, ServerContext};
-use super::server_conn::{ServerConfig, ServerConnectionData};
+use super::server_conn::ServerConnectionData;
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;

@@ -4,7 +4,10 @@ pub use crate::webpki::{
 };
 
 pub(crate) mod config;
-pub use config::WantsServerCert;
+pub use config::{
+    ClientHello, InvalidSniPolicy, ServerConfig, ServerCredentialResolver, StoresServerSessions,
+    WantsServerCert,
+};
 
 pub(crate) mod handy;
 pub use handy::NoServerSessionStorage;
@@ -19,10 +22,7 @@ pub(crate) use hs::ServerHandler;
 mod server_conn;
 #[cfg(feature = "std")]
 pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
-pub use server_conn::{
-    ClientHello, InvalidSniPolicy, ServerConfig, ServerConnectionData, ServerCredentialResolver,
-    StoresServerSessions, UnbufferedServerConnection,
-};
+pub use server_conn::{ServerConnectionData, UnbufferedServerConnection};
 
 mod tls12;
 pub(crate) use tls12::TLS12_HANDLER;
