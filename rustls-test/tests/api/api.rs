@@ -18,7 +18,7 @@ use rustls::crypto::{
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
 use rustls::internal::msgs::message::{Message, MessagePayload};
-use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
+use rustls::server::{Acceptor, ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
     ClientConfig, ClientConnection, HandshakeKind, KeyingMaterialExporter, ServerConfig,
     ServerConnection, SupportedCipherSuite,
@@ -1541,7 +1541,7 @@ fn large_client_hello() {
 
 #[test]
 fn large_client_hello_acceptor() {
-    let mut acceptor = rustls::server::Acceptor::default();
+    let mut acceptor = Acceptor::default();
     let hello = include_bytes!("../data/bug2227-clienthello.bin");
     let mut cursor = io::Cursor::new(hello);
     loop {
@@ -1552,6 +1552,28 @@ fn large_client_hello_acceptor() {
             break;
         }
     }
+}
+
+#[test]
+fn excess_client_hello_acceptor() {
+    // this is a trivial ClientHello, followed by a fragment of a ClientHello
+    let mut hello = encoding::basic_client_hello(vec![]);
+    hello.extend(&hello[..10].to_vec());
+    let hello = encoding::message_framing(ContentType::Handshake, ProtocolVersion::TLSv1_2, hello);
+
+    let mut acceptor = Acceptor::default();
+    acceptor
+        .read_tls(&mut io::Cursor::new(hello))
+        .unwrap();
+    let (error, mut alert) = acceptor.accept().unwrap_err();
+    assert_eq!(error, PeerMisbehaved::KeyEpochWithPendingFragment.into());
+
+    let mut alert_buf = vec![];
+    alert.write(&mut alert_buf).unwrap();
+    assert_eq!(
+        alert_buf,
+        encoding::alert(AlertDescription::UnexpectedMessage, &[])
+    );
 }
 
 #[test]
