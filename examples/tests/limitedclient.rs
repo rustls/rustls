@@ -6,20 +6,22 @@
 
 // Don't assume binutils are available everywhere, or that `nm` has a
 // portable interface.
-#![cfg(target_os = "linux")]
+#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::process::Command;
 
 #[test]
 fn limited_no_aes_symbols() {
-    let aws_aes =
-        |sym: &str| sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13");
+    let aws_aes = |sym: &str| {
+        (sym.starts_with("aws_lc_") || sym.starts_with("_aws_lc_"))
+            && sym.ends_with("_EVP_aead_aes_128_gcm_tls13")
+    };
     let expected = find_symbols_in_executable(aws_aes, env!("CARGO_BIN_EXE_simpleclient"));
     assert!(!expected.is_empty());
 
     let limited = env!("CARGO_BIN_EXE_limitedclient");
     let mut unexpected = find_symbols_in_executable(aws_aes, limited);
-    unexpected.retain(|sym| !sym.starts_with("aws_lc_fips_"));
+    unexpected.retain(|sym| !sym.starts_with("aws_lc_fips_") && !sym.starts_with("_aws_lc_fips_"));
     assert!(
         unexpected.is_empty(),
         "found unexpected symbols in {limited}: {unexpected:#?}",
