@@ -3,8 +3,8 @@ pub use crate::webpki::{
     ClientVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
 };
 
-pub(crate) mod builder;
-pub use builder::WantsServerCert;
+pub(crate) mod config;
+pub use config::WantsServerCert;
 
 pub(crate) mod handy;
 pub use handy::NoServerSessionStorage;
