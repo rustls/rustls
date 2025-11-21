@@ -8,7 +8,7 @@ use std::io;
 use kernel::KernelConnection;
 
 use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, IoState, State};
-use crate::crypto::cipher::InboundPlainMessage;
+use crate::crypto::cipher::{Decrypted, InboundPlainMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::deframer::DeframerIter;
@@ -17,7 +17,6 @@ use crate::msgs::deframer::handshake::HandshakeDeframer;
 use crate::msgs::handshake::Random;
 #[cfg(feature = "std")]
 use crate::msgs::message::Message;
-use crate::record_layer::Decrypted;
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 

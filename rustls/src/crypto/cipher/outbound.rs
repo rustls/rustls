@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
+use super::record_layer::RecordLayer;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::msgs::message::HEADER_SIZE;
-use crate::record_layer::RecordLayer;
 
 /// A TLS frame, named `TLSPlaintext` in the standard.
 ///
