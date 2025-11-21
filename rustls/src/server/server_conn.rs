@@ -65,54 +65,6 @@ mod connection {
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
 
-    /// Allows reading of early data in resumed TLS1.3 connections.
-    ///
-    /// "Early data" is also known as "0-RTT data".
-    ///
-    /// This type implements [`io::Read`].
-    pub struct ReadEarlyData<'a> {
-        common: &'a mut ConnectionCommon<ServerConnectionData>,
-    }
-
-    impl<'a> ReadEarlyData<'a> {
-        fn new(common: &'a mut ConnectionCommon<ServerConnectionData>) -> Self {
-            ReadEarlyData { common }
-        }
-
-        /// Returns the "early" exporter that can derive key material for use in early data
-        ///
-        /// See [RFC5705][] for general details on what exporters are, and [RFC8446 S7.5][] for
-        /// specific details on the "early" exporter.
-        ///
-        /// **Beware** that the early exporter requires care, as it is subject to the same
-        /// potential for replay as early data itself.  See [RFC8446 appendix E.5.1][] for
-        /// more detail.
-        ///
-        /// This function can be called at most once per connection. This function will error:
-        /// if called more than once per connection.
-        ///
-        /// If you are looking for the normal exporter, this is available from
-        /// [`ConnectionCommon::exporter()`].
-        ///
-        /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
-        /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
-        /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
-        /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
-        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-            self.common.core.early_exporter()
-        }
-    }
-
-    impl io::Read for ReadEarlyData<'_> {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            self.common
-                .core
-                .side
-                .early_data
-                .read(buf)
-        }
-    }
-
     /// This represents a single TLS server connection.
     ///
     /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
@@ -427,6 +379,54 @@ mod connection {
     impl Debug for AcceptedAlert {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             f.debug_struct("AcceptedAlert").finish()
+        }
+    }
+
+    /// Allows reading of early data in resumed TLS1.3 connections.
+    ///
+    /// "Early data" is also known as "0-RTT data".
+    ///
+    /// This type implements [`io::Read`].
+    pub struct ReadEarlyData<'a> {
+        common: &'a mut ConnectionCommon<ServerConnectionData>,
+    }
+
+    impl<'a> ReadEarlyData<'a> {
+        fn new(common: &'a mut ConnectionCommon<ServerConnectionData>) -> Self {
+            ReadEarlyData { common }
+        }
+
+        /// Returns the "early" exporter that can derive key material for use in early data
+        ///
+        /// See [RFC5705][] for general details on what exporters are, and [RFC8446 S7.5][] for
+        /// specific details on the "early" exporter.
+        ///
+        /// **Beware** that the early exporter requires care, as it is subject to the same
+        /// potential for replay as early data itself.  See [RFC8446 appendix E.5.1][] for
+        /// more detail.
+        ///
+        /// This function can be called at most once per connection. This function will error:
+        /// if called more than once per connection.
+        ///
+        /// If you are looking for the normal exporter, this is available from
+        /// [`ConnectionCommon::exporter()`].
+        ///
+        /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+        /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
+        /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
+        /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
+        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+            self.common.core.early_exporter()
+        }
+    }
+
+    impl io::Read for ReadEarlyData<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.common
+                .core
+                .side
+                .early_data
+                .read(buf)
         }
     }
 }
