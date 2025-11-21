@@ -16,6 +16,7 @@ use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
+use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
     ClientHelloPayload, HandshakePayload, ProtocolName, Random, ServerExtensions,
@@ -572,6 +573,7 @@ pub(crate) struct ClientHelloInput<'a> {
     pub(super) message: &'a Message<'a>,
     pub(super) client_hello: &'a ClientHelloPayload,
     pub(super) sig_schemes: Vec<SignatureScheme>,
+    pub(super) proof: HandshakeAlignedProof,
 }
 
 impl<'a> ClientHelloInput<'a> {
@@ -605,7 +607,7 @@ impl<'a> ClientHelloInput<'a> {
         }
 
         // No handshake messages should follow this one in this flight.
-        cx.common.check_aligned_handshake()?;
+        let proof = cx.common.check_aligned_handshake()?;
 
         if done_retry {
             let ch_sni = client_hello
@@ -633,6 +635,7 @@ impl<'a> ClientHelloInput<'a> {
             message,
             client_hello,
             sig_schemes: sig_schemes.to_owned(),
+            proof,
         })
     }
 }
