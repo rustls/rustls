@@ -291,32 +291,8 @@ impl CommonState {
             );
 
         for m in fragments {
-            match self
-                .record_layer
-                .next_pre_encrypt_action()
-            {
-                PreEncryptAction::Nothing => {}
-                PreEncryptAction::RefreshOrClose => match self.negotiated_version {
-                    Some(ProtocolVersion::TLSv1_3) => {
-                        // driven by caller, as we don't have the `State` here
-                        self.refresh_traffic_keys_pending = true;
-                    }
-                    _ => {
-                        error!(
-                            "traffic keys exhausted, closing connection to prevent security failure"
-                        );
-                        self.send_close_notify();
-                        return Err(EncryptError::EncryptExhausted);
-                    }
-                },
-                PreEncryptAction::Refuse => {
-                    return Err(EncryptError::EncryptExhausted);
-                }
-            }
-
             let em = self
-                .record_layer
-                .encrypt_outgoing(m)
+                .encrypt_outgoing_fragment(m)?
                 .encode();
 
             let len = em.len();
