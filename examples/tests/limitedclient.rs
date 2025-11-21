@@ -13,20 +13,22 @@ use std::process::Command;
 #[test]
 fn simpleclient_contains_aes_symbols() {
     assert!(
-        count_symbols_in_executable(
+        !find_symbols_in_executable(
             |sym| sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13"),
             env!("CARGO_BIN_EXE_simpleclient")
-        ) > 0
+        )
+        .is_empty()
     );
 }
 
 #[test]
 fn simpleclient_contains_tls12_code() {
     assert!(
-        count_symbols_in_executable(
+        !find_symbols_in_executable(
             |sym| sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug"),
             env!("CARGO_BIN_EXE_simpleclient")
-        ) > 0
+        )
+        .is_empty()
     );
 }
 
@@ -39,10 +41,11 @@ fn limitedclient_does_not_contain_aes_symbols() {
     }
 
     assert_eq!(
-        count_symbols_in_executable(
+        find_symbols_in_executable(
             |sym| sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13"),
             limitedclient
-        ),
+        )
+        .len(),
         0
     );
 }
@@ -50,10 +53,11 @@ fn limitedclient_does_not_contain_aes_symbols() {
 #[test]
 fn limitedclient_does_not_contain_tls12_code() {
     assert_eq!(
-        count_symbols_in_executable(
+        find_symbols_in_executable(
             |sym| sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug"),
             env!("CARGO_BIN_EXE_limitedclient")
-        ),
+        )
+        .len(),
         0
     );
 }
@@ -64,18 +68,17 @@ fn fips_mode(exe: &str) -> bool {
         .any(|sym| sym.starts_with("aws_lc_fips_"))
 }
 
-fn count_symbols_in_executable(f: impl Fn(&str) -> bool, exe: &str) -> usize {
-    let mut count = 0;
+fn find_symbols_in_executable(f: impl Fn(&str) -> bool, exe: &str) -> Vec<String> {
+    let mut matching = Vec::new();
 
     for sym in symbols_in_executable(exe).lines() {
         //println!("candidate symbol {sym:?}");
         if f(sym) {
-            println!("found aes symbol {sym:?}");
-            count += 1;
+            matching.push(sym.trim().to_owned());
         }
     }
 
-    count
+    matching
 }
 
 fn symbols_in_executable(exe: &str) -> String {
