@@ -25,229 +25,6 @@ use crate::time_provider::TimeProvider;
 use crate::verify::{ClientVerifier, DistinguishedName, NoClientAuth};
 use crate::{KeyLog, NoKeyLog, compress};
 
-/// A trait for the ability to store server session data.
-///
-/// The keys and values are opaque.
-///
-/// Inserted keys are randomly chosen by the library and have
-/// no internal structure (in other words, you may rely on all
-/// bits being uniformly random).  Queried keys are untrusted data.
-///
-/// Both the keys and values should be treated as
-/// **highly sensitive data**, containing enough key material
-/// to break all security of the corresponding sessions.
-///
-/// Implementations can be lossy (in other words, forgetting
-/// key/value pairs) without any negative security consequences.
-///
-/// However, note that `take` **must** reliably delete a returned
-/// value.  If it does not, there may be security consequences.
-///
-/// `put` and `take` are mutating operations; this isn't expressed
-/// in the type system to allow implementations freedom in
-/// how to achieve interior mutability.  `Mutex` is a common
-/// choice.
-pub trait StoresServerSessions: Debug + Send + Sync {
-    /// Store session secrets encoded in `value` against `key`,
-    /// overwrites any existing value against `key`.  Returns `true`
-    /// if the value was stored.
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
-
-    /// Find a value with the given `key`.  Return it, or None
-    /// if it doesn't exist.
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
-
-    /// Find a value with the given `key`.  Return it and delete it;
-    /// or None if it doesn't exist.
-    fn take(&self, key: &[u8]) -> Option<Vec<u8>>;
-
-    /// Whether the store can cache another session. This is used to indicate to clients
-    /// whether their session can be resumed; the implementation is not required to remember
-    /// a session even if it returns `true` here.
-    fn can_cache(&self) -> bool;
-}
-
-/// How to choose a certificate chain and signing key for use
-/// in server authentication.
-///
-/// This is suitable when selecting a certificate does not require
-/// I/O or when the application is using blocking I/O anyhow.
-///
-/// For applications that use async I/O and need to do I/O to choose
-/// a certificate (for instance, fetching a certificate from a data store),
-/// the [`Acceptor`][super::Acceptor] interface is more suitable.
-pub trait ServerCredentialResolver: Debug + Send + Sync {
-    /// Choose a certificate chain and matching key given simplified ClientHello information.
-    ///
-    /// The `SelectedCredential` returned from this method contains an identity and a
-    /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
-    /// [`Credentials`], on which an implementation can call [`Credentials::signer()`].
-    /// An implementation can either store long-lived [`Credentials`] values, or instantiate
-    /// them as needed using one of its constructors.
-    ///
-    /// Yielding an `Error` will abort the handshake. Some relevant error variants:
-    ///
-    /// * [`PeerIncompatible::NoSignatureSchemesInCommon`]
-    /// * [`PeerIncompatible::NoServerNameProvided`]
-    /// * [`Error::NoSuitableCertificate`]
-    ///
-    /// [`Credentials`]: crate::crypto::Credentials
-    /// [`Credentials::signer()`]: crate::crypto::Credentials::signer
-    /// [`Signer`]: crate::crypto::Signer
-    /// [`PeerIncompatible::NoSignatureSchemesInCommon`]: crate::error::PeerIncompatible::NoSignatureSchemesInCommon
-    /// [`PeerIncompatible::NoServerNameProvided`]: crate::error::PeerIncompatible::NoServerNameProvided
-    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error>;
-
-    /// Returns which [`CertificateType`]s this resolver supports.
-    ///
-    /// Returning an empty slice will result in an error. The default implementation signals
-    /// support for X.509 certificates. Implementations should return the same value every time.
-    ///
-    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
-    fn supported_certificate_types(&self) -> &'static [CertificateType] {
-        &[CertificateType::X509]
-    }
-}
-
-/// A struct representing the received Client Hello
-#[derive(Debug)]
-pub struct ClientHello<'a> {
-    pub(super) server_name: Option<Cow<'a, DnsName<'a>>>,
-    pub(super) signature_schemes: &'a [SignatureScheme],
-    pub(super) alpn: Option<&'a Vec<ProtocolName>>,
-    pub(super) server_cert_types: Option<&'a [CertificateType]>,
-    pub(super) client_cert_types: Option<&'a [CertificateType]>,
-    pub(super) cipher_suites: &'a [CipherSuite],
-    /// The [certificate_authorities] extension, if it was sent by the client.
-    ///
-    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
-    pub(super) certificate_authorities: Option<&'a [DistinguishedName]>,
-    pub(super) named_groups: Option<&'a [NamedGroup]>,
-}
-
-impl<'a> ClientHello<'a> {
-    pub(super) fn new(
-        input: &'a ClientHelloInput<'a>,
-        sni: Option<&'a DnsName<'static>>,
-        version: ProtocolVersion,
-    ) -> Self {
-        Self {
-            server_name: sni.map(Cow::Borrowed),
-            signature_schemes: &input.sig_schemes,
-            alpn: input.client_hello.protocols.as_ref(),
-            client_cert_types: input
-                .client_hello
-                .client_certificate_types
-                .as_deref(),
-            server_cert_types: input
-                .client_hello
-                .server_certificate_types
-                .as_deref(),
-            cipher_suites: &input.client_hello.cipher_suites,
-            // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
-            certificate_authorities: match version {
-                ProtocolVersion::TLSv1_2 => None,
-                _ => input
-                    .client_hello
-                    .certificate_authority_names
-                    .as_deref(),
-            },
-            named_groups: input
-                .client_hello
-                .named_groups
-                .as_deref(),
-        }
-    }
-
-    /// Get the server name indicator.
-    ///
-    /// Returns `None` if the client did not supply a SNI.
-    pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.server_name.as_deref()
-    }
-
-    /// Get the compatible signature schemes.
-    ///
-    /// Returns standard-specified default if the client omitted this extension.
-    pub fn signature_schemes(&self) -> &[SignatureScheme] {
-        self.signature_schemes
-    }
-
-    /// Get the ALPN protocol identifiers submitted by the client.
-    ///
-    /// Returns `None` if the client did not include an ALPN extension.
-    ///
-    /// Application Layer Protocol Negotiation (ALPN) is a TLS extension that lets a client
-    /// submit a set of identifiers that each a represent an application-layer protocol.
-    /// The server will then pick its preferred protocol from the set submitted by the client.
-    /// Each identifier is represented as a byte array, although common values are often ASCII-encoded.
-    /// See the official RFC-7301 specifications at <https://datatracker.ietf.org/doc/html/rfc7301>
-    /// for more information on ALPN.
-    ///
-    /// For example, a HTTP client might specify "http/1.1" and/or "h2". Other well-known values
-    /// are listed in the at IANA registry at
-    /// <https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids>.
-    ///
-    /// The server can specify supported ALPN protocols by setting [`ServerConfig::alpn_protocols`].
-    /// During the handshake, the server will select the first protocol configured that the client supports.
-    pub fn alpn(&self) -> Option<impl Iterator<Item = &'a [u8]>> {
-        self.alpn.map(|protocols| {
-            protocols
-                .iter()
-                .map(|proto| proto.as_ref())
-        })
-    }
-
-    /// Get cipher suites.
-    pub fn cipher_suites(&self) -> &[CipherSuite] {
-        self.cipher_suites
-    }
-
-    /// Get the server certificate types offered in the ClientHello.
-    ///
-    /// Returns `None` if the client did not include a certificate type extension.
-    pub fn server_cert_types(&self) -> Option<&'a [CertificateType]> {
-        self.server_cert_types
-    }
-
-    /// Get the client certificate types offered in the ClientHello.
-    ///
-    /// Returns `None` if the client did not include a certificate type extension.
-    pub fn client_cert_types(&self) -> Option<&'a [CertificateType]> {
-        self.client_cert_types
-    }
-
-    /// Get the [certificate_authorities] extension sent by the client.
-    ///
-    /// Returns `None` if the client did not send this extension.
-    ///
-    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
-    pub fn certificate_authorities(&self) -> Option<&'a [DistinguishedName]> {
-        self.certificate_authorities
-    }
-
-    /// Get the [`named_groups`] extension sent by the client.
-    ///
-    /// This means different things in different versions of TLS:
-    ///
-    /// Originally it was introduced as the "[`elliptic_curves`]" extension for TLS1.2.
-    /// It described the elliptic curves supported by a client for all purposes: key
-    /// exchange, signature verification (for server authentication), and signing (for
-    /// client auth).  Later [RFC7919] extended this to include FFDHE "named groups",
-    /// but FFDHE groups in this context only relate to key exchange.
-    ///
-    /// In TLS1.3 it was renamed to "[`named_groups`]" and now describes all types
-    /// of key exchange mechanisms, and does not relate at all to elliptic curves
-    /// used for signatures.
-    ///
-    /// [`elliptic_curves`]: https://datatracker.ietf.org/doc/html/rfc4492#section-5.1.1
-    /// [RFC7919]: https://datatracker.ietf.org/doc/html/rfc7919#section-2
-    /// [`named_groups`]:https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.7
-    pub fn named_groups(&self) -> Option<&'a [NamedGroup]> {
-        self.named_groups
-    }
-}
-
 /// Common configuration for a set of server sessions.
 ///
 /// Making one of these is cheap, though one of the inputs may be expensive: gathering trust roots
@@ -520,6 +297,229 @@ impl ServerConfig {
         self.time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
+    }
+}
+
+/// A trait for the ability to store server session data.
+///
+/// The keys and values are opaque.
+///
+/// Inserted keys are randomly chosen by the library and have
+/// no internal structure (in other words, you may rely on all
+/// bits being uniformly random).  Queried keys are untrusted data.
+///
+/// Both the keys and values should be treated as
+/// **highly sensitive data**, containing enough key material
+/// to break all security of the corresponding sessions.
+///
+/// Implementations can be lossy (in other words, forgetting
+/// key/value pairs) without any negative security consequences.
+///
+/// However, note that `take` **must** reliably delete a returned
+/// value.  If it does not, there may be security consequences.
+///
+/// `put` and `take` are mutating operations; this isn't expressed
+/// in the type system to allow implementations freedom in
+/// how to achieve interior mutability.  `Mutex` is a common
+/// choice.
+pub trait StoresServerSessions: Debug + Send + Sync {
+    /// Store session secrets encoded in `value` against `key`,
+    /// overwrites any existing value against `key`.  Returns `true`
+    /// if the value was stored.
+    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
+
+    /// Find a value with the given `key`.  Return it, or None
+    /// if it doesn't exist.
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
+
+    /// Find a value with the given `key`.  Return it and delete it;
+    /// or None if it doesn't exist.
+    fn take(&self, key: &[u8]) -> Option<Vec<u8>>;
+
+    /// Whether the store can cache another session. This is used to indicate to clients
+    /// whether their session can be resumed; the implementation is not required to remember
+    /// a session even if it returns `true` here.
+    fn can_cache(&self) -> bool;
+}
+
+/// How to choose a certificate chain and signing key for use
+/// in server authentication.
+///
+/// This is suitable when selecting a certificate does not require
+/// I/O or when the application is using blocking I/O anyhow.
+///
+/// For applications that use async I/O and need to do I/O to choose
+/// a certificate (for instance, fetching a certificate from a data store),
+/// the [`Acceptor`][super::Acceptor] interface is more suitable.
+pub trait ServerCredentialResolver: Debug + Send + Sync {
+    /// Choose a certificate chain and matching key given simplified ClientHello information.
+    ///
+    /// The `SelectedCredential` returned from this method contains an identity and a
+    /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
+    /// [`Credentials`], on which an implementation can call [`Credentials::signer()`].
+    /// An implementation can either store long-lived [`Credentials`] values, or instantiate
+    /// them as needed using one of its constructors.
+    ///
+    /// Yielding an `Error` will abort the handshake. Some relevant error variants:
+    ///
+    /// * [`PeerIncompatible::NoSignatureSchemesInCommon`]
+    /// * [`PeerIncompatible::NoServerNameProvided`]
+    /// * [`Error::NoSuitableCertificate`]
+    ///
+    /// [`Credentials`]: crate::crypto::Credentials
+    /// [`Credentials::signer()`]: crate::crypto::Credentials::signer
+    /// [`Signer`]: crate::crypto::Signer
+    /// [`PeerIncompatible::NoSignatureSchemesInCommon`]: crate::error::PeerIncompatible::NoSignatureSchemesInCommon
+    /// [`PeerIncompatible::NoServerNameProvided`]: crate::error::PeerIncompatible::NoServerNameProvided
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error>;
+
+    /// Returns which [`CertificateType`]s this resolver supports.
+    ///
+    /// Returning an empty slice will result in an error. The default implementation signals
+    /// support for X.509 certificates. Implementations should return the same value every time.
+    ///
+    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    fn supported_certificate_types(&self) -> &'static [CertificateType] {
+        &[CertificateType::X509]
+    }
+}
+
+/// A struct representing the received Client Hello
+#[derive(Debug)]
+pub struct ClientHello<'a> {
+    pub(super) server_name: Option<Cow<'a, DnsName<'a>>>,
+    pub(super) signature_schemes: &'a [SignatureScheme],
+    pub(super) alpn: Option<&'a Vec<ProtocolName>>,
+    pub(super) server_cert_types: Option<&'a [CertificateType]>,
+    pub(super) client_cert_types: Option<&'a [CertificateType]>,
+    pub(super) cipher_suites: &'a [CipherSuite],
+    /// The [certificate_authorities] extension, if it was sent by the client.
+    ///
+    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    pub(super) certificate_authorities: Option<&'a [DistinguishedName]>,
+    pub(super) named_groups: Option<&'a [NamedGroup]>,
+}
+
+impl<'a> ClientHello<'a> {
+    pub(super) fn new(
+        input: &'a ClientHelloInput<'a>,
+        sni: Option<&'a DnsName<'static>>,
+        version: ProtocolVersion,
+    ) -> Self {
+        Self {
+            server_name: sni.map(Cow::Borrowed),
+            signature_schemes: &input.sig_schemes,
+            alpn: input.client_hello.protocols.as_ref(),
+            client_cert_types: input
+                .client_hello
+                .client_certificate_types
+                .as_deref(),
+            server_cert_types: input
+                .client_hello
+                .server_certificate_types
+                .as_deref(),
+            cipher_suites: &input.client_hello.cipher_suites,
+            // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
+            certificate_authorities: match version {
+                ProtocolVersion::TLSv1_2 => None,
+                _ => input
+                    .client_hello
+                    .certificate_authority_names
+                    .as_deref(),
+            },
+            named_groups: input
+                .client_hello
+                .named_groups
+                .as_deref(),
+        }
+    }
+
+    /// Get the server name indicator.
+    ///
+    /// Returns `None` if the client did not supply a SNI.
+    pub fn server_name(&self) -> Option<&DnsName<'_>> {
+        self.server_name.as_deref()
+    }
+
+    /// Get the compatible signature schemes.
+    ///
+    /// Returns standard-specified default if the client omitted this extension.
+    pub fn signature_schemes(&self) -> &[SignatureScheme] {
+        self.signature_schemes
+    }
+
+    /// Get the ALPN protocol identifiers submitted by the client.
+    ///
+    /// Returns `None` if the client did not include an ALPN extension.
+    ///
+    /// Application Layer Protocol Negotiation (ALPN) is a TLS extension that lets a client
+    /// submit a set of identifiers that each a represent an application-layer protocol.
+    /// The server will then pick its preferred protocol from the set submitted by the client.
+    /// Each identifier is represented as a byte array, although common values are often ASCII-encoded.
+    /// See the official RFC-7301 specifications at <https://datatracker.ietf.org/doc/html/rfc7301>
+    /// for more information on ALPN.
+    ///
+    /// For example, a HTTP client might specify "http/1.1" and/or "h2". Other well-known values
+    /// are listed in the at IANA registry at
+    /// <https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids>.
+    ///
+    /// The server can specify supported ALPN protocols by setting [`ServerConfig::alpn_protocols`].
+    /// During the handshake, the server will select the first protocol configured that the client supports.
+    pub fn alpn(&self) -> Option<impl Iterator<Item = &'a [u8]>> {
+        self.alpn.map(|protocols| {
+            protocols
+                .iter()
+                .map(|proto| proto.as_ref())
+        })
+    }
+
+    /// Get cipher suites.
+    pub fn cipher_suites(&self) -> &[CipherSuite] {
+        self.cipher_suites
+    }
+
+    /// Get the server certificate types offered in the ClientHello.
+    ///
+    /// Returns `None` if the client did not include a certificate type extension.
+    pub fn server_cert_types(&self) -> Option<&'a [CertificateType]> {
+        self.server_cert_types
+    }
+
+    /// Get the client certificate types offered in the ClientHello.
+    ///
+    /// Returns `None` if the client did not include a certificate type extension.
+    pub fn client_cert_types(&self) -> Option<&'a [CertificateType]> {
+        self.client_cert_types
+    }
+
+    /// Get the [certificate_authorities] extension sent by the client.
+    ///
+    /// Returns `None` if the client did not send this extension.
+    ///
+    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    pub fn certificate_authorities(&self) -> Option<&'a [DistinguishedName]> {
+        self.certificate_authorities
+    }
+
+    /// Get the [`named_groups`] extension sent by the client.
+    ///
+    /// This means different things in different versions of TLS:
+    ///
+    /// Originally it was introduced as the "[`elliptic_curves`]" extension for TLS1.2.
+    /// It described the elliptic curves supported by a client for all purposes: key
+    /// exchange, signature verification (for server authentication), and signing (for
+    /// client auth).  Later [RFC7919] extended this to include FFDHE "named groups",
+    /// but FFDHE groups in this context only relate to key exchange.
+    ///
+    /// In TLS1.3 it was renamed to "[`named_groups`]" and now describes all types
+    /// of key exchange mechanisms, and does not relate at all to elliptic curves
+    /// used for signatures.
+    ///
+    /// [`elliptic_curves`]: https://datatracker.ietf.org/doc/html/rfc4492#section-5.1.1
+    /// [RFC7919]: https://datatracker.ietf.org/doc/html/rfc7919#section-2
+    /// [`named_groups`]:https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.7
+    pub fn named_groups(&self) -> Option<&'a [NamedGroup]> {
+        self.named_groups
     }
 }
 
