@@ -45,7 +45,7 @@ use crate::sync::Arc;
 use crate::vecbuf::ChunkVecBuffer;
 
 #[cfg(feature = "std")]
-mod connection {
+mod buffered {
     use alloc::boxed::Box;
     use core::fmt;
     use core::fmt::{Debug, Formatter};
@@ -432,7 +432,7 @@ mod connection {
 }
 
 #[cfg(feature = "std")]
-pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
+pub use buffered::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
 /// Unbuffered version of `ServerConnection`
 ///

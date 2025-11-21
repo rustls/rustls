@@ -9,6 +9,11 @@ pub use config::{
     WantsServerCert,
 };
 
+mod connection;
+#[cfg(feature = "std")]
+pub use connection::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
+pub use connection::{ServerConnectionData, UnbufferedServerConnection};
+
 pub(crate) mod handy;
 pub use handy::NoServerSessionStorage;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
@@ -18,11 +23,6 @@ pub use handy::ServerSessionMemoryCache;
 
 mod hs;
 pub(crate) use hs::ServerHandler;
-
-mod server_conn;
-#[cfg(feature = "std")]
-pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
-pub use server_conn::{ServerConnectionData, UnbufferedServerConnection};
 
 mod tls12;
 pub(crate) use tls12::TLS12_HANDLER;
