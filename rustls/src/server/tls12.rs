@@ -687,11 +687,11 @@ impl State<ServerConnectionData> for ExpectCcs {
 
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
-        cx.common.check_aligned_handshake()?;
+        let proof = cx.common.check_aligned_handshake()?;
 
         cx.common
             .record_layer
-            .start_decrypting();
+            .start_decrypting(&proof);
         Ok(Box::new(ExpectFinished {
             config: self.config,
             secrets: self.secrets,
