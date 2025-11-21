@@ -557,7 +557,7 @@ impl CommonState {
     ) -> Result<usize, EncryptError> {
         self.send_close_notify();
         self.check_required_size(outgoing_tls, [].into_iter())?;
-        Ok(self.write_fragments(outgoing_tls, [].into_iter()))
+        Ok(self.write_buffered_fragments(outgoing_tls))
     }
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
