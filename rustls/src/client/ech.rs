@@ -5,7 +5,8 @@ use alloc::vec::Vec;
 use pki_types::{DnsName, EchConfigListBytes, ServerName};
 use subtle::ConstantTimeEq;
 
-use crate::client::tls13;
+use super::config::ClientConfig;
+use super::tls13;
 use crate::crypto::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::crypto::SecureRandom;
 use crate::crypto::cipher::Payload;
@@ -36,7 +37,7 @@ use crate::msgs::persist::Retrieved;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
-use crate::{ClientConfig, CommonState, Tls13CipherSuite};
+use crate::{CommonState, Tls13CipherSuite};
 
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
 #[non_exhaustive]

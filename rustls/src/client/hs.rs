@@ -8,13 +8,13 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-use super::{ClientCredentialResolver, Tls12Resumption};
+use super::client_conn::ClientConnectionData;
+use super::common::ClientHelloDetails;
+use super::config::{ClientConfig, ClientCredentialResolver, Tls12Resumption};
+use super::ech::{EchMode, EchState, EchStatus};
+use super::tls13;
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
-use crate::client::client_conn::ClientConnectionData;
-use crate::client::common::ClientHelloDetails;
-use crate::client::ech::EchState;
-use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange};
