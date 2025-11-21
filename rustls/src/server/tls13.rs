@@ -555,7 +555,7 @@ mod client_hello {
         // Start key schedule
         let key_schedule_pre_handshake = if let Some(psk) = resuming_psk {
             let early_key_schedule = KeyScheduleEarly::new(suite, psk);
-            early_key_schedule.client_early_traffic_secret(
+            early_key_schedule.client_early_traffic_secret_for_server(
                 &client_hello_hash,
                 &*config.key_log,
                 &randoms.client,
