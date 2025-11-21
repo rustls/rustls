@@ -42,19 +42,6 @@ fn limited_no_tls12_symbols() {
 }
 
 fn find_symbols_in_executable(f: impl Fn(&str) -> bool, exe: &str) -> Vec<String> {
-    let mut matching = Vec::new();
-
-    for sym in symbols_in_executable(exe).lines() {
-        //println!("candidate symbol {sym:?}");
-        if f(sym) {
-            matching.push(sym.trim().to_owned());
-        }
-    }
-
-    matching
-}
-
-fn symbols_in_executable(exe: &str) -> String {
     let nm_output = dbg!(
         Command::new("nm")
             .arg("--defined-only")
@@ -65,5 +52,14 @@ fn symbols_in_executable(exe: &str) -> String {
     .output()
     .expect("nm failed");
 
-    String::from_utf8(nm_output.stdout).expect("nm output not valid utf8")
+    let mut matching = Vec::new();
+    let symbols = String::from_utf8(nm_output.stdout).expect("nm output not valid utf8");
+    for sym in symbols.lines() {
+        //println!("candidate symbol {sym:?}");
+        if f(sym) {
+            matching.push(sym.trim().to_owned());
+        }
+    }
+
+    matching
 }
