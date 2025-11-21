@@ -331,7 +331,16 @@ impl CommonState {
             }
         }
 
-        written += self.write_fragments(&mut outgoing_tls[written..], fragments);
+        for m in fragments {
+            let em = self
+                .encrypt_state
+                .encrypt_outgoing(m)
+                .encode();
+
+            let len = em.len();
+            outgoing_tls[written..written + len].copy_from_slice(&em);
+            written += len;
+        }
 
         Ok(written)
     }
@@ -596,27 +605,6 @@ impl CommonState {
         while let Some(message) = self.sendable_tls.pop() {
             let len = message.len();
             outgoing_tls[written..written + len].copy_from_slice(&message);
-            written += len;
-        }
-
-        written
-    }
-
-    fn write_fragments<'a>(
-        &mut self,
-        outgoing_tls: &mut [u8],
-        fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
-    ) -> usize {
-        let mut written = 0;
-
-        for m in fragments {
-            let em = self
-                .encrypt_state
-                .encrypt_outgoing(m)
-                .encode();
-
-            let len = em.len();
-            outgoing_tls[written..written + len].copy_from_slice(&em);
             written += len;
         }
 
