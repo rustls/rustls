@@ -285,10 +285,10 @@ impl CommonState {
                 payload,
             );
 
-        for f in 0..fragments.len() {
+        for m in fragments {
             match self
                 .record_layer
-                .pre_encrypt_action(f as u64)
+                .next_pre_encrypt_action()
             {
                 PreEncryptAction::Nothing => {}
                 PreEncryptAction::RefreshOrClose => match self.negotiated_version {
@@ -308,9 +308,7 @@ impl CommonState {
                     return Err(EncryptError::EncryptExhausted);
                 }
             }
-        }
 
-        for m in fragments {
             let em = self
                 .record_layer
                 .encrypt_outgoing(m)
