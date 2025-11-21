@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::fmt;
 
-use super::server_conn::ServerConnectionData;
+use super::connection::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
 use crate::common_state::{KxState, State};

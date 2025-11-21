@@ -8,12 +8,12 @@ use pki_types::ServerName;
 pub(crate) use server_hello::TLS12_HANDLER;
 use subtle::ConstantTimeEq;
 
-use super::client_conn::ClientConnectionData;
-use super::hs::ClientContext;
+use super::config::ClientConfig;
+use super::connection::ClientConnectionData;
+use super::hs::{self, ClientContext};
+use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::client::common::{ClientAuthDetails, ServerCertDetails};
-use crate::client::{ClientConfig, hs};
 use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
