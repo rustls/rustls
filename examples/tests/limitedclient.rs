@@ -40,25 +40,17 @@ fn limitedclient_does_not_contain_aes_symbols() {
         return;
     }
 
-    assert_eq!(
-        find_symbols_in_executable(
-            |sym| sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13"),
-            limitedclient
-        )
-        .len(),
-        0
+    assert_no_symbols_in_executable(
+        |sym| sym.starts_with("aws_lc_") && sym.ends_with("_EVP_aead_aes_128_gcm_tls13"),
+        limitedclient,
     );
 }
 
 #[test]
 fn limitedclient_does_not_contain_tls12_code() {
-    assert_eq!(
-        find_symbols_in_executable(
-            |sym| sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug"),
-            env!("CARGO_BIN_EXE_limitedclient")
-        )
-        .len(),
-        0
+    assert_no_symbols_in_executable(
+        |sym| sym.contains("rustls::client::tls12") && !sym.contains("core::fmt::Debug"),
+        env!("CARGO_BIN_EXE_limitedclient"),
     );
 }
 
@@ -66,6 +58,14 @@ fn fips_mode(exe: &str) -> bool {
     symbols_in_executable(exe)
         .lines()
         .any(|sym| sym.starts_with("aws_lc_fips_"))
+}
+
+fn assert_no_symbols_in_executable(f: impl Fn(&str) -> bool, exe: &str) {
+    let offending = find_symbols_in_executable(f, exe);
+    assert!(
+        offending.is_empty(),
+        "found unexpected symbols in {exe}: {offending:#?}",
+    );
 }
 
 fn find_symbols_in_executable(f: impl Fn(&str) -> bool, exe: &str) -> Vec<String> {
