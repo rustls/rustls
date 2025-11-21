@@ -17,6 +17,7 @@ use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::deframer::buffers::{Delocator, Locator};
+use crate::msgs::deframer::handshake::HandshakeAlignedProof;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
@@ -38,7 +39,7 @@ pub struct CommonState {
     pub(crate) alpn_protocol: Option<ProtocolName>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
-    pub(crate) aligned_handshake: bool,
+    pub(crate) aligned_handshake: Option<HandshakeAlignedProof>,
     pub(crate) may_send_application_data: bool,
     may_receive_application_data: bool,
     pub(crate) early_traffic: bool,
@@ -77,7 +78,7 @@ impl CommonState {
             alpn_protocol: None,
             exporter: None,
             early_exporter: None,
-            aligned_handshake: true,
+            aligned_handshake: None,
             may_send_application_data: false,
             may_receive_application_data: false,
             early_traffic: false,
@@ -322,15 +323,15 @@ impl CommonState {
     // messages.  Otherwise the defragmented messages will have
     // been protected with two different record layer protections,
     // which is illegal.  Not mentioned in RFC.
-    pub(crate) fn check_aligned_handshake(&mut self) -> Result<(), Error> {
-        if !self.aligned_handshake {
-            Err(self.send_fatal_alert(
-                AlertDescription::UnexpectedMessage,
-                PeerMisbehaved::KeyEpochWithPendingFragment,
-            ))
-        } else {
-            Ok(())
-        }
+    pub(crate) fn check_aligned_handshake(&mut self) -> Result<HandshakeAlignedProof, Error> {
+        self.aligned_handshake
+            .clone()
+            .ok_or_else(|| {
+                self.send_fatal_alert(
+                    AlertDescription::UnexpectedMessage,
+                    PeerMisbehaved::KeyEpochWithPendingFragment,
+                )
+            })
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue

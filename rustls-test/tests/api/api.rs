@@ -1556,6 +1556,27 @@ fn large_client_hello_acceptor() {
 }
 
 #[test]
+fn excess_client_hello_acceptor() {
+    // this is a trivial ClientHello, followed by a fragment of a ClientHello
+    let mut hello = encoding::basic_client_hello(vec![]);
+    let hello2 = hello[4..10].to_vec();
+    let hello2 = encoding::handshake_framing(HandshakeType::ClientHello, hello2);
+    hello.extend(hello2);
+    let hello = encoding::message_framing(ContentType::Handshake, ProtocolVersion::TLSv1_2, hello);
+
+    let mut acceptor = rustls::server::Acceptor::default();
+    let mut cursor = io::Cursor::new(hello);
+    loop {
+        acceptor.read_tls(&mut cursor).unwrap();
+
+        if let Some(accepted) = acceptor.accept().unwrap() {
+            println!("{accepted:?}");
+            break;
+        }
+    }
+}
+
+#[test]
 fn server_invalid_sni_policy() {
     const SERVER_NAME_GOOD: &str = "LXXXxxxXXXR";
     const SERVER_NAME_BAD: &str = "[XXXxxxXXX]";

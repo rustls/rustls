@@ -234,7 +234,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         // If we change keying when a subsequent handshake message is being joined,
         // the two halves will have different record layer protections.  Disallow this.
-        cx.common.check_aligned_handshake()?;
+        let proof = cx.common.check_aligned_handshake()?;
 
         let hash_at_client_recvd_server_hello = transcript.current_hash();
         let key_schedule = key_schedule.derive_client_handshake_secrets(
@@ -244,6 +244,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             &*config.key_log,
             &randoms.client,
             cx.common,
+            &proof,
         );
 
         emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
@@ -441,7 +442,7 @@ pub(super) fn derive_early_traffic_secret(
     emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
 
     let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
-    early_key_schedule.client_early_traffic_secret(
+    early_key_schedule.client_early_traffic_secret_for_client(
         &client_hello_hash,
         key_log,
         client_random,
@@ -1332,10 +1333,11 @@ impl State<ClientConnectionData> for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
+        let proof = cx.common.check_aligned_handshake()?;
         let handshake_hash = st.transcript.current_hash();
         let expect_verify_data = st
             .key_schedule
-            .sign_server_finish(&handshake_hash);
+            .sign_server_finish(&handshake_hash, &proof);
 
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
         {
@@ -1420,9 +1422,8 @@ impl State<ClientConnectionData> for ExpectFinished {
             .remove_tls12_session(&st.server_name);
 
         /* Now move to our application traffic keys. */
-        cx.common.check_aligned_handshake()?;
         let (key_schedule, exporter, resumption) =
-            key_schedule_pre_finished.into_traffic(cx.common, st.transcript.current_hash());
+            key_schedule_pre_finished.into_traffic(cx.common, st.transcript.current_hash(), &proof);
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
         cx.common.exporter = Some(Box::new(exporter));
@@ -1544,7 +1545,7 @@ impl ExpectTraffic {
         }
 
         // Mustn't be interleaved with other handshake messages.
-        common.check_aligned_handshake()?;
+        let proof = common.check_aligned_handshake()?;
 
         if common.should_update_key(key_update_request)? {
             self.key_schedule
@@ -1553,7 +1554,7 @@ impl ExpectTraffic {
 
         // Update our read-side keys.
         self.key_schedule
-            .update_decrypter(common);
+            .update_decrypter(common, &proof);
         Ok(())
     }
 }

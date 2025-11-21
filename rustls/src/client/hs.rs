@@ -227,7 +227,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         )?;
         trace!("Got HRR {hrr:?}");
 
-        cx.common.check_aligned_handshake()?;
+        let proof = cx.common.check_aligned_handshake()?;
 
         // We always send a key share when TLS 1.3 is enabled.
         let offered_key_share = self.next.offered_key_share.unwrap();
@@ -355,13 +355,13 @@ impl ExpectServerHelloOrHelloRetryRequest {
             .next
             .transcript_buffer
             .start_hash(cs.hash_provider());
-        let mut transcript_buffer = transcript.into_hrr_buffer();
+        let mut transcript_buffer = transcript.into_hrr_buffer(&proof);
         transcript_buffer.add_message(&m);
 
         // If we offered ECH and the server accepted, we also need to update the separate
         // ECH transcript with the hello retry request message.
         if let Some(ech_state) = self.next.ech_state.as_mut() {
-            ech_state.transcript_hrr_update(cs.hash_provider(), &m);
+            ech_state.transcript_hrr_update(cs.hash_provider(), &m, &proof);
         }
 
         // Early data is not allowed after HelloRetryrequest

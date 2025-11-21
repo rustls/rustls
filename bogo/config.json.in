@@ -304,9 +304,7 @@
     "GarbageCertificate-Client-TLS13": "remote error: bad certificate",
     "GarbageCertificate-Server-TLS12": "remote error: bad certificate",
     "GarbageCertificate-Server-TLS13": "remote error: bad certificate",
-    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter",
-    "TrailingDataWithFinished-Client-TLS13": "local error: bad record MAC",
-    "TrailingDataWithFinished-Resume-Client-TLS13": "local error: bad record MAC"
+    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter"
   },
   "HalfRTTTickets": 0
 }
