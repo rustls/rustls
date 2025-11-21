@@ -28,136 +28,6 @@ use crate::time_provider::TimeProvider;
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{DistinguishedName, KeyLog, compress, verify};
 
-/// A trait for the ability to store client session data, so that sessions
-/// can be resumed in future connections.
-///
-/// Generally all data in this interface should be treated as
-/// **highly sensitive**, containing enough key material to break all security
-/// of the corresponding session.
-///
-/// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
-/// expressed in the type system to allow implementations freedom in
-/// how to achieve interior mutability.  `Mutex` is a common choice.
-pub trait ClientSessionStore: fmt::Debug + Send + Sync {
-    /// Remember what `NamedGroup` the given server chose.
-    fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup);
-
-    /// This should return the value most recently passed to `set_kx_hint`
-    /// for the given `server_name`.
-    ///
-    /// If `None` is returned, the caller chooses the first configured group,
-    /// and an extra round trip might happen if that choice is unsatisfactory
-    /// to the server.
-    fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup>;
-
-    /// Remember a TLS1.2 session.
-    ///
-    /// At most one of these can be remembered at a time, per `server_name`.
-    fn set_tls12_session(
-        &self,
-        server_name: ServerName<'static>,
-        value: persist::Tls12ClientSessionValue,
-    );
-
-    /// Get the most recently saved TLS1.2 session for `server_name` provided to `set_tls12_session`.
-    fn tls12_session(
-        &self,
-        server_name: &ServerName<'_>,
-    ) -> Option<persist::Tls12ClientSessionValue>;
-
-    /// Remove and forget any saved TLS1.2 session for `server_name`.
-    fn remove_tls12_session(&self, server_name: &ServerName<'static>);
-
-    /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
-    /// resumption of this session.
-    ///
-    /// This can be called multiple times for a given session, allowing multiple independent tickets
-    /// to be valid at once.  The number of times this is called is controlled by the server, so
-    /// implementations of this trait should apply a reasonable bound of how many items are stored
-    /// simultaneously.
-    fn insert_tls13_ticket(
-        &self,
-        server_name: ServerName<'static>,
-        value: persist::Tls13ClientSessionValue,
-    );
-
-    /// Return a TLS1.3 ticket previously provided to `add_tls13_ticket`.
-    ///
-    /// Implementations of this trait must return each value provided to `add_tls13_ticket` _at most once_.
-    fn take_tls13_ticket(
-        &self,
-        server_name: &ServerName<'static>,
-    ) -> Option<persist::Tls13ClientSessionValue>;
-}
-
-/// A trait for the ability to choose a certificate chain and
-/// private key for the purposes of client authentication.
-pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
-    /// Resolve a client certificate chain/private key to use as the client's identity.
-    ///
-    /// The `SelectedCredential` returned from this method contains an identity and a
-    /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
-    /// [`Credentials`], on which an implementation can call [`Credentials::signer()`].
-    /// An implementation can either store long-lived [`Credentials`] values, or instantiate
-    /// them as needed using one of its constructors.
-    ///
-    /// Return `None` to continue the handshake without any client
-    /// authentication.  The server may reject the handshake later
-    /// if it requires authentication.
-    ///
-    /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
-    ///
-    /// [`Credentials`]: crate::crypto::Credentials
-    /// [`Credentials::signer()`]: crate::crypto::Credentials::signer
-    /// [`Signer`]: crate::crypto::Signer
-    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential>;
-
-    /// Returns which [`CertificateType`]s this resolver supports.
-    ///
-    /// Should return the empty slice if the resolver does not have any credentials to send.
-    /// Implementations should return the same value every time.
-    ///
-    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
-    fn supported_certificate_types(&self) -> &'static [CertificateType];
-}
-
-/// Context from the server to inform client credential selection.
-pub struct CredentialRequest<'a> {
-    pub(super) negotiated_type: CertificateType,
-    pub(super) root_hint_subjects: &'a [DistinguishedName],
-    pub(super) signature_schemes: &'a [SignatureScheme],
-}
-
-impl CredentialRequest<'_> {
-    /// List of certificate authority subject distinguished names provided by the server.
-    ///
-    /// If the list is empty, the client should send whatever certificate it has. The hints
-    /// are expected to be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. Note that
-    /// the encoding comes from the server and has not been validated by rustls.
-    ///
-    /// See [`DistinguishedName`] for more information on decoding with external crates like
-    /// `x509-parser`.
-    ///
-    /// [`DistinguishedName`]: crate::DistinguishedName
-    pub fn root_hint_subjects(&self) -> &[DistinguishedName] {
-        self.root_hint_subjects
-    }
-
-    /// Get the compatible signature schemes.
-    pub fn signature_schemes(&self) -> &[SignatureScheme] {
-        self.signature_schemes
-    }
-
-    /// The negotiated certificate type.
-    ///
-    /// If the server does not support [RFC 7250], this will be `CertificateType::X509`.
-    ///
-    /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
-    pub fn negotiated_type(&self) -> CertificateType {
-        self.negotiated_type
-    }
-}
-
 /// Common configuration for (typically) all connections made by a program.
 ///
 /// Making one of these is cheap, though one of the inputs may be expensive: gathering trust roots
@@ -386,6 +256,136 @@ impl ClientConfig {
     }
 }
 
+/// A trait for the ability to store client session data, so that sessions
+/// can be resumed in future connections.
+///
+/// Generally all data in this interface should be treated as
+/// **highly sensitive**, containing enough key material to break all security
+/// of the corresponding session.
+///
+/// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
+/// expressed in the type system to allow implementations freedom in
+/// how to achieve interior mutability.  `Mutex` is a common choice.
+pub trait ClientSessionStore: fmt::Debug + Send + Sync {
+    /// Remember what `NamedGroup` the given server chose.
+    fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup);
+
+    /// This should return the value most recently passed to `set_kx_hint`
+    /// for the given `server_name`.
+    ///
+    /// If `None` is returned, the caller chooses the first configured group,
+    /// and an extra round trip might happen if that choice is unsatisfactory
+    /// to the server.
+    fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup>;
+
+    /// Remember a TLS1.2 session.
+    ///
+    /// At most one of these can be remembered at a time, per `server_name`.
+    fn set_tls12_session(
+        &self,
+        server_name: ServerName<'static>,
+        value: persist::Tls12ClientSessionValue,
+    );
+
+    /// Get the most recently saved TLS1.2 session for `server_name` provided to `set_tls12_session`.
+    fn tls12_session(
+        &self,
+        server_name: &ServerName<'_>,
+    ) -> Option<persist::Tls12ClientSessionValue>;
+
+    /// Remove and forget any saved TLS1.2 session for `server_name`.
+    fn remove_tls12_session(&self, server_name: &ServerName<'static>);
+
+    /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
+    /// resumption of this session.
+    ///
+    /// This can be called multiple times for a given session, allowing multiple independent tickets
+    /// to be valid at once.  The number of times this is called is controlled by the server, so
+    /// implementations of this trait should apply a reasonable bound of how many items are stored
+    /// simultaneously.
+    fn insert_tls13_ticket(
+        &self,
+        server_name: ServerName<'static>,
+        value: persist::Tls13ClientSessionValue,
+    );
+
+    /// Return a TLS1.3 ticket previously provided to `add_tls13_ticket`.
+    ///
+    /// Implementations of this trait must return each value provided to `add_tls13_ticket` _at most once_.
+    fn take_tls13_ticket(
+        &self,
+        server_name: &ServerName<'static>,
+    ) -> Option<persist::Tls13ClientSessionValue>;
+}
+
+/// A trait for the ability to choose a certificate chain and
+/// private key for the purposes of client authentication.
+pub trait ClientCredentialResolver: fmt::Debug + Send + Sync {
+    /// Resolve a client certificate chain/private key to use as the client's identity.
+    ///
+    /// The `SelectedCredential` returned from this method contains an identity and a
+    /// one-time-use [`Signer`] wrapping the private key. This is usually obtained via a
+    /// [`Credentials`], on which an implementation can call [`Credentials::signer()`].
+    /// An implementation can either store long-lived [`Credentials`] values, or instantiate
+    /// them as needed using one of its constructors.
+    ///
+    /// Return `None` to continue the handshake without any client
+    /// authentication.  The server may reject the handshake later
+    /// if it requires authentication.
+    ///
+    /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
+    ///
+    /// [`Credentials`]: crate::crypto::Credentials
+    /// [`Credentials::signer()`]: crate::crypto::Credentials::signer
+    /// [`Signer`]: crate::crypto::Signer
+    fn resolve(&self, request: &CredentialRequest<'_>) -> Option<SelectedCredential>;
+
+    /// Returns which [`CertificateType`]s this resolver supports.
+    ///
+    /// Should return the empty slice if the resolver does not have any credentials to send.
+    /// Implementations should return the same value every time.
+    ///
+    /// See [RFC 7250](https://tools.ietf.org/html/rfc7250) for more information.
+    fn supported_certificate_types(&self) -> &'static [CertificateType];
+}
+
+/// Context from the server to inform client credential selection.
+pub struct CredentialRequest<'a> {
+    pub(super) negotiated_type: CertificateType,
+    pub(super) root_hint_subjects: &'a [DistinguishedName],
+    pub(super) signature_schemes: &'a [SignatureScheme],
+}
+
+impl CredentialRequest<'_> {
+    /// List of certificate authority subject distinguished names provided by the server.
+    ///
+    /// If the list is empty, the client should send whatever certificate it has. The hints
+    /// are expected to be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. Note that
+    /// the encoding comes from the server and has not been validated by rustls.
+    ///
+    /// See [`DistinguishedName`] for more information on decoding with external crates like
+    /// `x509-parser`.
+    ///
+    /// [`DistinguishedName`]: crate::DistinguishedName
+    pub fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        self.root_hint_subjects
+    }
+
+    /// Get the compatible signature schemes.
+    pub fn signature_schemes(&self) -> &[SignatureScheme] {
+        self.signature_schemes
+    }
+
+    /// The negotiated certificate type.
+    ///
+    /// If the server does not support [RFC 7250], this will be `CertificateType::X509`.
+    ///
+    /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
+    pub fn negotiated_type(&self) -> CertificateType {
+        self.negotiated_type
+    }
+}
+
 /// Configuration for how/when a client is allowed to resume a previous session.
 #[derive(Clone, Debug)]
 pub struct Resumption {
@@ -452,21 +452,21 @@ impl Default for Resumption {
     }
 }
 
-impl ConfigBuilder<ClientConfig, WantsVerifier> {
-    /// Enable Encrypted Client Hello (ECH) in the given mode.
+/// What mechanisms to support for resuming a TLS 1.2 session.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Tls12Resumption {
+    /// Disable 1.2 resumption.
+    Disabled,
+    /// Support 1.2 resumption using session ids only.
+    SessionIdOnly,
+    /// Support 1.2 resumption using session ids or RFC 5077 tickets.
     ///
-    /// This requires TLS 1.3 as the only supported protocol version to meet the requirement
-    /// to support ECH.  At the end, the config building process will return an error if either
-    /// TLS1.3 _is not_ supported by the provider, or TLS1.2 _is_ supported.
+    /// See[^1] for why you might like to disable RFC 5077 by instead choosing the `SessionIdOnly`
+    /// option. Note that TLS 1.3 tickets do not have those issues.
     ///
-    /// The `ClientConfig` that will be produced by this builder will be specific to the provided
-    /// [`crate::client::EchConfig`] and may not be appropriate for all connections made by the program.
-    /// In this case the configuration should only be shared by connections intended for domains
-    /// that offer the provided [`crate::client::EchConfig`] in their DNS zone.
-    pub fn with_ech(mut self, mode: EchMode) -> Self {
-        self.state.client_ech_mode = Some(mode);
-        self
-    }
+    /// [^1]: <https://words.filippo.io/we-need-to-talk-about-session-tickets/>
+    SessionIdOrTickets,
 }
 
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
@@ -514,77 +514,25 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
         }
     }
 
+    /// Enable Encrypted Client Hello (ECH) in the given mode.
+    ///
+    /// This requires TLS 1.3 as the only supported protocol version to meet the requirement
+    /// to support ECH.  At the end, the config building process will return an error if either
+    /// TLS1.3 _is not_ supported by the provider, or TLS1.2 _is_ supported.
+    ///
+    /// The `ClientConfig` that will be produced by this builder will be specific to the provided
+    /// [`crate::client::EchConfig`] and may not be appropriate for all connections made by the program.
+    /// In this case the configuration should only be shared by connections intended for domains
+    /// that offer the provided [`crate::client::EchConfig`] in their DNS zone.
+    pub fn with_ech(mut self, mode: EchMode) -> Self {
+        self.state.client_ech_mode = Some(mode);
+        self
+    }
+
     /// Access configuration options whose use is dangerous and requires
     /// extra care.
     pub fn dangerous(self) -> danger::DangerousClientConfigBuilder {
         danger::DangerousClientConfigBuilder { cfg: self }
-    }
-}
-
-/// What mechanisms to support for resuming a TLS 1.2 session.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Tls12Resumption {
-    /// Disable 1.2 resumption.
-    Disabled,
-    /// Support 1.2 resumption using session ids only.
-    SessionIdOnly,
-    /// Support 1.2 resumption using session ids or RFC 5077 tickets.
-    ///
-    /// See[^1] for why you might like to disable RFC 5077 by instead choosing the `SessionIdOnly`
-    /// option. Note that TLS 1.3 tickets do not have those issues.
-    ///
-    /// [^1]: <https://words.filippo.io/we-need-to-talk-about-session-tickets/>
-    SessionIdOrTickets,
-}
-
-/// Container for unsafe APIs
-pub(super) mod danger {
-    use core::marker::PhantomData;
-
-    use crate::client::WantsClientCert;
-    use crate::client::config::ClientConfig;
-    use crate::sync::Arc;
-    use crate::verify::ServerVerifier;
-    use crate::{ConfigBuilder, WantsVerifier};
-
-    /// Accessor for dangerous configuration options.
-    #[derive(Debug)]
-    pub struct DangerousClientConfig<'a> {
-        /// The underlying ClientConfig
-        pub(super) cfg: &'a mut ClientConfig,
-    }
-
-    impl DangerousClientConfig<'_> {
-        /// Overrides the default `ServerVerifier` with something else.
-        pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerVerifier>) {
-            self.cfg.verifier = verifier;
-        }
-    }
-
-    /// Accessor for dangerous configuration options.
-    #[derive(Debug)]
-    pub struct DangerousClientConfigBuilder {
-        /// The underlying ClientConfigBuilder
-        pub(super) cfg: ConfigBuilder<ClientConfig, WantsVerifier>,
-    }
-
-    impl DangerousClientConfigBuilder {
-        /// Set a custom certificate verifier.
-        pub fn with_custom_certificate_verifier(
-            self,
-            verifier: Arc<dyn ServerVerifier>,
-        ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
-            ConfigBuilder {
-                state: WantsClientCert {
-                    verifier,
-                    client_ech_mode: self.cfg.state.client_ech_mode,
-                },
-                provider: self.cfg.provider,
-                time_provider: self.cfg.time_provider,
-                side: PhantomData,
-            }
-        }
     }
 }
 
@@ -662,5 +610,55 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
             ech_mode: self.state.client_ech_mode,
         })
+    }
+}
+
+/// Container for unsafe APIs
+pub(super) mod danger {
+    use core::marker::PhantomData;
+
+    use crate::client::WantsClientCert;
+    use crate::client::config::ClientConfig;
+    use crate::sync::Arc;
+    use crate::verify::ServerVerifier;
+    use crate::{ConfigBuilder, WantsVerifier};
+
+    /// Accessor for dangerous configuration options.
+    #[derive(Debug)]
+    pub struct DangerousClientConfig<'a> {
+        /// The underlying ClientConfig
+        pub(super) cfg: &'a mut ClientConfig,
+    }
+
+    impl DangerousClientConfig<'_> {
+        /// Overrides the default `ServerVerifier` with something else.
+        pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerVerifier>) {
+            self.cfg.verifier = verifier;
+        }
+    }
+
+    /// Accessor for dangerous configuration options.
+    #[derive(Debug)]
+    pub struct DangerousClientConfigBuilder {
+        /// The underlying ClientConfigBuilder
+        pub(super) cfg: ConfigBuilder<ClientConfig, WantsVerifier>,
+    }
+
+    impl DangerousClientConfigBuilder {
+        /// Set a custom certificate verifier.
+        pub fn with_custom_certificate_verifier(
+            self,
+            verifier: Arc<dyn ServerVerifier>,
+        ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+            ConfigBuilder {
+                state: WantsClientCert {
+                    verifier,
+                    client_ech_mode: self.cfg.state.client_ech_mode,
+                },
+                provider: self.cfg.provider,
+                time_provider: self.cfg.time_provider,
+                side: PhantomData,
+            }
+        }
     }
 }
