@@ -1,15 +1,13 @@
 use num_bigint::BigUint;
 use rustls::Tls12CipherSuite;
-use rustls::crypto::ffdhe_groups::FfdheGroup;
+use rustls::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
 use rustls::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret, StartedKeyExchange, SupportedKxGroup,
 };
 use rustls::crypto::{CipherSuite, CipherSuiteCommon, NamedGroup, aws_lc_rs as provider};
 
-pub(crate) const FFDHE2048_GROUP: &dyn SupportedKxGroup = &FfdheKxGroup(
-    NamedGroup::FFDHE2048,
-    rustls::crypto::ffdhe_groups::FFDHE2048,
-);
+pub(crate) const FFDHE2048_GROUP: &dyn SupportedKxGroup =
+    &FfdheKxGroup(NamedGroup::FFDHE2048, FFDHE2048);
 
 #[derive(Debug)]
 pub(crate) struct FfdheKxGroup(pub NamedGroup, pub FfdheGroup<'static>);

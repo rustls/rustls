@@ -6,9 +6,11 @@ use core::ops::Deref;
 use zeroize::Zeroize;
 
 use super::NamedGroup;
-use super::ffdhe_groups::FfdheGroup;
 use crate::enums::ProtocolVersion;
 use crate::error::Error;
+
+pub mod ffdhe;
+use ffdhe::FfdheGroup;
 
 /// A supported key exchange group.
 ///
@@ -59,9 +61,8 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     /// The default implementation returns `None`, so non-FFDHE groups (the
     /// most common) do not need to do anything.
     ///
-    /// FFDHE groups must implement this. [`ffdhe_groups`][super::ffdhe_groups] contains
-    /// suitable values to return, for example
-    /// [`ffdhe_groups::FFDHE2048`][super::ffdhe_groups::FFDHE2048].
+    /// FFDHE groups must implement this. [`ffdhe`] contains suitable values to return, for
+    /// example [`ffdhe::FFDHE2048`].
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
         None
     }
@@ -217,9 +218,8 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// The default implementation returns `None`, so non-FFDHE groups (the
     /// most common) do not need to do anything.
     ///
-    /// FFDHE groups must implement this. [`ffdhe_groups`][super::ffdhe_groups] contains
-    /// suitable values to return, for example
-    /// [`ffdhe_groups::FFDHE2048`][super::ffdhe_groups::FFDHE2048].
+    /// FFDHE groups must implement this. [`ffdhe`] contains suitable values to return, for
+    /// example [`ffdhe::FFDHE2048`].
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
         None
     }

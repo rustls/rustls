@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use num_bigint::BigUint;
-use rustls::crypto::ffdhe_groups::{self, FfdheGroup};
+use rustls::crypto::kx::ffdhe::{FFDHE2048, FFDHE3072, FFDHE4096, FfdheGroup};
 use rustls::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret, StartedKeyExchange, SupportedKxGroup,
 };
@@ -273,12 +273,9 @@ pub fn ffdhe_provider() -> CryptoProvider {
 
 static FFDHE_KX_GROUPS: &[&dyn SupportedKxGroup] = &[&FFDHE2048_KX_GROUP, &FFDHE3072_KX_GROUP];
 
-pub const FFDHE2048_KX_GROUP: FfdheKxGroup =
-    FfdheKxGroup(NamedGroup::FFDHE2048, ffdhe_groups::FFDHE2048);
-pub const FFDHE3072_KX_GROUP: FfdheKxGroup =
-    FfdheKxGroup(NamedGroup::FFDHE3072, ffdhe_groups::FFDHE3072);
-pub const FFDHE4096_KX_GROUP: FfdheKxGroup =
-    FfdheKxGroup(NamedGroup::FFDHE4096, ffdhe_groups::FFDHE4096);
+pub const FFDHE2048_KX_GROUP: FfdheKxGroup = FfdheKxGroup(NamedGroup::FFDHE2048, FFDHE2048);
+pub const FFDHE3072_KX_GROUP: FfdheKxGroup = FfdheKxGroup(NamedGroup::FFDHE3072, FFDHE3072);
+pub const FFDHE4096_KX_GROUP: FfdheKxGroup = FfdheKxGroup(NamedGroup::FFDHE4096, FFDHE4096);
 
 /// The (test-only) TLS1.2 ciphersuite TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
 pub static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite {

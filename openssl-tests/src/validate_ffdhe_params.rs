@@ -1,21 +1,21 @@
 use base64::prelude::*;
 use rustls::crypto::NamedGroup;
-use rustls::crypto::ffdhe_groups::{self, FfdheGroup};
+use rustls::crypto::kx::ffdhe::{
+    FFDHE2048, FFDHE3072, FFDHE4096, FFDHE6144, FFDHE8192, FfdheGroup,
+};
 
 use crate::utils::verify_openssl3_available;
 
 #[test]
 fn ffdhe_params_correct() {
-    use NamedGroup::*;
-
     verify_openssl3_available();
 
     for (name, group) in [
-        (FFDHE2048, ffdhe_groups::FFDHE2048),
-        (FFDHE3072, ffdhe_groups::FFDHE3072),
-        (FFDHE4096, ffdhe_groups::FFDHE4096),
-        (FFDHE6144, ffdhe_groups::FFDHE6144),
-        (FFDHE8192, ffdhe_groups::FFDHE8192),
+        (NamedGroup::FFDHE2048, FFDHE2048),
+        (NamedGroup::FFDHE3072, FFDHE3072),
+        (NamedGroup::FFDHE4096, FFDHE4096),
+        (NamedGroup::FFDHE6144, FFDHE6144),
+        (NamedGroup::FFDHE8192, FFDHE8192),
     ] {
         println!("testing {name:?}");
         test_ffdhe_params_correct(name, group);

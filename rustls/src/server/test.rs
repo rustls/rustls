@@ -9,8 +9,8 @@ use super::hs::ClientHelloInput;
 use crate::TEST_PROVIDERS;
 use crate::common_state::{CommonState, Context, KxState, Side};
 use crate::crypto::cipher::FakeAead;
-use crate::crypto::ffdhe_groups::{FFDHE2048, FfdheGroup};
 use crate::crypto::hash::FakeHash;
+use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
 use crate::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret, StartedKeyExchange, SupportedKxGroup,
 };
