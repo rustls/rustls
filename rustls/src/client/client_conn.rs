@@ -20,84 +20,6 @@ use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
 
-#[derive(Debug, PartialEq)]
-enum EarlyDataState {
-    Disabled,
-    Ready,
-    Accepted,
-    AcceptedFinished,
-    Rejected,
-}
-
-#[derive(Debug)]
-pub(super) struct EarlyData {
-    state: EarlyDataState,
-    left: usize,
-}
-
-impl EarlyData {
-    fn new() -> Self {
-        Self {
-            left: 0,
-            state: EarlyDataState::Disabled,
-        }
-    }
-
-    pub(super) fn is_enabled(&self) -> bool {
-        matches!(self.state, EarlyDataState::Ready | EarlyDataState::Accepted)
-    }
-
-    #[cfg(feature = "std")]
-    fn is_accepted(&self) -> bool {
-        matches!(
-            self.state,
-            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
-        )
-    }
-
-    pub(super) fn enable(&mut self, max_data: usize) {
-        assert_eq!(self.state, EarlyDataState::Disabled);
-        self.state = EarlyDataState::Ready;
-        self.left = max_data;
-    }
-
-    pub(super) fn rejected(&mut self) {
-        trace!("EarlyData rejected");
-        self.state = EarlyDataState::Rejected;
-    }
-
-    pub(super) fn accepted(&mut self) {
-        trace!("EarlyData accepted");
-        assert_eq!(self.state, EarlyDataState::Ready);
-        self.state = EarlyDataState::Accepted;
-    }
-
-    pub(super) fn finished(&mut self) {
-        trace!("EarlyData finished");
-        self.state = match self.state {
-            EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,
-            _ => panic!("bad EarlyData state"),
-        }
-    }
-
-    fn check_write_opt(&mut self, sz: usize) -> Option<usize> {
-        match self.state {
-            EarlyDataState::Disabled => unreachable!(),
-            EarlyDataState::Ready | EarlyDataState::Accepted => {
-                let take = if self.left < sz {
-                    mem::replace(&mut self.left, 0)
-                } else {
-                    self.left -= sz;
-                    sz
-                };
-
-                Some(take)
-            }
-            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => None,
-        }
-    }
-}
-
 #[cfg(feature = "std")]
 mod connection {
     use alloc::vec::Vec;
@@ -116,76 +38,6 @@ mod connection {
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
-
-    /// Allows writing of early data in resumed TLS 1.3 connections.
-    ///
-    /// "Early data" is also known as "0-RTT data".
-    ///
-    /// This type implements [`io::Write`].
-    pub struct WriteEarlyData<'a> {
-        sess: &'a mut ClientConnection,
-    }
-
-    impl<'a> WriteEarlyData<'a> {
-        fn new(sess: &'a mut ClientConnection) -> Self {
-            WriteEarlyData { sess }
-        }
-
-        /// How many bytes you may send.  Writes will become short
-        /// once this reaches zero.
-        pub fn bytes_left(&self) -> usize {
-            self.sess
-                .inner
-                .core
-                .side
-                .early_data
-                .bytes_left()
-        }
-
-        /// Returns the "early" exporter that can derive key material for use in early data
-        ///
-        /// See [RFC5705][] for general details on what exporters are, and [RFC8446 S7.5][] for
-        /// specific details on the "early" exporter.
-        ///
-        /// **Beware** that the early exporter requires care, as it is subject to the same
-        /// potential for replay as early data itself.  See [RFC8446 appendix E.5.1][] for
-        /// more detail.
-        ///
-        /// This function can be called at most once per connection. This function will error:
-        /// if called more than once per connection.
-        ///
-        /// If you are looking for the normal exporter, this is available from
-        /// [`ConnectionCommon::exporter()`].
-        ///
-        /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
-        /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
-        /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
-        /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
-        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-            self.sess.core.early_exporter()
-        }
-    }
-
-    impl io::Write for WriteEarlyData<'_> {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.sess.write_early_data(buf)
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl super::EarlyData {
-        fn check_write(&mut self, sz: usize) -> io::Result<usize> {
-            self.check_write_opt(sz)
-                .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
-        }
-
-        fn bytes_left(&self) -> usize {
-            self.left
-        }
-    }
 
     /// This represents a single TLS client connection.
     pub struct ClientConnection {
@@ -334,7 +186,78 @@ mod connection {
             Self::Client(conn)
         }
     }
+
+    /// Allows writing of early data in resumed TLS 1.3 connections.
+    ///
+    /// "Early data" is also known as "0-RTT data".
+    ///
+    /// This type implements [`io::Write`].
+    pub struct WriteEarlyData<'a> {
+        sess: &'a mut ClientConnection,
+    }
+
+    impl<'a> WriteEarlyData<'a> {
+        fn new(sess: &'a mut ClientConnection) -> Self {
+            WriteEarlyData { sess }
+        }
+
+        /// How many bytes you may send.  Writes will become short
+        /// once this reaches zero.
+        pub fn bytes_left(&self) -> usize {
+            self.sess
+                .inner
+                .core
+                .side
+                .early_data
+                .bytes_left()
+        }
+
+        /// Returns the "early" exporter that can derive key material for use in early data
+        ///
+        /// See [RFC5705][] for general details on what exporters are, and [RFC8446 S7.5][] for
+        /// specific details on the "early" exporter.
+        ///
+        /// **Beware** that the early exporter requires care, as it is subject to the same
+        /// potential for replay as early data itself.  See [RFC8446 appendix E.5.1][] for
+        /// more detail.
+        ///
+        /// This function can be called at most once per connection. This function will error:
+        /// if called more than once per connection.
+        ///
+        /// If you are looking for the normal exporter, this is available from
+        /// [`ConnectionCommon::exporter()`].
+        ///
+        /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+        /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
+        /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
+        /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
+        pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+            self.sess.core.early_exporter()
+        }
+    }
+
+    impl io::Write for WriteEarlyData<'_> {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.sess.write_early_data(buf)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl super::EarlyData {
+        fn check_write(&mut self, sz: usize) -> io::Result<usize> {
+            self.check_write_opt(sz)
+                .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
+        }
+
+        fn bytes_left(&self) -> usize {
+            self.left
+        }
+    }
 }
+
 #[cfg(feature = "std")]
 pub use connection::{ClientConnection, WriteEarlyData};
 
@@ -517,6 +440,84 @@ impl MayEncryptEarlyData<'_> {
             .write_plaintext(early_data[..allowed].into(), outgoing_tls)
             .map_err(|e| e.into())
     }
+}
+
+#[derive(Debug)]
+pub(super) struct EarlyData {
+    state: EarlyDataState,
+    left: usize,
+}
+
+impl EarlyData {
+    fn new() -> Self {
+        Self {
+            left: 0,
+            state: EarlyDataState::Disabled,
+        }
+    }
+
+    pub(super) fn is_enabled(&self) -> bool {
+        matches!(self.state, EarlyDataState::Ready | EarlyDataState::Accepted)
+    }
+
+    #[cfg(feature = "std")]
+    fn is_accepted(&self) -> bool {
+        matches!(
+            self.state,
+            EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
+        )
+    }
+
+    pub(super) fn enable(&mut self, max_data: usize) {
+        assert_eq!(self.state, EarlyDataState::Disabled);
+        self.state = EarlyDataState::Ready;
+        self.left = max_data;
+    }
+
+    pub(super) fn rejected(&mut self) {
+        trace!("EarlyData rejected");
+        self.state = EarlyDataState::Rejected;
+    }
+
+    pub(super) fn accepted(&mut self) {
+        trace!("EarlyData accepted");
+        assert_eq!(self.state, EarlyDataState::Ready);
+        self.state = EarlyDataState::Accepted;
+    }
+
+    pub(super) fn finished(&mut self) {
+        trace!("EarlyData finished");
+        self.state = match self.state {
+            EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,
+            _ => panic!("bad EarlyData state"),
+        }
+    }
+
+    fn check_write_opt(&mut self, sz: usize) -> Option<usize> {
+        match self.state {
+            EarlyDataState::Disabled => unreachable!(),
+            EarlyDataState::Ready | EarlyDataState::Accepted => {
+                let take = if self.left < sz {
+                    mem::replace(&mut self.left, 0)
+                } else {
+                    self.left -= sz;
+                    sz
+                };
+
+                Some(take)
+            }
+            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum EarlyDataState {
+    Disabled,
+    Ready,
+    Accepted,
+    AcceptedFinished,
+    Rejected,
 }
 
 /// Errors that may arise when encrypting early (RTT-0) data
