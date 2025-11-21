@@ -295,6 +295,17 @@ impl CommonState {
                 payload.clone(),
             );
 
+        self.check_required_size(outgoing_tls, fragments)?;
+        let mut written = self.write_buffered_fragments(outgoing_tls);
+
+        let fragments = self
+            .message_fragmenter
+            .fragment_payload(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                payload,
+            );
+
         for f in 0..fragments.len() {
             match self
                 .encrypt_state
@@ -319,17 +330,6 @@ impl CommonState {
                 }
             }
         }
-
-        self.check_required_size(outgoing_tls, fragments)?;
-        let mut written = self.write_buffered_fragments(outgoing_tls);
-
-        let fragments = self
-            .message_fragmenter
-            .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                payload,
-            );
 
         written += self.write_fragments(&mut outgoing_tls[written..], fragments);
 
