@@ -21,6 +21,7 @@ use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
+use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::handshake::{
     CertificateChain, ClientKeyExchangeParams, HandshakeMessagePayload, HandshakePayload,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, SessionId,
@@ -171,6 +172,7 @@ mod client_hello {
                 });
 
             if let Some(data) = resume_data {
+                let proof = input.proof;
                 return start_resumption(
                     suite,
                     st.using_ems,
@@ -181,6 +183,7 @@ mod client_hello {
                     st.extra_exts,
                     st.config,
                     data,
+                    proof,
                 );
             }
 
@@ -261,6 +264,7 @@ mod client_hello {
         extra_exts: ServerExtensionsInput<'static>,
         config: Arc<ServerConfig>,
         resumedata: persist::Tls12ServerSessionValue,
+        proof: HandshakeAlignedProof,
     ) -> hs::NextStateOrError {
         debug!("Resuming connection");
 
@@ -310,7 +314,7 @@ mod client_hello {
         cx.common
             .record_layer
             .start_encrypting();
-        emit_finished(&secrets, &mut transcript, cx.common);
+        emit_finished(&secrets, &mut transcript, cx.common, &proof);
 
         Ok(Box::new(ExpectCcs {
             config,
@@ -771,9 +775,10 @@ fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     common: &mut CommonState,
+    proof: &HandshakeAlignedProof,
 ) {
     let vh = transcript.current_hash();
-    let verify_data = secrets.server_verify_data(&vh);
+    let verify_data = secrets.server_verify_data(&vh, proof);
     let verify_data_payload = Payload::Borrowed(&verify_data);
 
     let f = Message {
@@ -806,10 +811,12 @@ impl State<ServerConnectionData> for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        cx.common.check_aligned_handshake()?;
+        let proof = cx.common.check_aligned_handshake()?;
 
         let vh = self.transcript.current_hash();
-        let expect_verify_data = self.secrets.client_verify_data(&vh);
+        let expect_verify_data = self
+            .secrets
+            .client_verify_data(&vh, &proof);
 
         let fin_verified =
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
@@ -858,7 +865,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&self.secrets, &mut self.transcript, cx.common);
+            emit_finished(&self.secrets, &mut self.transcript, cx.common, &proof);
         }
 
         cx.common

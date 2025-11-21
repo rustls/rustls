@@ -1117,6 +1117,15 @@ impl Accepted {
         self.connection.enable_secret_extraction = config.enable_secret_extraction;
 
         let state = hs::ExpectClientHello::new(config, ServerExtensionsInput::default());
+        let proof = match self
+            .connection
+            .core
+            .common_state
+            .check_aligned_handshake()
+        {
+            Ok(proof) => proof,
+            Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
+        };
         let mut cx = hs::ServerContext {
             common: &mut self.connection.core.common_state,
             data: &mut self.connection.core.side,
@@ -1130,6 +1139,7 @@ impl Accepted {
             client_hello: Self::client_hello_payload(&self.message),
             message: &self.message,
             sig_schemes: self.sig_schemes,
+            proof,
         };
 
         let new = match state.with_input(input, &mut cx) {
