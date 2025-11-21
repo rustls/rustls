@@ -38,9 +38,10 @@ use core::time::Duration;
 use std::sync::Arc;
 
 use pki_types::PrivateKeyDer;
+use rustls::crypto::kx::SupportedKxGroup;
 use rustls::crypto::{
     CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SignatureScheme, SigningKey,
-    SupportedKxGroup, WebPkiSupportedAlgorithms,
+    WebPkiSupportedAlgorithms,
 };
 #[cfg(feature = "std")]
 use rustls::crypto::{TicketProducer, TicketerFactory};
@@ -279,7 +280,7 @@ pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] =
 /// Compatibility shims between ring 0.16.x and 0.17.x API
 mod ring_shim {
     use ring::agreement::{self, EphemeralPrivateKey, UnparsedPublicKey};
-    use rustls::crypto::SharedSecret;
+    use rustls::crypto::kx::SharedSecret;
 
     pub(super) fn agree_ephemeral(
         priv_key: EphemeralPrivateKey,

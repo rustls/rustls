@@ -43,7 +43,8 @@ mod client_hello {
     use super::*;
     use crate::compress::CertCompressor;
     use crate::crypto::cipher::Payload;
-    use crate::crypto::{SelectedCredential, Signer, SupportedKxGroup};
+    use crate::crypto::kx::SupportedKxGroup;
+    use crate::crypto::{SelectedCredential, Signer};
     use crate::msgs::base::PayloadU8;
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::Compression;

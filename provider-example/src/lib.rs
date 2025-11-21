@@ -32,11 +32,12 @@ use core::time::Duration;
 
 #[cfg(feature = "std")]
 use rustls::TicketRotator;
+use rustls::crypto::kx::KeyExchangeAlgorithm;
 use rustls::crypto::tls12::PrfUsingHmac;
 use rustls::crypto::tls13::HkdfUsingHmac;
 use rustls::crypto::{
-    CipherSuite, CipherSuiteCommon, CryptoProvider, GetRandomFailed, KeyExchangeAlgorithm,
-    KeyProvider, SecureRandom, SignatureScheme, SigningKey, TicketProducer, TicketerFactory,
+    CipherSuite, CipherSuiteCommon, CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom,
+    SignatureScheme, SigningKey, TicketProducer, TicketerFactory,
 };
 use rustls::error::{Error, OtherError};
 use rustls::pki_types::PrivateKeyDer;

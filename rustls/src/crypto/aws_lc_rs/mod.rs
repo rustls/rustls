@@ -313,7 +313,7 @@ pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
 mod ring_shim {
     use aws_lc_rs::agreement::{self, EphemeralPrivateKey, UnparsedPublicKey};
 
-    use crate::crypto::SharedSecret;
+    use crate::crypto::kx::SharedSecret;
 
     pub(super) fn agree_ephemeral(
         priv_key: EphemeralPrivateKey,

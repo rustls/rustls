@@ -2,7 +2,8 @@ use core::fmt;
 
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
-use crate::crypto::{self, CipherSuite, KeyExchangeAlgorithm, SignatureScheme};
+use crate::crypto::kx::KeyExchangeAlgorithm;
+use crate::crypto::{CipherSuite, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
@@ -14,7 +15,7 @@ pub struct CipherSuiteCommon {
     pub suite: CipherSuite,
 
     /// Which hash function the suite uses.
-    pub hash_provider: &'static dyn crypto::hash::Hash,
+    pub hash_provider: &'static dyn hash::Hash,
 
     /// Number of TCP-TLS messages that can be safely encrypted with a single key of this type
     ///
@@ -75,7 +76,7 @@ impl SupportedCipherSuite {
     }
 
     /// The hash function the ciphersuite uses.
-    pub(crate) fn hash_provider(&self) -> &'static dyn crypto::hash::Hash {
+    pub(crate) fn hash_provider(&self) -> &'static dyn hash::Hash {
         self.common().hash_provider
     }
 

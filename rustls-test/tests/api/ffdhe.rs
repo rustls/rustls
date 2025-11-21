@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 use num_bigint::BigUint;
 use rustls::crypto::ffdhe_groups::{self, FfdheGroup};
-use rustls::crypto::{
-    ActiveKeyExchange, CipherSuite, CipherSuiteCommon, CryptoProvider, KeyExchangeAlgorithm,
-    NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+use rustls::crypto::kx::{
+    ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret, StartedKeyExchange, SupportedKxGroup,
 };
+use rustls::crypto::{CipherSuite, CipherSuiteCommon, CryptoProvider, NamedGroup};
 use rustls::enums::ProtocolVersion;
 use rustls::{ClientConfig, SupportedCipherSuite, Tls12CipherSuite};
 use rustls_test::{

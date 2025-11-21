@@ -10,7 +10,8 @@ use std::time::SystemTimeError;
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 use webpki::ExtendedKeyUsage;
 
-use crate::crypto::{GetRandomFailed, InconsistentKeys, KeyExchangeAlgorithm};
+use crate::crypto::kx::KeyExchangeAlgorithm;
+use crate::crypto::{GetRandomFailed, InconsistentKeys};
 use crate::enums::{ContentType, HandshakeType};
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::EchConfigPayload;

@@ -13,7 +13,8 @@ use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
-use crate::crypto::{ActiveKeyExchange, Identity, TicketProducer};
+use crate::crypto::kx::ActiveKeyExchange;
+use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -35,7 +36,8 @@ use crate::{ConnectionTrafficSecrets, verify};
 mod client_hello {
     use super::*;
     use crate::common_state::KxState;
-    use crate::crypto::{ActiveKeyExchange, SelectedCredential, Signer, SupportedKxGroup};
+    use crate::crypto::kx::SupportedKxGroup;
+    use crate::crypto::{SelectedCredential, Signer};
     use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::{
         CertificateRequestPayload, CertificateStatus, ClientHelloPayload, ClientSessionTicket,

@@ -3,7 +3,8 @@ use alloc::vec::Vec;
 
 use zeroize::Zeroize;
 
-use super::{ActiveKeyExchange, hmac};
+use super::hmac;
+use super::kx::ActiveKeyExchange;
 use crate::enums::ProtocolVersion;
 use crate::error::Error;
 

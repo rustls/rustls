@@ -5,9 +5,9 @@ use aws_lc_rs::kem;
 
 use super::INVALID_KEY_SHARE;
 use crate::Error;
-use crate::crypto::{
-    ActiveKeyExchange, CompletedKeyExchange, NamedGroup, SharedSecret, StartedKeyExchange,
-    SupportedKxGroup,
+use crate::crypto::NamedGroup;
+use crate::crypto::kx::{
+    ActiveKeyExchange, CompletedKeyExchange, SharedSecret, StartedKeyExchange, SupportedKxGroup,
 };
 
 #[derive(Debug)]

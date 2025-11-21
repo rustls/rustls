@@ -4,10 +4,8 @@ use core::fmt;
 use aws_lc_rs::agreement;
 use aws_lc_rs::rand::SystemRandom;
 
-use crate::crypto::{
-    ActiveKeyExchange, GetRandomFailed, NamedGroup, SharedSecret, StartedKeyExchange,
-    SupportedKxGroup,
-};
+use crate::crypto::kx::{ActiveKeyExchange, SharedSecret, StartedKeyExchange};
+use crate::crypto::{GetRandomFailed, NamedGroup, SupportedKxGroup};
 use crate::error::{Error, PeerMisbehaved};
 
 /// A key-exchange group supported by *ring*.

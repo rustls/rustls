@@ -3,9 +3,10 @@ use alloc::vec::Vec;
 
 use super::INVALID_KEY_SHARE;
 use crate::Error;
-use crate::crypto::{
-    ActiveKeyExchange, CompletedKeyExchange, HybridKeyExchange, NamedGroup, SharedSecret,
-    StartedKeyExchange, SupportedKxGroup,
+use crate::crypto::NamedGroup;
+use crate::crypto::kx::{
+    ActiveKeyExchange, CompletedKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange,
+    SupportedKxGroup,
 };
 
 /// A generalization of hybrid key exchange.

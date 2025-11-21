@@ -11,11 +11,13 @@ use crate::common_state::{CommonState, Context, KxState, Side};
 use crate::crypto::cipher::FakeAead;
 use crate::crypto::ffdhe_groups::{FFDHE2048, FfdheGroup};
 use crate::crypto::hash::FakeHash;
+use crate::crypto::kx::{
+    ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+};
 use crate::crypto::tls12::FakePrf;
 use crate::crypto::{
-    ActiveKeyExchange, CipherSuite, Credentials, CryptoProvider, Identity, KeyExchangeAlgorithm,
-    NamedGroup, SharedSecret, SignatureScheme, SingleCredential, StartedKeyExchange,
-    SupportedKxGroup, tls12_only,
+    CipherSuite, Credentials, CryptoProvider, Identity, NamedGroup, SignatureScheme,
+    SingleCredential, tls12_only,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};

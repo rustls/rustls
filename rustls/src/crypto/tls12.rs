@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
-use super::{ActiveKeyExchange, hmac};
+use super::hmac;
+use super::kx::ActiveKeyExchange;
 use crate::enums::ProtocolVersion;
 use crate::error::Error;
 
