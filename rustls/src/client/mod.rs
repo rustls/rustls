@@ -1,15 +1,13 @@
-pub(super) mod builder;
-mod client_conn;
-mod common;
-mod ech;
-pub(super) mod handy;
-mod hs;
-#[cfg(test)]
-mod test;
-mod tls12;
-mod tls13;
+pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
+pub use crate::webpki::{
+    ServerVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
+    verify_identity_signed_by_trust_anchor, verify_server_name,
+};
 
+pub(super) mod builder;
 pub use builder::WantsClientCert;
+
+mod client_conn;
 pub use client_conn::{
     ClientConfig, ClientConnectionData, ClientCredentialResolver, ClientSessionStore,
     CredentialRequest, EarlyDataError, MayEncryptEarlyData, Resumption, Tls12Resumption,
@@ -17,9 +15,24 @@ pub use client_conn::{
 };
 #[cfg(feature = "std")]
 pub use client_conn::{ClientConnection, WriteEarlyData};
+
+mod common;
+
+mod ech;
 pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
+
+pub(super) mod handy;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use handy::ClientSessionMemoryCache;
+
+mod hs;
+pub(crate) use hs::ClientHandler;
+
+mod tls12;
+pub(crate) use tls12::TLS12_HANDLER;
+
+mod tls13;
+pub(crate) use tls13::TLS13_HANDLER;
 
 /// Dangerous configuration that should be audited and used with extreme care.
 pub mod danger {
@@ -31,12 +44,5 @@ pub mod danger {
     };
 }
 
-pub(crate) use hs::ClientHandler;
-pub(crate) use tls12::TLS12_HANDLER;
-pub(crate) use tls13::TLS13_HANDLER;
-
-pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
-pub use crate::webpki::{
-    ServerVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
-    verify_identity_signed_by_trust_anchor, verify_server_name,
-};
+#[cfg(test)]
+mod test;
