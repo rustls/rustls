@@ -14,7 +14,7 @@ use crate::common_state::{
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::crypto::{Identity, NamedGroup};
+use crate::crypto::{Identity, NamedGroup, rand};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -37,7 +37,7 @@ use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
 use crate::verify::ClientIdentity;
-use crate::{ConnectionTrafficSecrets, compress, rand, verify};
+use crate::{ConnectionTrafficSecrets, compress, verify};
 
 mod client_hello {
     use super::*;

@@ -17,7 +17,7 @@ use crate::client::ech::EchState;
 use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::crypto::cipher::Payload;
-use crate::crypto::{CipherSuite, CryptoProvider, KeyExchangeAlgorithm, StartedKeyExchange};
+use crate::crypto::{CipherSuite, CryptoProvider, KeyExchangeAlgorithm, StartedKeyExchange, rand};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -476,7 +476,7 @@ impl ClientHelloInput {
                 .protocols
                 .clone()
                 .unwrap_or_default(),
-            crate::rand::random_u16(config.provider.secure_random)?,
+            rand::random_u16(config.provider.secure_random)?,
         );
 
         Ok(Self {
