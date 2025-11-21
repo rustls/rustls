@@ -9,9 +9,9 @@ pub(crate) use server_hello::TLS12_HANDLER;
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
-use super::common::{ClientAuthDetails, ServerCertDetails};
 use super::config::ClientConfig;
 use super::hs::{self, ClientContext};
+use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
