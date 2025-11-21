@@ -318,7 +318,11 @@ pub(crate) struct KeyScheduleHandshake {
 }
 
 impl KeyScheduleHandshake {
-    pub(crate) fn sign_server_finish(&self, hs_hash: &hash::Output) -> hmac::PublicTag {
+    pub(crate) fn sign_server_finish(
+        &self,
+        hs_hash: &hash::Output,
+        _proof: &HandshakeAlignedProof,
+    ) -> hmac::PublicTag {
         self.ks
             .sign_finish(&self.server_handshake_traffic_secret, hs_hash)
     }
