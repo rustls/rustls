@@ -769,6 +769,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             Some(Ok(msg)) => {
                 self.deframer_buffer
                     .discard(buffer_progress.take_discard());
+                self.core.common_state.aligned_handshake = self.core.hs_deframer.aligned();
                 Ok(Some(msg))
             }
             Some(Err(err)) => Err(self.send_fatal_alert(AlertDescription::DecodeError, err)),
