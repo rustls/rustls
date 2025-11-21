@@ -26,6 +26,7 @@ use rustls::client::{ServerVerifierBuilder, UnbufferedClientConnection, WebPkiSe
 use rustls::crypto::cipher::{
     InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage, PlainMessage,
 };
+use rustls::crypto::kx::SupportedKxGroup;
 use rustls::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, NamedGroup,
     SelectedCredential, SignatureScheme, SigningKey, SingleCredential, WebPkiSupportedAlgorithms,
@@ -525,7 +526,7 @@ pub fn make_server_config(kt: KeyType, provider: &CryptoProvider) -> ServerConfi
 
 pub fn make_server_config_with_kx_groups(
     kt: KeyType,
-    kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
+    kx_groups: Vec<&'static dyn SupportedKxGroup>,
     provider: &CryptoProvider,
 ) -> ServerConfig {
     ServerConfig::builder(
@@ -657,7 +658,7 @@ pub fn make_client_config(kt: KeyType, provider: &CryptoProvider) -> ClientConfi
 
 pub fn make_client_config_with_kx_groups(
     kt: KeyType,
-    kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
+    kx_groups: Vec<&'static dyn SupportedKxGroup>,
     provider: &CryptoProvider,
 ) -> ClientConfig {
     ClientConfig::builder(

@@ -4,11 +4,12 @@ use core::ops::Range;
 
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
+use crate::crypto::Identity;
 use crate::crypto::cipher::{
     InboundPlainMessage, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, Payload,
     PlainMessage, PreEncryptAction, RecordLayer,
 };
-use crate::crypto::{Identity, SupportedKxGroup};
+use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;

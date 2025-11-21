@@ -23,10 +23,13 @@ use rustls::crypto::cipher::{
     MessageEncrypter, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
     Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
 };
+use rustls::crypto::kx::{
+    KeyExchangeAlgorithm, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+};
 use rustls::crypto::{
     self, CipherSuite, CipherSuiteCommon, Credentials, GetRandomFailed, HashAlgorithm, Identity,
-    KeyExchangeAlgorithm, NamedGroup, SelectedCredential, SignatureScheme, StartedKeyExchange,
-    TicketProducer, WebPkiSupportedAlgorithms, hash, tls12, tls13,
+    NamedGroup, SelectedCredential, SignatureScheme, TicketProducer, WebPkiSupportedAlgorithms,
+    hash, tls12, tls13,
 };
 use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
@@ -238,10 +241,10 @@ const HMAC_OUTPUT: &[u8] = b"HmacHmacHmacHmacHmacHmacHmacHmac";
 
 struct ActiveKeyExchange;
 
-impl crypto::ActiveKeyExchange for ActiveKeyExchange {
-    fn complete(self: Box<Self>, peer: &[u8]) -> Result<crypto::SharedSecret, Error> {
+impl crypto::kx::ActiveKeyExchange for ActiveKeyExchange {
+    fn complete(self: Box<Self>, peer: &[u8]) -> Result<SharedSecret, Error> {
         match peer {
-            KX_PEER_SHARE => Ok(crypto::SharedSecret::from(KX_SHARED_SECRET)),
+            KX_PEER_SHARE => Ok(SharedSecret::from(KX_SHARED_SECRET)),
             _ => Err(Error::from(PeerMisbehaved::InvalidKeyShare)),
         }
     }
@@ -255,12 +258,12 @@ impl crypto::ActiveKeyExchange for ActiveKeyExchange {
     }
 }
 
-const KEY_EXCHANGE_GROUP: &dyn crypto::SupportedKxGroup = &KeyExchangeGroup;
+const KEY_EXCHANGE_GROUP: &dyn SupportedKxGroup = &KeyExchangeGroup;
 
 #[derive(Debug)]
 struct KeyExchangeGroup;
 
-impl crypto::SupportedKxGroup for KeyExchangeGroup {
+impl SupportedKxGroup for KeyExchangeGroup {
     fn start(&self) -> Result<StartedKeyExchange, Error> {
         Ok(StartedKeyExchange::Single(Box::new(ActiveKeyExchange)))
     }

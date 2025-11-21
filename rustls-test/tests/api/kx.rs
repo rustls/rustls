@@ -6,10 +6,10 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use rustls::client::Resumption;
-use rustls::crypto::{
-    ActiveKeyExchange, CryptoProvider, HybridKeyExchange, NamedGroup, SharedSecret,
-    StartedKeyExchange, SupportedKxGroup,
+use rustls::crypto::kx::{
+    ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange, SupportedKxGroup,
 };
+use rustls::crypto::{CryptoProvider, NamedGroup};
 use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use rustls::internal::msgs::enums::ExtensionType;

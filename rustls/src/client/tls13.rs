@@ -19,10 +19,8 @@ use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
-use crate::crypto::{
-    ActiveKeyExchange, HybridKeyExchange, Identity, SelectedCredential, SharedSecret,
-    SignatureScheme, Signer, StartedKeyExchange,
-};
+use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
+use crate::crypto::{Identity, SelectedCredential, SignatureScheme, Signer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};

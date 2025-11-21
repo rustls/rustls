@@ -9,8 +9,8 @@ use crate::crypto::cipher::{
     PrefixedPayload, Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
 };
 use crate::crypto::enums::{CipherSuite, SignatureScheme};
+use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
 use crate::crypto::tls12::{Prf, PrfSecret};
-use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
 use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;

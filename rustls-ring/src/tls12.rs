@@ -6,8 +6,9 @@ use rustls::crypto::cipher::{
     MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaqueMessage, OutboundPlainMessage,
     PrefixedPayload, Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
 };
+use rustls::crypto::kx::KeyExchangeAlgorithm;
 use rustls::crypto::tls12::PrfUsingHmac;
-use rustls::crypto::{CipherSuite, KeyExchangeAlgorithm, SignatureScheme};
+use rustls::crypto::{CipherSuite, SignatureScheme};
 use rustls::error::Error;
 use rustls::version::TLS12_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls12CipherSuite};

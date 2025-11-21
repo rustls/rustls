@@ -1,5 +1,6 @@
 #![expect(non_camel_case_types)]
-use crate::crypto::{KeyExchangeAlgorithm, hash};
+use crate::crypto::hash;
+use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::enums::ProtocolVersion;
 
 enum_builder! {

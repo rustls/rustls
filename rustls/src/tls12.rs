@@ -8,7 +8,9 @@ use zeroize::Zeroizing;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionRandoms, Exporter};
 use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
-use crate::crypto::{self, KeyExchangeAlgorithm, SignatureScheme, hash};
+use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm};
+use crate::crypto::tls12::PrfSecret;
+use crate::crypto::{self, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ApiMisuse, Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
@@ -149,12 +151,12 @@ pub(crate) struct ConnectionSecrets {
     /// `master_secret` ready to be used as a TLS1.2 PRF secret.
     ///
     /// Zeroizing this on drop is left to the implementer of the trait.
-    master_secret_prf: Box<dyn crypto::tls12::PrfSecret>,
+    master_secret_prf: Box<dyn PrfSecret>,
 }
 
 impl ConnectionSecrets {
     pub(crate) fn from_key_exchange(
-        kx: Box<dyn crypto::ActiveKeyExchange>,
+        kx: Box<dyn ActiveKeyExchange>,
         peer_pub_key: &[u8],
         ems_seed: Option<hash::Output>,
         randoms: ConnectionRandoms,
@@ -330,7 +332,7 @@ impl ConnectionSecrets {
 
 pub(crate) struct Tls12Exporter {
     randoms: ConnectionRandoms,
-    master_secret_prf: Box<dyn crypto::tls12::PrfSecret>,
+    master_secret_prf: Box<dyn PrfSecret>,
 }
 
 impl Exporter for Tls12Exporter {
