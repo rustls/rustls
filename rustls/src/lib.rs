@@ -495,96 +495,13 @@ pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersi
 pub use crate::webpki::RootCertStore;
 
 /// Items for use in a client.
-pub mod client {
-    pub(super) mod builder;
-    mod client_conn;
-    mod common;
-    mod ech;
-    pub(super) mod handy;
-    mod hs;
-    #[cfg(test)]
-    mod test;
-    mod tls12;
-    mod tls13;
-
-    pub use builder::WantsClientCert;
-    pub use client_conn::{
-        ClientConfig, ClientConnectionData, ClientCredentialResolver, ClientSessionStore,
-        CredentialRequest, EarlyDataError, MayEncryptEarlyData, Resumption, Tls12Resumption,
-        UnbufferedClientConnection,
-    };
-    #[cfg(feature = "std")]
-    pub use client_conn::{ClientConnection, WriteEarlyData};
-    pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
-    #[cfg(any(feature = "std", feature = "hashbrown"))]
-    pub use handy::ClientSessionMemoryCache;
-
-    /// Dangerous configuration that should be audited and used with extreme care.
-    pub mod danger {
-        pub use super::builder::danger::DangerousClientConfigBuilder;
-        pub use super::client_conn::danger::DangerousClientConfig;
-        pub use crate::verify::{
-            HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
-            SignatureVerificationInput,
-        };
-    }
-
-    pub(crate) use hs::ClientHandler;
-    pub(crate) use tls12::TLS12_HANDLER;
-    pub(crate) use tls13::TLS13_HANDLER;
-
-    pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
-    pub use crate::webpki::{
-        ServerVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
-        verify_identity_signed_by_trust_anchor, verify_server_name,
-    };
-}
-
+pub mod client;
 pub use client::ClientConfig;
 #[cfg(feature = "std")]
 pub use client::ClientConnection;
 
 /// Items for use in a server.
-pub mod server {
-    pub(crate) mod builder;
-    pub(crate) mod handy;
-    mod hs;
-    mod server_conn;
-    #[cfg(test)]
-    mod test;
-    mod tls12;
-    mod tls13;
-
-    pub use builder::WantsServerCert;
-    pub use handy::NoServerSessionStorage;
-    #[cfg(any(feature = "std", feature = "hashbrown"))]
-    pub use handy::ServerNameResolver;
-    #[cfg(any(feature = "std", feature = "hashbrown"))]
-    pub use handy::ServerSessionMemoryCache;
-    #[cfg(feature = "std")]
-    pub use server_conn::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
-    pub use server_conn::{
-        ClientHello, InvalidSniPolicy, ServerConfig, ServerConnectionData,
-        ServerCredentialResolver, StoresServerSessions, UnbufferedServerConnection,
-    };
-
-    pub use crate::verify::NoClientAuth;
-    pub use crate::webpki::{
-        ClientVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
-    };
-
-    /// Dangerous configuration that should be audited and used with extreme care.
-    pub mod danger {
-        pub use crate::verify::{
-            ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
-        };
-    }
-
-    pub(crate) use hs::ServerHandler;
-    pub(crate) use tls12::TLS12_HANDLER;
-    pub(crate) use tls13::TLS13_HANDLER;
-}
-
+pub mod server;
 pub use server::ServerConfig;
 #[cfg(feature = "std")]
 pub use server::ServerConnection;
