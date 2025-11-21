@@ -361,7 +361,7 @@ impl CommonState {
                 // Alerts are always sendable -- never quashed by a PreEncryptAction.
                 let em = self.encrypt_state.encrypt_outgoing(m);
                 self.queue_tls_message(em);
-            } else if let Ok(m) = self.send_single_fragment(m) {
+            } else if let Ok(m) = self.encrypt_outgoing_fragment(m) {
                 self.queue_tls_message(m);
             }
         }
@@ -378,7 +378,7 @@ impl CommonState {
                 payload,
             );
         for m in iter {
-            if let Ok(m) = self.send_single_fragment(m) {
+            if let Ok(m) = self.encrypt_outgoing_fragment(m) {
                 self.queue_tls_message(m);
             }
         }
@@ -386,7 +386,7 @@ impl CommonState {
         len
     }
 
-    fn send_single_fragment(
+    fn encrypt_outgoing_fragment(
         &mut self,
         m: EncodedMessage<OutboundPlain<'_>>,
     ) -> Result<EncodedMessage<OutboundOpaque>, EncryptError> {
