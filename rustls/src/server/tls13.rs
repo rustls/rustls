@@ -10,7 +10,7 @@ use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, Protocol, Side, State,
+    CommonState, HandshakeFlightTls13, HandshakeKind, Input, Protocol, Side, State,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
@@ -817,20 +817,20 @@ impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),
          *  up to the configured max_early_data_size."
          * (RFC8446, 14.2.10) */
-        if let MessagePayload::ApplicationData(skip_data) = &m.payload {
+        if let MessagePayload::ApplicationData(skip_data) = &input.message.payload {
             if skip_data.bytes().len() <= self.skip_data_left {
                 self.skip_data_left -= skip_data.bytes().len();
                 return Ok(self);
             }
         }
 
-        self.next.handle(cx, m)
+        self.next.handle(cx, input)
     }
 }
 
@@ -844,8 +844,12 @@ struct ExpectCertificateOrCompressedCertificate {
 }
 
 impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
-        match m.payload {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        input: Input<'_>,
+    ) -> hs::NextStateOrError {
+        match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
@@ -858,7 +862,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 message_already_in_transcript: false,
                 expected_certificate_type: self.expected_certificate_type,
             })
-            .handle(cx, m),
+            .handle(cx, input),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
@@ -871,7 +875,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 send_tickets: self.send_tickets,
                 expected_certificate_type: self.expected_certificate_type,
             })
-            .handle(cx, m),
+            .handle(cx, input),
 
             payload => Err(inappropriate_handshake_message(
                 &payload,
@@ -898,8 +902,9 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
+        let m = input.message;
         self.transcript.add_message(&m);
         let compressed_cert = require_handshake_msg_move!(
             m,
@@ -955,7 +960,7 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             message_already_in_transcript: true,
             expected_certificate_type: self.expected_certificate_type,
         })
-        .handle(cx, m)
+        .handle(cx, Input { message: m })
     }
 }
 
@@ -973,8 +978,9 @@ impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ServerContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
+        let m = input.message;
         if !self.message_already_in_transcript {
             self.transcript.add_message(&m);
         }
@@ -1050,8 +1056,9 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
+        let m = input.message;
         let signature = require_handshake_msg!(
             m,
             HandshakeType::CertificateVerify,
@@ -1097,8 +1104,9 @@ impl State<ServerConnectionData> for ExpectEarlyData {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
+        let m = input.message;
         match m.payload {
             MessagePayload::ApplicationData(payload) => {
                 match cx
@@ -1232,8 +1240,9 @@ impl State<ServerConnectionData> for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
+        let m = input.message;
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
@@ -1311,8 +1320,9 @@ impl State<ServerConnectionData> for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
+        let m = input.message;
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
             MessagePayload::Handshake {
@@ -1375,8 +1385,9 @@ impl State<ServerConnectionData> for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         _cx: &mut ServerContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
+        let m = input.message;
         // reject all messages
         Err(inappropriate_message(&m.payload, &[]))
     }

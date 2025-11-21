@@ -7,7 +7,7 @@ use core::fmt;
 use super::connection::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
-use crate::common_state::{KxState, State};
+use crate::common_state::{Input, KxState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -503,7 +503,12 @@ impl ExpectClientHello {
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
-    fn handle<'m>(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'m>) -> NextStateOrError {
+    fn handle<'m>(
+        self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        input: Input<'m>,
+    ) -> NextStateOrError {
+        let m = input.message;
         let input = ClientHelloInput::from_message(&m, self.done_retry, cx)?;
         self.with_input(input, cx)
     }

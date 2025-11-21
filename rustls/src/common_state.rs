@@ -245,7 +245,7 @@ impl CommonState {
             sendable_plaintext,
         };
 
-        state.handle(&mut cx, msg)
+        state.handle(&mut cx, Input { message: msg })
     }
 
     pub(crate) fn maybe_send_fatal_alert(&mut self, error: &Error) {
@@ -785,7 +785,7 @@ pub(crate) trait State<Side>: Send + Sync {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut Context<'_, Side>,
-        message: Message<'m>,
+        input: Input<'m>,
     ) -> Result<Box<dyn State<Side>>, Error>;
 
     fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
@@ -799,6 +799,10 @@ pub(crate) trait State<Side>: Send + Sync {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
     }
+}
+
+pub(crate) struct Input<'a> {
+    pub(crate) message: Message<'a>,
 }
 
 pub(crate) struct Context<'a, Data> {

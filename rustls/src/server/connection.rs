@@ -14,11 +14,9 @@ use pki_types::DnsName;
 use super::config::ClientHello;
 use super::config::ServerConfig;
 use super::hs;
-#[cfg(feature = "std")]
-use super::hs::ClientHelloInput;
-#[cfg(feature = "std")]
-use crate::common_state::State;
 use crate::common_state::{CommonState, Side};
+#[cfg(feature = "std")]
+use crate::common_state::{Input, State};
 #[cfg(feature = "std")]
 use crate::conn::ConnectionCommon;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
@@ -40,6 +38,7 @@ use crate::msgs::handshake::ServerExtensionsInput;
 use crate::msgs::handshake::ServerNamePayload;
 #[cfg(feature = "std")]
 use crate::msgs::message::Message;
+use crate::server::hs::ClientHelloInput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::vecbuf::ChunkVecBuffer;
@@ -628,10 +627,10 @@ struct Accepting;
 #[cfg(feature = "std")]
 impl State<ServerConnectionData> for Accepting {
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn handle<'m>(
+    fn handle(
         self: Box<Self>,
         _cx: &mut hs::ServerContext<'_>,
-        _m: Message<'m>,
+        _input: Input<'_>,
     ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
         Err(Error::Unreachable("unreachable state"))
     }

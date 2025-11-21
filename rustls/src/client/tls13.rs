@@ -13,7 +13,7 @@ use super::hs::{
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
+    CommonState, HandshakeFlightTls13, HandshakeKind, Input, KxState, Protocol, Side, State,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
@@ -453,18 +453,18 @@ impl State<ClientConnectionData> for Expect {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
         let next = match *self {
-            Self::EncryptedExtensions(s) => s.handle(cx, m)?,
-            Self::Certificate(s) => s.handle(cx, m)?,
-            Self::CertificateOrCertReq(s) => s.handle(cx, m)?,
-            Self::CertificateOrCompressedCertificate(s) => s.handle(cx, m)?,
-            Self::CertificateOrCompressedCertificateOrCertReq(s) => s.handle(cx, m)?,
-            Self::CertificateVerify(s) => s.handle(cx, m)?,
-            Self::Finished(s) => s.handle(cx, m)?,
-            Self::Traffic(s) => s.handle(cx, m)?,
-            Self::QuicTraffic(s) => s.handle(cx, m)?,
+            Self::EncryptedExtensions(s) => s.handle(cx, input)?,
+            Self::Certificate(s) => s.handle(cx, input)?,
+            Self::CertificateOrCertReq(s) => s.handle(cx, input)?,
+            Self::CertificateOrCompressedCertificate(s) => s.handle(cx, input)?,
+            Self::CertificateOrCompressedCertificateOrCertReq(s) => s.handle(cx, input)?,
+            Self::CertificateVerify(s) => s.handle(cx, input)?,
+            Self::Finished(s) => s.handle(cx, input)?,
+            Self::Traffic(s) => s.handle(cx, input)?,
+            Self::QuicTraffic(s) => s.handle(cx, input)?,
         };
         *self = next;
         Ok(self)
@@ -502,7 +502,8 @@ struct ExpectEncryptedExtensions {
 }
 
 impl ExpectEncryptedExtensions {
-    fn handle(mut self, cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
+    fn handle(mut self, cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        let m = input.message;
         let exts = require_handshake_msg!(
             m,
             HandshakeType::EncryptedExtensions,
@@ -676,8 +677,8 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
 }
 
 impl ExpectCertificateOrCompressedCertificateOrCertReq {
-    fn handle(self, cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
-        match m.payload {
+    fn handle(self, cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
@@ -692,7 +693,7 @@ impl ExpectCertificateOrCompressedCertificateOrCertReq {
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             }
-            .handle(cx, m),
+            .handle(cx, input),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
@@ -708,7 +709,7 @@ impl ExpectCertificateOrCompressedCertificateOrCertReq {
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             }
-            .handle(cx, m),
+            .handle(cx, input),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
@@ -725,7 +726,7 @@ impl ExpectCertificateOrCompressedCertificateOrCertReq {
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
             }
-            .handle(cx, m),
+            .handle(cx, input),
 
             payload => Err(inappropriate_handshake_message(
                 &payload,
@@ -753,8 +754,8 @@ struct ExpectCertificateOrCompressedCertificate {
 }
 
 impl ExpectCertificateOrCompressedCertificate {
-    fn handle(self, cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
-        match m.payload {
+    fn handle(self, cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
@@ -769,7 +770,7 @@ impl ExpectCertificateOrCompressedCertificate {
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             }
-            .handle(cx, m),
+            .handle(cx, input),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
@@ -785,7 +786,7 @@ impl ExpectCertificateOrCompressedCertificate {
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             }
-            .handle(cx, m),
+            .handle(cx, input),
 
             payload => Err(inappropriate_handshake_message(
                 &payload,
@@ -812,8 +813,8 @@ struct ExpectCertificateOrCertReq {
 }
 
 impl ExpectCertificateOrCertReq {
-    fn handle(self, cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
-        match m.payload {
+    fn handle(self, cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
@@ -828,7 +829,7 @@ impl ExpectCertificateOrCertReq {
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
             }
-            .handle(cx, m),
+            .handle(cx, input),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
@@ -845,7 +846,7 @@ impl ExpectCertificateOrCertReq {
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
             }
-            .handle(cx, m),
+            .handle(cx, input),
 
             payload => Err(inappropriate_handshake_message(
                 &payload,
@@ -876,7 +877,8 @@ struct ExpectCertificateRequest {
 }
 
 impl ExpectCertificateRequest {
-    fn handle(mut self, _cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
+    fn handle(mut self, _cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        let m = input.message;
         let certreq = &require_handshake_msg!(
             m,
             HandshakeType::CertificateRequest,
@@ -974,7 +976,8 @@ struct ExpectCompressedCertificate {
 }
 
 impl ExpectCompressedCertificate {
-    fn handle(mut self, _cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
+    fn handle(mut self, _cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        let m = input.message;
         self.transcript.add_message(&m);
         let compressed_cert = require_handshake_msg_move!(
             m,
@@ -1042,7 +1045,8 @@ struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn handle(mut self, _cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
+    fn handle(mut self, _cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        let m = input.message;
         self.transcript.add_message(&m);
 
         self.handle_cert_payload(require_handshake_msg_move!(
@@ -1096,7 +1100,8 @@ struct ExpectCertificateVerify {
 }
 
 impl ExpectCertificateVerify {
-    fn handle(mut self, cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
+    fn handle(mut self, cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        let m = input.message;
         let cert_verify = require_handshake_msg!(
             m,
             HandshakeType::CertificateVerify,
@@ -1249,7 +1254,8 @@ struct ExpectFinished {
 }
 
 impl ExpectFinished {
-    fn handle(mut self, cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
+    fn handle(mut self, cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        let m = input.message;
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
@@ -1479,7 +1485,8 @@ impl ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle(mut self, cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
+    fn handle(mut self, cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        let m = input.message;
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
             MessagePayload::Handshake {
@@ -1539,7 +1546,8 @@ impl KernelState for ExpectTraffic {
 struct ExpectQuicTraffic(ExpectTraffic);
 
 impl ExpectQuicTraffic {
-    fn handle(mut self, cx: &mut ClientContext<'_>, m: Message<'_>) -> Result<Expect, Error> {
+    fn handle(mut self, cx: &mut ClientContext<'_>, input: Input<'_>) -> Result<Expect, Error> {
+        let m = input.message;
         let nst = require_handshake_msg!(
             m,
             HandshakeType::NewSessionTicket,
