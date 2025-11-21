@@ -6,8 +6,8 @@ pub(crate) use client_hello::TLS13_HANDLER;
 use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
+use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
-use super::server_conn::ServerConnectionData;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, Protocol, Side, State,
