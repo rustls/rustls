@@ -321,6 +321,7 @@ impl CommonState {
         }
 
         self.check_required_size(outgoing_tls, fragments)?;
+        let mut written = self.write_buffered_fragments(outgoing_tls);
 
         let fragments = self
             .message_fragmenter
@@ -330,7 +331,9 @@ impl CommonState {
                 payload,
             );
 
-        Ok(self.write_fragments(outgoing_tls, fragments))
+        written += self.write_fragments(&mut outgoing_tls[written..], fragments);
+
+        Ok(written)
     }
 
     #[cfg(feature = "std")]
@@ -604,7 +607,7 @@ impl CommonState {
         outgoing_tls: &mut [u8],
         fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
     ) -> usize {
-        let mut written = self.write_buffered_fragments(outgoing_tls);
+        let mut written = 0;
 
         for m in fragments {
             let em = self
