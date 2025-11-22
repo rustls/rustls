@@ -345,31 +345,17 @@ impl CommonState {
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
-    fn send_appdata_encrypt(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
-        // Here, the limit on sendable_tls applies to encrypted data,
-        // but we're respecting it for plaintext data -- so we'll
-        // be out by whatever the cipher+record overhead is.  That's a
-        // constant and predictable amount, so it's not a terrible issue.
-        let len = match limit {
-            #[cfg(feature = "std")]
-            Limit::Yes => self
-                .sendable_tls
-                .apply_limit(payload.len()),
-            Limit::No => payload.len(),
-        };
-
+    fn send_appdata_encrypt(&mut self, payload: OutboundChunks<'_>) {
         let iter = self
             .message_fragmenter
             .fragment_payload(
                 ContentType::ApplicationData,
                 ProtocolVersion::TLSv1_2,
-                payload.split_at(len).0,
+                payload,
             );
         for m in iter {
             self.send_single_fragment(m);
         }
-
-        len
     }
 
     fn send_single_fragment(&mut self, m: OutboundPlainMessage<'_>) {
@@ -415,18 +401,6 @@ impl CommonState {
         self.queue_tls_message(em);
     }
 
-    fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
-        debug_assert!(self.may_send_application_data);
-        debug_assert!(self.record_layer.is_encrypting());
-
-        if payload.is_empty() {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        self.send_appdata_encrypt(payload, limit)
-    }
-
     /// Mark the connection as ready to send application data.
     ///
     /// Also flush `sendable_plaintext` if it is `Some`.
@@ -456,7 +430,10 @@ impl CommonState {
         }
 
         while let Some(buf) = sendable_plaintext.pop() {
-            self.send_plain_non_buffering(buf.as_slice().into(), Limit::No);
+            if buf.is_empty() {
+                continue;
+            }
+            self.send_appdata_encrypt(buf.as_slice().into());
         }
     }
 
@@ -748,15 +725,31 @@ impl CommonState {
     /// Send plaintext application data, fragmenting and
     /// encrypting it as it goes out.
     ///
-    /// If internal buffers are too small, this function will not accept
-    /// all the data.
+    /// Returns the number of bytes written from `data`: this might
+    /// be less than `data.len()` if buffer limits were exceeded.
     pub(crate) fn buffer_plaintext(
         &mut self,
         payload: OutboundChunks<'_>,
         sendable_plaintext: &mut ChunkVecBuffer,
     ) -> usize {
         self.perhaps_write_key_update();
-        self.send_plain(payload, Limit::Yes, sendable_plaintext)
+        if !self.may_send_application_data {
+            return sendable_plaintext.append_limited_copy(payload);
+        }
+
+        // Limit on `sendable_tls` should apply to encrypted data but is enforced
+        // for plaintext data instead which does not include cipher+record overhead.
+        let len = self
+            .sendable_tls
+            .apply_limit(payload.len());
+        if len == 0 {
+            // Don't send empty fragments.
+            return 0;
+        }
+
+        debug_assert!(self.record_layer.is_encrypting());
+        self.send_appdata_encrypt(payload.split_at(len).0);
+        len
     }
 
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
@@ -768,31 +761,18 @@ impl CommonState {
             return 0;
         }
 
-        self.send_appdata_encrypt(data.into(), Limit::Yes)
-    }
-
-    /// Encrypt and send some plaintext `data`.  `limit` controls
-    /// whether the per-connection buffer limits apply.
-    ///
-    /// Returns the number of bytes written from `data`: this might
-    /// be less than `data.len()` if buffer limits were exceeded.
-    fn send_plain(
-        &mut self,
-        payload: OutboundChunks<'_>,
-        limit: Limit,
-        sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
-        if !self.may_send_application_data {
-            // If we haven't completed handshaking, buffer
-            // plaintext to send once we do.
-            let len = match limit {
-                Limit::Yes => sendable_plaintext.append_limited_copy(payload),
-                Limit::No => sendable_plaintext.append(payload.to_vec()),
-            };
-            return len;
+        // Limit on `sendable_tls` should apply to encrypted data but is enforced
+        // for plaintext data instead which does not include cipher+record overhead.
+        let len = self
+            .sendable_tls
+            .apply_limit(data.len());
+        if len == 0 {
+            // Don't send empty fragments.
+            return 0;
         }
 
-        self.send_plain_non_buffering(payload, limit)
+        self.send_appdata_encrypt(data[..len].into());
+        len
     }
 }
 
@@ -987,12 +967,6 @@ impl Side {
 pub(crate) enum Protocol {
     Tcp,
     Quic,
-}
-
-enum Limit {
-    #[cfg(feature = "std")]
-    Yes,
-    No,
 }
 
 /// Tracking technically-allowed protocol actions
