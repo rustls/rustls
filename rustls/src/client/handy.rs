@@ -2,7 +2,8 @@ use pki_types::ServerName;
 
 use super::CredentialRequest;
 use crate::client;
-use crate::crypto::{NamedGroup, SelectedCredential};
+use crate::crypto::SelectedCredential;
+use crate::crypto::kx::NamedGroup;
 use crate::enums::CertificateType;
 use crate::msgs::persist;
 
@@ -39,7 +40,7 @@ mod cache {
 
     use pki_types::ServerName;
 
-    use crate::crypto::NamedGroup;
+    use crate::crypto::kx::NamedGroup;
     use crate::limited_cache;
     use crate::lock::Mutex;
     use crate::msgs::persist;
@@ -210,9 +211,10 @@ mod tests {
     use crate::TEST_PROVIDERS;
     use crate::client::danger::{HandshakeSignatureValid, PeerVerified, ServerVerifier};
     use crate::client::{ClientCredentialResolver, ClientSessionStore, CredentialRequest};
+    use crate::crypto::kx::NamedGroup;
     use crate::crypto::{
-        CertificateIdentity, CipherSuite, Identity, NamedGroup, SelectedCredential,
-        SignatureScheme, tls12_suite, tls13_suite,
+        CertificateIdentity, CipherSuite, Identity, SelectedCredential, SignatureScheme,
+        tls12_suite, tls13_suite,
     };
     use crate::enums::CertificateType;
     use crate::error::Error;

@@ -12,9 +12,9 @@ use pki_types::{CertificateDer, DnsName};
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::crypto::kx::ffdhe::FfdheGroup;
-use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm};
+use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup};
 use crate::crypto::{
-    CipherSuite, GetRandomFailed, NamedGroup, SecureRandom, SelectedCredential, SignatureScheme,
+    CipherSuite, GetRandomFailed, SecureRandom, SelectedCredential, SignatureScheme,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, EchClientHelloType, HandshakeType,

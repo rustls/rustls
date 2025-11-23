@@ -3,8 +3,10 @@ use core::fmt;
 
 use ring::agreement;
 use ring::rand::SystemRandom;
-use rustls::crypto::kx::{ActiveKeyExchange, SharedSecret, StartedKeyExchange, SupportedKxGroup};
-use rustls::crypto::{GetRandomFailed, NamedGroup};
+use rustls::crypto::GetRandomFailed;
+use rustls::crypto::kx::{
+    ActiveKeyExchange, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+};
 use rustls::error::{Error, PeerMisbehaved};
 
 /// A key-exchange group supported by *ring*.

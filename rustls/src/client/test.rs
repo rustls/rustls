@@ -8,10 +8,11 @@ use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{MessageEncrypter, PlainMessage};
+use crate::crypto::kx::NamedGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, NamedGroup, SignatureScheme,
-    SingleCredential, tls12_only, tls13_only, tls13_suite,
+    CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
+    tls12_only, tls13_only, tls13_suite,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};

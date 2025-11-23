@@ -25,7 +25,8 @@ use super::handshake::{
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeAead, HpkeKdf, HpkeKem, HpkeSymmetricCipherSuite};
-use crate::crypto::{CipherSuite, NamedGroup, SignatureScheme};
+use crate::crypto::kx::NamedGroup;
+use crate::crypto::{CipherSuite, SignatureScheme};
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, HandshakeType, ProtocolVersion,
 };

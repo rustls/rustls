@@ -1,5 +1,5 @@
 use base64::prelude::*;
-use rustls::crypto::NamedGroup;
+use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::kx::ffdhe::{
     FFDHE2048, FFDHE3072, FFDHE4096, FFDHE6144, FFDHE8192, FfdheGroup,
 };
