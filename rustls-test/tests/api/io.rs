@@ -8,7 +8,8 @@ use std::io::{self, BufRead, IoSlice, Read, Write};
 use std::sync::Arc;
 
 use pki_types::DnsName;
-use rustls::crypto::{CryptoProvider, NamedGroup};
+use rustls::crypto::CryptoProvider;
+use rustls::crypto::kx::NamedGroup;
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use rustls::{ClientConfig, ClientConnection, ServerConfig, ServerConnection, Stream, StreamOwned};

@@ -11,10 +11,10 @@ use rustls::client::{ServerVerifierBuilder, UnbufferedClientConnection, WebPkiSe
 use rustls::crypto::cipher::{
     InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage, PlainMessage,
 };
-use rustls::crypto::kx::SupportedKxGroup;
+use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, NamedGroup,
-    SelectedCredential, SignatureScheme, SigningKey, SingleCredential, WebPkiSupportedAlgorithms,
+    CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential,
+    SignatureScheme, SigningKey, SingleCredential, WebPkiSupportedAlgorithms,
     verify_tls13_signature,
 };
 use rustls::enums::{CertificateType, ContentType, ProtocolVersion};
@@ -2085,7 +2085,8 @@ pub mod macros {
 
 /// Deeply inefficient, test-only TLS encoding helpers
 pub mod encoding {
-    use rustls::crypto::{CipherSuite, NamedGroup, SignatureScheme};
+    use rustls::crypto::kx::NamedGroup;
+    use rustls::crypto::{CipherSuite, SignatureScheme};
     use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
     use rustls::error::AlertDescription;
     use rustls::internal::msgs::codec::Codec;

@@ -409,7 +409,7 @@ mod tests {
     use super::*;
     use crate::TEST_PROVIDERS;
     use crate::common_state::{CommonState, Side};
-    use crate::crypto::NamedGroup;
+    use crate::crypto::kx::NamedGroup;
     use crate::msgs::handshake::{ServerEcdhParams, ServerKeyExchangeParams};
 
     #[test]

@@ -1,7 +1,5 @@
 #![expect(non_camel_case_types)]
 use crate::crypto::hash;
-use crate::crypto::kx::KeyExchangeAlgorithm;
-use crate::enums::ProtocolVersion;
 
 enum_builder! {
     /// The `CipherSuite` TLS protocol enum.  Values in this enum are taken
@@ -442,80 +440,6 @@ impl SignatureScheme {
 }
 
 enum_builder! {
-    /// The `NamedGroup` TLS protocol enum.  Values in this enum are taken
-    /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    ///
-    /// This enum is used for recognizing key exchange groups advertised
-    /// by a peer during a TLS handshake. It is **not** a list of groups that
-    /// Rustls supports. The supported groups are determined via the
-    /// [`CryptoProvider`][crate::crypto::CryptoProvider] interface.
-    #[repr(u16)]
-    pub enum NamedGroup {
-        secp256r1 => 0x0017,
-        secp384r1 => 0x0018,
-        secp521r1 => 0x0019,
-        X25519 => 0x001d,
-        X448 => 0x001e,
-        /// <https://www.iana.org/go/rfc8734>
-        brainpoolP256r1tls13 => 0x001f,
-        /// <https://www.iana.org/go/rfc8734>
-        brainpoolP384r1tls13 => 0x0020,
-        /// <https://www.iana.org/go/rfc8734>
-        brainpoolP512r1tls13 => 0x0021,
-        /// <https://www.iana.org/go/rfc8998>
-        curveSM2 => 0x0029,
-        FFDHE2048 => 0x0100,
-        FFDHE3072 => 0x0101,
-        FFDHE4096 => 0x0102,
-        FFDHE6144 => 0x0103,
-        FFDHE8192 => 0x0104,
-        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem/>
-        MLKEM512 => 0x0200,
-        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem/>
-        MLKEM768 => 0x0201,
-        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem/>
-        MLKEM1024 => 0x0202,
-        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
-        secp256r1MLKEM768 => 0x11eb,
-        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
-        X25519MLKEM768 => 0x11ec,
-        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
-        secp384r1MLKEM1024 => 0x11ed,
-    }
-}
-
-impl NamedGroup {
-    /// Return the key exchange algorithm associated with this `NamedGroup`
-    pub fn key_exchange_algorithm(self) -> KeyExchangeAlgorithm {
-        match u16::from(self) {
-            x if (0x100..0x200).contains(&x) => KeyExchangeAlgorithm::DHE,
-            _ => KeyExchangeAlgorithm::ECDHE,
-        }
-    }
-
-    /// Returns whether this `NamedGroup` is usable for the given protocol version.
-    pub fn usable_for_version(&self, version: ProtocolVersion) -> bool {
-        match version {
-            ProtocolVersion::TLSv1_3 => true,
-            _ => !matches!(
-                self,
-                Self::MLKEM512
-                    | Self::MLKEM768
-                    | Self::MLKEM1024
-                    | Self::X25519MLKEM768
-                    | Self::secp256r1MLKEM768
-                    | Self::secp384r1MLKEM1024
-                    | Self::brainpoolP256r1tls13
-                    | Self::brainpoolP384r1tls13
-                    | Self::brainpoolP512r1tls13
-                    | Self::curveSM2
-            ),
-        }
-    }
-}
-
-enum_builder! {
     /// The `HashAlgorithm` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognized ordinals.
@@ -575,11 +499,10 @@ enum_builder! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::msgs::enums::tests::{test_enum8, test_enum16};
+    use crate::msgs::enums::tests::test_enum8;
 
     #[test]
     fn test_enums() {
-        test_enum16::<NamedGroup>(NamedGroup::secp256r1, NamedGroup::FFDHE8192);
         test_enum8::<HashAlgorithm>(HashAlgorithm::NONE, HashAlgorithm::SHA512);
         test_enum8::<SignatureAlgorithm>(SignatureAlgorithm::Anonymous, SignatureAlgorithm::ECDSA);
     }

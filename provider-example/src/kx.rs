@@ -1,7 +1,8 @@
 use alloc::boxed::Box;
 
-use rustls::crypto::NamedGroup;
-use rustls::crypto::kx::{ActiveKeyExchange, SharedSecret, StartedKeyExchange, SupportedKxGroup};
+use rustls::crypto::kx::{
+    ActiveKeyExchange, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+};
 use rustls::error::PeerMisbehaved;
 
 pub(crate) struct KeyExchange {

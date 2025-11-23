@@ -26,7 +26,7 @@ pub mod aws_lc_rs;
 pub mod cipher;
 
 mod enums;
-pub use enums::{CipherSuite, HashAlgorithm, NamedGroup, SignatureAlgorithm, SignatureScheme};
+pub use enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
 
 /// Hashing interfaces.
 pub mod hash;
@@ -36,7 +36,7 @@ pub mod hmac;
 
 /// Key exchange interfaces.
 pub mod kx;
-use kx::SupportedKxGroup;
+use kx::{NamedGroup, SupportedKxGroup};
 
 /// Cryptography specific to TLS1.2.
 pub mod tls12;

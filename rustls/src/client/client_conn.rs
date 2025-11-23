@@ -13,7 +13,8 @@ use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::{CipherSuite, CryptoProvider, NamedGroup, SelectedCredential, SignatureScheme};
+use crate::crypto::kx::NamedGroup;
+use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme};
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::Error;
 use crate::kernel::KernelConnection;

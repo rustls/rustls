@@ -8,7 +8,8 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 
 use rustls::client::Resumption;
-use rustls::crypto::{CertificateIdentity, Identity, NamedGroup};
+use rustls::crypto::kx::NamedGroup;
+use rustls::crypto::{CertificateIdentity, Identity};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::{ClientConfig, ClientConnection, HandshakeKind, ServerConfig, ServerConnection};

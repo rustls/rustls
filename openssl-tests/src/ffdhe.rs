@@ -2,9 +2,10 @@ use num_bigint::BigUint;
 use rustls::Tls12CipherSuite;
 use rustls::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
 use rustls::crypto::kx::{
-    ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+    ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
+    SupportedKxGroup,
 };
-use rustls::crypto::{CipherSuite, CipherSuiteCommon, NamedGroup, aws_lc_rs as provider};
+use rustls::crypto::{CipherSuite, CipherSuiteCommon, aws_lc_rs as provider};
 
 pub(crate) const FFDHE2048_GROUP: &dyn SupportedKxGroup =
     &FfdheKxGroup(NamedGroup::FFDHE2048, FFDHE2048);

@@ -12,12 +12,13 @@ use crate::crypto::cipher::FakeAead;
 use crate::crypto::hash::FakeHash;
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
 use crate::crypto::kx::{
-    ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret, StartedKeyExchange, SupportedKxGroup,
+    ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
+    SupportedKxGroup,
 };
 use crate::crypto::tls12::FakePrf;
 use crate::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, NamedGroup, SignatureScheme,
-    SingleCredential, tls12_only,
+    CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
+    tls12_only,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
