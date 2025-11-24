@@ -2,7 +2,7 @@
 //! handle the buffers required to receive, process and send TLS data. Additionally it demonstrates
 //! using asynchronous I/O via tokio.
 
-use std::error::Error;
+use core::error::Error;
 use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, UnbufferedClientConnection};

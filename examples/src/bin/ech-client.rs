@@ -28,7 +28,7 @@
 //! "SSL_ECH_STATUS": "success"
 //! ```
 
-use std::error::Error;
+use core::error::Error;
 use std::fs;
 use std::io::{BufReader, Read, Write, stdout};
 use std::net::{TcpStream, ToSocketAddrs};

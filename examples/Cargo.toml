@@ -17,3 +17,6 @@ rustls = { path = "../rustls", features = ["aws-lc-rs", "log"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 webpki-roots = { workspace = true }
+
+[lints]
+workspace = true
