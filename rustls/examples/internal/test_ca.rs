@@ -1,12 +1,12 @@
+use core::net::IpAddr;
+use core::str::FromStr;
+use core::sync::atomic::{AtomicU64, Ordering};
+use core::time::Duration;
 use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
-use std::net::IpAddr;
 use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 
 use rcgen::string::Ia5String;
 use rcgen::{
@@ -18,7 +18,7 @@ use rcgen::{
 };
 use time::OffsetDateTime;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn core::error::Error>> {
     let mut credentialss = HashMap::<
         (Role, &'static SignatureAlgorithm),
         (Issuer<'static, KeyPair>, Certificate),
