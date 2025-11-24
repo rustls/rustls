@@ -1,22 +1,18 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
-use alloc::vec::Vec;
 use core::fmt;
 
 use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::{ApiMisuse, Error, InvalidMessage};
-use crate::msgs::base::hex;
-use crate::msgs::codec::{self, Codec, Reader};
-use crate::msgs::message::read_opaque_message_header;
+use crate::error::{ApiMisuse, Error};
+use crate::msgs::codec;
 use crate::suites::ConnectionTrafficSecrets;
 
-mod inbound;
-pub use inbound::InboundOpaque;
-
-mod outbound;
-pub use outbound::{OutboundOpaque, OutboundPlain};
+mod messages;
+pub use messages::{
+    EncodedMessage, InboundOpaque, MessageError, OutboundOpaque, OutboundPlain, Payload,
+};
 
 mod record_layer;
 pub(crate) use record_layer::{Decrypted, PreEncryptAction, RecordLayer};
@@ -411,149 +407,6 @@ impl From<[u8; Self::MAX_LEN]> for AeadKey {
     }
 }
 
-/// A TLS message with encoded (but not necessarily encrypted) payload.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Clone, Debug)]
-pub struct EncodedMessage<P> {
-    /// The content type of this message.
-    pub typ: ContentType,
-    /// The protocol version of this message.
-    pub version: ProtocolVersion,
-    /// The payload of this message.
-    pub payload: P,
-}
-
-impl<P> EncodedMessage<P> {
-    /// Create a new `EncodedMessage` with the given fields.
-    pub fn new(typ: ContentType, version: ProtocolVersion, payload: P) -> Self {
-        Self {
-            typ,
-            version,
-            payload,
-        }
-    }
-}
-
-impl<'a> EncodedMessage<Payload<'a>> {
-    /// Construct by decoding from a [`Reader`].
-    ///
-    /// `MessageError` allows callers to distinguish between valid prefixes (might
-    /// become valid if we read more data) and invalid data.
-    pub fn read(r: &mut Reader<'a>) -> Result<Self, MessageError> {
-        let (typ, version, len) = read_opaque_message_header(r)?;
-
-        let content = r
-            .take(len as usize)
-            .ok_or(MessageError::TooShortForLength)?;
-
-        Ok(Self {
-            typ,
-            version,
-            payload: Payload::Borrowed(content),
-        })
-    }
-
-    /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
-    pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
-        EncodedMessage {
-            version: self.version,
-            typ: self.typ,
-            payload: OutboundOpaque::from(self.payload.bytes()),
-        }
-    }
-
-    /// Borrow as an [`EncodedMessage<OutboundPlain<'a>>`].
-    pub fn borrow_outbound(&'a self) -> EncodedMessage<OutboundPlain<'a>> {
-        EncodedMessage {
-            version: self.version,
-            typ: self.typ,
-            payload: self.payload.bytes().into(),
-        }
-    }
-
-    /// Convert into an owned `EncodedMessage<Plain<'static>>`.
-    pub fn into_owned(self) -> Self {
-        Self {
-            typ: self.typ,
-            version: self.version,
-            payload: self.payload.into_owned(),
-        }
-    }
-}
-
-impl EncodedMessage<&'_ [u8]> {
-    /// Returns true if the payload is a CCS message.
-    ///
-    /// We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
-    /// Note: this is prior to the record layer, so is unencrypted. See
-    /// third paragraph of section 5 in RFC8446.
-    pub(crate) fn is_valid_ccs(&self) -> bool {
-        self.typ == ContentType::ChangeCipherSpec && self.payload == [0x01]
-    }
-}
-
-/// An externally length'd payload
-///
-/// When encountered in an [`EncodedMessage`], it represents a plaintext payload. It can be
-/// decrypted from an [`InboundOpaque`] or encrypted into an [`OutboundOpaque`],
-/// and it is also used for joining and fragmenting.
-#[non_exhaustive]
-#[derive(Clone, Eq, PartialEq)]
-pub enum Payload<'a> {
-    /// Borrowed payload
-    Borrowed(&'a [u8]),
-    /// Owned payload
-    Owned(Vec<u8>),
-}
-
-impl<'a> Payload<'a> {
-    /// A reference to the payload's bytes
-    pub fn bytes(&'a self) -> &'a [u8] {
-        match self {
-            Self::Borrowed(bytes) => bytes,
-            Self::Owned(bytes) => bytes,
-        }
-    }
-
-    pub(crate) fn into_owned(self) -> Payload<'static> {
-        Payload::Owned(self.into_vec())
-    }
-
-    pub(crate) fn into_vec(self) -> Vec<u8> {
-        match self {
-            Self::Borrowed(bytes) => bytes.to_vec(),
-            Self::Owned(bytes) => bytes,
-        }
-    }
-
-    pub(crate) fn read(r: &mut Reader<'a>) -> Self {
-        Self::Borrowed(r.rest())
-    }
-}
-
-impl Payload<'static> {
-    /// Create a new owned payload from the given `bytes`.
-    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
-        Self::Owned(bytes.into())
-    }
-}
-
-impl<'a> Codec<'a> for Payload<'a> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(self.bytes());
-    }
-
-    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        Ok(Self::read(r))
-    }
-}
-
-impl fmt::Debug for Payload<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, self.bytes())
-    }
-}
-
 /// A `MessageEncrypter` which doesn't work.
 struct InvalidMessageEncrypter {}
 
@@ -582,19 +435,6 @@ impl MessageDecrypter for InvalidMessageDecrypter {
     ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         Err(Error::DecryptError)
     }
-}
-
-/// Errors from trying to parse a TLS message.
-#[expect(missing_docs)]
-#[non_exhaustive]
-#[derive(Debug)]
-pub enum MessageError {
-    TooShortForHeader,
-    TooShortForLength,
-    InvalidEmptyPayload,
-    MessageTooLarge,
-    InvalidContentType,
-    UnknownProtocolVersion,
 }
 
 #[cfg(all(test, feature = "aws-lc-rs"))]
