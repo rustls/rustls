@@ -1803,7 +1803,7 @@ mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
         AeadKey, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, OutboundOpaque,
-        OutboundPlainMessage, Payload, Tls13AeadAlgorithm, UnsupportedOperationError,
+        OutboundPlain, Payload, Tls13AeadAlgorithm, UnsupportedOperationError,
     };
 
     use super::*;
@@ -1837,7 +1837,7 @@ mod plaintext {
     impl MessageEncrypter for Encrypter {
         fn encrypt(
             &mut self,
-            msg: OutboundPlainMessage<'_>,
+            msg: EncodedMessage<OutboundPlain<'_>>,
             _seq: u64,
         ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
             let mut payload = OutboundOpaque::with_capacity(msg.payload.len());

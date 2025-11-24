@@ -6,8 +6,7 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    EncodedMessage, OutboundChunks, OutboundOpaque, OutboundPlainMessage, Payload,
-    PreEncryptAction, RecordLayer,
+    EncodedMessage, OutboundOpaque, OutboundPlain, Payload, PreEncryptAction, RecordLayer,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -267,7 +266,7 @@ impl CommonState {
 
     pub(crate) fn write_plaintext(
         &mut self,
-        payload: OutboundChunks<'_>,
+        payload: OutboundPlain<'_>,
         outgoing_tls: &mut [u8],
     ) -> Result<usize, EncryptError> {
         if payload.is_empty() {
@@ -354,7 +353,7 @@ impl CommonState {
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
-    fn send_appdata_encrypt(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
+    fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>, limit: Limit) -> usize {
         if payload.is_empty() {
             // Don't send empty fragments.
             return 0;
@@ -386,7 +385,7 @@ impl CommonState {
         len
     }
 
-    fn send_single_fragment(&mut self, m: OutboundPlainMessage<'_>) {
+    fn send_single_fragment(&mut self, m: EncodedMessage<OutboundPlain<'_>>) {
         if m.typ == ContentType::Alert {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
             let em = self.record_layer.encrypt_outgoing(m);
@@ -437,7 +436,7 @@ impl CommonState {
     #[cfg(feature = "std")]
     pub(crate) fn buffer_plaintext(
         &mut self,
-        payload: OutboundChunks<'_>,
+        payload: OutboundPlain<'_>,
         sendable_plaintext: &mut ChunkVecBuffer,
     ) -> usize {
         self.perhaps_write_key_update();
@@ -450,7 +449,7 @@ impl CommonState {
         self.send_plain_non_buffering(payload, Limit::Yes)
     }
 
-    fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
+    fn send_plain_non_buffering(&mut self, payload: OutboundPlain<'_>, limit: Limit) -> usize {
         debug_assert!(self.may_send_application_data);
         debug_assert!(self.record_layer.is_encrypting());
         self.send_appdata_encrypt(payload, limit)
@@ -642,7 +641,7 @@ impl CommonState {
     fn check_required_size<'a>(
         &self,
         outgoing_tls: &mut [u8],
-        fragments: impl Iterator<Item = OutboundPlainMessage<'a>>,
+        fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
     ) -> Result<(), EncryptError> {
         let mut required_size = self.sendable_tls.len();
 
@@ -662,7 +661,7 @@ impl CommonState {
     fn write_fragments<'a>(
         &mut self,
         outgoing_tls: &mut [u8],
-        fragments: impl Iterator<Item = OutboundPlainMessage<'a>>,
+        fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
     ) -> usize {
         let mut written = 0;
 

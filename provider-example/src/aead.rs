@@ -5,7 +5,7 @@ use chacha20poly1305::{AeadInPlace, KeyInit, KeySizeUser};
 use rustls::ConnectionTrafficSecrets;
 use rustls::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlainMessage, Payload, Tls12AeadAlgorithm,
+    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlain, Payload, Tls12AeadAlgorithm,
     Tls13AeadAlgorithm, UnsupportedOperationError, make_tls12_aad, make_tls13_aad,
 };
 use rustls::enums::{ContentType, ProtocolVersion};
@@ -83,7 +83,7 @@ struct Tls13Cipher(chacha20poly1305::ChaCha20Poly1305, Iv);
 impl MessageEncrypter for Tls13Cipher {
     fn encrypt(
         &mut self,
-        m: OutboundPlainMessage<'_>,
+        m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
@@ -132,7 +132,7 @@ struct Tls12Cipher(chacha20poly1305::ChaCha20Poly1305, Iv);
 impl MessageEncrypter for Tls12Cipher {
     fn encrypt(
         &mut self,
-        m: OutboundPlainMessage<'_>,
+        m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());

@@ -16,7 +16,7 @@ mod inbound;
 pub use inbound::InboundOpaque;
 
 mod outbound;
-pub use outbound::{OutboundChunks, OutboundOpaque, OutboundPlainMessage};
+pub use outbound::{OutboundOpaque, OutboundPlain};
 
 mod record_layer;
 pub(crate) use record_layer::{Decrypted, PreEncryptAction, RecordLayer};
@@ -165,7 +165,7 @@ pub trait MessageEncrypter: Send + Sync {
     /// `seq` which can be used to derive a unique [`Nonce`].
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage<'_>,
+        msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error>;
 
@@ -471,9 +471,9 @@ impl<'a> EncodedMessage<Payload<'a>> {
         }
     }
 
-    /// Borrow as an [`OutboundPlainMessage`].
-    pub fn borrow_outbound(&'a self) -> OutboundPlainMessage<'a> {
-        OutboundPlainMessage {
+    /// Borrow as an [`EncodedMessage<OutboundPlain<'a>>`].
+    pub fn borrow_outbound(&'a self) -> EncodedMessage<OutboundPlain<'a>> {
+        EncodedMessage {
             version: self.version,
             typ: self.typ,
             payload: self.payload.bytes().into(),
@@ -567,7 +567,7 @@ struct InvalidMessageEncrypter {}
 impl MessageEncrypter for InvalidMessageEncrypter {
     fn encrypt(
         &mut self,
-        _m: OutboundPlainMessage<'_>,
+        _m: EncodedMessage<OutboundPlain<'_>>,
         _seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         Err(Error::EncryptError)

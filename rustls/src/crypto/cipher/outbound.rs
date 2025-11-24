@@ -2,25 +2,9 @@ use alloc::vec::Vec;
 
 use super::EncodedMessage;
 use super::record_layer::RecordLayer;
-use crate::enums::{ContentType, ProtocolVersion};
 use crate::msgs::message::HEADER_SIZE;
 
-/// A TLS frame, named `TLSPlaintext` in the standard.
-///
-/// This outbound type borrows its "to be encrypted" payload from the "user".
-/// It is used for fragmenting and is consumed by encryption.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Debug)]
-pub struct OutboundPlainMessage<'a> {
-    /// The content type of this message.
-    pub typ: ContentType,
-    /// The protocol version of this message.
-    pub version: ProtocolVersion,
-    /// The payload of this message.
-    pub payload: OutboundChunks<'a>,
-}
-
-impl OutboundPlainMessage<'_> {
+impl EncodedMessage<OutboundPlain<'_>> {
     pub(crate) fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
         HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
     }
@@ -42,7 +26,7 @@ impl OutboundPlainMessage<'_> {
 /// Multiple can hold non fragmented or empty payloads.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
-pub enum OutboundChunks<'a> {
+pub enum OutboundPlain<'a> {
     /// A single byte slice.
     ///
     /// Contrary to `Multiple`, this uses a single pointer indirection
@@ -58,7 +42,7 @@ pub enum OutboundChunks<'a> {
     },
 }
 
-impl<'a> OutboundChunks<'a> {
+impl<'a> OutboundPlain<'a> {
     /// Create a payload from a slice of byte slices.
     /// If fragmented the cursors are added by default: start = 0, end = length
     pub fn new(chunks: &'a [&'a [u8]]) -> Self {
@@ -150,7 +134,7 @@ impl<'a> OutboundChunks<'a> {
     }
 }
 
-impl<'a> From<&'a [u8]> for OutboundChunks<'a> {
+impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
     fn from(payload: &'a [u8]) -> Self {
         Self::Single(payload)
     }
@@ -193,7 +177,7 @@ impl OutboundOpaque {
     }
 
     /// Append bytes from an `OutboundChunks`.
-    pub fn extend_from_chunks(&mut self, chunks: &OutboundChunks<'_>) {
+    pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
         chunks.copy_to_vec(&mut self.0)
     }
 
@@ -249,7 +233,7 @@ mod tests {
     #[test]
     fn split_at_with_single_slice() {
         let owner: &[u8] = &[0, 1, 2, 3, 4, 5, 6, 7];
-        let borrowed_payload = OutboundChunks::Single(owner);
+        let borrowed_payload = OutboundPlain::Single(owner);
 
         let (before, after) = borrowed_payload.split_at(6);
         println!("before:{before:?}\nafter:{after:?}");
@@ -260,7 +244,7 @@ mod tests {
     #[test]
     fn split_at_with_multiple_slices() {
         let owner: Vec<&[u8]> = vec![&[0, 1, 2, 3], &[4, 5], &[6, 7, 8], &[9, 10, 11, 12]];
-        let borrowed_payload = OutboundChunks::new(&owner);
+        let borrowed_payload = OutboundPlain::new(&owner);
 
         let (before, after) = borrowed_payload.split_at(3);
         println!("before:{before:?}\nafter:{after:?}");
@@ -282,19 +266,19 @@ mod tests {
     fn split_out_of_bounds() {
         let owner: Vec<&[u8]> = vec![&[0, 1, 2, 3], &[4, 5], &[6, 7, 8], &[9, 10, 11, 12]];
 
-        let single_payload = OutboundChunks::Single(owner[0]);
+        let single_payload = OutboundPlain::Single(owner[0]);
         let (before, after) = single_payload.split_at(17);
         println!("before:{before:?}\nafter:{after:?}");
         assert_eq!(before.to_vec(), &[0, 1, 2, 3]);
         assert!(after.is_empty());
 
-        let multiple_payload = OutboundChunks::new(&owner);
+        let multiple_payload = OutboundPlain::new(&owner);
         let (before, after) = multiple_payload.split_at(17);
         println!("before:{before:?}\nafter:{after:?}");
         assert_eq!(before.to_vec(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
         assert!(after.is_empty());
 
-        let empty_payload = OutboundChunks::new_empty();
+        let empty_payload = OutboundPlain::new_empty();
         let (before, after) = empty_payload.split_at(17);
         println!("before:{before:?}\nafter:{after:?}");
         assert!(before.is_empty());
@@ -304,7 +288,7 @@ mod tests {
     #[test]
     fn empty_slices_mixed() {
         let owner: Vec<&[u8]> = vec![&[], &[], &[0], &[], &[1, 2], &[], &[3], &[4], &[], &[]];
-        let mut borrowed_payload = OutboundChunks::new(&owner);
+        let mut borrowed_payload = OutboundPlain::new(&owner);
         let mut fragment_count = 0;
         let mut fragment;
         let expected_fragments: &[&[u8]] = &[&[0, 1], &[2, 3], &[4]];
@@ -324,7 +308,7 @@ mod tests {
         let slices = (0..7)
             .map(|i| &owner[((1 << i) - 1)..((1 << (i + 1)) - 1)])
             .collect::<Vec<_>>();
-        let payload = OutboundChunks::new(&slices);
+        let payload = OutboundPlain::new(&slices);
 
         assert_eq!(payload.to_vec(), owner);
         println!("{payload:#?}");

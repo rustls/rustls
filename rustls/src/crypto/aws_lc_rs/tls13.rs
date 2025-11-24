@@ -6,7 +6,7 @@ use aws_lc_rs::{aead, hkdf, hmac};
 use crate::crypto;
 use crate::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
-    OutboundOpaque, OutboundPlainMessage, Payload, Tls13AeadAlgorithm, UnsupportedOperationError,
+    OutboundOpaque, OutboundPlain, Payload, Tls13AeadAlgorithm, UnsupportedOperationError,
     make_tls13_aad,
 };
 use crate::crypto::enums::CipherSuite;
@@ -224,7 +224,7 @@ struct AeadMessageDecrypter {
 impl MessageEncrypter for AeadMessageEncrypter {
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage<'_>,
+        msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
@@ -285,7 +285,7 @@ struct GcmMessageEncrypter {
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage<'_>,
+        msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
