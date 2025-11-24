@@ -1,17 +1,3 @@
-#![warn(
-    clippy::alloc_instead_of_core,
-    clippy::manual_let_else,
-    clippy::std_instead_of_core,
-    clippy::use_self,
-    clippy::upper_case_acronyms,
-    elided_lifetimes_in_paths,
-    trivial_numeric_casts,
-    unreachable_pub,
-    unused_import_braces,
-    unused_extern_crates,
-    unused_qualifications
-)]
-
 use core::hint::black_box;
 use core::mem;
 use std::collections::HashMap;
@@ -201,7 +187,7 @@ fn main() -> anyhow::Result<()> {
         } => {
             let bench = benchmarks
                 .get(index as usize)
-                .ok_or(anyhow::anyhow!("Benchmark not found: {index}"))?;
+                .ok_or_else(|| anyhow::anyhow!("Benchmark not found: {index}"))?;
 
             if let Some(warm_up) = bench.params.warm_up {
                 warm_up();
@@ -556,7 +542,7 @@ fn add_benchmark_group(benchmarks: &mut Vec<Benchmark>, params: BenchmarkParams)
 }
 
 /// Run all the provided benches under callgrind to retrieve their instruction count
-pub fn run_all(
+fn run_all(
     executable: String,
     output_dir: PathBuf,
     benches: &[Benchmark],
@@ -910,11 +896,11 @@ fn read_icount_results(path: &Path) -> anyhow::Result<HashMap<String, u64>> {
         measurements.insert(
             parts
                 .next()
-                .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                .ok_or_else(|| anyhow::anyhow!("CSV is wrongly formatted"))?
                 .to_string(),
             parts
                 .next()
-                .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                .ok_or_else(|| anyhow::anyhow!("CSV is wrongly formatted"))?
                 .parse()
                 .context("Unable to parse instruction count from CSV")?,
         );
@@ -938,27 +924,27 @@ fn read_memory_results(path: &Path) -> anyhow::Result<HashMap<String, MemoryDeta
         measurements.insert(
             parts
                 .next()
-                .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                .ok_or_else(|| anyhow::anyhow!("CSV is wrongly formatted"))?
                 .to_string(),
             MemoryDetails {
                 heap_total_bytes: parts
                     .next()
-                    .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                    .ok_or_else(|| anyhow::anyhow!("CSV is wrongly formatted"))?
                     .parse()
                     .context("Unable to parse heap total bytes from CSV")?,
                 heap_total_blocks: parts
                     .next()
-                    .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                    .ok_or_else(|| anyhow::anyhow!("CSV is wrongly formatted"))?
                     .parse()
                     .context("Unable to parse heap total blocks from CSV")?,
                 heap_peak_bytes: parts
                     .next()
-                    .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                    .ok_or_else(|| anyhow::anyhow!("CSV is wrongly formatted"))?
                     .parse()
                     .context("Unable to parse heap peak bytes from CSV")?,
                 heap_peak_blocks: parts
                     .next()
-                    .ok_or(anyhow::anyhow!("CSV is wrongly formatted"))?
+                    .ok_or_else(|| anyhow::anyhow!("CSV is wrongly formatted"))?
                     .parse()
                     .context("Unable to parse heap peak blocks from CSV")?,
             },
