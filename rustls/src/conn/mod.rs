@@ -33,7 +33,7 @@ mod connection {
 
     use crate::common_state::{CommonState, IoState};
     use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData};
-    use crate::crypto::cipher::OutboundChunks;
+    use crate::crypto::cipher::OutboundPlain;
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
@@ -336,14 +336,14 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             let payload_owner: Vec<&[u8]>;
             let payload = match bufs.len() {
                 0 => return Ok(0),
-                1 => OutboundChunks::Single(bufs[0].deref()),
+                1 => OutboundPlain::Single(bufs[0].deref()),
                 _ => {
                     payload_owner = bufs
                         .iter()
                         .map(|io_slice| io_slice.deref())
                         .collect();
 
-                    OutboundChunks::new(&payload_owner)
+                    OutboundPlain::new(&payload_owner)
                 }
             };
             let len = self

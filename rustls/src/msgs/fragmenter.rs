@@ -1,5 +1,5 @@
 use crate::Error;
-use crate::crypto::cipher::{EncodedMessage, OutboundChunks, OutboundPlainMessage, Payload};
+use crate::crypto::cipher::{EncodedMessage, OutboundPlain, Payload};
 use crate::enums::{ContentType, ProtocolVersion};
 
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
@@ -29,7 +29,7 @@ impl MessageFragmenter {
     pub fn fragment_message<'a>(
         &self,
         msg: &'a EncodedMessage<Payload<'_>>,
-    ) -> impl Iterator<Item = OutboundPlainMessage<'a>> + 'a {
+    ) -> impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>> + 'a {
         self.fragment_payload(msg.typ, msg.version, msg.payload.bytes().into())
     }
 
@@ -44,9 +44,9 @@ impl MessageFragmenter {
         &self,
         typ: ContentType,
         version: ProtocolVersion,
-        payload: OutboundChunks<'a>,
-    ) -> impl ExactSizeIterator<Item = OutboundPlainMessage<'a>> {
-        Chunker::new(payload, self.max_frag).map(move |payload| OutboundPlainMessage {
+        payload: OutboundPlain<'a>,
+    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> {
+        Chunker::new(payload, self.max_frag).map(move |payload| EncodedMessage {
             typ,
             version,
             payload,
@@ -73,18 +73,18 @@ impl MessageFragmenter {
 
 /// An iterator over borrowed fragments of a payload
 struct Chunker<'a> {
-    payload: OutboundChunks<'a>,
+    payload: OutboundPlain<'a>,
     limit: usize,
 }
 
 impl<'a> Chunker<'a> {
-    fn new(payload: OutboundChunks<'a>, limit: usize) -> Self {
+    fn new(payload: OutboundPlain<'a>, limit: usize) -> Self {
         Self { payload, limit }
     }
 }
 
 impl<'a> Iterator for Chunker<'a> {
-    type Item = OutboundChunks<'a>;
+    type Item = OutboundPlain<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.payload.is_empty() {
@@ -109,11 +109,11 @@ mod tests {
     use std::vec;
 
     use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use crate::crypto::cipher::{EncodedMessage, OutboundChunks, OutboundPlainMessage, Payload};
+    use crate::crypto::cipher::{EncodedMessage, OutboundPlain, Payload};
     use crate::enums::{ContentType, ProtocolVersion};
 
     fn msg_eq(
-        m: &OutboundPlainMessage<'_>,
+        m: &EncodedMessage<OutboundPlain<'_>>,
         total_len: usize,
         typ: &ContentType,
         version: &ProtocolVersion,
@@ -204,7 +204,7 @@ mod tests {
         let typ = ContentType::Handshake;
         let version = ProtocolVersion::TLSv1_2;
         let payload_owner: Vec<&[u8]> = vec![&[b'a'; 8], &[b'b'; 12], &[b'c'; 32], &[b'd'; 20]];
-        let borrowed_payload = OutboundChunks::new(&payload_owner);
+        let borrowed_payload = OutboundPlain::new(&payload_owner);
         let mut frag = MessageFragmenter::default();
         frag.set_max_fragment_size(Some(37)) // 32 + packet overhead
             .unwrap();

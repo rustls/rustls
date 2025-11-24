@@ -3,8 +3,8 @@ use alloc::boxed::Box;
 use ring::aead;
 use rustls::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlainMessage, Tls12AeadAlgorithm,
-    UnsupportedOperationError, make_tls12_aad,
+    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, UnsupportedOperationError,
+    make_tls12_aad,
 };
 use rustls::crypto::kx::KeyExchangeAlgorithm;
 use rustls::crypto::tls12::PrfUsingHmac;
@@ -281,7 +281,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage<'_>,
+        msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
@@ -367,7 +367,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage<'_>,
+        msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());

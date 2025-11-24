@@ -7,7 +7,7 @@ use std::io;
 use std::io::Read;
 
 #[cfg(feature = "std")]
-use crate::crypto::cipher::OutboundChunks;
+use crate::crypto::cipher::OutboundPlain;
 
 /// This is a byte buffer that is built from a deque of byte vectors.
 ///
@@ -119,7 +119,7 @@ impl ChunkVecBuffer {
 
     /// Append a copy of `bytes`, perhaps a prefix if
     /// we're near the limit.
-    pub(crate) fn append_limited_copy(&mut self, payload: OutboundChunks<'_>) -> usize {
+    pub(crate) fn append_limited_copy(&mut self, payload: OutboundPlain<'_>) -> usize {
         let take = self.apply_limit(payload.len());
         self.append(payload.split_at(take).0.to_vec());
         take
