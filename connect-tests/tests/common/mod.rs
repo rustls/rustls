@@ -3,15 +3,15 @@ use std::process;
 
 use regex::Regex;
 
-pub fn tlsserver_find() -> &'static str {
+pub(super) fn tlsserver_find() -> &'static str {
     "../target/debug/tlsserver-mio"
 }
 
-pub fn tlsclient_find() -> &'static str {
+pub(super) fn tlsclient_find() -> &'static str {
     "../target/debug/tlsclient-mio"
 }
 
-pub struct TlsClient {
+pub(super) struct TlsClient {
     pub hostname: String,
     pub port: u16,
     pub http: bool,
@@ -28,7 +28,7 @@ pub struct TlsClient {
 }
 
 impl TlsClient {
-    pub fn new(hostname: &str) -> Self {
+    pub(super) fn new(hostname: &str) -> Self {
         Self {
             hostname: hostname.to_string(),
             port: 443,
@@ -46,64 +46,64 @@ impl TlsClient {
         }
     }
 
-    pub fn cafile(&mut self, cafile: &Path) -> &mut Self {
+    pub(super) fn cafile(&mut self, cafile: &Path) -> &mut Self {
         self.cafile = Some(cafile.to_path_buf());
         self
     }
 
-    pub fn cache(&mut self, cache: &str) -> &mut Self {
+    pub(super) fn cache(&mut self, cache: &str) -> &mut Self {
         self.cache = Some(cache.to_string());
         self
     }
 
-    pub fn no_sni(&mut self) -> &mut Self {
+    pub(super) fn no_sni(&mut self) -> &mut Self {
         self.no_sni = true;
         self
     }
 
-    pub fn insecure(&mut self) -> &mut Self {
+    pub(super) fn insecure(&mut self) -> &mut Self {
         self.insecure = true;
         self
     }
 
-    pub fn verbose(&mut self) -> &mut Self {
+    pub(super) fn verbose(&mut self) -> &mut Self {
         self.verbose = true;
         self
     }
 
-    pub fn max_fragment_size(&mut self, max_fragment_size: usize) -> &mut Self {
+    pub(super) fn max_fragment_size(&mut self, max_fragment_size: usize) -> &mut Self {
         self.max_fragment_size = Some(max_fragment_size);
         self
     }
 
-    pub fn port(&mut self, port: u16) -> &mut Self {
+    pub(super) fn port(&mut self, port: u16) -> &mut Self {
         self.port = port;
         self
     }
 
-    pub fn expect(&mut self, expect: &str) -> &mut Self {
+    pub(super) fn expect(&mut self, expect: &str) -> &mut Self {
         self.expect_output
             .push(expect.to_string());
         self
     }
 
-    pub fn expect_log(&mut self, expect: &str) -> &mut Self {
+    pub(super) fn expect_log(&mut self, expect: &str) -> &mut Self {
         self.verbose = true;
         self.expect_log.push(expect.to_string());
         self
     }
 
-    pub fn suite(&mut self, suite: &str) -> &mut Self {
+    pub(super) fn suite(&mut self, suite: &str) -> &mut Self {
         self.suites.push(suite.to_string());
         self
     }
 
-    pub fn fails(&mut self) -> &mut Self {
+    pub(super) fn fails(&mut self) -> &mut Self {
         self.expect_fails = true;
         self
     }
 
-    pub fn go(&mut self) -> Option<()> {
+    pub(super) fn go(&mut self) -> Option<()> {
         let fragstring;
         let portstring = self.port.to_string();
         let mut args = Vec::<&str>::new();

@@ -13,3 +13,6 @@ rustls = { path = "../rustls", features = ["log"] }
 regex = { workspace = true }
 ring = { workspace = true }
 tokio = { workspace = true }
+
+[lints]
+workspace = true
