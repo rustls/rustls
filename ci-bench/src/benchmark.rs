@@ -3,7 +3,6 @@ use std::sync::Arc;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use rustls::crypto::{CryptoProvider, TicketProducer};
-use rustls::enums::ProtocolVersion;
 use rustls_test::KeyType;
 
 use crate::Side;
@@ -93,8 +92,6 @@ pub struct BenchmarkParams {
     pub ticketer: &'static fn() -> Arc<dyn TicketProducer>,
     /// Where to get keys for server auth
     pub auth_key: AuthKeySource,
-    /// TLS version
-    pub version: ProtocolVersion,
     /// A user-facing label that identifies these params
     pub label: String,
     /// Call this once this BenchmarkParams is sure to be used
@@ -107,7 +104,6 @@ impl BenchmarkParams {
         provider: Arc<CryptoProvider>,
         ticketer: &'static fn() -> Arc<dyn TicketProducer>,
         auth_key: AuthKeySource,
-        version: ProtocolVersion,
         label: String,
         warm_up: Option<fn()>,
     ) -> Self {
@@ -115,7 +111,6 @@ impl BenchmarkParams {
             provider,
             ticketer,
             auth_key,
-            version,
             label,
             warm_up,
         }
