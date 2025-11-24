@@ -2,8 +2,8 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use core::fmt::Debug;
 use std::borrow::Cow;
-use std::fmt::Debug;
 use std::io::{self, BufRead, IoSlice, Read, Write};
 use std::sync::Arc;
 
@@ -281,7 +281,7 @@ fn client_detects_broken_write_vectored_impl() {
 
     struct BrokenWriteVectored;
 
-    impl io::Write for BrokenWriteVectored {
+    impl Write for BrokenWriteVectored {
         fn write_vectored(&mut self, _bufs: &[IoSlice<'_>]) -> io::Result<usize> {
             Ok(9999)
         }
@@ -684,7 +684,7 @@ struct EofWriter<const N: usize> {
     written: usize,
 }
 
-impl<const N: usize> std::io::Write for EofWriter<N> {
+impl<const N: usize> Write for EofWriter<N> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let prev = self.written;
         self.written = N.min(self.written + buf.len());
@@ -696,7 +696,7 @@ impl<const N: usize> std::io::Write for EofWriter<N> {
     }
 }
 
-impl<const N: usize> std::io::Read for EofWriter<N> {
+impl<const N: usize> Read for EofWriter<N> {
     fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
         panic!() // This is a writer, it should not be read from.
     }
@@ -878,7 +878,7 @@ fn test_client_write_and_vectored_write_equivalence() {
 
     const N: usize = 1000;
 
-    let data_chunked: Vec<IoSlice> = std::iter::repeat_n(IoSlice::new(b"A"), N).collect();
+    let data_chunked: Vec<IoSlice<'_>> = core::iter::repeat_n(IoSlice::new(b"A"), N).collect();
     let bytes_written_chunked = client
         .writer()
         .write_vectored(&data_chunked)
@@ -903,13 +903,13 @@ struct FailsWrites {
     after: usize,
 }
 
-impl io::Read for FailsWrites {
+impl Read for FailsWrites {
     fn read(&mut self, _b: &mut [u8]) -> io::Result<usize> {
         Ok(0)
     }
 }
 
-impl io::Write for FailsWrites {
+impl Write for FailsWrites {
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
         if self.after > 0 {
             self.after -= 1;
@@ -1284,14 +1284,14 @@ fn test_client_mtu_reduction() {
         writevs: Vec<Vec<usize>>,
     }
 
-    impl io::Write for CollectWrites {
+    impl Write for CollectWrites {
         fn write(&mut self, _: &[u8]) -> io::Result<usize> {
             panic!()
         }
         fn flush(&mut self) -> io::Result<()> {
             panic!()
         }
-        fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        fn write_vectored(&mut self, b: &[IoSlice<'_>]) -> io::Result<usize> {
             let writes = b
                 .iter()
                 .map(|slice| slice.len())
@@ -1813,7 +1813,7 @@ fn server_closes_uncleanly() {
         check_read(&mut client.reader(), b"from-server!");
 
         check_read_err(
-            &mut client.reader() as &mut dyn io::Read,
+            &mut client.reader() as &mut dyn Read,
             io::ErrorKind::UnexpectedEof,
         );
 
@@ -1859,7 +1859,7 @@ fn client_closes_uncleanly() {
         check_read(&mut server.reader(), b"from-client!");
 
         check_read_err(
-            &mut server.reader() as &mut dyn io::Read,
+            &mut server.reader() as &mut dyn Read,
             io::ErrorKind::UnexpectedEof,
         );
 
@@ -2071,7 +2071,7 @@ fn test_read_tls_artificial_eof_after_close_notify() {
 
 struct FakeStream<'a>(&'a [u8]);
 
-impl io::Read for FakeStream<'_> {
+impl Read for FakeStream<'_> {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         let take = core::cmp::min(b.len(), self.0.len());
         let (taken, remain) = self.0.split_at(take);
@@ -2081,7 +2081,7 @@ impl io::Read for FakeStream<'_> {
     }
 }
 
-impl io::Write for FakeStream<'_> {
+impl Write for FakeStream<'_> {
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
         Ok(b.len())
     }

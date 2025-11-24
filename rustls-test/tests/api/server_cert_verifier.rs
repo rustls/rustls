@@ -629,7 +629,7 @@ fn client_check_server_valid_purpose() {
 }
 
 #[derive(Debug)]
-pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, Credentials)>);
+struct ResolvesCertChainByCaName(Vec<(DistinguishedName, Credentials)>);
 
 impl ServerCredentialResolver for ResolvesCertChainByCaName {
     fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {

@@ -147,7 +147,7 @@ impl KeyLogToVec {
     }
 
     fn take(&self) -> Vec<KeyLogItem> {
-        std::mem::take(&mut self.items.lock().unwrap())
+        core::mem::take(&mut self.items.lock().unwrap())
     }
 }
 

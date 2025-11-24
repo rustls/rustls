@@ -23,3 +23,6 @@ num-bigint = { workspace = true }
 pki-types = { workspace = true }
 x509-parser = { workspace = true }
 webpki = { workspace = true }
+
+[lints]
+workspace = true

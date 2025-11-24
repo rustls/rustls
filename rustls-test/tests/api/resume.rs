@@ -2,10 +2,10 @@
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use core::sync::atomic::{AtomicUsize, Ordering};
 use std::fmt;
 use std::io::{Read, Write};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rustls::client::Resumption;
 use rustls::crypto::{CertificateIdentity, Identity, NamedGroup};
