@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 
 use ring::aead;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape,
+    AeadKey, EncodedMessage, InboundOpaque, InboundPlainMessage, Iv, KeyBlockShape,
     MessageDecrypter, MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaque, OutboundPlainMessage,
     Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
 };
@@ -240,7 +240,7 @@ const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 impl MessageDecrypter for GcmMessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: InboundOpaqueMessage<'a>,
+        mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &msg.payload;
@@ -330,7 +330,7 @@ const CHACHAPOLY1305_OVERHEAD: usize = 16;
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: InboundOpaqueMessage<'a>,
+        mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &msg.payload;

@@ -13,7 +13,7 @@ use crate::msgs::message::read_opaque_message_header;
 use crate::suites::ConnectionTrafficSecrets;
 
 mod inbound;
-pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
+pub use inbound::{InboundOpaque, InboundPlainMessage};
 
 mod outbound;
 pub use outbound::{OutboundChunks, OutboundOpaque, OutboundPlainMessage};
@@ -154,7 +154,7 @@ pub trait MessageDecrypter: Send + Sync {
     /// `seq` which can be used to derive a unique [`Nonce`].
     fn decrypt<'a>(
         &mut self,
-        msg: InboundOpaqueMessage<'a>,
+        msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, Error>;
 }
@@ -423,6 +423,17 @@ pub struct EncodedMessage<P> {
     pub payload: P,
 }
 
+impl<P> EncodedMessage<P> {
+    /// Create a new `EncodedMessage` with the given fields.
+    pub fn new(typ: ContentType, version: ProtocolVersion, payload: P) -> Self {
+        Self {
+            typ,
+            version,
+            payload,
+        }
+    }
+}
+
 impl<'a> EncodedMessage<Payload<'a>> {
     /// Construct by decoding from a [`Reader`].
     ///
@@ -482,7 +493,7 @@ impl<'a> EncodedMessage<Payload<'a>> {
 /// An externally length'd payload
 ///
 /// When encountered in an [`EncodedMessage`], it represents a plaintext payload. It can be
-/// decrypted from an [`InboundOpaqueMessage`] or encrypted into an [`OutboundOpaque`],
+/// decrypted from an [`InboundOpaque`] or encrypted into an [`OutboundOpaque`],
 /// and it is also used for joining and fragmenting.
 #[non_exhaustive]
 #[derive(Clone, Eq, PartialEq)]
@@ -564,7 +575,7 @@ struct InvalidMessageDecrypter {}
 impl MessageDecrypter for InvalidMessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        _m: InboundOpaqueMessage<'a>,
+        _m: EncodedMessage<InboundOpaque<'a>>,
         _seq: u64,
     ) -> Result<InboundPlainMessage<'a>, Error> {
         Err(Error::DecryptError)

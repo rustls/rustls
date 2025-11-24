@@ -5,7 +5,7 @@ use std::sync::Arc;
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerVerifier;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape,
+    AeadKey, EncodedMessage, InboundOpaque, InboundPlainMessage, Iv, KeyBlockShape,
     MessageDecrypter, MessageEncrypter, OutboundOpaque, OutboundPlainMessage, Tls12AeadAlgorithm,
     Tls13AeadAlgorithm, UnsupportedOperationError,
 };
@@ -353,7 +353,7 @@ impl MessageEncrypter for Tls13Cipher {
 impl MessageDecrypter for Tls13Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: InboundOpaqueMessage<'a>,
+        mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &mut m.payload;
@@ -420,7 +420,7 @@ impl MessageEncrypter for Tls12Cipher {
 impl MessageDecrypter for Tls12Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: InboundOpaqueMessage<'a>,
+        mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &mut m.payload;

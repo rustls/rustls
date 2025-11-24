@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use core::cmp::min;
 
 use crate::crypto::cipher::{
-    EncodedMessage, InboundOpaqueMessage, InboundPlainMessage, MessageDecrypter, MessageEncrypter,
+    EncodedMessage, InboundOpaque, InboundPlainMessage, MessageDecrypter, MessageEncrypter,
     OutboundOpaque, OutboundPlainMessage,
 };
 use crate::error::Error;
@@ -61,7 +61,7 @@ impl RecordLayer {
     /// an error is returned.
     pub(crate) fn decrypt_incoming<'a>(
         &mut self,
-        encr: InboundOpaqueMessage<'a>,
+        encr: EncodedMessage<InboundOpaque<'a>>,
     ) -> Result<Option<Decrypted<'a>>, Error> {
         if self.decrypt_state != DirectionState::Active {
             return Ok(Some(Decrypted {
@@ -289,7 +289,7 @@ mod tests {
         impl MessageDecrypter for PassThroughDecrypter {
             fn decrypt<'a>(
                 &mut self,
-                m: InboundOpaqueMessage<'a>,
+                m: EncodedMessage<InboundOpaque<'a>>,
                 _: u64,
             ) -> Result<InboundPlainMessage<'a>, Error> {
                 Ok(m.into_plain_message())
@@ -325,10 +325,10 @@ mod tests {
         // Decrypting a message should update the read_seq and track that we have now performed
         // a decryption.
         record_layer
-            .decrypt_incoming(InboundOpaqueMessage::new(
+            .decrypt_incoming(EncodedMessage::new(
                 ContentType::Handshake,
                 ProtocolVersion::TLSv1_2,
-                &mut [0xC0, 0xFF, 0xEE],
+                InboundOpaque(&mut [0xC0, 0xFF, 0xEE]),
             ))
             .unwrap();
         assert!(matches!(record_layer.decrypt_state, DirectionState::Active));

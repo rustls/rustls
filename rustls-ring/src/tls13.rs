@@ -4,7 +4,7 @@ use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter,
+    AeadKey, EncodedMessage, InboundOpaque, InboundPlainMessage, Iv, MessageDecrypter,
     MessageEncrypter, Nonce, OutboundOpaque, OutboundPlainMessage, Tls13AeadAlgorithm,
     UnsupportedOperationError, make_tls13_aad,
 };
@@ -229,7 +229,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 impl MessageDecrypter for Tls13MessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: InboundOpaqueMessage<'a>,
+        mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &mut msg.payload;

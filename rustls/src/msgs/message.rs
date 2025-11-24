@@ -184,9 +184,7 @@ impl TryFrom<EncodedMessage<Payload<'_>>> for Message<'_> {
 /// Parses a plaintext message into a well-typed [`Message`].
 ///
 /// A [`InboundPlainMessage`] must contain plaintext content. Encrypted content should be stored in an
-/// [`InboundOpaqueMessage`] and decrypted before being stored into a [`EncodedMessage`].
-///
-/// [`InboundOpaqueMessage`]: crate::crypto::cipher::InboundOpaqueMessage
+/// [`EncodedMessage<InboundOpaque>`] and decrypted before being stored into a [`EncodedMessage`].
 impl<'a> TryFrom<InboundPlainMessage<'a>> for Message<'a> {
     type Error = InvalidMessage;
 
