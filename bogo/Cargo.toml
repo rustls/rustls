@@ -15,3 +15,6 @@ webpki = { workspace = true }
 [features]
 default = []
 fips = ["rustls/fips"]
+
+[lints]
+workspace = true
