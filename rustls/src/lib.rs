@@ -320,12 +320,6 @@
 #![warn(missing_docs, clippy::exhaustive_enums, clippy::exhaustive_structs)]
 #![forbid(unsafe_code, unused_must_use)]
 #![cfg_attr(not(any(bench, coverage_nightly)), forbid(unstable_features))]
-// Relax these clippy lints:
-// - too_many_arguments: some things just need a lot of state, wrapping it
-//   doesn't necessarily make it easier to follow what's going on
-// - new_without_default: for internal constructors, the indirection is not
-//   helpful
-#![expect(clippy::too_many_arguments, clippy::new_without_default)]
 // Enable documentation for all features on docs.rs
 #![cfg_attr(rustls_docsrs, feature(doc_cfg))]
 // Enable coverage() attr for nightly coverage builds, see

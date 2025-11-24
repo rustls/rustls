@@ -117,6 +117,15 @@ std_instead_of_core = "warn"
 upper_case_acronyms = "warn"
 use_self = "warn"
 
+# Relax these clippy lints:
+# - too_many_arguments: some things just need a lot of state, wrapping it
+#   doesn't necessarily make it easier to follow what's going on
+too_many_arguments = "allow"
+
+# - new_without_default: for internal constructors, the indirection is not
+#   helpful
+new_without_default = "allow"
+
 [workspace.lints.rust]
 elided_lifetimes_in_paths = "warn"
 trivial_numeric_casts = "warn"
