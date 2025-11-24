@@ -838,3 +838,28 @@ fn test_fragmented_append() {
     //   range end index 8192 out of range for slice of length 4096
     client.read_hs(&out).unwrap();
 }
+
+#[test]
+fn server_rejects_client_hello_with_trailing_fragment() {
+    let mut server = quic::ServerConnection::new(
+        Arc::new(make_server_config(
+            KeyType::EcdsaP256,
+            &provider::DEFAULT_TLS13_PROVIDER,
+        )),
+        quic::Version::V2,
+        b"server params".to_vec(),
+    )
+    .unwrap();
+
+    // this is a trivial ClientHello, followed by a fragment of a ClientHello
+    let mut hello =
+        encoding::basic_client_hello(vec![encoding::Extension::new_quic_transport_params(
+            b"client params",
+        )]);
+    hello.extend(&hello[..10].to_vec());
+
+    assert_eq!(
+        server.read_hs(&hello).unwrap_err(),
+        PeerMisbehaved::KeyEpochWithPendingFragment.into()
+    );
+}
