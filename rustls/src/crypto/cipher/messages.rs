@@ -1,14 +1,157 @@
 use alloc::vec::Vec;
+use core::fmt;
+use core::ops::{Deref, DerefMut, Range};
 
-use super::EncodedMessage;
-use super::record_layer::RecordLayer;
-use crate::msgs::message::HEADER_SIZE;
+use crate::crypto::cipher::RecordLayer;
+use crate::enums::{ContentType, ProtocolVersion};
+use crate::error::{Error, InvalidMessage, PeerMisbehaved};
+use crate::msgs::base::hex;
+use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
+use crate::msgs::message::{HEADER_SIZE, read_opaque_message_header};
 
-impl EncodedMessage<OutboundPlain<'_>> {
-    pub(crate) fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
-        HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
+/// A TLS message with encoded (but not necessarily encrypted) payload.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Clone, Debug)]
+pub struct EncodedMessage<P> {
+    /// The content type of this message.
+    pub typ: ContentType,
+    /// The protocol version of this message.
+    pub version: ProtocolVersion,
+    /// The payload of this message.
+    pub payload: P,
+}
+
+impl<P> EncodedMessage<P> {
+    /// Create a new `EncodedMessage` with the given fields.
+    pub fn new(typ: ContentType, version: ProtocolVersion, payload: P) -> Self {
+        Self {
+            typ,
+            version,
+            payload,
+        }
+    }
+}
+
+impl<'a> EncodedMessage<Payload<'a>> {
+    /// Construct by decoding from a [`Reader`].
+    ///
+    /// `MessageError` allows callers to distinguish between valid prefixes (might
+    /// become valid if we read more data) and invalid data.
+    pub fn read(r: &mut Reader<'a>) -> Result<Self, MessageError> {
+        let (typ, version, len) = read_opaque_message_header(r)?;
+
+        let content = r
+            .take(len as usize)
+            .ok_or(MessageError::TooShortForLength)?;
+
+        Ok(Self {
+            typ,
+            version,
+            payload: Payload::Borrowed(content),
+        })
     }
 
+    /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
+    pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
+        EncodedMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: OutboundOpaque::from(self.payload.bytes()),
+        }
+    }
+
+    /// Borrow as an `EncodedMessage<&[u8]>`.
+    pub(crate) fn borrowed(&'a self) -> EncodedMessage<&'a [u8]> {
+        EncodedMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: self.payload.bytes(),
+        }
+    }
+
+    /// Borrow as an [`EncodedMessage<OutboundPlain<'a>>`].
+    pub fn borrow_outbound(&'a self) -> EncodedMessage<OutboundPlain<'a>> {
+        EncodedMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: self.payload.bytes().into(),
+        }
+    }
+
+    /// Convert into an owned `EncodedMessage<Plain<'static>>`.
+    pub fn into_owned(self) -> Self {
+        Self {
+            typ: self.typ,
+            version: self.version,
+            payload: self.payload.into_owned(),
+        }
+    }
+
+    /// Returns true if the payload is a CCS message.
+    ///
+    /// We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
+    /// Note: this is prior to the record layer, so is unencrypted. See
+    /// third paragraph of section 5 in RFC8446.
+    pub(crate) fn is_valid_ccs(&self) -> bool {
+        self.typ == ContentType::ChangeCipherSpec && self.payload.bytes() == [0x01]
+    }
+}
+
+impl<'a> EncodedMessage<InboundOpaque<'a>> {
+    /// Force conversion into a plaintext message.
+    ///
+    /// This should only be used for messages that are known to be in plaintext. Otherwise, the
+    /// `InboundOpaqueMessage` should be decrypted into a `PlainMessage` using a `MessageDecrypter`.
+    pub fn into_plain_message(self) -> EncodedMessage<Payload<'a>> {
+        EncodedMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: Payload::Borrowed(self.payload.into_inner()),
+        }
+    }
+
+    /// Force conversion into a plaintext message.
+    ///
+    /// `range` restricts the resulting message: this function panics if it is out of range for
+    /// the underlying message payload.
+    ///
+    /// This should only be used for messages that are known to be in plaintext. Otherwise, the
+    /// `InboundOpaqueMessage` should be decrypted into a `PlainMessage` using a `MessageDecrypter`.
+    pub fn into_plain_message_range(self, range: Range<usize>) -> EncodedMessage<Payload<'a>> {
+        EncodedMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: Payload::Borrowed(&self.payload.into_inner()[range]),
+        }
+    }
+
+    /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
+    ///
+    /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
+    /// or the message (post-unpadding) is too long.
+    pub fn into_tls13_unpadded_message(mut self) -> Result<EncodedMessage<Payload<'a>>, Error> {
+        let payload = &mut self.payload;
+
+        if payload.len() > MAX_FRAGMENT_LEN + 1 {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        self.typ = unpad_tls13_payload(payload);
+        if self.typ == ContentType::Unknown(0) {
+            return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
+        }
+
+        if payload.len() > MAX_FRAGMENT_LEN {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        self.version = ProtocolVersion::TLSv1_3;
+        Ok(self.into_plain_message())
+    }
+}
+
+impl EncodedMessage<OutboundPlain<'_>> {
     pub(crate) fn to_unencrypted_opaque(&self) -> EncodedMessage<OutboundOpaque> {
         let mut payload = OutboundOpaque::with_capacity(self.payload.len());
         payload.extend_from_chunks(&self.payload);
@@ -17,6 +160,22 @@ impl EncodedMessage<OutboundPlain<'_>> {
             typ: self.typ,
             payload,
         }
+    }
+
+    pub(crate) fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
+        HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
+    }
+}
+
+impl EncodedMessage<OutboundOpaque> {
+    /// Encode this message to a vector of bytes.
+    pub fn encode(self) -> Vec<u8> {
+        let length = self.payload.len() as u16;
+        let mut encoded_payload = self.payload.0;
+        encoded_payload[0] = self.typ.into();
+        encoded_payload[1..3].copy_from_slice(&self.version.to_array());
+        encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
+        encoded_payload
     }
 }
 
@@ -140,18 +299,6 @@ impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
     }
 }
 
-impl EncodedMessage<OutboundOpaque> {
-    /// Encode this message to a vector of bytes.
-    pub fn encode(self) -> Vec<u8> {
-        let length = self.payload.len() as u16;
-        let mut encoded_payload = self.payload.0;
-        encoded_payload[0] = self.typ.into();
-        encoded_payload[1..3].copy_from_slice(&self.version.to_array());
-        encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
-        encoded_payload
-    }
-}
-
 /// A payload buffer with space reserved at the front for a TLS message header.
 ///
 /// `EncodedMessage<OutboundOpaque>` is named `TLSPlaintext` in the standard.
@@ -222,6 +369,144 @@ impl<const N: usize> From<&[u8; N]> for OutboundOpaque {
     fn from(content: &[u8; N]) -> Self {
         Self::from(&content[..])
     }
+}
+
+/// An externally length'd payload
+///
+/// When encountered in an [`EncodedMessage`], it represents a plaintext payload. It can be
+/// decrypted from an [`InboundOpaque`] or encrypted into an [`OutboundOpaque`],
+/// and it is also used for joining and fragmenting.
+#[non_exhaustive]
+#[derive(Clone, Eq, PartialEq)]
+pub enum Payload<'a> {
+    /// Borrowed payload
+    Borrowed(&'a [u8]),
+    /// Owned payload
+    Owned(Vec<u8>),
+}
+
+impl<'a> Payload<'a> {
+    /// A reference to the payload's bytes
+    pub fn bytes(&'a self) -> &'a [u8] {
+        match self {
+            Self::Borrowed(bytes) => bytes,
+            Self::Owned(bytes) => bytes,
+        }
+    }
+
+    pub(crate) fn into_owned(self) -> Payload<'static> {
+        Payload::Owned(self.into_vec())
+    }
+
+    pub(crate) fn into_vec(self) -> Vec<u8> {
+        match self {
+            Self::Borrowed(bytes) => bytes.to_vec(),
+            Self::Owned(bytes) => bytes,
+        }
+    }
+
+    pub(crate) fn read(r: &mut Reader<'a>) -> Self {
+        Self::Borrowed(r.rest())
+    }
+}
+
+impl Payload<'static> {
+    /// Create a new owned payload from the given `bytes`.
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
+        Self::Owned(bytes.into())
+    }
+}
+
+impl<'a> Codec<'a> for Payload<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(self.bytes());
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(Self::read(r))
+    }
+}
+
+impl fmt::Debug for Payload<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        hex(f, self.bytes())
+    }
+}
+
+/// A borrowed payload buffer.
+#[expect(clippy::exhaustive_structs)]
+pub struct InboundOpaque<'a>(pub &'a mut [u8]);
+
+impl<'a> InboundOpaque<'a> {
+    /// Truncate the payload to `len` bytes.
+    pub fn truncate(&mut self, len: usize) {
+        if len >= self.len() {
+            return;
+        }
+
+        self.0 = core::mem::take(&mut self.0)
+            .split_at_mut(len)
+            .0;
+    }
+
+    pub(crate) fn into_inner(self) -> &'a mut [u8] {
+        self.0
+    }
+
+    pub(crate) fn pop(&mut self) -> Option<u8> {
+        if self.is_empty() {
+            return None;
+        }
+
+        let len = self.len();
+        let last = self[len - 1];
+        self.truncate(len - 1);
+        Some(last)
+    }
+}
+
+impl Deref for InboundOpaque<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl DerefMut for InboundOpaque<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
+
+/// Decode a TLS1.3 `TLSInnerPlaintext` encoding.
+///
+/// `p` is a message payload, immediately post-decryption.  This function
+/// removes zero padding bytes, until a non-zero byte is encountered which is
+/// the content type, which is returned.  See RFC8446 s5.2.
+///
+/// ContentType(0) is returned if the message payload is empty or all zeroes.
+fn unpad_tls13_payload(p: &mut InboundOpaque<'_>) -> ContentType {
+    loop {
+        match p.pop() {
+            Some(0) => {}
+            Some(content_type) => return ContentType::from(content_type),
+            None => return ContentType::Unknown(0),
+        }
+    }
+}
+
+/// Errors from trying to parse a TLS message.
+#[expect(missing_docs)]
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum MessageError {
+    TooShortForHeader,
+    TooShortForLength,
+    InvalidEmptyPayload,
+    MessageTooLarge,
+    InvalidContentType,
+    UnknownProtocolVersion,
 }
 
 #[cfg(test)]
