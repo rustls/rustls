@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use core::cell::RefCell;
 
 #[cfg(feature = "ring")]
 #[path = "."]
@@ -94,11 +94,11 @@ impl CountingLogger {
 }
 
 impl log::Log for CountingLogger {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+    fn enabled(&self, _metadata: &log::Metadata<'_>) -> bool {
         true
     }
 
-    fn log(&self, record: &log::Record) {
+    fn log(&self, record: &log::Record<'_>) {
         println!("logging at {:?}: {:?}", record.level(), record.args());
 
         COUNTS.with(|c| {

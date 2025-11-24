@@ -567,7 +567,7 @@ fn test_quic_resumption_data_0rtt() {
 
     // Verify server can parse and use the received 0-RTT parameters
     if let Some(received_params) = server2.received_resumption_data() {
-        let params_str = std::str::from_utf8(received_params).unwrap();
+        let params_str = core::str::from_utf8(received_params).unwrap();
         assert!(params_str.contains("active_connection_id_limit=2"));
         assert!(params_str.contains("initial_max_data=1048576"));
         assert!(params_str.contains("initial_max_stream_data_bidi_local=262144"));
@@ -627,7 +627,7 @@ fn packet_key_api() {
     let header_len = PLAIN_HEADER.len();
     let tag_len = client_keys.local.packet.tag_len();
     let padding_len = 1200 - header_len - PAYLOAD.len() - tag_len;
-    buf.extend(std::iter::repeat_n(0, padding_len));
+    buf.extend(core::iter::repeat_n(0, padding_len));
     let (header, payload) = buf.split_at_mut(header_len);
     let tag = client_keys
         .local

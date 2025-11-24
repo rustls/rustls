@@ -1,9 +1,9 @@
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 #[cfg(feature = "zlib")]
-use std::sync::Arc;
+use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(feature = "zlib")]
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 #[cfg(feature = "zlib")]
 use rustls::client::Resumption;

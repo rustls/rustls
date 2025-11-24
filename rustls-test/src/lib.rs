@@ -1,18 +1,3 @@
-#![warn(
-    clippy::alloc_instead_of_core,
-    clippy::manual_let_else,
-    clippy::std_instead_of_core,
-    clippy::use_self,
-    clippy::upper_case_acronyms,
-    elided_lifetimes_in_paths,
-    trivial_numeric_casts,
-    unreachable_pub,
-    unused_import_braces,
-    unused_extern_crates,
-    unused_qualifications
-)]
-#![allow(clippy::new_without_default)]
-
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 use std::borrow::Cow;
@@ -731,7 +716,7 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
         tls13_cipher_suites: provider
             .tls13_cipher_suites
             .iter()
-            .cloned()
+            .copied()
             .filter(|cs| cs.common.suite == CipherSuite::TLS13_AES_128_GCM_SHA256)
             .collect(),
         ..provider.clone()
@@ -742,7 +727,7 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
         tls13_cipher_suites: provider
             .tls13_cipher_suites
             .iter()
-            .cloned()
+            .copied()
             .filter(|cs| cs.common.suite == CipherSuite::TLS13_AES_256_GCM_SHA384)
             .collect(),
         ..provider
