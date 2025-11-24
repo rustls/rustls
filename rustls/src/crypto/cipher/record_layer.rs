@@ -3,7 +3,7 @@ use core::cmp::min;
 
 use crate::crypto::cipher::{
     EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, OutboundOpaque,
-    OutboundPlainMessage,
+    OutboundPlain,
 };
 use crate::error::Error;
 use crate::log::trace;
@@ -109,7 +109,7 @@ impl RecordLayer {
     /// panics if the requisite keying material hasn't been established yet.
     pub(crate) fn encrypt_outgoing(
         &mut self,
-        plain: OutboundPlainMessage<'_>,
+        plain: EncodedMessage<OutboundPlain<'_>>,
     ) -> EncodedMessage<OutboundOpaque> {
         debug_assert!(self.encrypt_state == DirectionState::Active);
         assert!(self.next_pre_encrypt_action() != PreEncryptAction::Refuse);
