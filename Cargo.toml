@@ -108,6 +108,29 @@ zlib-rs = "0.5"
 codegen-units = 1
 lto = true
 
+[workspace.lints.clippy]
+alloc_instead_of_core = "warn"
+cloned_instead_of_copied = "warn"
+manual_let_else = "warn"
+or_fun_call = "warn"
+std_instead_of_core = "warn"
+upper_case_acronyms = "warn"
+use_self = "warn"
+
+[workspace.lints.rust]
+elided_lifetimes_in_paths = "warn"
+trivial_numeric_casts = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = [
+  "cfg(bench)",
+  "cfg(coverage_nightly)",
+  "cfg(rustls_docsrs)",
+] }
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+
 # ensure all our tests are against the local copy, never
 # against the latest _published_ copy.
 [patch.crates-io]

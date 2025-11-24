@@ -317,27 +317,9 @@
 //! [x25519mlkem768-manual]: manual::_05_defaults#about-the-post-quantum-secure-key-exchange-x25519mlkem768
 
 // Require docs for public APIs, deny unsafe code, etc.
+#![warn(missing_docs, clippy::exhaustive_enums, clippy::exhaustive_structs)]
 #![forbid(unsafe_code, unused_must_use)]
 #![cfg_attr(not(any(bench, coverage_nightly)), forbid(unstable_features))]
-#![warn(
-    clippy::alloc_instead_of_core,
-    clippy::cloned_instead_of_copied,
-    clippy::exhaustive_enums,
-    clippy::exhaustive_structs,
-    clippy::manual_let_else,
-    clippy::or_fun_call,
-    clippy::std_instead_of_core,
-    clippy::use_self,
-    clippy::upper_case_acronyms,
-    elided_lifetimes_in_paths,
-    missing_docs,
-    trivial_numeric_casts,
-    unnameable_types,
-    unreachable_pub,
-    unused_import_braces,
-    unused_extern_crates,
-    unused_qualifications
-)]
 // Relax these clippy lints:
 // - too_many_arguments: some things just need a lot of state, wrapping it
 //   doesn't necessarily make it easier to follow what's going on

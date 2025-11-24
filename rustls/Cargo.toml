@@ -70,9 +70,5 @@ allowed_external_types = [
 [package.metadata.cargo-semver-checks.lints]
 enum_no_repr_variant_discriminant_changed = "warn"
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [
-  "cfg(bench)",
-  "cfg(coverage_nightly)",
-  "cfg(rustls_docsrs)",
-] }
+[lints]
+workspace = true
