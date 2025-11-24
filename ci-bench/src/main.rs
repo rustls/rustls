@@ -403,47 +403,40 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
             Some(warm_up_aws_lc_rs as fn()),
         ),
     ] {
-        for (key_type, suite_name, version, name) in [
+        for (key_type, suite_name, name) in [
             (
                 KeyType::Rsa2048,
                 CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-                ProtocolVersion::TLSv1_2,
                 "1.2_rsa_aes",
             ),
             (
                 KeyType::Rsa2048,
                 CipherSuite::TLS13_AES_128_GCM_SHA256,
-                ProtocolVersion::TLSv1_3,
                 "1.3_rsa_aes",
             ),
             (
                 KeyType::EcdsaP256,
                 CipherSuite::TLS13_AES_128_GCM_SHA256,
-                ProtocolVersion::TLSv1_3,
                 "1.3_ecdsap256_aes",
             ),
             (
                 KeyType::EcdsaP384,
                 CipherSuite::TLS13_AES_128_GCM_SHA256,
-                ProtocolVersion::TLSv1_3,
                 "1.3_ecdsap384_aes",
             ),
             (
                 KeyType::Rsa2048,
                 CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-                ProtocolVersion::TLSv1_3,
                 "1.3_rsa_chacha",
             ),
             (
                 KeyType::EcdsaP256,
                 CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-                ProtocolVersion::TLSv1_3,
                 "1.3_ecdsap256_chacha",
             ),
             (
                 KeyType::EcdsaP384,
                 CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-                ProtocolVersion::TLSv1_3,
                 "1.3_ecdsap384_chacha",
             ),
         ] {
@@ -451,7 +444,6 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
                 select_suite(provider.clone(), suite_name),
                 ticketer,
                 AuthKeySource::KeyType(key_type),
-                version,
                 format!("{provider_name}_{name}"),
                 warm_up,
             ));
@@ -465,7 +457,6 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         rustls_fuzzing_provider::PROVIDER_TLS13.into(),
         make_ticketer,
         AuthKeySource::FuzzingProvider,
-        ProtocolVersion::TLSv1_3,
         "1.3_no_crypto".to_string(),
         None,
     ));
@@ -474,7 +465,6 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         rustls_fuzzing_provider::PROVIDER_TLS12.into(),
         make_ticketer,
         AuthKeySource::FuzzingProvider,
-        ProtocolVersion::TLSv1_2,
         "1.2_no_crypto".to_string(),
         None,
     ));
