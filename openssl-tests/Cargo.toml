@@ -13,3 +13,6 @@ num-bigint = { workspace = true }
 once_cell = { workspace = true }
 rustls = { path = "../rustls", features = ["aws-lc-rs"] }
 openssl = { workspace = true }
+
+[lints]
+workspace = true
