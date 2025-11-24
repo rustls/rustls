@@ -6,7 +6,9 @@ use crate::msgs::codec::Reader;
 use crate::msgs::message::{HEADER_SIZE, MessageError, read_opaque_message_header};
 
 pub(crate) mod buffers;
-pub(crate) mod handshake;
+
+mod handshake;
+pub(crate) use handshake::HandshakeDeframer;
 
 /// A deframer of TLS wire messages.
 ///

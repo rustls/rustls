@@ -11,9 +11,8 @@ use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::crypto::cipher::{Decrypted, InboundPlainMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
-use crate::msgs::deframer::DeframerIter;
 use crate::msgs::deframer::buffers::{BufferProgress, DeframerVecBuffer, Delocator, Locator};
-use crate::msgs::deframer::handshake::HandshakeDeframer;
+use crate::msgs::deframer::{DeframerIter, HandshakeDeframer};
 use crate::msgs::handshake::Random;
 #[cfg(feature = "std")]
 use crate::msgs::message::Message;
