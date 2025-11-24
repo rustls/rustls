@@ -6,7 +6,7 @@ use std::{format, fs, println, vec};
 use super::codec::Reader;
 use super::enums::AlertLevel;
 use super::message::Message;
-use crate::crypto::cipher::{Payload, PlainMessage};
+use crate::crypto::cipher::{EncodedMessage, Payload};
 use crate::enums::HandshakeType;
 use crate::error::AlertDescription;
 use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, PayloadU24};
@@ -30,14 +30,14 @@ fn test_read_fuzz_corpus() {
         f.read_to_end(&mut bytes).unwrap();
 
         let mut rd = Reader::init(&bytes);
-        let msg = PlainMessage::read(&mut rd).unwrap();
+        let msg = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
         println!("{msg:?}");
 
         let Ok(msg) = Message::try_from(msg) else {
             continue;
         };
 
-        let enc = PlainMessage::from(msg)
+        let enc = EncodedMessage::<Payload<'_>>::from(msg)
             .into_unencrypted_opaque()
             .encode();
         assert_eq!(bytes.to_vec(), enc);
@@ -68,7 +68,7 @@ fn can_read_safari_client_hello_with_ip_address_in_sni_extension() {
         \x79\x2f\x33\x08\x68\x74\x74\x70\x2f\x31\x2e\x31\x00\x0b\x00\x02\
         \x01\x00\x00\x0a\x00\x0a\x00\x08\x00\x1d\x00\x17\x00\x18\x00\x19";
     let mut rd = Reader::init(bytes);
-    let m = PlainMessage::read(&mut rd).unwrap();
+    let m = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
     println!("m = {m:?}");
     Message::try_from(m).unwrap();
 }
@@ -89,7 +89,7 @@ fn construct_all_types() {
         &b"\x18\x03\x04\x00\x04\x11\x22\x33\x44"[..],
     ];
     for &bytes in samples.iter() {
-        let m = PlainMessage::read(&mut Reader::init(bytes)).unwrap();
+        let m = EncodedMessage::<Payload<'_>>::read(&mut Reader::init(bytes)).unwrap();
         println!("m = {m:?}");
         let m = Message::try_from(m);
         println!("m' = {m:?}");

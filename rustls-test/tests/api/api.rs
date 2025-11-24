@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use pki_types::{DnsName, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
 use rustls::client::Resumption;
-use rustls::crypto::cipher::{Payload, PlainMessage};
+use rustls::crypto::cipher::{EncodedMessage, Payload};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, InconsistentKeys, SelectedCredential,
@@ -1367,7 +1367,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
 
     let mut raw_server = RawTls::new_server(server);
 
-    let msg = PlainMessage {
+    let msg = EncodedMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: Payload::new(encoding::handshake_framing(
@@ -1400,7 +1400,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
 
     let mut raw_server = RawTls::new_server(server);
 
-    let msg = PlainMessage {
+    let msg = EncodedMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: Payload::new(encoding::handshake_framing(
@@ -1439,7 +1439,7 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
 
     let mut raw_client = RawTls::new_client(client);
 
-    let msg = PlainMessage {
+    let msg = EncodedMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
         payload: Payload::new(encoding::basic_client_hello(vec![])),

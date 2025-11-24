@@ -8,7 +8,7 @@ use std::vec;
 use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
-use crate::crypto::cipher::{MessageEncrypter, PlainMessage};
+use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
@@ -461,7 +461,7 @@ fn client_requiring_rpk_receives_server_ee(
 
     let mut encrypter = fake_server_crypto.server_handshake_encrypter();
     let enc_ee = encrypter
-        .encrypt(PlainMessage::from(ee).borrow_outbound(), 0)
+        .encrypt(EncodedMessage::<Payload<'_>>::from(ee).borrow_outbound(), 0)
         .unwrap();
     conn.read_tls(&mut enc_ee.encode().as_slice())
         .unwrap();
@@ -687,7 +687,9 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
     let mut bytes = Vec::new();
     conn.write_tls(&mut bytes).unwrap();
 
-    let message = PlainMessage::read(&mut Reader::init(&bytes)).unwrap();
+    let message = EncodedMessage::<Payload<'_>>::read(&mut Reader::init(&bytes))
+        .unwrap()
+        .into_owned();
     match Message::try_from(message).unwrap() {
         Message {
             payload:

@@ -13,7 +13,8 @@ use rustls::client::{
     WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundOpaqueMessage, PlainMessage,
+    EncodedMessage, InboundOpaqueMessage, MessageDecrypter, MessageEncrypter,
+    OutboundOpaqueMessage, Payload,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -273,11 +274,13 @@ where
             // this is a bit of a falsehood: we don't know whether message
             // is encrypted.  it is quite unlikely that a genuine encrypted
             // message can be decoded by `Message::try_from`.
-            let plain = PlainMessage::read(&mut reader).unwrap();
+            let plain = EncodedMessage::<Payload<'_>>::read(&mut reader)
+                .unwrap()
+                .into_owned();
 
             let message_enc = match Message::try_from(plain.clone()) {
                 Ok(mut message) => match filter(&mut message) {
-                    Altered::InPlace => PlainMessage::from(message)
+                    Altered::InPlace => EncodedMessage::<Payload<'static>>::from(message)
                         .into_unencrypted_opaque()
                         .encode(),
                     Altered::Raw(data) => data,
@@ -1411,7 +1414,7 @@ impl RawTls {
 
     pub fn encrypt_and_send(
         &mut self,
-        msg: &PlainMessage,
+        msg: &EncodedMessage<Payload<'_>>,
         peer: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
     ) {
         let data = self

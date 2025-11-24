@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::crypto::cipher::{InboundPlainMessage, Payload, PlainMessage};
+use crate::crypto::cipher::{EncodedMessage, InboundPlainMessage, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::msgs::alert::AlertMessagePayload;
@@ -88,7 +88,7 @@ impl<'a> MessagePayload<'a> {
     }
 }
 
-impl From<Message<'_>> for PlainMessage {
+impl From<Message<'_>> for EncodedMessage<Payload<'_>> {
     fn from(msg: Message<'_>) -> Self {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
@@ -156,7 +156,7 @@ impl Message<'_> {
 
     #[cfg(test)]
     pub(crate) fn into_wire_bytes(self) -> Vec<u8> {
-        PlainMessage::from(self)
+        EncodedMessage::<Payload<'_>>::from(self)
             .into_unencrypted_opaque()
             .encode()
     }
@@ -169,10 +169,10 @@ impl Message<'_> {
     }
 }
 
-impl TryFrom<PlainMessage> for Message<'static> {
+impl TryFrom<EncodedMessage<Payload<'_>>> for Message<'_> {
     type Error = InvalidMessage;
 
-    fn try_from(plain: PlainMessage) -> Result<Self, Self::Error> {
+    fn try_from(plain: EncodedMessage<Payload<'_>>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
             payload: MessagePayload::new(plain.typ, plain.version, plain.payload.bytes())?
@@ -183,8 +183,8 @@ impl TryFrom<PlainMessage> for Message<'static> {
 
 /// Parses a plaintext message into a well-typed [`Message`].
 ///
-/// A [`PlainMessage`] must contain plaintext content. Encrypted content should be stored in an
-/// [`InboundOpaqueMessage`] and decrypted before being stored into a [`PlainMessage`].
+/// A [`InboundPlainMessage`] must contain plaintext content. Encrypted content should be stored in an
+/// [`InboundOpaqueMessage`] and decrypted before being stored into a [`EncodedMessage`].
 ///
 /// [`InboundOpaqueMessage`]: crate::crypto::cipher::InboundOpaqueMessage
 impl<'a> TryFrom<InboundPlainMessage<'a>> for Message<'a> {

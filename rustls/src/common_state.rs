@@ -6,8 +6,8 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    InboundPlainMessage, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, Payload,
-    PlainMessage, PreEncryptAction, RecordLayer,
+    EncodedMessage, InboundPlainMessage, OutboundChunks, OutboundOpaqueMessage,
+    OutboundPlainMessage, Payload, PreEncryptAction, RecordLayer,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -344,7 +344,7 @@ impl CommonState {
 
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
-    pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage) {
+    pub(crate) fn send_msg_encrypt(&mut self, m: EncodedMessage<Payload<'_>>) {
         let iter = self
             .message_fragmenter
             .fragment_message(&m);
@@ -744,7 +744,7 @@ impl CommonState {
     }
 
     pub(crate) fn enqueue_key_update_notification(&mut self) {
-        let message = PlainMessage::from(Message::build_key_update_notify());
+        let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
         self.queued_key_update_message = Some(
             self.record_layer
                 .encrypt_outgoing(message.borrow_outbound())

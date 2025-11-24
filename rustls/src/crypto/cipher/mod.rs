@@ -411,27 +411,24 @@ impl From<[u8; Self::MAX_LEN]> for AeadKey {
     }
 }
 
-/// A decrypted TLS frame
-///
-/// This type owns all memory for its interior parts. It can be decrypted from an OpaqueMessage
-/// or encrypted into an OpaqueMessage, and it is also used for joining and fragmenting.
+/// A TLS message with encoded (but not necessarily encrypted) payload.
 #[expect(clippy::exhaustive_structs)]
 #[derive(Clone, Debug)]
-pub struct PlainMessage {
+pub struct EncodedMessage<P> {
     /// The content type of this message.
     pub typ: ContentType,
     /// The protocol version of this message.
     pub version: ProtocolVersion,
     /// The payload of this message.
-    pub payload: Payload<'static>,
+    pub payload: P,
 }
 
-impl PlainMessage {
+impl<'a> EncodedMessage<Payload<'a>> {
     /// Construct by decoding from a [`Reader`].
     ///
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
-    pub fn read(r: &mut Reader<'_>) -> Result<Self, MessageError> {
+    pub fn read(r: &mut Reader<'a>) -> Result<Self, MessageError> {
         let (typ, version, len) = read_opaque_message_header(r)?;
 
         let content = r
@@ -441,7 +438,7 @@ impl PlainMessage {
         Ok(Self {
             typ,
             version,
-            payload: Payload::Owned(content.to_vec()),
+            payload: Payload::Borrowed(content),
         })
     }
 
@@ -455,7 +452,7 @@ impl PlainMessage {
     }
 
     /// Borrow as an [`InboundPlainMessage`].
-    pub fn borrow_inbound(&self) -> InboundPlainMessage<'_> {
+    pub fn borrow_inbound(&'a self) -> InboundPlainMessage<'a> {
         InboundPlainMessage {
             version: self.version,
             typ: self.typ,
@@ -464,16 +461,29 @@ impl PlainMessage {
     }
 
     /// Borrow as an [`OutboundPlainMessage`].
-    pub fn borrow_outbound(&self) -> OutboundPlainMessage<'_> {
+    pub fn borrow_outbound(&'a self) -> OutboundPlainMessage<'a> {
         OutboundPlainMessage {
             version: self.version,
             typ: self.typ,
             payload: self.payload.bytes().into(),
         }
     }
+
+    /// Convert into an owned `EncodedMessage<Plain<'static>>`.
+    pub fn into_owned(self) -> Self {
+        Self {
+            typ: self.typ,
+            version: self.version,
+            payload: self.payload.into_owned(),
+        }
+    }
 }
 
 /// An externally length'd payload
+///
+/// When encountered in an [`EncodedMessage`], it represents a plaintext payload. It can be
+/// decrypted from an [`InboundOpaqueMessage`] or encrypted into an [`OutboundOpaqueMessage`],
+/// and it is also used for joining and fragmenting.
 #[non_exhaustive]
 #[derive(Clone, Eq, PartialEq)]
 pub enum Payload<'a> {
