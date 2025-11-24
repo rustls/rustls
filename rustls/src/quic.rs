@@ -29,7 +29,7 @@ mod connection {
     use crate::crypto::cipher::{InboundPlainMessage, Payload};
     use crate::enums::{ContentType, ProtocolVersion};
     use crate::error::{AlertDescription, ApiMisuse, Error};
-    use crate::msgs::deframer::buffers::{DeframerVecBuffer, Locator};
+    use crate::msgs::deframer::{DeframerVecBuffer, Locator};
     use crate::msgs::handshake::{
         ClientExtensionsInput, ServerExtensionsInput, TransportParameters,
     };

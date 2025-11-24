@@ -30,7 +30,7 @@ use crate::kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::log::trace;
 #[cfg(feature = "std")]
-use crate::msgs::deframer::buffers::Locator;
+use crate::msgs::deframer::Locator;
 #[cfg(feature = "std")]
 use crate::msgs::handshake::ClientHelloPayload;
 use crate::msgs::handshake::{ProtocolName, ServerExtensionsInput, ServerNamePayload};
@@ -611,7 +611,7 @@ mod connection {
     use crate::common_state::{CommonState, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::{ApiMisuse, Error};
-    use crate::msgs::deframer::buffers::Locator;
+    use crate::msgs::deframer::Locator;
     use crate::server::hs::{ClientHelloInput, ServerContext};
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;

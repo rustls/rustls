@@ -18,7 +18,7 @@ use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
-use crate::msgs::deframer::buffers::Locator;
+use crate::msgs::deframer::Locator;
 use crate::msgs::handshake::ClientExtensionsInput;
 use crate::msgs::persist;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};

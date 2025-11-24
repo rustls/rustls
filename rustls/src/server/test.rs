@@ -22,7 +22,7 @@ use crate::crypto::{
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
 use crate::msgs::base::PayloadU16;
-use crate::msgs::deframer::buffers::Locator;
+use crate::msgs::deframer::Locator;
 use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
     ClientExtensions, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, KeyShareEntry,
