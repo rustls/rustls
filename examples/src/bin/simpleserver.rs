@@ -7,8 +7,8 @@
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.
 
+use core::error::Error as StdError;
 use std::env;
-use std::error::Error as StdError;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;

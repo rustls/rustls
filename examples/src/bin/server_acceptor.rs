@@ -4,12 +4,12 @@
 //!
 //! For a more complete server demonstration, see `tlsserver-mio.rs`.
 
+use core::ops::Add;
+use core::time::Duration;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::ops::Add;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 use std::{fs, thread};
 
 use clap::Parser;
@@ -114,7 +114,7 @@ fn main() {
 struct TestPki {
     provider: Arc<CryptoProvider>,
     roots: Arc<RootCertStore>,
-    ca_cert: (Issuer<'static, rcgen::KeyPair>, rcgen::Certificate),
+    ca_cert: (Issuer<'static, KeyPair>, rcgen::Certificate),
     client_cert: (rcgen::CertifiedKey<KeyPair>, SerialNumber),
     server_cert: rcgen::CertifiedKey<KeyPair>,
 }
@@ -158,7 +158,7 @@ impl TestPki {
             .push(rcgen::DnType::CommonName, "Example Client");
         client_ee_params.is_ca = rcgen::IsCa::NoCa;
         client_ee_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
-        let client_serial = rcgen::SerialNumber::from(vec![0xC0, 0xFF, 0xEE]);
+        let client_serial = SerialNumber::from(vec![0xC0, 0xFF, 0xEE]);
         client_ee_params.serial_number = Some(client_serial.clone());
         let client_key = KeyPair::generate_for(alg).unwrap();
         let client_cert = client_ee_params
@@ -195,7 +195,7 @@ impl TestPki {
     ///
     /// Since the presented client certificate is not available in the `ClientHello` the server
     /// must know ahead of time which CRLs it cares about.
-    fn server_config(&self, crl_path: &str, _hello: ClientHello) -> Arc<ServerConfig> {
+    fn server_config(&self, crl_path: &str, _hello: ClientHello<'_>) -> Arc<ServerConfig> {
         // Read the latest CRL from disk. The CRL is being periodically updated by the crl_updater
         // thread.
         let mut crl_file = File::open(crl_path).unwrap();
@@ -236,7 +236,7 @@ impl TestPki {
     /// The CRL will be signed by the test PKI CA and returned in DER serialized form.
     fn crl(
         &self,
-        serials: Vec<rcgen::SerialNumber>,
+        serials: Vec<SerialNumber>,
         next_update_seconds: u64,
     ) -> CertificateRevocationListDer<'static> {
         // In a real use-case you would want to set this to the current date/time.
@@ -257,7 +257,7 @@ impl TestPki {
         let crl_params = rcgen::CertificateRevocationListParams {
             this_update: now,
             next_update: now.add(Duration::from_secs(next_update_seconds)),
-            crl_number: rcgen::SerialNumber::from(1234),
+            crl_number: SerialNumber::from(1234),
             issuing_distribution_point: None,
             revoked_certs,
             key_identifier_method: rcgen::KeyIdMethod::Sha256,

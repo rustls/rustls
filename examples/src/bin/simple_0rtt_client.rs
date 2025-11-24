@@ -13,10 +13,10 @@
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.
 
+use core::str::FromStr;
 use std::env;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use rustls::RootCertStore;
@@ -79,7 +79,7 @@ fn main() {
     args.next();
     let domain_name = args
         .next()
-        .unwrap_or("jbp.io".to_owned());
+        .unwrap_or_else(|| "jbp.io".to_owned());
     let port = args
         .next()
         .map(|port| u16::from_str(&port).expect("invalid port"))

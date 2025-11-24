@@ -77,7 +77,7 @@ impl TlsClient {
         }
     }
 
-    fn read_source_to_end(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
+    fn read_source_to_end(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
         let mut buf = Vec::new();
         let len = rd.read_to_end(&mut buf)?;
         self.tls_conn
@@ -188,7 +188,7 @@ impl TlsClient {
         self.closing
     }
 }
-impl io::Write for TlsClient {
+impl Write for TlsClient {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         self.tls_conn.writer().write(bytes)
     }
@@ -198,7 +198,7 @@ impl io::Write for TlsClient {
     }
 }
 
-impl io::Read for TlsClient {
+impl Read for TlsClient {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
         self.tls_conn.reader().read(bytes)
     }
@@ -407,10 +407,10 @@ mod danger {
     };
 
     #[derive(Debug)]
-    pub struct NoCertificateVerification(CryptoProvider);
+    pub(super) struct NoCertificateVerification(CryptoProvider);
 
     impl NoCertificateVerification {
-        pub fn new(provider: CryptoProvider) -> Self {
+        pub(super) fn new(provider: CryptoProvider) -> Self {
             Self(provider)
         }
     }

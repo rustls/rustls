@@ -1,8 +1,8 @@
 //! This is a simple server using rustls' unbuffered API. Meaning that the application layer must
 //! handle the buffers required to receive, process and send TLS data.
 
+use core::error::Error;
 use std::env;
-use std::error::Error;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
