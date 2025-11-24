@@ -147,12 +147,12 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// The elements are documented separately:
 ///
-/// - **Random** - see [`crypto::SecureRandom::fill()`].
+/// - **Random** - see [`SecureRandom::fill()`].
 /// - **Cipher suites** - see [`SupportedCipherSuite`], [`Tls12CipherSuite`], and
 ///   [`Tls13CipherSuite`].
-/// - **Key exchange groups** - see [`crypto::SupportedKxGroup`].
-/// - **Signature verification algorithms** - see [`crypto::WebPkiSupportedAlgorithms`].
-/// - **Authentication key loading** - see [`crypto::KeyProvider::load_private_key()`] and
+/// - **Key exchange groups** - see [`SupportedKxGroup`].
+/// - **Signature verification algorithms** - see [`WebPkiSupportedAlgorithms`].
+/// - **Authentication key loading** - see [`KeyProvider::load_private_key()`] and
 ///   [`SigningKey`].
 ///
 /// # Example code
