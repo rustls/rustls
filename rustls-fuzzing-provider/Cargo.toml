@@ -9,3 +9,6 @@ rustls = { path = "../rustls", default-features = false, features = ["log", "std
 
 [dev-dependencies]
 env_logger = { workspace = true }
+
+[lints]
+workspace = true
