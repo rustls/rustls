@@ -30,3 +30,6 @@ webpki-roots = { workspace = true }
 name = "benchmarks"
 path = "benches/benchmarks.rs"
 harness = false
+
+[lints]
+workspace = true
