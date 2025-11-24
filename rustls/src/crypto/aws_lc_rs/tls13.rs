@@ -5,8 +5,8 @@ use aws_lc_rs::{aead, hkdf, hmac};
 
 use crate::crypto;
 use crate::crypto::cipher::{
-    AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
-    Nonce, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm,
+    AeadKey, EncodedMessage, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter,
+    MessageEncrypter, Nonce, OutboundOpaque, OutboundPlainMessage, Tls13AeadAlgorithm,
     UnsupportedOperationError, make_tls13_aad,
 };
 use crate::crypto::enums::CipherSuite;
@@ -226,9 +226,9 @@ impl MessageEncrypter for AeadMessageEncrypter {
         &mut self,
         msg: OutboundPlainMessage<'_>,
         seq: u64,
-    ) -> Result<OutboundOpaqueMessage, Error> {
+    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = PrefixedPayload::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(total_len);
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(total_len));
@@ -239,7 +239,7 @@ impl MessageEncrypter for AeadMessageEncrypter {
             .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OutboundOpaqueMessage {
+        Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
             // Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
             // protocol version, see https://www.rfc-editor.org/rfc/rfc8446#section-5.1
@@ -287,9 +287,9 @@ impl MessageEncrypter for GcmMessageEncrypter {
         &mut self,
         msg: OutboundPlainMessage<'_>,
         seq: u64,
-    ) -> Result<OutboundOpaqueMessage, Error> {
+    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = PrefixedPayload::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(total_len);
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(total_len));
@@ -300,7 +300,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
             .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OutboundOpaqueMessage {
+        Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_2,
             payload,

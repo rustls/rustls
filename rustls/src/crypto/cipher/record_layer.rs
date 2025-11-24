@@ -2,8 +2,8 @@ use alloc::boxed::Box;
 use core::cmp::min;
 
 use crate::crypto::cipher::{
-    InboundOpaqueMessage, InboundPlainMessage, MessageDecrypter, MessageEncrypter,
-    OutboundOpaqueMessage, OutboundPlainMessage,
+    EncodedMessage, InboundOpaqueMessage, InboundPlainMessage, MessageDecrypter, MessageEncrypter,
+    OutboundOpaque, OutboundPlainMessage,
 };
 use crate::error::Error;
 use crate::log::trace;
@@ -110,7 +110,7 @@ impl RecordLayer {
     pub(crate) fn encrypt_outgoing(
         &mut self,
         plain: OutboundPlainMessage<'_>,
-    ) -> OutboundOpaqueMessage {
+    ) -> EncodedMessage<OutboundOpaque> {
         debug_assert!(self.encrypt_state == DirectionState::Active);
         assert!(self.next_pre_encrypt_action() != PreEncryptAction::Refuse);
         let seq = self.write_seq;

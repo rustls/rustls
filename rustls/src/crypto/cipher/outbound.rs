@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 
+use super::EncodedMessage;
 use super::record_layer::RecordLayer;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::msgs::message::HEADER_SIZE;
@@ -24,10 +25,10 @@ impl OutboundPlainMessage<'_> {
         HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
     }
 
-    pub(crate) fn to_unencrypted_opaque(&self) -> OutboundOpaqueMessage {
-        let mut payload = PrefixedPayload::with_capacity(self.payload.len());
+    pub(crate) fn to_unencrypted_opaque(&self) -> EncodedMessage<OutboundOpaque> {
+        let mut payload = OutboundOpaque::with_capacity(self.payload.len());
         payload.extend_from_chunks(&self.payload);
-        OutboundOpaqueMessage {
+        EncodedMessage {
             version: self.version,
             typ: self.typ,
             payload,
@@ -155,22 +156,7 @@ impl<'a> From<&'a [u8]> for OutboundChunks<'a> {
     }
 }
 
-/// A TLS frame, named `TLSPlaintext` in the standard.
-///
-/// This outbound type owns all memory for its interior parts.
-/// It results from encryption and is used for io write.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Clone, Debug)]
-pub struct OutboundOpaqueMessage {
-    /// The content type of this message.
-    pub typ: ContentType,
-    /// The protocol version of this message.
-    pub version: ProtocolVersion,
-    /// The payload of this message.
-    pub payload: PrefixedPayload,
-}
-
-impl OutboundOpaqueMessage {
+impl EncodedMessage<OutboundOpaque> {
     /// Encode this message to a vector of bytes.
     pub fn encode(self) -> Vec<u8> {
         let length = self.payload.len() as u16;
@@ -182,11 +168,16 @@ impl OutboundOpaqueMessage {
     }
 }
 
-/// A byte buffer with space reserved at the front for a TLS message header.
+/// A payload buffer with space reserved at the front for a TLS message header.
+///
+/// `EncodedMessage<OutboundOpaque>` is named `TLSPlaintext` in the standard.
+///
+/// This outbound type owns all memory for its interior parts.
+/// It results from encryption and is used for io write.
 #[derive(Clone, Debug)]
-pub struct PrefixedPayload(Vec<u8>);
+pub struct OutboundOpaque(Vec<u8>);
 
-impl PrefixedPayload {
+impl OutboundOpaque {
     /// Create a new value with the given payload capacity.
     ///
     /// (The actual capacity of the returned value will be at least `HEADER_SIZE + capacity`.)
@@ -216,25 +207,25 @@ impl PrefixedPayload {
     }
 }
 
-impl AsRef<[u8]> for PrefixedPayload {
+impl AsRef<[u8]> for OutboundOpaque {
     fn as_ref(&self) -> &[u8] {
         &self.0[HEADER_SIZE..]
     }
 }
 
-impl AsMut<[u8]> for PrefixedPayload {
+impl AsMut<[u8]> for OutboundOpaque {
     fn as_mut(&mut self) -> &mut [u8] {
         &mut self.0[HEADER_SIZE..]
     }
 }
 
-impl<'a> Extend<&'a u8> for PrefixedPayload {
+impl<'a> Extend<&'a u8> for OutboundOpaque {
     fn extend<T: IntoIterator<Item = &'a u8>>(&mut self, iter: T) {
         self.0.extend(iter)
     }
 }
 
-impl From<&[u8]> for PrefixedPayload {
+impl From<&[u8]> for OutboundOpaque {
     fn from(content: &[u8]) -> Self {
         let mut payload = Vec::with_capacity(HEADER_SIZE + content.len());
         payload.extend(&[0u8; HEADER_SIZE]);
@@ -243,7 +234,7 @@ impl From<&[u8]> for PrefixedPayload {
     }
 }
 
-impl<const N: usize> From<&[u8; N]> for PrefixedPayload {
+impl<const N: usize> From<&[u8; N]> for OutboundOpaque {
     fn from(content: &[u8; N]) -> Self {
         Self::from(&content[..])
     }

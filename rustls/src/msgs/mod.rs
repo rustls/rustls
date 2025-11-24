@@ -56,7 +56,7 @@ mod message_test;
 mod tests {
     use super::codec::Reader;
     use super::message::Message;
-    use crate::crypto::cipher::{EncodedMessage, OutboundOpaqueMessage, Payload, PrefixedPayload};
+    use crate::crypto::cipher::{EncodedMessage, OutboundOpaque, Payload};
 
     #[test]
     fn smoketest() {
@@ -66,10 +66,10 @@ mod tests {
         while r.any_left() {
             let m = EncodedMessage::<Payload<'_>>::read(&mut r).unwrap();
 
-            let out = OutboundOpaqueMessage {
+            let out = EncodedMessage {
                 typ: m.typ,
                 version: m.version,
-                payload: PrefixedPayload::from(m.payload.bytes()),
+                payload: OutboundOpaque::from(m.payload.bytes()),
             }
             .encode();
             assert!(!out.is_empty());

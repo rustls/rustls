@@ -5,9 +5,9 @@ use std::sync::Arc;
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerVerifier;
 use rustls::crypto::cipher::{
-    AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape, MessageDecrypter,
-    MessageEncrypter, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
-    Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
+    AeadKey, EncodedMessage, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape,
+    MessageDecrypter, MessageEncrypter, OutboundOpaque, OutboundPlainMessage, Tls12AeadAlgorithm,
+    Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use rustls::crypto::kx::{
     KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
@@ -320,9 +320,9 @@ impl MessageEncrypter for Tls13Cipher {
         &mut self,
         m: OutboundPlainMessage<'_>,
         seq: u64,
-    ) -> Result<OutboundOpaqueMessage, Error> {
+    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
-        let mut payload = PrefixedPayload::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(total_len);
 
         payload.extend_from_chunks(&m.payload);
         payload.extend_from_slice(&m.typ.to_array());
@@ -338,7 +338,7 @@ impl MessageEncrypter for Tls13Cipher {
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
 
-        Ok(OutboundOpaqueMessage {
+        Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_2,
             payload,
@@ -389,9 +389,9 @@ impl MessageEncrypter for Tls12Cipher {
         &mut self,
         m: OutboundPlainMessage<'_>,
         seq: u64,
-    ) -> Result<OutboundOpaqueMessage, Error> {
+    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
-        let mut payload = PrefixedPayload::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(total_len);
         payload.extend_from_chunks(&m.payload);
 
         for (p, mask) in payload
@@ -405,7 +405,7 @@ impl MessageEncrypter for Tls12Cipher {
         payload.extend_from_slice(&seq.to_be_bytes());
         payload.extend_from_slice(AEAD_TAG);
 
-        Ok(OutboundOpaqueMessage {
+        Ok(EncodedMessage {
             typ: m.typ,
             version: m.version,
             payload,
