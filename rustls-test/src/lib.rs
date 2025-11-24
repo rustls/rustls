@@ -13,7 +13,7 @@ use rustls::client::{
     WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    EncodedMessage, InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, Payload,
+    EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -1436,13 +1436,18 @@ impl RawTls {
             .unwrap();
 
         let mut reader = Reader::init(&data);
-        let content_type = ContentType::read(&mut reader).unwrap();
+        let typ = ContentType::read(&mut reader).unwrap();
         let version = ProtocolVersion::read(&mut reader).unwrap();
         let len = u16::read(&mut reader).unwrap();
         let left = &mut data[5..];
         assert_eq!(len as usize, left.len());
 
-        let inbound = InboundOpaqueMessage::new(content_type, version, left);
+        let inbound = EncodedMessage {
+            typ,
+            version,
+            payload: InboundOpaque(left),
+        };
+
         let plain = self
             .decrypter
             .decrypt(inbound, self.dec_seq)
@@ -1797,7 +1802,7 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
+        AeadKey, InboundOpaque, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
         OutboundOpaque, OutboundPlainMessage, Tls13AeadAlgorithm, UnsupportedOperationError,
     };
 
@@ -1855,7 +1860,7 @@ mod plaintext {
     impl MessageDecrypter for Decrypter {
         fn decrypt<'a>(
             &mut self,
-            msg: InboundOpaqueMessage<'a>,
+            msg: EncodedMessage<InboundOpaque<'a>>,
             _seq: u64,
         ) -> Result<InboundPlainMessage<'a>, Error> {
             Ok(msg.into_plain_message())

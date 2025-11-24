@@ -4,10 +4,10 @@ use chacha20poly1305::aead::Buffer;
 use chacha20poly1305::{AeadInPlace, KeyInit, KeySizeUser};
 use rustls::ConnectionTrafficSecrets;
 use rustls::crypto::cipher::{
-    AeadKey, BorrowedPayload, EncodedMessage, InboundOpaqueMessage, InboundPlainMessage, Iv,
-    KeyBlockShape, MessageDecrypter, MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaque,
-    OutboundPlainMessage, Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError,
-    make_tls12_aad, make_tls13_aad,
+    AeadKey, EncodedMessage, InboundOpaque, InboundPlainMessage, Iv, KeyBlockShape,
+    MessageDecrypter, MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaque, OutboundPlainMessage,
+    Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
+    make_tls13_aad,
 };
 use rustls::enums::{ContentType, ProtocolVersion};
 
@@ -113,7 +113,7 @@ impl MessageEncrypter for Tls13Cipher {
 impl MessageDecrypter for Tls13Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: InboundOpaqueMessage<'a>,
+        mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, rustls::Error> {
         let payload = &mut m.payload;
@@ -161,7 +161,7 @@ impl MessageEncrypter for Tls12Cipher {
 impl MessageDecrypter for Tls12Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: InboundOpaqueMessage<'a>,
+        mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, rustls::Error> {
         let payload = &m.payload;
@@ -209,7 +209,7 @@ impl Buffer for EncryptBufferAdapter<'_> {
     }
 }
 
-struct DecryptBufferAdapter<'a, 'p>(&'a mut BorrowedPayload<'p>);
+struct DecryptBufferAdapter<'a, 'p>(&'a mut InboundOpaque<'p>);
 
 impl AsRef<[u8]> for DecryptBufferAdapter<'_, '_> {
     fn as_ref(&self) -> &[u8] {

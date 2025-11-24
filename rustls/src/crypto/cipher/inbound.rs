@@ -1,39 +1,16 @@
 use core::ops::{Deref, DerefMut, Range};
 
+use crate::crypto::cipher::EncodedMessage;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 
-/// A TLS frame, named TLSPlaintext in the standard.
-///
-/// This inbound type borrows its encrypted payload from a buffer elsewhere.
-/// It is used for joining and is consumed by decryption.
-#[expect(clippy::exhaustive_structs)]
-pub struct InboundOpaqueMessage<'a> {
-    /// The content type of the message.
-    pub typ: ContentType,
-    /// The protocol version of the message.
-    pub version: ProtocolVersion,
-    /// The encrypted payload of the message.
-    pub payload: BorrowedPayload<'a>,
-}
-
-impl<'a> InboundOpaqueMessage<'a> {
-    /// Construct a new `InboundOpaqueMessage` from constituent fields.
-    ///
-    /// `payload` is borrowed.
-    pub fn new(typ: ContentType, version: ProtocolVersion, payload: &'a mut [u8]) -> Self {
-        Self {
-            typ,
-            version,
-            payload: BorrowedPayload(payload),
-        }
-    }
-
+impl<'a> EncodedMessage<InboundOpaque<'a>> {
     /// Force conversion into a plaintext message.
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
-    /// `InboundOpaqueMessage` should be decrypted into a `PlainMessage` using a `MessageDecrypter`.
+    /// [`EncodedMessage<InboundOpaque>`] should be decrypted into a
+    /// [`EncodedMessage<Payload<'_>>`] using a [`MessageDecrypter`][super::MessageDecrypter].
     pub fn into_plain_message(self) -> InboundPlainMessage<'a> {
         InboundPlainMessage {
             typ: self.typ,
@@ -48,7 +25,8 @@ impl<'a> InboundOpaqueMessage<'a> {
     /// the underlying message payload.
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
-    /// `InboundOpaqueMessage` should be decrypted into a `PlainMessage` using a `MessageDecrypter`.
+    /// [`EncodedMessage<InboundOpaque>`] should be decrypted into a
+    /// [`EncodedMessage<Payload<'_>>`] using a [`MessageDecrypter`][super::MessageDecrypter].
     pub fn into_plain_message_range(self, range: Range<usize>) -> InboundPlainMessage<'a> {
         InboundPlainMessage {
             typ: self.typ,
@@ -83,9 +61,10 @@ impl<'a> InboundOpaqueMessage<'a> {
 }
 
 /// A borrowed payload buffer.
-pub struct BorrowedPayload<'a>(&'a mut [u8]);
+#[expect(clippy::exhaustive_structs)]
+pub struct InboundOpaque<'a>(pub &'a mut [u8]);
 
-impl Deref for BorrowedPayload<'_> {
+impl Deref for InboundOpaque<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -93,13 +72,13 @@ impl Deref for BorrowedPayload<'_> {
     }
 }
 
-impl DerefMut for BorrowedPayload<'_> {
+impl DerefMut for InboundOpaque<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }
 }
 
-impl<'a> BorrowedPayload<'a> {
+impl<'a> InboundOpaque<'a> {
     /// Truncate the payload to `len` bytes.
     pub fn truncate(&mut self, len: usize) {
         if len >= self.len() {
@@ -160,7 +139,7 @@ impl InboundPlainMessage<'_> {
 /// the content type, which is returned.  See RFC8446 s5.2.
 ///
 /// ContentType(0) is returned if the message payload is empty or all zeroes.
-fn unpad_tls13_payload(p: &mut BorrowedPayload<'_>) -> ContentType {
+fn unpad_tls13_payload(p: &mut InboundOpaque<'_>) -> ContentType {
     loop {
         match p.pop() {
             Some(0) => {}

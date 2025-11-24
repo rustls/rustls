@@ -1,6 +1,6 @@
 use core::mem;
 
-use crate::crypto::cipher::{InboundOpaqueMessage, MessageError};
+use crate::crypto::cipher::{EncodedMessage, InboundOpaque, MessageError};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::Reader;
 use crate::msgs::message::{HEADER_SIZE, read_opaque_message_header};
@@ -15,7 +15,7 @@ pub(crate) use handshake::{HandshakeAlignedProof, HandshakeDeframer};
 
 /// A deframer of TLS wire messages.
 ///
-/// Returns `Some(Ok(_))` containing each `InboundOpaqueMessage` deframed
+/// Returns `Some(Ok(_))` containing each [`EncodedMessage<InboundOpaque<'_>>`] deframed
 /// from the buffer.
 ///
 /// Returns `None` if no further messages can be deframed from the
@@ -47,7 +47,7 @@ impl<'a> DeframerIter<'a> {
 }
 
 impl<'a> Iterator for DeframerIter<'a> {
-    type Item = Result<InboundOpaqueMessage<'a>, Error>;
+    type Item = Result<EncodedMessage<InboundOpaque<'a>>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut reader = Reader::init(self.buf);
@@ -78,11 +78,11 @@ impl<'a> Iterator for DeframerIter<'a> {
         self.buf = remainder;
         self.consumed += end;
 
-        Some(Ok(InboundOpaqueMessage::new(
+        Some(Ok(EncodedMessage {
             typ,
             version,
-            &mut consumed[HEADER_SIZE..],
-        )))
+            payload: InboundOpaque(&mut consumed[HEADER_SIZE..]),
+        }))
     }
 }
 
