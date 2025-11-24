@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::crypto::cipher::{EncodedMessage, InboundPlainMessage, Payload};
+use crate::crypto::cipher::{EncodedMessage, InboundPlainMessage, MessageError, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::msgs::alert::AlertMessagePayload;
@@ -231,16 +231,6 @@ pub(crate) fn read_opaque_message_header(
     }
 
     Ok((typ, version, len))
-}
-
-#[derive(Debug)]
-pub enum MessageError {
-    TooShortForHeader,
-    TooShortForLength,
-    InvalidEmptyPayload,
-    MessageTooLarge,
-    InvalidContentType,
-    UnknownProtocolVersion,
 }
 
 /// Content type, version and size.

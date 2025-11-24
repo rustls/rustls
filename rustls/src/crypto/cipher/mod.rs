@@ -9,7 +9,7 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::base::hex;
 use crate::msgs::codec::{self, Codec, Reader};
-use crate::msgs::message::{MessageError, read_opaque_message_header};
+use crate::msgs::message::read_opaque_message_header;
 use crate::suites::ConnectionTrafficSecrets;
 
 mod inbound;
@@ -569,6 +569,19 @@ impl MessageDecrypter for InvalidMessageDecrypter {
     ) -> Result<InboundPlainMessage<'a>, Error> {
         Err(Error::DecryptError)
     }
+}
+
+/// Errors from trying to parse a TLS message.
+#[expect(missing_docs)]
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum MessageError {
+    TooShortForHeader,
+    TooShortForLength,
+    InvalidEmptyPayload,
+    MessageTooLarge,
+    InvalidContentType,
+    UnknownProtocolVersion,
 }
 
 #[cfg(all(test, feature = "aws-lc-rs"))]
