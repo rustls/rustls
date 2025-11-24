@@ -2,19 +2,6 @@
 //
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
-#![warn(
-    clippy::alloc_instead_of_core,
-    clippy::manual_let_else,
-    clippy::std_instead_of_core,
-    clippy::use_self,
-    clippy::upper_case_acronyms,
-    elided_lifetimes_in_paths,
-    trivial_numeric_casts,
-    unreachable_pub,
-    unused_import_braces,
-    unused_extern_crates,
-    unused_qualifications
-)]
 
 use core::mem;
 use core::num::NonZeroUsize;
