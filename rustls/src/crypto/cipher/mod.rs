@@ -16,7 +16,7 @@ mod inbound;
 pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
 
 mod outbound;
-pub use outbound::{OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
+pub use outbound::{OutboundChunks, OutboundOpaque, OutboundPlainMessage};
 
 mod record_layer;
 pub(crate) use record_layer::{Decrypted, PreEncryptAction, RecordLayer};
@@ -167,7 +167,7 @@ pub trait MessageEncrypter: Send + Sync {
         &mut self,
         msg: OutboundPlainMessage<'_>,
         seq: u64,
-    ) -> Result<OutboundOpaqueMessage, Error>;
+    ) -> Result<EncodedMessage<OutboundOpaque>, Error>;
 
     /// Return the length of the ciphertext that results from encrypting plaintext of
     /// length `payload_len`
@@ -442,12 +442,12 @@ impl<'a> EncodedMessage<Payload<'a>> {
         })
     }
 
-    /// Convert into an unencrypted [`OutboundOpaqueMessage`] (without decrypting).
-    pub fn into_unencrypted_opaque(self) -> OutboundOpaqueMessage {
-        OutboundOpaqueMessage {
+    /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
+    pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
+        EncodedMessage {
             version: self.version,
             typ: self.typ,
-            payload: PrefixedPayload::from(self.payload.bytes()),
+            payload: OutboundOpaque::from(self.payload.bytes()),
         }
     }
 
@@ -482,7 +482,7 @@ impl<'a> EncodedMessage<Payload<'a>> {
 /// An externally length'd payload
 ///
 /// When encountered in an [`EncodedMessage`], it represents a plaintext payload. It can be
-/// decrypted from an [`InboundOpaqueMessage`] or encrypted into an [`OutboundOpaqueMessage`],
+/// decrypted from an [`InboundOpaqueMessage`] or encrypted into an [`OutboundOpaque`],
 /// and it is also used for joining and fragmenting.
 #[non_exhaustive]
 #[derive(Clone, Eq, PartialEq)]
@@ -549,7 +549,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
         &mut self,
         _m: OutboundPlainMessage<'_>,
         _seq: u64,
-    ) -> Result<OutboundOpaqueMessage, Error> {
+    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         Err(Error::EncryptError)
     }
 

@@ -4,9 +4,9 @@ use aws_lc_rs::{aead, tls_prf};
 use zeroize::Zeroizing;
 
 use crate::crypto::cipher::{
-    AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape, MessageDecrypter,
-    MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaqueMessage, OutboundPlainMessage,
-    PrefixedPayload, Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
+    AeadKey, EncodedMessage, InboundOpaqueMessage, InboundPlainMessage, Iv, KeyBlockShape,
+    MessageDecrypter, MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaque, OutboundPlainMessage,
+    Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
 };
 use crate::crypto::enums::{CipherSuite, SignatureScheme};
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
@@ -306,9 +306,9 @@ impl MessageEncrypter for GcmMessageEncrypter {
         &mut self,
         msg: OutboundPlainMessage<'_>,
         seq: u64,
-    ) -> Result<OutboundOpaqueMessage, Error> {
+    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = PrefixedPayload::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(total_len);
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
@@ -320,7 +320,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
             .map(|tag| payload.extend_from_slice(tag.as_ref()))
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OutboundOpaqueMessage {
+        Ok(EncodedMessage {
             typ: msg.typ,
             version: msg.version,
             payload,
@@ -392,9 +392,9 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         &mut self,
         msg: OutboundPlainMessage<'_>,
         seq: u64,
-    ) -> Result<OutboundOpaqueMessage, Error> {
+    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = PrefixedPayload::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(total_len);
 
         let nonce =
             aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).to_array()?);
@@ -405,7 +405,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
             .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OutboundOpaqueMessage {
+        Ok(EncodedMessage {
             typ: msg.typ,
             version: msg.version,
             payload,

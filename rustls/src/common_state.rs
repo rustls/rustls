@@ -6,8 +6,8 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    EncodedMessage, InboundPlainMessage, OutboundChunks, OutboundOpaqueMessage,
-    OutboundPlainMessage, Payload, PreEncryptAction, RecordLayer,
+    EncodedMessage, InboundPlainMessage, OutboundChunks, OutboundOpaque, OutboundPlainMessage,
+    Payload, PreEncryptAction, RecordLayer,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -482,7 +482,7 @@ impl CommonState {
     }
 
     // Put m into sendable_tls for writing.
-    fn queue_tls_message(&mut self, m: OutboundOpaqueMessage) {
+    fn queue_tls_message(&mut self, m: EncodedMessage<OutboundOpaque>) {
         self.perhaps_write_key_update();
         self.sendable_tls.append(m.encode());
     }

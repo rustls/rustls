@@ -13,8 +13,7 @@ use rustls::client::{
     WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    EncodedMessage, InboundOpaqueMessage, MessageDecrypter, MessageEncrypter,
-    OutboundOpaqueMessage, Payload,
+    EncodedMessage, InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, Payload,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -1799,7 +1798,7 @@ mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
         AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
-        OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm, UnsupportedOperationError,
+        OutboundOpaque, OutboundPlainMessage, Tls13AeadAlgorithm, UnsupportedOperationError,
     };
 
     use super::*;
@@ -1835,11 +1834,11 @@ mod plaintext {
             &mut self,
             msg: OutboundPlainMessage<'_>,
             _seq: u64,
-        ) -> Result<OutboundOpaqueMessage, Error> {
-            let mut payload = PrefixedPayload::with_capacity(msg.payload.len());
+        ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
+            let mut payload = OutboundOpaque::with_capacity(msg.payload.len());
             payload.extend_from_chunks(&msg.payload);
 
-            Ok(OutboundOpaqueMessage {
+            Ok(EncodedMessage {
                 typ: ContentType::ApplicationData,
                 version: ProtocolVersion::TLSv1_2,
                 payload,

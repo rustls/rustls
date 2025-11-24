@@ -235,7 +235,7 @@ impl DeframerVecBuffer {
         }
 
         // If we can and need to increase the buffer size to allow a 4k read, do so. After
-        // dealing with a large handshake message (exceeding `OutboundOpaqueMessage::MAX_WIRE_SIZE`),
+        // dealing with a large handshake message (exceeding `MAX_WIRE_SIZE`),
         // make sure to reduce the buffer size again (large messages should be rare).
         // Also, reduce the buffer size if there are neither full nor partial messages in it,
         // which usually means that the other side suspended sending data.
