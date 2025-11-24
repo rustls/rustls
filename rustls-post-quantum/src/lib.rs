@@ -32,7 +32,7 @@ pub fn provider() -> CryptoProvider {
 
 #[cfg(feature = "aws-lc-rs-unstable")]
 mod key_provider {
-    use std::fmt::{self, Debug, Formatter};
+    use core::fmt::{self, Debug, Formatter};
     use std::sync::Arc;
 
     use aws_lc_rs::signature::KeyPair;
@@ -283,8 +283,8 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
 
 #[cfg(all(test, feature = "aws-lc-rs-unstable"))]
 mod tests {
+    use core::ops::DerefMut;
     use std::io;
-    use std::ops::DerefMut;
     use std::sync::Arc;
 
     use rcgen::{
