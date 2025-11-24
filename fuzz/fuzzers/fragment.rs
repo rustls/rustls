@@ -14,7 +14,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
-    let Ok(msg) = Message::try_from(msg) else {
+    let Ok(msg) = Message::try_from(&msg) else {
         return;
     };
 
@@ -22,7 +22,7 @@ fuzz_target!(|data: &[u8]| {
     frg.set_max_fragment_size(Some(32))
         .unwrap();
     for msg in frg.fragment_message(&EncodedMessage::<Payload>::from(msg)) {
-        Message::try_from(EncodedMessage {
+        Message::try_from(&EncodedMessage {
             typ: msg.typ,
             version: msg.version,
             payload: Payload::Owned(msg.payload.to_vec()),

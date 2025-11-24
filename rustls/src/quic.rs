@@ -26,7 +26,7 @@ mod connection {
     use crate::client::{ClientConfig, ClientConnectionData};
     use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
-    use crate::crypto::cipher::{InboundPlainMessage, Payload};
+    use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ContentType, ProtocolVersion};
     use crate::error::{AlertDescription, ApiMisuse, Error};
     use crate::msgs::deframer::{DeframerVecBuffer, Locator};
@@ -430,7 +430,7 @@ mod connection {
             let range = self.deframer_buffer.extend(plaintext);
 
             self.core.hs_deframer.input_message(
-                InboundPlainMessage {
+                EncodedMessage {
                     typ: ContentType::Handshake,
                     version: ProtocolVersion::TLSv1_3,
                     payload: &self.deframer_buffer.filled()[range.clone()],

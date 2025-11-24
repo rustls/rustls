@@ -2413,6 +2413,7 @@ impl<'a> Codec<'a> for CompressedCertificatePayload<'a> {
 }
 
 impl CompressedCertificatePayload<'_> {
+    #[cfg(feature = "std")]
     fn into_owned(self) -> CompressedCertificatePayload<'static> {
         CompressedCertificatePayload {
             compressed: self.compressed.into_owned(),
@@ -2515,6 +2516,7 @@ impl HandshakePayload<'_> {
         }
     }
 
+    #[cfg(feature = "std")]
     fn into_owned(self) -> HandshakePayload<'static> {
         use HandshakePayload::*;
 
@@ -2710,6 +2712,7 @@ impl<'a> HandshakeMessagePayload<'a> {
         Self(HandshakePayload::MessageHash(Payload::new(hash.to_vec())))
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn into_owned(self) -> HandshakeMessagePayload<'static> {
         HandshakeMessagePayload(self.0.into_owned())
     }

@@ -74,7 +74,7 @@ mod tests {
             .encode();
             assert!(!out.is_empty());
 
-            Message::try_from(m).unwrap();
+            Message::try_from(&m).unwrap();
         }
     }
 }

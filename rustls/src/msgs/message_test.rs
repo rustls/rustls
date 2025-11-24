@@ -33,7 +33,7 @@ fn test_read_fuzz_corpus() {
         let msg = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
         println!("{msg:?}");
 
-        let Ok(msg) = Message::try_from(msg) else {
+        let Ok(msg) = Message::try_from(&msg) else {
             continue;
         };
 
@@ -70,7 +70,7 @@ fn can_read_safari_client_hello_with_ip_address_in_sni_extension() {
     let mut rd = Reader::init(bytes);
     let m = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
     println!("m = {m:?}");
-    Message::try_from(m).unwrap();
+    Message::try_from(&m).unwrap();
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn construct_all_types() {
     for &bytes in samples.iter() {
         let m = EncodedMessage::<Payload<'_>>::read(&mut Reader::init(bytes)).unwrap();
         println!("m = {m:?}");
-        let m = Message::try_from(m);
+        let m = Message::try_from(&m);
         println!("m' = {m:?}");
     }
 }
