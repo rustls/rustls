@@ -21,3 +21,6 @@ rustls-fuzzing-provider = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 crabgrind = { workspace = true }
+
+[lints]
+workspace = true

@@ -40,7 +40,7 @@ pub(crate) fn get_reported_instr_count(
 
 /// Specifies which functionality is being benchmarked
 #[derive(Copy, Clone)]
-pub enum BenchmarkKind {
+pub(crate) enum BenchmarkKind {
     /// Perform the handshake and exit
     Handshake(ResumptionKind),
     /// Perform the handshake and transfer 1MB of data
@@ -49,7 +49,7 @@ pub enum BenchmarkKind {
 
 impl BenchmarkKind {
     /// Returns the [`ResumptionKind`] used in the handshake part of the benchmark
-    pub fn resumption_kind(self) -> ResumptionKind {
+    pub(crate) fn resumption_kind(self) -> ResumptionKind {
         match self {
             Self::Handshake(kind) => kind,
             Self::Transfer => ResumptionKind::No,
@@ -59,7 +59,7 @@ impl BenchmarkKind {
 
 /// The kind of resumption used during the handshake
 #[derive(PartialEq, Clone, Copy)]
-pub enum ResumptionKind {
+pub(crate) enum ResumptionKind {
     /// No resumption
     No,
     /// Session ID
@@ -69,10 +69,10 @@ pub enum ResumptionKind {
 }
 
 impl ResumptionKind {
-    pub const ALL: &'static [Self] = &[Self::No, Self::SessionId, Self::Tickets];
+    pub(crate) const ALL: &'static [Self] = &[Self::No, Self::SessionId, Self::Tickets];
 
     /// Returns a user-facing label that identifies the resumption kind
-    pub fn label(&self) -> &'static str {
+    pub(crate) fn label(&self) -> &'static str {
         match *self {
             Self::No => "no_resume",
             Self::SessionId => "session_id",
@@ -83,7 +83,7 @@ impl ResumptionKind {
 
 /// Parameters associated to a benchmark
 #[derive(Clone, Debug)]
-pub struct BenchmarkParams {
+pub(crate) struct BenchmarkParams {
     /// Which `CryptoProvider` to test.
     ///
     /// The choice of cipher suite is baked into this.
@@ -100,7 +100,7 @@ pub struct BenchmarkParams {
 
 impl BenchmarkParams {
     /// Create a new set of benchmark params
-    pub const fn new(
+    pub(crate) const fn new(
         provider: Arc<CryptoProvider>,
         ticketer: &'static fn() -> Arc<dyn TicketProducer>,
         auth_key: AuthKeySource,
@@ -118,13 +118,13 @@ impl BenchmarkParams {
 }
 
 #[derive(Clone, Debug)]
-pub enum AuthKeySource {
+pub(crate) enum AuthKeySource {
     KeyType(KeyType),
     FuzzingProvider,
 }
 
 /// A benchmark specification
-pub struct Benchmark {
+pub(crate) struct Benchmark {
     /// The name of the benchmark, as shown in the benchmark results
     name: String,
     /// The benchmark kind
@@ -135,17 +135,17 @@ pub struct Benchmark {
 
 impl Benchmark {
     /// Create a new benchmark
-    pub fn new(name: String, kind: BenchmarkKind, params: BenchmarkParams) -> Self {
+    pub(crate) fn new(name: String, kind: BenchmarkKind, params: BenchmarkParams) -> Self {
         Self { name, kind, params }
     }
 
     /// Returns the benchmark's unique name
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         &self.name
     }
 
     /// Returns the benchmark's unique name with the side appended to it
-    pub fn name_with_side(&self, side: Side) -> String {
+    pub(crate) fn name_with_side(&self, side: Side) -> String {
         format!("{}_{}", self.name, side.as_str())
     }
 }
