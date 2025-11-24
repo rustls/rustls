@@ -277,7 +277,7 @@ where
                 .unwrap()
                 .into_owned();
 
-            let message_enc = match Message::try_from(plain.clone()) {
+            let message_enc = match Message::try_from(&plain) {
                 Ok(mut message) => match filter(&mut message) {
                     Altered::InPlace => EncodedMessage::<Payload<'static>>::from(message)
                         .into_unencrypted_opaque()
@@ -1454,7 +1454,7 @@ impl RawTls {
             .unwrap();
         self.dec_seq += 1;
 
-        let msg = Message::try_from(plain).unwrap();
+        let msg = Message::try_from(&plain).unwrap();
         println!("receive_and_decrypt: {msg:?}");
 
         f(msg);
@@ -1802,8 +1802,8 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, InboundOpaque, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
-        OutboundOpaque, OutboundPlainMessage, Tls13AeadAlgorithm, UnsupportedOperationError,
+        AeadKey, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, OutboundOpaque,
+        OutboundPlainMessage, Tls13AeadAlgorithm, UnsupportedOperationError,
     };
 
     use super::*;
@@ -1862,7 +1862,7 @@ mod plaintext {
             &mut self,
             msg: EncodedMessage<InboundOpaque<'a>>,
             _seq: u64,
-        ) -> Result<InboundPlainMessage<'a>, Error> {
+        ) -> Result<EncodedMessage<&'a [u8]>, Error> {
             Ok(msg.into_plain_message())
         }
     }

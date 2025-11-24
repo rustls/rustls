@@ -690,7 +690,7 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
     let message = EncodedMessage::<Payload<'_>>::read(&mut Reader::init(&bytes))
         .unwrap()
         .into_owned();
-    match Message::try_from(message).unwrap() {
+    match Message::try_from(&message).unwrap() {
         Message {
             payload:
                 MessagePayload::Handshake {

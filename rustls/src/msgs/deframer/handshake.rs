@@ -3,7 +3,7 @@ use core::mem;
 use core::ops::Range;
 
 use super::buffers::{BufferProgress, Coalescer, Delocator, Locator};
-use crate::crypto::cipher::InboundPlainMessage;
+use crate::crypto::cipher::EncodedMessage;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, u24};
@@ -35,7 +35,7 @@ impl HandshakeDeframer {
     /// `outer_discard` is the rightmost extent of the original message.
     pub(crate) fn input_message(
         &mut self,
-        msg: InboundPlainMessage<'_>,
+        msg: EncodedMessage<&'_ [u8]>,
         containing_buffer: &Locator,
         outer_discard: usize,
     ) {
@@ -201,7 +201,7 @@ impl HandshakeDeframer {
         first.bounds.end += len;
 
         // finally, attempt to re-dissect `first`
-        let msg = InboundPlainMessage {
+        let msg = EncodedMessage {
             typ: ContentType::Handshake,
             version: first.version,
             payload: delocator.slice_from_range(&first.bounds),
@@ -246,7 +246,7 @@ struct DissectHandshakeIter<'a, 'b> {
 }
 
 impl<'a, 'b> DissectHandshakeIter<'a, 'b> {
-    fn new(msg: InboundPlainMessage<'b>, containing_buffer: &'a Locator) -> Self {
+    fn new(msg: EncodedMessage<&'b [u8]>, containing_buffer: &'a Locator) -> Self {
         Self {
             version: msg.version,
             payload: msg.payload,
@@ -305,7 +305,7 @@ pub(crate) struct HandshakeIter<'a, 'b> {
 }
 
 impl<'b> Iterator for HandshakeIter<'_, 'b> {
-    type Item = (InboundPlainMessage<'b>, usize);
+    type Item = (EncodedMessage<&'b [u8]>, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
         let next_span = self.deframer.spans.get(self.index)?;
@@ -325,7 +325,7 @@ impl<'b> Iterator for HandshakeIter<'_, 'b> {
 
         self.index += 1;
         Some((
-            InboundPlainMessage {
+            EncodedMessage {
                 typ: ContentType::Handshake,
                 version: next_span.version,
                 payload: self
@@ -391,7 +391,7 @@ mod tests {
     use crate::msgs::deframer::DeframerIter;
 
     fn add_bytes(hs: &mut HandshakeDeframer, slice: &[u8], within: &[u8]) {
-        let msg = InboundPlainMessage {
+        let msg = EncodedMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
             payload: slice,
@@ -508,7 +508,7 @@ mod tests {
             let (msg, discard) = iter.next().unwrap();
             assert!(matches!(
                 msg,
-                InboundPlainMessage {
+                EncodedMessage {
                     typ: ContentType::Handshake,
                     ..
                 }
@@ -519,7 +519,7 @@ mod tests {
         let (msg, discard) = iter.next().unwrap();
         assert!(matches!(
             msg,
-            InboundPlainMessage {
+            EncodedMessage {
                 typ: ContentType::Handshake,
                 ..
             }
