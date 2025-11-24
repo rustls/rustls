@@ -16,7 +16,7 @@ use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::codec::Codec;
-use crate::msgs::deframer::buffers::{Delocator, Locator};
+use crate::msgs::deframer::{Delocator, Locator};
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
