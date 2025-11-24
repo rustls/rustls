@@ -1,25 +1,7 @@
 //! A `CryptoProvider` implementation backed by *ring*.
 
 #![no_std]
-#![warn(
-    clippy::alloc_instead_of_core,
-    clippy::cloned_instead_of_copied,
-    clippy::exhaustive_enums,
-    clippy::exhaustive_structs,
-    clippy::manual_let_else,
-    clippy::or_fun_call,
-    clippy::std_instead_of_core,
-    clippy::use_self,
-    clippy::upper_case_acronyms,
-    elided_lifetimes_in_paths,
-    missing_docs,
-    trivial_numeric_casts,
-    unnameable_types,
-    unreachable_pub,
-    unused_import_braces,
-    unused_extern_crates,
-    unused_qualifications
-)]
+#![warn(clippy::exhaustive_enums, clippy::exhaustive_structs, missing_docs)]
 #![cfg_attr(bench, feature(test))]
 
 extern crate alloc;

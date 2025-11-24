@@ -25,10 +25,10 @@ webpki = { workspace = true, features = ["ring"] }
 bencher = { workspace = true }
 rustls-test = { workspace = true }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(bench)"] }
-
 [[bench]]
 name = "benchmarks"
 path = "benches/benchmarks.rs"
 harness = false
+
+[lints]
+workspace = true
