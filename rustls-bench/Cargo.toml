@@ -20,3 +20,6 @@ ring = ["dep:rustls-ring"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { workspace = true }
+
+[lints]
+workspace = true
