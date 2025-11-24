@@ -4,10 +4,9 @@ use chacha20poly1305::aead::Buffer;
 use chacha20poly1305::{AeadInPlace, KeyInit, KeySizeUser};
 use rustls::ConnectionTrafficSecrets;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, InboundPlainMessage, Iv, KeyBlockShape,
-    MessageDecrypter, MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaque, OutboundPlainMessage,
-    Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
-    make_tls13_aad,
+    AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
+    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlainMessage, Payload, Tls12AeadAlgorithm,
+    Tls13AeadAlgorithm, UnsupportedOperationError, make_tls12_aad, make_tls13_aad,
 };
 use rustls::enums::{ContentType, ProtocolVersion};
 
@@ -115,7 +114,7 @@ impl MessageDecrypter for Tls13Cipher {
         &mut self,
         mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<InboundPlainMessage<'a>, rustls::Error> {
+    ) -> Result<EncodedMessage<Payload<'a>>, rustls::Error> {
         let payload = &mut m.payload;
         let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).to_array()?);
         let aad = make_tls13_aad(payload.len());
@@ -163,7 +162,7 @@ impl MessageDecrypter for Tls12Cipher {
         &mut self,
         mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<InboundPlainMessage<'a>, rustls::Error> {
+    ) -> Result<EncodedMessage<Payload<'a>>, rustls::Error> {
         let payload = &m.payload;
         let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).to_array()?);
         let aad = make_tls12_aad(

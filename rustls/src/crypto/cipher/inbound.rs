@@ -1,6 +1,6 @@
 use core::ops::{Deref, DerefMut, Range};
 
-use crate::crypto::cipher::EncodedMessage;
+use super::{EncodedMessage, Payload};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
@@ -11,11 +11,11 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
     /// [`EncodedMessage<InboundOpaque>`] should be decrypted into a
     /// [`EncodedMessage<Payload<'_>>`] using a [`MessageDecrypter`][super::MessageDecrypter].
-    pub fn into_plain_message(self) -> InboundPlainMessage<'a> {
-        InboundPlainMessage {
+    pub fn into_plain_message(self) -> EncodedMessage<Payload<'a>> {
+        EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: self.payload.into_inner(),
+            payload: Payload::Borrowed(self.payload.into_inner()),
         }
     }
 
@@ -27,11 +27,11 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
     /// [`EncodedMessage<InboundOpaque>`] should be decrypted into a
     /// [`EncodedMessage<Payload<'_>>`] using a [`MessageDecrypter`][super::MessageDecrypter].
-    pub fn into_plain_message_range(self, range: Range<usize>) -> InboundPlainMessage<'a> {
-        InboundPlainMessage {
+    pub fn into_plain_message_range(self, range: Range<usize>) -> EncodedMessage<Payload<'a>> {
+        EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: &self.payload.into_inner()[range],
+            payload: Payload::Borrowed(&self.payload.into_inner()[range]),
         }
     }
 
@@ -39,7 +39,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     ///
     /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
     /// or the message (post-unpadding) is too long.
-    pub fn into_tls13_unpadded_message(mut self) -> Result<InboundPlainMessage<'a>, Error> {
+    pub fn into_tls13_unpadded_message(mut self) -> Result<EncodedMessage<Payload<'a>>, Error> {
         let payload = &mut self.payload;
 
         if payload.len() > MAX_FRAGMENT_LEN + 1 {
@@ -106,33 +106,7 @@ impl<'a> InboundOpaque<'a> {
     }
 }
 
-/// A TLS frame, named `TLSPlaintext` in the standard.
-///
-/// This inbound type borrows its decrypted payload from the original buffer.
-/// It results from decryption.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Debug)]
-pub struct InboundPlainMessage<'a> {
-    /// The content type of the message.
-    pub typ: ContentType,
-    /// The protocol version of the message.
-    pub version: ProtocolVersion,
-    /// The decrypted payload of the message.
-    pub payload: &'a [u8],
-}
-
-impl InboundPlainMessage<'_> {
-    /// Returns true if the payload is a CCS message.
-    ///
-    /// We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
-    /// Note: this is prior to the record layer, so is unencrypted. See
-    /// third paragraph of section 5 in RFC8446.
-    pub(crate) fn is_valid_ccs(&self) -> bool {
-        self.typ == ContentType::ChangeCipherSpec && self.payload == [0x01]
-    }
-}
-
-/// Decode a TLS1.3 `TLSInnerPlaintext` encoding.
+/// Decode a TLS1.3 `TLSInnerPayloadtext` encoding.
 ///
 /// `p` is a message payload, immediately post-decryption.  This function
 /// removes zero padding bytes, until a non-zero byte is encountered which is

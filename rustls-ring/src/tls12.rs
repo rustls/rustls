@@ -2,9 +2,9 @@ use alloc::boxed::Box;
 
 use ring::aead;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, InboundPlainMessage, Iv, KeyBlockShape,
-    MessageDecrypter, MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaque, OutboundPlainMessage,
-    Tls12AeadAlgorithm, UnsupportedOperationError, make_tls12_aad,
+    AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
+    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlainMessage, Payload, Tls12AeadAlgorithm,
+    UnsupportedOperationError, make_tls12_aad,
 };
 use rustls::crypto::kx::KeyExchangeAlgorithm;
 use rustls::crypto::tls12::PrfUsingHmac;
@@ -242,7 +242,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
         &mut self,
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<InboundPlainMessage<'a>, Error> {
+    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
         let payload = &msg.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
@@ -332,7 +332,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         &mut self,
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<InboundPlainMessage<'a>, Error> {
+    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
         let payload = &msg.payload;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {

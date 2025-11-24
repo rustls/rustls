@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::crypto::cipher::{EncodedMessage, InboundPlainMessage, MessageError, Payload};
+use crate::crypto::cipher::{EncodedMessage, MessageError, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::msgs::alert::AlertMessagePayload;
@@ -73,6 +73,7 @@ impl<'a> MessagePayload<'a> {
         }
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn into_owned(self) -> MessagePayload<'static> {
         use MessagePayload::*;
         match self {
@@ -169,29 +170,13 @@ impl Message<'_> {
     }
 }
 
-impl TryFrom<EncodedMessage<Payload<'_>>> for Message<'_> {
+impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
     type Error = InvalidMessage;
 
-    fn try_from(plain: EncodedMessage<Payload<'_>>) -> Result<Self, Self::Error> {
+    fn try_from(plain: &'a EncodedMessage<Payload<'a>>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
-            payload: MessagePayload::new(plain.typ, plain.version, plain.payload.bytes())?
-                .into_owned(),
-        })
-    }
-}
-
-/// Parses a plaintext message into a well-typed [`Message`].
-///
-/// A [`InboundPlainMessage`] must contain plaintext content. Encrypted content should be stored in an
-/// [`EncodedMessage<InboundOpaque>`] and decrypted before being stored into a [`EncodedMessage`].
-impl<'a> TryFrom<InboundPlainMessage<'a>> for Message<'a> {
-    type Error = InvalidMessage;
-
-    fn try_from(plain: InboundPlainMessage<'a>) -> Result<Self, Self::Error> {
-        Ok(Self {
-            version: plain.version,
-            payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
+            payload: MessagePayload::new(plain.typ, plain.version, plain.payload.bytes())?,
         })
     }
 }

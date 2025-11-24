@@ -5,9 +5,9 @@ use std::sync::Arc;
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerVerifier;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, InboundPlainMessage, Iv, KeyBlockShape,
-    MessageDecrypter, MessageEncrypter, OutboundOpaque, OutboundPlainMessage, Tls12AeadAlgorithm,
-    Tls13AeadAlgorithm, UnsupportedOperationError,
+    AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
+    OutboundOpaque, OutboundPlainMessage, Payload, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
+    UnsupportedOperationError,
 };
 use rustls::crypto::kx::{
     KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup,
@@ -355,7 +355,7 @@ impl MessageDecrypter for Tls13Cipher {
         &mut self,
         mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<InboundPlainMessage<'a>, Error> {
+    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
         let payload = &mut m.payload;
 
         let mut expected_tag = vec![];
@@ -422,7 +422,7 @@ impl MessageDecrypter for Tls12Cipher {
         &mut self,
         mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<InboundPlainMessage<'a>, Error> {
+    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
         let payload = &mut m.payload;
 
         let mut expected_tag = vec![];

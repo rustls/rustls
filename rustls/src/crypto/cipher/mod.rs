@@ -13,7 +13,7 @@ use crate::msgs::message::read_opaque_message_header;
 use crate::suites::ConnectionTrafficSecrets;
 
 mod inbound;
-pub use inbound::{InboundOpaque, InboundPlainMessage};
+pub use inbound::InboundOpaque;
 
 mod outbound;
 pub use outbound::{OutboundChunks, OutboundOpaque, OutboundPlainMessage};
@@ -156,7 +156,7 @@ pub trait MessageDecrypter: Send + Sync {
         &mut self,
         msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<InboundPlainMessage<'a>, Error>;
+    ) -> Result<EncodedMessage<Payload<'a>>, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
@@ -462,11 +462,11 @@ impl<'a> EncodedMessage<Payload<'a>> {
         }
     }
 
-    /// Borrow as an [`InboundPlainMessage`].
-    pub fn borrow_inbound(&'a self) -> InboundPlainMessage<'a> {
-        InboundPlainMessage {
-            version: self.version,
+    /// Borrow as an `EncodedMessage<&[u8]>`.
+    pub(crate) fn borrowed(&'a self) -> EncodedMessage<&'a [u8]> {
+        EncodedMessage {
             typ: self.typ,
+            version: self.version,
             payload: self.payload.bytes(),
         }
     }
@@ -488,6 +488,15 @@ impl<'a> EncodedMessage<Payload<'a>> {
             payload: self.payload.into_owned(),
         }
     }
+
+    /// Returns true if the payload is a CCS message.
+    ///
+    /// We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
+    /// Note: this is prior to the record layer, so is unencrypted. See
+    /// third paragraph of section 5 in RFC8446.
+    pub(crate) fn is_valid_ccs(&self) -> bool {
+        self.typ == ContentType::ChangeCipherSpec && self.payload.bytes() == [0x01]
+    }
 }
 
 /// An externally length'd payload
@@ -506,7 +515,7 @@ pub enum Payload<'a> {
 
 impl<'a> Payload<'a> {
     /// A reference to the payload's bytes
-    pub fn bytes(&self) -> &[u8] {
+    pub fn bytes(&'a self) -> &'a [u8] {
         match self {
             Self::Borrowed(bytes) => bytes,
             Self::Owned(bytes) => bytes,
@@ -577,7 +586,7 @@ impl MessageDecrypter for InvalidMessageDecrypter {
         &mut self,
         _m: EncodedMessage<InboundOpaque<'a>>,
         _seq: u64,
-    ) -> Result<InboundPlainMessage<'a>, Error> {
+    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
         Err(Error::DecryptError)
     }
 }

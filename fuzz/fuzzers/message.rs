@@ -10,7 +10,7 @@ use rustls::internal::msgs::message::Message;
 fuzz_target!(|data: &[u8]| {
     let mut rdr = Reader::init(data);
     if let Ok(m) = EncodedMessage::<Payload>::read(&mut rdr) {
-        let Ok(msg) = Message::try_from(m) else {
+        let Ok(msg) = Message::try_from(&m) else {
             return;
         };
         //println!("msg = {:#?}", m);

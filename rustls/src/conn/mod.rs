@@ -8,7 +8,7 @@ use std::io;
 use kernel::KernelConnection;
 
 use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, IoState, State};
-use crate::crypto::cipher::{Decrypted, InboundPlainMessage};
+use crate::crypto::cipher::{Decrypted, EncodedMessage, Payload};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::deframer::{
@@ -763,7 +763,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 self.deframer_buffer.filled_mut(),
                 &mut buffer_progress,
             )
-            .map(|opt| opt.map(|pm| Message::try_from(pm).map(|m| m.into_owned())));
+            .map(|opt| opt.map(|pm| Message::try_from(&pm).map(|m| m.into_owned())));
 
         match res? {
             Some(Ok(msg)) => {
@@ -925,7 +925,7 @@ impl<Side: SideData> ConnectionCore<Side> {
             }
         };
 
-        // Should `InboundPlainMessage` resolve to plaintext application
+        // Should `EncodedMessage<Payload>` resolve to plaintext application
         // data it will be allocated within `plaintext` and written to
         // `CommonState.received_plaintext` buffer.
         //
@@ -1000,7 +1000,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
+    ) -> Result<Option<EncodedMessage<Payload<'b>>>, Error> {
         // before processing any more of `buffer`, return any extant messages from `hs_deframer`
         if self.hs_deframer.has_message_ready() {
             Ok(self.take_handshake_message(buffer, buffer_progress))
@@ -1013,7 +1013,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Option<InboundPlainMessage<'b>> {
+    ) -> Option<EncodedMessage<Payload<'b>>> {
         self.hs_deframer
             .iter(buffer)
             .next()
@@ -1028,7 +1028,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
+    ) -> Result<Option<EncodedMessage<Payload<'b>>>, Error> {
         let version_is_tls13 = matches!(
             self.common_state.negotiated_version,
             Some(ProtocolVersion::TLSv1_3)
@@ -1114,7 +1114,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 
-            match message.payload.len() {
+            match message.payload.bytes().len() {
                 0 => {
                     if self.seen_consecutive_empty_fragments
                         == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
@@ -1269,7 +1269,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 /// Data specific to the peer's side (client or server).
 pub trait SideData: Debug {}
 
-/// An InboundPlainMessage which does not borrow its payload, but
+/// An [`EncodedMessage<Payload<'_>>`] which does not borrow its payload, but
 /// references a range that can later be borrowed.
 struct InboundUnborrowedMessage {
     typ: ContentType,
@@ -1278,19 +1278,19 @@ struct InboundUnborrowedMessage {
 }
 
 impl InboundUnborrowedMessage {
-    fn unborrow(locator: &Locator, msg: InboundPlainMessage<'_>) -> Self {
+    fn unborrow(locator: &Locator, msg: EncodedMessage<Payload<'_>>) -> Self {
         Self {
             typ: msg.typ,
             version: msg.version,
-            bounds: locator.locate(msg.payload),
+            bounds: locator.locate(msg.payload.bytes()),
         }
     }
 
-    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> InboundPlainMessage<'b> {
-        InboundPlainMessage {
+    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> EncodedMessage<Payload<'b>> {
+        EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: delocator.slice_from_range(&self.bounds),
+            payload: Payload::Borrowed(delocator.slice_from_range(&self.bounds)),
         }
     }
 }

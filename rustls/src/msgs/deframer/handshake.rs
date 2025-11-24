@@ -3,7 +3,7 @@ use core::mem;
 use core::ops::Range;
 
 use super::buffers::{BufferProgress, Coalescer, Delocator, Locator};
-use crate::crypto::cipher::InboundPlainMessage;
+use crate::crypto::cipher::{EncodedMessage, Payload};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, u24};
@@ -35,12 +35,12 @@ impl HandshakeDeframer {
     /// `outer_discard` is the rightmost extent of the original message.
     pub(crate) fn input_message(
         &mut self,
-        msg: InboundPlainMessage<'_>,
+        msg: EncodedMessage<Payload<'_>>,
         containing_buffer: &Locator,
         outer_discard: usize,
     ) {
         debug_assert_eq!(msg.typ, ContentType::Handshake);
-        debug_assert!(containing_buffer.fully_contains(msg.payload));
+        debug_assert!(containing_buffer.fully_contains(msg.payload.bytes()));
         debug_assert!(self.outer_discard <= outer_discard);
 
         self.outer_discard = outer_discard;
@@ -61,14 +61,14 @@ impl HandshakeDeframer {
             self.spans.push(FragmentSpan {
                 version: msg.version,
                 size: None,
-                bounds: containing_buffer.locate(msg.payload),
+                bounds: containing_buffer.locate(msg.payload.bytes()),
             });
             return;
         }
 
         // otherwise, we can expect `msg` to contain a handshake header introducing
         // a new message (and perhaps several of them.)
-        for span in DissectHandshakeIter::new(msg, containing_buffer) {
+        for span in DissectHandshakeIter::new(msg.borrowed(), containing_buffer) {
             self.spans.push(span);
         }
     }
@@ -201,7 +201,7 @@ impl HandshakeDeframer {
         first.bounds.end += len;
 
         // finally, attempt to re-dissect `first`
-        let msg = InboundPlainMessage {
+        let msg = EncodedMessage {
             typ: ContentType::Handshake,
             version: first.version,
             payload: delocator.slice_from_range(&first.bounds),
@@ -246,7 +246,7 @@ struct DissectHandshakeIter<'a, 'b> {
 }
 
 impl<'a, 'b> DissectHandshakeIter<'a, 'b> {
-    fn new(msg: InboundPlainMessage<'b>, containing_buffer: &'a Locator) -> Self {
+    fn new(msg: EncodedMessage<&'b [u8]>, containing_buffer: &'a Locator) -> Self {
         Self {
             version: msg.version,
             payload: msg.payload,
@@ -305,7 +305,7 @@ pub(crate) struct HandshakeIter<'a, 'b> {
 }
 
 impl<'b> Iterator for HandshakeIter<'_, 'b> {
-    type Item = (InboundPlainMessage<'b>, usize);
+    type Item = (EncodedMessage<Payload<'b>>, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
         let next_span = self.deframer.spans.get(self.index)?;
@@ -325,12 +325,13 @@ impl<'b> Iterator for HandshakeIter<'_, 'b> {
 
         self.index += 1;
         Some((
-            InboundPlainMessage {
+            EncodedMessage {
                 typ: ContentType::Handshake,
                 version: next_span.version,
-                payload: self
-                    .containing_buffer
-                    .slice_from_range(&next_span.bounds),
+                payload: Payload::Borrowed(
+                    self.containing_buffer
+                        .slice_from_range(&next_span.bounds),
+                ),
             },
             discard,
         ))
@@ -391,10 +392,10 @@ mod tests {
     use crate::msgs::deframer::DeframerIter;
 
     fn add_bytes(hs: &mut HandshakeDeframer, slice: &[u8], within: &[u8]) {
-        let msg = InboundPlainMessage {
+        let msg = EncodedMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
-            payload: slice,
+            payload: Payload::Borrowed(slice),
         };
         let locator = Locator::new(within);
         let discard = locator.locate(slice).end;
@@ -421,7 +422,7 @@ mod tests {
         std::println!("msg {msg:?} discard {discard:?}");
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
-        assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xff]);
+        assert_eq!(msg.payload.bytes(), &[0x21, 0x00, 0x00, 0x01, 0xff]);
 
         input.drain(..discard);
         assert_eq!(input, &[0, 1]);
@@ -442,7 +443,10 @@ mod tests {
         let (msg, discard) = std::dbg!(hs.iter(&input).next().unwrap());
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
-        assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
+        assert_eq!(
+            msg.payload.bytes(),
+            &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]
+        );
 
         input.drain(..discard);
         assert_eq!(input, &[0]);
@@ -480,7 +484,7 @@ mod tests {
 
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
-        assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xab]);
+        assert_eq!(msg.payload.bytes(), &[0x21, 0x00, 0x00, 0x01, 0xab]);
         assert_eq!(discard, 0);
     }
 
@@ -508,7 +512,7 @@ mod tests {
             let (msg, discard) = iter.next().unwrap();
             assert!(matches!(
                 msg,
-                InboundPlainMessage {
+                EncodedMessage {
                     typ: ContentType::Handshake,
                     ..
                 }
@@ -519,7 +523,7 @@ mod tests {
         let (msg, discard) = iter.next().unwrap();
         assert!(matches!(
             msg,
-            InboundPlainMessage {
+            EncodedMessage {
                 typ: ContentType::Handshake,
                 ..
             }

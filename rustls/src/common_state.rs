@@ -6,8 +6,8 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    EncodedMessage, InboundPlainMessage, OutboundChunks, OutboundOpaque, OutboundPlainMessage,
-    Payload, PreEncryptAction, RecordLayer,
+    EncodedMessage, OutboundChunks, OutboundOpaque, OutboundPlainMessage, Payload,
+    PreEncryptAction, RecordLayer,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -188,7 +188,7 @@ impl CommonState {
 
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
-        msg: InboundPlainMessage<'_>,
+        msg: EncodedMessage<Payload<'_>>,
         state: Box<dyn State<Data>>,
         data: &mut Data,
         plaintext_locator: &Locator,
@@ -217,7 +217,7 @@ impl CommonState {
         }
 
         // Now we can fully parse the message payload.
-        let msg = match Message::try_from(msg) {
+        let msg = match Message::try_from(&msg) {
             Ok(msg) => msg,
             Err(err) => {
                 return Err(self.send_fatal_alert(AlertDescription::from(err), err));
