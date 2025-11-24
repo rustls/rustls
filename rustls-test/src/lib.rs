@@ -2214,6 +2214,13 @@ pub mod encoding {
                 body: len_u16(share),
             }
         }
+
+        pub fn new_quic_transport_params(body: &[u8]) -> Self {
+            Self {
+                typ: ExtensionType::TransportParameters,
+                body: len_u16(body.to_vec()),
+            }
+        }
     }
 
     /// Return a full TLS message containing an alert.
