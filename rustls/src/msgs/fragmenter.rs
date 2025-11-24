@@ -1,5 +1,5 @@
 use crate::Error;
-use crate::crypto::cipher::{OutboundChunks, OutboundPlainMessage, PlainMessage};
+use crate::crypto::cipher::{EncodedMessage, OutboundChunks, OutboundPlainMessage, Payload};
 use crate::enums::{ContentType, ProtocolVersion};
 
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
@@ -28,7 +28,7 @@ impl MessageFragmenter {
     /// Payloads are borrowed from `msg`.
     pub fn fragment_message<'a>(
         &self,
-        msg: &'a PlainMessage,
+        msg: &'a EncodedMessage<Payload<'_>>,
     ) -> impl Iterator<Item = OutboundPlainMessage<'a>> + 'a {
         self.fragment_payload(msg.typ, msg.version, msg.payload.bytes().into())
     }
@@ -109,7 +109,7 @@ mod tests {
     use std::vec;
 
     use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use crate::crypto::cipher::{OutboundChunks, OutboundPlainMessage, Payload, PlainMessage};
+    use crate::crypto::cipher::{EncodedMessage, OutboundChunks, OutboundPlainMessage, Payload};
     use crate::enums::{ContentType, ProtocolVersion};
 
     fn msg_eq(
@@ -133,7 +133,7 @@ mod tests {
         let typ = ContentType::Handshake;
         let version = ProtocolVersion::TLSv1_2;
         let data: Vec<u8> = (1..70u8).collect();
-        let m = PlainMessage {
+        let m = EncodedMessage {
             typ,
             version,
             payload: Payload::new(data),
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn non_fragment() {
-        let m = PlainMessage {
+        let m = EncodedMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(b"\x01\x02\x03\x04\x05\x06\x07\x08".to_vec()),
