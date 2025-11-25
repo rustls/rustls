@@ -435,9 +435,11 @@ impl CommonState {
         sendable_plaintext: &mut Option<&mut ChunkVecBuffer>,
     ) {
         self.may_send_application_data = true;
-        if let Some(sendable_plaintext) = sendable_plaintext {
-            self.flush_plaintext(sendable_plaintext);
-        }
+        let Some(sendable_plaintext) = sendable_plaintext else {
+            return;
+        };
+
+        self.flush_plaintext(sendable_plaintext);
     }
 
     /// Mark the connection as ready to send and receive application data.
