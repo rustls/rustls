@@ -6,7 +6,7 @@ use subtle::ConstantTimeEq;
 
 use super::config::{ClientConfig, ClientSessionKey, ClientSessionStore};
 use super::connection::ClientConnectionData;
-use super::ech::{self, EchStatus};
+use super::ech::EchStatus;
 use super::hs::{
     self, ClientContext, ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello,
 };
@@ -22,7 +22,7 @@ use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
 use crate::crypto::{Identity, SelectedCredential, SignatureScheme, Signer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved, RejectedEch};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::PayloadU8;
@@ -89,17 +89,12 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);
 
-        validate_server_hello(cx.common, server_hello)?;
+        validate_server_hello(server_hello)?;
 
         let their_key_share = server_hello
             .key_share
             .as_ref()
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::MissingExtension,
-                    PeerMisbehaved::MissingKeyShare,
-                )
-            })?;
+            .ok_or(PeerMisbehaved::MissingKeyShare)?;
 
         let ClientHelloInput {
             config,
@@ -121,12 +116,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         // We always send a key share when TLS 1.3 is enabled.
         let our_key_share = st.offered_key_share.unwrap();
         let our_key_share = KeyExchangeChoice::new(&config, cx, our_key_share, their_key_share)
-            .map_err(|_| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::WrongGroupForKeyShare,
-                )
-            })?;
+            .map_err(|_| PeerMisbehaved::WrongGroupForKeyShare)?;
 
         let key_schedule_pre_handshake =
             match (server_hello.preshared_key, st.early_data_key_schedule) {
@@ -135,32 +125,22 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                         Some(resuming) => {
                             let Some(resuming_suite) = suite.can_resume_from(resuming.suite())
                             else {
-                                return Err({
-                                    cx.common.send_fatal_alert(
-                                    AlertDescription::IllegalParameter,
-                                    PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
-                                )
-                                });
+                                return Err(
+                                    PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite
+                                        .into(),
+                                );
                             };
 
                             // If the server varies the suite here, we will have encrypted early data with
                             // the wrong suite.
                             if cx.data.early_data.is_enabled() && resuming_suite != suite {
-                                return Err({
-                                    cx.common.send_fatal_alert(
-                                        AlertDescription::IllegalParameter,
-                                        PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite,
-                                    )
-                                });
+                                return Err(
+                                    PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite.into()
+                                );
                             }
 
                             if selected_psk != 0 {
-                                return Err({
-                                    cx.common.send_fatal_alert(
-                                        AlertDescription::IllegalParameter,
-                                        PeerMisbehaved::SelectedInvalidPsk,
-                                    )
-                                });
+                                return Err(PeerMisbehaved::SelectedInvalidPsk.into());
                             }
 
                             debug!("Resuming using PSK");
@@ -183,12 +163,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             };
 
         cx.common.kx_state.complete();
-        let shared_secret = our_key_share
-            .complete(&their_key_share.payload.0)
-            .map_err(|err| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::IllegalParameter, err)
-            })?;
+        let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
 
         let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
@@ -309,15 +284,9 @@ impl KeyExchangeChoice {
     }
 }
 
-fn validate_server_hello(
-    common: &mut CommonState,
-    server_hello: &ServerHelloPayload,
-) -> Result<(), Error> {
+fn validate_server_hello(server_hello: &ServerHelloPayload) -> Result<(), Error> {
     if !server_hello.only_contains(ALLOWED_PLAINTEXT_EXTS) {
-        return Err(common.send_fatal_alert(
-            AlertDescription::UnsupportedExtension,
-            PeerMisbehaved::UnexpectedCleartextExtension,
-        ));
+        return Err(PeerMisbehaved::UnexpectedCleartextExtension.into());
     }
 
     Ok(())
@@ -474,22 +443,15 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonS
 }
 
 fn validate_encrypted_extensions(
-    common: &mut CommonState,
     hello: &ClientHelloDetails,
     exts: &ServerExtensions<'_>,
 ) -> Result<(), Error> {
     if hello.server_sent_unsolicited_extensions(exts, &[]) {
-        return Err(common.send_fatal_alert(
-            AlertDescription::UnsupportedExtension,
-            PeerMisbehaved::UnsolicitedEncryptedExtension,
-        ));
+        return Err(PeerMisbehaved::UnsolicitedEncryptedExtension.into());
     }
 
     if exts.contains_any(ALLOWED_PLAINTEXT_EXTS) || exts.contains_any(DISALLOWED_TLS13_EXTS) {
-        return Err(common.send_fatal_alert(
-            AlertDescription::UnsupportedExtension,
-            PeerMisbehaved::DisallowedEncryptedExtension,
-        ));
+        return Err(PeerMisbehaved::DisallowedEncryptedExtension.into());
     }
 
     Ok(())
@@ -520,7 +482,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         debug!("TLS1.3 encrypted extensions: {exts:?}");
         self.transcript.add_message(&m);
 
-        validate_encrypted_extensions(cx.common, &self.hello, exts)?;
+        validate_encrypted_extensions(&self.hello, exts)?;
         hs::process_alpn_protocol(
             cx.common,
             &self.hello.alpn_protocols,
@@ -530,7 +492,6 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         )?;
 
         check_cert_type(
-            cx.common,
             self.config
                 .resolver()
                 .supported_certificate_types(),
@@ -538,7 +499,6 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         )?;
 
         check_cert_type(
-            cx.common,
             self.config
                 .verifier()
                 .supported_certificate_types(),
@@ -549,10 +509,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             // If we didn't offer ECH, or ECH was accepted, but the server sent an ECH encrypted
             // extension with retry configs, we must error.
             (EchStatus::NotOffered | EchStatus::Accepted, Some(_)) => {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::UnsupportedExtension,
-                    PeerMisbehaved::UnsolicitedEchExtension,
-                ));
+                return Err(PeerMisbehaved::UnsolicitedEchExtension.into());
             }
             // If we offered ECH, and it was rejected, store the retry configs (if any) from
             // the server's ECH extension. We will return them in an error produced at the end
@@ -568,9 +525,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             match exts.transport_parameters.as_ref() {
                 Some(params) => cx.common.quic.params = Some(params.clone().into_vec()),
                 None => {
-                    return Err(cx
-                        .common
-                        .missing_extension(PeerMisbehaved::MissingQuicTransportParameters));
+                    return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
                 }
             }
         }
@@ -661,7 +616,6 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 }
 
 fn check_cert_type(
-    common: &mut CommonState,
     client_supported: &[CertificateType],
     server_negotiated: Option<CertificateType>,
 ) -> Result<(), Error> {
@@ -672,9 +626,8 @@ fn check_cert_type(
             Ok(())
         }
         Some(ct) if client_supported.contains(&ct) => Ok(()),
-        _ => Err(common.send_fatal_alert(
-            AlertDescription::HandshakeFailure,
-            Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
+        _ => Err(Error::PeerIncompatible(
+            PeerIncompatible::IncorrectCertificateTypeExtension,
         )),
     }
 }
@@ -890,7 +843,7 @@ struct ExpectCertificateRequest {
 impl State<ClientConnectionData> for ExpectCertificateRequest {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
+        _cx: &mut ClientContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
         let certreq = &require_handshake_msg!(
@@ -907,10 +860,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         // Must be empty during handshake.
         if !certreq.context.0.is_empty() {
             warn!("Server sent non-empty certreq context");
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::DecodeError,
-                InvalidMessage::InvalidCertRequest,
-            ));
+            return Err(InvalidMessage::InvalidCertRequest.into());
         }
 
         let compat_sigschemes = certreq
@@ -924,10 +874,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             .collect::<Vec<SignatureScheme>>();
 
         if compat_sigschemes.is_empty() {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::HandshakeFailure,
-                PeerIncompatible::NoCertificateRequestSignatureSchemesInCommon,
-            ));
+            return Err(PeerIncompatible::NoCertificateRequestSignatureSchemesInCommon.into());
         }
 
         let compat_compressor = certreq
@@ -1016,38 +963,21 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             .find(|item| item.algorithm() == compressed_cert.alg);
 
         let Some(decompressor) = selected_decompressor else {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::BadCertificate,
-                PeerMisbehaved::SelectedUnofferedCertCompression,
-            ));
+            return Err(PeerMisbehaved::SelectedUnofferedCertCompression.into());
         };
 
         if compressed_cert.uncompressed_len as usize > CERTIFICATE_MAX_SIZE_LIMIT {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::BadCertificate,
-                InvalidMessage::CertificatePayloadTooLarge,
-            ));
+            return Err(InvalidMessage::CertificatePayloadTooLarge.into());
         }
 
         let mut decompress_buffer = vec![0u8; compressed_cert.uncompressed_len as usize];
         if let Err(compress::DecompressionFailed) =
             decompressor.decompress(compressed_cert.compressed.as_ref(), &mut decompress_buffer)
         {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::BadCertificate,
-                PeerMisbehaved::InvalidCertCompression,
-            ));
+            return Err(PeerMisbehaved::InvalidCertCompression.into());
         }
 
-        let cert_payload =
-            match CertificatePayloadTls13::read(&mut Reader::init(&decompress_buffer)) {
-                Ok(cm) => cm,
-                Err(err) => {
-                    return Err(cx
-                        .common
-                        .send_fatal_alert(AlertDescription::BadCertificate, err));
-                }
-            };
+        let cert_payload = CertificatePayloadTls13::read(&mut Reader::init(&decompress_buffer))?;
         trace!(
             "Server certificate decompressed using {:?} ({} bytes -> {})",
             compressed_cert.alg,
@@ -1097,7 +1027,7 @@ struct ExpectCertificate {
 impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
+        _cx: &mut ClientContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
         if !self.message_already_in_transcript {
@@ -1111,10 +1041,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
 
         // This is only non-empty for client auth.
         if !cert_chain.context.0.is_empty() {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::DecodeError,
-                InvalidMessage::InvalidCertRequest,
-            ));
+            return Err(InvalidMessage::InvalidCertRequest.into());
         }
 
         let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
@@ -1172,14 +1099,8 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
         let identity = Identity::from_peer(
             self.server_cert.cert_chain.0,
             self.expected_certificate_type,
-            cx.common,
         )?
-        .ok_or_else(|| {
-            cx.common.send_fatal_alert(
-                AlertDescription::BadCertificate,
-                PeerMisbehaved::NoCertificatesPresented,
-            )
-        })?;
+        .ok_or(PeerMisbehaved::NoCertificatesPresented)?;
 
         let cert_verified = self
             .config
@@ -1189,10 +1110,6 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                 server_name: &self.session_key.server_name,
                 ocsp_response: &self.server_cert.ocsp_response,
                 now: self.config.current_time()?,
-            })
-            .map_err(|err| {
-                cx.common
-                    .send_cert_verify_error_alert(err)
             })?;
 
         // 2. Verify their signature on the handshake.
@@ -1204,10 +1121,6 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                 message: construct_server_verify_message(&handshake_hash).as_ref(),
                 signer: &identity.as_signer(),
                 signature: cert_verify,
-            })
-            .map_err(|err| {
-                cx.common
-                    .send_cert_verify_error_alert(err)
             })?;
 
         cx.common.peer_identity = Some(identity);
@@ -1341,10 +1254,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         {
             true => verify::FinishedMessageVerified::assertion(),
             false => {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::DecryptError,
-                    PeerMisbehaved::IncorrectFinished,
-                ));
+                return Err(PeerMisbehaved::IncorrectFinished.into());
             }
         };
 
@@ -1431,7 +1341,10 @@ impl State<ClientConnectionData> for ExpectFinished {
         // sending an alert and returning an error (potentially with retry configs) if the server
         // did not accept our ECH offer.
         if cx.data.ech_status == EchStatus::Rejected {
-            return Err(ech::fatal_alert_required(st.ech_retry_configs, cx.common));
+            return Err(RejectedEch {
+                retry_configs: st.ech_retry_configs,
+            }
+            .into());
         }
 
         let st = ExpectTraffic {
@@ -1535,10 +1448,7 @@ impl ExpectTraffic {
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         if let Protocol::Quic = common.protocol {
-            return Err(common.send_fatal_alert(
-                AlertDescription::UnexpectedMessage,
-                PeerMisbehaved::KeyUpdateReceivedInQuicConnection,
-            ));
+            return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 
         // Mustn't be interleaved with other handshake messages.

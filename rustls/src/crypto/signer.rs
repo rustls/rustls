@@ -8,10 +8,9 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPubli
 
 use super::CryptoProvider;
 use crate::client::{ClientCredentialResolver, CredentialRequest};
-use crate::common_state::CommonState;
 use crate::crypto::SignatureScheme;
 use crate::enums::CertificateType;
-use crate::error::{AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible};
+use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::codec::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
@@ -228,7 +227,6 @@ impl<'a> Identity<'a> {
     pub(crate) fn from_peer(
         mut cert_chain: Vec<CertificateDer<'a>>,
         expected: CertificateType,
-        common: &mut CommonState,
     ) -> Result<Option<Self>, Error> {
         let mut iter = cert_chain.drain(..);
         let Some(first) = iter.next() else {
@@ -244,15 +242,11 @@ impl<'a> Identity<'a> {
                 0 => Ok(Some(Self::RawPublicKey(
                     SubjectPublicKeyInfoDer::from(first.as_ref()).into_owned(),
                 ))),
-                _ => Err(common.send_fatal_alert(
-                    AlertDescription::BadCertificate,
-                    PeerIncompatible::MultipleRawKeys,
-                )),
+                _ => Err(PeerIncompatible::MultipleRawKeys.into()),
             },
-            CertificateType::Unknown(ty) => Err(common.send_fatal_alert(
-                AlertDescription::UnsupportedCertificate,
-                PeerIncompatible::UnknownCertificateType(ty),
-            )),
+            CertificateType::Unknown(ty) => {
+                Err(PeerIncompatible::UnknownCertificateType(ty).into())
+            }
         }
     }
 

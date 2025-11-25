@@ -80,9 +80,12 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
             } else {
                 match self
                     .core
-                    .deframe(None, buffer.filled_mut(), &mut buffer_progress)
+                    .deframe(buffer.filled_mut(), &mut buffer_progress)
                 {
                     Err(err) => {
+                        self.core
+                            .common_state
+                            .maybe_send_fatal_alert(&err);
                         buffer.queue_discard(buffer_progress.take_discard());
                         return UnbufferedStatus {
                             discard: buffer.pending_discard(),
@@ -130,6 +133,9 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                         }
                     }
                     Err(e) => {
+                        self.core
+                            .common_state
+                            .maybe_send_fatal_alert(&e);
                         buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Err(e.clone());
                         return UnbufferedStatus {

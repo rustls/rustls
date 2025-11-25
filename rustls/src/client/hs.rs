@@ -19,7 +19,7 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
 use crate::msgs::enums::{Compression, ExtensionType};
@@ -72,12 +72,7 @@ impl ExpectServerHello {
         SupportedCipherSuite: From<&'static T>,
     {
         if server_hello.compression_method != Compression::Null {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::SelectedUnofferedCompression,
-                )
-            });
+            return Err(PeerMisbehaved::SelectedUnofferedCompression.into());
         }
 
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
@@ -86,10 +81,7 @@ impl ExpectServerHello {
             .hello
             .server_sent_unsolicited_extensions(server_hello, &allowed_unsolicited)
         {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::UnsupportedExtension,
-                PeerMisbehaved::UnsolicitedServerHelloExtension,
-            ));
+            return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
 
         cx.common.negotiated_version = Some(T::VERSION);
@@ -110,31 +102,18 @@ impl ExpectServerHello {
         // Uncompressed.  But it's allowed to be omitted.
         if let Some(point_fmts) = &server_hello.ec_point_formats {
             if !point_fmts.uncompressed {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints,
-                ));
+                return Err(PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints.into());
             }
         }
 
         let suite = <CryptoProvider as Borrow<[&'static T]>>::borrow(self.input.config.provider())
             .iter()
             .find(|cs| cs.common().suite == server_hello.cipher_suite)
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerMisbehaved::SelectedUnofferedCipherSuite,
-                )
-            })?;
+            .ok_or(PeerMisbehaved::SelectedUnofferedCipherSuite)?;
 
         match self.suite {
             Some(prev_suite) if prev_suite.suite() != suite.common().suite => {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::SelectedDifferentCipherSuiteAfterRetry,
-                    )
-                });
+                return Err(PeerMisbehaved::SelectedDifferentCipherSuiteAfterRetry.into());
             }
             _ => {
                 debug!("Using ciphersuite {suite:?}");
@@ -181,12 +160,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 }
 
                 if server_hello.selected_version.is_some() {
-                    return Err({
-                        cx.common.send_fatal_alert(
-                            AlertDescription::IllegalParameter,
-                            PeerMisbehaved::SelectedTls12UsingTls13VersionExtension,
-                        )
-                    });
+                    return Err(PeerMisbehaved::SelectedTls12UsingTls13VersionExtension.into());
                 }
 
                 self.with_version::<Tls12CipherSuite>(server_hello, &m, cx)
@@ -196,9 +170,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     TLSv1_2 | TLSv1_3 => PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig,
                     _ => PeerIncompatible::ServerDoesNotSupportTls12Or13,
                 };
-                Err(cx
-                    .common
-                    .send_fatal_alert(AlertDescription::ProtocolVersion, reason))
+                Err(reason.into())
             }
         }
     }
@@ -241,35 +213,20 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 .map(|(hybrid, _)| hybrid.component().0);
 
             if req_group == offered_key_share.group() || Some(req_group) == offered_hybrid {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup,
-                    )
-                });
+                return Err(PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup.into());
             }
         }
 
         // Or has an empty cookie.
         if let Some(cookie) = &hrr.cookie {
             if cookie.0.is_empty() {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::IllegalHelloRetryRequestWithEmptyCookie,
-                    )
-                });
+                return Err(PeerMisbehaved::IllegalHelloRetryRequestWithEmptyCookie.into());
             }
         }
 
         // Or asks us to change nothing.
         if hrr.cookie.is_none() && hrr.key_share.is_none() {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::IllegalHelloRetryRequestWithNoChanges,
-                )
-            });
+            return Err(PeerMisbehaved::IllegalHelloRetryRequestWithNoChanges.into());
         }
 
         // Or does not echo the session_id from our ClientHello:
@@ -286,12 +243,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // > "illegal_parameter" alert.
         // <https://www.rfc-editor.org/rfc/rfc8446#section-4.1.3>
         if hrr.session_id != self.next.input.session_id {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId,
-                )
-            });
+            return Err(PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into());
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
@@ -300,33 +252,18 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 cx.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             }
             _ => {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion,
-                    )
-                });
+                return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
             }
         }
 
         // Or asks us to use a ciphersuite we didn't offer.
         let Some(cs) = config.find_cipher_suite(hrr.cipher_suite) else {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
-                )
-            });
+            return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite.into());
         };
 
         // Or offers ECH related extensions when we didn't offer ECH.
         if cx.data.ech_status == EchStatus::NotOffered && hrr.encrypted_client_hello.is_some() {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::UnsupportedExtension,
-                    PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch,
-                )
-            });
+            return Err(PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch.into());
         }
 
         // HRR selects the ciphersuite.
@@ -336,7 +273,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // If we offered ECH, we need to confirm that the server accepted it.
         match (self.next.ech_state.as_ref(), cs) {
             (Some(ech_state), SupportedCipherSuite::Tls13(tls13_cs)) => {
-                if !ech_state.confirm_hrr_acceptance(hrr, tls13_cs, cx.common)? {
+                if !ech_state.confirm_hrr_acceptance(hrr, tls13_cs)? {
                     // If the server did not confirm, then note the new ECH status but
                     // continue the handshake. We will abort with an ECH required error
                     // at the end.
@@ -374,10 +311,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
                     .provider()
                     .find_kx_group(group, ProtocolVersion::TLSv1_3)
                 else {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
-                    ));
+                    return Err(
+                        PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup.into(),
+                    );
                 };
 
                 cx.common.kx_state = KxState::Start(skxg);
@@ -963,10 +899,7 @@ pub(super) fn process_alpn_protocol(
 
     if let Some(alpn_protocol) = &common.alpn_protocol {
         if !offered_protocols.contains(alpn_protocol) {
-            return Err(common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerMisbehaved::SelectedUnofferedApplicationProtocol,
-            ));
+            return Err(PeerMisbehaved::SelectedUnofferedApplicationProtocol.into());
         }
     }
 
@@ -977,10 +910,7 @@ pub(super) fn process_alpn_protocol(
     // servers which accept a connection that requires an application-layer protocol they do not
     // understand.
     if common.is_quic() && common.alpn_protocol.is_none() && !offered_protocols.is_empty() {
-        return Err(common.send_fatal_alert(
-            AlertDescription::NoApplicationProtocol,
-            Error::NoApplicationProtocol,
-        ));
+        return Err(Error::NoApplicationProtocol);
     }
 
     debug!(

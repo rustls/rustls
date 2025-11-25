@@ -17,7 +17,7 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::kx::ActiveKeyExchange;
 use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -68,7 +68,7 @@ mod client_hello {
             let mut randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
-                .start(suite.common.hash_provider, cx)?;
+                .start(suite.common.hash_provider)?;
 
             // -- TLS1.2 only from hereon in --
             transcript.add_message(input.message);
@@ -80,10 +80,7 @@ mod client_hello {
             {
                 st.using_ems = true;
             } else if st.config.require_ems {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerIncompatible::ExtendedMasterSecretExtensionRequired,
-                ));
+                return Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into());
             }
 
             // "RFC 4492 specified that if this extension is missing,
@@ -98,10 +95,7 @@ mod client_hello {
             trace!("ecpoints {supported_ec_point_formats:?}");
 
             if !supported_ec_point_formats.uncompressed {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerIncompatible::UncompressedEcPointsRequired,
-                ));
+                return Err(PeerIncompatible::UncompressedEcPointsRequired.into());
             }
 
             // -- If TLS1.3 is enabled, signal the downgrade in the server random
@@ -270,10 +264,7 @@ mod client_hello {
         debug!("Resuming connection");
 
         if resumedata.extended_ms && !using_ems {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerMisbehaved::ResumptionAttemptedWithVariedEms,
-            ));
+            return Err(PeerMisbehaved::ResumptionAttemptedWithVariedEms.into());
         }
 
         let session_id = input.client_hello.session_id;
@@ -458,7 +449,7 @@ struct ExpectCertificate {
 impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ServerContext<'_>,
+        _cx: &mut ServerContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
@@ -476,33 +467,25 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
         trace!("certs {cert_chain:?}");
 
-        let peer_identity =
-            match Identity::from_peer(cert_chain.0, CertificateType::X509, cx.common)? {
-                None if mandatory => {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::CertificateRequired,
-                        PeerMisbehaved::NoCertificatesPresented,
-                    ));
-                }
-                None => {
-                    debug!("client auth requested but no certificate supplied");
-                    self.transcript.abandon_client_auth();
-                    None
-                }
-                Some(identity) => {
-                    self.config
-                        .verifier
-                        .verify_identity(&ClientIdentity {
-                            identity: &identity,
-                            now: self.config.current_time()?,
-                        })
-                        .map_err(|err| {
-                            cx.common
-                                .send_cert_verify_error_alert(err)
-                        })?;
-                    Some(identity.into_owned())
-                }
-            };
+        let peer_identity = match Identity::from_peer(cert_chain.0, CertificateType::X509)? {
+            None if mandatory => {
+                return Err(PeerMisbehaved::NoCertificatesPresented.into());
+            }
+            None => {
+                debug!("client auth requested but no certificate supplied");
+                self.transcript.abandon_client_auth();
+                None
+            }
+            Some(identity) => {
+                self.config
+                    .verifier
+                    .verify_identity(&ClientIdentity {
+                        identity: &identity,
+                        now: self.config.current_time()?,
+                    })?;
+                Some(identity.into_owned())
+            }
+        };
 
         Ok(Box::new(ExpectClientKx {
             config: self.config,
@@ -549,22 +532,15 @@ impl State<ServerConnectionData> for ExpectClientKx {
 
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
-        let peer_kx_params = tls12::decode_kx_params::<ClientKeyExchangeParams>(
-            self.suite.kx,
-            cx.common,
-            client_kx.bytes(),
-        )?;
+        let peer_kx_params =
+            tls12::decode_kx_params::<ClientKeyExchangeParams>(self.suite.kx, client_kx.bytes())?;
         let secrets = ConnectionSecrets::from_key_exchange(
             self.server_kx,
             peer_kx_params.pub_key(),
             ems_seed,
             self.randoms,
             self.suite,
-        )
-        .map_err(|err| {
-            cx.common
-                .send_fatal_alert(AlertDescription::IllegalParameter, err)
-        })?;
+        )?;
         cx.common.kx_state.complete();
 
         self.config.key_log.log(
@@ -615,40 +591,30 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
-        let rc = {
-            let signature = require_handshake_msg!(
-                m,
-                HandshakeType::CertificateVerify,
-                HandshakePayload::CertificateVerify
-            )?;
+        let signature = require_handshake_msg!(
+            m,
+            HandshakeType::CertificateVerify,
+            HandshakePayload::CertificateVerify
+        )?;
 
-            match self.transcript.take_handshake_buf() {
-                Some(msgs) => self
-                    .config
+        match self.transcript.take_handshake_buf() {
+            Some(msgs) => {
+                self.config
                     .verifier
                     .verify_tls12_signature(&SignatureVerificationInput {
                         message: &msgs,
                         signer: &self.peer_identity.as_signer(),
                         signature,
-                    }),
-                None => {
-                    // This should be unreachable; the handshake buffer was initialized with
-                    // client authentication if the verifier wants to offer it.
-                    // `transcript.abandon_client_auth()` can extract it, but its only caller in
-                    // this flow will also set `ExpectClientKx::client_cert` to `None`, making it
-                    // impossible to reach this state.
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::AccessDenied,
-                        Error::General("client authentication not set up".into()),
-                    ));
-                }
+                    })?;
             }
-        };
-
-        if let Err(e) = rc {
-            return Err(cx
-                .common
-                .send_cert_verify_error_alert(e));
+            None => {
+                // This should be unreachable; the handshake buffer was initialized with
+                // client authentication if the verifier wants to offer it.
+                // `transcript.abandon_client_auth()` can extract it, but its only caller in
+                // this flow will also set `ExpectClientKx::client_cert` to `None`, making it
+                // impossible to reach this state.
+                return Err(Error::Unreachable("client authentication not set up"));
+            }
         }
 
         trace!("client CertificateVerify OK");
@@ -823,10 +789,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
                 true => verify::FinishedMessageVerified::assertion(),
                 false => {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::DecryptError,
-                        PeerMisbehaved::IncorrectFinished,
-                    ));
+                    return Err(PeerMisbehaved::IncorrectFinished.into());
                 }
             };
 
