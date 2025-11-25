@@ -437,7 +437,9 @@ impl CommonState {
             return;
         };
 
-        self.flush_plaintext(sendable_plaintext);
+        while let Some(buf) = sendable_plaintext.pop() {
+            self.send_plain_non_buffering(buf.as_slice().into(), Limit::No);
+        }
     }
 
     /// Mark the connection as ready to send and receive application data.
@@ -446,18 +448,6 @@ impl CommonState {
     pub(crate) fn start_traffic(&mut self, sendable_plaintext: &mut Option<&mut ChunkVecBuffer>) {
         self.may_receive_application_data = true;
         self.start_outgoing_traffic(sendable_plaintext);
-    }
-
-    /// Send any buffered plaintext.  Plaintext is buffered if
-    /// written during handshake.
-    fn flush_plaintext(&mut self, sendable_plaintext: &mut ChunkVecBuffer) {
-        if !self.may_send_application_data {
-            return;
-        }
-
-        while let Some(buf) = sendable_plaintext.pop() {
-            self.send_plain_non_buffering(buf.as_slice().into(), Limit::No);
-        }
     }
 
     // Put m into sendable_tls for writing.
