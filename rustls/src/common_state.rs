@@ -137,7 +137,9 @@ impl CommonState {
     /// means no protocol was agreed (because no protocols
     /// were offered or accepted by the peer).
     pub fn alpn_protocol(&self) -> Option<&[u8]> {
-        self.get_alpn_protocol()
+        self.alpn_protocol
+            .as_ref()
+            .map(AsRef::as_ref)
     }
 
     /// Retrieves the cipher suite agreed with the peer.
@@ -664,12 +666,6 @@ impl CommonState {
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
         self.message_fragmenter
             .set_max_fragment_size(new)
-    }
-
-    pub(crate) fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        self.alpn_protocol
-            .as_ref()
-            .map(AsRef::as_ref)
     }
 
     /// Returns true if the caller should call [`Connection::read_tls`] as soon
