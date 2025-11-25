@@ -335,6 +335,13 @@ impl CommonState {
         })
     }
 
+    #[cfg(feature = "std")]
+    pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
+        debug_assert!(self.early_traffic);
+        debug_assert!(self.record_layer.is_encrypting());
+        self.send_appdata_encrypt(data.into(), Limit::Yes)
+    }
+
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage) {
@@ -420,6 +427,27 @@ impl CommonState {
 
         let em = self.record_layer.encrypt_outgoing(m);
         self.queue_tls_message(em);
+    }
+
+    /// Send plaintext application data, fragmenting and
+    /// encrypting it as it goes out.
+    ///
+    /// If internal buffers are too small, this function will not accept
+    /// all the data.
+    #[cfg(feature = "std")]
+    pub(crate) fn buffer_plaintext(
+        &mut self,
+        payload: OutboundChunks<'_>,
+        sendable_plaintext: &mut ChunkVecBuffer,
+    ) -> usize {
+        self.perhaps_write_key_update();
+        if !self.may_send_application_data {
+            // If we haven't completed handshaking, buffer
+            // plaintext to send once we do.
+            return sendable_plaintext.append_limited_copy(payload);
+        }
+
+        self.send_plain_non_buffering(payload, Limit::Yes)
     }
 
     fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
@@ -722,35 +750,6 @@ impl CommonState {
                 .encrypt_outgoing(message.borrow_outbound())
                 .encode(),
         );
-    }
-}
-
-#[cfg(feature = "std")]
-impl CommonState {
-    /// Send plaintext application data, fragmenting and
-    /// encrypting it as it goes out.
-    ///
-    /// If internal buffers are too small, this function will not accept
-    /// all the data.
-    pub(crate) fn buffer_plaintext(
-        &mut self,
-        payload: OutboundChunks<'_>,
-        sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
-        self.perhaps_write_key_update();
-        if !self.may_send_application_data {
-            // If we haven't completed handshaking, buffer
-            // plaintext to send once we do.
-            return sendable_plaintext.append_limited_copy(payload);
-        }
-
-        self.send_plain_non_buffering(payload, Limit::Yes)
-    }
-
-    pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
-        debug_assert!(self.early_traffic);
-        debug_assert!(self.record_layer.is_encrypting());
-        self.send_appdata_encrypt(data.into(), Limit::Yes)
     }
 }
 
