@@ -587,7 +587,7 @@ impl CommonState {
     pub(crate) fn send_cert_verify_error_alert(&mut self, err: Error) -> Error {
         self.send_fatal_alert(
             match &err {
-                Error::InvalidCertificate(e) => e.clone().into(),
+                Error::InvalidCertificate(e) => e.into(),
                 Error::PeerMisbehaved(_) => AlertDescription::IllegalParameter,
                 _ => AlertDescription::HandshakeFailure,
             },

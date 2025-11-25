@@ -556,8 +556,8 @@ impl PartialEq<Self> for CertificateError {
 // The following mapping are heavily referenced in:
 // * [OpenSSL Implementation](https://github.com/openssl/openssl/blob/45bb98bfa223efd3258f445ad443f878011450f0/ssl/statem/statem_lib.c#L1434)
 // * [BoringSSL Implementation](https://github.com/google/boringssl/blob/583c60bd4bf76d61b2634a58bcda99a92de106cb/ssl/ssl_x509.cc#L1323)
-impl From<CertificateError> for AlertDescription {
-    fn from(e: CertificateError) -> Self {
+impl From<&CertificateError> for AlertDescription {
+    fn from(e: &CertificateError) -> Self {
         use CertificateError::*;
         match e {
             BadEncoding
