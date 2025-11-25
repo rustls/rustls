@@ -756,7 +756,13 @@ impl CommonState {
         sendable_plaintext: &mut ChunkVecBuffer,
     ) -> usize {
         self.perhaps_write_key_update();
-        self.send_plain(payload, sendable_plaintext)
+        if !self.may_send_application_data {
+            // If we haven't completed handshaking, buffer
+            // plaintext to send once we do.
+            return sendable_plaintext.append_limited_copy(payload);
+        }
+
+        self.send_plain_non_buffering(payload, Limit::Yes)
     }
 
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
@@ -769,25 +775,6 @@ impl CommonState {
         }
 
         self.send_appdata_encrypt(data.into(), Limit::Yes)
-    }
-
-    /// Encrypt and send some plaintext `data`.  `limit` controls
-    /// whether the per-connection buffer limits apply.
-    ///
-    /// Returns the number of bytes written from `data`: this might
-    /// be less than `data.len()` if buffer limits were exceeded.
-    fn send_plain(
-        &mut self,
-        payload: OutboundChunks<'_>,
-        sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
-        if !self.may_send_application_data {
-            // If we haven't completed handshaking, buffer
-            // plaintext to send once we do.
-            return sendable_plaintext.append_limited_copy(payload);
-        }
-
-        self.send_plain_non_buffering(payload, Limit::Yes)
     }
 }
 
