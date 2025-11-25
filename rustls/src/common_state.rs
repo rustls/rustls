@@ -239,7 +239,9 @@ impl CommonState {
             if msg.handshake_type() == Some(reject_ty) {
                 self.temper_counters
                     .received_renegotiation_request()?;
-                self.send_warning_alert(AlertDescription::NoRenegotiation);
+                let desc = AlertDescription::NoRenegotiation;
+                warn!("sending warning alert {desc:?}");
+                self.send_warning_alert_no_log(desc);
                 return Ok(state);
             }
         }
@@ -514,11 +516,6 @@ impl CommonState {
 
     pub(crate) fn missing_extension(&mut self, why: PeerMisbehaved) -> Error {
         self.send_fatal_alert(AlertDescription::MissingExtension, why)
-    }
-
-    fn send_warning_alert(&mut self, desc: AlertDescription) {
-        warn!("Sending warning alert {desc:?}");
-        self.send_warning_alert_no_log(desc);
     }
 
     pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
