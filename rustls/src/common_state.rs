@@ -754,7 +754,7 @@ impl CommonState {
         sendable_plaintext: &mut ChunkVecBuffer,
     ) -> usize {
         self.perhaps_write_key_update();
-        self.send_plain(payload, Limit::Yes, sendable_plaintext)
+        self.send_plain(payload, sendable_plaintext)
     }
 
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
@@ -777,20 +777,15 @@ impl CommonState {
     fn send_plain(
         &mut self,
         payload: OutboundChunks<'_>,
-        limit: Limit,
         sendable_plaintext: &mut ChunkVecBuffer,
     ) -> usize {
         if !self.may_send_application_data {
             // If we haven't completed handshaking, buffer
             // plaintext to send once we do.
-            let len = match limit {
-                Limit::Yes => sendable_plaintext.append_limited_copy(payload),
-                Limit::No => sendable_plaintext.append(payload.to_vec()),
-            };
-            return len;
+            return sendable_plaintext.append_limited_copy(payload);
         }
 
-        self.send_plain_non_buffering(payload, limit)
+        self.send_plain_non_buffering(payload, Limit::Yes)
     }
 }
 
