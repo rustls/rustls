@@ -13,7 +13,7 @@ use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme};
 use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 use crate::msgs::deframer::HandshakeAlignedProof;
@@ -83,10 +83,7 @@ impl ExtensionProcessing {
                 self.extensions.selected_protocol =
                     Some(SingleProtocolName::new(selected_protocol.clone()));
             } else if !our_protocols.is_empty() {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::NoApplicationProtocol,
-                    Error::NoApplicationProtocol,
-                ));
+                return Err(Error::NoApplicationProtocol);
             }
         }
 
@@ -101,18 +98,13 @@ impl ExtensionProcessing {
             if cx.common.alpn_protocol.is_none()
                 && (!our_protocols.is_empty() || hello.protocols.is_some())
             {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::NoApplicationProtocol,
-                    Error::NoApplicationProtocol,
-                ));
+                return Err(Error::NoApplicationProtocol);
             }
 
             match hello.transport_parameters.as_ref() {
                 Some(params) => cx.common.quic.params = Some(params.to_owned().into_vec()),
                 None => {
-                    return Err(cx
-                        .common
-                        .missing_extension(PeerMisbehaved::MissingQuicTransportParameters));
+                    return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
                 }
             }
         }
@@ -149,7 +141,6 @@ impl ExtensionProcessing {
             config
                 .verifier
                 .supported_certificate_types(),
-            cx,
         )?;
 
         let expected_server_type = self.process_cert_type_extension(
@@ -159,7 +150,6 @@ impl ExtensionProcessing {
             config
                 .cert_resolver
                 .supported_certificate_types(),
-            cx,
         )?;
 
         if hello.client_certificate_types.is_some() && config.verifier.offer_client_auth() {
@@ -211,7 +201,6 @@ impl ExtensionProcessing {
         &mut self,
         client: Option<&[CertificateType]>,
         server: &[CertificateType],
-        cx: &mut ServerContext<'_>,
     ) -> Result<CertificateType, Error> {
         if server.is_empty() {
             return Err(ApiMisuse::NoSupportedCertificateTypes.into());
@@ -228,19 +217,13 @@ impl ExtensionProcessing {
         // client hello.
         let client = match client {
             Some([]) => {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerIncompatible::IncorrectCertificateTypeExtension,
-                ));
+                return Err(PeerIncompatible::IncorrectCertificateTypeExtension.into());
             }
             Some(c) => c,
             None => {
                 return match server.contains(&CertificateType::X509) {
                     true => Ok(CertificateType::X509),
-                    false => Err(cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::IncorrectCertificateTypeExtension,
-                    )),
+                    false => Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
                 };
             }
         };
@@ -251,10 +234,7 @@ impl ExtensionProcessing {
             }
         }
 
-        Err(cx.common.send_fatal_alert(
-            AlertDescription::UnsupportedCertificate,
-            PeerIncompatible::IncorrectCertificateTypeExtension,
-        ))
+        Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
     }
 }
 
@@ -310,45 +290,26 @@ impl ExpectClientHello {
         cx.data.sni = self
             .config
             .invalid_sni_policy
-            .accept(input.client_hello.server_name.as_ref())
-            .map_err(|e| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::IllegalParameter, e)
-            })?;
+            .accept(input.client_hello.server_name.as_ref())?;
 
         // Are we doing TLS1.3?
         if let Some(versions) = &input.client_hello.supported_versions {
             if versions.tls13 && tls13_enabled {
                 self.with_version::<Tls13CipherSuite>(input, cx)
             } else if !versions.tls12 || !tls12_enabled {
-                Err(cx.common.send_fatal_alert(
-                    AlertDescription::ProtocolVersion,
-                    PeerIncompatible::Tls12NotOfferedOrEnabled,
-                ))
+                Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
             } else if cx.common.is_quic() {
-                Err(cx.common.send_fatal_alert(
-                    AlertDescription::ProtocolVersion,
-                    PeerIncompatible::Tls13RequiredForQuic,
-                ))
+                Err(PeerIncompatible::Tls13RequiredForQuic.into())
             } else {
                 self.with_version::<Tls12CipherSuite>(input, cx)
             }
         } else if u16::from(input.client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2)
         {
-            Err(cx.common.send_fatal_alert(
-                AlertDescription::ProtocolVersion,
-                PeerIncompatible::Tls12NotOffered,
-            ))
+            Err(PeerIncompatible::Tls12NotOffered.into())
         } else if !tls12_enabled && tls13_enabled {
-            Err(cx.common.send_fatal_alert(
-                AlertDescription::ProtocolVersion,
-                PeerIncompatible::SupportedVersionsExtensionRequired,
-            ))
+            Err(PeerIncompatible::SupportedVersionsExtensionRequired.into())
         } else if cx.common.is_quic() {
-            Err(cx.common.send_fatal_alert(
-                AlertDescription::ProtocolVersion,
-                PeerIncompatible::Tls13RequiredForQuic,
-            ))
+            Err(PeerIncompatible::Tls13RequiredForQuic.into())
         } else {
             self.with_version::<Tls12CipherSuite>(input, cx)
         }
@@ -397,27 +358,18 @@ impl ExpectClientHello {
         let credentials = self
             .config
             .cert_resolver
-            .resolve(&ClientHello::new(&input, cx.data.sni.as_ref(), T::VERSION))
-            .map_err(|err| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::HandshakeFailure, err)
-            })?;
+            .resolve(&ClientHello::new(&input, cx.data.sni.as_ref(), T::VERSION))?;
 
-        let (suite, skxg) = self
-            .choose_suite_and_kx_group(
-                suites,
-                credentials.signer.scheme(),
-                input
-                    .client_hello
-                    .named_groups
-                    .as_deref()
-                    .unwrap_or_default(),
-                &input.client_hello.cipher_suites,
-            )
-            .map_err(|incompat| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::HandshakeFailure, incompat)
-            })?;
+        let (suite, skxg) = self.choose_suite_and_kx_group(
+            suites,
+            credentials.signer.scheme(),
+            input
+                .client_hello
+                .named_groups
+                .as_deref()
+                .unwrap_or_default(),
+            &input.client_hello.cipher_suites,
+        )?;
 
         debug!("decided upon suite {suite:?}");
         cx.common.suite = Some(suite.into());
@@ -600,10 +552,7 @@ impl<'a> ClientHelloInput<'a> {
             .compression_methods
             .contains(&Compression::Null)
         {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerIncompatible::NullCompressionRequired,
-            ));
+            return Err(PeerIncompatible::NullCompressionRequired.into());
         }
 
         // No handshake messages should follow this one in this flight.
@@ -624,12 +573,7 @@ impl<'a> ClientHelloInput<'a> {
         let sig_schemes = client_hello
             .signature_schemes
             .as_ref()
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerIncompatible::SignatureAlgorithmsExtensionRequired,
-                )
-            })?;
+            .ok_or(PeerIncompatible::SignatureAlgorithmsExtensionRequired)?;
 
         Ok(ClientHelloInput {
             message,
@@ -646,18 +590,11 @@ pub(crate) enum HandshakeHashOrBuffer {
 }
 
 impl HandshakeHashOrBuffer {
-    pub(super) fn start(
-        self,
-        hash: &'static dyn Hash,
-        cx: &mut ServerContext<'_>,
-    ) -> Result<HandshakeHash, Error> {
+    pub(super) fn start(self, hash: &'static dyn Hash) -> Result<HandshakeHash, Error> {
         match self {
             Self::Buffer(inner) => Ok(inner.start_hash(hash)),
             Self::Hash(inner) if inner.algorithm() == hash.algorithm() => Ok(inner),
-            _ => Err(cx.common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerMisbehaved::HandshakeHashVariedAfterRetry,
-            )),
+            _ => Err(PeerMisbehaved::HandshakeHashVariedAfterRetry.into()),
         }
     }
 }

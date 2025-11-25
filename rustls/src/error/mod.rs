@@ -154,6 +154,31 @@ pub enum Error {
     Other(OtherError),
 }
 
+/// Determine which alert should be sent for a given error.
+///
+/// If this mapping fails, no alert is sent.
+impl TryFrom<&Error> for AlertDescription {
+    type Error = ();
+
+    fn try_from(error: &Error) -> Result<Self, Self::Error> {
+        Ok(match error {
+            Error::DecryptError => Self::BadRecordMac,
+            Error::InappropriateMessage { .. } | Error::InappropriateHandshakeMessage { .. } => {
+                Self::UnexpectedMessage
+            }
+            Error::InvalidCertificate(e) => Self::from(e),
+            Error::InvalidMessage(e) => Self::from(*e),
+            Error::NoApplicationProtocol => Self::NoApplicationProtocol,
+            Error::PeerMisbehaved(e) => Self::from(*e),
+            Error::PeerIncompatible(e) => Self::from(*e),
+            Error::PeerSentOversizedRecord => Self::RecordOverflow,
+            Error::RejectedEch(_) => Self::EncryptedClientHelloRequired,
+
+            _ => return Err(()),
+        })
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -917,6 +942,7 @@ impl From<InvalidMessage> for AlertDescription {
             InvalidMessage::PreSharedKeyIsNotFinalExtension => Self::IllegalParameter,
             InvalidMessage::DuplicateExtension(_) => Self::IllegalParameter,
             InvalidMessage::UnknownHelloRetryRequestExtension => Self::UnsupportedExtension,
+            InvalidMessage::CertificatePayloadTooLarge => Self::BadCertificate,
             _ => Self::DecodeError,
         }
     }
@@ -934,7 +960,7 @@ impl From<InvalidMessage> for AlertDescription {
 /// the wild.
 #[expect(missing_docs)]
 #[non_exhaustive]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PeerMisbehaved {
     AttemptedDowngradeToTls12WhenTls13IsSupported,
     BadCertChainExtensions,
@@ -1018,6 +1044,40 @@ pub enum PeerMisbehaved {
     UnsolicitedEchExtension,
 }
 
+impl From<PeerMisbehaved> for AlertDescription {
+    fn from(e: PeerMisbehaved) -> Self {
+        match e {
+            PeerMisbehaved::DisallowedEncryptedExtension
+            | PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch
+            | PeerMisbehaved::UnexpectedCleartextExtension
+            | PeerMisbehaved::UnsolicitedEchExtension
+            | PeerMisbehaved::UnsolicitedEncryptedExtension
+            | PeerMisbehaved::UnsolicitedServerHelloExtension => Self::UnsupportedExtension,
+
+            PeerMisbehaved::IllegalMiddleboxChangeCipherSpec
+            | PeerMisbehaved::KeyEpochWithPendingFragment
+            | PeerMisbehaved::KeyUpdateReceivedInQuicConnection => Self::UnexpectedMessage,
+
+            PeerMisbehaved::IllegalWarningAlert(_) => Self::DecodeError,
+
+            PeerMisbehaved::IncorrectBinder | PeerMisbehaved::IncorrectFinished => {
+                Self::DecryptError
+            }
+
+            PeerMisbehaved::InvalidCertCompression
+            | PeerMisbehaved::SelectedUnofferedCertCompression => Self::BadCertificate,
+
+            PeerMisbehaved::MissingKeyShare
+            | PeerMisbehaved::MissingPskModesExtension
+            | PeerMisbehaved::MissingQuicTransportParameters => Self::MissingExtension,
+
+            PeerMisbehaved::NoCertificatesPresented => Self::CertificateRequired,
+
+            _ => Self::IllegalParameter,
+        }
+    }
+}
+
 /// The set of cases where we failed to make a connection because a peer
 /// doesn't support a TLS version/feature we require.
 ///
@@ -1025,7 +1085,7 @@ pub enum PeerMisbehaved {
 /// versions.
 #[expect(missing_docs)]
 #[non_exhaustive]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PeerIncompatible {
     EcPointsExtensionRequired,
     ExtendedMasterSecretExtensionRequired,
@@ -1051,6 +1111,24 @@ pub enum PeerIncompatible {
     UncompressedEcPointsRequired,
     UnknownCertificateType(u8),
     UnsolicitedCertificateTypeExtension,
+}
+
+impl From<PeerIncompatible> for AlertDescription {
+    fn from(e: PeerIncompatible) -> Self {
+        match e {
+            PeerIncompatible::NullCompressionRequired => Self::IllegalParameter,
+
+            PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig
+            | PeerIncompatible::SupportedVersionsExtensionRequired
+            | PeerIncompatible::Tls12NotOffered
+            | PeerIncompatible::Tls12NotOfferedOrEnabled
+            | PeerIncompatible::Tls13RequiredForQuic => Self::ProtocolVersion,
+
+            PeerIncompatible::UnknownCertificateType(_) => Self::UnsupportedCertificate,
+
+            _ => Self::HandshakeFailure,
+        }
+    }
 }
 
 /// Extended Key Usage (EKU) purpose values.

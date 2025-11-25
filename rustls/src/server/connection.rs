@@ -329,6 +329,7 @@ mod buffered {
             let sig_schemes = match ClientHelloInput::from_message(&message, false, &mut cx) {
                 Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
+                    cx.common.try_send_fatal_alert(&err);
                     return Err((err, AcceptedAlert::from(connection)));
                 }
             };

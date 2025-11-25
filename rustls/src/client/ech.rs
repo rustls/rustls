@@ -7,6 +7,7 @@ use subtle::ConstantTimeEq;
 
 use super::config::ClientConfig;
 use super::tls13;
+use crate::Tls13CipherSuite;
 use crate::crypto::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::crypto::SecureRandom;
 use crate::crypto::cipher::Payload;
@@ -16,9 +17,7 @@ use crate::crypto::hpke::{
     HpkeSymmetricCipherSuite,
 };
 use crate::enums::ProtocolVersion;
-use crate::error::{
-    AlertDescription, EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch,
-};
+use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::PayloadU16;
@@ -37,7 +36,6 @@ use crate::msgs::persist::Retrieved;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
-use crate::{CommonState, Tls13CipherSuite};
 
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
 #[non_exhaustive]
@@ -519,7 +517,6 @@ impl EchState {
         &self,
         hrr: &HelloRetryRequest,
         cs: &Tls13CipherSuite,
-        common: &mut CommonState,
     ) -> Result<bool, Error> {
         // The client checks for the "encrypted_client_hello" extension.
         let ech_conf = match &hrr.encrypted_client_hello {
@@ -528,12 +525,7 @@ impl EchState {
             // Otherwise, if it has a length other than 8, the client aborts the
             // handshake with a "decode_error" alert.
             Some(ech_conf) if ech_conf.bytes().len() != 8 => {
-                return Err({
-                    common.send_fatal_alert(
-                        AlertDescription::DecodeError,
-                        PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch,
-                    )
-                });
+                return Err(PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch.into());
             }
             Some(ech_conf) => ech_conf,
         };
@@ -852,16 +844,6 @@ pub(crate) struct EchAccepted {
     pub(crate) transcript: HandshakeHash,
     pub(crate) random: Random,
     pub(crate) sent_extensions: Vec<ExtensionType>,
-}
-
-pub(crate) fn fatal_alert_required(
-    retry_configs: Option<Vec<EchConfigPayload>>,
-    common: &mut CommonState,
-) -> Error {
-    common.send_fatal_alert(
-        AlertDescription::EncryptedClientHelloRequired,
-        RejectedEch { retry_configs },
-    )
 }
 
 #[cfg(test)]

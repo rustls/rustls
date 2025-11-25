@@ -20,7 +20,7 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{Identity, Signer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{PayloadU8, PayloadU16};
@@ -81,12 +81,7 @@ mod server_hello {
                 .supports_version(ProtocolVersion::TLSv1_3)
                 && has_downgrade_marker
             {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported,
-                    )
-                });
+                return Err(PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported.into());
             }
 
             // If we didn't have an input session to resume, and we sent a session ID,
@@ -98,12 +93,7 @@ mod server_hello {
                 && !st.input.session_id.is_empty()
                 && st.input.session_id == server_hello.session_id
             {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::ServerEchoedCompatibilitySessionId,
-                    )
-                });
+                return Err(PeerMisbehaved::ServerEchoedCompatibilitySessionId.into());
             }
 
             let ClientHelloInput {
@@ -125,12 +115,7 @@ mod server_hello {
                 .extended_master_secret_ack
                 .is_some();
             if config.require_ems && !using_ems {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::ExtendedMasterSecretExtensionRequired,
-                    )
-                });
+                return Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into());
             }
 
             // Might the server send a ticket?
@@ -426,7 +411,7 @@ struct ExpectServerKx {
 impl State<ClientConnectionData> for ExpectServerKx {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
+        _cx: &mut ClientContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
         let opaque_kx = require_handshake_msg!(
@@ -438,12 +423,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
 
         let kx = opaque_kx
             .unwrap_given_kxa(self.suite.kx)
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::DecodeError,
-                    InvalidMessage::MissingKeyExchange,
-                )
-            })?;
+            .ok_or(InvalidMessage::MissingKeyExchange)?;
 
         // Save the signature and signed parameters for later verification.
         let mut kx_params = Vec::new();
@@ -776,17 +756,8 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // 5. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
-        let identity = Identity::from_peer(
-            st.server_cert.cert_chain.0,
-            CertificateType::X509,
-            cx.common,
-        )?
-        .ok_or_else(|| {
-            cx.common.send_fatal_alert(
-                AlertDescription::BadCertificate,
-                PeerMisbehaved::NoCertificatesPresented,
-            )
-        })?;
+        let identity = Identity::from_peer(st.server_cert.cert_chain.0, CertificateType::X509)?
+            .ok_or(PeerMisbehaved::NoCertificatesPresented)?;
 
         let cert_verified = st
             .config
@@ -796,10 +767,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 server_name: &st.session_key.server_name,
                 ocsp_response: &st.server_cert.ocsp_response,
                 now: st.config.current_time()?,
-            })
-            .map_err(|err| {
-                cx.common
-                    .send_cert_verify_error_alert(err)
             })?;
 
         // 2.
@@ -828,10 +795,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
                     message: &message,
                     signer: &identity.as_signer(),
                     signature,
-                })
-                .map_err(|err| {
-                    cx.common
-                        .send_cert_verify_error_alert(err)
                 })?
         };
         cx.common.peer_identity = Some(identity);
@@ -850,7 +813,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // 4a.
         let kx_params = tls12::decode_kx_params::<ServerKeyExchangeParams>(
             st.suite.kx,
-            cx.common,
             &st.server_kx.kx_params,
         )?;
         let maybe_skxg = match &kx_params {
@@ -870,10 +832,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             }
         };
         let Some(skxg) = maybe_skxg else {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerMisbehaved::SelectedUnofferedKxGroup,
-            ));
+            return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into());
         };
         cx.common.kx_state = KxState::Start(skxg);
         let kx = skxg.start()?.into_single();
@@ -900,11 +859,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             ems_seed,
             st.randoms,
             suite,
-        )
-        .map_err(|err| {
-            cx.common
-                .send_fatal_alert(AlertDescription::IllegalParameter, err)
-        })?;
+        )?;
         cx.common.kx_state.complete();
 
         // 4e. CCS. We are definitely going to switch on encryption.
@@ -1132,10 +1087,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
                 true => verify::FinishedMessageVerified::assertion(),
                 false => {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::DecryptError,
-                        PeerMisbehaved::IncorrectFinished,
-                    ));
+                    return Err(PeerMisbehaved::IncorrectFinished.into());
                 }
             };
 

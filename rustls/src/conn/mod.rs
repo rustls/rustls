@@ -10,7 +10,7 @@ use kernel::KernelConnection;
 use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::deframer::{
     BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
 };
@@ -758,11 +758,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
         let res = self
             .core
-            .deframe(
-                None,
-                self.deframer_buffer.filled_mut(),
-                &mut buffer_progress,
-            )
+            .deframe(self.deframer_buffer.filled_mut(), &mut buffer_progress)
             .map(|opt| opt.map(|pm| Message::try_from(&pm).map(|m| m.into_owned())));
 
         match res? {
@@ -772,7 +768,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 self.core.common_state.aligned_handshake = self.core.hs_deframer.aligned();
                 Ok(Some(msg))
             }
-            Some(Err(err)) => Err(self.send_fatal_alert(AlertDescription::DecodeError, err)),
+            Some(Err(err)) => Err(err.into()),
             None => Ok(None),
         }
     }
@@ -937,11 +933,16 @@ impl<Side: SideData> ConnectionCore<Side> {
         loop {
             let buffer = deframer_buffer.filled_mut();
             let locator = Locator::new(buffer);
-            let res = self.deframe(Some(&*state), buffer, &mut buffer_progress);
+            let res = self.deframe(buffer, &mut buffer_progress);
 
             let opt_msg = match res {
                 Ok(opt_msg) => opt_msg,
                 Err(e) => {
+                    self.common_state
+                        .maybe_send_fatal_alert(&e);
+                    if let Error::DecryptError = e {
+                        state.handle_decrypt_error();
+                    }
                     self.state = Err(e.clone());
                     deframer_buffer.discard(buffer_progress.take_discard());
                     return Err(e);
@@ -962,6 +963,8 @@ impl<Side: SideData> ConnectionCore<Side> {
             ) {
                 Ok(new) => state = new,
                 Err(e) => {
+                    self.common_state
+                        .maybe_send_fatal_alert(&e);
                     self.state = Err(e.clone());
                     deframer_buffer.discard(buffer_progress.take_discard());
                     return Err(e);
@@ -997,7 +1000,6 @@ impl<Side: SideData> ConnectionCore<Side> {
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
     fn deframe<'b>(
         &mut self,
-        state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
@@ -1005,7 +1007,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         if self.hs_deframer.has_message_ready() {
             Ok(self.take_handshake_message(buffer, buffer_progress))
         } else {
-            self.process_more_input(state, buffer, buffer_progress)
+            self.process_more_input(buffer, buffer_progress)
         }
     }
 
@@ -1025,7 +1027,6 @@ impl<Side: SideData> ConnectionCore<Side> {
 
     fn process_more_input<'b>(
         &mut self,
-        state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
@@ -1043,7 +1044,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 let message = match iter.next().transpose() {
                     Ok(Some(message)) => message,
                     Ok(None) => return Ok(None),
-                    Err(err) => return Err(self.handle_deframe_error(err, state)),
+                    Err(err) => return Err(err),
                 };
 
                 let allowed_plaintext = match message.typ {
@@ -1091,7 +1092,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
                     Ok(Some(message)) => message,
 
-                    Err(err) => return Err(self.handle_deframe_error(err, state)),
+                    Err(err) => return Err(err),
                 };
 
                 let Decrypted {
@@ -1160,32 +1161,6 @@ impl<Side: SideData> ConnectionCore<Side> {
 
                 return Ok(self.take_handshake_message(buffer, buffer_progress));
             }
-        }
-    }
-
-    fn handle_deframe_error(&mut self, error: Error, state: Option<&dyn State<Side>>) -> Error {
-        match error {
-            error @ Error::InvalidMessage(_) => {
-                if self.common_state.is_quic() {
-                    self.common_state.quic.alert = Some(AlertDescription::DecodeError);
-                    error
-                } else {
-                    self.common_state
-                        .send_fatal_alert(AlertDescription::DecodeError, error)
-                }
-            }
-            Error::PeerSentOversizedRecord => self
-                .common_state
-                .send_fatal_alert(AlertDescription::RecordOverflow, error),
-            Error::DecryptError => {
-                if let Some(state) = state {
-                    state.handle_decrypt_error();
-                }
-                self.common_state
-                    .send_fatal_alert(AlertDescription::BadRecordMac, error)
-            }
-
-            error => error,
         }
     }
 

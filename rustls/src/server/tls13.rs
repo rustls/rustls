@@ -17,7 +17,7 @@ use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
@@ -81,7 +81,7 @@ mod client_hello {
             let randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
-                .start(suite.common.hash_provider, cx)?;
+                .start(suite.common.hash_provider)?;
 
             if input
                 .client_hello
@@ -89,41 +89,27 @@ mod client_hello {
                 .len()
                 != 1
             {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::OfferedIncorrectCompressions,
-                ));
+                return Err(PeerMisbehaved::OfferedIncorrectCompressions.into());
             }
 
             let shares_ext = input
                 .client_hello
                 .key_shares
                 .as_ref()
-                .ok_or_else(|| {
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::KeyShareExtensionRequired,
-                    )
-                })?;
+                .ok_or(PeerIncompatible::KeyShareExtensionRequired)?;
 
             if input
                 .client_hello
                 .has_keyshare_extension_with_duplicates()
             {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::OfferedDuplicateKeyShares,
-                ));
+                return Err(PeerMisbehaved::OfferedDuplicateKeyShares.into());
             }
 
             if input
                 .client_hello
                 .has_certificate_compression_extension_with_duplicates()
             {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::OfferedDuplicateCertificateCompressions,
-                ));
+                return Err(PeerMisbehaved::OfferedDuplicateCertificateCompressions.into());
             }
 
             let cert_compressor = input
@@ -146,12 +132,7 @@ mod client_hello {
 
             // EarlyData extension is illegal in second ClientHello
             if st.done_retry && early_data_requested {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::EarlyDataAttemptedInSecondClientHello,
-                    )
-                });
+                return Err(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello.into());
             }
 
             // See if there is a KeyShare for the selected kx group.
@@ -165,10 +146,7 @@ mod client_hello {
                 transcript.add_message(input.message);
 
                 if st.done_retry {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::RefusedToFollowHelloRetryRequest,
-                    ));
+                    return Err(PeerMisbehaved::RefusedToFollowHelloRetryRequest.into());
                 }
 
                 emit_hello_retry_request(
@@ -212,24 +190,15 @@ mod client_hello {
                     .preshared_key_modes
                     .is_none()
                 {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::MissingExtension,
-                        PeerMisbehaved::MissingPskModesExtension,
-                    ));
+                    return Err(PeerMisbehaved::MissingPskModesExtension.into());
                 }
 
                 if psk_offer.binders.is_empty() {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::DecodeError,
-                        PeerMisbehaved::MissingBinderInPskExtension,
-                    ));
+                    return Err(PeerMisbehaved::MissingBinderInPskExtension.into());
                 }
 
                 if psk_offer.binders.len() != psk_offer.identities.len() {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders,
-                    ));
+                    return Err(PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders.into());
                 }
 
                 let now = st.config.current_time()?;
@@ -257,10 +226,7 @@ mod client_hello {
                         &resume.secret.0,
                         psk_offer.binders[i].as_ref(),
                     ) {
-                        return Err(cx.common.send_fatal_alert(
-                            AlertDescription::DecryptError,
-                            PeerMisbehaved::IncorrectBinder,
-                        ));
+                        return Err(PeerMisbehaved::IncorrectBinder.into());
                     }
 
                     chosen_psk_index = Some(i);
@@ -517,12 +483,7 @@ mod client_hello {
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
-        let ckx = kxgroup
-            .start_and_complete(&share.payload.0)
-            .map_err(|err| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::IllegalParameter, err)
-            })?;
+        let ckx = kxgroup.start_and_complete(&share.payload.0)?;
         cx.common.kx_state.complete();
 
         let extensions = Box::new(ServerExtensions {
@@ -953,38 +914,21 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             .find(|item| item.algorithm() == compressed_cert.alg);
 
         let Some(decompressor) = selected_decompressor else {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::BadCertificate,
-                PeerMisbehaved::SelectedUnofferedCertCompression,
-            ));
+            return Err(PeerMisbehaved::SelectedUnofferedCertCompression.into());
         };
 
         if compressed_cert.uncompressed_len as usize > CERTIFICATE_MAX_SIZE_LIMIT {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::BadCertificate,
-                InvalidMessage::CertificatePayloadTooLarge,
-            ));
+            return Err(InvalidMessage::CertificatePayloadTooLarge.into());
         }
 
         let mut decompress_buffer = vec![0u8; compressed_cert.uncompressed_len as usize];
         if let Err(compress::DecompressionFailed) =
             decompressor.decompress(compressed_cert.compressed.as_ref(), &mut decompress_buffer)
         {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::BadCertificate,
-                PeerMisbehaved::InvalidCertCompression,
-            ));
+            return Err(PeerMisbehaved::InvalidCertCompression.into());
         }
 
-        let cert_payload =
-            match CertificatePayloadTls13::read(&mut Reader::init(&decompress_buffer)) {
-                Ok(cm) => cm,
-                Err(err) => {
-                    return Err(cx
-                        .common
-                        .send_fatal_alert(AlertDescription::BadCertificate, err));
-                }
-            };
+        let cert_payload = CertificatePayloadTls13::read(&mut Reader::init(&decompress_buffer))?;
         trace!(
             "Client certificate decompressed using {:?} ({} bytes -> {})",
             compressed_cert.alg,
@@ -1028,7 +972,7 @@ struct ExpectCertificate {
 impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ServerContext<'_>,
+        _cx: &mut ServerContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
         if !self.message_already_in_transcript {
@@ -1057,8 +1001,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             .verifier
             .client_auth_mandatory();
 
-        let peer_identity =
-            Identity::from_peer(client_cert.0, self.expected_certificate_type, cx.common)?;
+        let peer_identity = Identity::from_peer(client_cert.0, self.expected_certificate_type)?;
 
         let Some(peer_identity) = peer_identity else {
             if !mandatory {
@@ -1073,10 +1016,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                 }));
             }
 
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::CertificateRequired,
-                PeerMisbehaved::NoCertificatesPresented,
-            ));
+            return Err(PeerMisbehaved::NoCertificatesPresented.into());
         };
 
         self.config
@@ -1084,10 +1024,6 @@ impl State<ServerConnectionData> for ExpectCertificate {
             .verify_identity(&ClientIdentity {
                 identity: &peer_identity,
                 now: self.config.current_time()?,
-            })
-            .map_err(|err| {
-                cx.common
-                    .send_cert_verify_error_alert(err)
             })?;
 
         Ok(Box::new(ExpectCertificateVerify {
@@ -1116,29 +1052,21 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         cx: &mut ServerContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
-        let rc = {
-            let signature = require_handshake_msg!(
-                m,
-                HandshakeType::CertificateVerify,
-                HandshakePayload::CertificateVerify
-            )?;
-            let handshake_hash = self.transcript.current_hash();
-            self.transcript.abandon_client_auth();
+        let signature = require_handshake_msg!(
+            m,
+            HandshakeType::CertificateVerify,
+            HandshakePayload::CertificateVerify
+        )?;
+        let handshake_hash = self.transcript.current_hash();
+        self.transcript.abandon_client_auth();
 
-            self.config
-                .verifier
-                .verify_tls13_signature(&verify::SignatureVerificationInput {
-                    message: construct_client_verify_message(&handshake_hash).as_ref(),
-                    signer: &self.peer_identity.as_signer(),
-                    signature,
-                })
-        };
-
-        if let Err(e) = rc {
-            return Err(cx
-                .common
-                .send_cert_verify_error_alert(e));
-        }
+        self.config
+            .verifier
+            .verify_tls13_signature(&verify::SignatureVerificationInput {
+                message: construct_client_verify_message(&handshake_hash).as_ref(),
+                signer: &self.peer_identity.as_signer(),
+                signature,
+            })?;
 
         trace!("client CertificateVerify OK");
         cx.common.peer_identity = Some(self.peer_identity);
@@ -1179,10 +1107,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     .take_received_plaintext(payload)
                 {
                     true => Ok(self),
-                    false => Err(cx.common.send_fatal_alert(
-                        AlertDescription::UnexpectedMessage,
-                        PeerMisbehaved::TooMuchEarlyDataReceived,
-                    )),
+                    false => Err(PeerMisbehaved::TooMuchEarlyDataReceived.into()),
                 }
             }
             MessagePayload::Handshake {
@@ -1321,12 +1246,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
         {
             true => verify::FinishedMessageVerified::assertion(),
-            false => {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::DecryptError,
-                    PeerMisbehaved::IncorrectFinished,
-                ));
-            }
+            false => return Err(PeerMisbehaved::IncorrectFinished.into()),
         };
 
         // Note: future derivations include Client Finished, but not the
@@ -1370,10 +1290,7 @@ impl ExpectTraffic {
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         if let Protocol::Quic = common.protocol {
-            return Err(common.send_fatal_alert(
-                AlertDescription::UnexpectedMessage,
-                PeerMisbehaved::KeyUpdateReceivedInQuicConnection,
-            ));
+            return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 
         let proof = common.check_aligned_handshake()?;
