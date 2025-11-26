@@ -1322,9 +1322,10 @@ impl State<ServerConnectionData> for ExpectFinished {
         {
             true => verify::FinishedMessageVerified::assertion(),
             false => {
-                return Err(cx
-                    .common
-                    .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError));
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::DecryptError,
+                    PeerMisbehaved::IncorrectFinished,
+                ));
             }
         };
 
