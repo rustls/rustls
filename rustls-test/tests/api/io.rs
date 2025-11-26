@@ -1523,7 +1523,8 @@ fn test_acceptor() {
     assert!(matches!(err, Error::InappropriateMessage { .. }));
     let mut alert_content = Vec::new();
     let _ = alert.write(&mut alert_content);
-    assert!(alert_content.is_empty()); // We do not expect an alert for this condition.
+    let expected = encoding::alert(AlertDescription::UnexpectedMessage, &[]);
+    assert_eq!(alert_content, expected);
 
     let mut acceptor = Acceptor::default();
     // Minimal 1-byte ClientHello message is not a legal handshake message

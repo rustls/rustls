@@ -314,7 +314,7 @@ mod buffered {
                     self.inner = Some(connection);
                     return Ok(None);
                 }
-                Err(err) => return Err((err, AcceptedAlert::from(connection))),
+                Err(err) => return Err(AcceptedAlert::from_error(err, connection)),
             };
 
             let mut cx = ServerContext {
@@ -329,8 +329,7 @@ mod buffered {
             let sig_schemes = match ClientHelloInput::from_message(&message, false, &mut cx) {
                 Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
-                    cx.common.try_send_fatal_alert(&err);
-                    return Err((err, AcceptedAlert::from(connection)));
+                    return Err(AcceptedAlert::from_error(err, connection));
                 }
             };
             debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
@@ -350,6 +349,16 @@ mod buffered {
     pub struct AcceptedAlert(ChunkVecBuffer);
 
     impl AcceptedAlert {
+        pub(super) fn from_error(
+            error: Error,
+            mut conn: ConnectionCommon<ServerConnectionData>,
+        ) -> (Error, Self) {
+            conn.core
+                .common_state
+                .maybe_send_fatal_alert(&error);
+            (error, Self(conn.core.common_state.sendable_tls))
+        }
+
         pub(super) fn empty() -> Self {
             Self(ChunkVecBuffer::new(None))
         }
@@ -368,12 +377,6 @@ mod buffered {
         pub fn write_all(&mut self, wr: &mut dyn io::Write) -> Result<(), io::Error> {
             while self.write(wr)? != 0 {}
             Ok(())
-        }
-    }
-
-    impl From<ConnectionCommon<ServerConnectionData>> for AcceptedAlert {
-        fn from(conn: ConnectionCommon<ServerConnectionData>) -> Self {
-            Self(conn.core.common_state.sendable_tls)
         }
     }
 
@@ -431,7 +434,6 @@ mod buffered {
         }
     }
 }
-
 #[cfg(feature = "std")]
 pub use buffered::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
@@ -572,7 +574,7 @@ impl Accepted {
             .check_aligned_handshake()
         {
             Ok(proof) => proof,
-            Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
+            Err(err) => return Err(AcceptedAlert::from_error(err, self.connection)),
         };
         let mut cx = hs::ServerContext {
             common: &mut self.connection.core.common_state,
@@ -592,7 +594,7 @@ impl Accepted {
 
         let new = match state.with_input(input, &mut cx) {
             Ok(new) => new,
-            Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
+            Err(err) => return Err(AcceptedAlert::from_error(err, self.connection)),
         };
         debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
