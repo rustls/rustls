@@ -823,9 +823,10 @@ impl State<ServerConnectionData> for ExpectFinished {
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
                 true => verify::FinishedMessageVerified::assertion(),
                 false => {
-                    return Err(cx
-                        .common
-                        .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError));
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::DecryptError,
+                        PeerMisbehaved::IncorrectFinished,
+                    ));
                 }
             };
 

@@ -960,6 +960,7 @@ pub enum PeerMisbehaved {
     IllegalMiddleboxChangeCipherSpec,
     IllegalTlsInnerPlaintext,
     IncorrectBinder,
+    IncorrectFinished,
     InvalidCertCompression,
     InvalidMaxEarlyDataSize,
     InvalidKeyShare,

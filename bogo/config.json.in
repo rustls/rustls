@@ -160,7 +160,6 @@
   },
   "ErrorMap": {
     ":APPLICATION_DATA_INSTEAD_OF_HANDSHAKE:": [":UNEXPECTED_MESSAGE:"],
-    ":DIGEST_CHECK_FAILED:": [":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"],
     ":ENCRYPTED_LENGTH_TOO_LONG:": [":GARBAGE:"],
     ":HTTPS_PROXY_REQUEST:": [":GARBAGE:"],
     ":HTTP_REQUEST:": [":GARBAGE:"],
@@ -277,7 +276,6 @@
     "TrailingMessageData-TLS13-EndOfEarlyData-TLS": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-TLS13-ServerCertificate-TLS": ":BAD_HANDSHAKE_MSG:",
     "TrailingMessageData-TLS13-ServerCertificateVerify-TLS": ":BAD_HANDSHAKE_MSG:",
-    "TrailingMessageData-TLS13-ServerFinished-TLS": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "TrailingMessageData-TLS13-ServerHello-TLS": ":BAD_HANDSHAKE_MSG:",
     "Unclean-Shutdown": ":CLOSE_WITHOUT_CLOSE_NOTIFY:",
     "UnknownCurve-HelloRetryRequest-TLS13": ":ILLEGAL_HELLO_RETRY_REQUEST_WITH_UNOFFERED_GROUP:",

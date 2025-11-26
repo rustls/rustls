@@ -1744,9 +1744,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::PskExtensionMustBeLast) => {
             quit(":PRE_SHARED_KEY_MUST_BE_LAST:")
         }
-        Error::PeerMisbehaved(PeerMisbehaved::IncorrectBinder) => {
-            quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:")
-        }
+        Error::PeerMisbehaved(
+            PeerMisbehaved::IncorrectBinder | PeerMisbehaved::IncorrectFinished,
+        ) => quit(":DIGEST_CHECK_FAILED:"),
         Error::PeerMisbehaved(PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints) => {
             quit(":SERVER_HELLO_MUST_OFFER_UNCOMPRESSED_EC_POINTS:")
         }
