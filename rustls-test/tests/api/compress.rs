@@ -262,7 +262,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
     assert_eq!(
         do_handshake_until_error(&mut client, &mut server),
         Err(ErrorFromPeer::Server(Error::InvalidMessage(
-            InvalidMessage::MessageTooLarge
+            InvalidMessage::CertificatePayloadTooLarge
         )))
     );
     transfer(&mut server, &mut client);

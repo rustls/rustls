@@ -962,7 +962,7 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
         if compressed_cert.uncompressed_len as usize > CERTIFICATE_MAX_SIZE_LIMIT {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::BadCertificate,
-                InvalidMessage::MessageTooLarge,
+                InvalidMessage::CertificatePayloadTooLarge,
             ));
         }
 
