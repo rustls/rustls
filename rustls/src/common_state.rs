@@ -551,7 +551,7 @@ impl CommonState {
         if let AlertLevel::Unknown(_) = alert.level {
             return Err(self.send_fatal_alert(
                 AlertDescription::IllegalParameter,
-                Error::AlertReceived(alert.description),
+                PeerMisbehaved::IllegalAlertLevel(u8::from(alert.level), alert.description),
             ));
         }
 
@@ -569,7 +569,10 @@ impl CommonState {
             self.temper_counters
                 .received_warning_alert()?;
             if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
-                return Err(self.send_fatal_alert(AlertDescription::DecodeError, err));
+                return Err(self.send_fatal_alert(
+                    AlertDescription::DecodeError,
+                    PeerMisbehaved::IllegalWarningAlert(alert.description),
+                ));
             }
 
             // Some implementations send pointless `user_canceled` alerts, don't log them
