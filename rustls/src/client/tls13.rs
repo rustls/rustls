@@ -89,7 +89,9 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);
 
-        validate_server_hello(server_hello)?;
+        if !server_hello.only_contains(ALLOWED_PLAINTEXT_EXTS) {
+            return Err(PeerMisbehaved::UnexpectedCleartextExtension.into());
+        }
 
         let their_key_share = server_hello
             .key_share
@@ -282,14 +284,6 @@ impl KeyExchangeChoice {
             Self::Component(akx) => akx.complete_component(peer_pub_key),
         }
     }
-}
-
-fn validate_server_hello(server_hello: &ServerHelloPayload) -> Result<(), Error> {
-    if !server_hello.only_contains(ALLOWED_PLAINTEXT_EXTS) {
-        return Err(PeerMisbehaved::UnexpectedCleartextExtension.into());
-    }
-
-    Ok(())
 }
 
 pub(super) fn initial_key_share(
