@@ -11,7 +11,9 @@ use pki_types::DnsName;
 use rustls::crypto::CryptoProvider;
 use rustls::crypto::kx::NamedGroup;
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
-use rustls::error::{AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible};
+use rustls::error::{
+    AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
+};
 use rustls::{ClientConfig, ClientConnection, ServerConfig, ServerConnection, Stream, StreamOwned};
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo,
@@ -2023,9 +2025,9 @@ fn test_close_notify_sent_prior_to_handshake_complete() {
     client.send_close_notify();
     assert_eq!(
         do_handshake_until_error(&mut client, &mut server),
-        Err(ErrorFromPeer::Server(Error::AlertReceived(
-            AlertDescription::CloseNotify
-        )))
+        Err(ErrorFromPeer::Server(
+            PeerMisbehaved::IllegalWarningAlert(AlertDescription::CloseNotify).into()
+        ))
     );
 }
 

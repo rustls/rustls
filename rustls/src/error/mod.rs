@@ -949,6 +949,8 @@ pub enum PeerMisbehaved {
     EarlyDataExtensionWithoutResumption,
     EarlyDataOfferedWithVariedCipherSuite,
     HandshakeHashVariedAfterRetry,
+    /// Received an alert with an undefined level and the given [`AlertDescription`]
+    IllegalAlertLevel(u8, AlertDescription),
     IllegalHelloRetryRequestWithEmptyCookie,
     IllegalHelloRetryRequestWithNoChanges,
     IllegalHelloRetryRequestWithOfferedGroup,
@@ -959,6 +961,8 @@ pub enum PeerMisbehaved {
     IllegalHelloRetryRequestWithInvalidEch,
     IllegalMiddleboxChangeCipherSpec,
     IllegalTlsInnerPlaintext,
+    /// Received a warning alert with the given [`AlertDescription`]
+    IllegalWarningAlert(AlertDescription),
     IncorrectBinder,
     IncorrectFinished,
     InvalidCertCompression,
