@@ -1582,7 +1582,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidMessage(InvalidMessage::InvalidContentType)
         | Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
         | Error::InvalidMessage(InvalidMessage::UnknownProtocolVersion)
-        | Error::InvalidMessage(InvalidMessage::MessageTooLarge) => quit(":GARBAGE:"),
+        | Error::InvalidMessage(
+            InvalidMessage::MessageTooLarge | InvalidMessage::CertificatePayloadTooLarge,
+        ) => quit(":GARBAGE:"),
         Error::InvalidMessage(InvalidMessage::MessageTooShort)
             if opts.enable_ech_grease || opts.ech_config_list.is_some() =>
         {
