@@ -59,7 +59,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
         let verifier = Arc::new(MockServerVerifier::rejects_certificate(
-            Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
+            CertificateError::ApplicationVerificationFailure.into(),
         ));
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
@@ -76,10 +76,8 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
             assert_eq!(
                 errs,
                 Err(vec![
-                    ErrorFromPeer::Client(Error::InvalidMessage(
-                        InvalidMessage::HandshakePayloadTooLarge,
-                    )),
-                    ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::HandshakeFailure)),
+                    ErrorFromPeer::Client(CertificateError::ApplicationVerificationFailure.into()),
+                    ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::AccessDenied)),
                 ]),
             );
         }
@@ -92,7 +90,7 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
     for kt in KeyType::all_for_provider(&provider).iter() {
         let mut client_config = make_client_config(*kt, &provider);
         let verifier = Arc::new(MockServerVerifier::rejects_tls12_signatures(
-            Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
+            CertificateError::ApplicationVerificationFailure.into(),
         ));
 
         client_config
@@ -107,10 +105,8 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
         assert_eq!(
             errs,
             Err(vec![
-                ErrorFromPeer::Client(Error::InvalidMessage(
-                    InvalidMessage::HandshakePayloadTooLarge,
-                )),
-                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::HandshakeFailure)),
+                ErrorFromPeer::Client(CertificateError::ApplicationVerificationFailure.into()),
+                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::AccessDenied)),
             ]),
         );
     }
@@ -122,7 +118,7 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
     for kt in KeyType::all_for_provider(&provider).iter() {
         let mut client_config = make_client_config(*kt, &provider);
         let verifier = Arc::new(MockServerVerifier::rejects_tls13_signatures(
-            Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
+            CertificateError::ApplicationVerificationFailure.into(),
         ));
 
         client_config
@@ -137,10 +133,8 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
         assert_eq!(
             errs,
             Err(vec![
-                ErrorFromPeer::Client(Error::InvalidMessage(
-                    InvalidMessage::HandshakePayloadTooLarge,
-                )),
-                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::HandshakeFailure)),
+                ErrorFromPeer::Client(CertificateError::ApplicationVerificationFailure.into()),
+                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::AccessDenied)),
             ]),
         );
     }
