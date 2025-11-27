@@ -208,6 +208,12 @@ impl ClientConfig {
         }
     }
 
+    /// Access configuration options whose use is dangerous and requires
+    /// extra care.
+    pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_> {
+        danger::DangerousClientConfig { cfg: self }
+    }
+
     /// Return true if connections made with this `ClientConfig` will
     /// operate in FIPS mode.
     ///
@@ -243,12 +249,6 @@ impl ClientConfig {
     /// authentication.
     pub fn verifier(&self) -> &Arc<dyn verify::ServerVerifier> {
         &self.verifier
-    }
-
-    /// Access configuration options whose use is dangerous and requires
-    /// extra care.
-    pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_> {
-        danger::DangerousClientConfig { cfg: self }
     }
 
     pub(super) fn needs_key_share(&self) -> bool {
