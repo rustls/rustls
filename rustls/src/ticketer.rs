@@ -9,13 +9,6 @@ use pki_types::UnixTime;
 use crate::crypto::TicketProducer;
 use crate::error::Error;
 
-#[derive(Debug)]
-pub(crate) struct TicketRotatorState {
-    current: Box<dyn TicketProducer>,
-    previous: Option<Box<dyn TicketProducer>>,
-    next_switch_time: u64,
-}
-
 /// A ticketer that has a 'current' sub-ticketer and a single
 /// 'previous' ticketer.  It creates a new ticketer every so
 /// often, demoting the current ticketer.
@@ -140,6 +133,13 @@ impl core::fmt::Debug for TicketRotator {
         f.debug_struct("TicketRotator")
             .finish_non_exhaustive()
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct TicketRotatorState {
+    current: Box<dyn TicketProducer>,
+    previous: Option<Box<dyn TicketProducer>>,
+    next_switch_time: u64,
 }
 
 #[cfg(test)]
