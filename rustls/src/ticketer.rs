@@ -48,6 +48,27 @@ impl TicketRotator {
         })
     }
 
+    fn encrypt_at(&self, message: &[u8], now: UnixTime) -> Option<Vec<u8>> {
+        self.maybe_roll(now)?
+            .current
+            .encrypt(message)
+    }
+
+    fn decrypt_at(&self, ciphertext: &[u8], now: UnixTime) -> Option<Vec<u8>> {
+        let state = self.maybe_roll(now)?;
+
+        // Decrypt with the current key; if that fails, try with the previous.
+        state
+            .current
+            .decrypt(ciphertext)
+            .or_else(|| {
+                state
+                    .previous
+                    .as_ref()
+                    .and_then(|previous| previous.decrypt(ciphertext))
+            })
+    }
+
     /// If it's time, demote the `current` ticketer to `previous` (so it
     /// does no new encryptions but can do decryption) and replace it
     /// with a new one.
@@ -103,24 +124,11 @@ impl TicketRotator {
 
 impl TicketProducer for TicketRotator {
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-        self.maybe_roll(UnixTime::now())?
-            .current
-            .encrypt(message)
+        self.encrypt_at(message, UnixTime::now())
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-        let state = self.maybe_roll(UnixTime::now())?;
-
-        // Decrypt with the current key; if that fails, try with the previous.
-        state
-            .current
-            .decrypt(ciphertext)
-            .or_else(|| {
-                state
-                    .previous
-                    .as_ref()
-                    .and_then(|previous| previous.decrypt(ciphertext))
-            })
+        self.decrypt_at(ciphertext, UnixTime::now())
     }
 
     fn lifetime(&self) -> Duration {
