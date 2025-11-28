@@ -5,7 +5,9 @@
 use std::sync::Arc;
 
 use rustls::client::Resumption;
-use rustls::error::{AlertDescription, ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
+use rustls::error::{
+    AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
+};
 use rustls::quic::{self, ConnectionCommon};
 use rustls::{HandshakeKind, Side, SideData};
 use rustls_test::{
@@ -362,6 +364,28 @@ fn test_quic_invalid_early_data_size() {
 }
 
 #[test]
+fn test_quic_read_hs_deframer_failure() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let server_config = make_server_config(KeyType::EcdsaP256, &provider);
+    let server_config = Arc::new(server_config);
+
+    let mut server =
+        quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec())
+            .unwrap();
+
+    assert_eq!(
+        server
+            .read_hs(&encoding::handshake_framing(
+                rustls::enums::HandshakeType::ClientHello,
+                vec![0x00; 32],
+            ))
+            .err(),
+        Some(InvalidMessage::MissingData("Random").into())
+    );
+    assert_eq!(server.alert(), Some(AlertDescription::DecodeError));
+}
+
+#[test]
 fn test_quic_server_no_params_received() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let server_config = make_server_config(KeyType::EcdsaP256, &provider);
@@ -378,6 +402,7 @@ fn test_quic_server_no_params_received() {
             PeerMisbehaved::MissingQuicTransportParameters
         ))
     );
+    assert_eq!(server.alert(), Some(AlertDescription::MissingExtension));
 }
 
 #[test]
@@ -402,6 +427,7 @@ fn test_quic_server_no_tls12() {
             PeerIncompatible::SupportedVersionsExtensionRequired
         )),
     );
+    assert_eq!(server.alert(), Some(AlertDescription::ProtocolVersion));
 }
 
 fn do_quic_handshake<L: SideData, R: SideData>(
