@@ -39,11 +39,13 @@ impl TicketRotator {
             generator,
             lifetime,
             state: RwLock::new(TicketRotatorState {
-                current: generator()?,
+                current: Generation {
+                    producer: generator()?,
+                    expires_at: UnixTime::now()
+                        .as_secs()
+                        .saturating_add(lifetime.as_secs()),
+                },
                 previous: None,
-                next_switch_time: UnixTime::now()
-                    .as_secs()
-                    .saturating_add(lifetime.as_secs()),
             }),
         })
     }
@@ -51,6 +53,7 @@ impl TicketRotator {
     fn encrypt_at(&self, message: &[u8], now: UnixTime) -> Option<Vec<u8>> {
         self.maybe_roll(now)?
             .current
+            .producer
             .encrypt(message)
     }
 
@@ -60,12 +63,13 @@ impl TicketRotator {
         // Decrypt with the current key; if that fails, try with the previous.
         state
             .current
+            .producer
             .decrypt(ciphertext)
             .or_else(|| {
                 state
                     .previous
                     .as_ref()
-                    .and_then(|previous| previous.decrypt(ciphertext))
+                    .and_then(|previous| previous.producer.decrypt(ciphertext))
             })
     }
 
@@ -88,33 +92,31 @@ impl TicketRotator {
         // to the next ticketer yet
         {
             let read = self.state.read().ok()?;
-
-            if now <= read.next_switch_time {
+            if now <= read.current.expires_at {
                 return Some(read);
             }
         }
 
-        // We need to switch ticketers, and make a new one.
-        // Generate a potential "next" ticketer outside the lock.
-        let next = (self.generator)().ok()?;
-
         let mut write = self.state.write().ok()?;
-
-        if now <= write.next_switch_time {
+        if now <= write.current.expires_at {
             // Another thread beat us to it.  Nothing to do.
             drop(write);
-
             return self.state.read().ok();
         }
+
+        // We need to switch ticketers, and make a new one.
+        // Generate a potential "next" ticketer outside the lock.
+        let next = Generation {
+            producer: (self.generator)().ok()?,
+            expires_at: now.saturating_add(self.lifetime.as_secs()),
+        };
 
         // Now we have:
         // - confirmed we need rotation
         // - confirmed we are the thread that will do it
         // - successfully made the replacement ticketer
         write.previous = Some(mem::replace(&mut write.current, next));
-        write.next_switch_time = now.saturating_add(self.lifetime.as_secs());
         drop(write);
-
         self.state.read().ok()
     }
 
@@ -145,9 +147,14 @@ impl core::fmt::Debug for TicketRotator {
 
 #[derive(Debug)]
 pub(crate) struct TicketRotatorState {
-    current: Box<dyn TicketProducer>,
-    previous: Option<Box<dyn TicketProducer>>,
-    next_switch_time: u64,
+    current: Generation,
+    previous: Option<Generation>,
+}
+
+#[derive(Debug)]
+struct Generation {
+    producer: Box<dyn TicketProducer>,
+    expires_at: u64,
 }
 
 #[cfg(test)]
