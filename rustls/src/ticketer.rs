@@ -39,38 +39,62 @@ impl TicketRotator {
             generator,
             lifetime,
             state: RwLock::new(TicketRotatorState {
-                current: Generation {
+                current: Some(Generation {
                     producer: generator()?,
                     expires_at: UnixTime::now()
                         .as_secs()
                         .saturating_add(lifetime.as_secs()),
-                },
+                }),
                 previous: None,
             }),
         })
     }
 
     fn encrypt_at(&self, message: &[u8], now: UnixTime) -> Option<Vec<u8>> {
-        self.maybe_roll(now)?
-            .current
-            .producer
-            .encrypt(message)
+        let state = self.maybe_roll(now)?;
+
+        // If we have a current ticketer, use it. We don't need to check its
+        // expiration time; if it would have expired, we would have rolled above.
+        if let Some(current) = &state.current {
+            return current.producer.encrypt(message);
+        }
+
+        // If we don't have a previous ticketer, we can't encrypt.
+        let Some(prev) = &state.previous else {
+            return None;
+        };
+
+        // If the previous ticketer is more than one `lifetime` old, decline to encrypt.
+        if !prev.in_grace_period(now, self.lifetime) {
+            return None;
+        }
+
+        prev.producer.encrypt(message)
     }
 
     fn decrypt_at(&self, ciphertext: &[u8], now: UnixTime) -> Option<Vec<u8>> {
         let state = self.maybe_roll(now)?;
 
-        // Decrypt with the current key; if that fails, try with the previous.
-        state
-            .current
-            .producer
-            .decrypt(ciphertext)
-            .or_else(|| {
-                state
-                    .previous
-                    .as_ref()
-                    .and_then(|previous| previous.producer.decrypt(ciphertext))
-            })
+        // If we have a current ticketer, use it. We don't need to check its
+        // expiration time; if it would have expired, we would have rolled above.
+        if let Some(current) = &state.current {
+            // If decryption fails, we're going to try the previous ticketer below.
+            if let Some(plain) = current.producer.decrypt(ciphertext) {
+                return Some(plain);
+            }
+        }
+
+        // If we don't have a previous ticketer, we can't decrypt.
+        let Some(prev) = &state.previous else {
+            return None;
+        };
+
+        // If the previous ticketer is more than one `lifetime` old, decline to decrypt.
+        if !prev.in_grace_period(now, self.lifetime) {
+            return None;
+        }
+
+        prev.producer.decrypt(ciphertext)
     }
 
     /// If it's time, demote the `current` ticketer to `previous` (so it
@@ -92,31 +116,40 @@ impl TicketRotator {
         // to the next ticketer yet
         {
             let read = self.state.read().ok()?;
-            if now <= read.current.expires_at {
-                return Some(read);
+            match &read.current {
+                Some(current) if now <= current.expires_at => return Some(read),
+                _ => {}
             }
         }
 
         let mut write = self.state.write().ok()?;
-        if now <= write.current.expires_at {
-            // Another thread beat us to it.  Nothing to do.
-            drop(write);
-            return self.state.read().ok();
+        if let Some(current) = &write.current {
+            if now <= current.expires_at {
+                // Another thread beat us to it. Nothing to do.
+                drop(write);
+                return self.state.read().ok();
+            }
         }
 
         // We need to switch ticketers, and make a new one.
         // Generate a potential "next" ticketer outside the lock.
-        let next = Generation {
-            producer: (self.generator)().ok()?,
-            expires_at: now.saturating_add(self.lifetime.as_secs()),
-        };
+        let next = (self.generator)()
+            .ok()
+            .map(|producer| Generation {
+                producer,
+                expires_at: now.saturating_add(self.lifetime.as_secs()),
+            });
 
         // Now we have:
         // - confirmed we need rotation
         // - confirmed we are the thread that will do it
         // - successfully made the replacement ticketer
-        write.previous = Some(mem::replace(&mut write.current, next));
+        let prev = mem::replace(&mut write.current, next);
+        if prev.is_some() {
+            write.previous = prev;
+        }
         drop(write);
+
         self.state.read().ok()
     }
 
@@ -147,7 +180,7 @@ impl core::fmt::Debug for TicketRotator {
 
 #[derive(Debug)]
 pub(crate) struct TicketRotatorState {
-    current: Generation,
+    current: Option<Generation>,
     previous: Option<Generation>,
 }
 
@@ -155,6 +188,14 @@ pub(crate) struct TicketRotatorState {
 struct Generation {
     producer: Box<dyn TicketProducer>,
     expires_at: u64,
+}
+
+impl Generation {
+    fn in_grace_period(&self, now: UnixTime, lifetime: Duration) -> bool {
+        now.as_secs()
+            .saturating_sub(self.expires_at)
+            <= lifetime.as_secs()
+    }
 }
 
 #[cfg(test)]
@@ -193,7 +234,6 @@ mod tests {
         assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
     }
 
-    #[ignore]
     #[test]
     fn ticketrotator_remains_usable_over_temporary_ticketer_creation_failure() {
         let mut t = TicketRotator::new(Duration::from_secs(1), FakeTicketer::new).unwrap();
@@ -205,12 +245,17 @@ mod tests {
         // Failed new ticketer; this means we still need to rotate.
         let t1 = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 1));
         drop(t.maybe_roll(t1));
+        assert!(t.encrypt_at(b"ticket 2", t1).is_some());
 
         // check post-failure encryption/decryption still works
         let t2 = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 2));
-        let cipher2 = t.encrypt_at(b"ticket 2", t2).unwrap();
+        let cipher3 = t.encrypt_at(b"ticket 3", t2).unwrap();
         assert_eq!(t.decrypt_at(&cipher1, t2).unwrap(), b"ticket 1");
-        assert_eq!(t.decrypt_at(&cipher2, t2).unwrap(), b"ticket 2");
+        assert_eq!(t.decrypt_at(&cipher3, t2).unwrap(), b"ticket 3");
+
+        let t3 = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 3));
+        assert_eq!(t.encrypt_at(b"ticket 4", t3), None);
+        assert_eq!(t.decrypt_at(&cipher3, t3), None);
 
         // do the rotation for real
         t.generator = FakeTicketer::new;
@@ -218,10 +263,18 @@ mod tests {
         drop(t.maybe_roll(t4));
 
         let t5 = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 5));
-        let cipher3 = t.encrypt_at(b"ticket 3", t5).unwrap();
-        assert!(t.decrypt_at(&cipher1, t5).is_some());
-        assert_eq!(t.decrypt_at(&cipher2, t5).unwrap(), b"ticket 2");
-        assert_eq!(t.decrypt_at(&cipher3, t5).unwrap(), b"ticket 3");
+        let cipher5 = t.encrypt_at(b"ticket 5", t5).unwrap();
+        assert!(t.decrypt_at(&cipher1, t5).is_none());
+        assert!(t.decrypt_at(&cipher3, t5).is_none());
+        assert_eq!(t.decrypt_at(&cipher5, t5).unwrap(), b"ticket 5");
+
+        // Cover the case where both ticketers are unavailable
+        t.generator = fail_generator;
+        let mut write = t.state.write().unwrap();
+        write.current = None;
+        write.previous = None;
+        drop(write);
+        assert!(t.encrypt(b"ticket 6").is_none());
     }
 
     #[derive(Debug)]
