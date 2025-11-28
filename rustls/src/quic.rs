@@ -433,7 +433,7 @@ mod connection {
                 EncodedMessage {
                     typ: ContentType::Handshake,
                     version: ProtocolVersion::TLSv1_3,
-                    payload: Payload::Borrowed(&self.deframer_buffer.filled()[range.clone()]),
+                    payload: &self.deframer_buffer.filled()[range.clone()],
                 },
                 &Locator::new(self.deframer_buffer.filled()),
                 range.end,

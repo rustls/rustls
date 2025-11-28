@@ -152,7 +152,7 @@ pub trait MessageDecrypter: Send + Sync {
         &mut self,
         msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<Payload<'a>>, Error>;
+    ) -> Result<EncodedMessage<&'a [u8]>, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
@@ -432,7 +432,7 @@ impl MessageDecrypter for InvalidMessageDecrypter {
         &mut self,
         _m: EncodedMessage<InboundOpaque<'a>>,
         _seq: u64,
-    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         Err(Error::DecryptError)
     }
 }

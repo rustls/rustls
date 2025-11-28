@@ -187,7 +187,7 @@ impl CommonState {
 
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
-        msg: EncodedMessage<Payload<'_>>,
+        msg: EncodedMessage<&'_ [u8]>,
         state: Box<dyn State<Data>>,
         data: &mut Data,
         plaintext_locator: &Locator,

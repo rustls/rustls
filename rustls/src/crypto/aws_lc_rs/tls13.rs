@@ -6,8 +6,7 @@ use aws_lc_rs::{aead, hkdf, hmac};
 use crate::crypto;
 use crate::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
-    OutboundOpaque, OutboundPlain, Payload, Tls13AeadAlgorithm, UnsupportedOperationError,
-    make_tls13_aad,
+    OutboundOpaque, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use crate::crypto::enums::CipherSuite;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
@@ -258,7 +257,7 @@ impl MessageDecrypter for AeadMessageDecrypter {
         &mut self,
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
@@ -322,7 +321,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
         &mut self,
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);

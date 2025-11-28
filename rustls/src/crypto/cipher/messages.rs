@@ -61,15 +61,6 @@ impl<'a> EncodedMessage<Payload<'a>> {
         }
     }
 
-    /// Borrow as an `EncodedMessage<&[u8]>`.
-    pub(crate) fn borrowed(&'a self) -> EncodedMessage<&'a [u8]> {
-        EncodedMessage {
-            typ: self.typ,
-            version: self.version,
-            payload: self.payload.bytes(),
-        }
-    }
-
     /// Borrow as an [`EncodedMessage<OutboundPlain<'a>>`].
     pub fn borrow_outbound(&'a self) -> EncodedMessage<OutboundPlain<'a>> {
         EncodedMessage {
@@ -87,14 +78,16 @@ impl<'a> EncodedMessage<Payload<'a>> {
             payload: self.payload.into_owned(),
         }
     }
+}
 
+impl EncodedMessage<&'_ [u8]> {
     /// Returns true if the payload is a CCS message.
     ///
     /// We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
     /// Note: this is prior to the record layer, so is unencrypted. See
     /// third paragraph of section 5 in RFC8446.
     pub(crate) fn is_valid_ccs(&self) -> bool {
-        self.typ == ContentType::ChangeCipherSpec && self.payload.bytes() == [0x01]
+        self.typ == ContentType::ChangeCipherSpec && self.payload == [0x01]
     }
 }
 
@@ -103,11 +96,11 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
     /// `InboundOpaqueMessage` should be decrypted into a `PlainMessage` using a `MessageDecrypter`.
-    pub fn into_plain_message(self) -> EncodedMessage<Payload<'a>> {
+    pub fn into_plain_message(self) -> EncodedMessage<&'a [u8]> {
         EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: Payload::Borrowed(self.payload.into_inner()),
+            payload: self.payload.into_inner(),
         }
     }
 
@@ -118,11 +111,11 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
     /// `InboundOpaqueMessage` should be decrypted into a `PlainMessage` using a `MessageDecrypter`.
-    pub fn into_plain_message_range(self, range: Range<usize>) -> EncodedMessage<Payload<'a>> {
+    pub fn into_plain_message_range(self, range: Range<usize>) -> EncodedMessage<&'a [u8]> {
         EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: Payload::Borrowed(&self.payload.into_inner()[range]),
+            payload: &self.payload.into_inner()[range],
         }
     }
 
@@ -130,7 +123,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     ///
     /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
     /// or the message (post-unpadding) is too long.
-    pub fn into_tls13_unpadded_message(mut self) -> Result<EncodedMessage<Payload<'a>>, Error> {
+    pub fn into_tls13_unpadded_message(mut self) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &mut self.payload;
 
         if payload.len() > MAX_FRAGMENT_LEN + 1 {

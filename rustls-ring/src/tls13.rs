@@ -5,8 +5,7 @@ use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
 use rustls::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
-    OutboundOpaque, OutboundPlain, Payload, Tls13AeadAlgorithm, UnsupportedOperationError,
-    make_tls13_aad,
+    OutboundOpaque, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::enums::{ContentType, ProtocolVersion};
@@ -231,7 +230,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         &mut self,
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);

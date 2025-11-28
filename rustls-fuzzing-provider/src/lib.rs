@@ -6,7 +6,7 @@ use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::ServerVerifier;
 use rustls::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    OutboundOpaque, OutboundPlain, Payload, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
+    OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
     UnsupportedOperationError,
 };
 use rustls::crypto::kx::{
@@ -355,7 +355,7 @@ impl MessageDecrypter for Tls13Cipher {
         &mut self,
         mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &mut m.payload;
 
         let mut expected_tag = vec![];
@@ -422,7 +422,7 @@ impl MessageDecrypter for Tls12Cipher {
         &mut self,
         mut m: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &mut m.payload;
 
         let mut expected_tag = vec![];

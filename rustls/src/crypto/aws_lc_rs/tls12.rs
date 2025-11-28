@@ -5,8 +5,8 @@ use zeroize::Zeroizing;
 
 use crate::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlain, Payload, Tls12AeadAlgorithm,
-    UnsupportedOperationError, make_tls12_aad,
+    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, UnsupportedOperationError,
+    make_tls12_aad,
 };
 use crate::crypto::enums::{CipherSuite, SignatureScheme};
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
@@ -262,7 +262,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
         &mut self,
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &msg.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
@@ -355,7 +355,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         &mut self,
         mut msg: EncodedMessage<InboundOpaque<'a>>,
         seq: u64,
-    ) -> Result<EncodedMessage<Payload<'a>>, Error> {
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &msg.payload;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {

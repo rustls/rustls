@@ -8,7 +8,7 @@ use std::io;
 use kernel::KernelConnection;
 
 use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, IoState, State};
-use crate::crypto::cipher::{Decrypted, EncodedMessage, Payload};
+use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::deframer::{
@@ -1000,7 +1000,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<EncodedMessage<Payload<'b>>>, Error> {
+    ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
         // before processing any more of `buffer`, return any extant messages from `hs_deframer`
         if self.hs_deframer.has_message_ready() {
             Ok(self.take_handshake_message(buffer, buffer_progress))
@@ -1013,7 +1013,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Option<EncodedMessage<Payload<'b>>> {
+    ) -> Option<EncodedMessage<&'b [u8]>> {
         self.hs_deframer
             .iter(buffer)
             .next()
@@ -1028,7 +1028,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         state: Option<&dyn State<Side>>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<EncodedMessage<Payload<'b>>>, Error> {
+    ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
         let version_is_tls13 = matches!(
             self.common_state.negotiated_version,
             Some(ProtocolVersion::TLSv1_3)
@@ -1114,7 +1114,9 @@ impl<Side: SideData> ConnectionCore<Side> {
                 return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 
-            match message.payload.bytes().len() {
+            let message: EncodedMessage<&[u8]> = message;
+
+            match message.payload.len() {
                 0 => {
                     if self.seen_consecutive_empty_fragments
                         == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
@@ -1278,19 +1280,19 @@ struct InboundUnborrowedMessage {
 }
 
 impl InboundUnborrowedMessage {
-    fn unborrow(locator: &Locator, msg: EncodedMessage<Payload<'_>>) -> Self {
+    fn unborrow(locator: &Locator, msg: EncodedMessage<&'_ [u8]>) -> Self {
         Self {
             typ: msg.typ,
             version: msg.version,
-            bounds: locator.locate(msg.payload.bytes()),
+            bounds: locator.locate(msg.payload),
         }
     }
 
-    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> EncodedMessage<Payload<'b>> {
+    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> EncodedMessage<&'b [u8]> {
         EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: Payload::Borrowed(delocator.slice_from_range(&self.bounds)),
+            payload: delocator.slice_from_range(&self.bounds),
         }
     }
 }

@@ -3,7 +3,7 @@ use core::cmp::min;
 
 use crate::crypto::cipher::{
     EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, OutboundOpaque,
-    OutboundPlain, Payload,
+    OutboundPlain,
 };
 use crate::error::Error;
 use crate::log::trace;
@@ -255,7 +255,7 @@ pub(crate) struct Decrypted<'a> {
     /// Whether the peer appears to be getting close to encrypting too many messages with this key.
     pub(crate) want_close_before_decrypt: bool,
     /// The decrypted message.
-    pub(crate) plaintext: EncodedMessage<Payload<'a>>,
+    pub(crate) plaintext: EncodedMessage<&'a [u8]>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -291,7 +291,7 @@ mod tests {
                 &mut self,
                 m: EncodedMessage<InboundOpaque<'a>>,
                 _: u64,
-            ) -> Result<EncodedMessage<Payload<'a>>, Error> {
+            ) -> Result<EncodedMessage<&'a [u8]>, Error> {
                 Ok(m.into_plain_message())
             }
         }
