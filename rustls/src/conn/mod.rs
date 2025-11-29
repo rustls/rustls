@@ -458,7 +458,7 @@ impl ConnectionRandoms {
 /// [`StreamOwned`]: crate::StreamOwned
 pub struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
-    deframer_buffer: DeframerVecBuffer,
+    pub(crate) deframer_buffer: DeframerVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
 }
 
