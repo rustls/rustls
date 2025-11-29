@@ -41,7 +41,7 @@ mod buffered {
 
     /// This represents a single TLS client connection.
     pub struct ClientConnection {
-        inner: ConnectionCommon<ClientConnectionData>,
+        pub(crate) inner: ConnectionCommon<ClientConnectionData>,
     }
 
     impl fmt::Debug for ClientConnection {

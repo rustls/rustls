@@ -10,7 +10,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::client::ClientConnection;
+use crate::{
+    ConnectionCommon,
+    client::{ClientConnection, ClientConnectionData},
+};
 
 //----------- split ----------------------------------------------------------
 
@@ -25,7 +28,9 @@ pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
         "the connection must be post-handshake"
     );
 
-    let conn = Arc::new(Mutex::new(conn));
+    let ClientConnection { inner } = conn;
+
+    let conn = Arc::new(Mutex::new(inner));
     (
         ClientReader { conn: conn.clone() },
         ClientWriter { conn: conn.clone() },
@@ -37,7 +42,7 @@ pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
 /// The reading half of a client-side TLS connection.
 pub struct ClientReader {
     /// The underlying connection.
-    conn: Arc<Mutex<ClientConnection>>,
+    conn: Arc<Mutex<ConnectionCommon<ClientConnectionData>>>,
 }
 
 impl ClientReader {
@@ -95,7 +100,7 @@ impl io::Read for PlaintextReader<'_> {
 /// The writing half of a client-side TLS connection.
 pub struct ClientWriter {
     /// The underlying connection.
-    conn: Arc<Mutex<ClientConnection>>,
+    conn: Arc<Mutex<ConnectionCommon<ClientConnectionData>>>,
 }
 
 impl ClientWriter {
