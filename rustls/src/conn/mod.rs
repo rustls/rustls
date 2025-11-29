@@ -22,6 +22,7 @@ use crate::vecbuf::ChunkVecBuffer;
 
 // pub so that it can be re-exported from the crate root
 pub mod kernel;
+pub mod split;
 pub(crate) mod unbuffered;
 
 #[cfg(feature = "std")]
