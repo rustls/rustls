@@ -42,6 +42,10 @@ pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
         !conn.is_handshaking(),
         "the connection must be post-handshake"
     );
+    assert!(
+        !conn.is_quic(),
+        "'rustls' only provides TLS handshake support for QUIC connections",
+    );
 
     let ClientConnection { inner } = conn;
     let ConnectionCommon {
@@ -465,12 +469,7 @@ impl ClientReader {
     ) -> Error {
         match error {
             error @ Error::InvalidMessage(_) => {
-                if common_state.is_quic() {
-                    common_state.quic.alert = Some(AlertDescription::DecodeError);
-                    error
-                } else {
-                    common_state.send_fatal_alert(AlertDescription::DecodeError, error)
-                }
+                common_state.send_fatal_alert(AlertDescription::DecodeError, error)
             }
             Error::PeerSentOversizedRecord => {
                 common_state.send_fatal_alert(AlertDescription::RecordOverflow, error)
