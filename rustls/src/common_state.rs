@@ -40,7 +40,7 @@ pub struct CommonState {
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) aligned_handshake: Option<HandshakeAlignedProof>,
     pub(crate) may_send_application_data: bool,
-    may_receive_application_data: bool,
+    pub(crate) may_receive_application_data: bool,
     pub(crate) early_traffic: bool,
     sent_fatal_alert: bool,
     /// If we signaled end of stream.
@@ -59,7 +59,7 @@ pub struct CommonState {
     pub(crate) protocol: Protocol,
     pub(crate) quic: quic::Quic,
     pub(crate) enable_secret_extraction: bool,
-    temper_counters: TemperCounters,
+    pub(crate) temper_counters: TemperCounters,
     pub(crate) refresh_traffic_keys_pending: bool,
     pub(crate) fips: bool,
     pub(crate) tls13_tickets_received: u32,
@@ -634,7 +634,7 @@ impl CommonState {
         Ok(self.write_fragments(outgoing_tls, [].into_iter()))
     }
 
-    fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
+    pub(crate) fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
         let m = Message::build_alert(AlertLevel::Warning, desc);
         self.send_msg(m, self.record_layer.is_encrypting());
     }
@@ -963,7 +963,7 @@ enum Limit {
 
 /// Tracking technically-allowed protocol actions
 /// that we limit to avoid denial-of-service vectors.
-struct TemperCounters {
+pub(crate) struct TemperCounters {
     allowed_warning_alerts: u8,
     allowed_renegotiation_requests: u8,
     allowed_key_update_requests: u8,
@@ -981,7 +981,7 @@ impl TemperCounters {
         }
     }
 
-    fn received_renegotiation_request(&mut self) -> Result<(), Error> {
+    pub(crate) fn received_renegotiation_request(&mut self) -> Result<(), Error> {
         match self.allowed_renegotiation_requests {
             0 => Err(PeerMisbehaved::TooManyRenegotiationRequests.into()),
             _ => {
@@ -1001,7 +1001,7 @@ impl TemperCounters {
         }
     }
 
-    fn received_tls13_change_cipher_spec(&mut self) -> Result<(), Error> {
+    pub(crate) fn received_tls13_change_cipher_spec(&mut self) -> Result<(), Error> {
         match self.allowed_middlebox_ccs {
             0 => Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into()),
             _ => {

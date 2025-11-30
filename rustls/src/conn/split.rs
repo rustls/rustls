@@ -14,18 +14,21 @@ use std::{
 };
 
 use crate::{
-    CommonState, ConnectionCommon, Error,
+    CommonState, ConnectionCommon, Error, Side,
     client::{ClientConnection, ClientConnectionData},
-    common_state::State,
+    common_state::{Context, State, UnborrowedPayload},
     conn::{
         ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage,
         connection::PlaintextSink,
     },
     crypto::cipher::{Decrypted, InboundPlainMessage, OutboundChunks},
-    enums::{ContentType, ProtocolVersion},
+    enums::{ContentType, HandshakeType, ProtocolVersion},
     error::{AlertDescription, PeerMisbehaved},
-    msgs::deframer::{
-        BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
+    msgs::{
+        deframer::{
+            BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
+        },
+        message::{Message, MessagePayload},
     },
     vecbuf::ChunkVecBuffer,
 };
@@ -193,13 +196,7 @@ impl ClientReader {
         seen_consecutive_empty_fragments: &mut u8,
         deframer_buffer: &mut DeframerVecBuffer,
     ) -> Result<(), Error> {
-        let mut state = match mem::replace(state_, Err(Error::HandshakeNotComplete)) {
-            Ok(state) => state,
-            Err(e) => {
-                *state_ = Err(e.clone());
-                return Err(e);
-            }
-        };
+        let state = state_.as_mut().map_err(|e| e.clone())?;
 
         // Should `InboundPlainMessage` resolve to plaintext application
         // data it will be allocated within `plaintext` and written to
@@ -217,7 +214,7 @@ impl ClientReader {
                 common_state,
                 hs_deframer,
                 seen_consecutive_empty_fragments,
-                Some(&*state),
+                &mut **state,
                 buffer,
                 &mut buffer_progress,
             );
@@ -235,16 +232,15 @@ impl ClientReader {
                 break;
             };
 
-            match common_state.process_main_protocol(
+            match Self::process_main_protocol(
+                common_state,
                 msg,
-                state,
+                &mut **state,
                 side_data,
                 &locator,
                 &mut plaintext,
-                // Unused after handshake states.
-                None,
             ) {
-                Ok(new) => state = new,
+                Ok(()) => {}
                 Err(e) => {
                     *state_ = Err(e.clone());
                     deframer_buffer.discard(buffer_progress.take_discard());
@@ -271,7 +267,6 @@ impl ClientReader {
         }
 
         deframer_buffer.discard(buffer_progress.take_discard());
-        *state_ = Ok(state);
         Ok(())
     }
 
@@ -280,7 +275,7 @@ impl ClientReader {
         common_state: &mut CommonState,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
-        state: Option<&dyn State<ClientConnectionData>>,
+        state: &dyn State<ClientConnectionData>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
@@ -323,7 +318,7 @@ impl ClientReader {
         common_state: &mut CommonState,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
-        state: Option<&dyn State<ClientConnectionData>>,
+        state: &dyn State<ClientConnectionData>,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
@@ -465,7 +460,7 @@ impl ClientReader {
     fn handle_deframe_error(
         common_state: &mut CommonState,
         error: Error,
-        state: Option<&dyn State<ClientConnectionData>>,
+        state: &dyn State<ClientConnectionData>,
     ) -> Error {
         match error {
             error @ Error::InvalidMessage(_) => {
@@ -475,13 +470,70 @@ impl ClientReader {
                 common_state.send_fatal_alert(AlertDescription::RecordOverflow, error)
             }
             Error::DecryptError => {
-                if let Some(state) = state {
-                    state.handle_decrypt_error();
-                }
+                state.handle_decrypt_error();
                 common_state.send_fatal_alert(AlertDescription::BadRecordMac, error)
             }
 
             error => error,
+        }
+    }
+
+    // CommonState::process_main_protocol()
+    fn process_main_protocol(
+        common_state: &mut CommonState,
+        msg: InboundPlainMessage<'_>,
+        state: &mut dyn State<ClientConnectionData>,
+        data: &mut ClientConnectionData,
+        plaintext_locator: &Locator,
+        received_plaintext: &mut Option<UnborrowedPayload>,
+    ) -> Result<(), Error> {
+        // Now we can fully parse the message payload.
+        let msg = match Message::try_from(msg) {
+            Ok(msg) => msg,
+            Err(err) => {
+                return Err(common_state.send_fatal_alert(AlertDescription::from(err), err));
+            }
+        };
+
+        // For alerts, we have separate logic.
+        if let MessagePayload::Alert(alert) = &msg.payload {
+            common_state.process_alert(alert)?;
+            return Ok(());
+        }
+
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotiation requests.  These can occur any time.
+        if !common_state.is_tls13() {
+            let reject_ty = match common_state.side {
+                Side::Client => HandshakeType::HelloRequest,
+                Side::Server => HandshakeType::ClientHello,
+            };
+
+            if msg.handshake_type() == Some(reject_ty) {
+                common_state
+                    .temper_counters
+                    .received_renegotiation_request()?;
+                let desc = AlertDescription::NoRenegotiation;
+                log::warn!("sending warning alert {desc:?}");
+                common_state.send_warning_alert_no_log(desc);
+                return Ok(());
+            }
+        }
+
+        let mut cx = Context {
+            common: common_state,
+            data,
+            plaintext_locator,
+            received_plaintext,
+            sendable_plaintext: None,
+        };
+        match state.handle_for_split_traffic(&mut cx, msg) {
+            Ok(next) => Ok(next),
+            Err(e @ Error::InappropriateMessage { .. })
+            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
+                Err(common_state.send_fatal_alert(AlertDescription::UnexpectedMessage, e))
+            }
+            Err(e) => Err(e),
         }
     }
 }
