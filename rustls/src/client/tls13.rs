@@ -13,7 +13,7 @@ use super::hs::{
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
+    CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State, TrafficState,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
@@ -1583,36 +1583,8 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn handle_tls13_session_ticket_for_split_traffic(
-        &mut self,
-        common_state: &mut CommonState,
-        new_ticket: NewSessionTicketPayloadTls13,
-    ) -> Result<(), Error> {
-        let mut kcx = KernelContext {
-            peer_identity: common_state.peer_identity.as_ref(),
-            protocol: common_state.protocol,
-            quic: &common_state.quic,
-        };
-        common_state.tls13_tickets_received = common_state
-            .tls13_tickets_received
-            .saturating_add(1);
-        self.handle_new_ticket_impl(&mut kcx, &new_ticket)
-    }
-
-    fn handle_key_update_for_split_traffic(
-        &mut self,
-        common_state: &mut CommonState,
-        key_update: KeyUpdateRequest,
-    ) -> Result<(), Error> {
-        self.handle_key_update(common_state, &key_update)
-    }
-
-    fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {
-        inappropriate_handshake_message(
-            payload,
-            &[ContentType::ApplicationData, ContentType::Handshake],
-            &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
-        )
+    fn into_traffic(self: Box<Self>) -> Result<Box<dyn TrafficState>, Error> {
+        Ok(self)
     }
 
     fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {
@@ -1628,6 +1600,46 @@ impl State<ClientConnectionData> for ExpectTraffic {
                 .extract_secrets(Side::Client)?,
             self,
         ))
+    }
+}
+
+impl TrafficState for ExpectTraffic {
+    fn handle_unexpected(&self, payload: &MessagePayload<'_>) -> Error {
+        inappropriate_handshake_message(
+            payload,
+            &[ContentType::ApplicationData, ContentType::Handshake],
+            &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
+        )
+    }
+
+    fn handle_tls13_session_ticket(
+        &mut self,
+        common_state: &mut CommonState,
+        new_ticket: NewSessionTicketPayloadTls13,
+    ) -> Result<(), Error> {
+        let mut kcx = KernelContext {
+            peer_identity: common_state.peer_identity.as_ref(),
+            protocol: common_state.protocol,
+            quic: &common_state.quic,
+        };
+        common_state.tls13_tickets_received = common_state
+            .tls13_tickets_received
+            .saturating_add(1);
+        self.handle_new_ticket_impl(&mut kcx, &new_ticket)
+    }
+
+    fn handle_key_update(
+        &mut self,
+        common_state: &mut CommonState,
+        key_update: KeyUpdateRequest,
+    ) -> Result<(), Error> {
+        self.handle_key_update(common_state, &key_update)
+    }
+
+    fn send_key_update_request(&mut self, common: &mut CommonState) {
+        let _ = self
+            .key_schedule
+            .request_key_update_and_update_encrypter(common);
     }
 }
 

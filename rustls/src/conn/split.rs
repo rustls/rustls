@@ -14,9 +14,9 @@ use std::{
 };
 
 use crate::{
-    CommonState, ConnectionCommon, Error, Side,
-    client::{ClientConnection, ClientConnectionData},
-    common_state::{State, UnborrowedPayload},
+    CommonState, Connection, ConnectionCommon, Error, ServerConnection, Side,
+    client::ClientConnection,
+    common_state::{TrafficState, UnborrowedPayload},
     conn::{
         ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage,
         connection::PlaintextSink,
@@ -36,40 +36,75 @@ use crate::{
 
 //----------- split ----------------------------------------------------------
 
-/// Split a [`ClientConnection`] into reader-writer halves.
+/// Split a [`Connection`] into reader-writer halves.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if `conn.is_handshaking()`.
-pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
-    assert!(
-        !conn.is_handshaking(),
-        "the connection must be post-handshake"
-    );
-    assert!(
-        !conn.is_quic(),
-        "'rustls' only provides TLS handshake support for QUIC connections",
-    );
-
-    let ClientConnection { inner } = conn;
-    let ConnectionCommon {
-        core,
-        deframer_buffer,
-        sendable_plaintext,
-    } = inner;
-    let ConnectionCore {
+/// Fails if `conn.is_handshaking()` or if it is a QUIC connection.
+pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
+    // Destructure the state into a type-independent thing.
+    let (
         state,
-        side: _,
         common_state,
         hs_deframer,
         seen_consecutive_empty_fragments,
-    } = core;
+        deframer_buffer,
+        sendable_plaintext,
+    ) = match conn.into() {
+        Connection::Client(ClientConnection { inner }) => {
+            let ConnectionCommon {
+                core,
+                deframer_buffer,
+                sendable_plaintext,
+            } = inner;
+            let ConnectionCore {
+                state,
+                side: _,
+                common_state,
+                hs_deframer,
+                seen_consecutive_empty_fragments,
+            } = core;
+
+            (
+                state?.into_traffic()?,
+                common_state,
+                hs_deframer,
+                seen_consecutive_empty_fragments,
+                deframer_buffer,
+                sendable_plaintext,
+            )
+        }
+
+        Connection::Server(ServerConnection { inner }) => {
+            let ConnectionCommon {
+                core,
+                deframer_buffer,
+                sendable_plaintext,
+            } = inner;
+            let ConnectionCore {
+                state,
+                side: _,
+                common_state,
+                hs_deframer,
+                seen_consecutive_empty_fragments,
+            } = core;
+
+            (
+                state?.into_traffic()?,
+                common_state,
+                hs_deframer,
+                seen_consecutive_empty_fragments,
+                deframer_buffer,
+                sendable_plaintext,
+            )
+        }
+    };
 
     let state = Arc::new(Mutex::new(state));
     let common_state = Arc::new(Mutex::new(common_state));
 
-    (
-        ClientReader {
+    Ok((
+        Reader {
             state: state.clone(),
             common_state: common_state.clone(),
 
@@ -77,20 +112,20 @@ pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
             hs_deframer,
             seen_consecutive_empty_fragments,
         },
-        ClientWriter {
+        Writer {
             state: state.clone(),
             common_state: common_state.clone(),
 
             sendable_plaintext,
         },
-    )
+    ))
 }
 
 //----------- Reader ---------------------------------------------------------
 
 /// The reading half of a client-side TLS connection.
-pub struct ClientReader {
-    state: Arc<Mutex<Result<Box<dyn State<ClientConnectionData>>, Error>>>,
+pub struct Reader {
+    state: Arc<Mutex<Box<dyn TrafficState>>>,
     common_state: Arc<Mutex<CommonState>>,
 
     /// A buffer of received TLS frames to coalesce.
@@ -106,7 +141,7 @@ pub struct ClientReader {
     seen_consecutive_empty_fragments: u8,
 }
 
-impl ClientReader {
+impl Reader {
     /// A reader for plaintext data.
     pub fn reader(&mut self) -> PlaintextReader<'_> {
         PlaintextReader { reader: self }
@@ -141,7 +176,7 @@ impl ClientReader {
             }
 
             Self::process_new_packets(
-                &mut state,
+                &mut **state,
                 &mut common_state,
                 &mut self.hs_deframer,
                 &mut self.seen_consecutive_empty_fragments,
@@ -185,14 +220,12 @@ impl ClientReader {
 
     // ConnectionCore::process_new_packets()
     fn process_new_packets(
-        state_: &mut Result<Box<dyn State<ClientConnectionData>>, Error>,
+        state: &mut dyn TrafficState,
         common_state: &mut CommonState,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         deframer_buffer: &mut DeframerVecBuffer,
     ) -> Result<(), Error> {
-        let state = state_.as_mut().map_err(|e| e.clone())?;
-
         // Should `InboundPlainMessage` resolve to plaintext application
         // data it will be allocated within `plaintext` and written to
         // `CommonState.received_plaintext` buffer.
@@ -209,7 +242,7 @@ impl ClientReader {
                 common_state,
                 hs_deframer,
                 seen_consecutive_empty_fragments,
-                &mut **state,
+                state,
                 buffer,
                 &mut buffer_progress,
             );
@@ -217,7 +250,6 @@ impl ClientReader {
             let opt_msg = match res {
                 Ok(opt_msg) => opt_msg,
                 Err(e) => {
-                    *state_ = Err(e.clone());
                     deframer_buffer.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
@@ -227,16 +259,9 @@ impl ClientReader {
                 break;
             };
 
-            match Self::process_main_protocol(
-                common_state,
-                msg,
-                &mut **state,
-                &locator,
-                &mut plaintext,
-            ) {
+            match Self::process_main_protocol(common_state, msg, state, &locator, &mut plaintext) {
                 Ok(()) => {}
                 Err(e) => {
-                    *state_ = Err(e.clone());
                     deframer_buffer.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
@@ -269,7 +294,7 @@ impl ClientReader {
         common_state: &mut CommonState,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
-        state: &dyn State<ClientConnectionData>,
+        state: &dyn TrafficState,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
@@ -312,7 +337,7 @@ impl ClientReader {
         common_state: &mut CommonState,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
-        state: &dyn State<ClientConnectionData>,
+        state: &dyn TrafficState,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
@@ -454,7 +479,7 @@ impl ClientReader {
     fn handle_deframe_error(
         common_state: &mut CommonState,
         error: Error,
-        state: &dyn State<ClientConnectionData>,
+        state: &dyn TrafficState,
     ) -> Error {
         match error {
             error @ Error::InvalidMessage(_) => {
@@ -476,7 +501,7 @@ impl ClientReader {
     fn process_main_protocol(
         common_state: &mut CommonState,
         msg: InboundPlainMessage<'_>,
-        state: &mut dyn State<ClientConnectionData>,
+        state: &mut dyn TrafficState,
         plaintext_locator: &Locator,
         received_plaintext: &mut Option<UnborrowedPayload>,
     ) -> Result<(), Error> {
@@ -524,14 +549,14 @@ impl ClientReader {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
                 ..
-            } => state.handle_tls13_session_ticket_for_split_traffic(common_state, new_ticket),
+            } => state.handle_tls13_session_ticket(common_state, new_ticket),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } => state.handle_key_update_for_split_traffic(common_state, key_update),
+            } => state.handle_key_update(common_state, key_update),
 
-            other => Err(state.handle_other_for_split_traffic(&other)),
+            other => Err(state.handle_unexpected(&other)),
         };
 
         match result {
@@ -557,7 +582,7 @@ pub struct Received {
 /// A reader of plaintext data from a [`ClientReader`].
 pub struct PlaintextReader<'a> {
     /// The underlying reader.
-    reader: &'a mut ClientReader,
+    reader: &'a mut Reader,
 }
 
 impl io::Read for PlaintextReader<'_> {
@@ -576,15 +601,15 @@ impl io::Read for PlaintextReader<'_> {
 //----------- Writer ---------------------------------------------------------
 
 /// The writing half of a client-side TLS connection.
-pub struct ClientWriter {
-    state: Arc<Mutex<Result<Box<dyn State<ClientConnectionData>>, Error>>>,
+pub struct Writer {
+    state: Arc<Mutex<Box<dyn TrafficState>>>,
     common_state: Arc<Mutex<CommonState>>,
 
     /// A buffer of plaintext to encrypt and send.
     sendable_plaintext: ChunkVecBuffer,
 }
 
-impl ClientWriter {
+impl Writer {
     /// A writer for plaintext data.
     pub fn writer(&mut self) -> PlaintextWriter<'_> {
         PlaintextWriter { writer: self }
@@ -618,14 +643,9 @@ impl ClientWriter {
     }
 
     // ConnectionCore::maybe_refresh_traffic_keys()
-    fn maybe_refresh_traffic_keys(
-        state: &mut Result<Box<dyn State<ClientConnectionData>>, Error>,
-        common_state: &mut CommonState,
-    ) {
+    fn maybe_refresh_traffic_keys(state: &mut dyn TrafficState, common_state: &mut CommonState) {
         if mem::take(&mut common_state.refresh_traffic_keys_pending) {
-            if let Ok(state) = state {
-                let _ = state.send_key_update_request(common_state);
-            }
+            let _ = state.send_key_update_request(common_state);
         }
     }
 }
@@ -633,7 +653,7 @@ impl ClientWriter {
 /// A writer of plaintext data into a [`ClientWriter`].
 pub struct PlaintextWriter<'a> {
     /// The underlying writer.
-    writer: &'a mut ClientWriter,
+    writer: &'a mut Writer,
 }
 
 impl PlaintextSink for PlaintextWriter<'_> {
@@ -641,7 +661,7 @@ impl PlaintextSink for PlaintextWriter<'_> {
         let mut state = self.writer.state.lock().unwrap();
         let mut common_state = self.writer.common_state.lock().unwrap();
         let len = common_state.buffer_plaintext(buf.into(), &mut self.writer.sendable_plaintext);
-        ClientWriter::maybe_refresh_traffic_keys(&mut state, &mut common_state);
+        Writer::maybe_refresh_traffic_keys(&mut **state, &mut common_state);
         Ok(len)
     }
 
@@ -663,7 +683,7 @@ impl PlaintextSink for PlaintextWriter<'_> {
         let mut state = self.writer.state.lock().unwrap();
         let mut common_state = self.writer.common_state.lock().unwrap();
         let len = common_state.buffer_plaintext(payload, &mut self.writer.sendable_plaintext);
-        ClientWriter::maybe_refresh_traffic_keys(&mut state, &mut common_state);
+        Writer::maybe_refresh_traffic_keys(&mut **state, &mut common_state);
         Ok(len)
     }
 

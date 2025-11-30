@@ -10,7 +10,9 @@ use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
 use super::hs::{self, ServerContext};
 use crate::check::inappropriate_message;
-use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
+use crate::common_state::{
+    CommonState, HandshakeFlightTls12, HandshakeKind, Side, State, TrafficState,
+};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
@@ -912,8 +914,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {
-        inappropriate_message(&payload, &[ContentType::ApplicationData])
+    fn into_traffic(self: Box<Self>) -> Result<Box<dyn TrafficState>, Error> {
+        Ok(self)
     }
 
     fn into_external_state(
@@ -925,6 +927,12 @@ impl State<ServerConnectionData> for ExpectTraffic {
                 "call of into_external_state() only allowed with enable_secret_extraction",
             )),
         }
+    }
+}
+
+impl TrafficState for ExpectTraffic {
+    fn handle_unexpected(&self, payload: &MessagePayload<'_>) -> Error {
+        inappropriate_message(&payload, &[ContentType::ApplicationData])
     }
 }
 

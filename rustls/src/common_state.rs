@@ -833,35 +833,8 @@ pub(crate) trait State<Side>: Send + Sync {
         message: Message<'m>,
     ) -> Result<Box<dyn State<Side>>, Error>;
 
-    fn handle_tls13_session_ticket_for_split_traffic(
-        &mut self,
-        common_state: &mut CommonState,
-        new_ticket: NewSessionTicketPayloadTls13,
-    ) -> Result<(), Error> {
-        let _ = common_state;
-        let payload = MessagePayload::Handshake {
-            parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
-            encoded: Payload::Borrowed(&[]),
-        };
-        return Err(self.handle_other_for_split_traffic(&payload));
-    }
-
-    fn handle_key_update_for_split_traffic(
-        &mut self,
-        common_state: &mut CommonState,
-        key_update: KeyUpdateRequest,
-    ) -> Result<(), Error> {
-        let _ = common_state;
-        let payload = MessagePayload::Handshake {
-            parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
-            encoded: Payload::Borrowed(&[]),
-        };
-        Err(self.handle_other_for_split_traffic(&payload))
-    }
-
-    fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {
-        let _ = payload;
-        Error::HandshakeNotComplete
+    fn into_traffic(self: Box<Self>) -> Result<Box<dyn TrafficState>, Error> {
+        Err(Error::HandshakeNotComplete)
     }
 
     fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
@@ -875,6 +848,42 @@ pub(crate) trait State<Side>: Send + Sync {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
     }
+}
+
+pub(crate) trait TrafficState {
+    fn handle_tls13_session_ticket(
+        &mut self,
+        common_state: &mut CommonState,
+        new_ticket: NewSessionTicketPayloadTls13,
+    ) -> Result<(), Error> {
+        let _ = common_state;
+        let payload = MessagePayload::Handshake {
+            parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
+            encoded: Payload::Borrowed(&[]),
+        };
+        return Err(self.handle_unexpected(&payload));
+    }
+
+    fn handle_key_update(
+        &mut self,
+        common_state: &mut CommonState,
+        key_update: KeyUpdateRequest,
+    ) -> Result<(), Error> {
+        let _ = common_state;
+        let payload = MessagePayload::Handshake {
+            parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
+            encoded: Payload::Borrowed(&[]),
+        };
+        Err(self.handle_unexpected(&payload))
+    }
+
+    fn handle_unexpected(&self, payload: &MessagePayload<'_>) -> Error;
+
+    fn send_key_update_request(&mut self, common_state: &mut CommonState) {
+        let _ = common_state;
+    }
+
+    fn handle_decrypt_error(&self) {}
 }
 
 pub(crate) struct Context<'a, Data> {

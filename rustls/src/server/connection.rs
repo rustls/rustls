@@ -70,7 +70,7 @@ mod buffered {
     /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
     /// Read data from the peer using the `io::Read` trait implementation.
     pub struct ServerConnection {
-        pub(super) inner: ConnectionCommon<ServerConnectionData>,
+        pub(crate) inner: ConnectionCommon<ServerConnectionData>,
     }
 
     impl ServerConnection {

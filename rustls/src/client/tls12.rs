@@ -13,7 +13,7 @@ use super::hs::{self, ClientContext};
 use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State, TrafficState};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
@@ -1205,8 +1205,8 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {
-        inappropriate_message(payload, &[ContentType::ApplicationData])
+    fn into_traffic(self: Box<Self>) -> Result<Box<dyn TrafficState>, Error> {
+        Ok(self)
     }
 
     fn into_external_state(
@@ -1218,6 +1218,12 @@ impl State<ClientConnectionData> for ExpectTraffic {
                 "call of into_external_state() only allowed with enable_secret_extraction",
             )),
         }
+    }
+}
+
+impl TrafficState for ExpectTraffic {
+    fn handle_unexpected(&self, payload: &MessagePayload<'_>) -> Error {
+        inappropriate_message(payload, &[ContentType::ApplicationData])
     }
 }
 

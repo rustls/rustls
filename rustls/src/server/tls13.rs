@@ -10,7 +10,7 @@ use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, Protocol, Side, State,
+    CommonState, HandshakeFlightTls13, HandshakeKind, Protocol, Side, State, TrafficState,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
@@ -1413,20 +1413,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn handle_key_update_for_split_traffic(
-        &mut self,
-        common_state: &mut CommonState,
-        key_update: KeyUpdateRequest,
-    ) -> Result<(), Error> {
-        self.handle_key_update(common_state, &key_update)
-    }
-
-    fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {
-        inappropriate_handshake_message(
-            payload,
-            &[ContentType::ApplicationData, ContentType::Handshake],
-            &[HandshakeType::KeyUpdate],
-        )
+    fn into_traffic(self: Box<Self>) -> Result<Box<dyn TrafficState>, Error> {
+        Ok(self)
     }
 
     fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {
@@ -1442,6 +1430,30 @@ impl State<ServerConnectionData> for ExpectTraffic {
                 .extract_secrets(Side::Server)?,
             self,
         ))
+    }
+}
+
+impl TrafficState for ExpectTraffic {
+    fn handle_key_update(
+        &mut self,
+        common_state: &mut CommonState,
+        key_update: KeyUpdateRequest,
+    ) -> Result<(), Error> {
+        self.handle_key_update(common_state, &key_update)
+    }
+
+    fn handle_unexpected(&self, payload: &MessagePayload<'_>) -> Error {
+        inappropriate_handshake_message(
+            payload,
+            &[ContentType::ApplicationData, ContentType::Handshake],
+            &[HandshakeType::KeyUpdate],
+        )
+    }
+
+    fn send_key_update_request(&mut self, common: &mut CommonState) {
+        let _ = self
+            .key_schedule
+            .request_key_update_and_update_encrypter(common);
     }
 }
 
