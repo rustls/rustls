@@ -1205,6 +1205,23 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
+    fn handle_for_split_traffic(
+        &mut self,
+        cx: &mut ClientContext<'_>,
+        message: Message<'_>,
+    ) -> Result<(), Error> {
+        match message.payload {
+            MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
+            payload => {
+                return Err(inappropriate_message(
+                    &payload,
+                    &[ContentType::ApplicationData],
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn into_external_state(
         mut self: Box<Self>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {

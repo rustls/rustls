@@ -831,6 +831,15 @@ pub(crate) trait State<Side>: Send + Sync {
         message: Message<'m>,
     ) -> Result<Box<dyn State<Side>>, Error>;
 
+    fn handle_for_split_traffic(
+        &mut self,
+        cx: &mut Context<'_, Side>,
+        message: Message<'_>,
+    ) -> Result<(), Error> {
+        let _ = (cx, message);
+        Err(Error::HandshakeNotComplete)
+    }
+
     fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
         Err(Error::HandshakeNotComplete)
     }

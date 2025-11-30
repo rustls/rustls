@@ -1413,6 +1413,29 @@ impl State<ServerConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
+    fn handle_for_split_traffic(
+        &mut self,
+        cx: &mut ServerContext<'_>,
+        message: Message<'_>,
+    ) -> Result<(), Error> {
+        match message.payload {
+            MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
+            MessagePayload::Handshake {
+                parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
+                ..
+            } => self.handle_key_update(cx.common, &key_update)?,
+            payload => {
+                return Err(inappropriate_handshake_message(
+                    &payload,
+                    &[ContentType::ApplicationData, ContentType::Handshake],
+                    &[HandshakeType::KeyUpdate],
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {
         self.key_schedule
             .request_key_update_and_update_encrypter(common)
