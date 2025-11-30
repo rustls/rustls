@@ -912,21 +912,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn handle_for_split_traffic(
-        &mut self,
-        cx: &mut ServerContext<'_>,
-        message: Message<'_>,
-    ) -> Result<(), Error> {
-        match message.payload {
-            MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
-            payload => {
-                return Err(inappropriate_message(
-                    &payload,
-                    &[ContentType::ApplicationData],
-                ));
-            }
-        }
-        Ok(())
+    fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {
+        inappropriate_message(&payload, &[ContentType::ApplicationData])
     }
 
     fn into_external_state(

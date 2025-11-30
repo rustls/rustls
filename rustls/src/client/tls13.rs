@@ -1583,31 +1583,28 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn handle_for_split_traffic(
+    fn handle_tls13_session_ticket_for_split_traffic(
         &mut self,
         cx: &mut ClientContext<'_>,
-        message: Message<'_>,
+        new_ticket: NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        match message.payload {
-            MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
-            MessagePayload::Handshake {
-                parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
-                ..
-            } => self.handle_new_ticket_tls13(cx, &new_ticket)?,
-            MessagePayload::Handshake {
-                parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
-                ..
-            } => self.handle_key_update(cx.common, &key_update)?,
-            payload => {
-                return Err(inappropriate_handshake_message(
-                    &payload,
-                    &[ContentType::ApplicationData, ContentType::Handshake],
-                    &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
-                ));
-            }
-        }
+        self.handle_new_ticket_tls13(cx, &new_ticket)
+    }
 
-        Ok(())
+    fn handle_key_update_for_split_traffic(
+        &mut self,
+        cx: &mut ClientContext<'_>,
+        key_update: KeyUpdateRequest,
+    ) -> Result<(), Error> {
+        self.handle_key_update(cx.common, &key_update)
+    }
+
+    fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {
+        inappropriate_handshake_message(
+            payload,
+            &[ContentType::ApplicationData, ContentType::Handshake],
+            &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
+        )
     }
 
     fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {

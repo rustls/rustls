@@ -19,7 +19,9 @@ use crate::msgs::codec::Codec;
 use crate::msgs::deframer::{Delocator, HandshakeAlignedProof, Locator};
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
-use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
+use crate::msgs::handshake::{
+    HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayloadTls13, ProtocolName,
+};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
@@ -831,13 +833,35 @@ pub(crate) trait State<Side>: Send + Sync {
         message: Message<'m>,
     ) -> Result<Box<dyn State<Side>>, Error>;
 
-    fn handle_for_split_traffic(
+    fn handle_tls13_session_ticket_for_split_traffic(
         &mut self,
         cx: &mut Context<'_, Side>,
-        message: Message<'_>,
+        new_ticket: NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        let _ = (cx, message);
-        Err(Error::HandshakeNotComplete)
+        let _ = cx;
+        let payload = MessagePayload::Handshake {
+            parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
+            encoded: Payload::Borrowed(&[]),
+        };
+        return Err(self.handle_other_for_split_traffic(&payload));
+    }
+
+    fn handle_key_update_for_split_traffic(
+        &mut self,
+        cx: &mut Context<'_, Side>,
+        key_update: KeyUpdateRequest,
+    ) -> Result<(), Error> {
+        let _ = cx;
+        let payload = MessagePayload::Handshake {
+            parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
+            encoded: Payload::Borrowed(&[]),
+        };
+        Err(self.handle_other_for_split_traffic(&payload))
+    }
+
+    fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {
+        let _ = payload;
+        Error::HandshakeNotComplete
     }
 
     fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
@@ -1011,7 +1035,7 @@ impl TemperCounters {
         }
     }
 
-    fn received_app_data(&mut self) {
+    pub(crate) fn received_app_data(&mut self) {
         self.allowed_key_update_requests = Self::INITIAL_KEY_UPDATE_REQUESTS;
     }
 

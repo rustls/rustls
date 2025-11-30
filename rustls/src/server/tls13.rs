@@ -1413,27 +1413,20 @@ impl State<ServerConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn handle_for_split_traffic(
+    fn handle_key_update_for_split_traffic(
         &mut self,
         cx: &mut ServerContext<'_>,
-        message: Message<'_>,
+        key_update: KeyUpdateRequest,
     ) -> Result<(), Error> {
-        match message.payload {
-            MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
-            MessagePayload::Handshake {
-                parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
-                ..
-            } => self.handle_key_update(cx.common, &key_update)?,
-            payload => {
-                return Err(inappropriate_handshake_message(
-                    &payload,
-                    &[ContentType::ApplicationData, ContentType::Handshake],
-                    &[HandshakeType::KeyUpdate],
-                ));
-            }
-        }
+        self.handle_key_update(cx.common, &key_update)
+    }
 
-        Ok(())
+    fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {
+        inappropriate_handshake_message(
+            payload,
+            &[ContentType::ApplicationData, ContentType::Handshake],
+            &[HandshakeType::KeyUpdate],
+        )
     }
 
     fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {

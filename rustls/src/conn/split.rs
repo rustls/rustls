@@ -28,6 +28,7 @@ use crate::{
         deframer::{
             BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
         },
+        handshake::{HandshakeMessagePayload, HandshakePayload},
         message::{Message, MessagePayload},
     },
     vecbuf::ChunkVecBuffer,
@@ -495,12 +496,6 @@ impl ClientReader {
             }
         };
 
-        // For alerts, we have separate logic.
-        if let MessagePayload::Alert(alert) = &msg.payload {
-            common_state.process_alert(alert)?;
-            return Ok(());
-        }
-
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
         if !common_state.is_tls13() {
@@ -520,15 +515,53 @@ impl ClientReader {
             }
         }
 
-        let mut cx = Context {
-            common: common_state,
-            data,
-            plaintext_locator,
-            received_plaintext,
-            sendable_plaintext: None,
+        let result = match msg.payload {
+            MessagePayload::ApplicationData(payload) => {
+                common_state
+                    .temper_counters
+                    .received_app_data();
+                let previous = received_plaintext
+                    .replace(UnborrowedPayload::unborrow(plaintext_locator, payload));
+                debug_assert!(previous.is_none(), "overwrote plaintext data");
+                Ok(())
+            }
+
+            // For alerts, we have separate logic.
+            MessagePayload::Alert(alert) => common_state.process_alert(&alert),
+
+            MessagePayload::Handshake {
+                parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
+                ..
+            } => {
+                let mut cx = Context {
+                    common: common_state,
+                    data,
+                    plaintext_locator,
+                    received_plaintext,
+                    sendable_plaintext: None,
+                };
+                state.handle_tls13_session_ticket_for_split_traffic(&mut cx, new_ticket)
+            }
+
+            MessagePayload::Handshake {
+                parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
+                ..
+            } => {
+                let mut cx = Context {
+                    common: common_state,
+                    data,
+                    plaintext_locator,
+                    received_plaintext,
+                    sendable_plaintext: None,
+                };
+                state.handle_key_update_for_split_traffic(&mut cx, key_update)
+            }
+
+            other => Err(state.handle_other_for_split_traffic(&other)),
         };
-        match state.handle_for_split_traffic(&mut cx, msg) {
-            Ok(next) => Ok(next),
+
+        match result {
+            Ok(()) => Ok(()),
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
                 Err(common_state.send_fatal_alert(AlertDescription::UnexpectedMessage, e))
