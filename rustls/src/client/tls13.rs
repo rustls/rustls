@@ -1585,18 +1585,26 @@ impl State<ClientConnectionData> for ExpectTraffic {
 
     fn handle_tls13_session_ticket_for_split_traffic(
         &mut self,
-        cx: &mut ClientContext<'_>,
+        common_state: &mut CommonState,
         new_ticket: NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        self.handle_new_ticket_tls13(cx, &new_ticket)
+        let mut kcx = KernelContext {
+            peer_identity: common_state.peer_identity.as_ref(),
+            protocol: common_state.protocol,
+            quic: &common_state.quic,
+        };
+        common_state.tls13_tickets_received = common_state
+            .tls13_tickets_received
+            .saturating_add(1);
+        self.handle_new_ticket_impl(&mut kcx, &new_ticket)
     }
 
     fn handle_key_update_for_split_traffic(
         &mut self,
-        cx: &mut ClientContext<'_>,
+        common_state: &mut CommonState,
         key_update: KeyUpdateRequest,
     ) -> Result<(), Error> {
-        self.handle_key_update(cx.common, &key_update)
+        self.handle_key_update(common_state, &key_update)
     }
 
     fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {

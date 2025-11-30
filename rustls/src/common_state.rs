@@ -835,10 +835,10 @@ pub(crate) trait State<Side>: Send + Sync {
 
     fn handle_tls13_session_ticket_for_split_traffic(
         &mut self,
-        cx: &mut Context<'_, Side>,
+        common_state: &mut CommonState,
         new_ticket: NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        let _ = cx;
+        let _ = common_state;
         let payload = MessagePayload::Handshake {
             parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
             encoded: Payload::Borrowed(&[]),
@@ -848,10 +848,10 @@ pub(crate) trait State<Side>: Send + Sync {
 
     fn handle_key_update_for_split_traffic(
         &mut self,
-        cx: &mut Context<'_, Side>,
+        common_state: &mut CommonState,
         key_update: KeyUpdateRequest,
     ) -> Result<(), Error> {
-        let _ = cx;
+        let _ = common_state;
         let payload = MessagePayload::Handshake {
             parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
             encoded: Payload::Borrowed(&[]),

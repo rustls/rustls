@@ -1415,10 +1415,10 @@ impl State<ServerConnectionData> for ExpectTraffic {
 
     fn handle_key_update_for_split_traffic(
         &mut self,
-        cx: &mut ServerContext<'_>,
+        common_state: &mut CommonState,
         key_update: KeyUpdateRequest,
     ) -> Result<(), Error> {
-        self.handle_key_update(cx.common, &key_update)
+        self.handle_key_update(common_state, &key_update)
     }
 
     fn handle_other_for_split_traffic(&self, payload: &MessagePayload<'_>) -> Error {

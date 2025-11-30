@@ -16,7 +16,7 @@ use std::{
 use crate::{
     CommonState, ConnectionCommon, Error, Side,
     client::{ClientConnection, ClientConnectionData},
-    common_state::{Context, State, UnborrowedPayload},
+    common_state::{State, UnborrowedPayload},
     conn::{
         ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage,
         connection::PlaintextSink,
@@ -59,7 +59,7 @@ pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
     } = inner;
     let ConnectionCore {
         state,
-        side: side_data,
+        side: _,
         common_state,
         hs_deframer,
         seen_consecutive_empty_fragments,
@@ -73,7 +73,6 @@ pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
             state: state.clone(),
             common_state: common_state.clone(),
 
-            side_data,
             deframer_buffer,
             hs_deframer,
             seen_consecutive_empty_fragments,
@@ -93,9 +92,6 @@ pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
 pub struct ClientReader {
     state: Arc<Mutex<Result<Box<dyn State<ClientConnectionData>>, Error>>>,
     common_state: Arc<Mutex<CommonState>>,
-
-    /// Side-specific data about the connection.
-    side_data: ClientConnectionData,
 
     /// A buffer of received TLS frames to coalesce.
     deframer_buffer: DeframerVecBuffer,
@@ -147,7 +143,6 @@ impl ClientReader {
             Self::process_new_packets(
                 &mut state,
                 &mut common_state,
-                &mut self.side_data,
                 &mut self.hs_deframer,
                 &mut self.seen_consecutive_empty_fragments,
                 &mut self.deframer_buffer,
@@ -192,7 +187,6 @@ impl ClientReader {
     fn process_new_packets(
         state_: &mut Result<Box<dyn State<ClientConnectionData>>, Error>,
         common_state: &mut CommonState,
-        side_data: &mut ClientConnectionData,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         deframer_buffer: &mut DeframerVecBuffer,
@@ -237,7 +231,6 @@ impl ClientReader {
                 common_state,
                 msg,
                 &mut **state,
-                side_data,
                 &locator,
                 &mut plaintext,
             ) {
@@ -484,7 +477,6 @@ impl ClientReader {
         common_state: &mut CommonState,
         msg: InboundPlainMessage<'_>,
         state: &mut dyn State<ClientConnectionData>,
-        data: &mut ClientConnectionData,
         plaintext_locator: &Locator,
         received_plaintext: &mut Option<UnborrowedPayload>,
     ) -> Result<(), Error> {
@@ -532,30 +524,12 @@ impl ClientReader {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
                 ..
-            } => {
-                let mut cx = Context {
-                    common: common_state,
-                    data,
-                    plaintext_locator,
-                    received_plaintext,
-                    sendable_plaintext: None,
-                };
-                state.handle_tls13_session_ticket_for_split_traffic(&mut cx, new_ticket)
-            }
+            } => state.handle_tls13_session_ticket_for_split_traffic(common_state, new_ticket),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } => {
-                let mut cx = Context {
-                    common: common_state,
-                    data,
-                    plaintext_locator,
-                    received_plaintext,
-                    sendable_plaintext: None,
-                };
-                state.handle_key_update_for_split_traffic(&mut cx, key_update)
-            }
+            } => state.handle_key_update_for_split_traffic(common_state, key_update),
 
             other => Err(state.handle_other_for_split_traffic(&other)),
         };
