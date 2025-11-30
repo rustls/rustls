@@ -115,7 +115,6 @@ impl ClientReader {
 
         let mut total = 0;
         let mut eof = false;
-        let mut sendable_plaintext = ChunkVecBuffer::new(None);
 
         while !eof && common_state.wants_read() {
             match Self::read_tls(
@@ -144,22 +143,11 @@ impl ClientReader {
                 &mut self.hs_deframer,
                 &mut self.seen_consecutive_empty_fragments,
                 &mut self.deframer_buffer,
-                &mut sendable_plaintext,
             )
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
         }
 
-        let writer_action = WriterAction {
-            sendable_plaintext: (!sendable_plaintext.is_empty()).then(|| {
-                let mut buffer = (0..sendable_plaintext.len())
-                    .map(|_| 0u8)
-                    .collect::<Box<[u8]>>();
-                sendable_plaintext
-                    .read(&mut buffer)
-                    .expect("just moving data");
-                buffer
-            }),
-        };
+        let writer_action = WriterAction {};
 
         Ok(Received {
             bytes_read: total,
@@ -200,7 +188,6 @@ impl ClientReader {
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         deframer_buffer: &mut DeframerVecBuffer,
-        sendable_plaintext: &mut ChunkVecBuffer,
     ) -> Result<(), Error> {
         let mut state = match mem::replace(state_, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
@@ -250,7 +237,8 @@ impl ClientReader {
                 side_data,
                 &locator,
                 &mut plaintext,
-                Some(sendable_plaintext),
+                // Unused after handshake states.
+                None,
             ) {
                 Ok(new) => state = new,
                 Err(e) => {
@@ -546,12 +534,7 @@ impl ClientWriter {
 
     /// Enact a [`WriterAction`] sent by the [`Reader`].
     pub fn enact(&mut self, action: WriterAction) {
-        let WriterAction { sendable_plaintext } = action;
-
-        if let Some(sendable_plaintext) = sendable_plaintext {
-            self.sendable_plaintext
-                .append(sendable_plaintext.into_vec());
-        }
+        let WriterAction {} = action;
     }
 
     /// Send prepared TLS messages over the network.
@@ -642,19 +625,11 @@ impl io::Write for PlaintextWriter<'_> {
 }
 
 /// An action commanded by the [`Reader`].
-pub struct WriterAction {
-    /// A buffer to append to `sendable_plaintext`.
-    sendable_plaintext: Option<Box<[u8]>>,
-}
+pub struct WriterAction {}
 
 impl WriterAction {
     /// Whether this action is a no-op.
     fn is_empty(&self) -> bool {
-        matches!(
-            self,
-            Self {
-                sendable_plaintext: None,
-            }
-        )
+        matches!(self, Self {})
     }
 }
