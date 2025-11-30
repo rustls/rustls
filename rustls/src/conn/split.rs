@@ -14,7 +14,7 @@ use std::{
 };
 
 use crate::{
-    CommonState, ConnectionCommon, Error, IoState,
+    CommonState, ConnectionCommon, Error,
     client::{ClientConnection, ClientConnectionData},
     common_state::State,
     conn::{
@@ -43,21 +43,19 @@ pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
         "the connection must be post-handshake"
     );
 
-    let ClientConnection {
-        inner:
-            ConnectionCommon {
-                core:
-                    ConnectionCore {
-                        state,
-                        side,
-                        common_state,
-                        hs_deframer,
-                        seen_consecutive_empty_fragments,
-                    },
-                deframer_buffer,
-                sendable_plaintext,
-            },
-    } = conn;
+    let ClientConnection { inner } = conn;
+    let ConnectionCommon {
+        core,
+        deframer_buffer,
+        sendable_plaintext,
+    } = inner;
+    let ConnectionCore {
+        state,
+        side: side_data,
+        common_state,
+        hs_deframer,
+        seen_consecutive_empty_fragments,
+    } = core;
 
     let state = Arc::new(Mutex::new(state));
     let common_state = Arc::new(Mutex::new(common_state));
@@ -66,8 +64,8 @@ pub fn split_client(conn: ClientConnection) -> (ClientReader, ClientWriter) {
         ClientReader {
             state: state.clone(),
             common_state: common_state.clone(),
-            side,
 
+            side_data,
             deframer_buffer,
             hs_deframer,
             seen_consecutive_empty_fragments,
@@ -88,8 +86,8 @@ pub struct ClientReader {
     state: Arc<Mutex<Result<Box<dyn State<ClientConnectionData>>, Error>>>,
     common_state: Arc<Mutex<CommonState>>,
 
-    side: ClientConnectionData,
     /// Side-specific data about the connection.
+    side_data: ClientConnectionData,
 
     /// A buffer of received TLS frames to coalesce.
     deframer_buffer: DeframerVecBuffer,
@@ -142,7 +140,7 @@ impl ClientReader {
             Self::process_new_packets(
                 &mut state,
                 &mut common_state,
-                &mut self.side,
+                &mut self.side_data,
                 &mut self.hs_deframer,
                 &mut self.seen_consecutive_empty_fragments,
                 &mut self.deframer_buffer,
@@ -198,12 +196,12 @@ impl ClientReader {
     fn process_new_packets(
         state_: &mut Result<Box<dyn State<ClientConnectionData>>, Error>,
         common_state: &mut CommonState,
-        side: &mut ClientConnectionData,
+        side_data: &mut ClientConnectionData,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         deframer_buffer: &mut DeframerVecBuffer,
         sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> Result<IoState, Error> {
+    ) -> Result<(), Error> {
         let mut state = match mem::replace(state_, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
             Err(e) => {
@@ -249,7 +247,7 @@ impl ClientReader {
             match common_state.process_main_protocol(
                 msg,
                 state,
-                side,
+                side_data,
                 &locator,
                 &mut plaintext,
                 Some(sendable_plaintext),
@@ -282,7 +280,7 @@ impl ClientReader {
 
         deframer_buffer.discard(buffer_progress.take_discard());
         *state_ = Ok(state);
-        Ok(common_state.current_io_state())
+        Ok(())
     }
 
     // ConnectionCore::deframe()
@@ -561,7 +559,7 @@ impl ClientWriter {
         let mut common_state = self.common_state.lock().unwrap();
         let mut total = 0;
         while common_state.wants_write() {
-            match Self::write_tls(&mut common_state, wr) {
+            match common_state.sendable_tls.write_to(wr) {
                 Ok(0) => return Ok(total),
                 Ok(n) => total += n,
 
@@ -578,29 +576,15 @@ impl ClientWriter {
         Ok(total)
     }
 
-    // ConnectionCommon::write_tls()
-    fn write_tls(common_state: &mut CommonState, wr: &mut dyn io::Write) -> io::Result<usize> {
-        common_state.sendable_tls.write_to(wr)
-    }
-
     // ConnectionCore::maybe_refresh_traffic_keys()
     fn maybe_refresh_traffic_keys(
         state: &mut Result<Box<dyn State<ClientConnectionData>>, Error>,
         common_state: &mut CommonState,
     ) {
         if mem::take(&mut common_state.refresh_traffic_keys_pending) {
-            let _ = Self::refresh_traffic_keys(state, common_state);
-        }
-    }
-
-    // ConnectionCore::refresh_traffic_keys()
-    fn refresh_traffic_keys(
-        state: &mut Result<Box<dyn State<ClientConnectionData>>, Error>,
-        common_state: &mut CommonState,
-    ) -> Result<(), Error> {
-        match state {
-            Ok(st) => st.send_key_update_request(common_state),
-            Err(e) => Err(e.clone()),
+            if let Ok(state) = state {
+                let _ = state.send_key_update_request(common_state);
+            }
         }
     }
 }
