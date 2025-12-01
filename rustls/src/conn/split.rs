@@ -685,11 +685,12 @@ impl Reader {
             .map(|()| None),
 
             MessagePayload::Handshake {
-                parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
+                parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(_)),
                 ..
-            } if info.is_tls13() && info.side == Side::Client => state
-                .handle_tls13_session_ticket(common_state, new_ticket)
-                .map(|()| None),
+            } if info.is_tls13() && info.side == Side::Client => {
+                // TODO: Restore support for session tickets
+                Ok(None)
+            }
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
@@ -698,6 +699,7 @@ impl Reader {
                 Self::handle_key_update(common_state, state, writer_action, key_update)
                     .map(|()| None)
             }
+
             other => Err(state.handle_unexpected(&other)),
         };
 

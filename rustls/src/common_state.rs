@@ -19,9 +19,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::deframer::{Delocator, HandshakeAlignedProof, Locator};
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
-use crate::msgs::handshake::{
-    HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayloadTls13, ProtocolName,
-};
+use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload, ProtocolName};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
@@ -851,19 +849,6 @@ pub(crate) trait State<Side>: Send + Sync {
 }
 
 pub(crate) trait TrafficState {
-    fn handle_tls13_session_ticket(
-        &mut self,
-        common_state: &mut CommonState,
-        new_ticket: NewSessionTicketPayloadTls13,
-    ) -> Result<(), Error> {
-        let _ = common_state;
-        let payload = MessagePayload::Handshake {
-            parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
-            encoded: Payload::Borrowed(&[]),
-        };
-        return Err(self.handle_unexpected(&payload));
-    }
-
     fn handle_key_update(
         &mut self,
         common_state: &mut CommonState,

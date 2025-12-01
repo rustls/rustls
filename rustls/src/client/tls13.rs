@@ -1612,22 +1612,6 @@ impl TrafficState for ExpectTraffic {
         )
     }
 
-    fn handle_tls13_session_ticket(
-        &mut self,
-        common_state: &mut CommonState,
-        new_ticket: NewSessionTicketPayloadTls13,
-    ) -> Result<(), Error> {
-        let mut kcx = KernelContext {
-            peer_identity: common_state.peer_identity.as_ref(),
-            protocol: common_state.protocol,
-            quic: &common_state.quic,
-        };
-        common_state.tls13_tickets_received = common_state
-            .tls13_tickets_received
-            .saturating_add(1);
-        self.handle_new_ticket_impl(&mut kcx, &new_ticket)
-    }
-
     fn handle_key_update(
         &mut self,
         common_state: &mut CommonState,
