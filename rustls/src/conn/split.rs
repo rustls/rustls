@@ -559,6 +559,11 @@ impl Reader {
         plaintext_locator: &Locator,
         received_plaintext: &mut Option<UnborrowedPayload>,
     ) -> Result<(), Error> {
+        let version_is_tls13 = matches!(
+            common_state.negotiated_version,
+            Some(ProtocolVersion::TLSv1_3)
+        );
+
         // Now we can fully parse the message payload.
         let msg = match Message::try_from(msg) {
             Ok(msg) => msg,
@@ -573,7 +578,7 @@ impl Reader {
 
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if !common_state.is_tls13() {
+        if !version_is_tls13 {
             let reject_ty = match common_state.side {
                 Side::Client => HandshakeType::HelloRequest,
                 Side::Server => HandshakeType::ClientHello,
@@ -607,12 +612,14 @@ impl Reader {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
                 ..
-            } => state.handle_tls13_session_ticket(common_state, new_ticket),
+            } if version_is_tls13 && common_state.side == Side::Client => {
+                state.handle_tls13_session_ticket(common_state, new_ticket)
+            }
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } => state.handle_key_update(common_state, key_update),
+            } if version_is_tls13 => state.handle_key_update(common_state, key_update),
 
             other => Err(state.handle_unexpected(&other)),
         };
