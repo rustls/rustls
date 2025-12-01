@@ -108,6 +108,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
             state: state.clone(),
             common_state: common_state.clone(),
 
+            buffered_error: None,
             deframer_buffer,
             hs_deframer,
             seen_consecutive_empty_fragments,
@@ -116,6 +117,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
             state: state.clone(),
             common_state: common_state.clone(),
 
+            enqueued_fatal_error: false,
             sendable_plaintext,
         },
     ))
@@ -127,6 +129,14 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
 pub struct Reader {
     state: Arc<Mutex<Box<dyn TrafficState>>>,
     common_state: Arc<Mutex<CommonState>>,
+
+    /// A buffered TLS error, if any.
+    ///
+    /// If a TLS error occurs, it is buffered here, and an appropriate writer
+    /// action is returned to the caller.  The error is returned in the next
+    /// invocation (and all subsequent ones).  This prevents the caller from
+    /// forgetting about the writer action in the failing case.
+    buffered_error: Option<Error>,
 
     /// A buffer of received TLS frames to coalesce.
     deframer_buffer: DeframerVecBuffer,
@@ -149,13 +159,28 @@ impl Reader {
 
     /// Receive TLS messages from the network.
     pub fn recv_tls(&mut self, rd: &mut dyn io::Read) -> io::Result<Received> {
+        if let Some(error) = &self.buffered_error {
+            // We have a buffered TLS error.  Any associated writer action has
+            // already been sent out, so we can now show the real error.  This
+            // also fuses the reader.
+            return Err(io::Error::new(io::ErrorKind::InvalidData, error.clone()));
+        }
+
         let mut state = self.state.lock().unwrap();
         let mut common_state = self.common_state.lock().unwrap();
+        let mut writer_action = WriterAction {
+            enqueued_fatal_alert: None,
+        };
 
         let mut total = 0;
         let mut eof = false;
 
-        while !eof && common_state.wants_read() {
+        while !eof
+            && common_state
+                .received_plaintext
+                .is_empty()
+            && !common_state.has_received_close_notify
+        {
             match Self::read_tls(
                 &mut common_state,
                 &mut self.hs_deframer,
@@ -169,28 +194,44 @@ impl Reader {
                     if total != 0 {
                         break;
                     } else {
-                        return Err(err);
+                        return Err(io::ErrorKind::WouldBlock.into());
                     }
                 }
+
                 Err(err) => return Err(err),
             }
 
-            Self::process_new_packets(
+            match Self::process_new_packets(
                 &mut **state,
                 &mut common_state,
+                &mut writer_action,
                 &mut self.hs_deframer,
                 &mut self.seen_consecutive_empty_fragments,
                 &mut self.deframer_buffer,
-            )
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+            ) {
+                Ok(()) => {}
+                Err(err) => {
+                    // Buffer the error and stop.
+                    self.buffered_error = Some(err);
+                    break;
+                }
+            }
         }
 
-        let writer_action = WriterAction {};
-
-        Ok(Received {
-            bytes_read: total,
-            writer_action: Some(writer_action).filter(|a| !a.is_empty()),
-        })
+        if !writer_action.is_empty() {
+            Ok(Received {
+                bytes_read: total,
+                writer_action: Some(writer_action),
+            })
+        } else if let Some(error) = &self.buffered_error {
+            // There was no writer action; show the error immediately.
+            Err(io::Error::new(io::ErrorKind::InvalidData, error.clone()))
+        } else {
+            Ok(Received {
+                bytes_read: total,
+                writer_action: None,
+            })
+        }
     }
 
     // ConnectionCommon::read_tls()
@@ -222,6 +263,7 @@ impl Reader {
     fn process_new_packets(
         state: &mut dyn TrafficState,
         common_state: &mut CommonState,
+        writer_action: &mut WriterAction,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         deframer_buffer: &mut DeframerVecBuffer,
@@ -240,6 +282,7 @@ impl Reader {
             let locator = Locator::new(buffer);
             let res = Self::deframe(
                 common_state,
+                writer_action,
                 hs_deframer,
                 seen_consecutive_empty_fragments,
                 state,
@@ -259,7 +302,14 @@ impl Reader {
                 break;
             };
 
-            match Self::process_main_protocol(common_state, msg, state, &locator, &mut plaintext) {
+            match Self::process_main_protocol(
+                common_state,
+                writer_action,
+                msg,
+                state,
+                &locator,
+                &mut plaintext,
+            ) {
                 Ok(()) => {}
                 Err(e) => {
                     deframer_buffer.discard(buffer_progress.take_discard());
@@ -292,6 +342,7 @@ impl Reader {
     // ConnectionCore::deframe()
     fn deframe<'b>(
         common_state: &mut CommonState,
+        writer_action: &mut WriterAction,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         state: &dyn TrafficState,
@@ -308,6 +359,7 @@ impl Reader {
         } else {
             Self::process_more_input(
                 common_state,
+                writer_action,
                 hs_deframer,
                 seen_consecutive_empty_fragments,
                 state,
@@ -335,6 +387,7 @@ impl Reader {
     // ConnectionCore::process_more_input()
     fn process_more_input<'b>(
         common_state: &mut CommonState,
+        writer_action: &mut WriterAction,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         state: &dyn TrafficState,
@@ -355,7 +408,7 @@ impl Reader {
                 let message = match iter.next().transpose() {
                     Ok(Some(message)) => message,
                     Ok(None) => return Ok(None),
-                    Err(err) => return Err(Self::handle_deframe_error(common_state, err, state)),
+                    Err(err) => return Err(Self::handle_deframe_error(writer_action, err, state)),
                 };
 
                 let allowed_plaintext = match message.typ {
@@ -401,7 +454,7 @@ impl Reader {
 
                     Ok(Some(message)) => message,
 
-                    Err(err) => return Err(Self::handle_deframe_error(common_state, err, state)),
+                    Err(err) => return Err(Self::handle_deframe_error(writer_action, err, state)),
                 };
 
                 let Decrypted {
@@ -477,20 +530,20 @@ impl Reader {
 
     // ConnectionCore::handle_deframe_error()
     fn handle_deframe_error(
-        common_state: &mut CommonState,
+        writer_action: &mut WriterAction,
         error: Error,
         state: &dyn TrafficState,
     ) -> Error {
         match error {
             error @ Error::InvalidMessage(_) => {
-                common_state.send_fatal_alert(AlertDescription::DecodeError, error)
+                Self::send_fatal_alert(writer_action, AlertDescription::DecodeError, error)
             }
             Error::PeerSentOversizedRecord => {
-                common_state.send_fatal_alert(AlertDescription::RecordOverflow, error)
+                Self::send_fatal_alert(writer_action, AlertDescription::RecordOverflow, error)
             }
             Error::DecryptError => {
                 state.handle_decrypt_error();
-                common_state.send_fatal_alert(AlertDescription::BadRecordMac, error)
+                Self::send_fatal_alert(writer_action, AlertDescription::BadRecordMac, error)
             }
 
             error => error,
@@ -500,6 +553,7 @@ impl Reader {
     // CommonState::process_main_protocol()
     fn process_main_protocol(
         common_state: &mut CommonState,
+        writer_action: &mut WriterAction,
         msg: InboundPlainMessage<'_>,
         state: &mut dyn TrafficState,
         plaintext_locator: &Locator,
@@ -509,7 +563,11 @@ impl Reader {
         let msg = match Message::try_from(msg) {
             Ok(msg) => msg,
             Err(err) => {
-                return Err(common_state.send_fatal_alert(AlertDescription::from(err), err));
+                return Err(Self::send_fatal_alert(
+                    writer_action,
+                    AlertDescription::from(err),
+                    err,
+                ));
             }
         };
 
@@ -562,11 +620,29 @@ impl Reader {
         match result {
             Ok(()) => Ok(()),
             Err(e @ Error::InappropriateMessage { .. })
-            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
-                Err(common_state.send_fatal_alert(AlertDescription::UnexpectedMessage, e))
-            }
+            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => Err(Self::send_fatal_alert(
+                writer_action,
+                AlertDescription::UnexpectedMessage,
+                e,
+            )),
             Err(e) => Err(e),
         }
+    }
+
+    // CommonState::send_fatal_alert()
+    fn send_fatal_alert(
+        writer_action: &mut WriterAction,
+        desc: AlertDescription,
+        err: impl Into<Error>,
+    ) -> Error {
+        debug_assert!(
+            writer_action
+                .enqueued_fatal_alert
+                .is_none()
+        );
+        let err = err.into();
+        writer_action.enqueued_fatal_alert = Some((desc, err.clone()));
+        err
     }
 }
 
@@ -607,6 +683,12 @@ pub struct Writer {
 
     /// A buffer of plaintext to encrypt and send.
     sendable_plaintext: ChunkVecBuffer,
+
+    /// An enqueued fatal alert to send.
+    ///
+    /// If this is `true`, then the appropriate alert has been enqueued.
+    /// Any further enqueued application data should be ignored.
+    enqueued_fatal_error: bool,
 }
 
 impl Writer {
@@ -617,16 +699,31 @@ impl Writer {
 
     /// Enact a [`WriterAction`] sent by the [`Reader`].
     pub fn enact(&mut self, action: WriterAction) {
-        let WriterAction {} = action;
+        let WriterAction {
+            enqueued_fatal_alert: fatal_error,
+        } = action;
+
+        // The reader saw a failure -- enqueue a fatal alert.
+        if let Some((desc, err)) = fatal_error {
+            debug_assert!(
+                !self.enqueued_fatal_error,
+                "'Reader' sent more than one fatal alert"
+            );
+
+            let mut common_state = self.common_state.lock().unwrap();
+            common_state.send_fatal_alert(desc, err);
+
+            self.enqueued_fatal_error = true;
+        }
     }
 
     /// Send prepared TLS messages over the network.
     pub fn send_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         let mut common_state = self.common_state.lock().unwrap();
         let mut total = 0;
-        while common_state.wants_write() {
+        while !common_state.sendable_tls.is_empty() {
             match common_state.sendable_tls.write_to(wr) {
-                Ok(0) => return Ok(total),
+                Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
                 Ok(n) => total += n,
 
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
@@ -658,6 +755,11 @@ pub struct PlaintextWriter<'a> {
 
 impl PlaintextSink for PlaintextWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // Ignore if a fatal error has been enqueued.
+        if self.writer.enqueued_fatal_error {
+            return Ok(0);
+        }
+
         let mut state = self.writer.state.lock().unwrap();
         let mut common_state = self.writer.common_state.lock().unwrap();
         let len = common_state.buffer_plaintext(buf.into(), &mut self.writer.sendable_plaintext);
@@ -666,6 +768,11 @@ impl PlaintextSink for PlaintextWriter<'_> {
     }
 
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        // Ignore if a fatal error has been enqueued.
+        if self.writer.enqueued_fatal_error {
+            return Ok(0);
+        }
+
         let payload_owner: Vec<&[u8]>;
         let payload = match bufs.len() {
             0 => return Ok(0),
@@ -703,11 +810,19 @@ impl io::Write for PlaintextWriter<'_> {
 }
 
 /// An action commanded by the [`Reader`].
-pub struct WriterAction {}
+pub struct WriterAction {
+    /// Enqueue a fatal alert and end the connection.
+    enqueued_fatal_alert: Option<(AlertDescription, Error)>,
+}
 
 impl WriterAction {
     /// Whether this action is a no-op.
     fn is_empty(&self) -> bool {
-        matches!(self, Self {})
+        matches!(
+            self,
+            Self {
+                enqueued_fatal_alert: None,
+            }
+        )
     }
 }
