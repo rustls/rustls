@@ -1636,10 +1636,15 @@ impl TrafficState for ExpectTraffic {
         self.handle_key_update(common_state, &key_update)
     }
 
-    fn send_key_update_request(&mut self, common: &mut CommonState) {
-        let _ = self
-            .key_schedule
-            .request_key_update_and_update_encrypter(common);
+    fn send_key_update(&mut self, common: &mut CommonState, request: bool) {
+        if request {
+            let _ = self
+                .key_schedule
+                .request_key_update_and_update_encrypter(common);
+        } else {
+            self.key_schedule
+                .update_encrypter_and_notify(common);
+        }
     }
 }
 

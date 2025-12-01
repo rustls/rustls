@@ -879,8 +879,8 @@ pub(crate) trait TrafficState {
 
     fn handle_unexpected(&self, payload: &MessagePayload<'_>) -> Error;
 
-    fn send_key_update_request(&mut self, common_state: &mut CommonState) {
-        let _ = common_state;
+    fn send_key_update(&mut self, common_state: &mut CommonState, request: bool) {
+        let _ = (common_state, request);
     }
 
     fn handle_decrypt_error(&self) {}
@@ -1024,7 +1024,7 @@ impl TemperCounters {
         }
     }
 
-    fn received_key_update_request(&mut self) -> Result<(), Error> {
+    pub(crate) fn received_key_update_request(&mut self) -> Result<(), Error> {
         match self.allowed_key_update_requests {
             0 => Err(PeerMisbehaved::TooManyKeyUpdateRequests.into()),
             _ => {

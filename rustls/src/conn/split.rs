@@ -24,13 +24,13 @@ use crate::{
         cipher::{Decrypted, InboundPlainMessage, OutboundChunks},
     },
     enums::{ContentType, HandshakeType, ProtocolVersion},
-    error::{AlertDescription, PeerMisbehaved},
+    error::{AlertDescription, InvalidMessage, PeerMisbehaved},
     msgs::{
         alert::AlertMessagePayload,
         deframer::{
             BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
         },
-        enums::AlertLevel,
+        enums::{AlertLevel, KeyUpdateRequest},
         handshake::{HandshakeMessagePayload, HandshakePayload, ProtocolName},
         message::{Message, MessagePayload},
     },
@@ -673,10 +673,10 @@ impl Reader {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } if info.is_tls13() => state
-                .handle_key_update(common_state, key_update)
-                .map(|()| None),
-
+            } if info.is_tls13() => {
+                Self::handle_key_update(common_state, state, writer_action, key_update)
+                    .map(|()| None)
+            }
             other => Err(state.handle_unexpected(&other)),
         };
 
@@ -740,6 +740,38 @@ impl Reader {
         }
 
         Err(err)
+    }
+
+    fn handle_key_update(
+        common_state: &mut CommonState,
+        state: &mut dyn TrafficState,
+        writer_action: &mut Option<WriterAction>,
+        request: KeyUpdateRequest,
+    ) -> Result<(), Error> {
+        common_state
+            .temper_counters
+            .received_key_update_request()?;
+
+        // Figure out whether we should update our own side.
+        match request {
+            KeyUpdateRequest::UpdateNotRequested => {}
+            KeyUpdateRequest::UpdateRequested => {
+                // Set the writer action.
+                debug_assert!(writer_action.is_none());
+                *writer_action = Some(WriterAction(WriterActionImpl::UpdateSendingKeys));
+            }
+            KeyUpdateRequest::Unknown(_) => {
+                return Err(Self::send_fatal_alert(
+                    writer_action,
+                    AlertDescription::IllegalParameter,
+                    InvalidMessage::InvalidKeyUpdate,
+                ));
+            }
+        }
+
+        // Hand off the action to the underlying state ... but don't let them
+        // update the sending keys.
+        state.handle_key_update(common_state, KeyUpdateRequest::UpdateNotRequested)
     }
 
     // CommonState::send_fatal_alert()
@@ -827,6 +859,12 @@ impl Writer {
                     self.enqueued_fatal_error = true;
                 }
             }
+
+            WriterActionImpl::UpdateSendingKeys => {
+                let mut common_state = self.common_state.lock().unwrap();
+                let mut state = self.state.lock().unwrap();
+                state.send_key_update(&mut common_state, false);
+            }
         }
     }
 
@@ -855,7 +893,7 @@ impl Writer {
     // ConnectionCore::maybe_refresh_traffic_keys()
     fn maybe_refresh_traffic_keys(state: &mut dyn TrafficState, common_state: &mut CommonState) {
         if mem::take(&mut common_state.refresh_traffic_keys_pending) {
-            let _ = state.send_key_update_request(common_state);
+            let _ = state.send_key_update(common_state, true);
         }
     }
 }
@@ -920,4 +958,10 @@ enum WriterActionImpl {
     ///
     /// If the alert is fatal, the writer will refuse new application data.
     EnqueueAlert(AlertLevel, AlertDescription),
+
+    /// Update the sending keys.
+    ///
+    /// This action is sent in response to a key update request from the peer,
+    /// so the writer shouldn't request the peer to update their keys again.
+    UpdateSendingKeys,
 }
