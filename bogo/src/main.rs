@@ -1818,8 +1818,7 @@ fn after_read(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) 
 
 fn orderly_close(conn: &mut net::TcpStream) {
     // assuming we just flush()'d, we will write no more.
-    conn.shutdown(net::Shutdown::Write)
-        .unwrap();
+    let _ = conn.shutdown(net::Shutdown::Write);
 
     // wait for EOF
     let mut buf = [0u8; 32];
