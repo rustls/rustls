@@ -220,9 +220,7 @@ impl Reader {
 
         let mut state = self.state.lock().unwrap();
         let mut common_state = self.common_state.lock().unwrap();
-        let mut writer_action = WriterAction {
-            enqueued_fatal_alert: None,
-        };
+        let mut writer_action = None;
 
         let mut total = 0;
         let mut eof = false;
@@ -269,20 +267,23 @@ impl Reader {
                     break;
                 }
             }
+
+            // Stop if we have a writer action.
+            if writer_action.is_some() {
+                return Ok(Received {
+                    bytes_read: total,
+                    writer_action,
+                });
+            }
         }
 
-        if !writer_action.is_empty() {
-            Ok(Received {
-                bytes_read: total,
-                writer_action: Some(writer_action),
-            })
-        } else if let Some(error) = &self.buffered_error {
+        if let Some(error) = &self.buffered_error {
             // There was no writer action; show the error immediately.
             Err(io::Error::new(io::ErrorKind::InvalidData, error.clone()))
         } else {
             Ok(Received {
                 bytes_read: total,
-                writer_action: None,
+                writer_action,
             })
         }
     }
@@ -317,7 +318,7 @@ impl Reader {
         info: &ConnectionInfo,
         state: &mut dyn TrafficState,
         common_state: &mut CommonState,
-        writer_action: &mut WriterAction,
+        writer_action: &mut Option<WriterAction>,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         deframer_buffer: &mut DeframerVecBuffer,
@@ -389,6 +390,11 @@ impl Reader {
             }
 
             deframer_buffer.discard(buffer_progress.take_discard());
+
+            if writer_action.is_some() {
+                // We have a writer action; stop immediately.
+                return Ok(());
+            }
         }
 
         deframer_buffer.discard(buffer_progress.take_discard());
@@ -399,7 +405,7 @@ impl Reader {
     fn deframe<'b>(
         info: &ConnectionInfo,
         common_state: &mut CommonState,
-        writer_action: &mut WriterAction,
+        writer_action: &mut Option<WriterAction>,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         state: &dyn TrafficState,
@@ -446,7 +452,7 @@ impl Reader {
     fn process_more_input<'b>(
         info: &ConnectionInfo,
         common_state: &mut CommonState,
-        writer_action: &mut WriterAction,
+        writer_action: &mut Option<WriterAction>,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
         state: &dyn TrafficState,
@@ -584,7 +590,7 @@ impl Reader {
 
     // ConnectionCore::handle_deframe_error()
     fn handle_deframe_error(
-        writer_action: &mut WriterAction,
+        writer_action: &mut Option<WriterAction>,
         error: Error,
         state: &dyn TrafficState,
     ) -> Error {
@@ -608,7 +614,7 @@ impl Reader {
     fn process_main_protocol(
         info: &ConnectionInfo,
         common_state: &mut CommonState,
-        writer_action: &mut WriterAction,
+        writer_action: &mut Option<WriterAction>,
         msg: InboundPlainMessage<'_>,
         state: &mut dyn TrafficState,
         plaintext_locator: &Locator,
@@ -638,9 +644,11 @@ impl Reader {
                 common_state
                     .temper_counters
                     .received_renegotiation_request()?;
-                let desc = AlertDescription::NoRenegotiation;
-                log::warn!("sending warning alert {desc:?}");
-                common_state.send_warning_alert_no_log(desc);
+                debug_assert!(writer_action.is_none());
+                *writer_action = Some(WriterAction(WriterActionImpl::EnqueueAlert(
+                    AlertLevel::Warning,
+                    AlertDescription::NoRenegotiation,
+                )));
                 return Ok(());
             }
         }
@@ -692,7 +700,7 @@ impl Reader {
     fn process_alert(
         info: &ConnectionInfo,
         common_state: &mut CommonState,
-        writer_action: &mut WriterAction,
+        writer_action: &mut Option<WriterAction>,
         alert: &AlertMessagePayload,
     ) -> Result<(), Error> {
         // Reject unknown AlertLevels.
@@ -740,18 +748,16 @@ impl Reader {
 
     // CommonState::send_fatal_alert()
     fn send_fatal_alert(
-        writer_action: &mut WriterAction,
+        writer_action: &mut Option<WriterAction>,
         desc: AlertDescription,
         err: impl Into<Error>,
     ) -> Error {
-        debug_assert!(
-            writer_action
-                .enqueued_fatal_alert
-                .is_none()
-        );
-        let err = err.into();
-        writer_action.enqueued_fatal_alert = Some((desc, err.clone()));
-        err
+        debug_assert!(writer_action.is_none());
+        *writer_action = Some(WriterAction(WriterActionImpl::EnqueueAlert(
+            AlertLevel::Fatal,
+            desc,
+        )));
+        err.into()
     }
 }
 
@@ -811,21 +817,20 @@ impl Writer {
 
     /// Enact a [`WriterAction`] sent by the [`Reader`].
     pub fn enact(&mut self, action: WriterAction) {
-        let WriterAction {
-            enqueued_fatal_alert: fatal_error,
-        } = action;
+        let WriterAction(action) = action;
+        match action {
+            WriterActionImpl::EnqueueAlert(level, desc) => {
+                // Enqueue the alert.
+                let msg = Message::build_alert(level, desc);
+                let mut common_state = self.common_state.lock().unwrap();
+                common_state.send_msg_encrypt(msg.into());
 
-        // The reader saw a failure -- enqueue a fatal alert.
-        if let Some((desc, err)) = fatal_error {
-            debug_assert!(
-                !self.enqueued_fatal_error,
-                "'Reader' sent more than one fatal alert"
-            );
-
-            let mut common_state = self.common_state.lock().unwrap();
-            common_state.send_fatal_alert(desc, err);
-
-            self.enqueued_fatal_error = true;
+                // Update internal state accordingly.
+                if matches!(level, AlertLevel::Fatal) {
+                    common_state.sent_fatal_alert = true;
+                    self.enqueued_fatal_error = true;
+                }
+            }
         }
     }
 
@@ -922,19 +927,11 @@ impl io::Write for PlaintextWriter<'_> {
 }
 
 /// An action commanded by the [`Reader`].
-pub struct WriterAction {
-    /// Enqueue a fatal alert and end the connection.
-    enqueued_fatal_alert: Option<(AlertDescription, Error)>,
-}
+pub struct WriterAction(WriterActionImpl);
 
-impl WriterAction {
-    /// Whether this action is a no-op.
-    fn is_empty(&self) -> bool {
-        matches!(
-            self,
-            Self {
-                enqueued_fatal_alert: None,
-            }
-        )
-    }
+enum WriterActionImpl {
+    /// Enqueue an alert.
+    ///
+    /// If the alert is fatal, the writer will refuse new application data.
+    EnqueueAlert(AlertLevel, AlertDescription),
 }

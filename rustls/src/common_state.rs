@@ -44,7 +44,7 @@ pub struct CommonState {
     pub(crate) may_send_application_data: bool,
     pub(crate) may_receive_application_data: bool,
     pub(crate) early_traffic: bool,
-    sent_fatal_alert: bool,
+    pub(crate) sent_fatal_alert: bool,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
     /// If the peer has signaled end of stream.
