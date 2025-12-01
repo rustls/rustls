@@ -1004,7 +1004,7 @@ pub(crate) struct TemperCounters {
 }
 
 impl TemperCounters {
-    fn received_warning_alert(&mut self) -> Result<(), Error> {
+    pub(crate) fn received_warning_alert(&mut self) -> Result<(), Error> {
         match self.allowed_warning_alerts {
             0 => Err(PeerMisbehaved::TooManyWarningAlertsReceived.into()),
             _ => {

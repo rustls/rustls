@@ -25,9 +25,11 @@ use crate::{
     enums::{ContentType, HandshakeType, ProtocolVersion},
     error::{AlertDescription, PeerMisbehaved},
     msgs::{
+        alert::AlertMessagePayload,
         deframer::{
             BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
         },
+        enums::AlertLevel,
         handshake::{HandshakeMessagePayload, HandshakePayload},
         message::{Message, MessagePayload},
     },
@@ -607,7 +609,9 @@ impl Reader {
             }
 
             // For alerts, we have separate logic.
-            MessagePayload::Alert(alert) => common_state.process_alert(&alert),
+            MessagePayload::Alert(alert) => {
+                Self::process_alert(common_state, writer_action, &alert)
+            }
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
@@ -634,6 +638,55 @@ impl Reader {
             )),
             Err(e) => Err(e),
         }
+    }
+
+    // CommonState::process_alert()
+    fn process_alert(
+        common_state: &mut CommonState,
+        writer_action: &mut WriterAction,
+        alert: &AlertMessagePayload,
+    ) -> Result<(), Error> {
+        // Reject unknown AlertLevels.
+        if let AlertLevel::Unknown(_) = alert.level {
+            return Err(Self::send_fatal_alert(
+                writer_action,
+                AlertDescription::IllegalParameter,
+                Error::AlertReceived(alert.description),
+            ));
+        }
+
+        // If we get a CloseNotify, make a note to declare EOF to our
+        // caller.  But do not treat unauthenticated alerts like this.
+        if alert.description == AlertDescription::CloseNotify {
+            common_state.has_received_close_notify = true;
+            return Ok(());
+        }
+
+        // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
+        // (except, for no good reason, user_cancelled).
+        let err = Error::AlertReceived(alert.description);
+        if alert.level == AlertLevel::Warning {
+            common_state
+                .temper_counters
+                .received_warning_alert()?;
+            if common_state.is_tls13() && alert.description != AlertDescription::UserCanceled {
+                return Err(Self::send_fatal_alert(
+                    writer_action,
+                    AlertDescription::DecodeError,
+                    err,
+                ));
+            }
+
+            // Some implementations send pointless `user_canceled` alerts, don't log them
+            // in release mode (https://bugs.openjdk.org/browse/JDK-8323517).
+            if alert.description != AlertDescription::UserCanceled || cfg!(debug_assertions) {
+                log::warn!("TLS alert warning received: {alert:?}");
+            }
+
+            return Ok(());
+        }
+
+        Err(err)
     }
 
     // CommonState::send_fatal_alert()
