@@ -488,8 +488,9 @@ impl CommonState {
     pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         {
             if let Protocol::Quic = self.protocol {
-                if let MessagePayload::Alert(alert) = m.payload {
-                    self.quic.alert = Some(alert.description);
+                if let MessagePayload::Alert(_) = m.payload {
+                    // alerts are sent out-of-band in QUIC mode
+                    return;
                 } else {
                     debug_assert!(
                         matches!(
