@@ -48,7 +48,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
     // Destructure the state into a type-independent thing.
     let (
         state,
-        common_state,
+        mut common_state,
         hs_deframer,
         seen_consecutive_empty_fragments,
         deframer_buffer,
@@ -103,6 +103,13 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
         }
     };
 
+    let received_plaintext = mem::replace(
+        &mut common_state.received_plaintext,
+        ChunkVecBuffer::new(None),
+    );
+    assert!(!common_state.has_seen_eof);
+    assert!(!common_state.has_received_close_notify);
+
     let info = Arc::new(ConnectionInfo {
         version: common_state.negotiated_version.unwrap(),
         handshake_kind: common_state.handshake_kind.unwrap(),
@@ -123,10 +130,13 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
             state: state.clone(),
             common_state: common_state.clone(),
 
+            has_seen_eof: false,
             buffered_error: None,
             deframer_buffer,
             hs_deframer,
             seen_consecutive_empty_fragments,
+            has_received_close_notify: false,
+            received_plaintext,
         },
         Writer {
             info: info.clone(),
@@ -179,6 +189,9 @@ pub struct Reader {
     state: Arc<Mutex<Box<dyn TrafficState>>>,
     common_state: Arc<Mutex<CommonState>>,
 
+    /// Whether the underlying transport has reported EOF.
+    has_seen_eof: bool,
+
     /// A buffered TLS error, if any.
     ///
     /// If a TLS error occurs, it is buffered here, and an appropriate writer
@@ -198,6 +211,12 @@ pub struct Reader {
     /// We limit consecutive empty fragments to avoid a route for the peer to
     /// send us significant but fruitless traffic.
     seen_consecutive_empty_fragments: u8,
+
+    /// Whether the peer has closed their half of the connection.
+    has_received_close_notify: bool,
+
+    /// A buffer of received plaintext.
+    received_plaintext: ChunkVecBuffer,
 }
 
 impl Reader {
@@ -222,16 +241,13 @@ impl Reader {
         let mut total = 0;
         let mut eof = false;
 
-        while !eof
-            && common_state
-                .received_plaintext
-                .is_empty()
-            && !common_state.has_received_close_notify
-        {
+        while !eof && self.received_plaintext.is_empty() && !self.has_received_close_notify {
             match Self::read_tls(
-                &mut common_state,
+                &mut self.has_seen_eof,
                 &mut self.hs_deframer,
                 &mut self.deframer_buffer,
+                &mut self.has_received_close_notify,
+                &mut self.received_plaintext,
                 rd,
             ) {
                 Ok(0) => eof = true,
@@ -255,6 +271,8 @@ impl Reader {
                 &mut writer_action,
                 &mut self.hs_deframer,
                 &mut self.seen_consecutive_empty_fragments,
+                &mut self.has_received_close_notify,
+                &mut self.received_plaintext,
                 &mut self.deframer_buffer,
             ) {
                 Ok(()) => {}
@@ -287,25 +305,24 @@ impl Reader {
 
     // ConnectionCommon::read_tls()
     fn read_tls(
-        common_state: &mut CommonState,
+        has_seen_eof: &mut bool,
         hs_deframer: &mut HandshakeDeframer,
         deframer_buffer: &mut DeframerVecBuffer,
+        has_received_close_notify: &bool,
+        received_plaintext: &mut ChunkVecBuffer,
         rd: &mut dyn io::Read,
     ) -> io::Result<usize> {
-        if common_state
-            .received_plaintext
-            .is_full()
-        {
+        if received_plaintext.is_full() {
             return Err(io::Error::other("received plaintext buffer full"));
         }
 
-        if common_state.has_received_close_notify {
+        if *has_received_close_notify {
             return Ok(0);
         }
 
         let res = deframer_buffer.read(rd, hs_deframer.is_active());
         if let Ok(0) = res {
-            common_state.has_seen_eof = true;
+            *has_seen_eof = true;
         }
         res
     }
@@ -318,14 +335,13 @@ impl Reader {
         writer_action: &mut Option<WriterAction>,
         hs_deframer: &mut HandshakeDeframer,
         seen_consecutive_empty_fragments: &mut u8,
+        has_received_close_notify: &mut bool,
+        received_plaintext: &mut ChunkVecBuffer,
         deframer_buffer: &mut DeframerVecBuffer,
     ) -> Result<(), Error> {
         // Should `InboundPlainMessage` resolve to plaintext application
         // data it will be allocated within `plaintext` and written to
         // `CommonState.received_plaintext` buffer.
-        //
-        // TODO `CommonState.received_plaintext` should be hoisted into
-        // `ConnectionCommon`
         let mut buffer_progress = hs_deframer.progress();
 
         loop {
@@ -357,6 +373,7 @@ impl Reader {
             let plaintext = match Self::process_main_protocol(
                 info,
                 common_state,
+                has_received_close_notify,
                 writer_action,
                 msg,
                 state,
@@ -369,7 +386,7 @@ impl Reader {
                 }
             };
 
-            if common_state.has_received_close_notify {
+            if *has_received_close_notify {
                 // "Any data received after a closure alert has been received MUST be ignored."
                 // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
                 // This is data that has already been accepted in `read_tls`.
@@ -379,9 +396,7 @@ impl Reader {
 
             if let Some(payload) = plaintext {
                 let payload = payload.reborrow(&Delocator::new(buffer));
-                common_state
-                    .received_plaintext
-                    .append(payload.into_vec());
+                received_plaintext.append(payload.into_vec());
             }
 
             deframer_buffer.discard(buffer_progress.take_discard());
@@ -609,6 +624,7 @@ impl Reader {
     fn process_main_protocol(
         info: &ConnectionInfo,
         common_state: &mut CommonState,
+        has_received_close_notify: &mut bool,
         writer_action: &mut Option<WriterAction>,
         msg: InboundPlainMessage<'_>,
         state: &mut dyn TrafficState,
@@ -659,9 +675,14 @@ impl Reader {
             }
 
             // For alerts, we have separate logic.
-            MessagePayload::Alert(alert) => {
-                Self::process_alert(info, common_state, writer_action, &alert).map(|()| None)
-            }
+            MessagePayload::Alert(alert) => Self::process_alert(
+                info,
+                common_state,
+                has_received_close_notify,
+                writer_action,
+                &alert,
+            )
+            .map(|()| None),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
@@ -696,6 +717,7 @@ impl Reader {
     fn process_alert(
         info: &ConnectionInfo,
         common_state: &mut CommonState,
+        has_received_close_notify: &mut bool,
         writer_action: &mut Option<WriterAction>,
         alert: &AlertMessagePayload,
     ) -> Result<(), Error> {
@@ -711,7 +733,7 @@ impl Reader {
         // If we get a CloseNotify, make a note to declare EOF to our
         // caller.  But do not treat unauthenticated alerts like this.
         if alert.description == AlertDescription::CloseNotify {
-            common_state.has_received_close_notify = true;
+            *has_received_close_notify = true;
             return Ok(());
         }
 
@@ -806,12 +828,10 @@ pub struct PlaintextReader<'a> {
 
 impl io::Read for PlaintextReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut common_state = self.reader.common_state.lock().unwrap();
-        let common = &mut *common_state;
         crate::Reader {
-            received_plaintext: &mut common.received_plaintext,
-            has_received_close_notify: common.has_received_close_notify,
-            has_seen_eof: common.has_seen_eof,
+            received_plaintext: &mut self.reader.received_plaintext,
+            has_received_close_notify: self.reader.has_received_close_notify,
+            has_seen_eof: self.reader.has_seen_eof,
         }
         .read(buf)
     }
