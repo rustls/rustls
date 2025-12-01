@@ -329,7 +329,6 @@ impl Reader {
         //
         // TODO `CommonState.received_plaintext` should be hoisted into
         // `ConnectionCommon`
-        let mut plaintext = None;
         let mut buffer_progress = hs_deframer.progress();
 
         loop {
@@ -358,21 +357,20 @@ impl Reader {
                 break;
             };
 
-            match Self::process_main_protocol(
+            let plaintext = match Self::process_main_protocol(
                 info,
                 common_state,
                 writer_action,
                 msg,
                 state,
                 &locator,
-                &mut plaintext,
             ) {
-                Ok(()) => {}
+                Ok(plaintext) => plaintext,
                 Err(e) => {
                     deframer_buffer.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
-            }
+            };
 
             if common_state.has_received_close_notify {
                 // "Any data received after a closure alert has been received MUST be ignored."
@@ -382,7 +380,7 @@ impl Reader {
                 break;
             }
 
-            if let Some(payload) = plaintext.take() {
+            if let Some(payload) = plaintext {
                 let payload = payload.reborrow(&Delocator::new(buffer));
                 common_state
                     .received_plaintext
@@ -618,8 +616,7 @@ impl Reader {
         msg: InboundPlainMessage<'_>,
         state: &mut dyn TrafficState,
         plaintext_locator: &Locator,
-        received_plaintext: &mut Option<UnborrowedPayload>,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<UnborrowedPayload>, Error> {
         // Now we can fully parse the message payload.
         let msg = match Message::try_from(msg) {
             Ok(msg) => msg,
@@ -649,7 +646,7 @@ impl Reader {
                     AlertLevel::Warning,
                     AlertDescription::NoRenegotiation,
                 )));
-                return Ok(());
+                return Ok(None);
             }
         }
 
@@ -658,34 +655,36 @@ impl Reader {
                 common_state
                     .temper_counters
                     .received_app_data();
-                let previous = received_plaintext
-                    .replace(UnborrowedPayload::unborrow(plaintext_locator, payload));
-                debug_assert!(previous.is_none(), "overwrote plaintext data");
-                Ok(())
+                Ok(Some(UnborrowedPayload::unborrow(
+                    plaintext_locator,
+                    payload,
+                )))
             }
 
             // For alerts, we have separate logic.
             MessagePayload::Alert(alert) => {
-                Self::process_alert(info, common_state, writer_action, &alert)
+                Self::process_alert(info, common_state, writer_action, &alert).map(|()| None)
             }
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
                 ..
-            } if info.is_tls13() && info.side == Side::Client => {
-                state.handle_tls13_session_ticket(common_state, new_ticket)
-            }
+            } if info.is_tls13() && info.side == Side::Client => state
+                .handle_tls13_session_ticket(common_state, new_ticket)
+                .map(|()| None),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } if info.is_tls13() => state.handle_key_update(common_state, key_update),
+            } if info.is_tls13() => state
+                .handle_key_update(common_state, key_update)
+                .map(|()| None),
 
             other => Err(state.handle_unexpected(&other)),
         };
 
         match result {
-            Ok(()) => Ok(()),
+            Ok(received_plaintext) => Ok(received_plaintext),
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => Err(Self::send_fatal_alert(
                 writer_action,
