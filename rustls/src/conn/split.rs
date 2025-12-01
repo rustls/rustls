@@ -18,10 +18,7 @@ use crate::{
     SupportedCipherSuite,
     client::ClientConnection,
     common_state::{TrafficState, UnborrowedPayload},
-    conn::{
-        ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage,
-        connection::PlaintextSink,
-    },
+    conn::{ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage},
     crypto::{
         Identity,
         cipher::{Decrypted, InboundPlainMessage, OutboundChunks},
@@ -869,7 +866,7 @@ pub struct PlaintextWriter<'a> {
     writer: &'a mut Writer,
 }
 
-impl PlaintextSink for PlaintextWriter<'_> {
+impl io::Write for PlaintextWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // Ignore if a fatal error has been enqueued.
         if self.writer.enqueued_fatal_error {
@@ -912,16 +909,6 @@ impl PlaintextSink for PlaintextWriter<'_> {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
-    }
-}
-
-impl io::Write for PlaintextWriter<'_> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        crate::Writer::new(self).write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        crate::Writer::new(self).flush()
     }
 }
 
