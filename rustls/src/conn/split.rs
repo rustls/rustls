@@ -14,14 +14,18 @@ use std::{
 };
 
 use crate::{
-    CommonState, Connection, ConnectionCommon, Error, ServerConnection, Side,
+    CommonState, Connection, ConnectionCommon, Error, HandshakeKind, ServerConnection, Side,
+    SupportedCipherSuite,
     client::ClientConnection,
     common_state::{TrafficState, UnborrowedPayload},
     conn::{
         ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage,
         connection::PlaintextSink,
     },
-    crypto::cipher::{Decrypted, InboundPlainMessage, OutboundChunks},
+    crypto::{
+        Identity,
+        cipher::{Decrypted, InboundPlainMessage, OutboundChunks},
+    },
     enums::{ContentType, HandshakeType, ProtocolVersion},
     error::{AlertDescription, PeerMisbehaved},
     msgs::{
@@ -30,7 +34,7 @@ use crate::{
             BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
         },
         enums::AlertLevel,
-        handshake::{HandshakeMessagePayload, HandshakePayload},
+        handshake::{HandshakeMessagePayload, HandshakePayload, ProtocolName},
         message::{Message, MessagePayload},
     },
     vecbuf::ChunkVecBuffer,
@@ -102,11 +106,23 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
         }
     };
 
+    let info = Arc::new(ConnectionInfo {
+        version: common_state.negotiated_version.unwrap(),
+        handshake_kind: common_state.handshake_kind.unwrap(),
+        side: common_state.side,
+        suite: common_state.suite.unwrap(),
+        alpn_protocol: common_state.alpn_protocol.clone(),
+        peer_identity: common_state
+            .peer_identity
+            .clone()
+            .unwrap(),
+    });
     let state = Arc::new(Mutex::new(state));
     let common_state = Arc::new(Mutex::new(common_state));
 
     Ok((
         Reader {
+            info: info.clone(),
             state: state.clone(),
             common_state: common_state.clone(),
 
@@ -116,6 +132,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
             seen_consecutive_empty_fragments,
         },
         Writer {
+            info: info.clone(),
             state: state.clone(),
             common_state: common_state.clone(),
 
@@ -125,10 +142,43 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
     ))
 }
 
+/// Immutable information about a connection.
+struct ConnectionInfo {
+    /// The TLS protocol version in use.
+    version: ProtocolVersion,
+
+    /// Which kind of handshake was performed.
+    ///
+    /// Relevant for resumptions.
+    handshake_kind: HandshakeKind,
+
+    /// Which side of the connection this is.
+    side: Side,
+
+    /// The cipher suite in use.
+    suite: SupportedCipherSuite,
+
+    /// The negotiated ALPN protocol, if any.
+    alpn_protocol: Option<ProtocolName>,
+
+    /// The identity of the peer.
+    peer_identity: Identity<'static>,
+}
+
+impl ConnectionInfo {
+    /// Whether this is a TLS 1.3 connection.
+    const fn is_tls13(&self) -> bool {
+        matches!(self.version, ProtocolVersion::TLSv1_3)
+    }
+}
+
 //----------- Reader ---------------------------------------------------------
 
 /// The reading half of a client-side TLS connection.
 pub struct Reader {
+    /// Immutable information about the connection.
+    info: Arc<ConnectionInfo>,
+
     state: Arc<Mutex<Box<dyn TrafficState>>>,
     common_state: Arc<Mutex<CommonState>>,
 
@@ -204,6 +254,7 @@ impl Reader {
             }
 
             match Self::process_new_packets(
+                &self.info,
                 &mut **state,
                 &mut common_state,
                 &mut writer_action,
@@ -263,6 +314,7 @@ impl Reader {
 
     // ConnectionCore::process_new_packets()
     fn process_new_packets(
+        info: &ConnectionInfo,
         state: &mut dyn TrafficState,
         common_state: &mut CommonState,
         writer_action: &mut WriterAction,
@@ -283,6 +335,7 @@ impl Reader {
             let buffer = deframer_buffer.filled_mut();
             let locator = Locator::new(buffer);
             let res = Self::deframe(
+                info,
                 common_state,
                 writer_action,
                 hs_deframer,
@@ -305,6 +358,7 @@ impl Reader {
             };
 
             match Self::process_main_protocol(
+                info,
                 common_state,
                 writer_action,
                 msg,
@@ -343,6 +397,7 @@ impl Reader {
 
     // ConnectionCore::deframe()
     fn deframe<'b>(
+        info: &ConnectionInfo,
         common_state: &mut CommonState,
         writer_action: &mut WriterAction,
         hs_deframer: &mut HandshakeDeframer,
@@ -360,6 +415,7 @@ impl Reader {
             ))
         } else {
             Self::process_more_input(
+                info,
                 common_state,
                 writer_action,
                 hs_deframer,
@@ -388,6 +444,7 @@ impl Reader {
 
     // ConnectionCore::process_more_input()
     fn process_more_input<'b>(
+        info: &ConnectionInfo,
         common_state: &mut CommonState,
         writer_action: &mut WriterAction,
         hs_deframer: &mut HandshakeDeframer,
@@ -396,11 +453,6 @@ impl Reader {
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
-        let version_is_tls13 = matches!(
-            common_state.negotiated_version,
-            Some(ProtocolVersion::TLSv1_3)
-        );
-
         let locator = Locator::new(buffer);
 
         loop {
@@ -423,7 +475,7 @@ impl Reader {
                     //   expect any plaintext.
                     // * The payload size is indicative of a plaintext alert message.
                     ContentType::Alert
-                        if version_is_tls13
+                        if info.is_tls13()
                             && !common_state
                                 .record_layer
                                 .has_decrypted()
@@ -554,6 +606,7 @@ impl Reader {
 
     // CommonState::process_main_protocol()
     fn process_main_protocol(
+        info: &ConnectionInfo,
         common_state: &mut CommonState,
         writer_action: &mut WriterAction,
         msg: InboundPlainMessage<'_>,
@@ -561,11 +614,6 @@ impl Reader {
         plaintext_locator: &Locator,
         received_plaintext: &mut Option<UnborrowedPayload>,
     ) -> Result<(), Error> {
-        let version_is_tls13 = matches!(
-            common_state.negotiated_version,
-            Some(ProtocolVersion::TLSv1_3)
-        );
-
         // Now we can fully parse the message payload.
         let msg = match Message::try_from(msg) {
             Ok(msg) => msg,
@@ -580,8 +628,8 @@ impl Reader {
 
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if !version_is_tls13 {
-            let reject_ty = match common_state.side {
+        if !info.is_tls13() {
+            let reject_ty = match info.side {
                 Side::Client => HandshakeType::HelloRequest,
                 Side::Server => HandshakeType::ClientHello,
             };
@@ -610,20 +658,20 @@ impl Reader {
 
             // For alerts, we have separate logic.
             MessagePayload::Alert(alert) => {
-                Self::process_alert(common_state, writer_action, &alert)
+                Self::process_alert(info, common_state, writer_action, &alert)
             }
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
                 ..
-            } if version_is_tls13 && common_state.side == Side::Client => {
+            } if info.is_tls13() && info.side == Side::Client => {
                 state.handle_tls13_session_ticket(common_state, new_ticket)
             }
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } if version_is_tls13 => state.handle_key_update(common_state, key_update),
+            } if info.is_tls13() => state.handle_key_update(common_state, key_update),
 
             other => Err(state.handle_unexpected(&other)),
         };
@@ -642,6 +690,7 @@ impl Reader {
 
     // CommonState::process_alert()
     fn process_alert(
+        info: &ConnectionInfo,
         common_state: &mut CommonState,
         writer_action: &mut WriterAction,
         alert: &AlertMessagePayload,
@@ -669,7 +718,7 @@ impl Reader {
             common_state
                 .temper_counters
                 .received_warning_alert()?;
-            if common_state.is_tls13() && alert.description != AlertDescription::UserCanceled {
+            if info.is_tls13() && alert.description != AlertDescription::UserCanceled {
                 return Err(Self::send_fatal_alert(
                     writer_action,
                     AlertDescription::DecodeError,
@@ -738,6 +787,9 @@ impl io::Read for PlaintextReader<'_> {
 
 /// The writing half of a client-side TLS connection.
 pub struct Writer {
+    /// Immutable information about the connection.
+    info: Arc<ConnectionInfo>,
+
     state: Arc<Mutex<Box<dyn TrafficState>>>,
     common_state: Arc<Mutex<CommonState>>,
 
