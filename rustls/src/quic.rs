@@ -8,7 +8,7 @@ use core::fmt::Debug;
 use crate::common_state::Side;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
-use crate::error::{AlertDescription, Error};
+use crate::error::Error;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
@@ -28,7 +28,7 @@ mod connection {
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ContentType, ProtocolVersion};
-    use crate::error::{AlertDescription, ApiMisuse, Error};
+    use crate::error::{ApiMisuse, Error};
     use crate::msgs::deframer::{DeframerVecBuffer, Locator};
     use crate::msgs::handshake::{
         ClientExtensionsInput, ServerExtensionsInput, TransportParameters,
@@ -84,16 +84,6 @@ mod connection {
             match self {
                 Self::Client(conn) => conn.write_hs(buf),
                 Self::Server(conn) => conn.write_hs(buf),
-            }
-        }
-
-        /// Emit the TLS description code of a fatal alert, if one has arisen.
-        ///
-        /// Check after `read_hs` returns `Err(_)`.
-        pub fn alert(&self) -> Option<AlertDescription> {
-            match self {
-                Self::Client(conn) => conn.alert(),
-                Self::Server(conn) => conn.alert(),
             }
         }
     }
@@ -426,6 +416,11 @@ mod connection {
         /// Consume unencrypted TLS handshake data.
         ///
         /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
+        ///
+        /// If this fails, obtain the alert to send using [`AlertDescription::try_from(&Error)`][]
+        /// with the returned error.
+        ///
+        /// [`AlertDescription::try_from(&Error)`]: crate::error::AlertDescription::try_from
         pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             let range = self.deframer_buffer.extend(plaintext);
 
@@ -458,13 +453,6 @@ mod connection {
                 .common_state
                 .quic
                 .write_hs(buf)
-        }
-
-        /// Emit the TLS description code of a fatal alert, if one has arisen.
-        ///
-        /// Check after `read_hs` returns `Err(_)`.
-        pub fn alert(&self) -> Option<AlertDescription> {
-            self.core.common_state.quic.alert
         }
     }
 
@@ -500,7 +488,6 @@ pub use connection::{ClientConnection, Connection, ConnectionCommon, ServerConne
 pub(crate) struct Quic {
     /// QUIC transport parameters received from the peer during the handshake
     pub(crate) params: Option<Vec<u8>>,
-    pub(crate) alert: Option<AlertDescription>,
     pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
     pub(crate) early_secret: Option<OkmBlock>,
     pub(crate) hs_secrets: Option<Secrets>,

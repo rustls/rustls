@@ -33,7 +33,6 @@ fn step<L: SideData, R: SideData>(
     };
 
     recv.read_hs(&buf)?;
-    assert_eq!(recv.alert(), None);
     Ok(change)
 }
 
@@ -227,8 +226,13 @@ fn test_quic_handshake() {
     step(&mut server, &mut client)
         .unwrap()
         .unwrap();
-    assert!(step(&mut server, &mut client).is_err());
-    assert_eq!(client.alert(), Some(AlertDescription::BadCertificate));
+    let err = step(&mut server, &mut client)
+        .err()
+        .unwrap();
+    assert_eq!(
+        AlertDescription::try_from(&err).ok(),
+        Some(AlertDescription::BadCertificate)
+    );
 
     // Key updates
 
@@ -294,15 +298,12 @@ fn test_quic_rejects_missing_alpn() {
             quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
                 .unwrap();
 
+        let err = step(&mut client, &mut server)
+            .err()
+            .unwrap();
+        assert_eq!(err, Error::NoApplicationProtocol);
         assert_eq!(
-            step(&mut client, &mut server)
-                .err()
-                .unwrap(),
-            Error::NoApplicationProtocol
-        );
-
-        assert_eq!(
-            server.alert(),
+            AlertDescription::try_from(&err).ok(),
             Some(AlertDescription::NoApplicationProtocol)
         );
     }
@@ -373,16 +374,18 @@ fn test_quic_read_hs_deframer_failure() {
         quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec())
             .unwrap();
 
+    let err = server
+        .read_hs(&encoding::handshake_framing(
+            rustls::enums::HandshakeType::ClientHello,
+            vec![0x00; 32],
+        ))
+        .err()
+        .unwrap();
+    assert_eq!(err, InvalidMessage::MissingData("Random").into());
     assert_eq!(
-        server
-            .read_hs(&encoding::handshake_framing(
-                rustls::enums::HandshakeType::ClientHello,
-                vec![0x00; 32],
-            ))
-            .err(),
-        Some(InvalidMessage::MissingData("Random").into())
+        AlertDescription::try_from(&err).ok(),
+        Some(AlertDescription::DecodeError)
     );
-    assert_eq!(server.alert(), Some(AlertDescription::DecodeError));
 }
 
 #[test]
@@ -396,13 +399,18 @@ fn test_quic_server_no_params_received() {
             .unwrap();
 
     let buf = encoding::basic_client_hello(vec![]);
+    let err = server
+        .read_hs(buf.as_slice())
+        .err()
+        .unwrap();
     assert_eq!(
-        server.read_hs(buf.as_slice()).err(),
-        Some(Error::PeerMisbehaved(
-            PeerMisbehaved::MissingQuicTransportParameters
-        ))
+        err,
+        Error::PeerMisbehaved(PeerMisbehaved::MissingQuicTransportParameters)
     );
-    assert_eq!(server.alert(), Some(AlertDescription::MissingExtension));
+    assert_eq!(
+        AlertDescription::try_from(&err).ok(),
+        Some(AlertDescription::MissingExtension)
+    );
 }
 
 #[test]
@@ -421,13 +429,18 @@ fn test_quic_server_no_tls12() {
         encoding::Extension::new_dummy_key_share(),
         encoding::Extension::new_kx_groups(),
     ]);
+    let err = server
+        .read_hs(buf.as_slice())
+        .err()
+        .unwrap();
     assert_eq!(
-        server.read_hs(buf.as_slice()).err(),
-        Some(Error::PeerIncompatible(
-            PeerIncompatible::SupportedVersionsExtensionRequired
-        )),
+        err,
+        Error::PeerIncompatible(PeerIncompatible::SupportedVersionsExtensionRequired),
     );
-    assert_eq!(server.alert(), Some(AlertDescription::ProtocolVersion));
+    assert_eq!(
+        AlertDescription::try_from(&err).ok(),
+        Some(AlertDescription::ProtocolVersion)
+    );
 }
 
 fn do_quic_handshake<L: SideData, R: SideData>(
@@ -452,7 +465,6 @@ fn quic_transfer<L: SideData, R: SideData>(
 
     if !buf.is_empty() {
         receiver.read_hs(&buf).unwrap();
-        assert_eq!(receiver.alert(), None);
     }
 }
 
