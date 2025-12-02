@@ -16,6 +16,7 @@ use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
+use crate::msgs::base::PayloadU8;
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
@@ -163,15 +164,12 @@ impl ExtensionProcessing {
     ) {
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
-
-        use crate::msgs::base::PayloadU8;
-        let secure_reneg_offered = hello.renegotiation_info.is_some()
+        if hello.renegotiation_info.is_some()
             || hello
                 .cipher_suites
-                .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
-
-        if secure_reneg_offered {
-            self.extensions.renegotiation_info = Some(PayloadU8::new(Vec::new()));
+                .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
+        {
+            self.extensions.renegotiation_info = Some(PayloadU8::empty());
         }
 
         // Tickets:
