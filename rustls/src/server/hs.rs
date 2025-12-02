@@ -116,21 +116,12 @@ impl ExtensionProcessing {
             self.extensions.server_name_ack = Some(());
         }
 
-        // Send status_request response if we have one.  This is not allowed
-        // if we're resuming, and is only triggered if we have an OCSP response
-        // to send.
-        if !for_resume
-            && hello
+        // Discard OCSP response if it is not necessary.
+        if for_resume
+            || hello
                 .certificate_status_request
-                .is_some()
+                .is_none()
         {
-            if let (Some([_, ..]), false) = (ocsp_response, cx.common.is_tls13()) {
-                // Only TLS1.2 sends confirmation in ServerHello
-                self.extensions
-                    .certificate_status_request_ack = Some(());
-            }
-        } else {
-            // Throw away any OCSP response so we don't try to send it later.
             ocsp_response.take();
         }
 
@@ -167,6 +158,7 @@ impl ExtensionProcessing {
         &mut self,
         config: &ServerConfig,
         hello: &ClientHelloPayload,
+        ocsp_response: &mut Option<&[u8]>,
         using_ems: bool,
     ) {
         // Renegotiation.
@@ -194,6 +186,12 @@ impl ExtensionProcessing {
         if using_ems {
             self.extensions
                 .extended_master_secret_ack = Some(());
+        }
+
+        // Send confirmation of OCSP staple request if we will send one.
+        if let Some([_, ..]) = &ocsp_response {
+            self.extensions
+                .certificate_status_request_ack = Some(());
         }
     }
 
