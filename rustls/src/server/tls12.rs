@@ -332,15 +332,9 @@ mod client_hello {
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput<'static>,
     ) -> Result<bool, Error> {
-        let mut ep = hs::ExtensionProcessing::new(extra_exts);
-        ep.process_common(
-            config,
-            cx,
-            ocsp_response,
-            hello,
-            resumedata.map(|r| &r.common),
-        )?;
-        ep.process_tls12(config, hello, ocsp_response, using_ems);
+        let mut ep = hs::ExtensionProcessing::new(extra_exts, hello, config);
+        ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
+        ep.process_tls12(ocsp_response, using_ems);
 
         let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
             legacy_version: ProtocolVersion::TLSv1_2,

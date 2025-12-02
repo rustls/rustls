@@ -664,14 +664,8 @@ mod client_hello {
         extra_exts: ServerExtensionsInput<'static>,
         config: &ServerConfig,
     ) -> Result<(CertificateTypes, EarlyDataDecision), Error> {
-        let mut ep = hs::ExtensionProcessing::new(extra_exts);
-        let cert_types = ep.process_common(
-            config,
-            cx,
-            ocsp_response,
-            hello,
-            resumedata.map(|r| &r.common),
-        )?;
+        let mut ep = hs::ExtensionProcessing::new(extra_exts, hello, config);
+        let cert_types = ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
 
         let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
         if early_data == EarlyDataDecision::Accepted {

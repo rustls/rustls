@@ -35,15 +35,20 @@ pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
 
-#[derive(Default)]
-pub(super) struct ExtensionProcessing {
+pub(super) struct ExtensionProcessing<'a> {
     // extensions to reply with
     pub(super) extensions: Box<ServerExtensions<'static>>,
     pub(super) send_ticket: bool,
+    pub(super) config: &'a ServerConfig,
+    pub(super) client_hello: &'a ClientHelloPayload,
 }
 
-impl ExtensionProcessing {
-    pub(super) fn new(extra_exts: ServerExtensionsInput<'static>) -> Self {
+impl<'a> ExtensionProcessing<'a> {
+    pub(super) fn new(
+        extra_exts: ServerExtensionsInput<'static>,
+        client_hello: &'a ClientHelloPayload,
+        config: &'a ServerConfig,
+    ) -> Self {
         let ServerExtensionsInput {
             transport_parameters,
         } = extra_exts;
@@ -56,17 +61,20 @@ impl ExtensionProcessing {
         Self {
             extensions,
             send_ticket: false,
+            config,
+            client_hello,
         }
     }
 
     pub(super) fn process_common(
         &mut self,
-        config: &ServerConfig,
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
-        hello: &ClientHelloPayload,
         resumedata: Option<&persist::CommonServerSessionValue>,
     ) -> Result<CertificateTypes, Error> {
+        let config = self.config;
+        let hello = self.client_hello;
+
         // ALPN
         let our_protocols = &config.alpn_protocols;
         if let Some(their_protocols) = &hello.protocols {
@@ -130,7 +138,7 @@ impl ExtensionProcessing {
             hello
                 .client_certificate_types
                 .as_deref(),
-            config
+            self.config
                 .verifier
                 .supported_certificate_types(),
         )?;
@@ -139,12 +147,12 @@ impl ExtensionProcessing {
             hello
                 .server_certificate_types
                 .as_deref(),
-            config
+            self.config
                 .cert_resolver
                 .supported_certificate_types(),
         )?;
 
-        if hello.client_certificate_types.is_some() && config.verifier.offer_client_auth() {
+        if hello.client_certificate_types.is_some() && self.config.verifier.offer_client_auth() {
             self.extensions.client_certificate_type = Some(expected_client_type);
         }
         if hello.server_certificate_types.is_some() {
@@ -155,13 +163,10 @@ impl ExtensionProcessing {
         })
     }
 
-    pub(super) fn process_tls12(
-        &mut self,
-        config: &ServerConfig,
-        hello: &ClientHelloPayload,
-        ocsp_response: &mut Option<&[u8]>,
-        using_ems: bool,
-    ) {
+    pub(super) fn process_tls12(&mut self, ocsp_response: &mut Option<&[u8]>, using_ems: bool) {
+        let config = self.config;
+        let hello = self.client_hello;
+
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
         if hello.renegotiation_info.is_some()
