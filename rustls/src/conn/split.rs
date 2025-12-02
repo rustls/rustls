@@ -116,7 +116,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
         handshake_kind: common_state.handshake_kind.unwrap(),
         side: common_state.side,
         suite: common_state.suite.unwrap(),
-        alpn_protocol: common_state.alpn_protocol.clone(),
+        _alpn_protocol: common_state.alpn_protocol.clone(),
         peer_identity: common_state
             .peer_identity
             .clone()
@@ -152,26 +152,28 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
 }
 
 /// Immutable information about a connection.
-struct ConnectionInfo {
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct ConnectionInfo {
     /// The TLS protocol version in use.
-    version: ProtocolVersion,
+    pub version: ProtocolVersion,
 
     /// Which kind of handshake was performed.
     ///
     /// Relevant for resumptions.
-    handshake_kind: HandshakeKind,
+    pub handshake_kind: HandshakeKind,
 
     /// Which side of the connection this is.
-    side: Side,
+    pub side: Side,
 
     /// The cipher suite in use.
-    suite: SupportedCipherSuite,
+    pub suite: SupportedCipherSuite,
 
     /// The negotiated ALPN protocol, if any.
-    alpn_protocol: Option<ProtocolName>,
+    _alpn_protocol: Option<ProtocolName>,
 
     /// The identity of the peer.
-    peer_identity: Identity<'static>,
+    pub peer_identity: Identity<'static>,
 }
 
 impl ConnectionInfo {
@@ -225,6 +227,11 @@ pub struct Reader {
 }
 
 impl Reader {
+    /// Information about the connection.
+    pub fn info(&self) -> &ConnectionInfo {
+        &self.info
+    }
+
     /// A reader for plaintext data.
     pub fn reader(&mut self) -> PlaintextReader<'_> {
         PlaintextReader { reader: self }
@@ -866,6 +873,11 @@ pub struct Writer {
 }
 
 impl Writer {
+    /// Information about the connection.
+    pub fn info(&self) -> &ConnectionInfo {
+        &self.info
+    }
+
     /// A writer for plaintext data.
     pub fn writer(&mut self) -> PlaintextWriter<'_> {
         PlaintextWriter { writer: self }
