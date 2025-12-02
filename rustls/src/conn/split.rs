@@ -17,7 +17,7 @@ use crate::{
     CommonState, Connection, ConnectionCommon, Error, HandshakeKind, ServerConnection, Side,
     SupportedCipherSuite,
     client::ClientConnection,
-    common_state::{TrafficState, UnborrowedPayload},
+    common_state::{TemperCounters, TrafficState, UnborrowedPayload},
     conn::{ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage},
     crypto::{
         Identity,
@@ -109,6 +109,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
     );
     assert!(!common_state.has_seen_eof);
     assert!(!common_state.has_received_close_notify);
+    let temper_counters = mem::take(&mut common_state.temper_counters);
 
     let info = Arc::new(ConnectionInfo {
         version: common_state.negotiated_version.unwrap(),
@@ -134,6 +135,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
             buffered_error: None,
             deframer_buffer,
             hs_deframer,
+            temper_counters,
             seen_consecutive_empty_fragments,
             has_received_close_notify: false,
             received_plaintext,
@@ -206,6 +208,9 @@ pub struct Reader {
     /// De-framing state specific to handshake messages.
     hs_deframer: HandshakeDeframer,
 
+    /// Counters for tracking peer misbehavior.
+    temper_counters: TemperCounters,
+
     /// The number of consecutive empty fragments we've received.
     ///
     /// We limit consecutive empty fragments to avoid a route for the peer to
@@ -270,6 +275,7 @@ impl Reader {
                 &mut common_state,
                 &mut writer_action,
                 &mut self.hs_deframer,
+                &mut self.temper_counters,
                 &mut self.seen_consecutive_empty_fragments,
                 &mut self.has_received_close_notify,
                 &mut self.received_plaintext,
@@ -334,6 +340,7 @@ impl Reader {
         common_state: &mut CommonState,
         writer_action: &mut Option<WriterAction>,
         hs_deframer: &mut HandshakeDeframer,
+        temper_counters: &mut TemperCounters,
         seen_consecutive_empty_fragments: &mut u8,
         has_received_close_notify: &mut bool,
         received_plaintext: &mut ChunkVecBuffer,
@@ -373,6 +380,7 @@ impl Reader {
             let plaintext = match Self::process_main_protocol(
                 info,
                 common_state,
+                temper_counters,
                 has_received_close_notify,
                 writer_action,
                 msg,
@@ -624,6 +632,7 @@ impl Reader {
     fn process_main_protocol(
         info: &ConnectionInfo,
         common_state: &mut CommonState,
+        temper_counters: &mut TemperCounters,
         has_received_close_notify: &mut bool,
         writer_action: &mut Option<WriterAction>,
         msg: InboundPlainMessage<'_>,
@@ -651,9 +660,7 @@ impl Reader {
             };
 
             if msg.handshake_type() == Some(reject_ty) {
-                common_state
-                    .temper_counters
-                    .received_renegotiation_request()?;
+                temper_counters.received_renegotiation_request()?;
                 debug_assert!(writer_action.is_none());
                 *writer_action = Some(WriterAction(WriterActionImpl::EnqueueAlert(
                     AlertLevel::Warning,
@@ -665,9 +672,7 @@ impl Reader {
 
         let result = match msg.payload {
             MessagePayload::ApplicationData(payload) => {
-                common_state
-                    .temper_counters
-                    .received_app_data();
+                temper_counters.received_app_data();
                 Ok(Some(UnborrowedPayload::unborrow(
                     plaintext_locator,
                     payload,
@@ -677,7 +682,7 @@ impl Reader {
             // For alerts, we have separate logic.
             MessagePayload::Alert(alert) => Self::process_alert(
                 info,
-                common_state,
+                temper_counters,
                 has_received_close_notify,
                 writer_action,
                 &alert,
@@ -695,10 +700,14 @@ impl Reader {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } if info.is_tls13() => {
-                Self::handle_key_update(common_state, state, writer_action, key_update)
-                    .map(|()| None)
-            }
+            } if info.is_tls13() => Self::handle_key_update(
+                common_state,
+                state,
+                temper_counters,
+                writer_action,
+                key_update,
+            )
+            .map(|()| None),
 
             other => Err(state.handle_unexpected(&other)),
         };
@@ -718,7 +727,7 @@ impl Reader {
     // CommonState::process_alert()
     fn process_alert(
         info: &ConnectionInfo,
-        common_state: &mut CommonState,
+        temper_counters: &mut TemperCounters,
         has_received_close_notify: &mut bool,
         writer_action: &mut Option<WriterAction>,
         alert: &AlertMessagePayload,
@@ -743,9 +752,7 @@ impl Reader {
         // (except, for no good reason, user_cancelled).
         let err = Error::AlertReceived(alert.description);
         if alert.level == AlertLevel::Warning {
-            common_state
-                .temper_counters
-                .received_warning_alert()?;
+            temper_counters.received_warning_alert()?;
             if info.is_tls13() && alert.description != AlertDescription::UserCanceled {
                 return Err(Self::send_fatal_alert(
                     writer_action,
@@ -769,12 +776,11 @@ impl Reader {
     fn handle_key_update(
         common_state: &mut CommonState,
         state: &mut dyn TrafficState,
+        temper_counters: &mut TemperCounters,
         writer_action: &mut Option<WriterAction>,
         request: KeyUpdateRequest,
     ) -> Result<(), Error> {
-        common_state
-            .temper_counters
-            .received_key_update_request()?;
+        temper_counters.received_key_update_request()?;
 
         // Figure out whether we should update our own side.
         match request {
