@@ -548,7 +548,15 @@ impl Reader {
                 } = message;
 
                 if want_close_before_decrypt {
-                    common_state.send_close_notify();
+                    // The peer should have rotated their keys (or closed the
+                    // connection) by now, but they're still going.  We'll try
+                    // to stop them by closing our end of the connection.
+                    debug_assert!(writer_action.is_none());
+                    *writer_action = Some(WriterAction(WriterActionImpl::EnqueueAlert(
+                        AlertLevel::Warning,
+                        AlertDescription::CloseNotify,
+                    )));
+                    return Err(Error::DecryptError);
                 }
 
                 break (plaintext, iter.bytes_consumed());
@@ -894,7 +902,9 @@ impl Writer {
                 common_state.send_msg_encrypt(msg.into());
 
                 // Update internal state accordingly.
-                if matches!(level, AlertLevel::Fatal) {
+                if matches!(level, AlertLevel::Fatal)
+                    || matches!(desc, AlertDescription::CloseNotify)
+                {
                     common_state.sent_fatal_alert = true;
                     self.enqueued_fatal_error = true;
                 }
