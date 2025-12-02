@@ -340,7 +340,7 @@ mod client_hello {
             hello,
             resumedata.map(|r| &r.common),
         )?;
-        ep.process_tls12(config, hello, using_ems);
+        ep.process_tls12(config, hello, ocsp_response, using_ems);
 
         let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
             legacy_version: ProtocolVersion::TLSv1_2,
