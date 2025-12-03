@@ -357,11 +357,6 @@ impl CommonState {
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
     fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>, limit: Limit) -> usize {
-        if payload.is_empty() {
-            // Don't send empty fragments.
-            return 0;
-        }
-
         // Here, the limit on sendable_tls applies to encrypted data,
         // but we're respecting it for plaintext data -- so we'll
         // be out by whatever the cipher+record overhead is.  That's a
