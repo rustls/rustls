@@ -449,7 +449,17 @@ impl CommonState {
             return sendable_plaintext.append_limited_copy(payload);
         }
 
-        self.send_plain_non_buffering(payload, Limit::Yes)
+        // Limit on `sendable_tls` should apply to encrypted data but is enforced
+        // for plaintext data instead which does not include cipher+record overhead.
+        let len = self
+            .sendable_tls
+            .apply_limit(payload.len());
+        if len == 0 {
+            // Don't send empty fragments.
+            return 0;
+        }
+
+        self.send_plain_non_buffering(payload.split_at(len).0, Limit::No)
     }
 
     fn send_plain_non_buffering(&mut self, payload: OutboundPlain<'_>, limit: Limit) -> usize {
