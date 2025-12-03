@@ -330,7 +330,18 @@ impl CommonState {
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.early_traffic);
         debug_assert!(self.record_layer.is_encrypting());
-        self.send_appdata_encrypt(data.into(), Limit::Yes)
+
+        // Limit on `sendable_tls` should apply to encrypted data but is enforced
+        // for plaintext data instead which does not include cipher+record overhead.
+        let len = self
+            .sendable_tls
+            .apply_limit(data.len());
+        if len == 0 {
+            // Don't send empty fragments.
+            return 0;
+        }
+
+        self.send_appdata_encrypt(data[..len].into(), Limit::No)
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
