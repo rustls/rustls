@@ -459,13 +459,8 @@ impl CommonState {
             return 0;
         }
 
-        self.send_plain_non_buffering(payload.split_at(len).0, Limit::No)
-    }
-
-    fn send_plain_non_buffering(&mut self, payload: OutboundPlain<'_>, limit: Limit) -> usize {
-        debug_assert!(self.may_send_application_data);
         debug_assert!(self.record_layer.is_encrypting());
-        self.send_appdata_encrypt(payload, limit)
+        self.send_appdata_encrypt(payload.split_at(len).0, Limit::No)
     }
 
     /// Mark the connection as ready to send application data.
@@ -480,8 +475,9 @@ impl CommonState {
             return;
         };
 
+        debug_assert!(self.record_layer.is_encrypting());
         while let Some(buf) = sendable_plaintext.pop() {
-            self.send_plain_non_buffering(buf.as_slice().into(), Limit::No);
+            self.send_appdata_encrypt(buf.as_slice().into(), Limit::No);
         }
     }
 
