@@ -68,7 +68,7 @@ jobs:
         if: runner.os == 'MacOS'
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.4"
+          go-version: "1.25.5"
 
       - name: cargo build (debug; default features)
         run: cargo build --locked
