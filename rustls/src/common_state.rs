@@ -341,7 +341,7 @@ impl CommonState {
             return 0;
         }
 
-        self.send_appdata_encrypt(data[..len].into(), Limit::No)
+        self.send_appdata_encrypt(data[..len].into())
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
@@ -356,19 +356,8 @@ impl CommonState {
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
-    fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>, limit: Limit) -> usize {
-        // Here, the limit on sendable_tls applies to encrypted data,
-        // but we're respecting it for plaintext data -- so we'll
-        // be out by whatever the cipher+record overhead is.  That's a
-        // constant and predictable amount, so it's not a terrible issue.
-        let len = match limit {
-            #[cfg(feature = "std")]
-            Limit::Yes => self
-                .sendable_tls
-                .apply_limit(payload.len()),
-            Limit::No => payload.len(),
-        };
-
+    fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
+        let len = payload.len();
         let iter = self
             .message_fragmenter
             .fragment_payload(
@@ -455,7 +444,7 @@ impl CommonState {
         }
 
         debug_assert!(self.record_layer.is_encrypting());
-        self.send_appdata_encrypt(payload.split_at(len).0, Limit::No)
+        self.send_appdata_encrypt(payload.split_at(len).0)
     }
 
     /// Mark the connection as ready to send application data.
@@ -472,7 +461,7 @@ impl CommonState {
 
         debug_assert!(self.record_layer.is_encrypting());
         while let Some(buf) = sendable_plaintext.pop() {
-            self.send_appdata_encrypt(buf.as_slice().into(), Limit::No);
+            self.send_appdata_encrypt(buf.as_slice().into());
         }
     }
 
@@ -915,12 +904,6 @@ impl Side {
 pub(crate) enum Protocol {
     Tcp,
     Quic,
-}
-
-enum Limit {
-    #[cfg(feature = "std")]
-    Yes,
-    No,
 }
 
 /// Tracking technically-allowed protocol actions
