@@ -38,6 +38,7 @@ fn buffered_client_data_sent() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
+        assert_eq!(0, server.writer().write(b"").unwrap());
         assert_eq!(5, client.writer().write(b"hello").unwrap());
 
         do_handshake(&mut client, &mut server);
@@ -60,6 +61,7 @@ fn buffered_server_data_sent() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
+        assert_eq!(0, server.writer().write(b"").unwrap());
         assert_eq!(5, server.writer().write(b"hello").unwrap());
 
         do_handshake(&mut client, &mut server);
@@ -305,10 +307,12 @@ fn buf_read() {
 
     do_handshake(&mut client, &mut server);
 
-    // Write two separate messages
+    // Write two separate messages ensuring that empty messages are not written
+    assert_eq!(client.writer().write(b"").unwrap(), 0);
     assert_eq!(client.writer().write(b"hello").unwrap(), 5);
     transfer(&mut client, &mut server);
     assert_eq!(client.writer().write(b"world").unwrap(), 5);
+    assert_eq!(client.writer().write(b"").unwrap(), 0);
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
 
