@@ -466,6 +466,14 @@ fn early_data_is_available_on_resumption() {
         client
             .early_data()
             .unwrap()
+            .write(b"")
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
             .write(b"hello")
             .unwrap(),
         5
