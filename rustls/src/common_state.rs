@@ -585,11 +585,7 @@ impl CommonState {
         Ok(())
     }
 
-    fn write_fragments<'a>(
-        &mut self,
-        outgoing_tls: &mut [u8],
-        fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
-    ) -> usize {
+    fn write_buffered_fragments(&mut self, outgoing_tls: &mut [u8]) -> usize {
         let mut written = 0;
 
         // Any pre-existing encrypted messages in `sendable_tls` must
@@ -599,6 +595,16 @@ impl CommonState {
             outgoing_tls[written..written + len].copy_from_slice(&message);
             written += len;
         }
+
+        written
+    }
+
+    fn write_fragments<'a>(
+        &mut self,
+        outgoing_tls: &mut [u8],
+        fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
+    ) -> usize {
+        let mut written = self.write_buffered_fragments(outgoing_tls);
 
         for m in fragments {
             let em = self
