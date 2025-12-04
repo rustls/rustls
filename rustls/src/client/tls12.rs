@@ -1205,8 +1205,8 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn into_traffic(self: Box<Self>) -> Result<Box<dyn TrafficState>, Error> {
-        Ok(self)
+    fn into_traffic(self: Box<Self>) -> Result<TrafficState, Error> {
+        Ok(TrafficState::Tls12)
     }
 
     fn into_external_state(
@@ -1218,12 +1218,6 @@ impl State<ClientConnectionData> for ExpectTraffic {
                 "call of into_external_state() only allowed with enable_secret_extraction",
             )),
         }
-    }
-}
-
-impl TrafficState for ExpectTraffic {
-    fn handle_unexpected(&self, payload: &MessagePayload<'_>) -> Error {
-        inappropriate_message(payload, &[ContentType::ApplicationData])
     }
 }
 

@@ -10,6 +10,7 @@ use crate::crypto::cipher::{
     PlainMessage, PreEncryptAction, RecordLayer,
 };
 use crate::crypto::kx::SupportedKxGroup;
+use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -19,7 +20,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::deframer::{Delocator, HandshakeAlignedProof, Locator};
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
-use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload, ProtocolName};
+use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
@@ -831,7 +832,7 @@ pub(crate) trait State<Side>: Send + Sync {
         message: Message<'m>,
     ) -> Result<Box<dyn State<Side>>, Error>;
 
-    fn into_traffic(self: Box<Self>) -> Result<Box<dyn TrafficState>, Error> {
+    fn into_traffic(self: Box<Self>) -> Result<TrafficState, Error> {
         Err(Error::HandshakeNotComplete)
     }
 
@@ -848,27 +849,18 @@ pub(crate) trait State<Side>: Send + Sync {
     }
 }
 
-pub(crate) trait TrafficState {
-    fn handle_key_update(
-        &mut self,
-        common_state: &mut CommonState,
-        key_update: KeyUpdateRequest,
-    ) -> Result<(), Error> {
-        let _ = common_state;
-        let payload = MessagePayload::Handshake {
-            parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
-            encoded: Payload::Borrowed(&[]),
-        };
-        Err(self.handle_unexpected(&payload))
-    }
+pub(crate) enum TrafficState {
+    /// State for a TLS 1.2 connection.
+    Tls12,
 
-    fn handle_unexpected(&self, payload: &MessagePayload<'_>) -> Error;
+    /// State for a TLS 1.3 connection.
+    Tls13 {
+        /// The secret from which decryption keys are derived.
+        decryption_secret: OkmBlock,
 
-    fn send_key_update(&mut self, common_state: &mut CommonState, request: bool) {
-        let _ = (common_state, request);
-    }
-
-    fn handle_decrypt_error(&self) {}
+        /// The secret from which encryption keys are derived.
+        encryption_secret: OkmBlock,
+    },
 }
 
 pub(crate) struct Context<'a, Data> {

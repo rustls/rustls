@@ -1413,8 +1413,15 @@ impl State<ServerConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn into_traffic(self: Box<Self>) -> Result<Box<dyn TrafficState>, Error> {
-        Ok(self)
+    fn into_traffic(self: Box<Self>) -> Result<TrafficState, Error> {
+        Ok(TrafficState::Tls13 {
+            decryption_secret: self
+                .key_schedule
+                .current_client_traffic_secret,
+            encryption_secret: self
+                .key_schedule
+                .current_server_traffic_secret,
+        })
     }
 
     fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {
@@ -1430,35 +1437,6 @@ impl State<ServerConnectionData> for ExpectTraffic {
                 .extract_secrets(Side::Server)?,
             self,
         ))
-    }
-}
-
-impl TrafficState for ExpectTraffic {
-    fn handle_key_update(
-        &mut self,
-        common_state: &mut CommonState,
-        key_update: KeyUpdateRequest,
-    ) -> Result<(), Error> {
-        self.handle_key_update(common_state, &key_update)
-    }
-
-    fn handle_unexpected(&self, payload: &MessagePayload<'_>) -> Error {
-        inappropriate_handshake_message(
-            payload,
-            &[ContentType::ApplicationData, ContentType::Handshake],
-            &[HandshakeType::KeyUpdate],
-        )
-    }
-
-    fn send_key_update(&mut self, common: &mut CommonState, request: bool) {
-        if request {
-            let _ = self
-                .key_schedule
-                .request_key_update_and_update_encrypter(common);
-        } else {
-            self.key_schedule
-                .update_encrypter_and_notify(common);
-        }
     }
 }
 

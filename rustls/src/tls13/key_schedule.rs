@@ -582,8 +582,8 @@ impl KeyScheduleTrafficWithClientFinishedPending {
 /// to be available.
 pub(crate) struct KeyScheduleTraffic {
     ks: KeyScheduleSuite,
-    current_client_traffic_secret: OkmBlock,
-    current_server_traffic_secret: OkmBlock,
+    pub(crate) current_client_traffic_secret: OkmBlock,
+    pub(crate) current_server_traffic_secret: OkmBlock,
 }
 
 impl KeyScheduleTraffic {
@@ -825,12 +825,12 @@ impl Deref for KeySchedule {
 /// This is a component part of `KeySchedule`, and groups operations
 /// that do not depend on the root key schedule secret.
 #[derive(Clone, Copy)]
-struct KeyScheduleSuite {
+pub(crate) struct KeyScheduleSuite {
     suite: &'static Tls13CipherSuite,
 }
 
 impl KeyScheduleSuite {
-    fn set_encrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
+    pub(crate) fn set_encrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
         let expander = self
             .suite
             .hkdf_provider
@@ -846,7 +846,7 @@ impl KeyScheduleSuite {
             );
     }
 
-    fn set_decrypter(
+    pub(crate) fn set_decrypter(
         &self,
         secret: &OkmBlock,
         common: &mut CommonState,
@@ -894,7 +894,7 @@ impl KeyScheduleSuite {
     }
 
     /// Derive the next application traffic secret, returning it.
-    fn derive_next(&self, base_key: &OkmBlock) -> OkmBlock {
+    pub(crate) fn derive_next(&self, base_key: &OkmBlock) -> OkmBlock {
         let expander = self
             .suite
             .hkdf_provider
