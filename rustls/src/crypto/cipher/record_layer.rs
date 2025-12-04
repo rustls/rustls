@@ -10,7 +10,7 @@ use crate::log::trace;
 use crate::msgs::deframer::HandshakeAlignedProof;
 
 #[derive(PartialEq)]
-enum DirectionState {
+pub(crate) enum DirectionState {
     /// No keying material.
     Invalid,
 
@@ -23,19 +23,19 @@ enum DirectionState {
 
 /// Record layer that tracks decryption and encryption keys.
 pub(crate) struct RecordLayer {
-    message_encrypter: Box<dyn MessageEncrypter>,
-    message_decrypter: Box<dyn MessageDecrypter>,
-    write_seq_max: u64,
-    write_seq: u64,
-    read_seq: u64,
-    has_decrypted: bool,
-    encrypt_state: DirectionState,
-    decrypt_state: DirectionState,
+    pub(crate) message_encrypter: Box<dyn MessageEncrypter>,
+    pub(crate) message_decrypter: Box<dyn MessageDecrypter>,
+    pub(crate) write_seq_max: u64,
+    pub(crate) write_seq: u64,
+    pub(crate) read_seq: u64,
+    pub(crate) has_decrypted: bool,
+    pub(crate) encrypt_state: DirectionState,
+    pub(crate) decrypt_state: DirectionState,
 
     // Message encrypted with other keys may be encountered, so failures
     // should be swallowed by the caller.  This struct tracks the amount
     // of message size this is allowed for.
-    trial_decryption_len: Option<usize>,
+    pub(crate) trial_decryption_len: Option<usize>,
 }
 
 impl RecordLayer {

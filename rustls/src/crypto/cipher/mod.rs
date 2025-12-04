@@ -19,7 +19,7 @@ mod outbound;
 pub use outbound::{OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 
 mod record_layer;
-pub(crate) use record_layer::{Decrypted, PreEncryptAction, RecordLayer};
+pub(crate) use record_layer::{Decrypted, DirectionState, PreEncryptAction, RecordLayer};
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
