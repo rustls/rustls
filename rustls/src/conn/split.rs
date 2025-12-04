@@ -17,13 +17,13 @@ use crate::{
     SupportedCipherSuite,
     check::{inappropriate_handshake_message, inappropriate_message},
     client::ClientConnection,
-    common_state::{Limit, TemperCounters, TrafficState, UnborrowedPayload},
+    common_state::{KxState, Limit, TemperCounters, TrafficState, UnborrowedPayload},
     conn::{ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage},
     crypto::{
         Identity,
         cipher::{
             Decrypted, InboundPlainMessage, OutboundChunks, OutboundOpaqueMessage,
-            OutboundPlainMessage, PlainMessage, PreEncryptAction,
+            OutboundPlainMessage, PlainMessage, PreEncryptAction, RecordLayer,
         },
         tls13::OkmBlock,
     },
@@ -32,9 +32,11 @@ use crate::{
     msgs::{
         alert::AlertMessagePayload,
         deframer::{
-            BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
+            BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeAlignedProof,
+            HandshakeDeframer, Locator,
         },
         enums::{AlertLevel, KeyUpdateRequest},
+        fragmenter::MessageFragmenter,
         handshake::{HandshakeMessagePayload, HandshakePayload, ProtocolName},
         message::{Message, MessagePayload},
     },
@@ -53,7 +55,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
     // Destructure the state into a type-independent thing.
     let (
         state,
-        mut common_state,
+        common_state,
         hs_deframer,
         seen_consecutive_empty_fragments,
         deframer_buffer,
@@ -108,25 +110,54 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
         }
     };
 
-    let received_plaintext = mem::replace(
-        &mut common_state.received_plaintext,
-        ChunkVecBuffer::new(None),
-    );
-    assert!(!common_state.has_seen_eof);
-    assert!(!common_state.has_received_close_notify);
+    let CommonState {
+        negotiated_version,
+        handshake_kind,
+        side,
+        record_layer,
+        suite,
+        kx_state: KxState::Complete(_),
+        alpn_protocol,
+        exporter: _,
+        early_exporter: _,
+        aligned_handshake,
+        may_send_application_data: true,
+        may_receive_application_data: true,
+        early_traffic: false,
+        sent_fatal_alert: false,
+        has_sent_close_notify: false,
+        has_received_close_notify: false,
+        has_seen_eof: false,
+        peer_identity,
+        message_fragmenter,
+        received_plaintext,
+        sendable_tls,
+        queued_key_update_message,
+        // QUIC is not supported here
+        protocol: _,
+        quic: _,
+        // TODO: No support for secret extraction
+        enable_secret_extraction: _,
+        temper_counters,
+        refresh_traffic_keys_pending,
+        // TODO: Expose FIPS support
+        fips: _,
+        // TODO: Support TLS 1.3 session tickets
+        tls13_tickets_received: _,
+    } = common_state
+    else {
+        panic!("unexpected state");
+    };
+
     assert!(sendable_plaintext.is_empty());
-    let temper_counters = mem::take(&mut common_state.temper_counters);
 
     let info = Arc::new(ConnectionInfo {
-        version: common_state.negotiated_version.unwrap(),
-        handshake_kind: common_state.handshake_kind.unwrap(),
-        side: common_state.side,
-        suite: common_state.suite.unwrap(),
-        _alpn_protocol: common_state.alpn_protocol.clone(),
-        peer_identity: common_state
-            .peer_identity
-            .clone()
-            .unwrap(),
+        version: negotiated_version.unwrap(),
+        handshake_kind: handshake_kind.unwrap(),
+        side: side,
+        suite: suite.unwrap(),
+        _alpn_protocol: alpn_protocol,
+        peer_identity: peer_identity.unwrap(),
     });
     let [encryption_secret, decryption_secret] = match state {
         TrafficState::Tls12 => {
@@ -145,17 +176,18 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
             .map(Some)
         }
     };
-    let common_state = Arc::new(Mutex::new(common_state));
+    let record_layer = Arc::new(Mutex::new(record_layer));
 
     Ok((
         Reader {
             info: info.clone(),
-            common_state: common_state.clone(),
+            record_layer: record_layer.clone(),
 
             has_seen_eof: false,
             buffered_error: None,
             deframer_buffer,
             hs_deframer,
+            aligned_handshake,
             decryption_secret,
             temper_counters,
             seen_consecutive_empty_fragments,
@@ -164,9 +196,13 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
         },
         Writer {
             info: info.clone(),
-            common_state: common_state.clone(),
+            record_layer: record_layer.clone(),
 
+            sendable_tls,
+            refresh_traffic_keys_pending,
+            queued_key_update_message,
             encryption_secret,
+            message_fragmenter,
             enqueued_fatal_error: false,
         },
     ))
@@ -211,7 +247,7 @@ pub struct Reader {
     /// Immutable information about the connection.
     info: Arc<ConnectionInfo>,
 
-    common_state: Arc<Mutex<CommonState>>,
+    record_layer: Arc<Mutex<RecordLayer>>,
 
     /// Whether the underlying transport has reported EOF.
     has_seen_eof: bool,
@@ -229,6 +265,9 @@ pub struct Reader {
 
     /// De-framing state specific to handshake messages.
     hs_deframer: HandshakeDeframer,
+
+    /// Whether `hs_deframer` is aligned on handshake messages.
+    aligned_handshake: Option<HandshakeAlignedProof>,
 
     /// The secret from which decryption keys are derived.
     ///
@@ -271,7 +310,7 @@ impl Reader {
             return Err(io::Error::new(io::ErrorKind::InvalidData, error.clone()));
         }
 
-        let mut common_state = self.common_state.lock().unwrap();
+        let mut record_layer = self.record_layer.lock().unwrap();
         let mut writer_action = None;
 
         let mut total = 0;
@@ -302,9 +341,10 @@ impl Reader {
 
             match Self::process_new_packets(
                 &self.info,
-                &mut common_state,
+                &mut record_layer,
                 &mut writer_action,
                 &mut self.hs_deframer,
+                &mut self.aligned_handshake,
                 &mut self.decryption_secret,
                 &mut self.temper_counters,
                 &mut self.seen_consecutive_empty_fragments,
@@ -367,9 +407,10 @@ impl Reader {
     // ConnectionCore::process_new_packets()
     fn process_new_packets(
         info: &ConnectionInfo,
-        common_state: &mut CommonState,
+        record_layer: &mut RecordLayer,
         writer_action: &mut Option<WriterAction>,
         hs_deframer: &mut HandshakeDeframer,
+        aligned_handshake: &mut Option<HandshakeAlignedProof>,
         decryption_secret: &mut Option<OkmBlock>,
         temper_counters: &mut TemperCounters,
         seen_consecutive_empty_fragments: &mut u8,
@@ -387,9 +428,10 @@ impl Reader {
             let locator = Locator::new(buffer);
             let res = Self::deframe(
                 info,
-                common_state,
+                record_layer,
                 writer_action,
                 hs_deframer,
+                aligned_handshake,
                 seen_consecutive_empty_fragments,
                 buffer,
                 &mut buffer_progress,
@@ -409,7 +451,8 @@ impl Reader {
 
             let plaintext = match Self::process_main_protocol(
                 info,
-                common_state,
+                record_layer,
+                aligned_handshake,
                 decryption_secret,
                 temper_counters,
                 has_received_close_notify,
@@ -452,9 +495,10 @@ impl Reader {
     // ConnectionCore::deframe()
     fn deframe<'b>(
         info: &ConnectionInfo,
-        common_state: &mut CommonState,
+        record_layer: &mut RecordLayer,
         writer_action: &mut Option<WriterAction>,
         hs_deframer: &mut HandshakeDeframer,
+        aligned_handshake: &mut Option<HandshakeAlignedProof>,
         seen_consecutive_empty_fragments: &mut u8,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
@@ -469,9 +513,10 @@ impl Reader {
         } else {
             Self::process_more_input(
                 info,
-                common_state,
+                record_layer,
                 writer_action,
                 hs_deframer,
+                aligned_handshake,
                 seen_consecutive_empty_fragments,
                 buffer,
                 buffer_progress,
@@ -497,9 +542,10 @@ impl Reader {
     // ConnectionCore::process_more_input()
     fn process_more_input<'b>(
         info: &ConnectionInfo,
-        common_state: &mut CommonState,
+        record_layer: &mut RecordLayer,
         writer_action: &mut Option<WriterAction>,
         hs_deframer: &mut HandshakeDeframer,
+        aligned_handshake: &mut Option<HandshakeAlignedProof>,
         seen_consecutive_empty_fragments: &mut u8,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
@@ -527,9 +573,7 @@ impl Reader {
                     // * The payload size is indicative of a plaintext alert message.
                     ContentType::Alert
                         if info.is_tls13()
-                            && !common_state
-                                .record_layer
-                                .has_decrypted()
+                            && !record_layer.has_decrypted()
                             && message.payload.len() <= 2 =>
                     {
                         true
@@ -542,10 +586,7 @@ impl Reader {
                     break (message.into_plain_message(), iter.bytes_consumed());
                 }
 
-                let message = match common_state
-                    .record_layer
-                    .decrypt_incoming(message)
-                {
+                let message = match record_layer.decrypt_incoming(message) {
                     // failed decryption during trial decryption is not allowed to be
                     // interleaved with partial handshake data.
                     Ok(None) if hs_deframer.aligned().is_none() => {
@@ -624,13 +665,11 @@ impl Reader {
             hs_deframer.input_message(message, &locator, buffer_progress.processed());
             hs_deframer.coalesce(buffer)?;
 
-            common_state.aligned_handshake = hs_deframer.aligned();
+            *aligned_handshake = hs_deframer.aligned();
 
             if hs_deframer.has_message_ready() {
                 // trial decryption finishes with the first handshake message after it started.
-                common_state
-                    .record_layer
-                    .finish_trial_decryption();
+                record_layer.finish_trial_decryption();
 
                 return Ok(Self::take_handshake_message(
                     hs_deframer,
@@ -661,7 +700,8 @@ impl Reader {
     // CommonState::process_main_protocol()
     fn process_main_protocol(
         info: &ConnectionInfo,
-        common_state: &mut CommonState,
+        record_layer: &mut RecordLayer,
+        aligned_handshake: &mut Option<HandshakeAlignedProof>,
         decryption_secret: &mut Option<OkmBlock>,
         temper_counters: &mut TemperCounters,
         has_received_close_notify: &mut bool,
@@ -732,7 +772,8 @@ impl Reader {
                 ..
             } if info.is_tls13() => Self::handle_key_update(
                 info,
-                common_state,
+                record_layer,
+                aligned_handshake,
                 decryption_secret,
                 temper_counters,
                 writer_action,
@@ -820,7 +861,8 @@ impl Reader {
 
     fn handle_key_update(
         info: &ConnectionInfo,
-        common_state: &mut CommonState,
+        record_layer: &mut RecordLayer,
+        aligned_handshake: &mut Option<HandshakeAlignedProof>,
         decryption_secret: &mut Option<OkmBlock>,
         temper_counters: &mut TemperCounters,
         writer_action: &mut Option<WriterAction>,
@@ -845,15 +887,13 @@ impl Reader {
             }
         }
 
-        let proof = common_state
-            .aligned_handshake
-            .ok_or_else(|| {
-                Self::send_fatal_alert(
-                    writer_action,
-                    AlertDescription::UnexpectedMessage,
-                    PeerMisbehaved::KeyEpochWithPendingFragment,
-                )
-            })?;
+        let proof = aligned_handshake.ok_or_else(|| {
+            Self::send_fatal_alert(
+                writer_action,
+                AlertDescription::UnexpectedMessage,
+                PeerMisbehaved::KeyEpochWithPendingFragment,
+            )
+        })?;
 
         // Update our read-side keys.
         let SupportedCipherSuite::Tls13(suite) = info.suite else {
@@ -862,9 +902,7 @@ impl Reader {
         let decryption_secret = decryption_secret.as_mut().unwrap();
         let ks = KeyScheduleSuite::from(suite);
         *decryption_secret = ks.derive_next(&decryption_secret);
-        common_state
-            .record_layer
-            .set_message_decrypter(ks.derive_decrypter(decryption_secret), &proof);
+        record_layer.set_message_decrypter(ks.derive_decrypter(decryption_secret), &proof);
 
         Ok(())
     }
@@ -917,7 +955,19 @@ pub struct Writer {
     /// Immutable information about the connection.
     info: Arc<ConnectionInfo>,
 
-    common_state: Arc<Mutex<CommonState>>,
+    record_layer: Arc<Mutex<RecordLayer>>,
+
+    /// A buffer of TLS fragments ready to send.
+    sendable_tls: ChunkVecBuffer,
+
+    /// Whether the traffic keys need to be refreshed.
+    refresh_traffic_keys_pending: bool,
+
+    /// A queued key update message.
+    queued_key_update_message: Option<Vec<u8>>,
+
+    /// State for fragmenting messages.
+    message_fragmenter: MessageFragmenter,
 
     /// The secret from which encryption keys are derived.
     ///
@@ -949,20 +999,27 @@ impl Writer {
             WriterActionImpl::EnqueueAlert(level, desc) => {
                 // Enqueue the alert.
                 let msg = Message::build_alert(level, desc);
-                let mut common_state = self.common_state.lock().unwrap();
-                Self::send_msg_encrypt(&mut common_state, msg.into());
+                let mut record_layer = self.record_layer.lock().unwrap();
+                Self::send_msg_encrypt(
+                    &self.info,
+                    &mut record_layer,
+                    &mut self.sendable_tls,
+                    &mut self.queued_key_update_message,
+                    &mut self.message_fragmenter,
+                    &mut self.refresh_traffic_keys_pending,
+                    msg.into(),
+                );
 
                 // Update internal state accordingly.
                 if matches!(level, AlertLevel::Fatal)
                     || matches!(desc, AlertDescription::CloseNotify)
                 {
-                    common_state.sent_fatal_alert = true;
                     self.enqueued_fatal_error = true;
                 }
             }
 
             WriterActionImpl::UpdateSendingKeys => {
-                let mut common_state = self.common_state.lock().unwrap();
+                let mut record_layer = self.record_layer.lock().unwrap();
 
                 let SupportedCipherSuite::Tls13(suite) = self.info.suite else {
                     unreachable!()
@@ -972,29 +1029,25 @@ impl Writer {
                 *secret = ks.derive_next(&secret);
                 {
                     let message = PlainMessage::from(Message::build_key_update_notify());
-                    common_state.queued_key_update_message = Some(
-                        common_state
-                            .record_layer
+                    self.queued_key_update_message = Some(
+                        record_layer
                             .encrypt_outgoing(message.borrow_outbound())
                             .encode(),
                     );
                 };
-                common_state
-                    .record_layer
-                    .set_message_encrypter(
-                        ks.derive_encrypter(&secret),
-                        suite.common.confidentiality_limit,
-                    );
+                record_layer.set_message_encrypter(
+                    ks.derive_encrypter(&secret),
+                    suite.common.confidentiality_limit,
+                );
             }
         }
     }
 
     /// Send prepared TLS messages over the network.
     pub fn send_tls(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        let mut common_state = self.common_state.lock().unwrap();
         let mut total = 0;
-        while !common_state.sendable_tls.is_empty() {
-            match common_state.sendable_tls.write_to(wr) {
+        while !self.sendable_tls.is_empty() {
+            match self.sendable_tls.write_to(wr) {
                 Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
                 Ok(n) => total += n,
 
@@ -1015,10 +1068,22 @@ impl Writer {
     fn maybe_refresh_traffic_keys(
         info: &ConnectionInfo,
         encryption_secret: &mut Option<OkmBlock>,
-        common_state: &mut CommonState,
+        record_layer: &mut RecordLayer,
+        sendable_tls: &mut ChunkVecBuffer,
+        message_fragmenter: &mut MessageFragmenter,
+        queued_key_update_message: &mut Option<Vec<u8>>,
+        refresh_traffic_keys_pending: &mut bool,
     ) {
-        if mem::take(&mut common_state.refresh_traffic_keys_pending) {
-            Self::send_msg_encrypt(common_state, Message::build_key_update_request().into());
+        if mem::take(refresh_traffic_keys_pending) {
+            Self::send_msg_encrypt(
+                info,
+                record_layer,
+                sendable_tls,
+                queued_key_update_message,
+                message_fragmenter,
+                refresh_traffic_keys_pending,
+                Message::build_key_update_request().into(),
+            );
 
             let SupportedCipherSuite::Tls13(suite) = info.suite else {
                 unreachable!()
@@ -1026,46 +1091,78 @@ impl Writer {
             let secret = encryption_secret.as_mut().unwrap();
             let ks = KeyScheduleSuite::from(suite);
             *secret = ks.derive_next(&secret);
-            common_state
-                .record_layer
-                .set_message_encrypter(
-                    ks.derive_encrypter(&secret),
-                    suite.common.confidentiality_limit,
-                );
+            record_layer.set_message_encrypter(
+                ks.derive_encrypter(&secret),
+                suite.common.confidentiality_limit,
+            );
         }
     }
 
     // CommonState::buffer_plaintext()
-    fn buffer_plaintext(common_state: &mut CommonState, payload: OutboundChunks<'_>) -> usize {
-        Self::perhaps_write_key_update(common_state);
-        Self::send_appdata_encrypt(common_state, payload, Limit::Yes)
+    fn buffer_plaintext(
+        info: &ConnectionInfo,
+        record_layer: &mut RecordLayer,
+        sendable_tls: &mut ChunkVecBuffer,
+        queued_key_update_message: &mut Option<Vec<u8>>,
+        refresh_traffic_keys_pending: &mut bool,
+        message_fragmenter: &mut MessageFragmenter,
+        payload: OutboundChunks<'_>,
+    ) -> usize {
+        Self::perhaps_write_key_update(sendable_tls, queued_key_update_message);
+        Self::send_appdata_encrypt(
+            info,
+            record_layer,
+            sendable_tls,
+            message_fragmenter,
+            queued_key_update_message,
+            refresh_traffic_keys_pending,
+            payload,
+            Limit::Yes,
+        )
     }
 
     // CommonState::perhaps_write_key_update()
-    fn perhaps_write_key_update(common_state: &mut CommonState) {
-        if let Some(message) = common_state
-            .queued_key_update_message
-            .take()
-        {
-            common_state
-                .sendable_tls
-                .append(message);
+    fn perhaps_write_key_update(
+        sendable_tls: &mut ChunkVecBuffer,
+        queued_key_update_message: &mut Option<Vec<u8>>,
+    ) {
+        if let Some(message) = queued_key_update_message.take() {
+            sendable_tls.append(message);
         }
     }
 
     // CommonState::send_msg_encrypt()
-    fn send_msg_encrypt(common_state: &mut CommonState, m: PlainMessage) {
-        let iter = common_state
-            .message_fragmenter
-            .fragment_message(&m);
+    fn send_msg_encrypt(
+        info: &ConnectionInfo,
+        record_layer: &mut RecordLayer,
+        sendable_tls: &mut ChunkVecBuffer,
+        queued_key_update_message: &mut Option<Vec<u8>>,
+        message_fragmenter: &mut MessageFragmenter,
+        refresh_traffic_keys_pending: &mut bool,
+        m: PlainMessage,
+    ) {
+        let iter = message_fragmenter.fragment_message(&m);
         for m in iter {
-            Self::send_single_fragment(common_state, m);
+            Self::send_single_fragment(
+                info,
+                record_layer,
+                sendable_tls,
+                message_fragmenter,
+                queued_key_update_message,
+                refresh_traffic_keys_pending,
+                m,
+            );
         }
     }
 
     // CommonState::send_appdata_encrypt()
     fn send_appdata_encrypt(
-        common_state: &mut CommonState,
+        info: &ConnectionInfo,
+        record_layer: &mut RecordLayer,
+        sendable_tls: &mut ChunkVecBuffer,
+        message_fragmenter: &mut MessageFragmenter,
+        queued_key_update_message: &mut Option<Vec<u8>>,
+        refresh_traffic_keys_pending: &mut bool,
         payload: OutboundChunks<'_>,
         limit: Limit,
     ) -> usize {
@@ -1080,56 +1177,76 @@ impl Writer {
         // constant and predictable amount, so it's not a terrible issue.
         let len = match limit {
             #[cfg(feature = "std")]
-            Limit::Yes => common_state
-                .sendable_tls
-                .apply_limit(payload.len()),
+            Limit::Yes => sendable_tls.apply_limit(payload.len()),
             Limit::No => payload.len(),
         };
 
-        let iter = common_state
-            .message_fragmenter
-            .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                payload.split_at(len).0,
-            );
+        let iter = message_fragmenter.fragment_payload(
+            ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_2,
+            payload.split_at(len).0,
+        );
         for m in iter {
-            Self::send_single_fragment(common_state, m);
+            Self::send_single_fragment(
+                info,
+                record_layer,
+                sendable_tls,
+                message_fragmenter,
+                queued_key_update_message,
+                refresh_traffic_keys_pending,
+                m,
+            );
         }
 
         len
     }
 
     // CommonState::send_single_fragment()
-    fn send_single_fragment(common_state: &mut CommonState, m: OutboundPlainMessage<'_>) {
+    fn send_single_fragment(
+        info: &ConnectionInfo,
+        record_layer: &mut RecordLayer,
+        sendable_tls: &mut ChunkVecBuffer,
+        message_fragmenter: &mut MessageFragmenter,
+        queued_key_update_message: &mut Option<Vec<u8>>,
+        refresh_traffic_keys_pending: &mut bool,
+        m: OutboundPlainMessage<'_>,
+    ) {
         if m.typ == ContentType::Alert {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            let em = common_state
-                .record_layer
-                .encrypt_outgoing(m);
-            Self::queue_tls_message(common_state, em);
+            let em = record_layer.encrypt_outgoing(m);
+            Self::queue_tls_message(sendable_tls, queued_key_update_message, em);
             return;
         }
 
-        match common_state
-            .record_layer
-            .next_pre_encrypt_action()
-        {
+        match record_layer.next_pre_encrypt_action() {
             PreEncryptAction::Nothing => {}
 
             // Close connection once we start to run out of
             // sequence space.
             PreEncryptAction::RefreshOrClose => {
-                match common_state.negotiated_version {
-                    Some(ProtocolVersion::TLSv1_3) => {
+                match info.version {
+                    ProtocolVersion::TLSv1_3 => {
                         // driven by caller, as we don't have the `State` here
-                        common_state.refresh_traffic_keys_pending = true;
+                        *refresh_traffic_keys_pending = true;
                     }
                     _ => {
                         log::error!(
                             "traffic keys exhausted, closing connection to prevent security failure"
                         );
-                        common_state.send_close_notify();
+                        log::debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
+                        let m = Message::build_alert(
+                            AlertLevel::Warning,
+                            AlertDescription::CloseNotify,
+                        );
+                        Self::send_msg_encrypt(
+                            info,
+                            record_layer,
+                            sendable_tls,
+                            queued_key_update_message,
+                            message_fragmenter,
+                            refresh_traffic_keys_pending,
+                            m.into(),
+                        );
                         return;
                     }
                 }
@@ -1142,18 +1259,18 @@ impl Writer {
             }
         };
 
-        let em = common_state
-            .record_layer
-            .encrypt_outgoing(m);
-        Self::queue_tls_message(common_state, em);
+        let em = record_layer.encrypt_outgoing(m);
+        Self::queue_tls_message(sendable_tls, queued_key_update_message, em);
     }
 
     // CommonState::queue_tls_message()
-    fn queue_tls_message(common_state: &mut CommonState, m: OutboundOpaqueMessage) {
-        Self::perhaps_write_key_update(common_state);
-        common_state
-            .sendable_tls
-            .append(m.encode());
+    fn queue_tls_message(
+        sendable_tls: &mut ChunkVecBuffer,
+        queued_key_update_message: &mut Option<Vec<u8>>,
+        m: OutboundOpaqueMessage,
+    ) {
+        Self::perhaps_write_key_update(sendable_tls, queued_key_update_message);
+        sendable_tls.append(m.encode());
     }
 }
 
@@ -1170,12 +1287,24 @@ impl io::Write for PlaintextWriter<'_> {
             return Ok(0);
         }
 
-        let mut common_state = self.writer.common_state.lock().unwrap();
-        let len = Writer::buffer_plaintext(&mut common_state, buf.into());
+        let mut record_layer = self.writer.record_layer.lock().unwrap();
+        let len = Writer::buffer_plaintext(
+            &self.writer.info,
+            &mut record_layer,
+            &mut self.writer.sendable_tls,
+            &mut self.writer.queued_key_update_message,
+            &mut self.writer.refresh_traffic_keys_pending,
+            &mut self.writer.message_fragmenter,
+            buf.into(),
+        );
         Writer::maybe_refresh_traffic_keys(
             &self.writer.info,
             &mut self.writer.encryption_secret,
-            &mut common_state,
+            &mut record_layer,
+            &mut self.writer.sendable_tls,
+            &mut self.writer.message_fragmenter,
+            &mut self.writer.queued_key_update_message,
+            &mut self.writer.refresh_traffic_keys_pending,
         );
         Ok(len)
     }
@@ -1200,12 +1329,24 @@ impl io::Write for PlaintextWriter<'_> {
             }
         };
 
-        let mut common_state = self.writer.common_state.lock().unwrap();
-        let len = Writer::buffer_plaintext(&mut common_state, payload);
+        let mut record_layer = self.writer.record_layer.lock().unwrap();
+        let len = Writer::buffer_plaintext(
+            &self.writer.info,
+            &mut record_layer,
+            &mut self.writer.sendable_tls,
+            &mut self.writer.queued_key_update_message,
+            &mut self.writer.refresh_traffic_keys_pending,
+            &mut self.writer.message_fragmenter,
+            payload,
+        );
         Writer::maybe_refresh_traffic_keys(
             &self.writer.info,
             &mut self.writer.encryption_secret,
-            &mut common_state,
+            &mut record_layer,
+            &mut self.writer.sendable_tls,
+            &mut self.writer.message_fragmenter,
+            &mut self.writer.queued_key_update_message,
+            &mut self.writer.refresh_traffic_keys_pending,
         );
         Ok(len)
     }
