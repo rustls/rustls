@@ -64,7 +64,7 @@ hashbrown = { version = "0.16", default-features = false, features = ["default-h
 hex = "0.4"
 hickory-resolver = { version = "0.25", features = ["https-aws-lc-rs", "webpki-roots"] }
 hmac = "0.12"
-hpke-rs = "0.3"
+hpke-rs = "0.4"
 hpke-rs-crypto = "0.3"
 hpke-rs-rust-crypto = "0.3"
 itertools = "0.14"
