@@ -361,22 +361,18 @@ impl Reader {
             }
 
             // Stop if we have a writer action.
-            if writer_action.is_some() {
-                return Ok(Received {
-                    bytes_read: total,
-                    writer_action,
-                });
+            if let Some(writer_action) = writer_action.take() {
+                return Ok(Received::WriterAction(writer_action));
             }
         }
 
         if let Some(error) = &self.buffered_error {
             // There was no writer action; show the error immediately.
             Err(io::Error::new(io::ErrorKind::InvalidData, error.clone()))
+        } else if let Some(writer_action) = writer_action {
+            Ok(Received::WriterAction(writer_action))
         } else {
-            Ok(Received {
-                bytes_read: total,
-                writer_action,
-            })
+            Ok(Received::Read(self.received_plaintext.len()))
         }
     }
 
@@ -923,12 +919,13 @@ impl Reader {
 }
 
 /// The output of [`Reader::recv_tls()`].
-pub struct Received {
-    /// The number of bytes read.
-    pub bytes_read: usize,
+#[must_use = "If there is a writer action, it must be enacted"]
+pub enum Received {
+    /// Data was read successfully.
+    Read(usize),
 
-    /// An action the writer should take, if any.
-    pub writer_action: Option<WriterAction>,
+    /// A writer action must be sent.
+    WriterAction(WriterAction),
 }
 
 /// A reader of plaintext data from a [`ClientReader`].
@@ -1357,6 +1354,7 @@ impl io::Write for PlaintextWriter<'_> {
 }
 
 /// An action commanded by the [`Reader`].
+#[must_use = "Pass this object to 'Writer::enact()'"]
 pub struct WriterAction(WriterActionImpl);
 
 enum WriterActionImpl {
