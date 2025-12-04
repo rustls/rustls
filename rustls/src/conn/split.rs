@@ -17,11 +17,14 @@ use crate::{
     SupportedCipherSuite,
     check::{inappropriate_handshake_message, inappropriate_message},
     client::ClientConnection,
-    common_state::{TemperCounters, TrafficState, UnborrowedPayload},
+    common_state::{Limit, TemperCounters, TrafficState, UnborrowedPayload},
     conn::{ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage},
     crypto::{
         Identity,
-        cipher::{Decrypted, InboundPlainMessage, OutboundChunks, PlainMessage},
+        cipher::{
+            Decrypted, InboundPlainMessage, OutboundChunks, OutboundOpaqueMessage,
+            OutboundPlainMessage, PlainMessage, PreEncryptAction,
+        },
         tls13::OkmBlock,
     },
     enums::{ContentType, HandshakeType, ProtocolVersion},
@@ -111,6 +114,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
     );
     assert!(!common_state.has_seen_eof);
     assert!(!common_state.has_received_close_notify);
+    assert!(sendable_plaintext.is_empty());
     let temper_counters = mem::take(&mut common_state.temper_counters);
 
     let info = Arc::new(ConnectionInfo {
@@ -163,7 +167,6 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
             common_state: common_state.clone(),
 
             encryption_secret,
-            sendable_plaintext,
             enqueued_fatal_error: false,
         },
     ))
@@ -921,9 +924,6 @@ pub struct Writer {
     /// Only available in TLS 1.3 connections, as it can change over time.
     encryption_secret: Option<OkmBlock>,
 
-    /// A buffer of plaintext to encrypt and send.
-    sendable_plaintext: ChunkVecBuffer,
-
     /// An enqueued fatal alert to send.
     ///
     /// If this is `true`, then the appropriate alert has been enqueued.
@@ -950,7 +950,7 @@ impl Writer {
                 // Enqueue the alert.
                 let msg = Message::build_alert(level, desc);
                 let mut common_state = self.common_state.lock().unwrap();
-                common_state.send_msg_encrypt(msg.into());
+                Self::send_msg_encrypt(&mut common_state, msg.into());
 
                 // Update internal state accordingly.
                 if matches!(level, AlertLevel::Fatal)
@@ -1018,7 +1018,7 @@ impl Writer {
         common_state: &mut CommonState,
     ) {
         if mem::take(&mut common_state.refresh_traffic_keys_pending) {
-            common_state.send_msg_encrypt(Message::build_key_update_request().into());
+            Self::send_msg_encrypt(common_state, Message::build_key_update_request().into());
 
             let SupportedCipherSuite::Tls13(suite) = info.suite else {
                 unreachable!()
@@ -1033,6 +1033,127 @@ impl Writer {
                     suite.common.confidentiality_limit,
                 );
         }
+    }
+
+    // CommonState::buffer_plaintext()
+    fn buffer_plaintext(common_state: &mut CommonState, payload: OutboundChunks<'_>) -> usize {
+        Self::perhaps_write_key_update(common_state);
+        Self::send_appdata_encrypt(common_state, payload, Limit::Yes)
+    }
+
+    // CommonState::perhaps_write_key_update()
+    fn perhaps_write_key_update(common_state: &mut CommonState) {
+        if let Some(message) = common_state
+            .queued_key_update_message
+            .take()
+        {
+            common_state
+                .sendable_tls
+                .append(message);
+        }
+    }
+
+    // CommonState::send_msg_encrypt()
+    fn send_msg_encrypt(common_state: &mut CommonState, m: PlainMessage) {
+        let iter = common_state
+            .message_fragmenter
+            .fragment_message(&m);
+        for m in iter {
+            Self::send_single_fragment(common_state, m);
+        }
+    }
+
+    // CommonState::send_appdata_encrypt()
+    fn send_appdata_encrypt(
+        common_state: &mut CommonState,
+        payload: OutboundChunks<'_>,
+        limit: Limit,
+    ) -> usize {
+        if payload.is_empty() {
+            // Don't send empty fragments.
+            return 0;
+        }
+
+        // Here, the limit on sendable_tls applies to encrypted data,
+        // but we're respecting it for plaintext data -- so we'll
+        // be out by whatever the cipher+record overhead is.  That's a
+        // constant and predictable amount, so it's not a terrible issue.
+        let len = match limit {
+            #[cfg(feature = "std")]
+            Limit::Yes => common_state
+                .sendable_tls
+                .apply_limit(payload.len()),
+            Limit::No => payload.len(),
+        };
+
+        let iter = common_state
+            .message_fragmenter
+            .fragment_payload(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                payload.split_at(len).0,
+            );
+        for m in iter {
+            Self::send_single_fragment(common_state, m);
+        }
+
+        len
+    }
+
+    // CommonState::send_single_fragment()
+    fn send_single_fragment(common_state: &mut CommonState, m: OutboundPlainMessage<'_>) {
+        if m.typ == ContentType::Alert {
+            // Alerts are always sendable -- never quashed by a PreEncryptAction.
+            let em = common_state
+                .record_layer
+                .encrypt_outgoing(m);
+            Self::queue_tls_message(common_state, em);
+            return;
+        }
+
+        match common_state
+            .record_layer
+            .next_pre_encrypt_action()
+        {
+            PreEncryptAction::Nothing => {}
+
+            // Close connection once we start to run out of
+            // sequence space.
+            PreEncryptAction::RefreshOrClose => {
+                match common_state.negotiated_version {
+                    Some(ProtocolVersion::TLSv1_3) => {
+                        // driven by caller, as we don't have the `State` here
+                        common_state.refresh_traffic_keys_pending = true;
+                    }
+                    _ => {
+                        log::error!(
+                            "traffic keys exhausted, closing connection to prevent security failure"
+                        );
+                        common_state.send_close_notify();
+                        return;
+                    }
+                }
+            }
+
+            // Refuse to wrap counter at all costs.  This
+            // is basically untestable unfortunately.
+            PreEncryptAction::Refuse => {
+                return;
+            }
+        };
+
+        let em = common_state
+            .record_layer
+            .encrypt_outgoing(m);
+        Self::queue_tls_message(common_state, em);
+    }
+
+    // CommonState::queue_tls_message()
+    fn queue_tls_message(common_state: &mut CommonState, m: OutboundOpaqueMessage) {
+        Self::perhaps_write_key_update(common_state);
+        common_state
+            .sendable_tls
+            .append(m.encode());
     }
 }
 
@@ -1050,7 +1171,7 @@ impl io::Write for PlaintextWriter<'_> {
         }
 
         let mut common_state = self.writer.common_state.lock().unwrap();
-        let len = common_state.buffer_plaintext(buf.into(), &mut self.writer.sendable_plaintext);
+        let len = Writer::buffer_plaintext(&mut common_state, buf.into());
         Writer::maybe_refresh_traffic_keys(
             &self.writer.info,
             &mut self.writer.encryption_secret,
@@ -1080,7 +1201,7 @@ impl io::Write for PlaintextWriter<'_> {
         };
 
         let mut common_state = self.writer.common_state.lock().unwrap();
-        let len = common_state.buffer_plaintext(payload, &mut self.writer.sendable_plaintext);
+        let len = Writer::buffer_plaintext(&mut common_state, payload);
         Writer::maybe_refresh_traffic_keys(
             &self.writer.info,
             &mut self.writer.encryption_secret,

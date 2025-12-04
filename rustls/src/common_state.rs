@@ -51,7 +51,7 @@ pub struct CommonState {
     #[cfg(feature = "std")]
     pub(crate) has_seen_eof: bool,
     pub(crate) peer_identity: Option<Identity<'static>>,
-    message_fragmenter: MessageFragmenter,
+    pub(crate) message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
     pub(crate) queued_key_update_message: Option<Vec<u8>>,
@@ -965,7 +965,7 @@ pub(crate) enum Protocol {
     Quic,
 }
 
-enum Limit {
+pub(crate) enum Limit {
     #[cfg(feature = "std")]
     Yes,
     No,
