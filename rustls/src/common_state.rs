@@ -54,7 +54,7 @@ pub struct CommonState {
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
-    queued_key_update_message: Option<Vec<u8>>,
+    pub(crate) queued_key_update_message: Option<Vec<u8>>,
 
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub(crate) protocol: Protocol,

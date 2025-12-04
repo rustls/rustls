@@ -5,7 +5,7 @@ use core::ops::Deref;
 
 use crate::common_state::{CommonState, Side};
 use crate::conn::Exporter;
-use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
+use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, MessageEncrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{hash, hmac};
@@ -846,6 +846,17 @@ impl KeyScheduleSuite {
             );
     }
 
+    pub(crate) fn derive_encrypter(&self, secret: &OkmBlock) -> Box<dyn MessageEncrypter> {
+        let expander = self
+            .suite
+            .hkdf_provider
+            .expander_for_okm(secret);
+        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
+        let iv = derive_traffic_iv(expander.as_ref(), self.suite.aead_alg.iv_len());
+
+        self.suite.aead_alg.encrypter(key, iv)
+    }
+
     pub(crate) fn set_decrypter(
         &self,
         secret: &OkmBlock,
@@ -857,7 +868,7 @@ impl KeyScheduleSuite {
             .set_message_decrypter(self.derive_decrypter(secret), proof);
     }
 
-    fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn MessageDecrypter> {
+    pub(crate) fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn MessageDecrypter> {
         let expander = self
             .suite
             .hkdf_provider

@@ -21,7 +21,7 @@ use crate::{
     conn::{ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX, ConnectionCore, InboundUnborrowedMessage},
     crypto::{
         Identity,
-        cipher::{Decrypted, InboundPlainMessage, OutboundChunks},
+        cipher::{Decrypted, InboundPlainMessage, OutboundChunks, PlainMessage},
         tls13::OkmBlock,
     },
     enums::{ContentType, HandshakeType, ProtocolVersion},
@@ -842,7 +842,15 @@ impl Reader {
             }
         }
 
-        let proof = common_state.check_aligned_handshake()?;
+        let proof = common_state
+            .aligned_handshake
+            .ok_or_else(|| {
+                Self::send_fatal_alert(
+                    writer_action,
+                    AlertDescription::UnexpectedMessage,
+                    PeerMisbehaved::KeyEpochWithPendingFragment,
+                )
+            })?;
 
         // Update our read-side keys.
         let SupportedCipherSuite::Tls13(suite) = info.suite else {
@@ -851,7 +859,9 @@ impl Reader {
         let decryption_secret = decryption_secret.as_mut().unwrap();
         let ks = KeyScheduleSuite::from(suite);
         *decryption_secret = ks.derive_next(&decryption_secret);
-        ks.set_decrypter(&decryption_secret, common_state, &proof);
+        common_state
+            .record_layer
+            .set_message_decrypter(ks.derive_decrypter(decryption_secret), &proof);
 
         Ok(())
     }
@@ -960,8 +970,21 @@ impl Writer {
                 let secret = self.encryption_secret.as_mut().unwrap();
                 let ks = KeyScheduleSuite::from(suite);
                 *secret = ks.derive_next(&secret);
-                common_state.enqueue_key_update_notification();
-                ks.set_encrypter(&secret, &mut common_state);
+                {
+                    let message = PlainMessage::from(Message::build_key_update_notify());
+                    common_state.queued_key_update_message = Some(
+                        common_state
+                            .record_layer
+                            .encrypt_outgoing(message.borrow_outbound())
+                            .encode(),
+                    );
+                };
+                common_state
+                    .record_layer
+                    .set_message_encrypter(
+                        ks.derive_encrypter(&secret),
+                        suite.common.confidentiality_limit,
+                    );
             }
         }
     }
@@ -1003,7 +1026,12 @@ impl Writer {
             let secret = encryption_secret.as_mut().unwrap();
             let ks = KeyScheduleSuite::from(suite);
             *secret = ks.derive_next(&secret);
-            ks.set_encrypter(&secret, common_state);
+            common_state
+                .record_layer
+                .set_message_encrypter(
+                    ks.derive_encrypter(&secret),
+                    suite.common.confidentiality_limit,
+                );
         }
     }
 }
