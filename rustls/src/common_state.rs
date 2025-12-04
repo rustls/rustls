@@ -187,7 +187,7 @@ impl CommonState {
 
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
-        msg: EncodedMessage<&'_ [u8]>,
+        msg: Result<Message<'_>, InvalidMessage>,
         state: Box<dyn State<Data>>,
         data: &mut Data,
         plaintext_locator: &Locator,
@@ -195,25 +195,23 @@ impl CommonState {
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
     ) -> Result<Box<dyn State<Data>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
-        if msg.typ == ContentType::ChangeCipherSpec
-            && !self.may_receive_application_data
+        if !self.may_receive_application_data
             && self.is_tls13()
+            && matches!(
+                &msg,
+                Ok(Message {
+                    payload: MessagePayload::ChangeCipherSpec(_),
+                    ..
+                })
+            )
         {
-            if !msg.is_valid_ccs() {
-                // "An implementation which receives any other change_cipher_spec value or
-                //  which receives a protected change_cipher_spec record MUST abort the
-                //  handshake with an "unexpected_message" alert."
-                return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
-            }
-
             self.temper_counters
                 .received_tls13_change_cipher_spec()?;
             trace!("Dropping CCS");
             return Ok(state);
         }
 
-        // Now we can fully parse the message payload.
-        let msg = Message::try_from(&msg)?;
+        let msg = msg?;
 
         // For alerts, we have separate logic.
         if let MessagePayload::Alert(alert) = &msg.payload {
@@ -247,7 +245,7 @@ impl CommonState {
             sendable_plaintext,
         };
 
-        state.handle(&mut cx, msg)
+        state.handle(&mut cx, Input { message: msg })
     }
 
     pub(crate) fn maybe_send_fatal_alert(&mut self, error: &Error) {
@@ -788,7 +786,7 @@ pub(crate) trait State<Side>: Send + Sync {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut Context<'_, Side>,
-        message: Message<'m>,
+        input: Input<'m>,
     ) -> Result<Box<dyn State<Side>>, Error>;
 
     fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
@@ -802,6 +800,10 @@ pub(crate) trait State<Side>: Send + Sync {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
     }
+}
+
+pub(crate) struct Input<'a> {
+    pub(crate) message: Message<'a>,
 }
 
 pub(crate) struct Context<'a, Data> {

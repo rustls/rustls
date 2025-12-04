@@ -9,12 +9,14 @@ use core::ops::Deref;
 use pki_types::ServerName;
 
 use super::Tls12Resumption;
+use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::client::ech::EchState;
 use crate::client::{
-    ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
+    ClientConfig, ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus,
+    tls13,
 };
-use crate::common_state::{CommonState, HandshakeKind, KxState, State};
+use crate::common_state::{CommonState, HandshakeKind, Input, KxState, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -38,7 +40,6 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarly;
-use crate::{ClientConfig, bs_debug};
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
@@ -131,7 +132,8 @@ impl ExpectServerHello {
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, input: Input<'_>) -> NextStateOrError {
+        let m = input.message;
         let server_hello =
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
         trace!("We got ServerHello {server_hello:#?}");
@@ -189,8 +191,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
     fn handle_hello_retry_request(
         mut self,
         cx: &mut ClientContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> NextStateOrError {
+        let m = input.message;
         let hrr = require_handshake_msg!(
             m,
             HandshakeType::HelloRetryRequest,
@@ -336,18 +339,20 @@ impl ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> NextStateOrError {
-        match m.payload {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, input: Input<'_>) -> NextStateOrError {
+        match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(..)),
                 ..
             } => self
                 .into_expect_server_hello()
-                .handle(cx, m),
+                .handle(cx, input),
+
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(..)),
                 ..
-            } => self.handle_hello_retry_request(cx, m),
+            } => self.handle_hello_retry_request(cx, input),
+
             payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::Handshake],

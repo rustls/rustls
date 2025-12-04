@@ -17,7 +17,9 @@ use rustls::crypto::{
     SignatureScheme, Signer, SigningKey,
 };
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
-use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
+use rustls::error::{
+    AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerMisbehaved,
+};
 use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{Acceptor, ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
@@ -1052,9 +1054,7 @@ fn test_client_rejects_illegal_tls13_ccs() {
     transfer_altered(&mut server, corrupt_ccs, &mut client);
     assert_eq!(
         client.process_new_packets(),
-        Err(Error::PeerMisbehaved(
-            PeerMisbehaved::IllegalMiddleboxChangeCipherSpec
-        ))
+        Err(InvalidMessage::TrailingData("ChangeCipherSpecPayload").into())
     );
 }
 
