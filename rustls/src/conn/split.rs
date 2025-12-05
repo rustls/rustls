@@ -128,7 +128,7 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
         message_fragmenter,
         received_plaintext,
         sendable_tls,
-        queued_key_update_message,
+        queued_key_update_message: None,
         // QUIC is not supported here
         protocol: _,
         quic: _,
@@ -208,7 +208,6 @@ pub fn split(conn: impl Into<Connection>) -> Result<(Reader, Writer), Error> {
             info: info.clone(),
             sendable_tls,
             refresh_traffic_keys_pending,
-            queued_key_update_message,
             encryption_secret,
             message_encrypter,
             write_seq,
@@ -990,9 +989,6 @@ pub struct Writer {
     /// Whether the traffic keys need to be refreshed.
     refresh_traffic_keys_pending: bool,
 
-    /// A queued key update message.
-    queued_key_update_message: Option<Vec<u8>>,
-
     /// The message encrypter.
     message_encrypter: Box<dyn MessageEncrypter>,
 
@@ -1041,7 +1037,6 @@ impl Writer {
                 Self::send_msg_encrypt(
                     &self.info,
                     &mut self.sendable_tls,
-                    &mut self.queued_key_update_message,
                     &mut self.message_fragmenter,
                     &mut *self.message_encrypter,
                     &mut self.write_seq,
@@ -1069,7 +1064,7 @@ impl Writer {
                 *secret = ks.derive_next(&secret);
                 {
                     let message = PlainMessage::from(Message::build_key_update_notify());
-                    self.queued_key_update_message = Some(
+                    self.sendable_tls.append(
                         Self::encrypt_outgoing(
                             &mut *self.message_encrypter,
                             &mut self.write_seq,
@@ -1112,7 +1107,6 @@ impl Writer {
         encryption_secret: &mut Option<OkmBlock>,
         sendable_tls: &mut ChunkVecBuffer,
         message_fragmenter: &mut MessageFragmenter,
-        queued_key_update_message: &mut Option<Vec<u8>>,
         message_encrypter: &mut Box<dyn MessageEncrypter>,
         write_seq: &mut u64,
         write_seq_max: &mut u64,
@@ -1124,7 +1118,6 @@ impl Writer {
             Self::send_msg_encrypt(
                 info,
                 sendable_tls,
-                queued_key_update_message,
                 message_fragmenter,
                 &mut **message_encrypter,
                 write_seq,
@@ -1149,7 +1142,6 @@ impl Writer {
     fn buffer_plaintext(
         info: &ConnectionInfo,
         sendable_tls: &mut ChunkVecBuffer,
-        queued_key_update_message: &mut Option<Vec<u8>>,
         refresh_traffic_keys_pending: &mut bool,
         message_fragmenter: &mut MessageFragmenter,
         message_encrypter: &mut dyn MessageEncrypter,
@@ -1157,12 +1149,10 @@ impl Writer {
         write_seq_max: u64,
         payload: OutboundChunks<'_>,
     ) -> usize {
-        Self::perhaps_write_key_update(sendable_tls, queued_key_update_message);
         Self::send_appdata_encrypt(
             info,
             sendable_tls,
             message_fragmenter,
-            queued_key_update_message,
             refresh_traffic_keys_pending,
             message_encrypter,
             write_seq,
@@ -1172,21 +1162,10 @@ impl Writer {
         )
     }
 
-    // CommonState::perhaps_write_key_update()
-    fn perhaps_write_key_update(
-        sendable_tls: &mut ChunkVecBuffer,
-        queued_key_update_message: &mut Option<Vec<u8>>,
-    ) {
-        if let Some(message) = queued_key_update_message.take() {
-            sendable_tls.append(message);
-        }
-    }
-
     // CommonState::send_msg_encrypt()
     fn send_msg_encrypt(
         info: &ConnectionInfo,
         sendable_tls: &mut ChunkVecBuffer,
-        queued_key_update_message: &mut Option<Vec<u8>>,
         message_fragmenter: &mut MessageFragmenter,
         message_encrypter: &mut dyn MessageEncrypter,
         write_seq: &mut u64,
@@ -1203,7 +1182,6 @@ impl Writer {
                 message_encrypter,
                 write_seq,
                 write_seq_max,
-                queued_key_update_message,
                 refresh_traffic_keys_pending,
                 m,
             );
@@ -1215,7 +1193,6 @@ impl Writer {
         info: &ConnectionInfo,
         sendable_tls: &mut ChunkVecBuffer,
         message_fragmenter: &mut MessageFragmenter,
-        queued_key_update_message: &mut Option<Vec<u8>>,
         refresh_traffic_keys_pending: &mut bool,
         message_encrypter: &mut dyn MessageEncrypter,
         write_seq: &mut u64,
@@ -1251,7 +1228,6 @@ impl Writer {
                 message_encrypter,
                 write_seq,
                 write_seq_max,
-                queued_key_update_message,
                 refresh_traffic_keys_pending,
                 m,
             );
@@ -1268,14 +1244,13 @@ impl Writer {
         message_encrypter: &mut dyn MessageEncrypter,
         write_seq: &mut u64,
         write_seq_max: u64,
-        queued_key_update_message: &mut Option<Vec<u8>>,
         refresh_traffic_keys_pending: &mut bool,
         m: OutboundPlainMessage<'_>,
     ) {
         if m.typ == ContentType::Alert {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
             let em = Self::encrypt_outgoing(message_encrypter, write_seq, m);
-            Self::queue_tls_message(sendable_tls, queued_key_update_message, em);
+            sendable_tls.append(em.encode());
             return;
         }
 
@@ -1302,7 +1277,6 @@ impl Writer {
                         Self::send_msg_encrypt(
                             info,
                             sendable_tls,
-                            queued_key_update_message,
                             message_fragmenter,
                             message_encrypter,
                             write_seq,
@@ -1323,7 +1297,7 @@ impl Writer {
         };
 
         let em = Self::encrypt_outgoing(message_encrypter, write_seq, m);
-        Self::queue_tls_message(sendable_tls, queued_key_update_message, em);
+        sendable_tls.append(em.encode());
     }
 
     // RecordLayer::encrypt_outgoing()
@@ -1349,16 +1323,6 @@ impl Writer {
             _ => PreEncryptAction::Nothing,
         }
     }
-
-    // CommonState::queue_tls_message()
-    fn queue_tls_message(
-        sendable_tls: &mut ChunkVecBuffer,
-        queued_key_update_message: &mut Option<Vec<u8>>,
-        m: OutboundOpaqueMessage,
-    ) {
-        Self::perhaps_write_key_update(sendable_tls, queued_key_update_message);
-        sendable_tls.append(m.encode());
-    }
 }
 
 /// A writer of plaintext data into a [`ClientWriter`].
@@ -1377,7 +1341,6 @@ impl io::Write for PlaintextWriter<'_> {
         let len = Writer::buffer_plaintext(
             &self.writer.info,
             &mut self.writer.sendable_tls,
-            &mut self.writer.queued_key_update_message,
             &mut self.writer.refresh_traffic_keys_pending,
             &mut self.writer.message_fragmenter,
             &mut *self.writer.message_encrypter,
@@ -1390,7 +1353,6 @@ impl io::Write for PlaintextWriter<'_> {
             &mut self.writer.encryption_secret,
             &mut self.writer.sendable_tls,
             &mut self.writer.message_fragmenter,
-            &mut self.writer.queued_key_update_message,
             &mut self.writer.message_encrypter,
             &mut self.writer.write_seq,
             &mut self.writer.write_seq_max,
@@ -1422,7 +1384,6 @@ impl io::Write for PlaintextWriter<'_> {
         let len = Writer::buffer_plaintext(
             &self.writer.info,
             &mut self.writer.sendable_tls,
-            &mut self.writer.queued_key_update_message,
             &mut self.writer.refresh_traffic_keys_pending,
             &mut self.writer.message_fragmenter,
             &mut *self.writer.message_encrypter,
@@ -1435,7 +1396,6 @@ impl io::Write for PlaintextWriter<'_> {
             &mut self.writer.encryption_secret,
             &mut self.writer.sendable_tls,
             &mut self.writer.message_fragmenter,
-            &mut self.writer.queued_key_update_message,
             &mut self.writer.message_encrypter,
             &mut self.writer.write_seq,
             &mut self.writer.write_seq_max,
