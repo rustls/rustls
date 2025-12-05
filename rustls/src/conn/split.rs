@@ -1138,30 +1138,6 @@ impl Writer {
         }
     }
 
-    // CommonState::buffer_plaintext()
-    fn buffer_plaintext(
-        info: &ConnectionInfo,
-        sendable_tls: &mut ChunkVecBuffer,
-        refresh_traffic_keys_pending: &mut bool,
-        message_fragmenter: &mut MessageFragmenter,
-        message_encrypter: &mut dyn MessageEncrypter,
-        write_seq: &mut u64,
-        write_seq_max: u64,
-        payload: OutboundChunks<'_>,
-    ) -> usize {
-        Self::send_appdata_encrypt(
-            info,
-            sendable_tls,
-            message_fragmenter,
-            refresh_traffic_keys_pending,
-            message_encrypter,
-            write_seq,
-            write_seq_max,
-            payload,
-            Limit::Yes,
-        )
-    }
-
     // CommonState::send_msg_encrypt()
     fn send_msg_encrypt(
         info: &ConnectionInfo,
@@ -1338,15 +1314,16 @@ impl io::Write for PlaintextWriter<'_> {
             return Ok(0);
         }
 
-        let len = Writer::buffer_plaintext(
+        let len = Writer::send_appdata_encrypt(
             &self.writer.info,
             &mut self.writer.sendable_tls,
-            &mut self.writer.refresh_traffic_keys_pending,
             &mut self.writer.message_fragmenter,
+            &mut self.writer.refresh_traffic_keys_pending,
             &mut *self.writer.message_encrypter,
             &mut self.writer.write_seq,
             self.writer.write_seq_max,
             buf.into(),
+            Limit::Yes,
         );
         Writer::maybe_refresh_traffic_keys(
             &self.writer.info,
@@ -1381,15 +1358,16 @@ impl io::Write for PlaintextWriter<'_> {
             }
         };
 
-        let len = Writer::buffer_plaintext(
+        let len = Writer::send_appdata_encrypt(
             &self.writer.info,
             &mut self.writer.sendable_tls,
-            &mut self.writer.refresh_traffic_keys_pending,
             &mut self.writer.message_fragmenter,
+            &mut self.writer.refresh_traffic_keys_pending,
             &mut *self.writer.message_encrypter,
             &mut self.writer.write_seq,
             self.writer.write_seq_max,
             payload,
+            Limit::Yes,
         );
         Writer::maybe_refresh_traffic_keys(
             &self.writer.info,
