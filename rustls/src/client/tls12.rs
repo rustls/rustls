@@ -174,6 +174,7 @@ mod server_hello {
                         Ok(Box::new(ExpectNewTicket {
                             config,
                             secrets,
+                            peer_identity: resuming.peer_identity().clone(),
                             resuming_session: Some(resuming),
                             session_id: server_hello.session_id,
                             session_key,
@@ -186,6 +187,7 @@ mod server_hello {
                         Ok(Box::new(ExpectCcs {
                             config,
                             secrets,
+                            peer_identity: resuming.peer_identity().clone(),
                             resuming_session: Some(resuming),
                             session_id: server_hello.session_id,
                             session_key,
@@ -781,7 +783,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                     signature,
                 })?
         };
-        cx.common.peer_identity = Some(identity);
+        cx.common.peer_identity = Some(identity.clone());
 
         // 3.
         if let Some(client_auth) = &st.client_auth {
@@ -868,6 +870,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             Ok(Box::new(ExpectNewTicket {
                 config: st.config,
                 secrets,
+                peer_identity: identity,
                 resuming_session: st.resuming_session,
                 session_id: st.session_id,
                 session_key: st.session_key,
@@ -880,6 +883,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             Ok(Box::new(ExpectCcs {
                 config: st.config,
                 secrets,
+                peer_identity: identity,
                 resuming_session: st.resuming_session,
                 session_id: st.session_id,
                 session_key: st.session_key,
@@ -896,6 +900,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
 struct ExpectNewTicket {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
+    peer_identity: Identity<'static>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
@@ -925,6 +930,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
             resuming_session: self.resuming_session,
             session_id: self.session_id,
             session_key: self.session_key,
+            peer_identity: self.peer_identity,
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: Some(nst),
@@ -938,6 +944,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
 struct ExpectCcs {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
+    peer_identity: Identity<'static>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
@@ -970,6 +977,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
+            peer_identity: self.peer_identity,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
             session_key: self.session_key,
@@ -985,6 +993,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 
 struct ExpectFinished {
     config: Arc<ClientConfig>,
+    peer_identity: Identity<'static>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
@@ -998,7 +1007,7 @@ struct ExpectFinished {
 
 impl ExpectFinished {
     // -- Waiting for their finished --
-    fn save_session(&mut self, cx: &ClientContext<'_>) {
+    fn save_session(&mut self) {
         // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
         // original ticket again.
         let (mut ticket, lifetime) = match self.ticket.take() {
@@ -1027,11 +1036,7 @@ impl ExpectFinished {
             self.session_id,
             ticket,
             self.secrets.master_secret(),
-            cx.common
-                .peer_identity
-                .as_ref()
-                .unwrap() // must be Some if we got this far
-                .clone(),
+            self.peer_identity.clone(),
             now,
             lifetime,
             self.using_ems,
@@ -1071,7 +1076,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         // Hash this message too.
         st.transcript.add_message(&m);
 
-        st.save_session(cx);
+        st.save_session();
 
         if st.resuming_session.is_some() {
             emit_ccs(cx.common);

@@ -544,6 +544,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     session_key: self.session_key,
                     randoms: self.randoms,
                     suite: self.suite,
+                    peer_identity: resuming_session.peer_identity().clone(),
                     transcript: self.transcript,
                     key_schedule: self.key_schedule,
                     client_auth: None,
@@ -1091,7 +1092,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                 signature: cert_verify,
             })?;
 
-        cx.common.peer_identity = Some(identity);
+        cx.common.peer_identity = Some(identity.clone());
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
@@ -1099,6 +1100,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             session_key: self.session_key,
             randoms: self.randoms,
             suite: self.suite,
+            peer_identity: identity,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
@@ -1198,6 +1200,7 @@ struct ExpectFinished {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
+    peer_identity: Identity<'static>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -1321,6 +1324,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             session_key: st.session_key,
             suite: st.suite,
             key_schedule,
+            peer_identity: st.peer_identity,
             resumption,
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
@@ -1343,6 +1347,7 @@ struct ExpectTraffic {
     session_key: ClientSessionKey<'static>,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTraffic,
+    peer_identity: Identity<'static>,
     resumption: KeyScheduleResumption,
     _cert_verified: verify::PeerVerified,
     _sig_verified: verify::HandshakeSignatureValid,
@@ -1365,9 +1370,7 @@ impl ExpectTraffic {
             self.suite,
             nst.ticket.clone(),
             secret.as_ref(),
-            cx.peer_identity
-                .unwrap() // should be Some() if we got this far
-                .clone(),
+            self.peer_identity.clone(),
             now,
             nst.lifetime,
             nst.age_add,
@@ -1399,7 +1402,6 @@ impl ExpectTraffic {
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         let mut kcx = KernelContext {
-            peer_identity: cx.common.peer_identity.as_ref(),
             protocol: cx.common.protocol,
             quic: &cx.common.quic,
         };

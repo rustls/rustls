@@ -393,6 +393,7 @@ mod client_hello {
                     transcript,
                     suite,
                     key_schedule: key_schedule_traffic,
+                    peer_identity: resumedata.and_then(|r| r.common.peer_identity),
                     send_tickets: st.send_tickets,
                 }))
             } else {
@@ -401,6 +402,7 @@ mod client_hello {
                     transcript,
                     suite,
                     key_schedule: key_schedule_traffic,
+                    peer_identity: resumedata.and_then(|r| r.common.peer_identity),
                     send_tickets: st.send_tickets,
                 }))
             }
@@ -1006,6 +1008,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                     transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: self.key_schedule,
+                    peer_identity: None,
                     send_tickets: self.send_tickets,
                 }));
             }
@@ -1063,7 +1066,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             })?;
 
         trace!("client CertificateVerify OK");
-        cx.common.peer_identity = Some(self.peer_identity);
+        cx.common.peer_identity = Some(self.peer_identity.clone());
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
@@ -1071,6 +1074,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             transcript: self.transcript,
             suite: self.suite,
             key_schedule: self.key_schedule,
+            peer_identity: Some(self.peer_identity),
             send_tickets: self.send_tickets,
         }))
     }
@@ -1084,6 +1088,7 @@ struct ExpectEarlyData {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    peer_identity: Option<Identity<'static>>,
     send_tickets: usize,
 }
 
@@ -1117,6 +1122,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: self.key_schedule,
+                    peer_identity: self.peer_identity,
                     send_tickets: self.send_tickets,
                 }))
             }
@@ -1134,6 +1140,7 @@ fn get_server_session_value(
     suite: &'static Tls13CipherSuite,
     resumption: &KeyScheduleResumption,
     cx: &ServerContext<'_>,
+    peer_identity: Option<Identity<'static>>,
     nonce: &[u8],
     time_now: UnixTime,
     age_obfuscation_offset: u32,
@@ -1144,7 +1151,7 @@ fn get_server_session_value(
         persist::CommonServerSessionValue::new(
             cx.data.sni.as_ref(),
             suite.common.suite,
-            cx.common.peer_identity.clone(),
+            peer_identity,
             cx.common.alpn_protocol.clone(),
             cx.data.resumption_data.clone(),
             time_now,
@@ -1160,6 +1167,7 @@ struct ExpectFinished {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    peer_identity: Option<Identity<'static>>,
     send_tickets: usize,
 }
 
@@ -1168,6 +1176,7 @@ impl ExpectFinished {
         flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
         cx: &ServerContext<'_>,
+        peer_identity: Option<Identity<'static>>,
         resumption: &KeyScheduleResumption,
         config: &ServerConfig,
     ) -> Result<(), Error> {
@@ -1178,7 +1187,8 @@ impl ExpectFinished {
         let now = config.current_time()?;
 
         let plain =
-            get_server_session_value(suite, resumption, cx, &nonce, now, age_add).get_encoding();
+            get_server_session_value(suite, resumption, cx, peer_identity, &nonce, now, age_add)
+                .get_encoding();
 
         let ticketer = config.ticketer.as_deref();
         let (ticket, lifetime) = if let Some(ticketer) = ticketer {
@@ -1252,7 +1262,14 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         let mut flight = HandshakeFlightTls13::new(&mut self.transcript);
         for _ in 0..self.send_tickets {
-            Self::emit_ticket(&mut flight, self.suite, cx, &resumption, &self.config)?;
+            Self::emit_ticket(
+                &mut flight,
+                self.suite,
+                cx,
+                self.peer_identity.clone(),
+                &resumption,
+                &self.config,
+            )?;
         }
         flight.finish(cx.common);
 
