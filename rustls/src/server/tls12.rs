@@ -292,7 +292,6 @@ mod client_hello {
         );
         cx.common
             .start_encryption_tls12(&secrets, Side::Server);
-        cx.common.peer_identity = resumedata.common.peer_identity.clone();
         cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
         if send_ticket {
@@ -592,7 +591,7 @@ struct ExpectCertificateVerify {
 impl State<ServerConnectionData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ServerContext<'_>,
+        _cx: &mut ServerContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
         let signature = require_handshake_msg!(
@@ -622,7 +621,6 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        cx.common.peer_identity = Some(self.peer_identity.clone());
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectCcs {
@@ -851,6 +849,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             emit_finished(&self.secrets, &mut self.transcript, cx.common, &proof);
         }
 
+        cx.common.peer_identity = self.peer_identity;
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
 
