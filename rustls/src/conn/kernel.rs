@@ -58,7 +58,6 @@ use core::marker::PhantomData;
 
 use crate::client::ClientConnectionData;
 use crate::common_state::Protocol;
-use crate::crypto::Identity;
 use crate::enums::ProtocolVersion;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::NewSessionTicketPayloadTls13;
@@ -75,7 +74,6 @@ use crate::{CommonState, ConnectionTrafficSecrets, Error, SupportedCipherSuite};
 pub struct KernelConnection<Side> {
     state: Box<dyn KernelState>,
 
-    peer_identity: Option<Identity<'static>>,
     quic: Quic,
 
     negotiated_version: ProtocolVersion,
@@ -90,7 +88,6 @@ impl<Side> KernelConnection<Side> {
         Ok(Self {
             state,
 
-            peer_identity: common.peer_identity,
             quic: common.quic,
             negotiated_version: common
                 .negotiated_version
@@ -227,7 +224,6 @@ impl KernelConnection<ClientConnectionData> {
 
         let nst = NewSessionTicketPayloadTls13::read_bytes(payload)?;
         let mut cx = KernelContext {
-            peer_identity: self.peer_identity.as_ref(),
             protocol: self.protocol,
             quic: &self.quic,
         };
@@ -252,7 +248,6 @@ pub(crate) trait KernelState: Send + Sync {
 }
 
 pub(crate) struct KernelContext<'a> {
-    pub(crate) peer_identity: Option<&'a Identity<'static>>,
     pub(crate) protocol: Protocol,
     pub(crate) quic: &'a Quic,
 }

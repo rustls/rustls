@@ -292,14 +292,22 @@ mod client_hello {
         );
         cx.common
             .start_encryption_tls12(&secrets, Side::Server);
-        cx.common.peer_identity = resumedata.common.peer_identity;
+        cx.common.peer_identity = resumedata.common.peer_identity.clone();
         cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
         if send_ticket {
             let now = config.current_time()?;
 
             if let Some(ticketer) = config.ticketer.as_deref() {
-                emit_ticket(&secrets, &mut transcript, using_ems, cx, ticketer, now)?;
+                emit_ticket(
+                    &secrets,
+                    &mut transcript,
+                    using_ems,
+                    resumedata.common.peer_identity.as_ref(),
+                    cx,
+                    ticketer,
+                    now,
+                )?;
             }
         }
         emit_ccs(cx.common);
@@ -313,6 +321,7 @@ mod client_hello {
             secrets,
             transcript,
             session_id,
+            peer_identity: resumedata.common.peer_identity,
             using_ems,
             resuming: true,
             send_ticket,
@@ -560,6 +569,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 secrets,
                 transcript: self.transcript,
                 session_id: self.session_id,
+                peer_identity: None,
                 using_ems: self.using_ems,
                 resuming: false,
                 send_ticket: self.send_ticket,
@@ -612,7 +622,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        cx.common.peer_identity = Some(self.peer_identity);
+        cx.common.peer_identity = Some(self.peer_identity.clone());
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectCcs {
@@ -620,6 +630,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             secrets: self.secrets,
             transcript: self.transcript,
             session_id: self.session_id,
+            peer_identity: Some(self.peer_identity),
             using_ems: self.using_ems,
             resuming: false,
             send_ticket: self.send_ticket,
@@ -633,6 +644,7 @@ struct ExpectCcs {
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
+    peer_identity: Option<Identity<'static>>,
     using_ems: bool,
     resuming: bool,
     send_ticket: bool,
@@ -662,6 +674,7 @@ impl State<ServerConnectionData> for ExpectCcs {
             secrets: self.secrets,
             transcript: self.transcript,
             session_id: self.session_id,
+            peer_identity: self.peer_identity,
             using_ems: self.using_ems,
             resuming: self.resuming,
             send_ticket: self.send_ticket,
@@ -673,6 +686,7 @@ impl State<ServerConnectionData> for ExpectCcs {
 fn get_server_connection_value_tls12(
     secrets: &ConnectionSecrets,
     using_ems: bool,
+    peer_identity: Option<&Identity<'static>>,
     cx: &ServerContext<'_>,
     time_now: UnixTime,
 ) -> persist::ServerSessionValue {
@@ -680,7 +694,7 @@ fn get_server_connection_value_tls12(
         persist::CommonServerSessionValue::new(
             cx.data.sni.as_ref(),
             secrets.suite().common.suite,
-            cx.common.peer_identity.clone(),
+            peer_identity.cloned(),
             cx.common.alpn_protocol.clone(),
             cx.data.resumption_data.clone(),
             time_now,
@@ -695,11 +709,13 @@ fn emit_ticket(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
     using_ems: bool,
+    peer_identity: Option<&Identity<'static>>,
     cx: &mut ServerContext<'_>,
     ticketer: &dyn TicketProducer,
     now: UnixTime,
 ) -> Result<(), Error> {
-    let plain = get_server_connection_value_tls12(secrets, using_ems, cx, now).get_encoding();
+    let plain = get_server_connection_value_tls12(secrets, using_ems, peer_identity, cx, now)
+        .get_encoding();
 
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
@@ -758,6 +774,7 @@ struct ExpectFinished {
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
+    peer_identity: Option<Identity<'static>>,
     using_ems: bool,
     resuming: bool,
     send_ticket: bool,
@@ -791,7 +808,13 @@ impl State<ServerConnectionData> for ExpectFinished {
         if !self.resuming && !self.session_id.is_empty() {
             let now = self.config.current_time()?;
 
-            let value = get_server_connection_value_tls12(&self.secrets, self.using_ems, cx, now);
+            let value = get_server_connection_value_tls12(
+                &self.secrets,
+                self.using_ems,
+                self.peer_identity.as_ref(),
+                cx,
+                now,
+            );
 
             let worked = self
                 .config
@@ -814,6 +837,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                         &self.secrets,
                         &mut self.transcript,
                         self.using_ems,
+                        self.peer_identity.as_ref(),
                         cx,
                         ticketer,
                         now,
