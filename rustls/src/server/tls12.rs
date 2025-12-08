@@ -907,7 +907,8 @@ impl State<ServerConnectionData> for ExpectFinished {
                     .extract_secrets(Side::Server)
             });
 
-        cx.common.exporter = Some(self.secrets.into_exporter());
+        cx.common
+            .emit(Event::Exporter(self.secrets.into_exporter()));
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,
