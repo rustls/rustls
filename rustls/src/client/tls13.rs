@@ -527,7 +527,6 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         .set_handshake_encrypter(cx.common);
                 }
 
-                cx.common.peer_identity = Some(resuming_session.peer_identity().clone());
                 cx.common.handshake_kind = Some(match cx.common.handshake_kind {
                     Some(HandshakeKind::FullWithHelloRetryRequest) => {
                         HandshakeKind::ResumedWithHelloRetryRequest
@@ -1053,7 +1052,7 @@ struct ExpectCertificateVerify {
 impl State<ClientConnectionData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
+        _cx: &mut ClientContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
         let cert_verify = require_handshake_msg!(
@@ -1092,7 +1091,6 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                 signature: cert_verify,
             })?;
 
-        cx.common.peer_identity = Some(identity.clone());
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
@@ -1306,6 +1304,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             key_schedule_pre_finished.into_traffic(cx.common, st.transcript.current_hash(), &proof);
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
+        cx.common.peer_identity = Some(st.peer_identity.clone());
         cx.common.exporter = Some(Box::new(exporter));
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by

@@ -163,9 +163,6 @@ mod server_hello {
                     cx.common
                         .start_encryption_tls12(&secrets, Side::Client);
 
-                    // Since we're resuming, we verified the certificate and
-                    // proof of possession in the prior session.
-                    cx.common.peer_identity = Some(resuming.peer_identity().clone());
                     cx.common.handshake_kind = Some(HandshakeKind::Resumed);
                     let cert_verified = verify::PeerVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
@@ -174,6 +171,8 @@ mod server_hello {
                         Ok(Box::new(ExpectNewTicket {
                             config,
                             secrets,
+                            // Since we're resuming, we verified the certificate and
+                            // proof of possession in the prior session.
                             peer_identity: resuming.peer_identity().clone(),
                             resuming_session: Some(resuming),
                             session_id: server_hello.session_id,
@@ -783,7 +782,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
                     signature,
                 })?
         };
-        cx.common.peer_identity = Some(identity.clone());
 
         // 3.
         if let Some(client_auth) = &st.client_auth {
@@ -1095,6 +1093,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             .then(|| st.secrets.extract_secrets(Side::Client));
 
         cx.common.exporter = Some(st.secrets.into_exporter());
+        cx.common.peer_identity = Some(st.peer_identity);
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,

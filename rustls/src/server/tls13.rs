@@ -252,9 +252,6 @@ mod client_hello {
 
             if let Some(resume) = &resumedata {
                 cx.data.received_resumption_data = Some(resume.common.application_data.0.clone());
-                cx.common
-                    .peer_identity
-                    .clone_from(&resume.common.peer_identity);
             }
 
             let full_handshake = resumedata.is_none();
@@ -1046,7 +1043,7 @@ struct ExpectCertificateVerify {
 impl State<ServerConnectionData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ServerContext<'_>,
+        _cx: &mut ServerContext<'_>,
         m: Message<'_>,
     ) -> hs::NextStateOrError {
         let signature = require_handshake_msg!(
@@ -1066,7 +1063,6 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             })?;
 
         trace!("client CertificateVerify OK");
-        cx.common.peer_identity = Some(self.peer_identity.clone());
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
@@ -1276,6 +1272,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         // Application data may now flow, even if we have client auth enabled.
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
+        cx.common.peer_identity = self.peer_identity;
         cx.common.exporter = Some(Box::new(exporter));
 
         Ok(match cx.common.is_quic() {
