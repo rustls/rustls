@@ -9,7 +9,9 @@ use subtle::ConstantTimeEq;
 use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, HandshakeFlightTls13, HandshakeKind, Input, Side, State};
+use crate::common_state::{
+    CommonState, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State,
+};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::kx::NamedGroup;
@@ -1260,7 +1262,10 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         // Application data may now flow, even if we have client auth enabled.
         cx.common.start_traffic();
-        cx.common.peer_identity = self.peer_identity;
+        if let Some(identity) = self.peer_identity {
+            cx.common
+                .emit(Event::PeerIdentity(identity));
+        }
         cx.common.exporter = Some(Box::new(exporter));
 
         Ok(match cx.common.protocol.is_quic() {
