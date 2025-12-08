@@ -13,7 +13,9 @@ use super::hs::{
 };
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{CommonState, HandshakeFlightTls13, HandshakeKind, Input, Side, State};
+use crate::common_state::{
+    CommonState, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State,
+};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
@@ -1311,7 +1313,8 @@ impl State<ClientConnectionData> for ExpectFinished {
         let (key_schedule, exporter, resumption) =
             key_schedule_pre_finished.into_traffic(cx.common, st.transcript.current_hash(), &proof);
         cx.common.start_traffic();
-        cx.common.peer_identity = Some(st.peer_identity.clone());
+        cx.common
+            .emit(Event::PeerIdentity(st.peer_identity.clone()));
         cx.common.exporter = Some(Box::new(exporter));
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by

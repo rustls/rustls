@@ -675,6 +675,14 @@ impl CommonState {
     }
 }
 
+impl Output for CommonState {
+    fn emit(&mut self, ev: Event) {
+        match ev {
+            Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
+        }
+    }
+}
+
 /// Describes which sort of handshake happened.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[non_exhaustive]
@@ -815,6 +823,16 @@ impl Input<'_> {
         self.aligned_handshake
             .ok_or_else(|| PeerMisbehaved::KeyEpochWithPendingFragment.into())
     }
+}
+
+/// The route for handshake state machine to surface determinations about the connection.
+pub(crate) trait Output {
+    fn emit(&mut self, ev: Event);
+}
+
+/// The set
+pub(crate) enum Event {
+    PeerIdentity(Identity<'static>),
 }
 
 /// Lifetime-erased equivalent to [`Payload`]
