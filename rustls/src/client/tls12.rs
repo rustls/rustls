@@ -13,7 +13,7 @@ use super::hs::{self, ClientContext};
 use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, HandshakeKind, Input, Side, State};
+use crate::common_state::{CommonState, Event, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -1127,7 +1127,8 @@ impl State<ClientConnectionData> for ExpectFinished {
             .then(|| st.secrets.extract_secrets(Side::Client));
 
         cx.common.exporter = Some(st.secrets.into_exporter());
-        cx.common.peer_identity = Some(st.peer_identity);
+        cx.common
+            .emit(Event::PeerIdentity(st.peer_identity));
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,

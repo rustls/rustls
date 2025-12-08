@@ -10,7 +10,9 @@ use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
 use super::hs::{self, ServerContext};
 use crate::check::inappropriate_message;
-use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Input, Side, State};
+use crate::common_state::{
+    CommonState, Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State,
+};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -884,7 +886,10 @@ impl State<ServerConnectionData> for ExpectFinished {
             emit_finished(&self.secrets, &mut self.transcript, cx.common, &proof);
         }
 
-        cx.common.peer_identity = self.peer_identity;
+        if let Some(identity) = self.peer_identity {
+            cx.common
+                .emit(Event::PeerIdentity(identity));
+        }
         cx.common.start_traffic();
 
         let extracted_secrets = self
