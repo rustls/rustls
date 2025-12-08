@@ -202,7 +202,6 @@ mod server_hello {
             cx.common.handshake_kind = Some(HandshakeKind::Full);
             Ok(Box::new(ExpectCertificate {
                 config,
-                resuming_session: None,
                 session_id: server_hello.session_id,
                 session_key,
                 randoms,
@@ -221,7 +220,6 @@ mod server_hello {
 
 struct ExpectCertificate {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
@@ -249,7 +247,6 @@ impl State<ClientConnectionData> for ExpectCertificate {
         if self.may_send_cert_status {
             Ok(Box::new(ExpectCertificateStatusOrServerKx {
                 config: self.config,
-                resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -263,7 +260,6 @@ impl State<ClientConnectionData> for ExpectCertificate {
         } else {
             Ok(Box::new(ExpectServerKx {
                 config: self.config,
-                resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -280,7 +276,6 @@ impl State<ClientConnectionData> for ExpectCertificate {
 
 struct ExpectCertificateStatusOrServerKx {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
@@ -300,7 +295,6 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 ..
             } => Box::new(ExpectServerKx {
                 config: self.config,
-                resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -317,7 +311,6 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 ..
             } => Box::new(ExpectCertificateStatus {
                 config: self.config,
-                resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -343,7 +336,6 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
 
 struct ExpectCertificateStatus {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
@@ -378,7 +370,6 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
 
         Ok(Box::new(ExpectServerKx {
             config: self.config,
-            resuming_session: self.resuming_session,
             session_id: self.session_id,
             session_key: self.session_key,
             randoms: self.randoms,
@@ -394,7 +385,6 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
 
 struct ExpectServerKx {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
@@ -439,7 +429,6 @@ impl State<ClientConnectionData> for ExpectServerKx {
 
         Ok(Box::new(ExpectServerDoneOrCertReq {
             config: self.config,
-            resuming_session: self.resuming_session,
             session_id: self.session_id,
             session_key: self.session_key,
             randoms: self.randoms,
@@ -573,7 +562,6 @@ impl ServerKxDetails {
 // client auth.  Otherwise we go straight to ServerHelloDone.
 struct ExpectServerDoneOrCertReq {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
@@ -601,7 +589,6 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
         ) {
             Box::new(ExpectCertificateRequest {
                 config: self.config,
-                resuming_session: self.resuming_session,
                 session_id: self.session_id,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -619,7 +606,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
 
             Box::new(ExpectServerDone {
                 config: self.config,
-                resuming_session: self.resuming_session,
+                resuming_session: None,
                 session_id: self.session_id,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -638,7 +625,6 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
 
 struct ExpectCertificateRequest {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
@@ -685,7 +671,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
 
         Ok(Box::new(ExpectServerDone {
             config: self.config,
-            resuming_session: self.resuming_session,
+            resuming_session: None,
             session_id: self.session_id,
             session_key: self.session_key,
             randoms: self.randoms,
