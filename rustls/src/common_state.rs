@@ -678,6 +678,7 @@ impl CommonState {
 impl Output for CommonState {
     fn emit(&mut self, ev: Event) {
         match ev {
+            Event::Exporter(exporter) => self.exporter = Some(exporter),
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
         }
     }
@@ -832,6 +833,7 @@ pub(crate) trait Output {
 
 /// The set of events output by the low-level handshake state machine.
 pub(crate) enum Event {
+    Exporter(Box<dyn Exporter>),
     PeerIdentity(Identity<'static>),
 }
 
