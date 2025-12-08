@@ -447,7 +447,10 @@ impl ClientHelloInput {
             transcript_buffer.set_client_auth_enabled();
         }
 
-        let key_share = if self.config.needs_key_share() {
+        let key_share = if self
+            .config
+            .supports_version(ProtocolVersion::TLSv1_3)
+        {
             Some(tls13::initial_key_share(&self.config, &self.session_key)?)
         } else {
             None

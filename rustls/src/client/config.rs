@@ -249,10 +249,6 @@ impl ClientConfig {
         &self.domain.verifier
     }
 
-    pub(super) fn needs_key_share(&self) -> bool {
-        self.supports_version(ProtocolVersion::TLSv1_3)
-    }
-
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.domain.provider.supports_version(v)
     }
