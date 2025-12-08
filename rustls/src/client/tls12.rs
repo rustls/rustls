@@ -179,7 +179,6 @@ mod server_hello {
                             session_key,
                             using_ems,
                             transcript,
-                            resuming: true,
                             cert_verified,
                             sig_verified,
                         }))
@@ -193,7 +192,6 @@ mod server_hello {
                             using_ems,
                             transcript,
                             ticket: None,
-                            resuming: true,
                             cert_verified,
                             sig_verified,
                         }))
@@ -889,7 +887,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 session_key: st.session_key,
                 using_ems: st.using_ems,
                 transcript,
-                resuming: false,
                 cert_verified,
                 sig_verified,
             }))
@@ -903,7 +900,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 using_ems: st.using_ems,
                 transcript,
                 ticket: None,
-                resuming: false,
                 cert_verified,
                 sig_verified,
             }))
@@ -919,7 +915,6 @@ struct ExpectNewTicket {
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
     transcript: HandshakeHash,
-    resuming: bool,
     cert_verified: verify::PeerVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
@@ -947,7 +942,6 @@ impl State<ClientConnectionData> for ExpectNewTicket {
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: Some(nst),
-            resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
         }))
@@ -964,7 +958,6 @@ struct ExpectCcs {
     using_ems: bool,
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
-    resuming: bool,
     cert_verified: verify::PeerVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
@@ -998,7 +991,6 @@ impl State<ClientConnectionData> for ExpectCcs {
             transcript: self.transcript,
             ticket: self.ticket,
             secrets: self.secrets,
-            resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
         }))
@@ -1014,7 +1006,6 @@ struct ExpectFinished {
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
     secrets: ConnectionSecrets,
-    resuming: bool,
     cert_verified: verify::PeerVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
@@ -1096,7 +1087,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         st.save_session(cx);
 
-        if st.resuming {
+        if st.resuming_session.is_some() {
             emit_ccs(cx.common);
             cx.common
                 .record_layer
@@ -1126,7 +1117,7 @@ impl State<ClientConnectionData> for ExpectFinished {
     // this might mean that the ticket was invalid for some reason, so we remove it
     // from the store to restart a session from scratch
     fn handle_decrypt_error(&self) {
-        if self.resuming {
+        if self.resuming_session.is_some() {
             self.config
                 .resumption
                 .store
