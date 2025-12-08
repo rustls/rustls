@@ -1281,7 +1281,8 @@ impl State<ServerConnectionData> for ExpectFinished {
             cx.common
                 .emit(Event::PeerIdentity(identity));
         }
-        cx.common.exporter = Some(Box::new(exporter));
+        cx.common
+            .emit(Event::Exporter(Box::new(exporter)));
 
         Ok(match cx.common.protocol.quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),

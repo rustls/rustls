@@ -1315,7 +1315,8 @@ impl State<ClientConnectionData> for ExpectFinished {
         cx.common.start_traffic();
         cx.common
             .emit(Event::PeerIdentity(st.peer_identity.clone()));
-        cx.common.exporter = Some(Box::new(exporter));
+        cx.common
+            .emit(Event::Exporter(Box::new(exporter)));
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
         // sending an alert and returning an error (potentially with retry configs) if the server
