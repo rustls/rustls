@@ -117,10 +117,7 @@ fn test_client_sends_helloretryrequest() {
     }
 
     assert_eq!(client.handshake_kind(), None);
-    assert_eq!(
-        server.handshake_kind(),
-        Some(HandshakeKind::FullWithHelloRetryRequest)
-    );
+    assert_eq!(server.handshake_kind(), None);
 
     // server sends HRR
     {
@@ -131,14 +128,8 @@ fn test_client_sends_helloretryrequest() {
         assert!(pipe.writevs[0].len() == 2); // hello retry request and CCS
     }
 
-    assert_eq!(
-        client.handshake_kind(),
-        Some(HandshakeKind::FullWithHelloRetryRequest)
-    );
-    assert_eq!(
-        server.handshake_kind(),
-        Some(HandshakeKind::FullWithHelloRetryRequest)
-    );
+    assert_eq!(client.handshake_kind(), None);
+    assert_eq!(server.handshake_kind(), None);
 
     // client sends fixed hello
     {

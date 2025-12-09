@@ -14,7 +14,7 @@ use crate::client::ech::EchState;
 use crate::client::{
     ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
 };
-use crate::common_state::{CommonState, HandshakeKind, KxState, State};
+use crate::common_state::{CommonState, KxState, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -58,6 +58,7 @@ pub(crate) struct ExpectServerHello {
     pub(super) offered_key_share: Option<StartedKeyExchange>,
     pub(super) suite: Option<SupportedCipherSuite>,
     pub(super) ech_state: Option<EchState>,
+    pub(super) done_retry: bool,
 }
 
 impl ExpectServerHello {
@@ -268,7 +269,6 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // HRR selects the ciphersuite.
         cx.common.suite = Some(cs);
-        cx.common.handshake_kind = Some(HandshakeKind::FullWithHelloRetryRequest);
 
         // If we offered ECH, we need to confirm that the server accepted it.
         match (self.next.ech_state.as_ref(), cs) {
@@ -806,13 +806,14 @@ fn emit_client_hello_for_retry(
             schedule
         });
 
-    let next = ExpectServerHello {
+    let mut next = ExpectServerHello {
         input,
         transcript_buffer,
         early_data_key_schedule,
         offered_key_share: key_share,
         suite,
         ech_state,
+        done_retry: false,
     };
 
     Ok(if supported_versions.tls13 && retryreq.is_none() {
@@ -821,6 +822,7 @@ fn emit_client_hello_for_retry(
             extra_exts: extra_exts.into_owned(),
         })
     } else {
+        next.done_retry = retryreq.is_some();
         Box::new(next)
     })
 }

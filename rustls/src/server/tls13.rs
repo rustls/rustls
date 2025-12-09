@@ -273,16 +273,12 @@ mod client_hello {
                 emit_fake_ccs(cx.common);
             }
 
-            if full_handshake {
-                cx.common
-                    .handshake_kind
-                    .get_or_insert(HandshakeKind::Full);
-            } else {
-                cx.common.handshake_kind = match st.done_retry {
-                    true => Some(HandshakeKind::ResumedWithHelloRetryRequest),
-                    false => Some(HandshakeKind::Resumed),
-                };
-            }
+            cx.common.handshake_kind = Some(match (full_handshake, st.done_retry) {
+                (true, true) => HandshakeKind::FullWithHelloRetryRequest,
+                (true, false) => HandshakeKind::Full,
+                (false, true) => HandshakeKind::ResumedWithHelloRetryRequest,
+                (false, false) => HandshakeKind::Resumed,
+            });
 
             let mut ocsp_response = signer.ocsp.as_deref();
             let mut flight = HandshakeFlightTls13::new(&mut transcript);
@@ -592,7 +588,6 @@ mod client_hello {
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
         common.send_msg(m, false);
-        common.handshake_kind = Some(HandshakeKind::FullWithHelloRetryRequest);
     }
 
     fn decide_if_early_data_allowed(

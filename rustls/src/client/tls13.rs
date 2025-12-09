@@ -212,6 +212,13 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
 
+        cx.common.handshake_kind = Some(match (&resuming_session, st.done_retry) {
+            (Some(_), true) => HandshakeKind::ResumedWithHelloRetryRequest,
+            (None, true) => HandshakeKind::FullWithHelloRetryRequest,
+            (Some(_), false) => HandshakeKind::Resumed,
+            (None, false) => HandshakeKind::Full,
+        });
+
         Ok(Box::new(ExpectEncryptedExtensions {
             config,
             resuming_session,
@@ -529,13 +536,6 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         .set_handshake_encrypter(cx.common);
                 }
 
-                cx.common.handshake_kind = Some(match cx.common.handshake_kind {
-                    Some(HandshakeKind::FullWithHelloRetryRequest) => {
-                        HandshakeKind::ResumedWithHelloRetryRequest
-                    }
-                    _ => HandshakeKind::Resumed,
-                });
-
                 // We *don't* reverify the certificate chain here: resumption is a
                 // continuation of the previous session in terms of security policy.
                 let cert_verified = verify::PeerVerified::assertion();
@@ -558,9 +558,6 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 if exts.early_data_ack.is_some() {
                     return Err(PeerMisbehaved::EarlyDataExtensionWithoutResumption.into());
                 }
-                cx.common
-                    .handshake_kind
-                    .get_or_insert(HandshakeKind::Full);
 
                 let expected_certificate_type = exts
                     .server_certificate_type
