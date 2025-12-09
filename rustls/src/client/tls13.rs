@@ -22,7 +22,9 @@ use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
 use crate::crypto::{Identity, SelectedCredential, SignatureScheme, Signer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved, RejectedEch};
+use crate::error::{
+    ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved, RejectedEch,
+};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::PayloadU8;
@@ -1471,6 +1473,9 @@ impl State<ClientConnectionData> for ExpectTraffic {
     fn into_external_state(
         self: Box<Self>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        if !self.config.enable_secret_extraction {
+            return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
+        }
         Ok((
             self.key_schedule
                 .extract_secrets(Side::Client)?,
@@ -1518,6 +1523,9 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
     fn into_external_state(
         self: Box<Self>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        if !self.0.config.enable_secret_extraction {
+            return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
+        }
         Ok((
             self.0
                 .key_schedule

@@ -57,7 +57,6 @@ pub struct CommonState {
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub(crate) protocol: Protocol,
     pub(crate) quic: quic::Quic,
-    pub(crate) enable_secret_extraction: bool,
     temper_counters: TemperCounters,
     pub(crate) refresh_traffic_keys_pending: bool,
     pub(crate) fips: bool,
@@ -92,7 +91,6 @@ impl CommonState {
             queued_key_update_message: None,
             protocol: Protocol::Tcp,
             quic: quic::Quic::default(),
-            enable_secret_extraction: false,
             temper_counters: TemperCounters::default(),
             refresh_traffic_keys_pending: false,
             fips: false,

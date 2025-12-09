@@ -564,8 +564,6 @@ impl Accepted {
             return Err((err, AcceptedAlert::empty()));
         }
 
-        self.connection.enable_secret_extraction = config.enable_secret_extraction;
-
         let state = hs::ExpectClientHello::new(config, ServerExtensionsInput::default());
         let proof = match self
             .connection
@@ -729,7 +727,6 @@ impl ConnectionCore<ServerConnectionData> {
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
-        common.enable_secret_extraction = config.enable_secret_extraction;
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts)),

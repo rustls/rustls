@@ -1173,13 +1173,6 @@ impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn dangerous_into_kernel_connection(
         self,
     ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
-        if !self
-            .common_state
-            .enable_secret_extraction
-        {
-            return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
-        }
-
         if self.common_state.is_handshaking() {
             return Err(Error::HandshakeNotComplete);
         }
