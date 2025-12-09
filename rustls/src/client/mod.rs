@@ -132,8 +132,8 @@ impl ClientAuthDetails {
     ) -> Self {
         let server_hello = CredentialRequest {
             negotiated_type,
-            signature_schemes,
             root_hint_subjects: root_hint_subjects.unwrap_or_default(),
+            signature_schemes,
         };
 
         if let Some(credentials) = resolver.resolve(&server_hello) {

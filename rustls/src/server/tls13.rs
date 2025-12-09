@@ -488,8 +488,8 @@ mod client_hello {
 
         let extensions = Box::new(ServerExtensions {
             key_share: Some(KeyShareEntry::new(ckx.group, ckx.pub_key)),
-            selected_version: Some(ProtocolVersion::TLSv1_3),
             preshared_key: chosen_psk_idx.map(|idx| idx as u16),
+            selected_version: Some(ProtocolVersion::TLSv1_3),
             ..Default::default()
         });
 
@@ -695,6 +695,14 @@ mod client_hello {
                         .verifier
                         .supported_verify_schemes(),
                 ),
+                authority_names: match config
+                    .verifier
+                    .root_hint_subjects()
+                    .as_ref()
+                {
+                    [] => None,
+                    authorities => Some(authorities.to_vec()),
+                },
                 certificate_compression_algorithms: match config.cert_decompressors.as_slice() {
                     &[] => None,
                     decomps => Some(
@@ -703,14 +711,6 @@ mod client_hello {
                             .map(|decomp| decomp.algorithm())
                             .collect(),
                     ),
-                },
-                authority_names: match config
-                    .verifier
-                    .root_hint_subjects()
-                    .as_ref()
-                {
-                    [] => None,
-                    authorities => Some(authorities.to_vec()),
                 },
             },
         };
@@ -1003,9 +1003,9 @@ impl State<ServerConnectionData> for ExpectCertificate {
                 self.transcript.abandon_client_auth();
                 return Ok(Box::new(ExpectFinished {
                     config: self.config,
+                    transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: self.key_schedule,
-                    transcript: self.transcript,
                     send_tickets: self.send_tickets,
                 }));
             }
@@ -1022,8 +1022,8 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
         Ok(Box::new(ExpectCertificateVerify {
             config: self.config,
-            suite: self.suite,
             transcript: self.transcript,
+            suite: self.suite,
             key_schedule: self.key_schedule,
             peer_identity: peer_identity.into_owned(),
             send_tickets: self.send_tickets,
@@ -1068,9 +1068,9 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
             config: self.config,
+            transcript: self.transcript,
             suite: self.suite,
             key_schedule: self.key_schedule,
-            transcript: self.transcript,
             send_tickets: self.send_tickets,
         }))
     }
@@ -1114,9 +1114,9 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 self.transcript.add_message(&m);
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
+                    transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: self.key_schedule,
-                    transcript: self.transcript,
                     send_tickets: self.send_tickets,
                 }))
             }

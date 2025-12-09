@@ -410,13 +410,13 @@ impl<'a> ClientHello<'a> {
             server_name: sni.map(Cow::Borrowed),
             signature_schemes: &input.sig_schemes,
             alpn: input.client_hello.protocols.as_ref(),
-            client_cert_types: input
-                .client_hello
-                .client_certificate_types
-                .as_deref(),
             server_cert_types: input
                 .client_hello
                 .server_certificate_types
+                .as_deref(),
+            client_cert_types: input
+                .client_hello
+                .client_certificate_types
                 .as_deref(),
             cipher_suites: &input.client_hello.cipher_suites,
             // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
@@ -668,8 +668,6 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         self.provider.consistency_check()?;
         Ok(ServerConfig {
             provider: self.provider,
-            verifier: self.state.verifier,
-            cert_resolver,
             ignore_client_order: false,
             max_fragment_size: None,
             #[cfg(feature = "std")]
@@ -677,7 +675,9 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             #[cfg(not(feature = "std"))]
             session_storage: Arc::new(handy::NoServerSessionStorage {}),
             ticketer: None,
+            cert_resolver,
             alpn_protocols: Vec::new(),
+            verifier: self.state.verifier,
             key_log: Arc::new(NoKeyLog {}),
             enable_secret_extraction: false,
             max_early_data_size: 0,

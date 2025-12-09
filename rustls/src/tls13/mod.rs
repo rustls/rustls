@@ -77,7 +77,7 @@ impl Tls13CipherSuite {
     /// Returns a `quic::Suite` for the ciphersuite, if supported.
     pub fn quic_suite(&'static self) -> Option<crate::quic::Suite> {
         self.quic
-            .map(|quic| crate::quic::Suite { quic, suite: self })
+            .map(|quic| crate::quic::Suite { suite: self, quic })
     }
 }
 

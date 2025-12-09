@@ -419,15 +419,16 @@ impl ClientHelloInput {
             rand::random_u16(config.provider().secure_random)?,
         );
 
+        let random = Random::new(config.provider().secure_random)?;
         Ok(Self {
+            config,
             resuming,
-            random: Random::new(config.provider().secure_random)?,
+            random,
             sent_tls13_fake_ccs: false,
             hello,
             session_id,
             session_key,
             prev_ech_ext: None,
-            config,
         })
     }
 
@@ -497,14 +498,21 @@ fn emit_client_hello_for_retry(
     let forbids_tls12 = cx.common.is_quic() || ech_state.is_some();
 
     let supported_versions = SupportedProtocolVersions {
-        tls12: config.supports_version(ProtocolVersion::TLSv1_2) && !forbids_tls12,
         tls13: config.supports_version(ProtocolVersion::TLSv1_3),
+        tls12: config.supports_version(ProtocolVersion::TLSv1_2) && !forbids_tls12,
     };
 
     // should be unreachable thanks to config builder
     assert!(supported_versions.any(|_| true));
 
     let mut exts = Box::new(ClientExtensions {
+        certificate_status_request: match config
+            .verifier()
+            .request_ocsp_response()
+        {
+            true => Some(CertificateStatusRequest::build_ocsp()),
+            false => None,
+        },
         // offer groups which are usable for any offered version
         named_groups: Some(
             config
@@ -519,21 +527,14 @@ fn emit_client_hello_for_retry(
                 })
                 .collect(),
         ),
-        supported_versions: Some(supported_versions),
         signature_schemes: Some(
             config
                 .verifier()
                 .supported_verify_schemes(),
         ),
-        extended_master_secret_request: Some(()),
-        certificate_status_request: match config
-            .verifier()
-            .request_ocsp_response()
-        {
-            true => Some(CertificateStatusRequest::build_ocsp()),
-            false => None,
-        },
         protocols: extra_exts.protocols.clone(),
+        extended_master_secret_request: Some(()),
+        supported_versions: Some(supported_versions),
         ..Default::default()
     });
 
@@ -606,8 +607,8 @@ fn emit_client_hello_for_retry(
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
         exts.preshared_key_modes = Some(PskKeyExchangeModes {
-            psk: false,
             psk_dhe: true,
+            psk: false,
         });
     }
 

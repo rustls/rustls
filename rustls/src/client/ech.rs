@@ -377,17 +377,17 @@ impl EchState {
         }
 
         Ok(Self {
+            outer_name: config_contents.public_name.clone(),
+            early_data_key_schedule: None,
+            inner_hello_random: Random::new(secure_random)?,
+            inner_hello_transcript,
             secure_random,
             sender,
             config_id: key_config.config_id,
             inner_name,
-            outer_name: config_contents.public_name.clone(),
             maximum_name_length: config_contents.maximum_name_length,
             cipher_suite: config.suite.suite().sym,
             enc,
-            inner_hello_random: Random::new(secure_random)?,
-            inner_hello_transcript,
-            early_data_key_schedule: None,
             enable_sni,
             sent_extensions: Vec::new(),
         })
@@ -589,16 +589,12 @@ impl EchState {
         let mut inner_hello = ClientHelloPayload {
             // Some information is copied over as-is.
             client_version: outer_hello.client_version,
-            session_id: outer_hello.session_id,
-            compression_methods: outer_hello.compression_methods.clone(),
-
-            // We will build up the included extensions ourselves.
-            extensions: Box::new(ClientExtensions::default()),
 
             // Set the inner hello random to the one we generated when creating the ECH state.
             // We hold on to the inner_hello_random in the ECH state to use later for confirming
             // whether ECH was accepted or not.
             random: self.inner_hello_random,
+            session_id: outer_hello.session_id,
 
             // We remove the empty renegotiation info SCSV from the outer hello's ciphersuite.
             // Similar to the TLS 1.2 specific extensions we will filter out, this is seen as a
@@ -609,6 +605,10 @@ impl EchState {
                 .filter(|cs| **cs != TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
                 .copied()
                 .collect(),
+            compression_methods: outer_hello.compression_methods.clone(),
+
+            // We will build up the included extensions ourselves.
+            extensions: Box::new(ClientExtensions::default()),
         };
 
         inner_hello.order_seed = outer_hello.order_seed;

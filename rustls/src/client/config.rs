@@ -743,12 +743,6 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         }
 
         Ok(ClientConfig {
-            domain: SecurityDomain::new(
-                self.provider,
-                client_auth_cert_resolver,
-                self.state.verifier,
-                self.time_provider,
-            ),
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
             max_fragment_size: None,
@@ -757,9 +751,15 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             enable_secret_extraction: false,
             enable_early_data: false,
             require_ems: cfg!(feature = "fips"),
+            domain: SecurityDomain::new(
+                self.provider,
+                client_auth_cert_resolver,
+                self.state.verifier,
+                self.time_provider,
+            ),
+            cert_decompressors: compress::default_cert_decompressors().to_vec(),
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
-            cert_decompressors: compress::default_cert_decompressors().to_vec(),
             ech_mode: self.state.client_ech_mode,
         })
     }

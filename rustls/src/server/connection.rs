@@ -586,8 +586,8 @@ impl Accepted {
         };
 
         let input = ClientHelloInput {
-            client_hello: Self::client_hello_payload(&self.message),
             message: &self.message,
+            client_hello: Self::client_hello_payload(&self.message),
             sig_schemes: self.sig_schemes,
             proof,
         };

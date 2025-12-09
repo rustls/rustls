@@ -913,12 +913,12 @@ impl Keys {
             .extract_from_secret(Some(salt), client_dst_connection_id);
 
         let secrets = Secrets {
-            version,
             client: hkdf_expand_label_block(hs_secret.as_ref(), CLIENT_LABEL, &[]),
             server: hkdf_expand_label_block(hs_secret.as_ref(), SERVER_LABEL, &[]),
             suite,
             quic,
             side,
+            version,
         };
         Self::new(&secrets)
     }
