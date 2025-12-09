@@ -17,7 +17,7 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::kx::ActiveKeyExchange;
 use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -898,9 +898,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         match self.extracted_secrets.take() {
             Some(extracted_secrets) => Ok((extracted_secrets?, self)),
-            None => Err(Error::Unreachable(
-                "call of into_external_state() only allowed with enable_secret_extraction",
-            )),
+            None => Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into()),
         }
     }
 }

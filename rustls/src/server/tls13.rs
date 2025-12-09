@@ -17,7 +17,7 @@ use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
@@ -1278,6 +1278,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         Ok(match cx.common.is_quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
             false => Box::new(ExpectTraffic {
+                config: self.config,
                 key_schedule: key_schedule_traffic,
                 _fin_verified: fin,
             }),
@@ -1287,6 +1288,7 @@ impl State<ServerConnectionData> for ExpectFinished {
 
 // --- Process traffic ---
 struct ExpectTraffic {
+    config: Arc<ServerConfig>,
     key_schedule: KeyScheduleTraffic,
     _fin_verified: verify::FinishedMessageVerified,
 }
@@ -1347,6 +1349,9 @@ impl State<ServerConnectionData> for ExpectTraffic {
     fn into_external_state(
         self: Box<Self>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        if !self.config.enable_secret_extraction {
+            return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
+        }
         Ok((
             self.key_schedule
                 .extract_secrets(Side::Server)?,
