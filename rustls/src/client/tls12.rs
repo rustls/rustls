@@ -991,13 +991,13 @@ impl State<ClientConnectionData> for ExpectCcs {
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
-            secrets: self.secrets,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
             session_key: self.session_key,
             using_ems: self.using_ems,
             transcript: self.transcript,
             ticket: self.ticket,
+            secrets: self.secrets,
             resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,

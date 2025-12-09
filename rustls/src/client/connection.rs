@@ -451,8 +451,8 @@ pub(super) struct EarlyData {
 impl EarlyData {
     fn new() -> Self {
         Self {
-            left: 0,
             state: EarlyDataState::Disabled,
+            left: 0,
         }
     }
 

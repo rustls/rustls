@@ -55,8 +55,8 @@ impl<'a> EncodedMessage<Payload<'a>> {
     /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
     pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
         EncodedMessage {
-            version: self.version,
             typ: self.typ,
+            version: self.version,
             payload: OutboundOpaque::from(self.payload.bytes()),
         }
     }
@@ -64,8 +64,8 @@ impl<'a> EncodedMessage<Payload<'a>> {
     /// Borrow as an [`EncodedMessage<OutboundPlain<'a>>`].
     pub fn borrow_outbound(&'a self) -> EncodedMessage<OutboundPlain<'a>> {
         EncodedMessage {
-            version: self.version,
             typ: self.typ,
+            version: self.version,
             payload: self.payload.bytes().into(),
         }
     }
@@ -151,8 +151,8 @@ impl EncodedMessage<OutboundPlain<'_>> {
         let mut payload = OutboundOpaque::with_capacity(self.payload.len());
         payload.extend_from_chunks(&self.payload);
         EncodedMessage {
-            version: self.version,
             typ: self.typ,
+            version: self.version,
             payload,
         }
     }

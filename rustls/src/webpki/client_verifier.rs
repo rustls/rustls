@@ -44,14 +44,15 @@ impl ClientVerifierBuilder {
         roots: Arc<RootCertStore>,
         supported_algs: WebPkiSupportedAlgorithms,
     ) -> Self {
+        let root_hint_subjects = roots.subjects();
         Self {
-            root_hint_subjects: roots.subjects(),
             roots,
+            root_hint_subjects,
             crls: Vec::new(),
-            anon_policy: AnonymousClientPolicy::Deny,
             revocation_check_depth: RevocationCheckDepth::Chain,
             unknown_revocation_policy: UnknownStatusPolicy::Deny,
             revocation_expiration_policy: ExpirationPolicy::Ignore,
+            anon_policy: AnonymousClientPolicy::Deny,
             supported_algs,
         }
     }

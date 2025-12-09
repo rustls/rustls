@@ -135,8 +135,8 @@ impl HandshakeHash {
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
 
         HandshakeHashBuffer {
-            client_auth_enabled: self.client_auth.is_some(),
             buffer: old_handshake_hash_msg.get_encoding(),
+            client_auth_enabled: self.client_auth.is_some(),
         }
     }
 
