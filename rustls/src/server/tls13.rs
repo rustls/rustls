@@ -479,7 +479,7 @@ mod client_hello {
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
         let ckx = kxgroup.start_and_complete(&share.payload.0)?;
-        cx.common.kx_state.complete();
+        cx.common.negotiated_kx_group = Some(kxgroup);
 
         let extensions = Box::new(ServerExtensions {
             key_share: Some(KeyShareEntry::new(ckx.group, ckx.pub_key)),

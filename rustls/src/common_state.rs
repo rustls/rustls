@@ -33,7 +33,7 @@ pub struct CommonState {
     pub(crate) side: Side,
     pub(crate) record_layer: RecordLayer,
     pub(crate) suite: Option<SupportedCipherSuite>,
-    pub(crate) kx_state: KxState,
+    pub(crate) negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
     pub(crate) alpn_protocol: Option<ProtocolName>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
@@ -71,7 +71,7 @@ impl CommonState {
             side,
             record_layer: RecordLayer::new(),
             suite: None,
-            kx_state: KxState::default(),
+            negotiated_kx_group: None,
             alpn_protocol: None,
             exporter: None,
             early_exporter: None,
@@ -156,10 +156,7 @@ impl CommonState {
     /// and the [`CommonState::protocol_version()`] is TLS 1.2, then no key exchange will have
     /// occurred and this function will return `None`.
     pub fn negotiated_key_exchange_group(&self) -> Option<&'static dyn SupportedKxGroup> {
-        match self.kx_state {
-            KxState::Complete(group) => Some(group),
-            _ => None,
-        }
+        self.negotiated_kx_group
     }
 
     /// Retrieves the protocol version agreed with the peer.
@@ -981,23 +978,6 @@ impl Default for TemperCounters {
             //
             // note BoringSSL allows up to 32.
             allowed_middlebox_ccs: 2,
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-pub(crate) enum KxState {
-    #[default]
-    None,
-    Start(&'static dyn SupportedKxGroup),
-    Complete(&'static dyn SupportedKxGroup),
-}
-
-impl KxState {
-    pub(crate) fn complete(&mut self) {
-        debug_assert!(matches!(self, Self::Start(_)));
-        if let Self::Start(group) = self {
-            *self = Self::Complete(*group);
         }
     }
 }

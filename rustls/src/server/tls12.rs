@@ -14,7 +14,7 @@ use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
-use crate::crypto::kx::ActiveKeyExchange;
+use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
@@ -37,7 +37,6 @@ use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
     use super::*;
-    use crate::common_state::KxState;
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::msgs::enums::{ClientCertificateType, Compression};
@@ -191,7 +190,6 @@ mod client_hello {
                 st.session_id = SessionId::random(st.config.provider.secure_random)?;
             }
 
-            cx.common.kx_state = KxState::Start(kx_group);
             cx.common.handshake_kind = Some(HandshakeKind::Full);
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
@@ -375,7 +373,7 @@ mod client_hello {
         selected_group: &'static dyn SupportedKxGroup,
         credentials: Box<dyn Signer>,
         randoms: &ConnectionRandoms,
-    ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
+    ) -> Result<GroupAndKeyExchange, Error> {
         let kx = selected_group.start()?.into_single();
         let kx_params = ServerKeyExchangeParams::new(&*kx);
 
@@ -395,7 +393,10 @@ mod client_hello {
         flight.add(HandshakeMessagePayload(
             HandshakePayload::ServerKeyExchange(skx),
         ));
-        Ok(kx)
+        Ok(GroupAndKeyExchange {
+            kx,
+            group: selected_group,
+        })
     }
 
     fn emit_certificate_req(
@@ -444,7 +445,7 @@ struct ExpectCertificate {
     session_id: SessionId,
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
-    server_kx: Box<dyn ActiveKeyExchange>,
+    server_kx: GroupAndKeyExchange,
     send_ticket: bool,
 }
 
@@ -511,7 +512,7 @@ struct ExpectClientKx {
     session_id: SessionId,
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
-    server_kx: Box<dyn ActiveKeyExchange>,
+    server_kx: GroupAndKeyExchange,
     peer_identity: Option<Identity<'static>>,
     send_ticket: bool,
 }
@@ -536,14 +537,15 @@ impl State<ServerConnectionData> for ExpectClientKx {
         // resulting premaster secret.
         let peer_kx_params =
             tls12::decode_kx_params::<ClientKeyExchangeParams>(self.suite.kx, client_kx.bytes())?;
+
         let secrets = ConnectionSecrets::from_key_exchange(
-            self.server_kx,
+            self.server_kx.kx,
             peer_kx_params.pub_key(),
             ems_seed,
             self.randoms,
             self.suite,
         )?;
-        cx.common.kx_state.complete();
+        cx.common.negotiated_kx_group = Some(self.server_kx.group);
 
         self.config.key_log.log(
             "CLIENT_RANDOM",
@@ -921,4 +923,9 @@ impl KernelState for ExpectTraffic {
             "server connections should never have handle_new_session_ticket called on them"
         )
     }
+}
+
+struct GroupAndKeyExchange {
+    group: &'static dyn SupportedKxGroup,
+    kx: Box<dyn ActiveKeyExchange>,
 }
