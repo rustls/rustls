@@ -273,12 +273,14 @@ mod client_hello {
                 emit_fake_ccs(cx.common);
             }
 
-            cx.common.handshake_kind = Some(match (full_handshake, st.done_retry) {
-                (true, true) => HandshakeKind::FullWithHelloRetryRequest,
-                (true, false) => HandshakeKind::Full,
-                (false, true) => HandshakeKind::ResumedWithHelloRetryRequest,
-                (false, false) => HandshakeKind::Resumed,
-            });
+            cx.common.emit(Event::HandshakeKind(
+                match (full_handshake, st.done_retry) {
+                    (true, true) => HandshakeKind::FullWithHelloRetryRequest,
+                    (true, false) => HandshakeKind::Full,
+                    (false, true) => HandshakeKind::ResumedWithHelloRetryRequest,
+                    (false, false) => HandshakeKind::Resumed,
+                },
+            ));
 
             let mut ocsp_response = signer.ocsp.as_deref();
             let mut flight = HandshakeFlightTls13::new(&mut transcript);
