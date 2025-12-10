@@ -212,12 +212,14 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
 
-        cx.common.handshake_kind = Some(match (&resuming_session, st.done_retry) {
-            (Some(_), true) => HandshakeKind::ResumedWithHelloRetryRequest,
-            (None, true) => HandshakeKind::FullWithHelloRetryRequest,
-            (Some(_), false) => HandshakeKind::Resumed,
-            (None, false) => HandshakeKind::Full,
-        });
+        cx.common.emit(Event::HandshakeKind(
+            match (&resuming_session, st.done_retry) {
+                (Some(_), true) => HandshakeKind::ResumedWithHelloRetryRequest,
+                (None, true) => HandshakeKind::FullWithHelloRetryRequest,
+                (Some(_), false) => HandshakeKind::Resumed,
+                (None, false) => HandshakeKind::Full,
+            },
+        ));
 
         Ok(Box::new(ExpectEncryptedExtensions {
             config,

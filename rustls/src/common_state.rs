@@ -29,7 +29,7 @@ use crate::vecbuf::ChunkVecBuffer;
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
-    pub(crate) handshake_kind: Option<HandshakeKind>,
+    handshake_kind: Option<HandshakeKind>,
     pub(crate) side: Side,
     pub(crate) decrypt_state: DecryptionState,
     pub(crate) encrypt_state: EncryptionState,
@@ -681,6 +681,10 @@ impl Output for CommonState {
             Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
             Event::EncryptMessage(m) => self.send_msg(m, true),
             Event::Exporter(exporter) => self.exporter = Some(exporter),
+            Event::HandshakeKind(hk) => {
+                assert!(self.handshake_kind.is_none());
+                self.handshake_kind = Some(hk);
+            }
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
             Event::PlainMessage(m) => self.send_msg(m, false),
         }
@@ -839,6 +843,7 @@ pub(crate) enum Event<'a> {
     EarlyExporter(Box<dyn Exporter>),
     EncryptMessage(Message<'a>),
     Exporter(Box<dyn Exporter>),
+    HandshakeKind(HandshakeKind),
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
 }
