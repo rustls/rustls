@@ -358,7 +358,7 @@ impl CommonState {
             .fragment_payload(
                 ContentType::ApplicationData,
                 ProtocolVersion::TLSv1_2,
-                payload.split_at(len).0,
+                payload,
             );
         for m in iter {
             self.send_single_fragment(m);
