@@ -518,11 +518,12 @@ mod client_hello {
             );
 
             if config.max_early_data_size > 0 {
-                cx.common.early_exporter = Some(early_key_schedule.early_exporter(
-                    &client_hello_hash,
-                    &*config.key_log,
-                    &randoms.client,
-                ));
+                cx.common
+                    .emit(Event::EarlyExporter(early_key_schedule.early_exporter(
+                        &client_hello_hash,
+                        &*config.key_log,
+                        &randoms.client,
+                    )));
             }
 
             KeySchedulePreHandshake::from(early_key_schedule)
