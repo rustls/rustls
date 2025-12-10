@@ -419,11 +419,10 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonS
         return;
     }
 
-    let m = Message {
+    common.emit(Event::PlainMessage(Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    };
-    common.send_msg(m, false);
+    }));
 }
 
 fn validate_encrypted_extensions(
@@ -1200,7 +1199,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Com
     };
 
     transcript.add_message(&m);
-    common.send_msg(m, true);
+    common.emit(Event::EncryptMessage(m));
 }
 
 struct ExpectFinished {

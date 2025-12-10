@@ -3,7 +3,7 @@
 use alloc::boxed::Box;
 use core::ops::Deref;
 
-use crate::common_state::{CommonState, Protocol, Side};
+use crate::common_state::{CommonState, Event, Output, Protocol, Side};
 use crate::conn::Exporter;
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
@@ -645,7 +645,7 @@ impl KeyScheduleTraffic {
         &mut self,
         common: &mut CommonState,
     ) -> Result<(), Error> {
-        common.send_msg_encrypt(Message::build_key_update_request().into());
+        common.emit(Event::EncryptMessage(Message::build_key_update_request()));
         let secret = self.next_application_traffic_secret(self.ks.side);
         self.ks.set_encrypter(&secret, common);
         Ok(())

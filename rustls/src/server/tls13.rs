@@ -504,7 +504,7 @@ mod client_hello {
 
         trace!("sending server hello {sh:?}");
         transcript.add_message(&sh);
-        cx.common.send_msg(sh, false);
+        cx.common.emit(Event::PlainMessage(sh));
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some(psk) = resuming_psk {
@@ -553,7 +553,7 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
-        common.send_msg(m, false);
+        common.emit(Event::PlainMessage(m));
     }
 
     fn emit_hello_retry_request(
@@ -584,7 +584,7 @@ mod client_hello {
         trace!("Requesting retry {m:?}");
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
-        common.send_msg(m, false);
+        common.emit(Event::PlainMessage(m));
     }
 
     fn decide_if_early_data_allowed(
