@@ -9,11 +9,12 @@ use super::connection::ClientConnectionData;
 use super::ech::EchStatus;
 use super::hs::{
     self, ClientContext, ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello,
+    GroupAndKeyShare,
 };
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
+    CommonState, HandshakeFlightTls13, HandshakeKind, Protocol, Side, State,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
@@ -150,9 +151,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 }
             };
 
-        cx.common.kx_state.complete();
         let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
-
         let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
         // If we have ECH state, check that the server accepted our offer.
@@ -245,14 +244,16 @@ impl KeyExchangeChoice {
     fn new(
         config: &Arc<ClientConfig>,
         cx: &mut ClientContext<'_>,
-        our_key_share: StartedKeyExchange,
+        our_key_share: GroupAndKeyShare,
         their_key_share: &KeyShareEntry,
     ) -> Result<Self, ()> {
-        if our_key_share.group() == their_key_share.group {
-            return Ok(Self::Whole(our_key_share.into_single()));
+        if our_key_share.share.group() == their_key_share.group {
+            cx.common.negotiated_kx_group = Some(our_key_share.group);
+            return Ok(Self::Whole(our_key_share.share.into_single()));
         }
 
         let (hybrid_key_share, actual_skxg) = our_key_share
+            .share
             .as_hybrid_checked(&config.provider().kx_groups, ProtocolVersion::TLSv1_3)
             .ok_or(())?;
 
@@ -260,13 +261,13 @@ impl KeyExchangeChoice {
             return Err(());
         }
 
-        let StartedKeyExchange::Hybrid(hybrid_key_share) = our_key_share else {
+        let StartedKeyExchange::Hybrid(hybrid_key_share) = our_key_share.share else {
             return Err(()); // unreachable due to `as_hybrid_checked`
         };
 
         // correct the record for the benefit of accuracy of
         // `negotiated_key_exchange_group()`
-        cx.common.kx_state = KxState::Start(actual_skxg);
+        cx.common.negotiated_kx_group = Some(actual_skxg);
 
         Ok(Self::Component(hybrid_key_share))
     }
@@ -282,8 +283,7 @@ impl KeyExchangeChoice {
 pub(super) fn initial_key_share(
     config: &ClientConfig,
     session_key: &ClientSessionKey<'_>,
-    kx_state: &mut KxState,
-) -> Result<StartedKeyExchange, Error> {
+) -> Result<GroupAndKeyShare, Error> {
     let group = config
         .resumption
         .store
@@ -303,8 +303,7 @@ pub(super) fn initial_key_share(
                 .expect("No kx groups configured")
         });
 
-    *kx_state = KxState::Start(group);
-    group.start()
+    GroupAndKeyShare::new(group)
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a

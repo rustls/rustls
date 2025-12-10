@@ -7,7 +7,7 @@ use std::vec;
 use super::ServerConnectionData;
 use super::hs::ClientHelloInput;
 use crate::TEST_PROVIDERS;
-use crate::common_state::{CommonState, Context, KxState, Side};
+use crate::common_state::{CommonState, Context, Side};
 use crate::crypto::cipher::FakeAead;
 use crate::crypto::hash::FakeHash;
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
@@ -23,13 +23,14 @@ use crate::crypto::{
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
 use crate::msgs::base::PayloadU16;
+use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::deframer::Locator;
 use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
     ClientExtensions, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, KeyShareEntry,
     Random, SessionId, SupportedProtocolVersions,
 };
-use crate::msgs::message::{Message, MessagePayload};
+use crate::msgs::message::{HEADER_SIZE, Message, MessagePayload};
 use crate::pki_types::pem::PemObject;
 use crate::pki_types::{CertificateDer, PrivateKeyDer};
 use crate::server::{ServerConfig, ServerConnection};
@@ -200,10 +201,28 @@ fn server_chooses_ffdhe_group_for_client_hello(
         .unwrap();
     conn.process_new_packets().unwrap();
 
-    let KxState::Start(skxg) = &conn.kx_state else {
-        panic!("unexpected kx_state");
+    let mut flight = vec![];
+    conn.write_tls(&mut &mut flight)
+        .unwrap();
+
+    let mut r = Reader::init(&flight[HEADER_SIZE..]);
+    assert!(matches!(
+        HandshakeMessagePayload::read(&mut r).unwrap(),
+        HandshakeMessagePayload(HandshakePayload::ServerHello(_))
+    ));
+    assert!(matches!(
+        HandshakeMessagePayload::read(&mut r).unwrap(),
+        HandshakeMessagePayload(HandshakePayload::Certificate(_))
+    ));
+
+    let HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(skx)) =
+        HandshakeMessagePayload::read(&mut r).unwrap()
+    else {
+        panic!("unexpected third message");
     };
-    assert_eq!(skxg.name(), FAKE_FFDHE_GROUP.name());
+
+    skx.unwrap_given_kxa(KeyExchangeAlgorithm::DHE)
+        .expect("DHE not used");
 }
 
 #[test]

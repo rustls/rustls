@@ -14,9 +14,9 @@ use crate::client::ech::EchState;
 use crate::client::{
     ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
 };
-use crate::common_state::{CommonState, KxState, State};
+use crate::common_state::{CommonState, State};
 use crate::crypto::cipher::Payload;
-use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange};
+use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
@@ -55,7 +55,7 @@ pub(crate) struct ExpectServerHello {
     //
     // If this is `None` then we do not support early data.
     pub(super) early_data_key_schedule: Option<KeyScheduleEarly>,
-    pub(super) offered_key_share: Option<StartedKeyExchange>,
+    pub(super) offered_key_share: Option<GroupAndKeyShare>,
     pub(super) suite: Option<SupportedCipherSuite>,
     pub(super) ech_state: Option<EchState>,
     pub(super) done_retry: bool,
@@ -210,10 +210,11 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         if let (None, Some(req_group)) = (&hrr.cookie, hrr.key_share) {
             let offered_hybrid = offered_key_share
+                .share
                 .as_hybrid_checked(&config.provider().kx_groups, ProtocolVersion::TLSv1_3)
                 .map(|(hybrid, _)| hybrid.component().0);
 
-            if req_group == offered_key_share.group() || Some(req_group) == offered_hybrid {
+            if req_group == offered_key_share.share.group() || Some(req_group) == offered_hybrid {
                 return Err(PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup.into());
             }
         }
@@ -306,7 +307,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         let key_share = match hrr.key_share {
-            Some(group) if group != offered_key_share.group() => {
+            Some(group) if group != offered_key_share.share.group() => {
                 let Some(skxg) = config
                     .provider()
                     .find_kx_group(group, ProtocolVersion::TLSv1_3)
@@ -316,8 +317,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
                     );
                 };
 
-                cx.common.kx_state = KxState::Start(skxg);
-                skxg.start()?
+                GroupAndKeyShare::new(skxg)?
             }
             _ => offered_key_share,
         };
@@ -448,11 +448,7 @@ impl ClientHelloInput {
         }
 
         let key_share = if self.config.needs_key_share() {
-            Some(tls13::initial_key_share(
-                &self.config,
-                &self.session_key,
-                &mut cx.common.kx_state,
-            )?)
+            Some(tls13::initial_key_share(&self.config, &self.session_key)?)
         } else {
             None
         };
@@ -485,7 +481,7 @@ impl ClientHelloInput {
 fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
-    key_share: Option<StartedKeyExchange>,
+    key_share: Option<GroupAndKeyShare>,
     extra_exts: ClientExtensionsInput<'static>,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
@@ -576,9 +572,9 @@ fn emit_client_hello_for_retry(
         (None, false) => None,
     };
 
-    if let Some(key_share) = &key_share {
+    if let Some(GroupAndKeyShare { share, .. }) = &key_share {
         debug_assert!(supported_versions.tls13);
-        let mut shares = vec![KeyShareEntry::new(key_share.group(), key_share.pub_key())];
+        let mut shares = vec![KeyShareEntry::new(share.group(), share.pub_key())];
 
         if !retryreq
             .map(|rr| rr.key_share.is_some())
@@ -589,7 +585,7 @@ fn emit_client_hello_for_retry(
             // algorithm is also supported separately by our provider for this version
             // (via `component_separately_supported`).
             if let Some((hybrid, _)) =
-                key_share.as_hybrid_checked(&config.provider().kx_groups, ProtocolVersion::TLSv1_3)
+                share.as_hybrid_checked(&config.provider().kx_groups, ProtocolVersion::TLSv1_3)
             {
                 let (component_group, component_share) = hybrid.component();
                 shares.push(KeyShareEntry::new(component_group, component_share));
@@ -825,6 +821,20 @@ fn emit_client_hello_for_retry(
         next.done_retry = retryreq.is_some();
         Box::new(next)
     })
+}
+
+pub(super) struct GroupAndKeyShare {
+    pub(super) group: &'static dyn SupportedKxGroup,
+    pub(super) share: StartedKeyExchange,
+}
+
+impl GroupAndKeyShare {
+    pub(super) fn new(group: &'static dyn SupportedKxGroup) -> Result<Self, Error> {
+        Ok(Self {
+            group,
+            share: group.start()?,
+        })
+    }
 }
 
 /// Prepares `exts` and `cx` with TLS 1.2 or TLS 1.3 session

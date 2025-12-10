@@ -7,7 +7,7 @@ use core::fmt;
 use super::connection::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
-use crate::common_state::{KxState, State};
+use crate::common_state::State;
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -374,7 +374,6 @@ impl ExpectClientHello {
 
         debug!("decided upon suite {suite:?}");
         cx.common.suite = Some(suite.into());
-        cx.common.kx_state = KxState::Start(skxg);
 
         suite
             .server_handler()

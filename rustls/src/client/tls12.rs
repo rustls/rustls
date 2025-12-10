@@ -13,7 +13,7 @@ use super::hs::{self, ClientContext};
 use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
@@ -818,7 +818,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
         let Some(skxg) = maybe_skxg else {
             return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into());
         };
-        cx.common.kx_state = KxState::Start(skxg);
         let kx = skxg.start()?.into_single();
 
         // 4b.
@@ -844,7 +843,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             st.randoms,
             suite,
         )?;
-        cx.common.kx_state.complete();
+        cx.common.negotiated_kx_group = Some(skxg);
 
         // 4e. CCS. We are definitely going to switch on encryption.
         emit_ccs(cx.common);
