@@ -462,7 +462,7 @@ fn emit_certificate(
     };
 
     transcript.add_message(&cert);
-    common.send_msg(cert, false);
+    common.emit(Event::PlainMessage(cert));
 }
 
 fn emit_client_kx(
@@ -491,7 +491,7 @@ fn emit_client_kx(
     };
 
     transcript.add_message(&ckx);
-    common.send_msg(ckx, false);
+    common.emit(Event::PlainMessage(ckx));
 }
 
 fn emit_certverify(
@@ -515,17 +515,15 @@ fn emit_certverify(
     };
 
     transcript.add_message(&m);
-    common.send_msg(m, false);
+    common.emit(Event::PlainMessage(m));
     Ok(())
 }
 
 fn emit_ccs(common: &mut CommonState) {
-    let ccs = Message {
+    common.emit(Event::PlainMessage(Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    };
-
-    common.send_msg(ccs, false);
+    }));
 }
 
 fn emit_finished(
@@ -546,7 +544,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    common.send_msg(f, true);
+    common.emit(Event::EncryptMessage(f));
 }
 
 struct ServerKxDetails {

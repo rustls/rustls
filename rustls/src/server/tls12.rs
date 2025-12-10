@@ -758,17 +758,15 @@ fn emit_ticket(
     };
 
     transcript.add_message(&m);
-    cx.common.send_msg(m, false);
+    cx.common.emit(Event::PlainMessage(m));
     Ok(())
 }
 
 fn emit_ccs(common: &mut CommonState) {
-    let m = Message {
+    common.emit(Event::PlainMessage(Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    };
-
-    common.send_msg(m, false);
+    }));
 }
 
 fn emit_finished(
@@ -789,7 +787,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    common.send_msg(f, true);
+    common.emit(Event::EncryptMessage(f));
 }
 
 struct ExpectFinished {

@@ -334,7 +334,7 @@ impl CommonState {
 
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
-    pub(crate) fn send_msg_encrypt(&mut self, m: EncodedMessage<Payload<'_>>) {
+    fn send_msg_encrypt(&mut self, m: EncodedMessage<Payload<'_>>) {
         let iter = self
             .message_fragmenter
             .fragment_message(&m);
@@ -466,7 +466,7 @@ impl CommonState {
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
-    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         {
             if self.protocol.quic() {
                 if let MessagePayload::Alert(_) = m.payload {
@@ -676,11 +676,13 @@ impl CommonState {
 }
 
 impl Output for CommonState {
-    fn emit(&mut self, ev: Event) {
+    fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
+            Event::EncryptMessage(m) => self.send_msg(m, true),
             Event::Exporter(exporter) => self.exporter = Some(exporter),
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
+            Event::PlainMessage(m) => self.send_msg(m, false),
         }
     }
 }
@@ -829,14 +831,16 @@ impl Input<'_> {
 
 /// The route for handshake state machine to surface determinations about the connection.
 pub(crate) trait Output {
-    fn emit(&mut self, ev: Event);
+    fn emit(&mut self, ev: Event<'_>);
 }
 
 /// The set
-pub(crate) enum Event {
+pub(crate) enum Event<'a> {
     EarlyExporter(Box<dyn Exporter>),
+    EncryptMessage(Message<'a>),
     Exporter(Box<dyn Exporter>),
     PeerIdentity(Identity<'static>),
+    PlainMessage(Message<'a>),
 }
 
 /// Lifetime-erased equivalent to [`Payload`]
@@ -1014,16 +1018,18 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
     }
 
     pub(crate) fn finish(self, common: &mut CommonState) {
-        common.send_msg(
-            Message {
-                version: match TLS13 {
-                    true => ProtocolVersion::TLSv1_3,
-                    false => ProtocolVersion::TLSv1_2,
-                },
-                payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
+        let m = Message {
+            version: match TLS13 {
+                true => ProtocolVersion::TLSv1_3,
+                false => ProtocolVersion::TLSv1_2,
             },
-            TLS13,
-        );
+            payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
+        };
+
+        common.emit(match TLS13 {
+            true => Event::EncryptMessage(m),
+            false => Event::PlainMessage(m),
+        });
     }
 }
 
