@@ -678,6 +678,7 @@ impl CommonState {
 impl Output for CommonState {
     fn emit(&mut self, ev: Event) {
         match ev {
+            Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
             Event::Exporter(exporter) => self.exporter = Some(exporter),
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
         }
@@ -833,6 +834,7 @@ pub(crate) trait Output {
 
 /// The set
 pub(crate) enum Event {
+    EarlyExporter(Box<dyn Exporter>),
     Exporter(Box<dyn Exporter>),
     PeerIdentity(Identity<'static>),
 }
