@@ -14,7 +14,7 @@ use crate::client::ech::EchState;
 use crate::client::{
     ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
 };
-use crate::common_state::{CommonState, Input, State};
+use crate::common_state::{CommonState, Event, Input, Output, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -785,7 +785,7 @@ fn emit_client_hello_for_retry(
     trace!("Sending ClientHello {ch:#?}");
 
     transcript_buffer.add_message(&ch);
-    cx.common.send_msg(ch, false);
+    cx.common.emit(Event::PlainMessage(ch));
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_data_key_schedule =
