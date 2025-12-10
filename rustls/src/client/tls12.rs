@@ -162,7 +162,8 @@ mod server_hello {
                     );
 
                     let (dec, enc) = secrets.make_cipher_pair(Side::Client);
-                    cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+                    cx.common
+                        .emit(Event::HandshakeKind(HandshakeKind::Resumed));
                     let cert_verified = verify::PeerVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -201,7 +202,8 @@ mod server_hello {
                 }
             }
 
-            cx.common.handshake_kind = Some(HandshakeKind::Full);
+            cx.common
+                .emit(Event::HandshakeKind(HandshakeKind::Full));
             Ok(Box::new(ExpectCertificate {
                 config,
                 session_id: server_hello.session_id,

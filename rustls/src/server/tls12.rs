@@ -192,7 +192,8 @@ mod client_hello {
                 st.session_id = SessionId::random(st.config.provider.secure_random)?;
             }
 
-            cx.common.handshake_kind = Some(HandshakeKind::Full);
+            cx.common
+                .emit(Event::HandshakeKind(HandshakeKind::Full));
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
@@ -291,7 +292,8 @@ mod client_hello {
             secrets.master_secret(),
         );
 
-        cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+        cx.common
+            .emit(Event::HandshakeKind(HandshakeKind::Resumed));
 
         if send_ticket {
             let now = config.current_time()?;
