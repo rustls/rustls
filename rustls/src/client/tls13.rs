@@ -145,7 +145,6 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                     debug!("Not resuming");
                     // Discard the early data key schedule.
                     cx.data.early_data.rejected();
-                    cx.common.early_traffic = false;
                     resuming_session.take();
                     KeySchedulePreHandshake::new(suite)
                 }
@@ -408,7 +407,7 @@ pub(super) fn derive_early_traffic_secret(
         Some(early_key_schedule.early_exporter(&client_hello_hash, key_log, client_random));
 
     // Now the client can send encrypted early data
-    cx.common.early_traffic = true;
+    cx.data.early_data.start();
     trace!("Starting early data traffic");
 }
 
@@ -518,18 +517,17 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
         match self.resuming_session {
             Some(resuming_session) => {
-                let was_early_traffic = cx.common.early_traffic;
+                let was_early_traffic = cx.data.early_data.is_sending();
                 if was_early_traffic {
                     match exts.early_data_ack {
                         Some(()) => cx.data.early_data.accepted(),
                         None => {
                             cx.data.early_data.rejected();
-                            cx.common.early_traffic = false;
                         }
                     }
                 }
 
-                if was_early_traffic && !cx.common.early_traffic {
+                if was_early_traffic && !cx.data.early_data.is_sending() {
                     // If no early traffic, set the encryption key for handshakes
                     self.key_schedule
                         .set_handshake_encrypter(cx.common);
@@ -1230,9 +1228,8 @@ impl State<ClientConnectionData> for ExpectFinished {
         let hash_after_handshake = st.transcript.current_hash();
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
-        if cx.common.early_traffic {
+        if cx.data.early_data.is_sending() {
             emit_end_of_early_data_tls13(&mut st.transcript, cx.common);
-            cx.common.early_traffic = false;
             cx.data.early_data.finished();
             st.key_schedule
                 .set_handshake_encrypter(cx.common);

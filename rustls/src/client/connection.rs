@@ -454,7 +454,17 @@ impl EarlyData {
     }
 
     pub(super) fn is_enabled(&self) -> bool {
-        matches!(self.state, EarlyDataState::Ready | EarlyDataState::Accepted)
+        matches!(
+            self.state,
+            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
+        )
+    }
+
+    pub(crate) fn is_sending(&self) -> bool {
+        matches!(
+            self.state,
+            EarlyDataState::Sending | EarlyDataState::Accepted
+        )
     }
 
     #[cfg(feature = "std")]
@@ -471,6 +481,11 @@ impl EarlyData {
         self.left = max_data;
     }
 
+    pub(crate) fn start(&mut self) {
+        assert_eq!(self.state, EarlyDataState::Ready);
+        self.state = EarlyDataState::Sending;
+    }
+
     pub(super) fn rejected(&mut self) {
         trace!("EarlyData rejected");
         self.state = EarlyDataState::Rejected;
@@ -478,7 +493,7 @@ impl EarlyData {
 
     pub(super) fn accepted(&mut self) {
         trace!("EarlyData accepted");
-        assert_eq!(self.state, EarlyDataState::Ready);
+        assert_eq!(self.state, EarlyDataState::Sending);
         self.state = EarlyDataState::Accepted;
     }
 
@@ -493,7 +508,7 @@ impl EarlyData {
     fn check_write_opt(&mut self, sz: usize) -> Option<usize> {
         match self.state {
             EarlyDataState::Disabled => unreachable!(),
-            EarlyDataState::Ready | EarlyDataState::Accepted => {
+            EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted => {
                 let take = if self.left < sz {
                     mem::replace(&mut self.left, 0)
                 } else {
@@ -512,6 +527,7 @@ impl EarlyData {
 enum EarlyDataState {
     Disabled,
     Ready,
+    Sending,
     Accepted,
     AcceptedFinished,
     Rejected,

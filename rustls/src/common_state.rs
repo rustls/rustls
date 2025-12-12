@@ -41,7 +41,6 @@ pub struct CommonState {
     pub(crate) aligned_handshake: Option<HandshakeAlignedProof>,
     pub(crate) may_send_application_data: bool,
     may_receive_application_data: bool,
-    pub(crate) early_traffic: bool,
     sent_fatal_alert: bool,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
@@ -80,7 +79,6 @@ impl CommonState {
             aligned_handshake: None,
             may_send_application_data: false,
             may_receive_application_data: false,
-            early_traffic: false,
             sent_fatal_alert: false,
             has_sent_close_notify: false,
             has_received_close_notify: false,
@@ -323,7 +321,6 @@ impl CommonState {
 
     #[cfg(feature = "std")]
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
-        debug_assert!(self.early_traffic);
         debug_assert!(self.encrypt_state.is_encrypting());
 
         // Limit on `sendable_tls` should apply to encrypted data but is enforced
