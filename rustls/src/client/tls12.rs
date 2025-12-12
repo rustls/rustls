@@ -1083,8 +1083,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             emit_finished(&st.secrets, &mut st.transcript, cx.common, &proof);
         }
 
-        cx.common
-            .start_traffic(&mut cx.sendable_plaintext);
+        cx.common.start_traffic();
 
         let extracted_secrets = st
             .config

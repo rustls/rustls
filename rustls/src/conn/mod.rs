@@ -959,7 +959,6 @@ impl<Side: SideData> ConnectionCore<Side> {
                 &mut self.side,
                 &locator,
                 &mut plaintext,
-                Some(sendable_plaintext),
             ) {
                 Ok(new) => state = new,
                 Err(e) => {
@@ -969,6 +968,15 @@ impl<Side: SideData> ConnectionCore<Side> {
                     deframer_buffer.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
+            }
+
+            if self
+                .common_state
+                .may_send_application_data
+                && !sendable_plaintext.is_empty()
+            {
+                self.common_state
+                    .send_buffered_plaintext(sendable_plaintext);
             }
 
             if self

@@ -323,7 +323,6 @@ mod buffered {
                 // `ClientHelloInput::from_message` won't read borrowed plaintext
                 plaintext_locator: &Locator::new(&[]),
                 received_plaintext: &mut None,
-                sendable_plaintext: Some(&mut connection.sendable_plaintext),
             };
 
             let sig_schemes = match ClientHelloInput::from_message(&message, false, &mut cx) {
@@ -580,7 +579,6 @@ impl Accepted {
             // `ExpectClientHello::with_input` won't read borrowed plaintext
             plaintext_locator: &Locator::new(&[]),
             received_plaintext: &mut None,
-            sendable_plaintext: Some(&mut self.connection.sendable_plaintext),
         };
 
         let input = ClientHelloInput {

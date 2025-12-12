@@ -120,7 +120,6 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                         &mut self.core.side,
                         &plaintext_locator,
                         &mut received_plaintext,
-                        None,
                     ) {
                     Ok(new) => {
                         buffer.queue_discard(buffer_progress.take_discard());

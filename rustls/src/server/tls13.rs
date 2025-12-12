@@ -352,8 +352,7 @@ mod client_hello {
                 // Application data can be sent immediately after Finished, in one
                 // flight.  However, if client auth is enabled, we don't want to send
                 // application data to an unauthenticated peer.
-                cx.common
-                    .start_outgoing_traffic(&mut cx.sendable_plaintext);
+                cx.common.start_outgoing_traffic();
             }
 
             if doing_client_auth {
@@ -1265,8 +1264,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         flight.finish(cx.common);
 
         // Application data may now flow, even if we have client auth enabled.
-        cx.common
-            .start_traffic(&mut cx.sendable_plaintext);
+        cx.common.start_traffic();
         cx.common.peer_identity = self.peer_identity;
         cx.common.exporter = Some(Box::new(exporter));
 
