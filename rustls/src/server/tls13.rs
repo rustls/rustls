@@ -1265,13 +1265,13 @@ impl State<ServerConnectionData> for ExpectFinished {
         flight.finish(cx.common);
 
         // Application data may now flow, even if we have client auth enabled.
-        cx.common.start_traffic();
         if let Some(identity) = self.peer_identity {
             cx.common
                 .emit(Event::PeerIdentity(identity));
         }
         cx.common
             .emit(Event::Exporter(Box::new(exporter)));
+        cx.common.emit(Event::StartTraffic);
 
         Ok(match cx.common.protocol.is_quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),

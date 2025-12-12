@@ -1322,11 +1322,11 @@ impl State<ClientConnectionData> for ExpectFinished {
         /* Now move to our application traffic keys. */
         let (key_schedule, exporter, resumption) =
             key_schedule_pre_finished.into_traffic(cx.common, st.transcript.current_hash(), &proof);
-        cx.common.start_traffic();
         cx.common
             .emit(Event::PeerIdentity(st.peer_identity.clone()));
         cx.common
             .emit(Event::Exporter(Box::new(exporter)));
+        cx.common.emit(Event::StartTraffic);
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
         // sending an alert and returning an error (potentially with retry configs) if the server
