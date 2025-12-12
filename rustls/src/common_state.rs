@@ -34,7 +34,7 @@ pub struct CommonState {
     pub(crate) decrypt_state: DecryptionState,
     pub(crate) encrypt_state: EncryptionState,
     pub(crate) suite: Option<SupportedCipherSuite>,
-    pub(crate) negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
+    negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
     pub(crate) alpn_protocol: Option<ProtocolName>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
@@ -685,6 +685,10 @@ impl Output for CommonState {
                 assert!(self.handshake_kind.is_none());
                 self.handshake_kind = Some(hk);
             }
+            Event::KeyExchangeGroup(kxg) => {
+                assert!(self.negotiated_kx_group.is_none());
+                self.negotiated_kx_group = Some(kxg);
+            }
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
             Event::PlainMessage(m) => self.send_msg(m, false),
         }
@@ -844,6 +848,7 @@ pub(crate) enum Event<'a> {
     EncryptMessage(Message<'a>),
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
+    KeyExchangeGroup(&'static dyn SupportedKxGroup),
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
 }

@@ -849,7 +849,8 @@ impl ExpectServerDone {
             self.randoms,
             suite,
         )?;
-        cx.common.negotiated_kx_group = Some(skxg);
+        cx.common
+            .emit(Event::KeyExchangeGroup(skxg));
 
         // 4e. CCS. We are definitely going to switch on encryption.
         emit_ccs(cx.common);
