@@ -154,7 +154,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 self.with_version::<Tls13CipherSuite>(server_hello, &m, cx)
             }
             TLSv1_2 if config.supports_version(TLSv1_2) => {
-                if cx.data.early_data.is_enabled() && cx.common.early_traffic {
+                if cx.data.early_data.is_sending() {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
                     return Err(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion.into());
