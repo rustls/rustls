@@ -563,7 +563,8 @@ impl State<ServerConnectionData> for ExpectClientKx {
             self.randoms,
             self.suite,
         )?;
-        cx.common.negotiated_kx_group = Some(self.server_kx.group);
+        cx.common
+            .emit(Event::KeyExchangeGroup(self.server_kx.group));
 
         self.config.key_log.log(
             "CLIENT_RANDOM",
