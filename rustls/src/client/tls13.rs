@@ -251,7 +251,8 @@ impl KeyExchangeChoice {
         their_key_share: &KeyShareEntry,
     ) -> Result<Self, ()> {
         if our_key_share.share.group() == their_key_share.group {
-            cx.common.negotiated_kx_group = Some(our_key_share.group);
+            cx.common
+                .emit(Event::KeyExchangeGroup(our_key_share.group));
             return Ok(Self::Whole(our_key_share.share.into_single()));
         }
 
@@ -270,7 +271,8 @@ impl KeyExchangeChoice {
 
         // correct the record for the benefit of accuracy of
         // `negotiated_key_exchange_group()`
-        cx.common.negotiated_kx_group = Some(actual_skxg);
+        cx.common
+            .emit(Event::KeyExchangeGroup(actual_skxg));
 
         Ok(Self::Component(hybrid_key_share))
     }
