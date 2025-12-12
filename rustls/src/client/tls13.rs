@@ -1300,8 +1300,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         /* Now move to our application traffic keys. */
         let (key_schedule, exporter, resumption) =
             key_schedule_pre_finished.into_traffic(cx.common, st.transcript.current_hash(), &proof);
-        cx.common
-            .start_traffic(&mut cx.sendable_plaintext);
+        cx.common.start_traffic();
         cx.common.peer_identity = Some(st.peer_identity.clone());
         cx.common.exporter = Some(Box::new(exporter));
 
