@@ -690,6 +690,11 @@ impl Output for CommonState {
             }
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
             Event::PlainMessage(m) => self.send_msg(m, false),
+            Event::ReceivedTicket => {
+                self.tls13_tickets_received = self
+                    .tls13_tickets_received
+                    .saturating_add(1)
+            }
             Event::StartOutgoingTraffic => self.start_outgoing_traffic(),
             Event::StartTraffic => self.start_traffic(),
         }
@@ -853,6 +858,7 @@ pub(crate) enum Event<'a> {
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
+    ReceivedTicket,
     /// Mark the connection as ready to send application data.
     StartOutgoingTraffic,
     /// Mark the connection as ready to send and receive application data.

@@ -1418,14 +1418,13 @@ impl ExpectTraffic {
         cx: &mut ClientContext<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
+        cx.common.emit(Event::ReceivedTicket);
+
         let mut kcx = KernelContext {
             protocol: cx.common.protocol,
             quic: &cx.common.quic,
         };
-        cx.common.tls13_tickets_received = cx
-            .common
-            .tls13_tickets_received
-            .saturating_add(1);
+
         self.handle_new_ticket_impl(&mut kcx, nst)
     }
 
