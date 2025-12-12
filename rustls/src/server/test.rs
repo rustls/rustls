@@ -66,7 +66,6 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
             data: &mut ServerConnectionData::default(),
             plaintext_locator: &Locator::new(&[]),
             received_plaintext: &mut None,
-            sendable_plaintext: None,
         },
     )
     .map(|_| ())

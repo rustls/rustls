@@ -852,8 +852,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         }
 
         cx.common.peer_identity = self.peer_identity;
-        cx.common
-            .start_traffic(&mut cx.sendable_plaintext);
+        cx.common.start_traffic();
 
         let extracted_secrets = self
             .config

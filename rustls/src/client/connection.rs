@@ -280,8 +280,6 @@ impl ConnectionCore<ClientConnectionData> {
             // `start_handshake` won't read plaintext
             plaintext_locator: &Locator::new(&[]),
             received_plaintext: &mut None,
-            // `start_handshake` won't produce plaintext
-            sendable_plaintext: None,
         };
 
         let input = ClientHelloInput::new(name, &extra_exts, &mut cx, config)?;

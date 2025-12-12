@@ -187,7 +187,6 @@ impl CommonState {
         data: &mut Data,
         plaintext_locator: &Locator,
         received_plaintext: &mut Option<UnborrowedPayload>,
-        sendable_plaintext: Option<&mut ChunkVecBuffer>,
     ) -> Result<Box<dyn State<Data>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec
@@ -239,7 +238,6 @@ impl CommonState {
             data,
             plaintext_locator,
             received_plaintext,
-            sendable_plaintext,
         };
 
         state.handle(&mut cx, msg)
@@ -442,30 +440,22 @@ impl CommonState {
         self.send_appdata_encrypt(payload.split_at(len).0)
     }
 
-    /// Mark the connection as ready to send application data.
-    ///
-    /// Also flush `sendable_plaintext` if it is `Some`.
-    pub(crate) fn start_outgoing_traffic(
-        &mut self,
-        sendable_plaintext: &mut Option<&mut ChunkVecBuffer>,
-    ) {
-        self.may_send_application_data = true;
-        let Some(sendable_plaintext) = sendable_plaintext else {
-            return;
-        };
-
-        debug_assert!(self.record_layer.is_encrypting());
-        while let Some(buf) = sendable_plaintext.pop() {
+    pub(crate) fn send_buffered_plaintext(&mut self, plaintext: &mut ChunkVecBuffer) {
+        while let Some(buf) = plaintext.pop() {
             self.send_appdata_encrypt(buf.as_slice().into());
         }
     }
 
     /// Mark the connection as ready to send and receive application data.
-    ///
-    /// Also flush `sendable_plaintext` if it is `Some`.
-    pub(crate) fn start_traffic(&mut self, sendable_plaintext: &mut Option<&mut ChunkVecBuffer>) {
+    pub(crate) fn start_traffic(&mut self) {
         self.may_receive_application_data = true;
-        self.start_outgoing_traffic(sendable_plaintext);
+        self.start_outgoing_traffic();
+    }
+
+    /// Mark the connection as ready to send application data.
+    pub(crate) fn start_outgoing_traffic(&mut self) {
+        self.may_send_application_data = true;
+        debug_assert!(self.record_layer.is_encrypting());
     }
 
     // Put m into sendable_tls for writing.
@@ -814,9 +804,6 @@ pub(crate) struct Context<'a, Data> {
     /// Plaintext data may be reborrowed using a [`Delocator`] which was
     /// initialized from the same slice as `plaintext_locator`.
     pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
-    /// Buffered plaintext. This is `Some` if any plaintext was written during handshake and `None`
-    /// otherwise.
-    pub(crate) sendable_plaintext: Option<&'a mut ChunkVecBuffer>,
 }
 
 impl<'a, Data> Context<'a, Data> {
