@@ -922,9 +922,7 @@ pub(super) fn process_alpn_protocol(
     offered_protocols: &[ProtocolName],
     selected: Option<&ProtocolName>,
 ) -> Result<(), Error> {
-    common.alpn_protocol = selected.map(ToOwned::to_owned);
-
-    if let Some(alpn_protocol) = &common.alpn_protocol {
+    if let Some(alpn_protocol) = selected {
         if !offered_protocols.contains(alpn_protocol) {
             return Err(PeerMisbehaved::SelectedUnofferedApplicationProtocol.into());
         }
@@ -936,17 +934,21 @@ pub(super) fn process_alpn_protocol(
     // mechanism) if and only if any ALPN protocols were configured. This defends against badly-behaved
     // servers which accept a connection that requires an application-layer protocol they do not
     // understand.
-    if common.protocol.quic() && common.alpn_protocol.is_none() && !offered_protocols.is_empty() {
+    if common.protocol.quic() && selected.is_none() && !offered_protocols.is_empty() {
         return Err(Error::NoApplicationProtocol);
     }
 
     debug!(
         "ALPN protocol is {:?}",
-        common
-            .alpn_protocol
+        selected
             .as_ref()
             .map(|v| bs_debug::BsDebug(v.as_ref()))
     );
+
+    if let Some(protocol) = selected {
+        common.emit(Event::ApplicationProtocol(protocol.to_owned()));
+    }
+
     Ok(())
 }
 
