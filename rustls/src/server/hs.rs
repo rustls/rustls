@@ -7,7 +7,7 @@ use core::fmt;
 use super::connection::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
-use crate::common_state::{Input, State};
+use crate::common_state::{Event, Input, Output, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -77,24 +77,31 @@ impl<'a> ExtensionProcessing<'a> {
 
         // ALPN
         let our_protocols = &config.alpn_protocols;
-        if let Some(their_protocols) = &hello.protocols {
-            cx.common.alpn_protocol = our_protocols
+        let chosen_protocol = if let Some(their_protocols) = &hello.protocols {
+            if let Some(selected_protocol) = our_protocols
                 .iter()
                 .find(|ours| {
                     their_protocols
                         .iter()
                         .any(|theirs| theirs.as_ref() == ours.as_slice())
                 })
-                .map(|bytes| ProtocolName::from(bytes.clone()));
-            if let Some(selected_protocol) = &cx.common.alpn_protocol {
+                .map(|bytes| ProtocolName::from(bytes.clone()))
+            {
                 debug!("Chosen ALPN protocol {selected_protocol:?}");
 
                 self.extensions.selected_protocol =
                     Some(SingleProtocolName::new(selected_protocol.clone()));
+                cx.common
+                    .emit(Event::ApplicationProtocol(selected_protocol));
+                true
             } else if !our_protocols.is_empty() {
                 return Err(Error::NoApplicationProtocol);
+            } else {
+                false
             }
-        }
+        } else {
+            false
+        };
 
         if cx.common.protocol.is_quic() {
             // QUIC has strict ALPN, unlike TLS's more backwards-compatible behavior. RFC 9001
@@ -104,9 +111,7 @@ impl<'a> ExtensionProcessing<'a> {
             // protocols were configured locally or offered by the client. This helps prevent
             // successful establishment of connections between peers that can't understand
             // each other.
-            if cx.common.alpn_protocol.is_none()
-                && (!our_protocols.is_empty() || hello.protocols.is_some())
-            {
+            if !chosen_protocol && (!our_protocols.is_empty() || hello.protocols.is_some()) {
                 return Err(Error::NoApplicationProtocol);
             }
 

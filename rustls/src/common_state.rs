@@ -676,6 +676,7 @@ impl CommonState {
 impl Output for CommonState {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
+            Event::ApplicationProtocol(protocol) => self.alpn_protocol = Some(protocol),
             Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
             Event::EncryptMessage(m) => self.send_msg(m, true),
             Event::Exporter(exporter) => self.exporter = Some(exporter),
@@ -844,6 +845,7 @@ pub(crate) trait Output {
 
 /// The set
 pub(crate) enum Event<'a> {
+    ApplicationProtocol(ProtocolName),
     EarlyExporter(Box<dyn Exporter>),
     EncryptMessage(Message<'a>),
     Exporter(Box<dyn Exporter>),
