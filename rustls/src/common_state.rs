@@ -446,8 +446,7 @@ impl CommonState {
         self.start_outgoing_traffic();
     }
 
-    /// Mark the connection as ready to send application data.
-    pub(crate) fn start_outgoing_traffic(&mut self) {
+    fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
         debug_assert!(self.encrypt_state.is_encrypting());
     }
@@ -690,6 +689,7 @@ impl Output for CommonState {
             }
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
             Event::PlainMessage(m) => self.send_msg(m, false),
+            Event::StartOutgoingTraffic => self.start_outgoing_traffic(),
             Event::StartTraffic => self.start_traffic(),
         }
     }
@@ -851,6 +851,8 @@ pub(crate) enum Event<'a> {
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
+    /// Mark the connection as ready to send application data.
+    StartOutgoingTraffic,
     /// Mark the connection as ready to send and receive application data.
     StartTraffic,
 }
