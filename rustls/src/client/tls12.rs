@@ -1129,8 +1129,6 @@ impl State<ClientConnectionData> for ExpectFinished {
             emit_finished(&st.secrets, &mut st.transcript, cx.common, &proof);
         }
 
-        cx.common.start_traffic();
-
         let extracted_secrets = st
             .config
             .enable_secret_extraction
@@ -1140,6 +1138,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             .emit(Event::PeerIdentity(st.peer_identity));
         cx.common
             .emit(Event::Exporter(st.secrets.into_exporter()));
+        cx.common.emit(Event::StartTraffic);
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,
