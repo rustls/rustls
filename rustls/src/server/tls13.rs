@@ -353,7 +353,8 @@ mod client_hello {
                 // Application data can be sent immediately after Finished, in one
                 // flight.  However, if client auth is enabled, we don't want to send
                 // application data to an unauthenticated peer.
-                cx.common.start_outgoing_traffic();
+                cx.common
+                    .emit(Event::StartOutgoingTraffic);
             }
 
             if doing_client_auth {
