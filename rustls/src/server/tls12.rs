@@ -898,7 +898,6 @@ impl State<ServerConnectionData> for ExpectFinished {
             cx.common
                 .emit(Event::PeerIdentity(identity));
         }
-        cx.common.start_traffic();
 
         let extracted_secrets = self
             .config
@@ -910,6 +909,7 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         cx.common
             .emit(Event::Exporter(self.secrets.into_exporter()));
+        cx.common.emit(Event::StartTraffic);
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,
