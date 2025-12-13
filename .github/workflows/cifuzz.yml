@@ -24,7 +24,7 @@ jobs:
         dry-run: false
         language: rust
     - name: Upload Crash
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       if: failure() && steps.build.outcome == 'success'
       with:
         name: artifacts
