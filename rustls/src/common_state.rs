@@ -382,12 +382,11 @@ impl CommonState {
         {
             PreEncryptAction::Nothing => {}
 
-            // Close connection once we start to run out of
-            // sequence space.
+            // Close connection once we start to run out of sequence space.
             PreEncryptAction::RefreshOrClose => {
                 match self.negotiated_version {
                     Some(ProtocolVersion::TLSv1_3) => {
-                        // driven by caller, as we don't have the `State` here
+                        // Driven by caller, as we don't have the `State` here.
                         self.refresh_traffic_keys_pending = true;
                     }
                     _ => {
@@ -400,11 +399,9 @@ impl CommonState {
                 }
             }
 
-            // Refuse to wrap counter at all costs.  This
+            // Refuse to wrap counter at all costs. This
             // is basically untestable unfortunately.
-            PreEncryptAction::Refuse => {
-                return Err(EncryptError::EncryptExhausted);
-            }
+            PreEncryptAction::Refuse => return Err(EncryptError::EncryptExhausted),
         };
 
         Ok(self.encrypt_state.encrypt_outgoing(m))
