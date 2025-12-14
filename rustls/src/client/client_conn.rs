@@ -183,6 +183,12 @@ pub struct ClientConfig {
     ///
     /// The default is false.
     pub enable_early_data: bool,
+
+    /// Optional hook to customize the encoded ClientHello immediately before sending.
+    ///
+    /// This allows controlling fingerprinting-relevant details (like extension ordering)
+    /// while still using rustls for record protection, key schedule, and verification.
+    pub client_hello_customizer: Option<Arc<dyn super::ClientHelloCustomizer>>,
 }
 
 /// What mechanisms to support for resuming a TLS 1.2 session.
@@ -240,6 +246,15 @@ impl ClientConfig {
     #[cfg(feature = "dangerous_configuration")]
     pub fn dangerous(&mut self) -> danger::DangerousClientConfig {
         danger::DangerousClientConfig { cfg: self }
+    }
+
+    /// Attach a [`super::ClientHelloCustomizer`] to this configuration.
+    pub fn with_client_hello_customizer(
+        mut self,
+        customizer: Arc<dyn super::ClientHelloCustomizer>,
+    ) -> Self {
+        self.client_hello_customizer = Some(customizer);
+        self
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {

@@ -217,6 +217,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: false,
             enable_early_data: false,
+            client_hello_customizer: None,
         }
     }
 }

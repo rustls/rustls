@@ -413,6 +413,9 @@ pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIO
 
 /// Items for use in a client.
 pub mod client {
+    use std::collections::HashSet;
+    use std::fmt;
+
     pub(super) mod builder;
     mod client_conn;
     mod common;
@@ -430,6 +433,9 @@ pub mod client {
     };
     pub use handy::ClientSessionMemoryCache;
 
+    /// Exposes TLS `ExtensionType` values for ClientHello customization.
+    pub use crate::msgs::enums::ExtensionType;
+
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{
         verify_server_cert_signed_by_trust_anchor, verify_server_name,
@@ -441,6 +447,143 @@ pub mod client {
 
     pub use crate::msgs::persist::Tls12ClientSessionValue;
     pub use crate::msgs::persist::Tls13ClientSessionValue;
+
+    /// Context provided to a [`ClientHelloCustomizer`].
+    #[derive(Clone, Copy, Debug)]
+    pub struct ClientHelloContext<'a> {
+        /// The server name used for this connection.
+        pub server_name: &'a ServerName,
+
+        /// Whether this ClientHello is sent in response to a HelloRetryRequest (HRR).
+        pub is_retry: bool,
+    }
+
+    /// A mutable view over the ClientHello about to be encoded and sent.
+    ///
+    /// This intentionally exposes a narrow API surface so callers can influence
+    /// fingerprinting-relevant details (e.g. extension ordering) without coupling to
+    /// rustls' internal message types.
+    #[derive(Debug)]
+    pub struct ClientHello<'a> {
+        inner: &'a mut crate::msgs::handshake::ClientHelloPayload,
+    }
+
+    impl<'a> ClientHello<'a> {
+        pub(crate) fn new(inner: &'a mut crate::msgs::handshake::ClientHelloPayload) -> Self {
+            Self { inner }
+        }
+    }
+
+    impl ClientHello<'_> {
+        /// Returns the extension encoding order that will be used when this ClientHello is encoded.
+        pub fn extension_encoding_order(&self) -> Vec<ExtensionType> {
+            self.inner
+                .extensions
+                .iter()
+                .map(|e| e.get_type())
+                .collect()
+        }
+
+        /// Override the order in which ClientHello extensions are encoded.
+        ///
+        /// The provided `order` must:
+        ///
+        /// - Contain **each used extension exactly once** (no missing, extra, or duplicate entries).
+        /// - Keep `pre_shared_key` last when it is present (RFC8446).
+        ///
+        /// If these requirements are not met, an [`crate::Error`] is returned.
+        pub fn set_extension_encoding_order(
+            &mut self,
+            mut order: Vec<ExtensionType>,
+        ) -> Result<(), crate::Error> {
+            // Build the currently used extension set (and reject duplicates).
+            let mut used = Vec::with_capacity(self.inner.extensions.len());
+            let mut seen = HashSet::new();
+            for ext in &self.inner.extensions {
+                let typ = ext.get_type();
+                let key = typ.get_u16();
+                if !seen.insert(key) {
+                    return Err(crate::Error::PeerMisbehaved(
+                        crate::error::PeerMisbehaved::DuplicateClientHelloExtensions,
+                    ));
+                }
+                used.push(typ);
+            }
+
+            // Reject duplicates in `order`.
+            {
+                let mut order_seen = HashSet::new();
+                for ext in &order {
+                    if !order_seen.insert(ext.get_u16()) {
+                        return Err(crate::Error::General(
+                            "invalid ClientHello extension order (duplicate)".into(),
+                        ));
+                    }
+                }
+            }
+
+            // Exact set match between `used` and `order`.
+            {
+                let mut used_sorted = used
+                    .iter()
+                    .map(|e| e.get_u16())
+                    .collect::<Vec<_>>();
+                used_sorted.sort_unstable();
+
+                let mut order_sorted = order
+                    .iter()
+                    .map(|e| e.get_u16())
+                    .collect::<Vec<_>>();
+                order_sorted.sort_unstable();
+
+                if used_sorted != order_sorted {
+                    return Err(crate::Error::General(
+                        "invalid ClientHello extension order (set mismatch)".into(),
+                    ));
+                }
+            }
+
+            // Enforce ordering constraints.
+            if self
+                .inner
+                .extensions
+                .iter()
+                .any(|e| e.get_type() == ExtensionType::PreSharedKey)
+                && order.last() != Some(&ExtensionType::PreSharedKey)
+            {
+                return Err(crate::Error::General(
+                    "invalid ClientHello extension order (psk must be last)".into(),
+                ));
+            }
+
+            // Reorder extensions to match `order`.
+            let mut reordered = Vec::with_capacity(self.inner.extensions.len());
+            for want in order.drain(..) {
+                let pos = self
+                    .inner
+                    .extensions
+                    .iter()
+                    .position(|e| e.get_type() == want)
+                    .expect("validated set match above");
+                reordered.push(self.inner.extensions.remove(pos));
+            }
+            debug_assert!(self.inner.extensions.is_empty());
+            self.inner.extensions = reordered;
+
+            Ok(())
+        }
+    }
+
+    /// Hook for customizing the encoded ClientHello without replacing rustls' record layer,
+    /// key schedule, or certificate verification.
+    pub trait ClientHelloCustomizer: fmt::Debug + Send + Sync {
+        /// Customize the ClientHello immediately before it is encoded and sent.
+        fn customize_client_hello(
+            &self,
+            ctx: ClientHelloContext<'_>,
+            hello: &mut ClientHello<'_>,
+        ) -> Result<(), crate::Error>;
+    }
 }
 
 pub use client::{ClientConfig, ClientConnection, ServerName};

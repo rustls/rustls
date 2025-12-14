@@ -142,7 +142,7 @@ pub(super) fn start_handshake(
     };
 
     let may_send_sct_list = config.verifier.request_scts();
-    Ok(emit_client_hello_for_retry(
+    emit_client_hello_for_retry(
         transcript_buffer,
         None,
         key_share,
@@ -161,7 +161,7 @@ pub(super) fn start_handshake(
             server_name,
         },
         cx,
-    ))
+    )
 }
 
 struct ExpectServerHello {
@@ -198,7 +198,7 @@ fn emit_client_hello_for_retry(
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
-) -> NextState {
+) -> NextStateOrError {
     let config = &input.config;
     let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !cx.common.is_quic();
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
@@ -275,12 +275,6 @@ fn emit_client_hello_for_retry(
     // Do we have a SessionID or ticket cached for this host?
     let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
 
-    // Note what extensions we sent.
-    input.hello.sent_extensions = exts
-        .iter()
-        .map(ClientExtension::get_type)
-        .collect();
-
     let mut cipher_suites: Vec<_> = config
         .cipher_suites
         .iter()
@@ -289,16 +283,34 @@ fn emit_client_hello_for_retry(
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
+    let mut hello_payload = ClientHelloPayload {
+        client_version: ProtocolVersion::TLSv1_2,
+        random: input.random,
+        session_id: input.session_id,
+        cipher_suites,
+        compression_methods: vec![Compression::Null],
+        extensions: exts,
+    };
+
+    if let Some(customizer) = &config.client_hello_customizer {
+        let ctx = crate::client::ClientHelloContext {
+            server_name: &input.server_name,
+            is_retry: retryreq.is_some(),
+        };
+        let mut hello = crate::client::ClientHello::new(&mut hello_payload);
+        customizer.customize_client_hello(ctx, &mut hello)?;
+    }
+
+    // Note what extensions we sent (in encoding order).
+    input.hello.sent_extensions = hello_payload
+        .extensions
+        .iter()
+        .map(ClientExtension::get_type)
+        .collect();
+
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
-        payload: HandshakePayload::ClientHello(ClientHelloPayload {
-            client_version: ProtocolVersion::TLSv1_2,
-            random: input.random,
-            session_id: input.session_id,
-            cipher_suites,
-            compression_methods: vec![Compression::Null],
-            extensions: exts,
-        }),
+        payload: HandshakePayload::ClientHello(hello_payload),
     };
 
     let early_key_schedule = if let Some(resuming) = tls13_session {
@@ -357,11 +369,11 @@ fn emit_client_hello_for_retry(
         suite,
     };
 
-    if support_tls13 && retryreq.is_none() {
+    Ok(if support_tls13 && retryreq.is_none() {
         Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
     } else {
         Box::new(next)
-    }
+    })
 }
 
 /// Prepare resumption with the session state retrieved from storage.
@@ -841,7 +853,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             _ => offered_key_share,
         };
 
-        Ok(emit_client_hello_for_retry(
+        emit_client_hello_for_retry(
             transcript_buffer,
             Some(hrr),
             Some(key_share),
@@ -850,7 +862,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             Some(cs),
             self.next.input,
             cx,
-        ))
+        )
     }
 }
 

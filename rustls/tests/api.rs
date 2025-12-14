@@ -4001,6 +4001,79 @@ fn test_client_does_not_offer_sha1() {
 }
 
 #[test]
+fn test_client_hello_extension_order_can_be_overridden() {
+    use rustls::client::{ClientHello, ClientHelloContext, ClientHelloCustomizer, ExtensionType};
+    use rustls::internal::msgs::{
+        codec::Reader, handshake::HandshakePayload, message::MessagePayload, message::OpaqueMessage,
+    };
+    use rustls::HandshakeType;
+
+    #[derive(Debug)]
+    struct FixedOrder {
+        order: Vec<ExtensionType>,
+    }
+
+    impl ClientHelloCustomizer for FixedOrder {
+        fn customize_client_hello(
+            &self,
+            _ctx: ClientHelloContext<'_>,
+            hello: &mut ClientHello<'_>,
+        ) -> Result<(), rustls::Error> {
+            hello.set_extension_encoding_order(self.order.clone())
+        }
+    }
+
+    fn client_hello_extension_order_for_config(cfg: rustls::ClientConfig) -> Vec<ExtensionType> {
+        let (mut client, _) = make_pair_for_configs(cfg, make_server_config(KeyType::Rsa));
+        assert!(client.wants_write());
+
+        let mut buf = [0u8; 262144];
+        let sz = client.write_tls(&mut buf.as_mut()).unwrap();
+        let msg = OpaqueMessage::read(&mut Reader::init(&buf[..sz])).unwrap();
+        let msg = Message::try_from(msg.into_plain_message()).unwrap();
+        assert!(msg.is_handshake_type(HandshakeType::ClientHello));
+
+        let client_hello = match msg.payload {
+            MessagePayload::Handshake { parsed, .. } => match parsed.payload {
+                HandshakePayload::ClientHello(ch) => ch,
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        };
+
+        client_hello
+            .extensions
+            .iter()
+            .map(|e| e.get_type())
+            .collect()
+    }
+
+    for kt in ALL_KEY_TYPES.iter() {
+        let base_cfg = make_client_config_with_versions(*kt, &[&rustls::version::TLS13]);
+        let base_order = client_hello_extension_order_for_config(base_cfg);
+
+        let mut desired = base_order.clone();
+        desired.sort_by_key(|e| e.get_u16());
+        desired.reverse();
+
+        // If PSK is present, it must remain last.
+        if let Some(pos) = desired
+            .iter()
+            .position(|e| *e == ExtensionType::PreSharedKey)
+        {
+            let psk = desired.remove(pos);
+            desired.push(psk);
+        }
+
+        let cfg = make_client_config_with_versions(*kt, &[&rustls::version::TLS13])
+            .with_client_hello_customizer(Arc::new(FixedOrder { order: desired.clone() }));
+
+        let actual = client_hello_extension_order_for_config(cfg);
+        assert_eq!(actual, desired);
+    }
+}
+
+#[test]
 fn test_client_config_keyshare() {
     let client_config =
         make_client_config_with_kx_groups(KeyType::Rsa, &[&rustls::kx_group::SECP384R1]);
