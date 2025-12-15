@@ -1068,7 +1068,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                         if version_is_tls13
                             && !self
                                 .common_state
-                                .record_layer
+                                .decrypt_state
                                 .has_decrypted()
                             && message.payload.len() <= 2 =>
                     {
@@ -1084,7 +1084,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
                 let message = match self
                     .common_state
-                    .record_layer
+                    .decrypt_state
                     .decrypt_incoming(message)
                 {
                     // failed decryption during trial decryption is not allowed to be
@@ -1164,7 +1164,7 @@ impl<Side: SideData> ConnectionCore<Side> {
             if self.hs_deframer.has_message_ready() {
                 // trial decryption finishes with the first handshake message after it started.
                 self.common_state
-                    .record_layer
+                    .decrypt_state
                     .finish_trial_decryption();
 
                 return Ok(self.take_handshake_message(buffer, buffer_progress));
@@ -1195,12 +1195,19 @@ impl<Side: SideData> ConnectionCore<Side> {
 
         let state = self.state?;
 
-        let record_layer = &self.common_state.record_layer;
+        let read_seq = self
+            .common_state
+            .decrypt_state
+            .read_seq();
+        let write_seq = self
+            .common_state
+            .encrypt_state
+            .write_seq();
 
         let (secrets, state) = state.into_external_state()?;
         let secrets = ExtractedSecrets {
-            tx: (record_layer.write_seq(), secrets.tx),
-            rx: (record_layer.read_seq(), secrets.rx),
+            tx: (write_seq, secrets.tx),
+            rx: (read_seq, secrets.rx),
         };
         let external = KernelConnection::new(state, self.common_state)?;
 

@@ -855,7 +855,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
 
         let (dec, enc) = secrets.make_cipher_pair(Side::Client);
         cx.common
-            .record_layer
+            .encrypt_state
             .set_message_encrypter(
                 enc,
                 secrets
@@ -978,7 +978,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 
         // Note: msgs layer validates trivial contents of CCS.
         cx.common
-            .record_layer
+            .decrypt_state
             .set_message_decrypter(self.pending_decrypter, &proof);
 
         Ok(Box::new(ExpectFinished {
@@ -1087,7 +1087,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         if let Some((_, encrypter)) = st.resuming.take() {
             emit_ccs(cx.common);
             cx.common
-                .record_layer
+                .encrypt_state
                 .set_message_encrypter(
                     encrypter,
                     st.secrets

@@ -15,7 +15,7 @@ pub use messages::{
 };
 
 mod record_layer;
-pub(crate) use record_layer::{Decrypted, PreEncryptAction, RecordLayer};
+pub(crate) use record_layer::{Decrypted, DecryptionState, EncryptionState, PreEncryptAction};
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
