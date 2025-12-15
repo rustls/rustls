@@ -870,7 +870,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         let (dec, enc) = secrets.make_cipher_pair(Side::Client);
         cx.common
             .record_layer
-            .prepare_message_encrypter(
+            .set_message_encrypter(
                 enc,
                 secrets
                     .suite()
@@ -880,10 +880,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
         cx.common
             .record_layer
             .prepare_message_decrypter(dec);
-
-        cx.common
-            .record_layer
-            .start_encrypting();
 
         // 5.
         emit_finished(&secrets, &mut transcript, cx.common, &proof);
