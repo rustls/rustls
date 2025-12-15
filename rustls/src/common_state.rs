@@ -6,7 +6,8 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    EncodedMessage, OutboundOpaque, OutboundPlain, Payload, PreEncryptAction, RecordLayer,
+    DecryptionState, EncodedMessage, EncryptionState, OutboundOpaque, OutboundPlain, Payload,
+    PreEncryptAction,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -30,7 +31,8 @@ pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
     pub(crate) handshake_kind: Option<HandshakeKind>,
     pub(crate) side: Side,
-    pub(crate) record_layer: RecordLayer,
+    pub(crate) decrypt_state: DecryptionState,
+    pub(crate) encrypt_state: EncryptionState,
     pub(crate) suite: Option<SupportedCipherSuite>,
     pub(crate) negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
     pub(crate) alpn_protocol: Option<ProtocolName>,
@@ -68,7 +70,8 @@ impl CommonState {
             negotiated_version: None,
             handshake_kind: None,
             side,
-            record_layer: RecordLayer::new(),
+            decrypt_state: DecryptionState::new(),
+            encrypt_state: EncryptionState::new(),
             suite: None,
             negotiated_kx_group: None,
             alpn_protocol: None,
@@ -248,7 +251,7 @@ impl CommonState {
         };
         debug_assert!(!self.sent_fatal_alert);
         let m = Message::build_alert(AlertLevel::Fatal, alert);
-        self.send_msg(m, self.record_layer.is_encrypting());
+        self.send_msg(m, self.encrypt_state.is_encrypting());
         self.sent_fatal_alert = true;
     }
 
@@ -271,7 +274,7 @@ impl CommonState {
 
         for f in 0..fragments.len() {
             match self
-                .record_layer
+                .encrypt_state
                 .pre_encrypt_action(f as u64)
             {
                 PreEncryptAction::Nothing => {}
@@ -321,7 +324,7 @@ impl CommonState {
     #[cfg(feature = "std")]
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.early_traffic);
-        debug_assert!(self.record_layer.is_encrypting());
+        debug_assert!(self.encrypt_state.is_encrypting());
 
         // Limit on `sendable_tls` should apply to encrypted data but is enforced
         // for plaintext data instead which does not include cipher+record overhead.
@@ -367,13 +370,13 @@ impl CommonState {
     fn send_single_fragment(&mut self, m: EncodedMessage<OutboundPlain<'_>>) {
         if m.typ == ContentType::Alert {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            let em = self.record_layer.encrypt_outgoing(m);
+            let em = self.encrypt_state.encrypt_outgoing(m);
             self.queue_tls_message(em);
             return;
         }
 
         match self
-            .record_layer
+            .encrypt_state
             .next_pre_encrypt_action()
         {
             PreEncryptAction::Nothing => {}
@@ -403,7 +406,7 @@ impl CommonState {
             }
         };
 
-        let em = self.record_layer.encrypt_outgoing(m);
+        let em = self.encrypt_state.encrypt_outgoing(m);
         self.queue_tls_message(em);
     }
 
@@ -435,7 +438,7 @@ impl CommonState {
             return 0;
         }
 
-        debug_assert!(self.record_layer.is_encrypting());
+        debug_assert!(self.encrypt_state.is_encrypting());
         self.send_appdata_encrypt(payload.split_at(len).0)
     }
 
@@ -454,7 +457,7 @@ impl CommonState {
     /// Mark the connection as ready to send application data.
     pub(crate) fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
-        debug_assert!(self.record_layer.is_encrypting());
+        debug_assert!(self.encrypt_state.is_encrypting());
     }
 
     // Put m into sendable_tls for writing.
@@ -569,7 +572,7 @@ impl CommonState {
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
         let m = Message::build_alert(AlertLevel::Warning, desc);
-        self.send_msg(m, self.record_layer.is_encrypting());
+        self.send_msg(m, self.encrypt_state.is_encrypting());
     }
 
     fn check_required_size<'a>(
@@ -580,7 +583,7 @@ impl CommonState {
         let mut required_size = self.sendable_tls.len();
 
         for m in fragments {
-            required_size += m.encoded_len(&self.record_layer);
+            required_size += m.encoded_len(&self.encrypt_state);
         }
 
         if required_size > outgoing_tls.len() {
@@ -609,7 +612,7 @@ impl CommonState {
 
         for m in fragments {
             let em = self
-                .record_layer
+                .encrypt_state
                 .encrypt_outgoing(m)
                 .encode();
 
@@ -676,7 +679,7 @@ impl CommonState {
     pub(crate) fn enqueue_key_update_notification(&mut self) {
         let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
         self.queued_key_update_message = Some(
-            self.record_layer
+            self.encrypt_state
                 .encrypt_outgoing(message.borrow_outbound())
                 .encode(),
         );

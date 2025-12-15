@@ -346,7 +346,7 @@ impl KeyScheduleHandshake {
                 .ks
                 .set_decrypter(secret, common, proof),
             Some(max_early_data_size) => common
-                .record_layer
+                .decrypt_state
                 .set_message_decrypter_with_trial_decryption(
                     self.ks
                         .derive_decrypter(&self.client_handshake_traffic_secret),
@@ -839,7 +839,7 @@ impl KeyScheduleSuite {
         let iv = derive_traffic_iv(expander.as_ref(), self.suite.aead_alg.iv_len());
 
         common
-            .record_layer
+            .encrypt_state
             .set_message_encrypter(
                 self.suite.aead_alg.encrypter(key, iv),
                 self.suite.common.confidentiality_limit,
@@ -853,7 +853,7 @@ impl KeyScheduleSuite {
         proof: &HandshakeAlignedProof,
     ) {
         common
-            .record_layer
+            .decrypt_state
             .set_message_decrypter(self.derive_decrypter(secret), proof);
     }
 

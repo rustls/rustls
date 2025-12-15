@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
 
-use crate::crypto::cipher::RecordLayer;
+use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::base::hex;
@@ -157,7 +157,7 @@ impl EncodedMessage<OutboundPlain<'_>> {
         }
     }
 
-    pub(crate) fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
+    pub(crate) fn encoded_len(&self, record_layer: &EncryptionState) -> usize {
         HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
     }
 }

@@ -310,7 +310,7 @@ mod client_hello {
 
         let (dec, enc) = secrets.make_cipher_pair(Side::Server);
         cx.common
-            .record_layer
+            .encrypt_state
             .set_message_encrypter(
                 enc,
                 secrets
@@ -682,7 +682,7 @@ impl State<ServerConnectionData> for ExpectCcs {
         };
 
         cx.common
-            .record_layer
+            .decrypt_state
             .set_message_decrypter(dec, &proof);
 
         Ok(Box::new(ExpectFinished {
@@ -865,7 +865,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             }
             emit_ccs(cx.common);
             cx.common
-                .record_layer
+                .encrypt_state
                 .set_message_encrypter(
                     pending_encrypter,
                     self.secrets
