@@ -160,8 +160,20 @@ mod server_hello {
                         &secrets.randoms.client,
                         secrets.master_secret(),
                     );
+
+                    let (dec, enc) = secrets.make_cipher_pair(Side::Client);
                     cx.common
-                        .start_encryption_tls12(&secrets, Side::Client);
+                        .record_layer
+                        .prepare_message_encrypter(
+                            enc,
+                            secrets
+                                .suite()
+                                .common
+                                .confidentiality_limit,
+                        );
+                    cx.common
+                        .record_layer
+                        .prepare_message_decrypter(dec);
 
                     cx.common.handshake_kind = Some(HandshakeKind::Resumed);
                     let cert_verified = verify::PeerVerified::assertion();
@@ -854,8 +866,21 @@ impl State<ClientConnectionData> for ExpectServerDone {
             &secrets.randoms.client,
             secrets.master_secret(),
         );
+
+        let (dec, enc) = secrets.make_cipher_pair(Side::Client);
         cx.common
-            .start_encryption_tls12(&secrets, Side::Client);
+            .record_layer
+            .prepare_message_encrypter(
+                enc,
+                secrets
+                    .suite()
+                    .common
+                    .confidentiality_limit,
+            );
+        cx.common
+            .record_layer
+            .prepare_message_decrypter(dec);
+
         cx.common
             .record_layer
             .start_encrypting();
