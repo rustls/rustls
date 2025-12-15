@@ -14,9 +14,6 @@ enum DirectionState {
     /// No keying material.
     Invalid,
 
-    /// Keying material present, but not yet in use.
-    Prepared,
-
     /// Keying material in use.
     Active,
 }
@@ -120,37 +117,6 @@ impl RecordLayer {
             .unwrap()
     }
 
-    /// Prepare to use the given `MessageEncrypter` for future message encryption.
-    /// It is not used until you call `start_encrypting`.
-    fn prepare_message_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>, max_messages: u64) {
-        self.message_encrypter = cipher;
-        self.write_seq = 0;
-        self.write_seq_max = min(SEQ_SOFT_LIMIT, max_messages);
-        self.encrypt_state = DirectionState::Prepared;
-    }
-
-    /// Prepare to use the given `MessageDecrypter` for future message decryption.
-    /// It is not used until you call `start_decrypting`.
-    fn prepare_message_decrypter(&mut self, cipher: Box<dyn MessageDecrypter>) {
-        self.message_decrypter = cipher;
-        self.read_seq = 0;
-        self.decrypt_state = DirectionState::Prepared;
-    }
-
-    /// Start using the `MessageEncrypter` previously provided to the previous
-    /// call to `prepare_message_encrypter`.
-    fn start_encrypting(&mut self) {
-        debug_assert!(self.encrypt_state == DirectionState::Prepared);
-        self.encrypt_state = DirectionState::Active;
-    }
-
-    /// Start using the `MessageDecrypter` previously provided to the previous
-    /// call to `prepare_message_decrypter`.
-    fn start_decrypting(&mut self, _proof: &HandshakeAlignedProof) {
-        debug_assert!(self.decrypt_state == DirectionState::Prepared);
-        self.decrypt_state = DirectionState::Active;
-    }
-
     /// Set and start using the given `MessageEncrypter` for future outgoing
     /// message encryption.
     pub(crate) fn set_message_encrypter(
@@ -158,8 +124,10 @@ impl RecordLayer {
         cipher: Box<dyn MessageEncrypter>,
         max_messages: u64,
     ) {
-        self.prepare_message_encrypter(cipher, max_messages);
-        self.start_encrypting();
+        self.message_encrypter = cipher;
+        self.write_seq = 0;
+        self.write_seq_max = min(SEQ_SOFT_LIMIT, max_messages);
+        self.encrypt_state = DirectionState::Active;
     }
 
     /// Set and start using the given `MessageDecrypter` for future incoming
@@ -167,10 +135,11 @@ impl RecordLayer {
     pub(crate) fn set_message_decrypter(
         &mut self,
         cipher: Box<dyn MessageDecrypter>,
-        proof: &HandshakeAlignedProof,
+        _proof: &HandshakeAlignedProof,
     ) {
-        self.prepare_message_decrypter(cipher);
-        self.start_decrypting(proof);
+        self.message_decrypter = cipher;
+        self.read_seq = 0;
+        self.decrypt_state = DirectionState::Active;
         self.trial_decryption_len = None;
     }
 
@@ -181,10 +150,11 @@ impl RecordLayer {
         &mut self,
         cipher: Box<dyn MessageDecrypter>,
         max_length: usize,
-        proof: &HandshakeAlignedProof,
+        _proof: &HandshakeAlignedProof,
     ) {
-        self.prepare_message_decrypter(cipher);
-        self.start_decrypting(proof);
+        self.message_decrypter = cipher;
+        self.read_seq = 0;
+        self.decrypt_state = DirectionState::Active;
         self.trial_decryption_len = Some(max_length);
     }
 
