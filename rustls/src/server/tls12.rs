@@ -288,8 +288,21 @@ mod client_hello {
             &secrets.randoms.client,
             secrets.master_secret(),
         );
+
+        let (dec, enc) = secrets.make_cipher_pair(Side::Server);
         cx.common
-            .start_encryption_tls12(&secrets, Side::Server);
+            .record_layer
+            .prepare_message_encrypter(
+                enc,
+                secrets
+                    .suite()
+                    .common
+                    .confidentiality_limit,
+            );
+        cx.common
+            .record_layer
+            .prepare_message_decrypter(dec);
+
         cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
         if send_ticket {
@@ -552,8 +565,19 @@ impl State<ServerConnectionData> for ExpectClientKx {
             &secrets.randoms.client,
             secrets.master_secret(),
         );
+        let (dec, enc) = secrets.make_cipher_pair(Side::Server);
         cx.common
-            .start_encryption_tls12(&secrets, Side::Server);
+            .record_layer
+            .prepare_message_encrypter(
+                enc,
+                secrets
+                    .suite()
+                    .common
+                    .confidentiality_limit,
+            );
+        cx.common
+            .record_layer
+            .prepare_message_decrypter(dec);
 
         match self.peer_identity {
             Some(peer_identity) => Ok(Box::new(ExpectCertificateVerify {

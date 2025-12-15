@@ -22,7 +22,6 @@ use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
-use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -505,20 +504,6 @@ impl CommonState {
         } else {
             self.send_msg_encrypt(m.into());
         }
-    }
-
-    pub(crate) fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets, side: Side) {
-        let (dec, enc) = secrets.make_cipher_pair(side);
-        self.record_layer
-            .prepare_message_encrypter(
-                enc,
-                secrets
-                    .suite()
-                    .common
-                    .confidentiality_limit,
-            );
-        self.record_layer
-            .prepare_message_decrypter(dec);
     }
 
     pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
