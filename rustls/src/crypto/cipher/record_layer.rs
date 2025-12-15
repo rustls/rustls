@@ -51,9 +51,11 @@ impl EncryptionState {
         cipher: Box<dyn MessageEncrypter>,
         max_messages: u64,
     ) {
-        self.message_encrypter = Some(cipher);
-        self.write_seq = 0;
-        self.write_seq_max = min(SEQ_SOFT_LIMIT, max_messages);
+        *self = Self {
+            message_encrypter: Some(cipher),
+            write_seq_max: min(SEQ_SOFT_LIMIT, max_messages),
+            write_seq: 0,
+        };
     }
 
     pub(crate) fn next_pre_encrypt_action(&self) -> PreEncryptAction {
