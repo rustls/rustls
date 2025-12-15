@@ -13,7 +13,7 @@ use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
@@ -289,11 +289,6 @@ mod client_hello {
             secrets.master_secret(),
         );
 
-        let (dec, enc) = secrets.make_cipher_pair(Side::Server);
-        cx.common
-            .record_layer
-            .prepare_message_decrypter(dec);
-
         cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
         if send_ticket {
@@ -312,6 +307,8 @@ mod client_hello {
             }
         }
         emit_ccs(cx.common);
+
+        let (dec, enc) = secrets.make_cipher_pair(Side::Server);
         cx.common
             .record_layer
             .set_message_encrypter(
@@ -330,7 +327,7 @@ mod client_hello {
             session_id,
             peer_identity: resumedata.common.peer_identity,
             using_ems,
-            resuming: true,
+            resuming_decrypter: Some(dec),
             send_ticket,
         }))
     }
@@ -562,19 +559,6 @@ impl State<ServerConnectionData> for ExpectClientKx {
             &secrets.randoms.client,
             secrets.master_secret(),
         );
-        let (dec, enc) = secrets.make_cipher_pair(Side::Server);
-        cx.common
-            .record_layer
-            .prepare_message_encrypter(
-                enc,
-                secrets
-                    .suite()
-                    .common
-                    .confidentiality_limit,
-            );
-        cx.common
-            .record_layer
-            .prepare_message_decrypter(dec);
 
         match self.peer_identity {
             Some(peer_identity) => Ok(Box::new(ExpectCertificateVerify {
@@ -593,7 +577,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 session_id: self.session_id,
                 peer_identity: None,
                 using_ems: self.using_ems,
-                resuming: false,
+                resuming_decrypter: None,
                 send_ticket: self.send_ticket,
             })),
         }
@@ -653,7 +637,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             session_id: self.session_id,
             peer_identity: Some(self.peer_identity),
             using_ems: self.using_ems,
-            resuming: false,
+            resuming_decrypter: None,
             send_ticket: self.send_ticket,
         }))
     }
@@ -667,7 +651,7 @@ struct ExpectCcs {
     session_id: SessionId,
     peer_identity: Option<Identity<'static>>,
     using_ems: bool,
-    resuming: bool,
+    resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
     send_ticket: bool,
 }
 
@@ -687,9 +671,20 @@ impl State<ServerConnectionData> for ExpectCcs {
         // message.
         let proof = cx.common.check_aligned_handshake()?;
 
+        let (dec, pending_encrypter) = match self.resuming_decrypter {
+            Some(dec) => (dec, None),
+            None => {
+                let (dec, enc) = self
+                    .secrets
+                    .make_cipher_pair(Side::Server);
+                (dec, Some(enc))
+            }
+        };
+
         cx.common
             .record_layer
-            .start_decrypting(&proof);
+            .set_message_decrypter(dec, &proof);
+
         Ok(Box::new(ExpectFinished {
             config: self.config,
             secrets: self.secrets,
@@ -697,8 +692,9 @@ impl State<ServerConnectionData> for ExpectCcs {
             session_id: self.session_id,
             peer_identity: self.peer_identity,
             using_ems: self.using_ems,
-            resuming: self.resuming,
+            resuming: pending_encrypter.is_none(),
             send_ticket: self.send_ticket,
+            pending_encrypter,
         }))
     }
 }
@@ -799,6 +795,7 @@ struct ExpectFinished {
     using_ems: bool,
     resuming: bool,
     send_ticket: bool,
+    pending_encrypter: Option<Box<dyn MessageEncrypter>>,
 }
 
 impl State<ServerConnectionData> for ExpectFinished {
@@ -850,7 +847,8 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         // Send our CCS and Finished.
         self.transcript.add_message(&m);
-        if !self.resuming {
+        if let Some(pending_encrypter) = self.pending_encrypter {
+            assert!(!self.resuming);
             if self.send_ticket {
                 let now = self.config.current_time()?;
                 if let Some(ticketer) = self.config.ticketer.as_deref() {
@@ -868,7 +866,13 @@ impl State<ServerConnectionData> for ExpectFinished {
             emit_ccs(cx.common);
             cx.common
                 .record_layer
-                .start_encrypting();
+                .set_message_encrypter(
+                    pending_encrypter,
+                    self.secrets
+                        .suite()
+                        .common
+                        .confidentiality_limit,
+                );
             emit_finished(&self.secrets, &mut self.transcript, cx.common, &proof);
         }
 

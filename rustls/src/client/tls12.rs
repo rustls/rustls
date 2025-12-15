@@ -16,7 +16,7 @@ use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{CommonState, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{Identity, Signer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
@@ -162,19 +162,6 @@ mod server_hello {
                     );
 
                     let (dec, enc) = secrets.make_cipher_pair(Side::Client);
-                    cx.common
-                        .record_layer
-                        .prepare_message_encrypter(
-                            enc,
-                            secrets
-                                .suite()
-                                .common
-                                .confidentiality_limit,
-                        );
-                    cx.common
-                        .record_layer
-                        .prepare_message_decrypter(dec);
-
                     cx.common.handshake_kind = Some(HandshakeKind::Resumed);
                     let cert_verified = verify::PeerVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
@@ -186,10 +173,11 @@ mod server_hello {
                             // Since we're resuming, we verified the certificate and
                             // proof of possession in the prior session.
                             peer_identity: resuming.peer_identity().clone(),
-                            resuming_session: Some(resuming),
+                            resuming: Some((resuming, enc)),
                             session_id: server_hello.session_id,
                             session_key,
                             using_ems,
+                            pending_decrypter: dec,
                             transcript,
                             cert_verified,
                             sig_verified,
@@ -199,10 +187,11 @@ mod server_hello {
                             config,
                             secrets,
                             peer_identity: resuming.peer_identity().clone(),
-                            resuming_session: Some(resuming),
+                            resuming: Some((resuming, enc)),
                             session_id: server_hello.session_id,
                             session_key,
                             using_ems,
+                            pending_decrypter: dec,
                             transcript,
                             ticket: None,
                             cert_verified,
@@ -874,9 +863,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
                     .common
                     .confidentiality_limit,
             );
-        cx.common
-            .record_layer
-            .prepare_message_decrypter(dec);
 
         // 5.
         emit_finished(&secrets, &mut transcript, cx.common, &proof);
@@ -886,10 +872,11 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 config: st.config,
                 secrets,
                 peer_identity: identity,
-                resuming_session: None,
+                resuming: None,
                 session_id: st.session_id,
                 session_key: st.session_key,
                 using_ems: st.using_ems,
+                pending_decrypter: dec,
                 transcript,
                 cert_verified,
                 sig_verified,
@@ -899,10 +886,11 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 config: st.config,
                 secrets,
                 peer_identity: identity,
-                resuming_session: None,
+                resuming: None,
                 session_id: st.session_id,
                 session_key: st.session_key,
                 using_ems: st.using_ems,
+                pending_decrypter: dec,
                 transcript,
                 ticket: None,
                 cert_verified,
@@ -916,10 +904,11 @@ struct ExpectNewTicket {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     peer_identity: Identity<'static>,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
+    resuming: Option<(persist::Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
+    pending_decrypter: Box<dyn MessageDecrypter>,
     transcript: HandshakeHash,
     cert_verified: verify::PeerVerified,
     sig_verified: verify::HandshakeSignatureValid,
@@ -942,11 +931,12 @@ impl State<ClientConnectionData> for ExpectNewTicket {
         Ok(Box::new(ExpectCcs {
             config: self.config,
             secrets: self.secrets,
-            resuming_session: self.resuming_session,
+            resuming: self.resuming,
             session_id: self.session_id,
             session_key: self.session_key,
             peer_identity: self.peer_identity,
             using_ems: self.using_ems,
+            pending_decrypter: self.pending_decrypter,
             transcript: self.transcript,
             ticket: Some(nst),
             cert_verified: self.cert_verified,
@@ -960,10 +950,11 @@ struct ExpectCcs {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     peer_identity: Identity<'static>,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
+    resuming: Option<(persist::Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
+    pending_decrypter: Box<dyn MessageDecrypter>,
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
     cert_verified: verify::PeerVerified,
@@ -988,12 +979,12 @@ impl State<ClientConnectionData> for ExpectCcs {
         // Note: msgs layer validates trivial contents of CCS.
         cx.common
             .record_layer
-            .start_decrypting(&proof);
+            .set_message_decrypter(self.pending_decrypter, &proof);
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
             peer_identity: self.peer_identity,
-            resuming_session: self.resuming_session,
+            resuming: self.resuming,
             session_id: self.session_id,
             session_key: self.session_key,
             using_ems: self.using_ems,
@@ -1009,7 +1000,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 struct ExpectFinished {
     config: Arc<ClientConfig>,
     peer_identity: Identity<'static>,
-    resuming_session: Option<persist::Tls12ClientSessionValue>,
+    resuming: Option<(persist::Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
@@ -1031,7 +1022,7 @@ impl ExpectFinished {
         };
 
         if ticket.0.is_empty() {
-            if let Some(resuming_session) = &mut self.resuming_session {
+            if let Some((resuming_session, _)) = &mut self.resuming {
                 ticket = resuming_session.ticket();
             }
         }
@@ -1093,11 +1084,17 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         st.save_session();
 
-        if st.resuming_session.is_some() {
+        if let Some((_, encrypter)) = st.resuming.take() {
             emit_ccs(cx.common);
             cx.common
                 .record_layer
-                .start_encrypting();
+                .set_message_encrypter(
+                    encrypter,
+                    st.secrets
+                        .suite()
+                        .common
+                        .confidentiality_limit,
+                );
             emit_finished(&st.secrets, &mut st.transcript, cx.common, &proof);
         }
 
@@ -1123,7 +1120,7 @@ impl State<ClientConnectionData> for ExpectFinished {
     // this might mean that the ticket was invalid for some reason, so we remove it
     // from the store to restart a session from scratch
     fn handle_decrypt_error(&self) {
-        if self.resuming_session.is_some() {
+        if self.resuming.is_some() {
             self.config
                 .resumption
                 .store
