@@ -9,25 +9,14 @@ use crate::error::Error;
 use crate::log::trace;
 use crate::msgs::deframer::HandshakeAlignedProof;
 
-#[derive(PartialEq)]
-enum DirectionState {
-    /// No keying material.
-    Invalid,
-
-    /// Keying material in use.
-    Active,
-}
-
 /// Record layer that tracks decryption and encryption keys.
 pub(crate) struct RecordLayer {
-    message_encrypter: Box<dyn MessageEncrypter>,
-    message_decrypter: Box<dyn MessageDecrypter>,
+    message_encrypter: Option<Box<dyn MessageEncrypter>>,
+    message_decrypter: Option<Box<dyn MessageDecrypter>>,
     write_seq_max: u64,
     write_seq: u64,
     read_seq: u64,
     has_decrypted: bool,
-    encrypt_state: DirectionState,
-    decrypt_state: DirectionState,
 
     // Message encrypted with other keys may be encountered, so failures
     // should be swallowed by the caller.  This struct tracks the amount
@@ -39,14 +28,12 @@ impl RecordLayer {
     /// Create new record layer with no keys.
     pub(crate) fn new() -> Self {
         Self {
-            message_encrypter: <dyn MessageEncrypter>::invalid(),
-            message_decrypter: <dyn MessageDecrypter>::invalid(),
+            message_encrypter: None,
+            message_decrypter: None,
             write_seq_max: 0,
             write_seq: 0,
             read_seq: 0,
             has_decrypted: false,
-            encrypt_state: DirectionState::Invalid,
-            decrypt_state: DirectionState::Invalid,
             trial_decryption_len: None,
         }
     }
@@ -60,12 +47,12 @@ impl RecordLayer {
         &mut self,
         encr: EncodedMessage<InboundOpaque<'a>>,
     ) -> Result<Option<Decrypted<'a>>, Error> {
-        if self.decrypt_state != DirectionState::Active {
+        let Some(decrypter) = &mut self.message_decrypter else {
             return Ok(Some(Decrypted {
                 want_close_before_decrypt: false,
                 plaintext: encr.into_plain_message(),
             }));
-        }
+        };
 
         // Set to `true` if the peer appears to getting close to encrypting
         // too many messages with this key.
@@ -78,10 +65,7 @@ impl RecordLayer {
         let want_close_before_decrypt = self.read_seq == SEQ_SOFT_LIMIT;
 
         let encrypted_len = encr.payload.len();
-        match self
-            .message_decrypter
-            .decrypt(encr, self.read_seq)
-        {
+        match decrypter.decrypt(encr, self.read_seq) {
             Ok(plaintext) => {
                 self.read_seq += 1;
                 if !self.has_decrypted {
@@ -108,11 +92,12 @@ impl RecordLayer {
         &mut self,
         plain: EncodedMessage<OutboundPlain<'_>>,
     ) -> EncodedMessage<OutboundOpaque> {
-        debug_assert!(self.encrypt_state == DirectionState::Active);
         assert!(self.next_pre_encrypt_action() != PreEncryptAction::Refuse);
         let seq = self.write_seq;
         self.write_seq += 1;
         self.message_encrypter
+            .as_mut()
+            .unwrap()
             .encrypt(plain, seq)
             .unwrap()
     }
@@ -124,10 +109,9 @@ impl RecordLayer {
         cipher: Box<dyn MessageEncrypter>,
         max_messages: u64,
     ) {
-        self.message_encrypter = cipher;
+        self.message_encrypter = Some(cipher);
         self.write_seq = 0;
         self.write_seq_max = min(SEQ_SOFT_LIMIT, max_messages);
-        self.encrypt_state = DirectionState::Active;
     }
 
     /// Set and start using the given `MessageDecrypter` for future incoming
@@ -137,9 +121,8 @@ impl RecordLayer {
         cipher: Box<dyn MessageDecrypter>,
         _proof: &HandshakeAlignedProof,
     ) {
-        self.message_decrypter = cipher;
+        self.message_decrypter = Some(cipher);
         self.read_seq = 0;
-        self.decrypt_state = DirectionState::Active;
         self.trial_decryption_len = None;
     }
 
@@ -152,9 +135,8 @@ impl RecordLayer {
         max_length: usize,
         _proof: &HandshakeAlignedProof,
     ) {
-        self.message_decrypter = cipher;
+        self.message_decrypter = Some(cipher);
         self.read_seq = 0;
-        self.decrypt_state = DirectionState::Active;
         self.trial_decryption_len = Some(max_length);
     }
 
@@ -179,7 +161,7 @@ impl RecordLayer {
     }
 
     pub(crate) fn is_encrypting(&self) -> bool {
-        self.encrypt_state == DirectionState::Active
+        self.message_encrypter.is_some()
     }
 
     /// Return true if we have ever decrypted a message. This is used in place
@@ -198,7 +180,9 @@ impl RecordLayer {
 
     pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
         self.message_encrypter
-            .encrypted_payload_len(payload_len)
+            .as_ref()
+            .map(|enc| enc.encrypted_payload_len(payload_len))
+            .unwrap_or_default()
     }
 
     fn doing_trial_decryption(&mut self, requested: usize) -> bool {
@@ -264,27 +248,16 @@ mod tests {
 
         // A record layer starts out invalid, having never decrypted.
         let mut record_layer = RecordLayer::new();
-        assert!(matches!(
-            record_layer.decrypt_state,
-            DirectionState::Invalid
-        ));
+        assert!(record_layer.message_decrypter.is_none());
         assert_eq!(record_layer.read_seq, 0);
         assert!(!record_layer.has_decrypted());
 
-        // Preparing the record layer should update the decrypt state, but shouldn't affect whether it
+        // Initializing the record layer should update the decrypt state, but shouldn't affect whether it
         // has decrypted.
-        record_layer.prepare_message_decrypter(Box::new(PassThroughDecrypter));
-        assert!(matches!(
-            record_layer.decrypt_state,
-            DirectionState::Prepared
-        ));
-        assert_eq!(record_layer.read_seq, 0);
-        assert!(!record_layer.has_decrypted());
-
-        // Starting decryption should update the decrypt state, but not affect whether it has decrypted.
         let deframer = HandshakeDeframer::default();
-        record_layer.start_decrypting(&deframer.aligned().unwrap());
-        assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
+        record_layer
+            .set_message_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
+        assert!(record_layer.message_decrypter.is_some());
         assert_eq!(record_layer.read_seq, 0);
         assert!(!record_layer.has_decrypted());
 
@@ -297,7 +270,6 @@ mod tests {
                 InboundOpaque(&mut [0xC0, 0xFF, 0xEE]),
             ))
             .unwrap();
-        assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
         assert_eq!(record_layer.read_seq, 1);
         assert!(record_layer.has_decrypted());
 
@@ -305,7 +277,6 @@ mod tests {
         // the read_seq number, but not our knowledge of whether we have decrypted previously.
         record_layer
             .set_message_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
-        assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
         assert_eq!(record_layer.read_seq, 0);
         assert!(record_layer.has_decrypted());
     }

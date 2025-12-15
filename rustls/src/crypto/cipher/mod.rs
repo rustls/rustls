@@ -170,18 +170,6 @@ pub trait MessageEncrypter: Send + Sync {
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
 }
 
-impl dyn MessageEncrypter {
-    pub(crate) fn invalid() -> Box<dyn MessageEncrypter> {
-        Box::new(InvalidMessageEncrypter {})
-    }
-}
-
-impl dyn MessageDecrypter {
-    pub(crate) fn invalid() -> Box<dyn MessageDecrypter> {
-        Box::new(InvalidMessageDecrypter {})
-    }
-}
-
 /// A write or read IV.
 #[derive(Default, Clone)]
 pub struct Iv {
@@ -404,36 +392,6 @@ impl From<[u8; Self::MAX_LEN]> for AeadKey {
             buf: bytes,
             used: Self::MAX_LEN,
         }
-    }
-}
-
-/// A `MessageEncrypter` which doesn't work.
-struct InvalidMessageEncrypter {}
-
-impl MessageEncrypter for InvalidMessageEncrypter {
-    fn encrypt(
-        &mut self,
-        _m: EncodedMessage<OutboundPlain<'_>>,
-        _seq: u64,
-    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
-        Err(Error::EncryptError)
-    }
-
-    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
-        payload_len
-    }
-}
-
-/// A `MessageDecrypter` which doesn't work.
-struct InvalidMessageDecrypter {}
-
-impl MessageDecrypter for InvalidMessageDecrypter {
-    fn decrypt<'a>(
-        &mut self,
-        _m: EncodedMessage<InboundOpaque<'a>>,
-        _seq: u64,
-    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
-        Err(Error::DecryptError)
     }
 }
 
