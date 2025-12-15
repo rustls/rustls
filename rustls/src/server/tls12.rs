@@ -292,15 +292,6 @@ mod client_hello {
         let (dec, enc) = secrets.make_cipher_pair(Side::Server);
         cx.common
             .record_layer
-            .prepare_message_encrypter(
-                enc,
-                secrets
-                    .suite()
-                    .common
-                    .confidentiality_limit,
-            );
-        cx.common
-            .record_layer
             .prepare_message_decrypter(dec);
 
         cx.common.handshake_kind = Some(HandshakeKind::Resumed);
@@ -323,7 +314,13 @@ mod client_hello {
         emit_ccs(cx.common);
         cx.common
             .record_layer
-            .start_encrypting();
+            .set_message_encrypter(
+                enc,
+                secrets
+                    .suite()
+                    .common
+                    .confidentiality_limit,
+            );
         emit_finished(&secrets, &mut transcript, cx.common, &proof);
 
         Ok(Box::new(ExpectCcs {
