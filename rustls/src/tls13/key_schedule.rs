@@ -393,14 +393,13 @@ impl KeyScheduleHandshake {
             None => self
                 .ks
                 .set_decrypter(secret, common, proof),
-            Some(max_early_data_size) => common
-                .decrypt_state
-                .set_message_decrypter_with_trial_decryption(
-                    self.ks
-                        .derive_decrypter(&self.client_handshake_traffic_secret),
-                    max_early_data_size,
-                    proof,
-                ),
+            Some(max_early_data_size) => common.emit(Event::MessageDecrypterWithTrialDecryption {
+                decrypter: self
+                    .ks
+                    .derive_decrypter(&self.client_handshake_traffic_secret),
+                max_length: max_early_data_size,
+                proof: *proof,
+            }),
         }
     }
 
@@ -917,9 +916,10 @@ impl KeyScheduleSuite {
         common: &mut CommonState,
         proof: &HandshakeAlignedProof,
     ) {
-        common
-            .decrypt_state
-            .set_message_decrypter(self.derive_decrypter(secret), proof);
+        common.emit(Event::MessageDecrypter {
+            decrypter: self.derive_decrypter(secret),
+            proof: *proof,
+        });
     }
 
     fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn MessageDecrypter> {

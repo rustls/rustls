@@ -6,8 +6,8 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    DecryptionState, EncodedMessage, EncryptionState, MessageEncrypter, OutboundOpaque,
-    OutboundPlain, Payload, PreEncryptAction,
+    DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter, MessageEncrypter,
+    OutboundOpaque, OutboundPlain, Payload, PreEncryptAction,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -688,6 +688,16 @@ impl Output for CommonState {
                 assert!(self.negotiated_kx_group.is_none());
                 self.negotiated_kx_group = Some(kxg);
             }
+            Event::MessageDecrypter { decrypter, proof } => self
+                .decrypt_state
+                .set_message_decrypter(decrypter, &proof),
+            Event::MessageDecrypterWithTrialDecryption {
+                decrypter,
+                max_length,
+                proof,
+            } => self
+                .decrypt_state
+                .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
             Event::MessageEncrypter { encrypter, limit } => self
                 .encrypt_state
                 .set_message_encrypter(encrypter, limit),
@@ -859,6 +869,15 @@ pub(crate) enum Event<'a> {
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
+    MessageDecrypter {
+        decrypter: Box<dyn MessageDecrypter>,
+        proof: HandshakeAlignedProof,
+    },
+    MessageDecrypterWithTrialDecryption {
+        decrypter: Box<dyn MessageDecrypter>,
+        max_length: usize,
+        proof: HandshakeAlignedProof,
+    },
     MessageEncrypter {
         encrypter: Box<dyn MessageEncrypter>,
         limit: u64,

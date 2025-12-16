@@ -685,7 +685,7 @@ impl State<ServerConnectionData> for ExpectCcs {
         // message.
         let proof = input.check_aligned_handshake()?;
 
-        let (dec, pending_encrypter) = match self.resuming_decrypter {
+        let (decrypter, pending_encrypter) = match self.resuming_decrypter {
             Some(dec) => (dec, None),
             None => {
                 let (dec, enc) = self
@@ -696,8 +696,7 @@ impl State<ServerConnectionData> for ExpectCcs {
         };
 
         cx.common
-            .decrypt_state
-            .set_message_decrypter(dec, &proof);
+            .emit(Event::MessageDecrypter { decrypter, proof });
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
