@@ -6,8 +6,8 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    DecryptionState, EncodedMessage, EncryptionState, OutboundOpaque, OutboundPlain, Payload,
-    PreEncryptAction,
+    DecryptionState, EncodedMessage, EncryptionState, MessageEncrypter, OutboundOpaque,
+    OutboundPlain, Payload, PreEncryptAction,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
@@ -688,6 +688,9 @@ impl Output for CommonState {
                 assert!(self.negotiated_kx_group.is_none());
                 self.negotiated_kx_group = Some(kxg);
             }
+            Event::MessageEncrypter { encrypter, limit } => self
+                .encrypt_state
+                .set_message_encrypter(encrypter, limit),
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
             Event::PlainMessage(m) => self.send_msg(m, false),
             Event::ReceivedTicket => {
@@ -856,6 +859,10 @@ pub(crate) enum Event<'a> {
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
+    MessageEncrypter {
+        encrypter: Box<dyn MessageEncrypter>,
+        limit: u64,
+    },
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
     ReceivedTicket,
