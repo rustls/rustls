@@ -990,8 +990,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 
         // Note: msgs layer validates trivial contents of CCS.
         cx.common
-            .decrypt_state
-            .set_message_decrypter(self.pending_decrypter, &proof);
+            .emit(Event::MessageDecrypter(self.pending_decrypter, proof));
 
         Ok(Box::new(ExpectFinished {
             config: self.config,

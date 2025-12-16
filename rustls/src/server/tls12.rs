@@ -689,8 +689,7 @@ impl State<ServerConnectionData> for ExpectCcs {
         };
 
         cx.common
-            .decrypt_state
-            .set_message_decrypter(dec, &proof);
+            .emit(Event::MessageDecrypter(dec, proof));
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
