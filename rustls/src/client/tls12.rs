@@ -998,9 +998,10 @@ impl State<ClientConnectionData> for ExpectCcs {
         let proof = input.check_aligned_handshake()?;
 
         // Note: msgs layer validates trivial contents of CCS.
-        cx.common
-            .decrypt_state
-            .set_message_decrypter(self.pending_decrypter, &proof);
+        cx.common.emit(Event::MessageDecrypter {
+            decrypter: self.pending_decrypter,
+            proof,
+        });
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
