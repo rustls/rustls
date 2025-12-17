@@ -176,7 +176,7 @@ impl CommonState {
         self.handshake_kind
     }
 
-    pub(crate) fn is_tls13(&self) -> bool {
+    fn is_tls13(&self) -> bool {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
