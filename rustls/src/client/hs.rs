@@ -85,7 +85,8 @@ impl ExpectServerHello {
             return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
 
-        cx.common.negotiated_version = Some(T::VERSION);
+        cx.common
+            .emit(Event::ProtocolVersion(T::VERSION));
 
         // Extract ALPN protocol
         if T::VERSION != ProtocolVersion::TLSv1_3 {
@@ -255,7 +256,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
         match hrr.supported_versions {
             Some(ProtocolVersion::TLSv1_3) => {
-                cx.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
+                cx.common
+                    .emit(Event::ProtocolVersion(ProtocolVersion::TLSv1_3));
             }
             _ => {
                 return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
