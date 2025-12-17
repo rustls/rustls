@@ -119,7 +119,8 @@ impl ExpectServerHello {
             _ => {
                 debug!("Using ciphersuite {suite:?}");
                 self.suite = Some(SupportedCipherSuite::from(suite));
-                cx.common.suite = Some(SupportedCipherSuite::from(suite));
+                cx.common
+                    .emit(Event::CipherSuite(SupportedCipherSuite::from(suite)));
             }
         }
 
@@ -272,7 +273,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // HRR selects the ciphersuite.
-        cx.common.suite = Some(cs);
+        cx.common.emit(Event::CipherSuite(cs));
 
         // If we offered ECH, we need to confirm that the server accepted it.
         match (self.next.ech_state.as_ref(), cs) {
