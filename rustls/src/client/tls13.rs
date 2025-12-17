@@ -13,9 +13,7 @@ use super::hs::{
 };
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, Input, Protocol, Side, State,
-};
+use crate::common_state::{CommonState, HandshakeFlightTls13, HandshakeKind, Input, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
@@ -407,7 +405,7 @@ pub(super) fn derive_early_traffic_secret(
 }
 
 pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonState) {
-    if common.is_quic() {
+    if common.protocol.quic() {
         return;
     }
 
@@ -501,7 +499,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         };
 
         // QUIC transport parameters
-        if cx.common.is_quic() {
+        if cx.common.protocol.quic() {
             match exts.transport_parameters.as_ref() {
                 Some(params) => cx.common.quic.params = Some(params.clone().into_vec()),
                 None => {
@@ -1181,7 +1179,7 @@ fn emit_finished_tls13(
 }
 
 fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut CommonState) {
-    if common.is_quic() {
+    if common.protocol.quic() {
         return;
     }
 
@@ -1339,7 +1337,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             _fin_verified: fin,
         };
 
-        Ok(match cx.common.is_quic() {
+        Ok(match cx.common.protocol.quic() {
             true => Box::new(ExpectQuicTraffic(st)),
             false => Box::new(st),
         })
@@ -1387,7 +1385,7 @@ impl ExpectTraffic {
                 .unwrap_or_default(),
         );
 
-        if cx.is_quic() {
+        if cx.protocol.quic() {
             if let Some(sz) = nst.extensions.max_early_data_size {
                 if sz != 0 && sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
@@ -1426,7 +1424,7 @@ impl ExpectTraffic {
         input: Input<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        if let Protocol::Quic = common.protocol {
+        if common.protocol.quic() {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 

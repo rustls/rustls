@@ -468,7 +468,7 @@ impl CommonState {
     /// Send a raw TLS message, fragmenting it if needed.
     pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         {
-            if let Protocol::Quic = self.protocol {
+            if self.protocol.quic() {
                 if let MessagePayload::Alert(_) = m.payload {
                     // alerts are sent out-of-band in QUIC mode
                     return;
@@ -649,10 +649,6 @@ impl CommonState {
             plaintext_bytes_to_read: self.received_plaintext.len(),
             peer_has_closed: self.has_received_close_notify,
         }
-    }
-
-    pub(crate) fn is_quic(&self) -> bool {
-        self.protocol == Protocol::Quic
     }
 
     pub(crate) fn should_update_key(
@@ -881,8 +877,17 @@ impl Side {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum Protocol {
+    /// TCP-TLS, standardized in RFC5246 and RFC8446
     Tcp,
-    Quic,
+    /// QUIC, standardized in RFC9001
+    #[cfg_attr(not(feature = "std"), expect(dead_code))]
+    Quic(quic::Version),
+}
+
+impl Protocol {
+    pub(crate) fn quic(&self) -> bool {
+        matches!(self, Self::Quic(_))
+    }
 }
 
 /// Tracking technically-allowed protocol actions

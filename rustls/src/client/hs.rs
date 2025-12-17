@@ -409,7 +409,7 @@ impl ClientHelloInput {
         // https://tools.ietf.org/html/rfc9001#section-8.4
         let session_id = match session_id {
             Some(session_id) => session_id,
-            None if cx.common.is_quic() => SessionId::empty(),
+            None if cx.common.protocol.quic() => SessionId::empty(),
             None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
             None => SessionId::random(config.provider().secure_random)?,
         };
@@ -499,7 +499,7 @@ fn emit_client_hello_for_retry(
     let config = &input.config;
     // Defense in depth: the ECH state should be None if ECH is disabled based on config
     // builder semantics.
-    let forbids_tls12 = cx.common.is_quic() || ech_state.is_some();
+    let forbids_tls12 = cx.common.protocol.quic() || ech_state.is_some();
 
     let supported_versions = SupportedProtocolVersions {
         tls13: config.supports_version(ProtocolVersion::TLSv1_3),
@@ -936,7 +936,7 @@ pub(super) fn process_alpn_protocol(
     // mechanism) if and only if any ALPN protocols were configured. This defends against badly-behaved
     // servers which accept a connection that requires an application-layer protocol they do not
     // understand.
-    if common.is_quic() && common.alpn_protocol.is_none() && !offered_protocols.is_empty() {
+    if common.protocol.quic() && common.alpn_protocol.is_none() && !offered_protocols.is_empty() {
         return Err(Error::NoApplicationProtocol);
     }
 
@@ -991,7 +991,7 @@ impl ClientSessionValue {
             });
 
         if let Some(resuming) = &found {
-            if cx.common.is_quic() {
+            if cx.common.protocol.quic() {
                 cx.common.quic.params = resuming
                     .tls13()
                     .map(|v| v.quic_params());

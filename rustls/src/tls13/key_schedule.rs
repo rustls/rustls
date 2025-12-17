@@ -132,7 +132,7 @@ impl KeyScheduleEarly {
             client_random,
         );
 
-        if common.is_quic() {
+        if self.ks.protocol.quic() {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
             // before the application can see.
             common.quic.early_secret = Some(client_early_traffic_secret.clone());
@@ -340,14 +340,14 @@ impl KeyScheduleHandshakeStart {
             client_random,
         );
 
-        if common.is_quic() {
+        if let Protocol::Quic(quic_version) = self.ks.protocol {
             common.quic.hs_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 self.ks.suite,
                 self.ks.suite.quic.unwrap(),
                 self.ks.side,
-                common.quic.version,
+                quic_version,
             ));
         }
 
@@ -424,14 +424,14 @@ impl KeyScheduleHandshake {
             .ks
             .set_encrypter(server_secret, common);
 
-        if common.is_quic() {
+        if let Protocol::Quic(quic_version) = before_finished.ks.protocol {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 before_finished.ks.suite,
                 before_finished.ks.suite.quic.unwrap(),
                 before_finished.ks.side,
-                common.quic.version,
+                quic_version,
             ));
         }
 
@@ -570,14 +570,14 @@ impl KeyScheduleClientBeforeFinished {
         next.ks
             .set_encrypter(client_secret, common);
 
-        if common.is_quic() {
+        if let Protocol::Quic(quic_version) = next.ks.protocol {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 next.ks.suite,
                 next.ks.suite.quic.unwrap(),
                 next.ks.side,
-                common.quic.version,
+                quic_version,
             ));
         }
 

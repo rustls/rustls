@@ -9,9 +9,7 @@ use subtle::ConstantTimeEq;
 use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, Input, Protocol, Side, State,
-};
+use crate::common_state::{CommonState, HandshakeFlightTls13, HandshakeKind, Input, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::kx::NamedGroup;
@@ -375,7 +373,8 @@ mod client_hello {
                         expected_certificate_type: cert_types.client,
                     }))
                 }
-            } else if doing_early_data == EarlyDataDecision::Accepted && !cx.common.is_quic() {
+            } else if doing_early_data == EarlyDataDecision::Accepted && !cx.common.protocol.quic()
+            {
                 // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
                 // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
                 // connection error of type PROTOCOL_VIOLATION.
@@ -544,7 +543,7 @@ mod client_hello {
     }
 
     fn emit_fake_ccs(common: &mut CommonState) {
-        if common.is_quic() {
+        if common.protocol.quic() {
             return;
         }
         let m = Message {
@@ -633,7 +632,7 @@ mod client_hello {
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
         } else {
-            if cx.common.is_quic() {
+            if cx.common.protocol.quic() {
                 // Clobber value set in tls13::emit_server_hello
                 cx.common.quic.early_secret = None;
             }
@@ -1279,7 +1278,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         cx.common.peer_identity = self.peer_identity;
         cx.common.exporter = Some(Box::new(exporter));
 
-        Ok(match cx.common.is_quic() {
+        Ok(match cx.common.protocol.quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
             false => Box::new(ExpectTraffic {
                 config: self.config,
@@ -1304,7 +1303,7 @@ impl ExpectTraffic {
         input: Input<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        if let Protocol::Quic = common.protocol {
+        if common.protocol.quic() {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 

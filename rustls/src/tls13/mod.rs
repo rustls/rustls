@@ -96,7 +96,7 @@ impl Suite for Tls13CipherSuite {
     fn usable_for_protocol(&self, proto: Protocol) -> bool {
         match proto {
             Protocol::Tcp => true,
-            Protocol::Quic => self.quic.is_some(),
+            Protocol::Quic(_) => self.quic.is_some(),
         }
     }
 

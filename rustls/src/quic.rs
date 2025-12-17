@@ -161,8 +161,8 @@ mod connection {
                 ..ClientExtensionsInput::from_alpn(alpn_protocols)
             };
 
-            let mut inner = ConnectionCore::for_client(config, name, exts, Protocol::Quic)?;
-            inner.common_state.quic.version = quic_version;
+            let inner =
+                ConnectionCore::for_client(config, name, exts, Protocol::Quic(quic_version))?;
             Ok(Self {
                 inner: inner.into(),
             })
@@ -265,8 +265,7 @@ mod connection {
             };
 
             let mut core = ConnectionCore::for_server(config, exts)?;
-            core.common_state.protocol = Protocol::Quic;
-            core.common_state.quic.version = quic_version;
+            core.common_state.protocol = Protocol::Quic(quic_version);
             Ok(Self { inner: core.into() })
         }
 
@@ -401,6 +400,9 @@ mod connection {
                     SupportedCipherSuite::Tls13(suite) => Some(suite),
                     _ => None,
                 })?;
+            let Protocol::Quic(version) = self.core.common_state.protocol else {
+                return None;
+            };
             Some(DirectionalKeys::new(
                 suite,
                 suite.quic?,
@@ -409,7 +411,7 @@ mod connection {
                     .quic
                     .early_secret
                     .as_ref()?,
-                self.core.common_state.quic.version,
+                version,
             ))
         }
 
@@ -494,7 +496,6 @@ pub(crate) struct Quic {
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
     #[cfg(feature = "std")]
     pub(crate) returned_traffic_keys: bool,
-    pub(crate) version: Version,
 }
 
 #[cfg(feature = "std")]
@@ -964,7 +965,7 @@ pub enum KeyChange {
 ///
 /// Governs version-specific behavior in the TLS layer
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Version {
     /// First stable RFC
     #[default]
