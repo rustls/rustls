@@ -681,6 +681,7 @@ impl Output for CommonState {
             Event::CipherSuite(suite) => self.suite = Some(suite),
             Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
             Event::EncryptMessage(m) => self.send_msg(m, true),
+            Event::EnqueueKeyUpdateNotification => self.enqueue_key_update_notification(),
             Event::Exporter(exporter) => self.exporter = Some(exporter),
             Event::HandshakeKind(hk) => {
                 assert!(self.handshake_kind.is_none());
@@ -874,6 +875,7 @@ pub(crate) enum Event<'a> {
     CipherSuite(SupportedCipherSuite),
     EarlyExporter(Box<dyn Exporter>),
     EncryptMessage(Message<'a>),
+    EnqueueKeyUpdateNotification,
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
