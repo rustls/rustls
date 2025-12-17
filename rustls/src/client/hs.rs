@@ -88,7 +88,7 @@ impl ExpectServerHello {
         cx.common.negotiated_version = Some(T::VERSION);
 
         // Extract ALPN protocol
-        if !cx.common.is_tls13() {
+        if T::VERSION != ProtocolVersion::TLSv1_3 {
             process_alpn_protocol(
                 cx.common,
                 &self.input.hello.alpn_protocols,
