@@ -332,7 +332,8 @@ impl ExpectClientHello {
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
     {
-        cx.common.negotiated_version = Some(T::VERSION);
+        cx.common
+            .emit(Event::ProtocolVersion(T::VERSION));
 
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
