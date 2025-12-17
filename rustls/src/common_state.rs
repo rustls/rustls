@@ -709,6 +709,7 @@ impl Output for CommonState {
             Event::QuicTransportParameters(params) => self.quic.params = Some(params),
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
             Event::PlainMessage(m) => self.send_msg(m, false),
+            Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
             Event::ReceivedTicket => {
                 self.tls13_tickets_received = self
                     .tls13_tickets_received
@@ -891,6 +892,7 @@ pub(crate) enum Event<'a> {
     },
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
+    ProtocolVersion(ProtocolVersion),
     QuicEarlySecret(Option<OkmBlock>),
     QuicHandshakeSecrets(quic::Secrets),
     QuicTrafficSecrets(quic::Secrets),
