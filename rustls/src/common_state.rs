@@ -466,28 +466,6 @@ impl CommonState {
 
     /// Send a raw TLS message, fragmenting it if needed.
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        {
-            if self.protocol.is_quic() {
-                if let MessagePayload::Alert(_) = m.payload {
-                    // alerts are sent out-of-band in QUIC mode
-                    return;
-                } else {
-                    debug_assert!(
-                        matches!(
-                            m.payload,
-                            MessagePayload::Handshake { .. } | MessagePayload::HandshakeFlight(_)
-                        ),
-                        "QUIC uses TLS for the cryptographic handshake only"
-                    );
-                    let mut bytes = Vec::new();
-                    m.payload.encode(&mut bytes);
-                    self.quic
-                        .hs_queue
-                        .push_back((must_encrypt, bytes));
-                }
-                return;
-            }
-        }
         if !must_encrypt {
             let msg = &m.into();
             let iter = self
@@ -680,7 +658,10 @@ impl Output for CommonState {
             Event::ApplicationProtocol(protocol) => self.alpn_protocol = Some(protocol),
             Event::CipherSuite(suite) => self.suite = Some(suite),
             Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
-            Event::EncryptMessage(m) => self.send_msg(m, true),
+            Event::EncryptMessage(m) => match self.protocol {
+                Protocol::Tcp => self.send_msg(m, true),
+                Protocol::Quic(_) => self.quic.send_msg(m, true),
+            },
             Event::EnqueueKeyUpdateNotification => self.enqueue_key_update_notification(),
             Event::Exporter(exporter) => self.exporter = Some(exporter),
             Event::HandshakeKind(hk) => {
@@ -709,7 +690,10 @@ impl Output for CommonState {
             Event::QuicTrafficSecrets(sec) => self.quic.traffic_secrets = Some(sec),
             Event::QuicTransportParameters(params) => self.quic.params = Some(params),
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
-            Event::PlainMessage(m) => self.send_msg(m, false),
+            Event::PlainMessage(m) => match self.protocol {
+                Protocol::Tcp => self.send_msg(m, false),
+                Protocol::Quic(_) => self.quic.send_msg(m, false),
+            },
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
             Event::ReceivedTicket => {
                 self.tls13_tickets_received = self
