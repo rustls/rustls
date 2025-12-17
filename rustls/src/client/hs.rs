@@ -460,9 +460,11 @@ impl ClientHelloInput {
         };
 
         let ech_state = match self.config.ech_mode.as_ref() {
-            Some(EchMode::Enable(ech_config)) => {
-                Some(ech_config.state(self.session_key.server_name.clone(), &self.config)?)
-            }
+            Some(EchMode::Enable(ech_config)) => Some(ech_config.state(
+                self.session_key.server_name.clone(),
+                cx.common.protocol,
+                &self.config,
+            )?),
             _ => None,
         };
 
@@ -694,6 +696,7 @@ fn emit_client_hello_for_retry(
         .and_then(|mode| match mode {
             EchMode::Grease(cfg) => Some(cfg.grease_ext(
                 config.provider().secure_random,
+                cx.common.protocol,
                 input.session_key.server_name.clone(),
                 &chp_payload,
             )),
@@ -744,8 +747,11 @@ fn emit_client_hello_for_retry(
         // When we're not doing ECH and resuming, then the PSK binder need to be filled in as
         // normal.
         (_, Some(tls13_session)) => {
-            let key_schedule =
-                KeyScheduleEarlyClient::new(tls13_session.suite(), tls13_session.secret());
+            let key_schedule = KeyScheduleEarlyClient::new(
+                cx.common.protocol,
+                tls13_session.suite(),
+                tls13_session.secret(),
+            );
             tls13::fill_in_psk_binder(&key_schedule, &transcript_buffer, &mut chp);
             Some((tls13_session.suite(), key_schedule))
         }
