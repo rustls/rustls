@@ -8,6 +8,7 @@ use subtle::ConstantTimeEq;
 use super::config::ClientConfig;
 use super::tls13;
 use crate::Tls13CipherSuite;
+use crate::common_state::Protocol;
 use crate::crypto::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::crypto::SecureRandom;
 use crate::crypto::cipher::Payload;
@@ -132,11 +133,13 @@ impl EchConfig {
     pub(super) fn state(
         &self,
         server_name: ServerName<'static>,
+        protocol: Protocol,
         config: &ClientConfig,
     ) -> Result<EchState, Error> {
         EchState::new(
             self,
             server_name.clone(),
+            protocol,
             !config
                 .resolver()
                 .supported_certificate_types()
@@ -236,6 +239,7 @@ impl EchGreaseConfig {
     pub(crate) fn grease_ext(
         &self,
         secure_random: &'static dyn SecureRandom,
+        protocol: Protocol,
         inner_name: ServerName<'static>,
         outer_hello: &ClientHelloPayload,
     ) -> Result<EncryptedClientHello, Error> {
@@ -265,6 +269,7 @@ impl EchGreaseConfig {
                 suite: self.suite,
             },
             inner_name,
+            protocol,
             false,
             secure_random,
             false, // Does not matter if we enable/disable SNI here. Inner hello is not used.
@@ -327,6 +332,8 @@ pub(crate) struct EchState {
     pub(crate) inner_hello_transcript: HandshakeHashBuffer,
     // A source of secure random data.
     secure_random: &'static dyn SecureRandom,
+    // The top level protocol
+    protocol: Protocol,
     // An HPKE sealer context that can be used for encrypting ECH data.
     sender: Box<dyn HpkeSealer>,
     // The ID of the ECH configuration we've chosen - this is included in the outer ECH extension.
@@ -352,6 +359,7 @@ impl EchState {
     pub(crate) fn new(
         config: &EchConfig,
         inner_name: ServerName<'static>,
+        protocol: Protocol,
         client_auth_enabled: bool,
         secure_random: &'static dyn SecureRandom,
         enable_sni: bool,
@@ -387,6 +395,7 @@ impl EchState {
             inner_name,
             maximum_name_length: config_contents.maximum_name_length,
             cipher_suite: config.suite.suite().sym,
+            protocol,
             enc,
             enable_sni,
             sent_extensions: Vec::new(),
@@ -675,7 +684,8 @@ impl EchState {
         if let Some(resuming) = resuming.as_ref() {
             let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(inner_hello));
 
-            let key_schedule = KeyScheduleEarlyClient::new(resuming.suite(), resuming.secret());
+            let key_schedule =
+                KeyScheduleEarlyClient::new(self.protocol, resuming.suite(), resuming.secret());
             tls13::fill_in_psk_binder(&key_schedule, &self.inner_hello_transcript, &mut chp);
             self.early_data_key_schedule = Some(key_schedule);
 
