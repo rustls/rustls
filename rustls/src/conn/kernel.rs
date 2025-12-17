@@ -252,12 +252,6 @@ pub(crate) struct KernelContext<'a> {
     pub(crate) quic: &'a Quic,
 }
 
-impl KernelContext<'_> {
-    pub(crate) fn is_quic(&self) -> bool {
-        self.protocol == Protocol::Quic
-    }
-}
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) enum Direction {
     Transmit,
