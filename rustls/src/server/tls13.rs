@@ -526,7 +526,7 @@ mod client_hello {
 
             KeySchedulePreHandshake::from(early_key_schedule)
         } else {
-            KeySchedulePreHandshake::new(suite)
+            KeySchedulePreHandshake::new(Side::Server, suite)
         };
 
         // Do key exchange
