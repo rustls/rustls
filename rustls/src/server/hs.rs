@@ -380,7 +380,8 @@ impl ExpectClientHello {
         )?;
 
         debug!("decided upon suite {suite:?}");
-        cx.common.suite = Some(suite.into());
+        cx.common
+            .emit(Event::CipherSuite(suite.into()));
 
         suite
             .server_handler()
