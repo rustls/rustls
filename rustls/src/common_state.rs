@@ -682,6 +682,7 @@ impl Output for CommonState {
                 Protocol::Tcp => self.send_msg(m, true),
                 Protocol::Quic(_) => self.send_msg_quic(m, true),
             },
+            Event::EnqueueKeyUpdateNotification => self.enqueue_key_update_notification(),
             Event::Exporter(exporter) => self.exporter = Some(exporter),
             Event::HandshakeKind(hk) => {
                 assert!(self.handshake_kind.is_none());
@@ -874,6 +875,7 @@ pub(crate) enum Event<'a> {
     CipherSuite(SupportedCipherSuite),
     EarlyExporter(Box<dyn Exporter>),
     EncryptMessage(Message<'a>),
+    EnqueueKeyUpdateNotification,
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
