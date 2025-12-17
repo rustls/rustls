@@ -638,7 +638,7 @@ pub(crate) struct KeyScheduleTraffic {
 impl KeyScheduleTraffic {
     pub(crate) fn update_encrypter_and_notify(&mut self, common: &mut CommonState) {
         let secret = self.next_application_traffic_secret(self.ks.side);
-        common.enqueue_key_update_notification();
+        common.emit(Event::EnqueueKeyUpdateNotification);
         self.ks.set_encrypter(&secret, common);
     }
 
