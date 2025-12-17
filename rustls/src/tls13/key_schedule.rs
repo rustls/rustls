@@ -135,7 +135,9 @@ impl KeyScheduleEarly {
         if self.ks.protocol.quic() {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
             // before the application can see.
-            common.quic.early_secret = Some(client_early_traffic_secret.clone());
+            common.emit(Event::QuicEarlySecret(Some(
+                client_early_traffic_secret.clone(),
+            )));
         }
 
         client_early_traffic_secret
@@ -341,14 +343,14 @@ impl KeyScheduleHandshakeStart {
         );
 
         if let Protocol::Quic(quic_version) = self.ks.protocol {
-            common.quic.hs_secrets = Some(quic::Secrets::new(
+            common.emit(Event::QuicHandshakeSecrets(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 self.ks.suite,
                 self.ks.suite.quic.unwrap(),
                 self.ks.side,
                 quic_version,
-            ));
+            )));
         }
 
         KeyScheduleHandshake {
@@ -423,14 +425,14 @@ impl KeyScheduleHandshake {
             .set_encrypter(server_secret, common);
 
         if let Protocol::Quic(quic_version) = before_finished.ks.protocol {
-            common.quic.traffic_secrets = Some(quic::Secrets::new(
+            common.emit(Event::QuicTrafficSecrets(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 before_finished.ks.suite,
                 before_finished.ks.suite.quic.unwrap(),
                 before_finished.ks.side,
                 quic_version,
-            ));
+            )));
         }
 
         KeyScheduleTrafficWithClientFinishedPending {
@@ -569,14 +571,14 @@ impl KeyScheduleClientBeforeFinished {
             .set_encrypter(client_secret, common);
 
         if let Protocol::Quic(quic_version) = next.ks.protocol {
-            common.quic.traffic_secrets = Some(quic::Secrets::new(
+            common.emit(Event::QuicTrafficSecrets(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 next.ks.suite,
                 next.ks.suite.quic.unwrap(),
                 next.ks.side,
                 quic_version,
-            ));
+            )));
         }
 
         next.into_traffic(hs_hash)

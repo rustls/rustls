@@ -640,8 +640,8 @@ mod client_hello {
             EarlyDataDecision::Accepted
         } else {
             if cx.common.protocol.quic() {
-                // Clobber value set in tls13::emit_server_hello
-                cx.common.quic.early_secret = None;
+                cx.common
+                    .emit(Event::QuicEarlySecret(None));
             }
 
             rejected_or_disabled

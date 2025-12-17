@@ -510,7 +510,9 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         // QUIC transport parameters
         if cx.common.protocol.quic() {
             match exts.transport_parameters.as_ref() {
-                Some(params) => cx.common.quic.params = Some(params.clone().into_vec()),
+                Some(params) => cx
+                    .common
+                    .emit(Event::QuicTransportParameters(params.clone().into_vec())),
                 None => {
                     return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
                 }
