@@ -13,9 +13,7 @@ use super::hs::{
 };
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, Input, Protocol, Side, State,
-};
+use crate::common_state::{CommonState, HandshakeFlightTls13, HandshakeKind, Input, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
@@ -1387,7 +1385,7 @@ impl ExpectTraffic {
                 .unwrap_or_default(),
         );
 
-        if cx.is_quic() {
+        if cx.protocol.is_quic() {
             if let Some(sz) = nst.extensions.max_early_data_size {
                 if sz != 0 && sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
@@ -1426,7 +1424,7 @@ impl ExpectTraffic {
         input: Input<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        if let Protocol::Quic = common.protocol {
+        if common.protocol.is_quic() {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 

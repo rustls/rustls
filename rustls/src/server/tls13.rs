@@ -9,9 +9,7 @@ use subtle::ConstantTimeEq;
 use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{
-    CommonState, HandshakeFlightTls13, HandshakeKind, Input, Protocol, Side, State,
-};
+use crate::common_state::{CommonState, HandshakeFlightTls13, HandshakeKind, Input, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::kx::NamedGroup;
@@ -1306,7 +1304,7 @@ impl ExpectTraffic {
         input: Input<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        if let Protocol::Quic = common.protocol {
+        if common.protocol.is_quic() {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 
