@@ -146,7 +146,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                     // Discard the early data key schedule.
                     cx.data.early_data.rejected();
                     resuming_session.take();
-                    KeySchedulePreHandshake::new(Side::Client, suite)
+                    KeySchedulePreHandshake::new(Side::Client, cx.common.protocol, suite)
                 }
             };
 
