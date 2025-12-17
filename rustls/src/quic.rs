@@ -9,6 +9,7 @@ use crate::common_state::Side;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::Error;
+use crate::msgs::message::{Message, MessagePayload};
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
@@ -496,6 +497,27 @@ pub(crate) struct Quic {
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
     #[cfg(feature = "std")]
     pub(crate) returned_traffic_keys: bool,
+}
+
+impl Quic {
+    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        if let MessagePayload::Alert(_) = m.payload {
+            // alerts are sent out-of-band in QUIC mode
+            return;
+        }
+
+        debug_assert!(
+            matches!(
+                m.payload,
+                MessagePayload::Handshake { .. } | MessagePayload::HandshakeFlight(_)
+            ),
+            "QUIC uses TLS for the cryptographic handshake only"
+        );
+        let mut bytes = Vec::new();
+        m.payload.encode(&mut bytes);
+        self.hs_queue
+            .push_back((must_encrypt, bytes));
+    }
 }
 
 #[cfg(feature = "std")]
