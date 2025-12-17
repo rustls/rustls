@@ -116,7 +116,9 @@ impl<'a> ExtensionProcessing<'a> {
             }
 
             match hello.transport_parameters.as_ref() {
-                Some(params) => cx.common.quic.params = Some(params.to_owned().into_vec()),
+                Some(params) => cx
+                    .common
+                    .emit(Event::QuicTransportParameters(params.to_owned().into_vec())),
                 None => {
                     return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
                 }
