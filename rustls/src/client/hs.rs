@@ -992,12 +992,12 @@ impl ClientSessionValue {
                 None
             });
 
-        if let Some(resuming) = &found {
-            if cx.common.protocol.is_quic() {
-                cx.common.quic.params = resuming
-                    .tls13()
-                    .map(|v| v.quic_params());
-            }
+        if let Some(quic_params) = found
+            .as_ref()
+            .and_then(|r| r.tls13().map(|v| v.quic_params()))
+        {
+            cx.common
+                .emit(Event::QuicTransportParameters(quic_params));
         }
 
         found

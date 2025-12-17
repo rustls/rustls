@@ -10,6 +10,7 @@ use crate::crypto::cipher::{
     OutboundOpaque, OutboundPlain, Payload, PreEncryptAction,
 };
 use crate::crypto::kx::SupportedKxGroup;
+use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -701,6 +702,10 @@ impl Output for CommonState {
             Event::MessageEncrypter { encrypter, limit } => self
                 .encrypt_state
                 .set_message_encrypter(encrypter, limit),
+            Event::QuicEarlySecret(sec) => self.quic.early_secret = sec,
+            Event::QuicHandshakeSecrets(sec) => self.quic.hs_secrets = Some(sec),
+            Event::QuicTrafficSecrets(sec) => self.quic.traffic_secrets = Some(sec),
+            Event::QuicTransportParameters(params) => self.quic.params = Some(params),
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
             Event::PlainMessage(m) => self.send_msg(m, false),
             Event::ReceivedTicket => {
@@ -884,6 +889,10 @@ pub(crate) enum Event<'a> {
     },
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
+    QuicEarlySecret(Option<OkmBlock>),
+    QuicHandshakeSecrets(quic::Secrets),
+    QuicTrafficSecrets(quic::Secrets),
+    QuicTransportParameters(Vec<u8>),
     ReceivedTicket,
     /// Mark the connection as ready to send application data.
     StartOutgoingTraffic,
