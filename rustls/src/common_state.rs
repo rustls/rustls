@@ -41,7 +41,7 @@ pub struct CommonState {
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) may_send_application_data: bool,
     may_receive_application_data: bool,
-    sent_fatal_alert: bool,
+    has_sent_fatal_alert: bool,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
     /// If the peer has signaled end of stream.
@@ -78,7 +78,7 @@ impl CommonState {
             early_exporter: None,
             may_send_application_data: false,
             may_receive_application_data: false,
-            sent_fatal_alert: false,
+            has_sent_fatal_alert: false,
             has_sent_close_notify: false,
             has_received_close_notify: false,
             #[cfg(feature = "std")]
@@ -253,10 +253,10 @@ impl CommonState {
         let Ok(alert) = AlertDescription::try_from(error) else {
             return;
         };
-        debug_assert!(!self.sent_fatal_alert);
+        debug_assert!(!self.has_sent_fatal_alert);
         let m = Message::build_alert(AlertLevel::Fatal, alert);
         self.send_msg(m, self.encrypt_state.is_encrypting());
-        self.sent_fatal_alert = true;
+        self.has_sent_fatal_alert = true;
     }
 
     pub(crate) fn write_plaintext(
@@ -544,11 +544,11 @@ impl CommonState {
     ///
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn send_close_notify(&mut self) {
-        if self.sent_fatal_alert {
+        if self.has_sent_fatal_alert {
             return;
         }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-        self.sent_fatal_alert = true;
+        self.has_sent_fatal_alert = true;
         self.has_sent_close_notify = true;
         self.send_warning_alert_no_log(AlertDescription::CloseNotify);
     }
