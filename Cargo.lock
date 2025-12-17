@@ -1236,13 +1236,13 @@ dependencies = [
 
 [[package]]
 name = "hpke-rs"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0d131cd4e00b0d03bee8a120828a374474511ec1a713f2bdf2fa5528dc92b32"
+checksum = "c8c09b01d75373842d3123a4dd51bad5cb70e95d8b96e50bc20d08877a8d2443"
 dependencies = [
- "hpke-rs-crypto",
+ "hpke-rs-crypto 0.4.0",
  "hpke-rs-libcrux",
- "hpke-rs-rust-crypto",
+ "hpke-rs-rust-crypto 0.4.0",
  "libcrux-sha3",
  "log",
  "rand_core 0.9.3",
@@ -1259,12 +1259,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "hpke-rs-libcrux"
+name = "hpke-rs-crypto"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e3aa555e687a1417cd15b680e143ffc62040ddd0f3295129f50afcd2992dc70"
+checksum = "2dd92b7d7f0deaae59c152e01c01f5280ea92dfac82090e5c025879b32df9193"
 dependencies = [
- "hpke-rs-crypto",
+ "rand_core 0.9.3",
+]
+
+[[package]]
+name = "hpke-rs-libcrux"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86584c7a2d82c03391ad7944944390e4f1d9ccbe59daa020bb829c6c0504892f"
+dependencies = [
+ "hpke-rs-crypto 0.4.0",
  "libcrux-aead",
  "libcrux-ecdh",
  "libcrux-hkdf",
@@ -1284,7 +1293,27 @@ dependencies = [
  "aes-gcm",
  "chacha20poly1305",
  "hkdf",
- "hpke-rs-crypto",
+ "hpke-rs-crypto 0.3.0",
+ "k256",
+ "p256",
+ "p384",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "sha2",
+ "x25519-dalek",
+]
+
+[[package]]
+name = "hpke-rs-rust-crypto"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "019f9a15c71981dffb32882487c372d3e6e48557c1c1ac84f235cbded330a2ef"
+dependencies = [
+ "aes-gcm",
+ "chacha20poly1305",
+ "hkdf",
+ "hpke-rs-crypto 0.4.0",
  "k256",
  "p256",
  "p384",
@@ -2707,8 +2736,8 @@ dependencies = [
  "env_logger",
  "hmac",
  "hpke-rs",
- "hpke-rs-crypto",
- "hpke-rs-rust-crypto",
+ "hpke-rs-crypto 0.3.0",
+ "hpke-rs-rust-crypto 0.3.0",
  "p256",
  "pkcs8",
  "rand_core 0.6.4",
