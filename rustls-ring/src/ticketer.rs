@@ -157,7 +157,7 @@ impl Debug for AeadTicketer {
 
 static TICKETER_AEAD: &aead::Algorithm = &aead::CHACHA20_POLY1305;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use rustls::crypto::TicketerFactory;
 
