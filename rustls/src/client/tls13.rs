@@ -310,22 +310,17 @@ pub(super) fn initial_key_share(
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
 /// data dependency on the message they are contained within.
 pub(super) fn fill_in_psk_binder(
-    resuming: &persist::Tls13ClientSessionValue,
+    key_schedule: &KeyScheduleEarly,
     transcript: &HandshakeHashBuffer,
     hmp: &mut HandshakeMessagePayload<'_>,
-) -> KeyScheduleEarly {
-    // We need to know the hash function of the suite we're trying to resume into.
-    let suite = resuming.suite();
-    let suite_hash = suite.common.hash_provider;
-
+) {
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
     let binder_plaintext = hmp.encoding_for_binder_signing();
-    let handshake_hash = transcript.hash_given(suite_hash, &binder_plaintext);
+    let handshake_hash = transcript.hash_given(key_schedule.hash(), &binder_plaintext);
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
     // to resume.
-    let key_schedule = KeyScheduleEarly::new(suite, resuming.secret());
     let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
     if let HandshakePayload::ClientHello(ch) = &mut hmp.0 {
@@ -343,8 +338,6 @@ pub(super) fn fill_in_psk_binder(
             binders[0] = PresharedKeyBinder::from(real_binder.as_ref().to_vec());
         }
     };
-
-    key_schedule
 }
 
 pub(super) fn prepare_resumption(
