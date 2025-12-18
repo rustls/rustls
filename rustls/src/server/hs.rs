@@ -560,7 +560,7 @@ impl<'a> ClientHelloInput<'a> {
         }
 
         // No handshake messages should follow this one in this flight.
-        let proof = cx.common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
 
         if done_retry {
             let ch_sni = client_hello

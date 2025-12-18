@@ -202,7 +202,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         )?;
         trace!("Got HRR {hrr:?}");
 
-        let proof = cx.common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
 
         // We always send a key share when TLS 1.3 is enabled.
         let offered_key_share = self.next.offered_key_share.unwrap();

@@ -438,7 +438,6 @@ mod connection {
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
-            self.core.common_state.aligned_handshake = self.core.hs_deframer.aligned();
             self.core
                 .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)?;
 

@@ -38,7 +38,6 @@ pub struct CommonState {
     pub(crate) alpn_protocol: Option<ProtocolName>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
-    pub(crate) aligned_handshake: Option<HandshakeAlignedProof>,
     pub(crate) may_send_application_data: bool,
     may_receive_application_data: bool,
     sent_fatal_alert: bool,
@@ -76,7 +75,6 @@ impl CommonState {
             alpn_protocol: None,
             exporter: None,
             early_exporter: None,
-            aligned_handshake: None,
             may_send_application_data: false,
             may_receive_application_data: false,
             sent_fatal_alert: false,
@@ -183,6 +181,7 @@ impl CommonState {
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
         msg: EncodedMessage<&'_ [u8]>,
+        aligned_handshake: Option<HandshakeAlignedProof>,
         state: Box<dyn State<Data>>,
         data: &mut Data,
         plaintext_locator: &Locator,
@@ -240,7 +239,13 @@ impl CommonState {
             received_plaintext,
         };
 
-        state.handle(&mut cx, Input { message: msg })
+        state.handle(
+            &mut cx,
+            Input {
+                message: msg,
+                aligned_handshake,
+            },
+        )
     }
 
     pub(crate) fn maybe_send_fatal_alert(&mut self, error: &Error) {
@@ -308,15 +313,6 @@ impl CommonState {
             );
 
         Ok(self.write_fragments(outgoing_tls, fragments))
-    }
-
-    // Changing the keys must not span any fragmented handshake
-    // messages.  Otherwise the defragmented messages will have
-    // been protected with two different record layer protections,
-    // which is illegal.  Not mentioned in RFC.
-    pub(crate) fn check_aligned_handshake(&mut self) -> Result<HandshakeAlignedProof, Error> {
-        self.aligned_handshake
-            .ok_or_else(|| PeerMisbehaved::KeyEpochWithPendingFragment.into())
     }
 
     #[cfg(feature = "std")]
@@ -811,6 +807,18 @@ impl<'a, Data> Context<'a, Data> {
 
 pub(crate) struct Input<'a> {
     pub(crate) message: Message<'a>,
+    pub(crate) aligned_handshake: Option<HandshakeAlignedProof>,
+}
+
+impl Input<'_> {
+    // Changing the keys must not span any fragmented handshake
+    // messages.  Otherwise the defragmented messages will have
+    // been protected with two different record layer protections,
+    // which is illegal.  Not mentioned in RFC.
+    pub(crate) fn check_aligned_handshake(&self) -> Result<HandshakeAlignedProof, Error> {
+        self.aligned_handshake
+            .ok_or_else(|| PeerMisbehaved::KeyEpochWithPendingFragment.into())
+    }
 }
 
 /// Lifetime-erased equivalent to [`Payload`]

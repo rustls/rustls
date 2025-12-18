@@ -59,7 +59,10 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
     };
 
     ClientHelloInput::from_input(
-        &Input { message: m },
+        &Input {
+            message: m,
+            aligned_handshake: None,
+        },
         false,
         &mut Context {
             common: &mut CommonState::new(Side::Server),

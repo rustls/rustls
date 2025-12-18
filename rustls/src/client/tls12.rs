@@ -56,7 +56,7 @@ mod server_hello {
             &self,
             suite: &'static Tls12CipherSuite,
             server_hello: &ServerHelloPayload,
-            Input { message }: &Input<'_>,
+            Input { message, .. }: &Input<'_>,
             st: ExpectServerHello,
             cx: &mut ClientContext<'_>,
         ) -> hs::NextStateOrError {
@@ -237,7 +237,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&message);
         let server_cert_chain = require_handshake_msg_move!(
@@ -357,7 +357,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&message);
         let server_cert_ocsp_response = require_handshake_msg_move!(
@@ -406,7 +406,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         let opaque_kx = require_handshake_msg!(
             message,
@@ -646,7 +646,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         let certreq = require_handshake_msg!(
             message,
@@ -708,9 +708,9 @@ impl State<ClientConnectionData> for ExpectServerDone {
     fn handle(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
-        match message.payload {
+        match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHelloDone),
                 ..
@@ -725,9 +725,10 @@ impl State<ClientConnectionData> for ExpectServerDone {
         }
 
         let mut st = *self;
-        st.transcript.add_message(&message);
+        st.transcript
+            .add_message(&input.message);
 
-        let proof = cx.common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
 
         trace!("Server cert is {:?}", st.server_cert.cert_chain);
         debug!("Server DNS name is {:?}", st.session_key.server_name);
@@ -926,7 +927,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&message);
 
@@ -973,9 +974,9 @@ impl State<ClientConnectionData> for ExpectCcs {
     fn handle(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
-        match message.payload {
+        match input.message.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
                 return Err(inappropriate_message(
@@ -986,7 +987,7 @@ impl State<ClientConnectionData> for ExpectCcs {
         }
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
-        let proof = cx.common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
 
         // Note: msgs layer validates trivial contents of CCS.
         cx.common
@@ -1071,13 +1072,16 @@ impl State<ClientConnectionData> for ExpectFinished {
     fn handle(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
         let mut st = *self;
-        let finished =
-            require_handshake_msg!(message, HandshakeType::Finished, HandshakePayload::Finished)?;
+        let finished = require_handshake_msg!(
+            input.message,
+            HandshakeType::Finished,
+            HandshakePayload::Finished
+        )?;
 
-        let proof = cx.common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
 
         // Work out what verify_data we expect.
         let vh = st.transcript.current_hash();
@@ -1096,7 +1100,8 @@ impl State<ClientConnectionData> for ExpectFinished {
             };
 
         // Hash this message too.
-        st.transcript.add_message(&message);
+        st.transcript
+            .add_message(&input.message);
 
         st.save_session();
 
@@ -1158,7 +1163,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
     fn handle(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         match message.payload {
             MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
