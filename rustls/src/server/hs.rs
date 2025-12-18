@@ -7,7 +7,7 @@ use core::fmt;
 use super::connection::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
-use crate::common_state::State;
+use crate::common_state::{Input, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -503,8 +503,12 @@ impl ExpectClientHello {
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
-    fn handle<'m>(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message<'m>) -> NextStateOrError {
-        let input = ClientHelloInput::from_message(&m, self.done_retry, cx)?;
+    fn handle<'m>(
+        self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        input: Input<'m>,
+    ) -> NextStateOrError {
+        let input = ClientHelloInput::from_input(&input, self.done_retry, cx)?;
         self.with_input(input, cx)
     }
 }
@@ -536,13 +540,13 @@ impl<'a> ClientHelloInput<'a> {
     /// [`ClientHello`] value for a [`ServerCredentialResolver`].
     ///
     /// [`ServerCredentialResolver`]: crate::server::ServerCredentialResolver
-    pub(super) fn from_message(
-        message: &'a Message<'a>,
+    pub(super) fn from_input(
+        input: &'a Input<'a>,
         done_retry: bool,
         cx: &mut ServerContext<'_>,
     ) -> Result<Self, Error> {
         let client_hello = require_handshake_msg!(
-            message,
+            input.message,
             HandshakeType::ClientHello,
             HandshakePayload::ClientHello
         )?;
@@ -576,7 +580,7 @@ impl<'a> ClientHelloInput<'a> {
             .ok_or(PeerIncompatible::SignatureAlgorithmsExtensionRequired)?;
 
         Ok(ClientHelloInput {
-            message,
+            message: &input.message,
             client_hello,
             sig_schemes: sig_schemes.to_owned(),
             proof,

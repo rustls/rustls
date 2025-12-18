@@ -16,9 +16,9 @@ use super::config::ServerConfig;
 use super::hs;
 #[cfg(feature = "std")]
 use super::hs::ClientHelloInput;
-#[cfg(feature = "std")]
-use crate::common_state::State;
 use crate::common_state::{CommonState, Side};
+#[cfg(feature = "std")]
+use crate::common_state::{Input, State};
 #[cfg(feature = "std")]
 use crate::conn::ConnectionCommon;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
@@ -308,7 +308,7 @@ mod buffered {
                 ));
             };
 
-            let message = match connection.first_handshake_message() {
+            let input = match connection.first_handshake_message() {
                 Ok(Some(msg)) => msg,
                 Ok(None) => {
                     self.inner = Some(connection);
@@ -325,7 +325,7 @@ mod buffered {
                 received_plaintext: &mut None,
             };
 
-            let sig_schemes = match ClientHelloInput::from_message(&message, false, &mut cx) {
+            let sig_schemes = match ClientHelloInput::from_input(&input, false, &mut cx) {
                 Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
                     return Err(AcceptedAlert::from_error(err, connection));
@@ -335,7 +335,7 @@ mod buffered {
 
             Ok(Some(Accepted {
                 connection,
-                message,
+                message: input.message,
                 sig_schemes,
             }))
         }
@@ -627,7 +627,7 @@ impl State<ServerConnectionData> for Accepting {
     fn handle<'m>(
         self: Box<Self>,
         _cx: &mut hs::ServerContext<'_>,
-        _m: Message<'m>,
+        _input: Input<'m>,
     ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
         Err(Error::Unreachable("unreachable state"))
     }

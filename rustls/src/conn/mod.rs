@@ -7,6 +7,8 @@ use std::io;
 
 use kernel::KernelConnection;
 
+#[cfg(feature = "std")]
+use crate::common_state::Input;
 use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
@@ -753,7 +755,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     ///
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
-    pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message<'static>>, Error> {
+    pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Input<'static>>, Error> {
         let mut buffer_progress = self.core.hs_deframer.progress();
 
         let res = self
@@ -766,7 +768,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 self.deframer_buffer
                     .discard(buffer_progress.take_discard());
                 self.core.common_state.aligned_handshake = self.core.hs_deframer.aligned();
-                Ok(Some(msg))
+                Ok(Some(Input { message: msg }))
             }
             Some(Err(err)) => Err(err.into()),
             None => Ok(None),

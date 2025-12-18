@@ -7,7 +7,7 @@ use std::vec;
 use super::ServerConnectionData;
 use super::hs::ClientHelloInput;
 use crate::TEST_PROVIDERS;
-use crate::common_state::{CommonState, Context, Side};
+use crate::common_state::{CommonState, Context, Input, Side};
 use crate::crypto::cipher::FakeAead;
 use crate::crypto::hash::FakeHash;
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
@@ -58,8 +58,8 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
         ))),
     };
 
-    ClientHelloInput::from_message(
-        &m,
+    ClientHelloInput::from_input(
+        &Input { message: m },
         false,
         &mut Context {
             common: &mut CommonState::new(Side::Server),
