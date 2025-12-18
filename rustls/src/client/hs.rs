@@ -14,7 +14,7 @@ use crate::client::ech::EchState;
 use crate::client::{
     ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
 };
-use crate::common_state::{CommonState, State};
+use crate::common_state::{CommonState, Input, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -65,7 +65,7 @@ impl ExpectServerHello {
     fn with_version<T: Suite + 'static>(
         mut self,
         server_hello: &ServerHelloPayload,
-        message: &Message<'_>,
+        input: &Input<'_>,
         cx: &mut ClientContext<'_>,
     ) -> NextStateOrError
     where
@@ -127,14 +127,17 @@ impl ExpectServerHello {
         // handshake_traffic_secret.
         suite
             .client_handler()
-            .handle_server_hello(suite, server_hello, message, self, cx)
+            .handle_server_hello(suite, server_hello, input, self, cx)
     }
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> NextStateOrError {
-        let server_hello =
-            require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, input: Input<'_>) -> NextStateOrError {
+        let server_hello = require_handshake_msg!(
+            &input.message,
+            HandshakeType::ServerHello,
+            HandshakePayload::ServerHello
+        )?;
         trace!("We got ServerHello {server_hello:#?}");
 
         use ProtocolVersion::{TLSv1_2, TLSv1_3};
@@ -151,7 +154,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         match server_version {
             TLSv1_3 if tls13_supported => {
-                self.with_version::<Tls13CipherSuite>(server_hello, &m, cx)
+                self.with_version::<Tls13CipherSuite>(server_hello, &input, cx)
             }
             TLSv1_2 if config.supports_version(TLSv1_2) => {
                 if cx.data.early_data.is_sending() {
@@ -164,7 +167,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     return Err(PeerMisbehaved::SelectedTls12UsingTls13VersionExtension.into());
                 }
 
-                self.with_version::<Tls12CipherSuite>(server_hello, &m, cx)
+                self.with_version::<Tls12CipherSuite>(server_hello, &input, cx)
             }
             _ => {
                 let reason = match server_version {
@@ -190,10 +193,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
     fn handle_hello_retry_request(
         mut self,
         cx: &mut ClientContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> NextStateOrError {
         let hrr = require_handshake_msg!(
-            m,
+            input.message,
             HandshakeType::HelloRetryRequest,
             HandshakePayload::HelloRetryRequest
         )?;
@@ -293,12 +296,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
             .transcript_buffer
             .start_hash(cs.hash_provider());
         let mut transcript_buffer = transcript.into_hrr_buffer(&proof);
-        transcript_buffer.add_message(&m);
+        transcript_buffer.add_message(&input.message);
 
         // If we offered ECH and the server accepted, we also need to update the separate
         // ECH transcript with the hello retry request message.
         if let Some(ech_state) = self.next.ech_state.as_mut() {
-            ech_state.transcript_hrr_update(cs.hash_provider(), &m, &proof);
+            ech_state.transcript_hrr_update(cs.hash_provider(), &input.message, &proof);
         }
 
         // Early data is not allowed after HelloRetryrequest
@@ -336,18 +339,18 @@ impl ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> NextStateOrError {
-        match m.payload {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, input: Input<'_>) -> NextStateOrError {
+        match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(..)),
                 ..
             } => self
                 .into_expect_server_hello()
-                .handle(cx, m),
+                .handle(cx, input),
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(..)),
                 ..
-            } => self.handle_hello_retry_request(cx, m),
+            } => self.handle_hello_retry_request(cx, input),
             payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::Handshake],
@@ -1018,7 +1021,7 @@ pub(crate) trait ClientHandler<T>: fmt::Debug + Sealed + Send + Sync {
         &self,
         suite: &'static T,
         server_hello: &ServerHelloPayload,
-        message: &Message<'_>,
+        input: &Input<'_>,
         st: ExpectServerHello,
         cx: &mut ClientContext<'_>,
     ) -> NextStateOrError;

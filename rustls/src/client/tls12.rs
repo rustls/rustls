@@ -13,7 +13,7 @@ use super::hs::{self, ClientContext};
 use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, HandshakeKind, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, Input, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -56,7 +56,7 @@ mod server_hello {
             &self,
             suite: &'static Tls12CipherSuite,
             server_hello: &ServerHelloPayload,
-            message: &Message<'_>,
+            Input { message }: &Input<'_>,
             st: ExpectServerHello,
             cx: &mut ClientContext<'_>,
         ) -> hs::NextStateOrError {
@@ -237,11 +237,11 @@ impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        m: Message<'_>,
+        Input { message }: Input<'_>,
     ) -> hs::NextStateOrError {
-        self.transcript.add_message(&m);
+        self.transcript.add_message(&message);
         let server_cert_chain = require_handshake_msg_move!(
-            m,
+            message,
             HandshakeType::Certificate,
             HandshakePayload::Certificate
         )?;
@@ -290,8 +290,12 @@ struct ExpectCertificateStatusOrServerKx {
 }
 
 impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
-        match m.payload {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        input: Input<'_>,
+    ) -> hs::NextStateOrError {
+        match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(..)),
                 ..
@@ -307,7 +311,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 must_issue_new_ticket: self.must_issue_new_ticket,
                 negotiated_client_type: self.negotiated_client_type,
             })
-            .handle(cx, m),
+            .handle(cx, input),
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateStatus(..)),
                 ..
@@ -323,7 +327,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 must_issue_new_ticket: self.must_issue_new_ticket,
                 negotiated_client_type: self.negotiated_client_type,
             })
-            .handle(cx, m),
+            .handle(cx, input),
             payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::Handshake],
@@ -353,11 +357,11 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        m: Message<'_>,
+        Input { message }: Input<'_>,
     ) -> hs::NextStateOrError {
-        self.transcript.add_message(&m);
+        self.transcript.add_message(&message);
         let server_cert_ocsp_response = require_handshake_msg_move!(
-            m,
+            message,
             HandshakeType::CertificateStatus,
             HandshakePayload::CertificateStatus
         )?
@@ -402,14 +406,14 @@ impl State<ClientConnectionData> for ExpectServerKx {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        m: Message<'_>,
+        Input { message }: Input<'_>,
     ) -> hs::NextStateOrError {
         let opaque_kx = require_handshake_msg!(
-            m,
+            message,
             HandshakeType::ServerKeyExchange,
             HandshakePayload::ServerKeyExchange
         )?;
-        self.transcript.add_message(&m);
+        self.transcript.add_message(&message);
 
         let kx = opaque_kx
             .unwrap_given_kxa(self.suite.kx)
@@ -580,10 +584,10 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        m: Message<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
         if matches!(
-            m.payload,
+            input.message.payload,
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequest(_)),
                 ..
@@ -602,7 +606,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
                 must_issue_new_ticket: self.must_issue_new_ticket,
                 negotiated_client_type: self.negotiated_client_type,
             })
-            .handle(cx, m)
+            .handle(cx, input)
         } else {
             self.transcript.abandon_client_auth();
 
@@ -619,7 +623,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
                 client_auth: None,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
-            .handle(cx, m)
+            .handle(cx, input)
         }
     }
 }
@@ -642,14 +646,14 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        m: Message<'_>,
+        Input { message }: Input<'_>,
     ) -> hs::NextStateOrError {
         let certreq = require_handshake_msg!(
-            m,
+            message,
             HandshakeType::CertificateRequest,
             HandshakePayload::CertificateRequest
         )?;
-        self.transcript.add_message(&m);
+        self.transcript.add_message(&message);
         debug!("Got CertificateRequest {certreq:?}");
 
         // The RFC jovially describes the design here as 'somewhat complicated'
@@ -701,8 +705,12 @@ struct ExpectServerDone {
 }
 
 impl State<ClientConnectionData> for ExpectServerDone {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
-        match m.payload {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        Input { message }: Input<'_>,
+    ) -> hs::NextStateOrError {
+        match message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHelloDone),
                 ..
@@ -717,7 +725,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         }
 
         let mut st = *self;
-        st.transcript.add_message(&m);
+        st.transcript.add_message(&message);
 
         let proof = cx.common.check_aligned_handshake()?;
 
@@ -918,12 +926,12 @@ impl State<ClientConnectionData> for ExpectNewTicket {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        m: Message<'_>,
+        Input { message }: Input<'_>,
     ) -> hs::NextStateOrError {
-        self.transcript.add_message(&m);
+        self.transcript.add_message(&message);
 
         let nst = require_handshake_msg_move!(
-            m,
+            message,
             HandshakeType::NewSessionTicket,
             HandshakePayload::NewSessionTicket
         )?;
@@ -962,8 +970,12 @@ struct ExpectCcs {
 }
 
 impl State<ClientConnectionData> for ExpectCcs {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
-        match m.payload {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        Input { message }: Input<'_>,
+    ) -> hs::NextStateOrError {
+        match message.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
                 return Err(inappropriate_message(
@@ -1056,10 +1068,14 @@ impl ExpectFinished {
 }
 
 impl State<ClientConnectionData> for ExpectFinished {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        Input { message }: Input<'_>,
+    ) -> hs::NextStateOrError {
         let mut st = *self;
         let finished =
-            require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
+            require_handshake_msg!(message, HandshakeType::Finished, HandshakePayload::Finished)?;
 
         let proof = cx.common.check_aligned_handshake()?;
 
@@ -1080,7 +1096,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             };
 
         // Hash this message too.
-        st.transcript.add_message(&m);
+        st.transcript.add_message(&message);
 
         st.save_session();
 
@@ -1139,8 +1155,12 @@ struct ExpectTraffic {
 }
 
 impl State<ClientConnectionData> for ExpectTraffic {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message<'_>) -> hs::NextStateOrError {
-        match m.payload {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        Input { message }: Input<'_>,
+    ) -> hs::NextStateOrError {
+        match message.payload {
             MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
             payload => {
                 return Err(inappropriate_message(
