@@ -116,6 +116,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     .common_state
                     .process_main_protocol(
                         msg,
+                        self.core.hs_deframer.aligned(),
                         state,
                         &mut self.core.side,
                         &plaintext_locator,

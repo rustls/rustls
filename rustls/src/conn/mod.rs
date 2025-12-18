@@ -767,8 +767,10 @@ impl<Side: SideData> ConnectionCommon<Side> {
             Some(Ok(msg)) => {
                 self.deframer_buffer
                     .discard(buffer_progress.take_discard());
-                self.core.common_state.aligned_handshake = self.core.hs_deframer.aligned();
-                Ok(Some(Input { message: msg }))
+                Ok(Some(Input {
+                    message: msg,
+                    aligned_handshake: self.core.hs_deframer.aligned(),
+                }))
             }
             Some(Err(err)) => Err(err.into()),
             None => Ok(None),
@@ -957,6 +959,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
             match self.common_state.process_main_protocol(
                 msg,
+                self.hs_deframer.aligned(),
                 state,
                 &mut self.side,
                 &locator,
@@ -1160,8 +1163,6 @@ impl<Side: SideData> ConnectionCore<Side> {
             self.hs_deframer
                 .input_message(message, &locator, buffer_progress.processed());
             self.hs_deframer.coalesce(buffer)?;
-
-            self.common_state.aligned_handshake = self.hs_deframer.aligned();
 
             if self.hs_deframer.has_message_ready() {
                 // trial decryption finishes with the first handshake message after it started.

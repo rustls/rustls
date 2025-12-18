@@ -267,6 +267,7 @@ mod client_hello {
                 resumedata
                     .as_ref()
                     .map(|x| &x.secret.0[..]),
+                &input.proof,
                 &st.config,
             )?;
             if !st.done_retry {
@@ -321,10 +322,9 @@ mod client_hello {
 
             // If we're not doing early data, then the next messages we receive
             // are encrypted with the handshake keys.
-            let proof = cx.common.check_aligned_handshake()?;
             match doing_early_data {
                 EarlyDataDecision::Disabled => {
-                    key_schedule.set_handshake_decrypter(None, cx.common, &proof);
+                    key_schedule.set_handshake_decrypter(None, cx.common, &input.proof);
                     cx.data.early_data.reject();
                 }
                 EarlyDataDecision::RequestedButRejected => {
@@ -334,7 +334,7 @@ mod client_hello {
                     key_schedule.set_handshake_decrypter(
                         Some(max_early_data_size(st.config.max_early_data_size)),
                         cx.common,
-                        &proof,
+                        &input.proof,
                     );
                     cx.data.early_data.reject();
                 }
@@ -346,7 +346,7 @@ mod client_hello {
             }
 
             let key_schedule_traffic =
-                emit_finished_tls13(flight, &randoms, cx, key_schedule, &st.config, &proof);
+                emit_finished_tls13(flight, &randoms, cx, key_schedule, &st.config, &input.proof);
 
             if !doing_client_auth && st.config.send_half_rtt_data {
                 // Application data can be sent immediately after Finished, in one
@@ -472,6 +472,7 @@ mod client_hello {
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
         chosen_psk_idx: Option<usize>,
         resuming_psk: Option<&[u8]>,
+        proof: &HandshakeAlignedProof,
         config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
@@ -501,8 +502,6 @@ mod client_hello {
             )),
         };
 
-        let proof = cx.common.check_aligned_handshake()?;
-
         let client_hello_hash = transcript.hash_given(&[]);
 
         trace!("sending server hello {sh:?}");
@@ -517,7 +516,7 @@ mod client_hello {
                 &*config.key_log,
                 &randoms.client,
                 cx.common,
-                &proof,
+                proof,
             );
 
             if config.max_early_data_size > 0 {
@@ -946,7 +945,13 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             message_already_in_transcript: true,
             expected_certificate_type: self.expected_certificate_type,
         })
-        .handle(cx, Input { message: m })
+        .handle(
+            cx,
+            Input {
+                message: m,
+                aligned_handshake: input.aligned_handshake,
+            },
+        )
     }
 }
 
@@ -964,7 +969,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ServerContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         if !self.message_already_in_transcript {
             self.transcript.add_message(&message);
@@ -1042,7 +1047,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ServerContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         let signature = require_handshake_msg!(
             message,
@@ -1090,9 +1095,9 @@ impl State<ServerConnectionData> for ExpectEarlyData {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
-        Input { message }: Input<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
-        match message.payload {
+        match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 match cx
                     .data
@@ -1107,10 +1112,11 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 parsed: HandshakeMessagePayload(HandshakePayload::EndOfEarlyData),
                 ..
             } => {
-                let proof = cx.common.check_aligned_handshake()?;
+                let proof = input.check_aligned_handshake()?;
                 self.key_schedule
                     .update_decrypter(cx.common, &proof);
-                self.transcript.add_message(&message);
+                self.transcript
+                    .add_message(&input.message);
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
                     transcript: self.transcript,
@@ -1230,13 +1236,16 @@ impl State<ServerConnectionData> for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
-        Input { message }: Input<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
-        let finished =
-            require_handshake_msg!(message, HandshakeType::Finished, HandshakePayload::Finished)?;
+        let finished = require_handshake_msg!(
+            input.message,
+            HandshakeType::Finished,
+            HandshakePayload::Finished
+        )?;
 
         let handshake_hash = self.transcript.current_hash();
-        let proof = cx.common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
         let (key_schedule_before_finished, expect_verify_data) = self
             .key_schedule
             .sign_client_finish(&handshake_hash, cx.common, &proof);
@@ -1249,7 +1258,8 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         // Note: future derivations include Client Finished, but not the
         // main application data keying.
-        self.transcript.add_message(&message);
+        self.transcript
+            .add_message(&input.message);
 
         let (key_schedule_traffic, exporter, resumption) =
             key_schedule_before_finished.into_traffic(self.transcript.current_hash());
@@ -1294,13 +1304,14 @@ impl ExpectTraffic {
     fn handle_key_update(
         &mut self,
         common: &mut CommonState,
+        input: Input<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         if let Protocol::Quic = common.protocol {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 
-        let proof = common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
 
         if common.should_update_key(key_update_request)? {
             self.key_schedule
@@ -1318,14 +1329,14 @@ impl State<ServerConnectionData> for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
-        Input { message }: Input<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
-        match message.payload {
+        match input.message.payload {
             MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } => self.handle_key_update(cx.common, &key_update)?,
+            } => self.handle_key_update(cx.common, input, &key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,
@@ -1385,7 +1396,7 @@ impl State<ServerConnectionData> for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         _cx: &mut ServerContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         // reject all messages
         Err(inappropriate_message(&message.payload, &[]))

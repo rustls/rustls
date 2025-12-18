@@ -64,7 +64,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         &self,
         suite: &'static Tls13CipherSuite,
         server_hello: &ServerHelloPayload,
-        Input { message }: &Input<'_>,
+        input: &Input<'_>,
         st: ExpectServerHello,
         cx: &mut ClientContext<'_>,
     ) -> hs::NextStateOrError {
@@ -72,7 +72,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         let mut transcript = st
             .transcript_buffer
             .start_hash(suite.common.hash_provider);
-        transcript.add_message(message);
+        transcript.add_message(&input.message);
 
         let mut randoms = ConnectionRandoms::new(st.input.random, server_hello.random);
 
@@ -162,7 +162,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                         ..
                     },
                 ..
-            } = &message
+            } = &input.message
             else {
                 unreachable!("ServerHello is a handshake message");
             };
@@ -176,7 +176,9 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 // server hello message, and switch the relevant state to the copies for the
                 // inner client hello.
                 Some(mut accepted) => {
-                    accepted.transcript.add_message(message);
+                    accepted
+                        .transcript
+                        .add_message(&input.message);
                     transcript = accepted.transcript;
                     randoms.client = accepted.random.0;
                     hello.sent_extensions = accepted.sent_extensions;
@@ -195,7 +197,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         // If we change keying when a subsequent handshake message is being joined,
         // the two halves will have different record layer protections.  Disallow this.
-        let proof = cx.common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
 
         let hash_at_client_recvd_server_hello = transcript.current_hash();
         let key_schedule = key_schedule.derive_client_handshake_secrets(
@@ -457,7 +459,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         let exts = require_handshake_msg!(
             message,
@@ -827,7 +829,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         let certreq = &require_handshake_msg!(
             message,
@@ -929,7 +931,7 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&message);
         let compressed_cert = require_handshake_msg_move!(
@@ -1031,7 +1033,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&message);
 
@@ -1061,7 +1063,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         let cert_verify = require_handshake_msg!(
             message,
@@ -1219,13 +1221,16 @@ impl State<ClientConnectionData> for ExpectFinished {
     fn handle(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
         let mut st = *self;
-        let finished =
-            require_handshake_msg!(message, HandshakeType::Finished, HandshakePayload::Finished)?;
+        let finished = require_handshake_msg!(
+            input.message,
+            HandshakeType::Finished,
+            HandshakePayload::Finished
+        )?;
 
-        let proof = cx.common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
         let handshake_hash = st.transcript.current_hash();
         let expect_verify_data = st
             .key_schedule
@@ -1239,7 +1244,8 @@ impl State<ClientConnectionData> for ExpectFinished {
             }
         };
 
-        st.transcript.add_message(&message);
+        st.transcript
+            .add_message(&input.message);
 
         let hash_after_handshake = st.transcript.current_hash();
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
@@ -1424,6 +1430,7 @@ impl ExpectTraffic {
     fn handle_key_update(
         &mut self,
         common: &mut CommonState,
+        input: Input<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         if let Protocol::Quic = common.protocol {
@@ -1431,7 +1438,7 @@ impl ExpectTraffic {
         }
 
         // Mustn't be interleaved with other handshake messages.
-        let proof = common.check_aligned_handshake()?;
+        let proof = input.check_aligned_handshake()?;
 
         if common.should_update_key(key_update_request)? {
             self.key_schedule
@@ -1449,9 +1456,9 @@ impl State<ClientConnectionData> for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
-        match message.payload {
+        match input.message.payload {
             MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
@@ -1460,7 +1467,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } => self.handle_key_update(cx.common, &key_update)?,
+            } => self.handle_key_update(cx.common, input, &key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,
@@ -1516,7 +1523,7 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
     fn handle(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
-        Input { message }: Input<'_>,
+        Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         let nst = require_handshake_msg!(
             message,

@@ -335,7 +335,7 @@ mod buffered {
 
             Ok(Some(Accepted {
                 connection,
-                message: input.message,
+                input,
                 sig_schemes,
             }))
         }
@@ -510,7 +510,7 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
 #[cfg(feature = "std")]
 pub struct Accepted {
     connection: ConnectionCommon<ServerConnectionData>,
-    message: Message<'static>,
+    input: Input<'static>,
     sig_schemes: Vec<SignatureScheme>,
 }
 
@@ -518,7 +518,7 @@ pub struct Accepted {
 impl Accepted {
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
-        let payload = Self::client_hello_payload(&self.message);
+        let payload = Self::client_hello_payload(&self.input.message);
         let server_name = payload
             .server_name
             .as_ref()
@@ -564,14 +564,11 @@ impl Accepted {
         }
 
         let state = hs::ExpectClientHello::new(config, ServerExtensionsInput::default());
-        let proof = match self
-            .connection
-            .core
-            .common_state
-            .check_aligned_handshake()
-        {
+        let proof = match self.input.check_aligned_handshake() {
             Ok(proof) => proof,
-            Err(err) => return Err(AcceptedAlert::from_error(err, self.connection)),
+            Err(err) => {
+                return Err(AcceptedAlert::from_error(err, self.connection));
+            }
         };
         let mut cx = hs::ServerContext {
             common: &mut self.connection.core.common_state,
@@ -582,8 +579,8 @@ impl Accepted {
         };
 
         let input = ClientHelloInput {
-            message: &self.message,
-            client_hello: Self::client_hello_payload(&self.message),
+            message: &self.input.message,
+            client_hello: Self::client_hello_payload(&self.input.message),
             sig_schemes: self.sig_schemes,
             proof,
         };
