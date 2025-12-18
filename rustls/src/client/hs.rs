@@ -743,10 +743,11 @@ fn emit_client_hello_for_retry(
 
         // When we're not doing ECH and resuming, then the PSK binder need to be filled in as
         // normal.
-        (_, Some(tls13_session)) => Some((
-            tls13_session.suite(),
-            tls13::fill_in_psk_binder(&tls13_session, &transcript_buffer, &mut chp),
-        )),
+        (_, Some(tls13_session)) => {
+            let key_schedule = KeyScheduleEarly::new(tls13_session.suite(), tls13_session.secret());
+            tls13::fill_in_psk_binder(&key_schedule, &transcript_buffer, &mut chp);
+            Some((tls13_session.suite(), key_schedule))
+        }
 
         // No early key schedule in other cases.
         _ => None,

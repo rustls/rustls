@@ -675,12 +675,9 @@ impl EchState {
         if let Some(resuming) = resuming.as_ref() {
             let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(inner_hello));
 
-            // Retain the early key schedule we get from processing the binder.
-            self.early_data_key_schedule = Some(tls13::fill_in_psk_binder(
-                resuming,
-                &self.inner_hello_transcript,
-                &mut chp,
-            ));
+            let key_schedule = KeyScheduleEarly::new(resuming.suite(), resuming.secret());
+            tls13::fill_in_psk_binder(&key_schedule, &self.inner_hello_transcript, &mut chp);
+            self.early_data_key_schedule = Some(key_schedule);
 
             // fill_in_psk_binder works on an owned HandshakeMessagePayload, so we need to
             // extract our inner hello back out of it to retain ownership.

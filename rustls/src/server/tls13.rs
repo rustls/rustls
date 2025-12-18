@@ -221,9 +221,8 @@ mod client_hello {
 
                     if !check_binder(
                         &mut transcript,
-                        suite,
+                        &KeyScheduleEarly::new(suite, &resume.secret.0),
                         input.message,
-                        &resume.secret.0,
                         psk_offer.binders[i].as_ref(),
                     ) {
                         return Err(PeerMisbehaved::IncorrectBinder.into());
@@ -427,9 +426,8 @@ mod client_hello {
 
     fn check_binder(
         transcript: &mut HandshakeHash,
-        suite: &'static Tls13CipherSuite,
+        key_schedule: &KeyScheduleEarly,
         client_hello: &Message<'_>,
-        psk: &[u8],
         binder: &[u8],
     ) -> bool {
         let binder_plaintext = match &client_hello.payload {
@@ -441,7 +439,6 @@ mod client_hello {
 
         let handshake_hash = transcript.hash_given(binder_plaintext);
 
-        let key_schedule = KeyScheduleEarly::new(suite, psk);
         let real_binder =
             key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
