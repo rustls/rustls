@@ -704,7 +704,7 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
 }
 
 fn roots() -> RootCertStore {
-    let mut r = RootCertStore::empty();
+    let mut r = RootCertStore::with_capacity(1);
     r.add(CertificateDer::from_slice(include_bytes!(
         "../../../test-ca/rsa-2048/ca.der"
     )))

@@ -325,7 +325,7 @@ mod tests {
             )
             .unwrap();
 
-        let mut roots = RootCertStore::empty();
+        let mut roots = RootCertStore::with_capacity(1);
         roots.add(issuer.der().clone()).unwrap();
         let client_config = ClientConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions()

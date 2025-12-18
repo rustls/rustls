@@ -49,7 +49,7 @@ pub const PROVIDER_TLS13: crypto::CryptoProvider = crypto::CryptoProvider {
 
 pub fn server_verifier() -> Arc<dyn ServerVerifier> {
     // we need one of these, but it doesn't matter what it is
-    let mut root_store = RootCertStore::empty();
+    let mut root_store = RootCertStore::with_capacity(1);
     root_store.add_parsable_certificates([CertificateDer::from(
         &include_bytes!("../../test-ca/ecdsa-p256/inter.der")[..],
     )]);

@@ -788,7 +788,7 @@ impl Parameters {
                     panic!("client auth requested but no X.509 identity available");
                 };
 
-                let mut client_auth_roots = RootCertStore::empty();
+                let mut client_auth_roots = RootCertStore::with_capacity(id.intermediates.len());
                 for root in &id.intermediates {
                     client_auth_roots
                         .add(root.clone())
@@ -829,7 +829,7 @@ impl Parameters {
     }
 
     fn client_config(&self) -> Arc<ClientConfig> {
-        let mut root_store = RootCertStore::empty();
+        let mut root_store = RootCertStore::with_capacity(1);
         root_store
             .add(self.proto.key_type.ca_cert())
             .unwrap();
