@@ -132,6 +132,10 @@ impl KeyScheduleEarly {
             current_exporter_secret: early_exporter_secret,
         })
     }
+
+    pub(crate) fn hash(&self) -> &'static dyn hash::Hash {
+        self.ks.inner.suite.common.hash_provider
+    }
 }
 
 /// The "early secret" stage of the key schedule.
