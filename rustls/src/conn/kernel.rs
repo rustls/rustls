@@ -85,17 +85,16 @@ pub struct KernelConnection<Side> {
 
 impl<Side> KernelConnection<Side> {
     pub(crate) fn new(state: Box<dyn KernelState>, common: CommonState) -> Result<Self, Error> {
+        let (negotiated_version, protocol, suite, quic) = common
+            .into_kernel_parts()
+            .ok_or(Error::HandshakeNotComplete)?;
         Ok(Self {
             state,
 
-            quic: common.quic,
-            negotiated_version: common
-                .negotiated_version
-                .ok_or(Error::HandshakeNotComplete)?,
-            protocol: common.protocol,
-            suite: common
-                .suite
-                .ok_or(Error::HandshakeNotComplete)?,
+            quic,
+            negotiated_version,
+            protocol,
+            suite,
 
             _side: PhantomData,
         })

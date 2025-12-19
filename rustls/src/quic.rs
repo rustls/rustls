@@ -395,7 +395,7 @@ mod connection {
             let suite = self
                 .core
                 .common_state
-                .suite
+                .negotiated_cipher_suite()
                 .and_then(|suite| match suite {
                     SupportedCipherSuite::Tls13(suite) => Some(suite),
                     _ => None,
