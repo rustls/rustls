@@ -1484,9 +1484,9 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {
+    fn send_key_update_request(&mut self, output: &mut dyn Output) -> Result<(), Error> {
         self.key_schedule
-            .request_key_update_and_update_encrypter(common)
+            .request_key_update_and_update_encrypter(output)
     }
 
     fn into_external_state(
