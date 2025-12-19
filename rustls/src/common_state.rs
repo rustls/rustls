@@ -810,7 +810,7 @@ pub(crate) trait State<Side>: Send + Sync {
         input: Input<'m>,
     ) -> Result<Box<dyn State<Side>>, Error>;
 
-    fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
+    fn send_key_update_request(&mut self, _output: &mut dyn Output) -> Result<(), Error> {
         Err(Error::HandshakeNotComplete)
     }
 
