@@ -1054,9 +1054,9 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "graviola"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00678994ed89e22df4c4d99e3105b0ae69206d4b9aaeaeec3a52c2bec55c1f01"
+checksum = "b1662fcff7237fbe8c91ff2800fcce9435af25b7f0cb580f5679b31c3a1f1e7a"
 dependencies = [
  "cfg-if",
  "getrandom 0.3.3",
@@ -2654,11 +2654,12 @@ dependencies = [
 
 [[package]]
 name = "rustls-graviola"
-version = "0.2.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51c72f95752eab205ea6e623eb35e14e6767640be83f0d210ba64c76f7105525"
+checksum = "e81f0f2005bfba00e8088f9cb75f4b3ce3f2a31aebfaeed0b2cc05e13d01ce06"
 dependencies = [
  "graviola",
+ "libcrux-ml-kem",
  "rustls 0.23.32",
 ]
 
