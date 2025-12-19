@@ -43,7 +43,7 @@ use crate::sealed::Sealed;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
-    KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleResumption,
+    KeyScheduleEarlyClient, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleResumption,
     KeyScheduleTraffic,
 };
 use crate::tls13::{
@@ -310,7 +310,7 @@ pub(super) fn initial_key_share(
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
 /// data dependency on the message they are contained within.
 pub(super) fn fill_in_psk_binder(
-    key_schedule: &KeyScheduleEarly,
+    key_schedule: &KeyScheduleEarlyClient,
     transcript: &HandshakeHashBuffer,
     hmp: &mut HandshakeMessagePayload<'_>,
 ) {
@@ -382,7 +382,7 @@ pub(super) fn derive_early_traffic_secret(
     key_log: &dyn KeyLog,
     cx: &mut ClientContext<'_>,
     hash_alg: &'static dyn Hash,
-    early_key_schedule: &KeyScheduleEarly,
+    early_key_schedule: &KeyScheduleEarlyClient,
     sent_tls13_fake_ccs: &mut bool,
     transcript_buffer: &HandshakeHashBuffer,
     client_random: &[u8; 32],
@@ -391,7 +391,7 @@ pub(super) fn derive_early_traffic_secret(
     emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
 
     let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
-    early_key_schedule.client_early_traffic_secret_for_client(
+    early_key_schedule.client_early_traffic_secret(
         &client_hello_hash,
         key_log,
         client_random,
