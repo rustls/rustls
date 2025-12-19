@@ -31,7 +31,7 @@ use crate::vecbuf::ChunkVecBuffer;
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
     handshake_kind: Option<HandshakeKind>,
-    pub(crate) side: Side,
+    side: Side,
     pub(crate) decrypt_state: DecryptionState,
     pub(crate) encrypt_state: EncryptionState,
     pub(crate) suite: Option<SupportedCipherSuite>,
