@@ -34,7 +34,7 @@ pub struct CommonState {
     side: Side,
     pub(crate) decrypt_state: DecryptionState,
     pub(crate) encrypt_state: EncryptionState,
-    pub(crate) suite: Option<SupportedCipherSuite>,
+    suite: Option<SupportedCipherSuite>,
     negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
     pub(crate) alpn_protocol: Option<ProtocolName>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
@@ -177,6 +177,23 @@ impl CommonState {
 
     fn is_tls13(&self) -> bool {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+    }
+
+    pub(super) fn into_kernel_parts(
+        self,
+    ) -> Option<(ProtocolVersion, Protocol, SupportedCipherSuite, quic::Quic)> {
+        let Self {
+            negotiated_version,
+            suite,
+            protocol,
+            quic,
+            ..
+        } = self;
+
+        match (negotiated_version, suite) {
+            (Some(version), Some(suite)) => Some((version, protocol, suite, quic)),
+            _ => None,
+        }
     }
 
     pub(crate) fn process_main_protocol<Data>(
