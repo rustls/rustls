@@ -37,7 +37,7 @@ use crate::suites::{Suite, SupportedCipherSuite};
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-use crate::tls13::key_schedule::KeyScheduleEarly;
+use crate::tls13::key_schedule::KeyScheduleEarlyClient;
 use crate::{ClientConfig, bs_debug};
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
@@ -54,7 +54,7 @@ pub(crate) struct ExpectServerHello {
     // Otherwise, it is thrown away.
     //
     // If this is `None` then we do not support early data.
-    pub(super) early_data_key_schedule: Option<KeyScheduleEarly>,
+    pub(super) early_data_key_schedule: Option<KeyScheduleEarlyClient>,
     pub(super) offered_key_share: Option<GroupAndKeyShare>,
     pub(super) suite: Option<SupportedCipherSuite>,
     pub(super) ech_state: Option<EchState>,
@@ -744,7 +744,8 @@ fn emit_client_hello_for_retry(
         // When we're not doing ECH and resuming, then the PSK binder need to be filled in as
         // normal.
         (_, Some(tls13_session)) => {
-            let key_schedule = KeyScheduleEarly::new(tls13_session.suite(), tls13_session.secret());
+            let key_schedule =
+                KeyScheduleEarlyClient::new(tls13_session.suite(), tls13_session.secret());
             tls13::fill_in_psk_binder(&key_schedule, &transcript_buffer, &mut chp);
             Some((tls13_session.suite(), key_schedule))
         }

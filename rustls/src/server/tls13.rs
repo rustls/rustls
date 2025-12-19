@@ -59,7 +59,7 @@ mod client_hello {
     use crate::sealed::Sealed;
     use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello, ServerHandler};
     use crate::tls13::key_schedule::{
-        KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
+        KeyScheduleEarlyServer, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
     use crate::verify::DigitallySignedStruct;
 
@@ -221,7 +221,7 @@ mod client_hello {
 
                     if !check_binder(
                         &mut transcript,
-                        &KeyScheduleEarly::new(suite, &resume.secret.0),
+                        &KeyScheduleEarlyServer::new(suite, &resume.secret.0),
                         input.message,
                         psk_offer.binders[i].as_ref(),
                     ) {
@@ -426,7 +426,7 @@ mod client_hello {
 
     fn check_binder(
         transcript: &mut HandshakeHash,
-        key_schedule: &KeyScheduleEarly,
+        key_schedule: &KeyScheduleEarlyServer,
         client_hello: &Message<'_>,
         binder: &[u8],
     ) -> bool {
@@ -507,8 +507,8 @@ mod client_hello {
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some(psk) = resuming_psk {
-            let early_key_schedule = KeyScheduleEarly::new(suite, psk);
-            early_key_schedule.client_early_traffic_secret_for_server(
+            let early_key_schedule = KeyScheduleEarlyServer::new(suite, psk);
+            early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
                 &randoms.client,

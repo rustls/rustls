@@ -21,6 +21,72 @@ use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite, quic};
 // with an empty or trivial secret, or extract the wrong kind of secrets
 // at a given point.
 
+pub(crate) struct KeyScheduleEarlyClient(KeyScheduleEarly);
+
+impl KeyScheduleEarlyClient {
+    pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
+        Self(KeyScheduleEarly::new(suite, secret))
+    }
+
+    /// Computes the `client_early_traffic_secret` and installs it as encrypter.
+    pub(crate) fn client_early_traffic_secret(
+        &self,
+        hs_hash: &hash::Output,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+        common: &mut CommonState,
+    ) {
+        self.0.ks.set_encrypter(
+            &self
+                .0
+                .client_early_traffic_secret(hs_hash, key_log, client_random, common),
+            common,
+        );
+    }
+}
+
+impl Deref for KeyScheduleEarlyClient {
+    type Target = KeyScheduleEarly;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub(crate) struct KeyScheduleEarlyServer(KeyScheduleEarly);
+
+impl KeyScheduleEarlyServer {
+    pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
+        Self(KeyScheduleEarly::new(suite, secret))
+    }
+
+    /// Computes the `client_early_traffic_secret` and installs it as decrypter.
+    pub(crate) fn client_early_traffic_secret(
+        &self,
+        hs_hash: &hash::Output,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+        common: &mut CommonState,
+        proof: &HandshakeAlignedProof,
+    ) {
+        self.0.ks.set_decrypter(
+            &self
+                .0
+                .client_early_traffic_secret(hs_hash, key_log, client_random, common),
+            common,
+            proof,
+        );
+    }
+}
+
+impl Deref for KeyScheduleEarlyServer {
+    type Target = KeyScheduleEarly;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// The "early secret" stage of the key schedule WITH a PSK.
 ///
 /// This is only useful when you need to use one of the binder
@@ -33,44 +99,10 @@ pub(crate) struct KeyScheduleEarly {
 }
 
 impl KeyScheduleEarly {
-    pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
+    fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
         Self {
             ks: KeySchedule::new(suite, secret),
         }
-    }
-
-    /// Computes the `client_early_traffic_secret` and installs it as encrypter.
-    pub(crate) fn client_early_traffic_secret_for_client(
-        &self,
-        hs_hash: &hash::Output,
-        key_log: &dyn KeyLog,
-        client_random: &[u8; 32],
-        common: &mut CommonState,
-    ) {
-        debug_assert_eq!(common.side, Side::Client);
-
-        self.ks.set_encrypter(
-            &self.client_early_traffic_secret(hs_hash, key_log, client_random, common),
-            common,
-        );
-    }
-
-    /// Computes the `client_early_traffic_secret` and installs it as decrypter.
-    pub(crate) fn client_early_traffic_secret_for_server(
-        &self,
-        hs_hash: &hash::Output,
-        key_log: &dyn KeyLog,
-        client_random: &[u8; 32],
-        common: &mut CommonState,
-        proof: &HandshakeAlignedProof,
-    ) {
-        debug_assert_eq!(common.side, Side::Server);
-
-        self.ks.set_decrypter(
-            &self.client_early_traffic_secret(hs_hash, key_log, client_random, common),
-            common,
-            proof,
-        );
     }
 
     /// Computes the `client_early_traffic_secret` and returns it.
@@ -190,8 +222,15 @@ impl KeySchedulePreHandshake {
 }
 
 /// Creates a key schedule with a PSK.
-impl From<KeyScheduleEarly> for KeySchedulePreHandshake {
-    fn from(KeyScheduleEarly { ks }: KeyScheduleEarly) -> Self {
+impl From<KeyScheduleEarlyClient> for KeySchedulePreHandshake {
+    fn from(KeyScheduleEarlyClient(KeyScheduleEarly { ks }): KeyScheduleEarlyClient) -> Self {
+        Self { ks }
+    }
+}
+
+/// Creates a key schedule with a PSK.
+impl From<KeyScheduleEarlyServer> for KeySchedulePreHandshake {
+    fn from(KeyScheduleEarlyServer(KeyScheduleEarly { ks }): KeyScheduleEarlyServer) -> Self {
         Self { ks }
     }
 }
