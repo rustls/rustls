@@ -790,27 +790,24 @@ pub(crate) struct Context<'a, Data> {
     pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
 }
 
-impl<'a, Data> Context<'a, Data> {
-    /// Receive plaintext data [`Payload<'_>`].
-    ///
-    /// Since [`Context`] does not hold a lifetime to the receive buffer the
-    /// passed [`Payload`] will have it's lifetime erased by storing an index
-    /// into the receive buffer as an [`UnborrowedPayload`]. This enables the
-    /// data to be later reborrowed after it has been decrypted in-place.
-    pub(crate) fn receive_plaintext(&mut self, payload: Payload<'_>) {
-        self.common
-            .temper_counters
-            .received_app_data();
-        let previous = self
-            .received_plaintext
-            .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
-        debug_assert!(previous.is_none(), "overwrote plaintext data");
-    }
-}
-
 impl<Data> Output for Context<'_, Data> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
+            Event::ApplicationData(payload) => {
+                // Receive plaintext data [`Payload<'_>`].
+                //
+                // Since [`Context`] does not hold a lifetime to the receive buffer the
+                // passed [`Payload`] will have it's lifetime erased by storing an index
+                // into the receive buffer as an [`UnborrowedPayload`]. This enables the
+                // data to be later reborrowed after it has been decrypted in-place.
+                self.common
+                    .temper_counters
+                    .received_app_data();
+                let previous = self
+                    .received_plaintext
+                    .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
+                debug_assert!(previous.is_none(), "overwrote plaintext data");
+            }
             Event::ApplicationProtocol(protocol) => self.common.alpn_protocol = Some(protocol),
             Event::CipherSuite(suite) => self.common.suite = Some(suite),
             Event::EarlyExporter(exporter) => self.common.early_exporter = Some(exporter),
@@ -891,6 +888,7 @@ pub(crate) trait Output {
 
 /// The set
 pub(crate) enum Event<'a> {
+    ApplicationData(Payload<'a>),
     ApplicationProtocol(ProtocolName),
     CipherSuite(SupportedCipherSuite),
     EarlyExporter(Box<dyn Exporter>),
