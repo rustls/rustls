@@ -44,7 +44,7 @@ use crate::{ClientConfig, ServerConfig};
 /// (if any) to send to the peer. The methods to do this are specific to whether you're building a ClientConfig
 /// or a ServerConfig, as tracked by the [`ConfigSide`] type parameter on the various impls of ConfigBuilder.
 ///
-/// A `Result<ClientConfig, Error>` or `Result<ServerConfig, Error>`is the outcome of the builder process.
+/// A `Result<ClientConfig, Error>` or `Result<ServerConfig, Error>` is the outcome of the builder process.
 /// The error is used to report consistency problems with the configuration. For example, it's an error
 /// to have a `CryptoProvider` that has no cipher suites.
 ///
