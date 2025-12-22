@@ -177,19 +177,15 @@ impl CommonState {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
-    pub(super) fn into_kernel_parts(
-        self,
-    ) -> Option<(ProtocolVersion, Protocol, SupportedCipherSuite, quic::Quic)> {
+    pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
         let Self {
             negotiated_version,
             suite,
-            protocol,
-            quic,
             ..
         } = self;
 
         match (negotiated_version, suite) {
-            (Some(version), Some(suite)) => Some((version, protocol, suite, quic)),
+            (Some(version), Some(suite)) => Some((version, suite)),
             _ => None,
         }
     }
