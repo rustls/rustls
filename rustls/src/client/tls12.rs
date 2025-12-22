@@ -162,8 +162,7 @@ mod server_hello {
                     );
 
                     let (dec, enc) = secrets.make_cipher_pair(Side::Client);
-                    cx.common
-                        .emit(Event::HandshakeKind(HandshakeKind::Resumed));
+                    cx.emit(Event::HandshakeKind(HandshakeKind::Resumed));
                     let cert_verified = verify::PeerVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -202,8 +201,7 @@ mod server_hello {
                 }
             }
 
-            cx.common
-                .emit(Event::HandshakeKind(HandshakeKind::Full));
+            cx.emit(Event::HandshakeKind(HandshakeKind::Full));
             Ok(Box::new(ExpectCertificate {
                 config,
                 session_id: server_hello.session_id,
@@ -798,7 +796,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                     CertificateChain::from_signer(credentials)
                 }
             };
-            emit_certificate(&mut st.transcript, certs, cx.common);
+            emit_certificate(&mut st.transcript, certs, cx);
         }
 
         // 4a.
@@ -829,7 +827,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
 
         // 4b.
         let mut transcript = st.transcript;
-        emit_client_kx(&mut transcript, st.suite.kx, cx.common, kx.pub_key());
+        emit_client_kx(&mut transcript, st.suite.kx, cx, kx.pub_key());
         // Note: EMS handshake hash only runs up to ClientKeyExchange.
         let ems_seed = st
             .using_ems
@@ -837,7 +835,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
 
         // 4c.
         if let Some(ClientAuthDetails::Verify { credentials, .. }) = st.client_auth {
-            emit_certverify(&mut transcript, credentials.signer, cx.common)?;
+            emit_certverify(&mut transcript, credentials.signer, cx)?;
         }
 
         // 4d. Derive secrets.
@@ -850,11 +848,10 @@ impl State<ClientConnectionData> for ExpectServerDone {
             st.randoms,
             suite,
         )?;
-        cx.common
-            .emit(Event::KeyExchangeGroup(skxg));
+        cx.emit(Event::KeyExchangeGroup(skxg));
 
         // 4e. CCS. We are definitely going to switch on encryption.
-        emit_ccs(cx.common);
+        emit_ccs(cx);
 
         // 4f. Now commit secrets.
         st.config.key_log.log(
@@ -864,7 +861,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         );
 
         let (dec, enc) = secrets.make_cipher_pair(Side::Client);
-        cx.common.emit(Event::MessageEncrypter(
+        cx.emit(Event::MessageEncrypter(
             enc,
             secrets
                 .suite()
@@ -873,7 +870,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         ));
 
         // 5.
-        emit_finished(&secrets, &mut transcript, cx.common, &proof);
+        emit_finished(&secrets, &mut transcript, cx, &proof);
 
         if st.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -989,8 +986,7 @@ impl State<ClientConnectionData> for ExpectCcs {
         let proof = input.check_aligned_handshake()?;
 
         // Note: msgs layer validates trivial contents of CCS.
-        cx.common
-            .emit(Event::MessageDecrypter(self.pending_decrypter, proof));
+        cx.emit(Event::MessageDecrypter(self.pending_decrypter, proof));
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
@@ -1104,15 +1100,15 @@ impl State<ClientConnectionData> for ExpectFinished {
         st.save_session();
 
         if let Some((_, encrypter)) = st.resuming.take() {
-            emit_ccs(cx.common);
-            cx.common.emit(Event::MessageEncrypter(
+            emit_ccs(cx);
+            cx.emit(Event::MessageEncrypter(
                 encrypter,
                 st.secrets
                     .suite()
                     .common
                     .confidentiality_limit,
             ));
-            emit_finished(&st.secrets, &mut st.transcript, cx.common, &proof);
+            emit_finished(&st.secrets, &mut st.transcript, cx, &proof);
         }
 
         let extracted_secrets = st
@@ -1120,11 +1116,9 @@ impl State<ClientConnectionData> for ExpectFinished {
             .enable_secret_extraction
             .then(|| st.secrets.extract_secrets(Side::Client));
 
-        cx.common
-            .emit(Event::PeerIdentity(st.peer_identity));
-        cx.common
-            .emit(Event::Exporter(st.secrets.into_exporter()));
-        cx.common.emit(Event::StartTraffic);
+        cx.emit(Event::PeerIdentity(st.peer_identity));
+        cx.emit(Event::Exporter(st.secrets.into_exporter()));
+        cx.emit(Event::StartTraffic);
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,
