@@ -191,8 +191,7 @@ mod client_hello {
                 st.session_id = SessionId::random(st.config.provider.secure_random)?;
             }
 
-            cx.common
-                .emit(Event::HandshakeKind(HandshakeKind::Full));
+            cx.emit(Event::HandshakeKind(HandshakeKind::Full));
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
@@ -218,7 +217,7 @@ mod client_hello {
             let doing_client_auth = emit_certificate_req(&mut flight, &st.config)?;
             emit_server_hello_done(&mut flight);
 
-            flight.finish(cx.common);
+            flight.finish(cx);
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
@@ -282,7 +281,7 @@ mod client_hello {
             &randoms,
             extra_exts,
         )?;
-        flight.finish(cx.common);
+        flight.finish(cx);
 
         let secrets = ConnectionSecrets::new_resume(randoms, suite, &resumedata.master_secret);
         config.key_log.log(
@@ -291,8 +290,7 @@ mod client_hello {
             secrets.master_secret(),
         );
 
-        cx.common
-            .emit(Event::HandshakeKind(HandshakeKind::Resumed));
+        cx.emit(Event::HandshakeKind(HandshakeKind::Resumed));
         cx.data.received_resumption_data = Some(
             resumedata
                 .common
@@ -316,17 +314,17 @@ mod client_hello {
                 )?;
             }
         }
-        emit_ccs(cx.common);
+        emit_ccs(cx);
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Server);
-        cx.common.emit(Event::MessageEncrypter {
+        cx.emit(Event::MessageEncrypter {
             encrypter,
             limit: secrets
                 .suite()
                 .common
                 .confidentiality_limit,
         });
-        emit_finished(&secrets, &mut transcript, cx.common, &proof);
+        emit_finished(&secrets, &mut transcript, cx, &proof);
 
         Ok(Box::new(ExpectCcs {
             config,
@@ -560,8 +558,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
             self.randoms,
             self.suite,
         )?;
-        cx.common
-            .emit(Event::KeyExchangeGroup(self.server_kx.group));
+        cx.emit(Event::KeyExchangeGroup(self.server_kx.group));
 
         self.config.key_log.log(
             "CLIENT_RANDOM",
@@ -694,8 +691,7 @@ impl State<ServerConnectionData> for ExpectCcs {
             }
         };
 
-        cx.common
-            .emit(Event::MessageDecrypter { decrypter, proof });
+        cx.emit(Event::MessageDecrypter { decrypter, proof });
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
@@ -767,7 +763,7 @@ fn emit_ticket(
     };
 
     transcript.add_message(&m);
-    cx.common.emit(Event::PlainMessage(m));
+    cx.emit(Event::PlainMessage(m));
     Ok(())
 }
 
@@ -880,8 +876,8 @@ impl State<ServerConnectionData> for ExpectFinished {
                     )?;
                 }
             }
-            emit_ccs(cx.common);
-            cx.common.emit(Event::MessageEncrypter {
+            emit_ccs(cx);
+            cx.emit(Event::MessageEncrypter {
                 encrypter,
                 limit: self
                     .secrets
@@ -889,12 +885,11 @@ impl State<ServerConnectionData> for ExpectFinished {
                     .common
                     .confidentiality_limit,
             });
-            emit_finished(&self.secrets, &mut self.transcript, cx.common, &proof);
+            emit_finished(&self.secrets, &mut self.transcript, cx, &proof);
         }
 
         if let Some(identity) = self.peer_identity {
-            cx.common
-                .emit(Event::PeerIdentity(identity));
+            cx.emit(Event::PeerIdentity(identity));
         }
 
         let extracted_secrets = self
@@ -905,9 +900,8 @@ impl State<ServerConnectionData> for ExpectFinished {
                     .extract_secrets(Side::Server)
             });
 
-        cx.common
-            .emit(Event::Exporter(self.secrets.into_exporter()));
-        cx.common.emit(Event::StartTraffic);
+        cx.emit(Event::Exporter(self.secrets.into_exporter()));
+        cx.emit(Event::StartTraffic);
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,

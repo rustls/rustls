@@ -94,8 +94,7 @@ impl<'a> ExtensionProcessing<'a> {
 
                 self.extensions.selected_protocol =
                     Some(SingleProtocolName::new(selected_protocol.clone()));
-                cx.common
-                    .emit(Event::ApplicationProtocol(selected_protocol));
+                cx.emit(Event::ApplicationProtocol(selected_protocol));
                 true
             } else if !our_protocols.is_empty() {
                 return Err(Error::NoApplicationProtocol);
@@ -119,9 +118,9 @@ impl<'a> ExtensionProcessing<'a> {
             }
 
             match hello.transport_parameters.as_ref() {
-                Some(params) => cx
-                    .common
-                    .emit(Event::QuicTransportParameters(params.to_owned().into_vec())),
+                Some(params) => {
+                    cx.emit(Event::QuicTransportParameters(params.to_owned().into_vec()))
+                }
                 None => {
                     return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
                 }
@@ -338,8 +337,7 @@ impl ExpectClientHello {
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
     {
-        cx.common
-            .emit(Event::ProtocolVersion(T::VERSION));
+        cx.emit(Event::ProtocolVersion(T::VERSION));
 
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
@@ -387,8 +385,7 @@ impl ExpectClientHello {
         )?;
 
         debug!("decided upon suite {suite:?}");
-        cx.common
-            .emit(Event::CipherSuite(suite.into()));
+        cx.emit(Event::CipherSuite(suite.into()));
 
         suite
             .server_handler()

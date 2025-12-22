@@ -667,62 +667,6 @@ impl CommonState {
     }
 }
 
-impl Output for CommonState {
-    fn emit(&mut self, ev: Event<'_>) {
-        match ev {
-            Event::ApplicationProtocol(protocol) => {
-                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
-            }
-            Event::CipherSuite(suite) => self.suite = Some(suite),
-            Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
-            Event::EncryptMessage(m) => match self.protocol {
-                Protocol::Tcp => self.send_msg(m, true),
-                Protocol::Quic(_) => self.quic.send_msg(m, true),
-            },
-            Event::EnqueueKeyUpdateNotification => self.enqueue_key_update_notification(),
-            Event::Exporter(exporter) => self.exporter = Some(exporter),
-            Event::HandshakeKind(hk) => {
-                assert!(self.handshake_kind.is_none());
-                self.handshake_kind = Some(hk);
-            }
-            Event::KeyExchangeGroup(kxg) => {
-                assert!(self.negotiated_kx_group.is_none());
-                self.negotiated_kx_group = Some(kxg);
-            }
-            Event::MessageDecrypter { decrypter, proof } => self
-                .decrypt_state
-                .set_message_decrypter(decrypter, &proof),
-            Event::MessageDecrypterWithTrialDecryption {
-                decrypter,
-                max_length,
-                proof,
-            } => self
-                .decrypt_state
-                .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
-            Event::MessageEncrypter { encrypter, limit } => self
-                .encrypt_state
-                .set_message_encrypter(encrypter, limit),
-            Event::QuicEarlySecret(sec) => self.quic.early_secret = sec,
-            Event::QuicHandshakeSecrets(sec) => self.quic.hs_secrets = Some(sec),
-            Event::QuicTrafficSecrets(sec) => self.quic.traffic_secrets = Some(sec),
-            Event::QuicTransportParameters(params) => self.quic.params = Some(params),
-            Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
-            Event::PlainMessage(m) => match self.protocol {
-                Protocol::Tcp => self.send_msg(m, false),
-                Protocol::Quic(_) => self.quic.send_msg(m, false),
-            },
-            Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
-            Event::ReceivedTicket => {
-                self.tls13_tickets_received = self
-                    .tls13_tickets_received
-                    .saturating_add(1)
-            }
-            Event::StartOutgoingTraffic => self.start_outgoing_traffic(),
-            Event::StartTraffic => self.start_traffic(),
-        }
-    }
-}
-
 /// Describes which sort of handshake happened.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[non_exhaustive]
@@ -846,6 +790,73 @@ impl<'a, Data> Context<'a, Data> {
             .received_plaintext
             .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
         debug_assert!(previous.is_none(), "overwrote plaintext data");
+    }
+}
+
+impl<Data> Output for Context<'_, Data> {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::ApplicationProtocol(protocol) => {
+                self.common.alpn_protocol =
+                    Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
+            }
+            Event::CipherSuite(suite) => self.common.suite = Some(suite),
+            Event::EarlyExporter(exporter) => self.common.early_exporter = Some(exporter),
+            Event::EncryptMessage(m) => match self.common.protocol {
+                Protocol::Tcp => self.common.send_msg(m, true),
+                Protocol::Quic(_) => self.common.quic.send_msg(m, true),
+            },
+            Event::EnqueueKeyUpdateNotification => self
+                .common
+                .enqueue_key_update_notification(),
+            Event::Exporter(exporter) => self.common.exporter = Some(exporter),
+            Event::HandshakeKind(hk) => {
+                assert!(self.common.handshake_kind.is_none());
+                self.common.handshake_kind = Some(hk);
+            }
+            Event::KeyExchangeGroup(kxg) => {
+                assert!(
+                    self.common
+                        .negotiated_kx_group
+                        .is_none()
+                );
+                self.common.negotiated_kx_group = Some(kxg);
+            }
+            Event::MessageDecrypter { decrypter, proof } => self
+                .common
+                .decrypt_state
+                .set_message_decrypter(decrypter, &proof),
+            Event::MessageDecrypterWithTrialDecryption {
+                decrypter,
+                max_length,
+                proof,
+            } => self
+                .common
+                .decrypt_state
+                .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
+            Event::MessageEncrypter { encrypter, limit } => self
+                .common
+                .encrypt_state
+                .set_message_encrypter(encrypter, limit),
+            Event::QuicEarlySecret(sec) => self.common.quic.early_secret = sec,
+            Event::QuicHandshakeSecrets(sec) => self.common.quic.hs_secrets = Some(sec),
+            Event::QuicTrafficSecrets(sec) => self.common.quic.traffic_secrets = Some(sec),
+            Event::QuicTransportParameters(params) => self.common.quic.params = Some(params),
+            Event::PeerIdentity(identity) => self.common.peer_identity = Some(identity),
+            Event::PlainMessage(m) => match self.common.protocol {
+                Protocol::Tcp => self.common.send_msg(m, false),
+                Protocol::Quic(_) => self.common.quic.send_msg(m, false),
+            },
+            Event::ProtocolVersion(ver) => self.common.negotiated_version = Some(ver),
+            Event::ReceivedTicket => {
+                self.common.tls13_tickets_received = self
+                    .common
+                    .tls13_tickets_received
+                    .saturating_add(1)
+            }
+            Event::StartOutgoingTraffic => self.common.start_outgoing_traffic(),
+            Event::StartTraffic => self.common.start_traffic(),
+        }
     }
 }
 
