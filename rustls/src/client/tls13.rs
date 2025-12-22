@@ -13,9 +13,7 @@ use super::hs::{
 };
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{
-    CommonState, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State,
-};
+use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::Payload;
@@ -207,15 +205,15 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             suite,
             &*config.key_log,
             &randoms.client,
-            cx.common,
+            cx,
             &proof,
         );
 
         if !key_schedule.protocol().is_quic() {
-            emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
+            emit_fake_ccs(&mut sent_tls13_fake_ccs, cx);
         }
 
-        cx.common.emit(Event::HandshakeKind(
+        cx.emit(Event::HandshakeKind(
             match (&resuming_session, st.done_retry) {
                 (Some(_), true) => HandshakeKind::ResumedWithHelloRetryRequest,
                 (None, true) => HandshakeKind::FullWithHelloRetryRequest,
@@ -254,8 +252,7 @@ impl KeyExchangeChoice {
         their_key_share: &KeyShareEntry,
     ) -> Result<Self, ()> {
         if our_key_share.share.group() == their_key_share.group {
-            cx.common
-                .emit(Event::KeyExchangeGroup(our_key_share.group));
+            cx.emit(Event::KeyExchangeGroup(our_key_share.group));
             return Ok(Self::Whole(our_key_share.share.into_single()));
         }
 
@@ -274,8 +271,7 @@ impl KeyExchangeChoice {
 
         // correct the record for the benefit of accuracy of
         // `negotiated_key_exchange_group()`
-        cx.common
-            .emit(Event::KeyExchangeGroup(actual_skxg));
+        cx.emit(Event::KeyExchangeGroup(actual_skxg));
 
         Ok(Self::Component(hybrid_key_share))
     }
@@ -355,8 +351,7 @@ pub(super) fn prepare_resumption(
     doing_retry: bool,
 ) {
     let resuming_suite = resuming_session.suite();
-    cx.common
-        .emit(Event::CipherSuite(resuming_suite.into()));
+    cx.emit(Event::CipherSuite(resuming_suite.into()));
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size();
@@ -397,23 +392,17 @@ pub(super) fn derive_early_traffic_secret(
 ) {
     if !early_key_schedule.protocol().is_quic() {
         // For middlebox compatibility
-        emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
+        emit_fake_ccs(sent_tls13_fake_ccs, cx);
     }
 
     let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
-    early_key_schedule.client_early_traffic_secret(
+    early_key_schedule.client_early_traffic_secret(&client_hello_hash, key_log, client_random, cx);
+
+    cx.emit(Event::EarlyExporter(early_key_schedule.early_exporter(
         &client_hello_hash,
         key_log,
         client_random,
-        cx.common,
-    );
-
-    cx.common
-        .emit(Event::EarlyExporter(early_key_schedule.early_exporter(
-            &client_hello_hash,
-            key_log,
-            client_random,
-        )));
+    )));
 
     // Now the client can send encrypted early data
     cx.data.early_data.start();
@@ -477,7 +466,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             .selected_protocol
             .as_ref()
             .map(|protocol| protocol.as_ref());
-        hs::process_alpn_protocol(cx.common, &self.hello.alpn_protocols, selected_alpn)?;
+        hs::process_alpn_protocol(cx, &self.hello.alpn_protocols, selected_alpn)?;
 
         // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
         // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
@@ -524,9 +513,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         // QUIC transport parameters
         if self.key_schedule.protocol().is_quic() {
             match exts.transport_parameters.as_ref() {
-                Some(params) => cx
-                    .common
-                    .emit(Event::QuicTransportParameters(params.clone().into_vec())),
+                Some(params) => cx.emit(Event::QuicTransportParameters(params.clone().into_vec())),
                 None => {
                     return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
                 }
@@ -548,7 +535,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 if was_early_traffic && !cx.data.early_data.is_sending() {
                     // If no early traffic, set the encryption key for handshakes
                     self.key_schedule
-                        .set_handshake_encrypter(cx.common);
+                        .set_handshake_encrypter(cx);
                 }
 
                 // We *don't* reverify the certificate chain here: resumption is a
@@ -1267,11 +1254,11 @@ impl State<ClientConnectionData> for ExpectFinished {
          * but appears in the transcript after the server Finished. */
         if cx.data.early_data.is_sending() {
             if !st.key_schedule.protocol().is_quic() {
-                emit_end_of_early_data_tls13(&mut st.transcript, cx.common);
+                emit_end_of_early_data_tls13(&mut st.transcript, cx);
             }
             cx.data.early_data.finished();
             st.key_schedule
-                .set_handshake_encrypter(cx.common);
+                .set_handshake_encrypter(cx);
         }
 
         let mut flight = HandshakeFlightTls13::new(&mut st.transcript);
@@ -1324,7 +1311,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             );
 
         emit_finished_tls13(&mut flight, &verify_data);
-        flight.finish(cx.common);
+        flight.finish(cx);
 
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
@@ -1335,12 +1322,10 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         /* Now move to our application traffic keys. */
         let (key_schedule, exporter, resumption) =
-            key_schedule_pre_finished.into_traffic(cx.common, st.transcript.current_hash(), &proof);
-        cx.common
-            .emit(Event::PeerIdentity(st.peer_identity.clone()));
-        cx.common
-            .emit(Event::Exporter(Box::new(exporter)));
-        cx.common.emit(Event::StartTraffic);
+            key_schedule_pre_finished.into_traffic(cx, st.transcript.current_hash(), &proof);
+        cx.emit(Event::PeerIdentity(st.peer_identity.clone()));
+        cx.emit(Event::Exporter(Box::new(exporter)));
+        cx.emit(Event::StartTraffic);
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
         // sending an alert and returning an error (potentially with retry configs) if the server
@@ -1436,7 +1421,7 @@ impl ExpectTraffic {
         cx: &mut ClientContext<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        cx.common.emit(Event::ReceivedTicket);
+        cx.emit(Event::ReceivedTicket);
 
         let mut kcx = KernelContext {
             protocol: self.key_schedule.protocol(),
@@ -1448,7 +1433,7 @@ impl ExpectTraffic {
 
     fn handle_key_update(
         &mut self,
-        common: &mut CommonState,
+        cx: &mut ClientContext<'_>,
         input: Input<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
@@ -1459,14 +1444,17 @@ impl ExpectTraffic {
         // Mustn't be interleaved with other handshake messages.
         let proof = input.check_aligned_handshake()?;
 
-        if common.should_update_key(key_update_request)? {
+        if cx
+            .common
+            .should_update_key(key_update_request)?
+        {
             self.key_schedule
-                .update_encrypter_and_notify(common);
+                .update_encrypter_and_notify(cx);
         }
 
         // Update our read-side keys.
         self.key_schedule
-            .update_decrypter(common, &proof);
+            .update_decrypter(cx, &proof);
         Ok(())
     }
 }
@@ -1486,7 +1474,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } => self.handle_key_update(cx.common, input, &key_update)?,
+            } => self.handle_key_update(cx, input, &key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,
