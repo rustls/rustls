@@ -64,7 +64,7 @@ pub struct CommonState {
 }
 
 impl CommonState {
-    pub(crate) fn new(side: Side) -> Self {
+    pub(crate) fn new(side: Side, protocol: Protocol) -> Self {
         Self {
             negotiated_version: None,
             handshake_kind: None,
@@ -88,7 +88,7 @@ impl CommonState {
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             queued_key_update_message: None,
-            protocol: Protocol::Tcp,
+            protocol,
             quic: quic::Quic::default(),
             temper_counters: TemperCounters::default(),
             refresh_traffic_keys_pending: false,
