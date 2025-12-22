@@ -420,12 +420,12 @@ pub(super) fn derive_early_traffic_secret(
     trace!("Starting early data traffic");
 }
 
-pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonState) {
+pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Output) {
     if core::mem::replace(sent_tls13_fake_ccs, true) {
         return;
     }
 
-    common.emit(Event::PlainMessage(Message {
+    output.emit(Event::PlainMessage(Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     }));
@@ -1203,7 +1203,7 @@ fn emit_finished_tls13(
     )));
 }
 
-fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut CommonState) {
+fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn Output) {
     let m = Message {
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -1212,7 +1212,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Com
     };
 
     transcript.add_message(&m);
-    common.emit(Event::EncryptMessage(m));
+    output.emit(Event::EncryptMessage(m));
 }
 
 struct ExpectFinished {
