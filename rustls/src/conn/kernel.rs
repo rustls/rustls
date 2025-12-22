@@ -57,11 +57,9 @@ use alloc::boxed::Box;
 use core::marker::PhantomData;
 
 use crate::client::ClientConnectionData;
-use crate::common_state::Protocol;
 use crate::enums::ProtocolVersion;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::NewSessionTicketPayloadTls13;
-use crate::quic::Quic;
 use crate::{CommonState, ConnectionTrafficSecrets, Error, SupportedCipherSuite};
 
 /// A kernel connection.
@@ -74,10 +72,7 @@ use crate::{CommonState, ConnectionTrafficSecrets, Error, SupportedCipherSuite};
 pub struct KernelConnection<Side> {
     state: Box<dyn KernelState>,
 
-    quic: Quic,
-
     negotiated_version: ProtocolVersion,
-    protocol: Protocol,
     suite: SupportedCipherSuite,
 
     _side: PhantomData<Side>,
@@ -85,15 +80,13 @@ pub struct KernelConnection<Side> {
 
 impl<Side> KernelConnection<Side> {
     pub(crate) fn new(state: Box<dyn KernelState>, common: CommonState) -> Result<Self, Error> {
-        let (negotiated_version, protocol, suite, quic) = common
+        let (negotiated_version, suite) = common
             .into_kernel_parts()
             .ok_or(Error::HandshakeNotComplete)?;
         Ok(Self {
             state,
 
-            quic,
             negotiated_version,
-            protocol,
             suite,
 
             _side: PhantomData,
@@ -222,12 +215,8 @@ impl KernelConnection<ClientConnectionData> {
         }
 
         let nst = NewSessionTicketPayloadTls13::read_bytes(payload)?;
-        let mut cx = KernelContext {
-            protocol: self.protocol,
-            quic: &self.quic,
-        };
         self.state
-            .handle_new_session_ticket(&mut cx, &nst)
+            .handle_new_session_ticket(&nst)
     }
 }
 
@@ -241,14 +230,8 @@ pub(crate) trait KernelState: Send + Sync {
     /// only exposes the relevant API for client connections.
     fn handle_new_session_ticket(
         &self,
-        cx: &mut KernelContext<'_>,
         message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error>;
-}
-
-pub(crate) struct KernelContext<'a> {
-    pub(crate) protocol: Protocol,
-    pub(crate) quic: &'a Quic,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

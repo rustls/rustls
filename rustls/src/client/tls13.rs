@@ -15,7 +15,7 @@ use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelContext, KernelState};
+use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
@@ -26,7 +26,7 @@ use crate::error::{
 };
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::PayloadU8;
+use crate::msgs::base::{PayloadU8, PayloadU16};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
@@ -511,14 +511,18 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         };
 
         // QUIC transport parameters
-        if self.key_schedule.protocol().is_quic() {
-            match exts.transport_parameters.as_ref() {
-                Some(params) => cx.emit(Event::QuicTransportParameters(params.clone().into_vec())),
-                None => {
-                    return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
-                }
-            }
-        }
+        let quic_params = if self.key_schedule.protocol().is_quic() {
+            let Some(quic_params) = exts.transport_parameters.as_ref() else {
+                return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
+            };
+
+            cx.emit(Event::QuicTransportParameters(
+                quic_params.clone().into_vec(),
+            ));
+            Some(PayloadU16::new(quic_params.clone().into_vec()))
+        } else {
+            None
+        };
 
         match self.resuming_session {
             Some(resuming_session) => {
@@ -545,9 +549,12 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
                     session_key: self.session_key,
+                    session_input: persist::Tls13ClientSessionInput {
+                        suite: self.suite,
+                        peer_identity: resuming_session.peer_identity().clone(),
+                        quic_params,
+                    },
                     randoms: self.randoms,
-                    suite: self.suite,
-                    peer_identity: resuming_session.peer_identity().clone(),
                     transcript: self.transcript,
                     key_schedule: self.key_schedule,
                     client_auth: None,
@@ -570,6 +577,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         session_key: self.session_key,
                         randoms: self.randoms,
                         suite: self.suite,
+                        quic_params,
                         transcript: self.transcript,
                         key_schedule: self.key_schedule,
                         ech_retry_configs,
@@ -582,6 +590,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         session_key: self.session_key,
                         randoms: self.randoms,
                         suite: self.suite,
+                        quic_params,
                         transcript: self.transcript,
                         key_schedule: self.key_schedule,
                         ech_retry_configs,
@@ -616,6 +625,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
+    quic_params: Option<PayloadU16>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
@@ -638,6 +648,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
+                quic_params: self.quic_params,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
@@ -654,6 +665,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
+                quic_params: self.quic_params,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
@@ -670,6 +682,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
+                quic_params: self.quic_params,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 offered_cert_compression: true,
@@ -697,6 +710,7 @@ struct ExpectCertificateOrCompressedCertificate {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
+    quic_params: Option<PayloadU16>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -719,6 +733,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
+                quic_params: self.quic_params,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
@@ -735,6 +750,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
+                quic_params: self.quic_params,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
@@ -760,6 +776,7 @@ struct ExpectCertificateOrCertReq {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
+    quic_params: Option<PayloadU16>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
@@ -782,6 +799,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
+                quic_params: self.quic_params,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
@@ -798,6 +816,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
+                quic_params: self.quic_params,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 offered_cert_compression: false,
@@ -827,6 +846,7 @@ struct ExpectCertificateRequest {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
+    quic_params: Option<PayloadU16>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     offered_cert_compression: bool,
@@ -899,6 +919,7 @@ impl ExpectCertificateRequest {
                 session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
+                quic_params: self.quic_params,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
@@ -911,6 +932,7 @@ impl ExpectCertificateRequest {
                 session_key: self.session_key,
                 randoms: self.randoms,
                 suite: self.suite,
+                quic_params: self.quic_params,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
@@ -926,6 +948,7 @@ struct ExpectCompressedCertificate {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
+    quic_params: Option<PayloadU16>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -979,6 +1002,7 @@ impl ExpectCompressedCertificate {
             session_key: self.session_key,
             randoms: self.randoms,
             suite: self.suite,
+            quic_params: self.quic_params,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
@@ -994,6 +1018,7 @@ struct ExpectCertificate {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
+    quic_params: Option<PayloadU16>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -1031,6 +1056,7 @@ impl ExpectCertificate {
             session_key: self.session_key,
             randoms: self.randoms,
             suite: self.suite,
+            quic_params: self.quic_params,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             server_cert,
@@ -1057,6 +1083,7 @@ struct ExpectCertificateVerify {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
+    quic_params: Option<PayloadU16>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
@@ -1112,9 +1139,12 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
         Ok(Box::new(ExpectFinished {
             config: self.config,
             session_key: self.session_key,
+            session_input: persist::Tls13ClientSessionInput {
+                suite: self.suite,
+                peer_identity: identity,
+                quic_params: self.quic_params,
+            },
             randoms: self.randoms,
-            suite: self.suite,
-            peer_identity: identity,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
@@ -1208,9 +1238,8 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn
 struct ExpectFinished {
     config: Arc<ClientConfig>,
     session_key: ClientSessionKey<'static>,
+    session_input: persist::Tls13ClientSessionInput,
     randoms: ConnectionRandoms,
-    suite: &'static Tls13CipherSuite,
-    peer_identity: Identity<'static>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -1323,7 +1352,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         /* Now move to our application traffic keys. */
         let (key_schedule, exporter, resumption) =
             key_schedule_pre_finished.into_traffic(cx, st.transcript.current_hash(), &proof);
-        cx.emit(Event::PeerIdentity(st.peer_identity.clone()));
+        cx.emit(Event::PeerIdentity(st.session_input.peer_identity.clone()));
         cx.emit(Event::Exporter(Box::new(exporter)));
         cx.emit(Event::StartTraffic);
 
@@ -1342,9 +1371,8 @@ impl State<ClientConnectionData> for ExpectFinished {
             config: st.config.clone(),
             session_storage: st.config.resumption.store.clone(),
             session_key: st.session_key,
-            suite: st.suite,
+            session_input: st.session_input,
             key_schedule,
-            peer_identity: st.peer_identity,
             resumption,
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
@@ -1365,9 +1393,8 @@ struct ExpectTraffic {
     config: Arc<ClientConfig>,
     session_storage: Arc<dyn ClientSessionStore>,
     session_key: ClientSessionKey<'static>,
-    suite: &'static Tls13CipherSuite,
+    session_input: persist::Tls13ClientSessionInput,
     key_schedule: KeyScheduleTraffic,
-    peer_identity: Identity<'static>,
     resumption: KeyScheduleResumption,
     _cert_verified: verify::PeerVerified,
     _sig_verified: verify::HandshakeSignatureValid,
@@ -1375,22 +1402,17 @@ struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle_new_ticket_impl(
-        &self,
-        cx: &KernelContext<'_>,
-        nst: &NewSessionTicketPayloadTls13,
-    ) -> Result<(), Error> {
+    fn handle_new_ticket_impl(&self, nst: &NewSessionTicketPayloadTls13) -> Result<(), Error> {
         let secret = self
             .resumption
             .derive_ticket_psk(&nst.nonce.0);
 
         let now = self.config.current_time()?;
 
-        let mut value = persist::Tls13ClientSessionValue::new(
-            self.suite,
+        let value = persist::Tls13ClientSessionValue::new(
+            self.session_input.clone(),
             nst.ticket.clone(),
             secret.as_ref(),
-            self.peer_identity.clone(),
             now,
             nst.lifetime,
             nst.age_add,
@@ -1399,15 +1421,11 @@ impl ExpectTraffic {
                 .unwrap_or_default(),
         );
 
-        if cx.protocol.is_quic() {
+        if self.key_schedule.protocol().is_quic() {
             if let Some(sz) = nst.extensions.max_early_data_size {
                 if sz != 0 && sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
                 }
-            }
-
-            if let Some(quic_params) = &cx.quic.params {
-                value.set_quic_params(quic_params);
             }
         }
 
@@ -1423,12 +1441,7 @@ impl ExpectTraffic {
     ) -> Result<(), Error> {
         cx.emit(Event::ReceivedTicket);
 
-        let kcx = KernelContext {
-            protocol: self.key_schedule.protocol(),
-            quic: &cx.common.quic,
-        };
-
-        self.handle_new_ticket_impl(&kcx, nst)
+        self.handle_new_ticket_impl(nst)
     }
 
     fn handle_key_update(
@@ -1517,10 +1530,9 @@ impl KernelState for ExpectTraffic {
 
     fn handle_new_session_ticket(
         &self,
-        cx: &mut KernelContext<'_>,
         message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        self.handle_new_ticket_impl(cx, message)
+        self.handle_new_ticket_impl(message)
     }
 }
 
@@ -1564,12 +1576,8 @@ impl KernelState for ExpectQuicTraffic {
         ))
     }
 
-    fn handle_new_session_ticket(
-        &self,
-        cx: &mut KernelContext<'_>,
-        nst: &NewSessionTicketPayloadTls13,
-    ) -> Result<(), Error> {
-        self.0.handle_new_ticket_impl(cx, nst)
+    fn handle_new_session_ticket(&self, nst: &NewSessionTicketPayloadTls13) -> Result<(), Error> {
+        self.0.handle_new_ticket_impl(nst)
     }
 }
 

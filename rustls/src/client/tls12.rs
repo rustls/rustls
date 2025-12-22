@@ -15,7 +15,7 @@ use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{Event, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelContext, KernelState};
+use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{Identity, Signer};
@@ -1202,7 +1202,6 @@ impl KernelState for ExpectTraffic {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle_new_session_ticket(
         &self,
-        _cx: &mut KernelContext<'_>,
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         Err(Error::Unreachable(
