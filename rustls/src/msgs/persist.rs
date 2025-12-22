@@ -78,22 +78,23 @@ pub struct Tls13ClientSessionValue {
 
 impl Tls13ClientSessionValue {
     pub(crate) fn new(
-        suite: &'static Tls13CipherSuite,
+        input: Tls13ClientSessionInput,
         ticket: Arc<PayloadU16>,
         secret: &[u8],
-        peer_identity: Identity<'static>,
         time_now: UnixTime,
         lifetime: Duration,
         age_add: u32,
         max_early_data_size: u32,
     ) -> Self {
         Self {
-            suite,
+            suite: input.suite,
             secret: Zeroizing::new(PayloadU8::new(secret.to_vec())),
             age_add,
             max_early_data_size,
-            common: ClientSessionCommon::new(ticket, time_now, lifetime, peer_identity),
-            quic_params: PayloadU16::new(Vec::new()),
+            common: ClientSessionCommon::new(ticket, time_now, lifetime, input.peer_identity),
+            quic_params: input
+                .quic_params
+                .unwrap_or_else(|| PayloadU16::new(Vec::new())),
         }
     }
 
@@ -119,10 +120,6 @@ impl Tls13ClientSessionValue {
     #[doc(hidden)]
     pub fn _private_set_max_early_data_size(&mut self, new: u32) {
         self.max_early_data_size = new;
-    }
-
-    pub fn set_quic_params(&mut self, quic_params: &[u8]) {
-        self.quic_params = PayloadU16::new(quic_params.to_vec());
     }
 
     pub fn quic_params(&self) -> Vec<u8> {
@@ -229,6 +226,14 @@ impl ClientSessionCommon {
     pub(crate) fn ticket(&self) -> &[u8] {
         self.ticket.0.as_ref()
     }
+}
+
+/// A "template" for future TLS1.3 client session values.
+#[derive(Clone)]
+pub(crate) struct Tls13ClientSessionInput {
+    pub(crate) suite: &'static Tls13CipherSuite,
+    pub(crate) peer_identity: Identity<'static>,
+    pub(crate) quic_params: Option<PayloadU16>,
 }
 
 static MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);
