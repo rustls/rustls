@@ -7,7 +7,7 @@ use core::fmt;
 use super::connection::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
-use crate::common_state::{Event, Input, Output, State};
+use crate::common_state::{Event, Input, Output, Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -38,6 +38,7 @@ pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConne
 pub(super) struct ExtensionProcessing<'a> {
     // extensions to reply with
     pub(super) extensions: Box<ServerExtensions<'static>>,
+    pub(super) protocol: Protocol,
     pub(super) send_ticket: bool,
     pub(super) config: &'a ServerConfig,
     pub(super) client_hello: &'a ClientHelloPayload,
@@ -46,6 +47,7 @@ pub(super) struct ExtensionProcessing<'a> {
 impl<'a> ExtensionProcessing<'a> {
     pub(super) fn new(
         extra_exts: ServerExtensionsInput<'static>,
+        protocol: Protocol,
         client_hello: &'a ClientHelloPayload,
         config: &'a ServerConfig,
     ) -> Self {
@@ -60,6 +62,7 @@ impl<'a> ExtensionProcessing<'a> {
 
         Self {
             extensions,
+            protocol,
             send_ticket: false,
             config,
             client_hello,
@@ -103,7 +106,7 @@ impl<'a> ExtensionProcessing<'a> {
             false
         };
 
-        if cx.common.protocol.quic() {
+        if self.protocol.quic() {
             // QUIC has strict ALPN, unlike TLS's more backwards-compatible behavior. RFC 9001
             // says: "The server MUST treat the inability to select a compatible application
             // protocol as a connection error of type 0x0178". We judge that ALPN was desired
@@ -252,6 +255,7 @@ pub(super) struct CertificateTypes {
 
 pub(crate) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
+    pub(super) protocol: Protocol,
     pub(super) extra_exts: ServerExtensionsInput<'static>,
     pub(super) transcript: HandshakeHashOrBuffer,
     pub(super) session_id: SessionId,
@@ -264,6 +268,7 @@ impl ExpectClientHello {
     pub(super) fn new(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput<'static>,
+        protocol: Protocol,
     ) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
 
@@ -273,6 +278,7 @@ impl ExpectClientHello {
 
         Self {
             config,
+            protocol,
             extra_exts,
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
             session_id: SessionId::empty(),
@@ -306,7 +312,7 @@ impl ExpectClientHello {
                 self.with_version::<Tls13CipherSuite>(input, cx)
             } else if !versions.tls12 || !tls12_enabled {
                 Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
-            } else if cx.common.protocol.quic() {
+            } else if self.protocol.quic() {
                 Err(PeerIncompatible::Tls13RequiredForQuic.into())
             } else {
                 self.with_version::<Tls12CipherSuite>(input, cx)
@@ -316,7 +322,7 @@ impl ExpectClientHello {
             Err(PeerIncompatible::Tls12NotOffered.into())
         } else if !tls12_enabled && tls13_enabled {
             Err(PeerIncompatible::SupportedVersionsExtensionRequired.into())
-        } else if cx.common.protocol.quic() {
+        } else if self.protocol.quic() {
             Err(PeerIncompatible::Tls13RequiredForQuic.into())
         } else {
             self.with_version::<Tls12CipherSuite>(input, cx)
