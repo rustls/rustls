@@ -50,7 +50,7 @@ While Rustls itself is platform independent, it requires the use of cryptography
 for implementing the cryptography algorithms used in TLS. In Rustls, a
 [`crypto::CryptoProvider`] represents a collection of crypto primitive implementations.
 
-The Rustls team recommends using the [`aws-lc-rs`] crate, which for its complete feature set
+The Rustls team recommends using the [`aws-lc-rs`] crate for its complete feature set
 and performance. See [the aws-lc-rs FAQ][aws-lc-rs-platforms-faq] for more details of the
 platform/architecture support constraints in aws-lc-rs.
 
