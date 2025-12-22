@@ -39,6 +39,7 @@ use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
     use super::*;
+    use crate::common_state::Protocol;
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::msgs::enums::{ClientCertificateType, Compression};
@@ -354,7 +355,7 @@ mod client_hello {
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput<'static>,
     ) -> Result<bool, Error> {
-        let mut ep = hs::ExtensionProcessing::new(extra_exts, hello, config);
+        let mut ep = hs::ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
         ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
         ep.process_tls12(ocsp_response, using_ems);
 

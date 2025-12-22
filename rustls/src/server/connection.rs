@@ -16,7 +16,7 @@ use super::config::ServerConfig;
 use super::hs;
 #[cfg(feature = "std")]
 use super::hs::ClientHelloInput;
-use crate::common_state::{CommonState, Side};
+use crate::common_state::{CommonState, Protocol, Side};
 #[cfg(feature = "std")]
 use crate::common_state::{Input, State};
 #[cfg(feature = "std")]
@@ -54,7 +54,9 @@ mod buffered {
 
     use pki_types::DnsName;
 
-    use super::{Accepted, Accepting, ServerConfig, ServerConnectionData, ServerExtensionsInput};
+    use super::{
+        Accepted, Accepting, Protocol, ServerConfig, ServerConnectionData, ServerExtensionsInput,
+    };
     use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
@@ -81,6 +83,7 @@ mod buffered {
                 inner: ConnectionCommon::from(ConnectionCore::for_server(
                     config,
                     ServerExtensionsInput::default(),
+                    Protocol::Tcp,
                 )?),
             })
         }
@@ -450,6 +453,7 @@ impl UnbufferedServerConnection {
             inner: UnbufferedConnectionCommon::from(ConnectionCore::for_server(
                 config,
                 ServerExtensionsInput::default(),
+                Protocol::Tcp,
             )?),
         })
     }
@@ -563,7 +567,8 @@ impl Accepted {
             return Err((err, AcceptedAlert::empty()));
         }
 
-        let state = hs::ExpectClientHello::new(config, ServerExtensionsInput::default());
+        let state =
+            hs::ExpectClientHello::new(config, ServerExtensionsInput::default(), Protocol::Tcp);
         let proof = match self.input.check_aligned_handshake() {
             Ok(proof) => proof,
             Err(err) => {
@@ -719,12 +724,14 @@ impl ConnectionCore<ServerConnectionData> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput<'static>,
+        protocol: Protocol,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
+        common.protocol = protocol;
         common.fips = config.fips();
         Ok(Self::new(
-            Box::new(hs::ExpectClientHello::new(config, extra_exts)),
+            Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
             ServerConnectionData::default(),
             common,
         ))
