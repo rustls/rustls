@@ -265,8 +265,7 @@ mod connection {
                 }),
             };
 
-            let mut core = ConnectionCore::for_server(config, exts)?;
-            core.common_state.protocol = Protocol::Quic(quic_version);
+            let core = ConnectionCore::for_server(config, exts, Protocol::Quic(quic_version))?;
             Ok(Self { inner: core.into() })
         }
 
