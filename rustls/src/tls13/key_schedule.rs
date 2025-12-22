@@ -43,6 +43,10 @@ impl KeyScheduleEarlyClient {
             output,
         );
     }
+
+    pub(crate) fn protocol(&self) -> Protocol {
+        self.0.ks.protocol
+    }
 }
 
 impl Deref for KeyScheduleEarlyClient {
@@ -456,6 +460,10 @@ impl KeyScheduleHandshake {
             .sign_finish(&self.client_handshake_traffic_secret, &handshake_hash);
         (KeyScheduleClientBeforeFinished(before_finished), tag)
     }
+
+    pub(crate) fn protocol(&self) -> Protocol {
+        self.ks.protocol
+    }
 }
 
 /// Keys derived (but not installed) before client's Finished message.
@@ -720,6 +728,10 @@ impl KeyScheduleTraffic {
             Side::Server => (server_secrets, client_secrets),
         };
         Ok(PartiallyExtractedSecrets { tx, rx })
+    }
+
+    pub(crate) fn protocol(&self) -> Protocol {
+        self.ks.protocol
     }
 }
 
