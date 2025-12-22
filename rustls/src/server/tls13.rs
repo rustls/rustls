@@ -42,6 +42,7 @@ use crate::{ConnectionTrafficSecrets, compress, verify};
 
 mod client_hello {
     use super::*;
+    use crate::common_state::Protocol;
     use crate::compress::CertCompressor;
     use crate::crypto::cipher::Payload;
     use crate::crypto::kx::SupportedKxGroup;
@@ -156,7 +157,9 @@ mod client_hello {
                     cx.common,
                     kx_group.name(),
                 );
-                emit_fake_ccs(cx.common);
+                if !st.protocol.is_quic() {
+                    emit_fake_ccs(cx.common);
+                }
 
                 let skip_early_data = max_early_data_size(st.config.max_early_data_size);
 
@@ -221,7 +224,7 @@ mod client_hello {
 
                     if !check_binder(
                         &mut transcript,
-                        &KeyScheduleEarlyServer::new(cx.common.protocol, suite, &resume.secret.0),
+                        &KeyScheduleEarlyServer::new(st.protocol, suite, &resume.secret.0),
                         input.message,
                         psk_offer.binders[i].as_ref(),
                     ) {
@@ -259,6 +262,7 @@ mod client_hello {
                 &mut transcript,
                 &randoms,
                 suite,
+                st.protocol,
                 cx,
                 &input.client_hello.session_id,
                 chosen_share_and_kxg,
@@ -269,7 +273,7 @@ mod client_hello {
                 &input.proof,
                 &st.config,
             )?;
-            if !st.done_retry {
+            if !st.done_retry && !st.protocol.is_quic() {
                 emit_fake_ccs(cx.common);
             }
 
@@ -287,6 +291,7 @@ mod client_hello {
             let (cert_types, doing_early_data) = emit_encrypted_extensions(
                 &mut flight,
                 suite,
+                st.protocol,
                 cx,
                 &mut ocsp_response,
                 input.client_hello,
@@ -377,9 +382,7 @@ mod client_hello {
                         expected_certificate_type: cert_types.client,
                     }))
                 }
-            } else if doing_early_data == EarlyDataDecision::Accepted
-                && !cx.common.protocol.is_quic()
-            {
+            } else if doing_early_data == EarlyDataDecision::Accepted && !st.protocol.is_quic() {
                 // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
                 // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
                 // connection error of type PROTOCOL_VIOLATION.
@@ -468,6 +471,7 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         randoms: &ConnectionRandoms,
         suite: &'static Tls13CipherSuite,
+        protocol: Protocol,
         cx: &mut ServerContext<'_>,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
@@ -512,7 +516,7 @@ mod client_hello {
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some(psk) = resuming_psk {
-            let early_key_schedule = KeyScheduleEarlyServer::new(cx.common.protocol, suite, psk);
+            let early_key_schedule = KeyScheduleEarlyServer::new(protocol, suite, psk);
             early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
@@ -532,7 +536,7 @@ mod client_hello {
 
             KeySchedulePreHandshake::from(early_key_schedule)
         } else {
-            KeySchedulePreHandshake::new(Side::Server, cx.common.protocol, suite)
+            KeySchedulePreHandshake::new(Side::Server, protocol, suite)
         };
 
         // Do key exchange
@@ -550,9 +554,6 @@ mod client_hello {
     }
 
     fn emit_fake_ccs(common: &mut CommonState) {
-        if common.protocol.is_quic() {
-            return;
-        }
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
@@ -596,6 +597,7 @@ mod client_hello {
         client_hello: &ClientHelloPayload,
         resumedata: Option<&Tls13ServerSessionValue>,
         suite: &'static Tls13CipherSuite,
+        protocol: Protocol,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
         let early_data_requested = client_hello
@@ -639,7 +641,7 @@ mod client_hello {
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
         } else {
-            if cx.common.protocol.is_quic() {
+            if protocol.is_quic() {
                 cx.common
                     .emit(Event::QuicEarlySecret(None));
             }
@@ -651,6 +653,7 @@ mod client_hello {
     fn emit_encrypted_extensions(
         flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
+        protocol: Protocol,
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -658,10 +661,11 @@ mod client_hello {
         extra_exts: ServerExtensionsInput<'static>,
         config: &ServerConfig,
     ) -> Result<(CertificateTypes, EarlyDataDecision), Error> {
-        let mut ep = hs::ExtensionProcessing::new(extra_exts, hello, config);
+        let mut ep = hs::ExtensionProcessing::new(extra_exts, protocol, hello, config);
         let cert_types = ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
 
-        let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
+        let early_data =
+            decide_if_early_data_allowed(cx, hello, resumedata, suite, protocol, config);
         if early_data == EarlyDataDecision::Accepted {
             ep.extensions.early_data_ack = Some(());
         }
@@ -1274,14 +1278,19 @@ impl State<ServerConnectionData> for ExpectFinished {
             .emit(Event::Exporter(Box::new(exporter)));
         cx.common.emit(Event::StartTraffic);
 
-        Ok(match cx.common.protocol.is_quic() {
-            true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
-            false => Box::new(ExpectTraffic {
-                config: self.config,
-                key_schedule: key_schedule_traffic,
-                _fin_verified: fin,
-            }),
-        })
+        Ok(
+            match key_schedule_traffic
+                .protocol()
+                .is_quic()
+            {
+                true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
+                false => Box::new(ExpectTraffic {
+                    config: self.config,
+                    key_schedule: key_schedule_traffic,
+                    _fin_verified: fin,
+                }),
+            },
+        )
     }
 }
 
@@ -1299,7 +1308,7 @@ impl ExpectTraffic {
         input: Input<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        if common.protocol.is_quic() {
+        if self.key_schedule.protocol().is_quic() {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 
