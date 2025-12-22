@@ -13,7 +13,7 @@
 //! for implementing the cryptography algorithms used in TLS. In Rustls, a
 //! [`crypto::CryptoProvider`] represents a collection of crypto primitive implementations.
 //!
-//! The Rustls team recommends using the [`aws-lc-rs`] crate, which for its complete feature set
+//! The Rustls team recommends using the [`aws-lc-rs`] crate for its complete feature set
 //! and performance. See [the aws-lc-rs FAQ][aws-lc-rs-platforms-faq] for more details of the
 //! platform/architecture support constraints in aws-lc-rs.
 //!
@@ -118,7 +118,7 @@
 //! plaintext on the right:
 //!
 //! [`read_tls()`]: Connection::read_tls
-//! [`write_tls()`]: Connection::read_tls
+//! [`write_tls()`]: Connection::write_tls
 //!
 //! ```text
 //!          TLS                                   Plaintext
@@ -506,7 +506,7 @@ pub use server::ServerConnection;
 
 /// All defined protocol versions appear in this module.
 ///
-/// ALL_VERSIONS is a provided as an array of all of these values.
+/// ALL_VERSIONS is provided as an array of all of these values.
 pub mod version {
     pub use crate::versions::{
         TLS12, TLS12_VERSION, TLS13, TLS13_VERSION, Tls12Version, Tls13Version,
