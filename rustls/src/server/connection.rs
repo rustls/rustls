@@ -268,7 +268,7 @@ mod buffered {
                     ConnectionCore::new(
                         Box::new(Accepting),
                         ServerConnectionData::default(),
-                        CommonState::new(Side::Server),
+                        CommonState::new(Side::Server, Protocol::Tcp),
                     )
                     .into(),
                 ),
@@ -726,9 +726,8 @@ impl ConnectionCore<ServerConnectionData> {
         extra_exts: ServerExtensionsInput<'static>,
         protocol: Protocol,
     ) -> Result<Self, Error> {
-        let mut common = CommonState::new(Side::Server);
+        let mut common = CommonState::new(Side::Server, protocol);
         common.set_max_fragment_size(config.max_fragment_size)?;
-        common.protocol = protocol;
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
