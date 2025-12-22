@@ -282,7 +282,7 @@ impl ConnectionCore<ClientConnectionData> {
             received_plaintext: &mut None,
         };
 
-        let input = ClientHelloInput::new(name, &extra_exts, &mut cx, config)?;
+        let input = ClientHelloInput::new(name, &extra_exts, proto, &mut cx, config)?;
         let state = input.start_handshake(extra_exts, &mut cx)?;
         debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
