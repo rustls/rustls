@@ -1081,7 +1081,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             .add(&self.body[start_len..]);
     }
 
-    pub(crate) fn finish(self, common: &mut CommonState) {
+    pub(crate) fn finish(self, output: &mut dyn Output) {
         let m = Message {
             version: match TLS13 {
                 true => ProtocolVersion::TLSv1_3,
@@ -1090,7 +1090,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
         };
 
-        common.emit(match TLS13 {
+        output.emit(match TLS13 {
             true => Event::EncryptMessage(m),
             false => Event::PlainMessage(m),
         });
