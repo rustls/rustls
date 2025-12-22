@@ -85,13 +85,12 @@ impl ExpectServerHello {
             return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
 
-        cx.common
-            .emit(Event::ProtocolVersion(T::VERSION));
+        cx.emit(Event::ProtocolVersion(T::VERSION));
 
         // Extract ALPN protocol
         if T::VERSION != ProtocolVersion::TLSv1_3 {
             process_alpn_protocol(
-                cx.common,
+                cx,
                 &self.input.hello.alpn_protocols,
                 server_hello
                     .selected_protocol
@@ -120,8 +119,7 @@ impl ExpectServerHello {
             _ => {
                 debug!("Using ciphersuite {suite:?}");
                 self.suite = Some(SupportedCipherSuite::from(suite));
-                cx.common
-                    .emit(Event::CipherSuite(SupportedCipherSuite::from(suite)));
+                cx.emit(Event::CipherSuite(SupportedCipherSuite::from(suite)));
             }
         }
 
@@ -256,8 +254,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
         match hrr.supported_versions {
             Some(ProtocolVersion::TLSv1_3) => {
-                cx.common
-                    .emit(Event::ProtocolVersion(ProtocolVersion::TLSv1_3));
+                cx.emit(Event::ProtocolVersion(ProtocolVersion::TLSv1_3));
             }
             _ => {
                 return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
@@ -275,7 +272,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // HRR selects the ciphersuite.
-        cx.common.emit(Event::CipherSuite(cs));
+        cx.emit(Event::CipherSuite(cs));
 
         // If we offered ECH, we need to confirm that the server accepted it.
         match (self.next.ech_state.as_ref(), cs) {
@@ -785,13 +782,13 @@ fn emit_client_hello_for_retry(
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, cx.common);
+        tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, cx);
     }
 
     trace!("Sending ClientHello {ch:#?}");
 
     transcript_buffer.add_message(&ch);
-    cx.common.emit(Event::PlainMessage(ch));
+    cx.emit(Event::PlainMessage(ch));
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_data_key_schedule =
@@ -993,8 +990,7 @@ impl ClientSessionValue {
                 .tls13()
                 .map(|v| v.quic_params())
             {
-                cx.common
-                    .emit(Event::QuicTransportParameters(quic_params));
+                cx.emit(Event::QuicTransportParameters(quic_params));
             }
         }
 
