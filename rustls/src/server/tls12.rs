@@ -923,7 +923,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
         Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
         match message.payload {
-            MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
+            MessagePayload::ApplicationData(payload) => cx.emit(Event::ApplicationData(payload)),
             payload => {
                 return Err(inappropriate_message(
                     &payload,
