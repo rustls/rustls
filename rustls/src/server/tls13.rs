@@ -11,7 +11,7 @@ use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelContext, KernelState};
+use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
@@ -1386,7 +1386,6 @@ impl KernelState for ExpectTraffic {
 
     fn handle_new_session_ticket(
         &mut self,
-        _cx: &mut KernelContext<'_>,
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         unreachable!(
@@ -1421,7 +1420,6 @@ impl KernelState for ExpectQuicTraffic {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle_new_session_ticket(
         &mut self,
-        _cx: &mut KernelContext<'_>,
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         unreachable!("handle_new_session_ticket should not be called for server-side connections")

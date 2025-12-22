@@ -222,7 +222,9 @@ mod tests {
     use crate::crypto::{CertificateIdentity, CipherSuite, Identity, tls12_suite, tls13_suite};
     use crate::msgs::base::PayloadU16;
     use crate::msgs::handshake::SessionId;
-    use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
+    use crate::msgs::persist::{
+        Tls12ClientSessionValue, Tls13ClientSessionPrecursor, Tls13ClientSessionValue,
+    };
     use crate::sync::Arc;
 
     #[test]
@@ -266,13 +268,16 @@ mod tests {
             c.insert_tls13_ticket(
                 key.clone(),
                 Tls13ClientSessionValue::new(
-                    tls13_suite(CipherSuite::TLS13_AES_256_GCM_SHA384, provider),
+                    &Tls13ClientSessionPrecursor {
+                        suite: tls13_suite(CipherSuite::TLS13_AES_256_GCM_SHA384, provider),
+                        peer_identity: Identity::X509(CertificateIdentity {
+                            end_entity: CertificateDer::from(&[][..]),
+                            intermediates: Vec::new(),
+                        }),
+                        quic_params: None,
+                    },
                     Arc::new(PayloadU16::empty()),
                     &[],
-                    Identity::X509(CertificateIdentity {
-                        end_entity: CertificateDer::from(&[][..]),
-                        intermediates: Vec::new(),
-                    }),
                     now,
                     Duration::ZERO,
                     0,
