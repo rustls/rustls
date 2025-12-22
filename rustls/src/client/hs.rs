@@ -14,7 +14,7 @@ use crate::client::ech::EchState;
 use crate::client::{
     ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
 };
-use crate::common_state::{CommonState, Event, Input, Output, State};
+use crate::common_state::{CommonState, Event, Input, Output, Protocol, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -369,6 +369,7 @@ pub(crate) struct ClientHelloInput {
     pub(super) random: Random,
     pub(super) sent_tls13_fake_ccs: bool,
     pub(super) hello: ClientHelloDetails,
+    pub(super) protocol: Protocol,
     pub(super) session_id: SessionId,
     pub(super) session_key: ClientSessionKey<'static>,
     pub(super) prev_ech_ext: Option<EncryptedClientHello>,
@@ -378,6 +379,7 @@ impl ClientHelloInput {
     pub(super) fn new(
         server_name: ServerName<'static>,
         extra_exts: &ClientExtensionsInput<'_>,
+        protocol: Protocol,
         cx: &mut ClientContext<'_>,
         config: Arc<ClientConfig>,
     ) -> Result<Self, Error> {
@@ -412,7 +414,7 @@ impl ClientHelloInput {
         // https://tools.ietf.org/html/rfc9001#section-8.4
         let session_id = match session_id {
             Some(session_id) => session_id,
-            None if cx.common.protocol.is_quic() => SessionId::empty(),
+            None if protocol.is_quic() => SessionId::empty(),
             None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
             None => SessionId::random(config.provider().secure_random)?,
         };
@@ -432,6 +434,7 @@ impl ClientHelloInput {
             random,
             sent_tls13_fake_ccs: false,
             hello,
+            protocol,
             session_id,
             session_key,
             prev_ech_ext: None,
@@ -465,7 +468,7 @@ impl ClientHelloInput {
         let ech_state = match self.config.ech_mode.as_ref() {
             Some(EchMode::Enable(ech_config)) => Some(ech_config.state(
                 self.session_key.server_name.clone(),
-                cx.common.protocol,
+                self.protocol,
                 &self.config,
             )?),
             _ => None,
@@ -502,7 +505,7 @@ fn emit_client_hello_for_retry(
     let config = &input.config;
     // Defense in depth: the ECH state should be None if ECH is disabled based on config
     // builder semantics.
-    let forbids_tls12 = cx.common.protocol.is_quic() || ech_state.is_some();
+    let forbids_tls12 = input.protocol.is_quic() || ech_state.is_some();
 
     let supported_versions = SupportedProtocolVersions {
         tls13: config.supports_version(ProtocolVersion::TLSv1_3),
@@ -673,7 +676,7 @@ fn emit_client_hello_for_retry(
     let mut cipher_suites: Vec<_> = config
         .provider()
         .iter_cipher_suites()
-        .filter_map(|cs| match cs.usable_for_protocol(cx.common.protocol) {
+        .filter_map(|cs| match cs.usable_for_protocol(input.protocol) {
             true => Some(cs.suite()),
             false => None,
         })
@@ -699,7 +702,7 @@ fn emit_client_hello_for_retry(
         .and_then(|mode| match mode {
             EchMode::Grease(cfg) => Some(cfg.grease_ext(
                 config.provider().secure_random,
-                cx.common.protocol,
+                input.protocol,
                 input.session_key.server_name.clone(),
                 &chp_payload,
             )),
@@ -751,7 +754,7 @@ fn emit_client_hello_for_retry(
         // normal.
         (_, Some(tls13_session)) => {
             let key_schedule = KeyScheduleEarlyClient::new(
-                cx.common.protocol,
+                input.protocol,
                 tls13_session.suite(),
                 tls13_session.secret(),
             );
