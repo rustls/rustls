@@ -268,9 +268,8 @@ impl ConnectionCore<ClientConnectionData> {
         extra_exts: ClientExtensionsInput<'static>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client);
+        let mut common_state = CommonState::new(Side::Client, proto);
         common_state.set_max_fragment_size(config.max_fragment_size)?;
-        common_state.protocol = proto;
         common_state.fips = config.fips();
         let mut data = ClientConnectionData::new();
 
