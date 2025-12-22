@@ -91,6 +91,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             mut sent_tls13_fake_ccs,
             mut hello,
             session_key,
+            protocol,
             ..
         } = st.input;
 
@@ -146,7 +147,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                     // Discard the early data key schedule.
                     cx.data.early_data.rejected();
                     resuming_session.take();
-                    KeySchedulePreHandshake::new(Side::Client, cx.common.protocol, suite)
+                    KeySchedulePreHandshake::new(Side::Client, protocol, suite)
                 }
             };
 
@@ -210,7 +211,9 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             &proof,
         );
 
-        emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
+        if !key_schedule.protocol().quic() {
+            emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
+        }
 
         cx.common.emit(Event::HandshakeKind(
             match (&resuming_session, st.done_retry) {
@@ -392,8 +395,10 @@ pub(super) fn derive_early_traffic_secret(
     transcript_buffer: &HandshakeHashBuffer,
     client_random: &[u8; 32],
 ) {
-    // For middlebox compatibility
-    emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
+    if !early_key_schedule.protocol().quic() {
+        // For middlebox compatibility
+        emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
+    }
 
     let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
     early_key_schedule.client_early_traffic_secret(
@@ -416,10 +421,6 @@ pub(super) fn derive_early_traffic_secret(
 }
 
 pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonState) {
-    if common.protocol.quic() {
-        return;
-    }
-
     if core::mem::replace(sent_tls13_fake_ccs, true) {
         return;
     }
@@ -471,13 +472,25 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         self.transcript.add_message(&message);
 
         validate_encrypted_extensions(&self.hello, exts)?;
-        hs::process_alpn_protocol(
-            cx.common,
-            &self.hello.alpn_protocols,
-            exts.selected_protocol
-                .as_ref()
-                .map(|protocol| protocol.as_ref()),
-        )?;
+
+        let selected_alpn = exts
+            .selected_protocol
+            .as_ref()
+            .map(|protocol| protocol.as_ref());
+        hs::process_alpn_protocol(cx.common, &self.hello.alpn_protocols, selected_alpn)?;
+
+        // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
+        // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
+        // the user intended to use ALPN (rather than some out-of-band protocol negotiation
+        // mechanism) if and only if any ALPN protocols were configured. This defends against badly-behaved
+        // servers which accept a connection that requires an application-layer protocol they do not
+        // understand.
+        if self.key_schedule.protocol().quic()
+            && selected_alpn.is_none()
+            && !self.hello.alpn_protocols.is_empty()
+        {
+            return Err(Error::NoApplicationProtocol);
+        }
 
         check_cert_type(
             self.config
@@ -509,7 +522,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         };
 
         // QUIC transport parameters
-        if cx.common.protocol.quic() {
+        if self.key_schedule.protocol().quic() {
             match exts.transport_parameters.as_ref() {
                 Some(params) => cx
                     .common
@@ -1191,10 +1204,6 @@ fn emit_finished_tls13(
 }
 
 fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut CommonState) {
-    if common.protocol.quic() {
-        return;
-    }
-
     let m = Message {
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -1254,7 +1263,9 @@ impl State<ClientConnectionData> for ExpectFinished {
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if cx.data.early_data.is_sending() {
-            emit_end_of_early_data_tls13(&mut st.transcript, cx.common);
+            if !st.key_schedule.protocol().quic() {
+                emit_end_of_early_data_tls13(&mut st.transcript, cx.common);
+            }
             cx.data.early_data.finished();
             st.key_schedule
                 .set_handshake_encrypter(cx.common);
@@ -1338,6 +1349,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             .into());
         }
 
+        let protocol = key_schedule.protocol();
         let st = ExpectTraffic {
             config: st.config.clone(),
             session_storage: st.config.resumption.store.clone(),
@@ -1351,7 +1363,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             _fin_verified: fin,
         };
 
-        Ok(match cx.common.protocol.quic() {
+        Ok(match protocol.quic() {
             true => Box::new(ExpectQuicTraffic(st)),
             false => Box::new(st),
         })
@@ -1424,7 +1436,7 @@ impl ExpectTraffic {
         cx.common.emit(Event::ReceivedTicket);
 
         let mut kcx = KernelContext {
-            protocol: cx.common.protocol,
+            protocol: self.key_schedule.protocol(),
             quic: &cx.common.quic,
         };
 
@@ -1437,7 +1449,7 @@ impl ExpectTraffic {
         input: Input<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        if common.protocol.quic() {
+        if self.key_schedule.protocol().quic() {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 
