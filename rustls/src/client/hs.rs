@@ -14,7 +14,7 @@ use crate::client::ech::EchState;
 use crate::client::{
     ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
 };
-use crate::common_state::{CommonState, Event, Input, Output, Protocol, State};
+use crate::common_state::{Event, Input, Output, Protocol, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -924,7 +924,7 @@ fn prepare_resumption<'a>(
 }
 
 pub(super) fn process_alpn_protocol(
-    common: &mut CommonState,
+    output: &mut dyn Output,
     offered_protocols: &[ProtocolName],
     selected: Option<&ProtocolName>,
 ) -> Result<(), Error> {
@@ -942,7 +942,7 @@ pub(super) fn process_alpn_protocol(
     );
 
     if let Some(protocol) = selected {
-        common.emit(Event::ApplicationProtocol(protocol.to_owned()));
+        output.emit(Event::ApplicationProtocol(protocol.to_owned()));
     }
 
     Ok(())

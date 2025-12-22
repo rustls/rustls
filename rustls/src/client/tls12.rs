@@ -13,7 +13,7 @@ use super::hs::{self, ClientContext};
 use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, Event, HandshakeKind, Input, Output, Side, State};
+use crate::common_state::{Event, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -454,7 +454,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
 fn emit_certificate(
     transcript: &mut HandshakeHash,
     cert_chain: CertificateChain<'_>,
-    common: &mut CommonState,
+    output: &mut dyn Output,
 ) {
     let cert = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -464,13 +464,13 @@ fn emit_certificate(
     };
 
     transcript.add_message(&cert);
-    common.emit(Event::PlainMessage(cert));
+    output.emit(Event::PlainMessage(cert));
 }
 
 fn emit_client_kx(
     transcript: &mut HandshakeHash,
     kxa: KeyExchangeAlgorithm,
-    common: &mut CommonState,
+    output: &mut dyn Output,
     pub_key: &[u8],
 ) {
     let mut buf = Vec::new();
@@ -493,13 +493,13 @@ fn emit_client_kx(
     };
 
     transcript.add_message(&ckx);
-    common.emit(Event::PlainMessage(ckx));
+    output.emit(Event::PlainMessage(ckx));
 }
 
 fn emit_certverify(
     transcript: &mut HandshakeHash,
     signer: Box<dyn Signer>,
-    common: &mut CommonState,
+    output: &mut dyn Output,
 ) -> Result<(), Error> {
     let message = transcript
         .take_handshake_buf()
@@ -517,12 +517,12 @@ fn emit_certverify(
     };
 
     transcript.add_message(&m);
-    common.emit(Event::PlainMessage(m));
+    output.emit(Event::PlainMessage(m));
     Ok(())
 }
 
-fn emit_ccs(common: &mut CommonState) {
-    common.emit(Event::PlainMessage(Message {
+fn emit_ccs(output: &mut dyn Output) {
+    output.emit(Event::PlainMessage(Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     }));
@@ -531,7 +531,7 @@ fn emit_ccs(common: &mut CommonState) {
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
-    common: &mut CommonState,
+    output: &mut dyn Output,
     proof: &HandshakeAlignedProof,
 ) {
     let vh = transcript.current_hash();
@@ -546,7 +546,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    common.emit(Event::EncryptMessage(f));
+    output.emit(Event::EncryptMessage(f));
 }
 
 struct ServerKxDetails {

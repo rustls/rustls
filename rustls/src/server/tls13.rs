@@ -554,19 +554,19 @@ mod client_hello {
         Ok(key_schedule)
     }
 
-    fn emit_fake_ccs(common: &mut CommonState) {
+    fn emit_fake_ccs(output: &mut dyn Output) {
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
-        common.emit(Event::PlainMessage(m));
+        output.emit(Event::PlainMessage(m));
     }
 
     fn emit_hello_retry_request(
         transcript: &mut HandshakeHash,
         suite: &'static Tls13CipherSuite,
         session_id: SessionId,
-        common: &mut CommonState,
+        output: &mut dyn Output,
         group: NamedGroup,
     ) {
         let req = HelloRetryRequest {
@@ -590,7 +590,7 @@ mod client_hello {
         trace!("Requesting retry {m:?}");
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
-        common.emit(Event::PlainMessage(m));
+        output.emit(Event::PlainMessage(m));
     }
 
     fn decide_if_early_data_allowed(
