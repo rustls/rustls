@@ -237,32 +237,39 @@ mod tests {
     #[test]
     fn ticketrotator_remains_usable_over_temporary_ticketer_creation_failure() {
         let mut t = TicketRotator::new(Duration::from_secs(1), FakeTicketer::new).unwrap();
-        let now = UnixTime::now();
+        let expiry = t
+            .state
+            .read()
+            .unwrap()
+            .current
+            .as_ref()
+            .unwrap()
+            .expires_at;
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
         t.generator = fail_generator;
 
         // Failed new ticketer; this means we still need to rotate.
-        let t1 = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 1));
+        let t1 = UnixTime::since_unix_epoch(Duration::from_secs(expiry));
         drop(t.maybe_roll(t1));
         assert!(t.encrypt_at(b"ticket 2", t1).is_some());
 
         // check post-failure encryption/decryption still works
-        let t2 = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 2));
+        let t2 = UnixTime::since_unix_epoch(Duration::from_secs(expiry + 1));
         let cipher3 = t.encrypt_at(b"ticket 3", t2).unwrap();
         assert_eq!(t.decrypt_at(&cipher1, t2).unwrap(), b"ticket 1");
         assert_eq!(t.decrypt_at(&cipher3, t2).unwrap(), b"ticket 3");
 
-        let t3 = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 3));
+        let t3 = UnixTime::since_unix_epoch(Duration::from_secs(expiry + 2));
         assert_eq!(t.encrypt_at(b"ticket 4", t3), None);
         assert_eq!(t.decrypt_at(&cipher3, t3), None);
 
         // do the rotation for real
         t.generator = FakeTicketer::new;
-        let t4 = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 4));
+        let t4 = UnixTime::since_unix_epoch(Duration::from_secs(expiry + 3));
         drop(t.maybe_roll(t4));
 
-        let t5 = UnixTime::since_unix_epoch(Duration::from_secs(now.as_secs() + 5));
+        let t5 = UnixTime::since_unix_epoch(Duration::from_secs(expiry + 4));
         let cipher5 = t.encrypt_at(b"ticket 5", t5).unwrap();
         assert!(t.decrypt_at(&cipher1, t5).is_none());
         assert!(t.decrypt_at(&cipher3, t5).is_none());
