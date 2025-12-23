@@ -290,6 +290,13 @@ mod client_hello {
         );
 
         cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+        cx.data.received_resumption_data = Some(
+            resumedata
+                .common
+                .application_data
+                .0
+                .clone(),
+        );
 
         if send_ticket {
             let now = config.current_time()?;
