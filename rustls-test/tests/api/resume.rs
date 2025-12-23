@@ -92,9 +92,11 @@ fn resumption_combinations() {
             (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
             (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
         ] {
+            let resumption_data = format!("resumption data {kt:?} {version:?}");
             let client_config = make_client_config(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
+            server.set_resumption_data(resumption_data.as_bytes());
             do_handshake(&mut client, &mut server);
 
             let expected_kx = expected_kx_for_version(version);
@@ -122,6 +124,10 @@ fn resumption_combinations() {
 
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
             assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
+            assert_eq!(
+                server.received_resumption_data(),
+                Some(resumption_data.as_bytes())
+            );
             if version == ProtocolVersion::TLSv1_2 {
                 assert!(
                     client
