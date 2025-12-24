@@ -65,7 +65,7 @@ mod connection {
         ///
         /// See [`ConnectionCommon::write_tls()`] for more information.
         pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-            self.sendable_tls.write_to(wr)
+            self.send.sendable_tls.write_to(wr)
         }
 
         /// Returns an object that allows reading plaintext.
@@ -329,6 +329,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             let len = self
                 .core
                 .common_state
+                .send
                 .buffer_plaintext(buf.into(), &mut self.sendable_plaintext);
             self.core.maybe_refresh_traffic_keys();
             Ok(len)
@@ -351,6 +352,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             let len = self
                 .core
                 .common_state
+                .send
                 .buffer_plaintext(payload, &mut self.sendable_plaintext);
             self.core.maybe_refresh_traffic_keys();
             Ok(len)
@@ -556,7 +558,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
     pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
         self.sendable_plaintext.set_limit(limit);
-        self.sendable_tls.set_limit(limit);
+        self.core
+            .common_state
+            .send
+            .sendable_tls
+            .set_limit(limit);
     }
 
     /// Sets a limit on the internal buffers used to buffer decoded plaintext.
@@ -565,6 +571,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
         self.core
             .common_state
+            .recv
             .received_plaintext
             .set_limit(limit);
     }
@@ -606,11 +613,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub fn reader(&mut self) -> Reader<'_> {
         let common = &mut self.core.common_state;
         Reader {
-            received_plaintext: &mut common.received_plaintext,
+            received_plaintext: &mut common.recv.received_plaintext,
             // Are we done? i.e., have we processed all received messages, and received a
             // close_notify to indicate that no new messages will arrive?
-            has_received_close_notify: common.has_received_close_notify,
-            has_seen_eof: common.has_seen_eof,
+            has_received_close_notify: common.recv.has_received_close_notify,
+            has_seen_eof: common.recv.has_seen_eof,
         }
     }
 
@@ -804,11 +811,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
     /// [`reader()`]: ConnectionCommon::reader
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        if self.received_plaintext.is_full() {
+        if self.recv.received_plaintext.is_full() {
             return Err(io::Error::other("received plaintext buffer full"));
         }
 
-        if self.has_received_close_notify {
+        if self.recv.has_received_close_notify {
             return Ok(0);
         }
 
@@ -816,7 +823,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .deframer_buffer
             .read(rd, self.core.hs_deframer.is_active());
         if let Ok(0) = res {
-            self.has_seen_eof = true;
+            self.recv.has_seen_eof = true;
         }
         res
     }
@@ -829,7 +836,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// After this function returns, the connection buffer may not yet be fully flushed. The
     /// [`CommonState::wants_write`] function can be used to check if the output buffer is empty.
     pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.sendable_tls.write_to(wr)
+        self.send.sendable_tls.write_to(wr)
     }
 }
 
@@ -943,6 +950,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 Ok(opt_msg) => opt_msg,
                 Err(e) => {
                     self.common_state
+                        .send
                         .maybe_send_fatal_alert(&e);
                     if let Error::DecryptError = e {
                         state.handle_decrypt_error();
@@ -957,17 +965,17 @@ impl<Side: SideData> ConnectionCore<Side> {
                 break;
             };
 
-            match self.common_state.process_main_protocol(
-                msg,
-                self.hs_deframer.aligned(),
-                state,
-                &mut self.side,
-                &locator,
-                &mut plaintext,
-            ) {
+            let mut cx = Context {
+                common: &mut self.common_state,
+                data: &mut self.side,
+                plaintext_locator: &locator,
+                received_plaintext: &mut plaintext,
+            };
+            match cx.process_main_protocol(msg, self.hs_deframer.aligned(), state) {
                 Ok(new) => state = new,
                 Err(e) => {
                     self.common_state
+                        .send
                         .maybe_send_fatal_alert(&e);
                     self.state = Err(e.clone());
                     deframer_buffer.discard(buffer_progress.take_discard());
@@ -977,15 +985,18 @@ impl<Side: SideData> ConnectionCore<Side> {
 
             if self
                 .common_state
+                .send
                 .may_send_application_data
                 && !sendable_plaintext.is_empty()
             {
                 self.common_state
+                    .send
                     .send_buffered_plaintext(sendable_plaintext);
             }
 
             if self
                 .common_state
+                .recv
                 .has_received_close_notify
             {
                 // "Any data received after a closure alert has been received MUST be ignored."
@@ -998,6 +1009,7 @@ impl<Side: SideData> ConnectionCore<Side> {
             if let Some(payload) = plaintext.take() {
                 let payload = payload.reborrow(&Delocator::new(buffer));
                 self.common_state
+                    .recv
                     .received_plaintext
                     .append(payload.into_vec());
             }
@@ -1073,6 +1085,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                         if version_is_tls13
                             && !self
                                 .common_state
+                                .recv
                                 .decrypt_state
                                 .has_decrypted()
                             && message.payload.len() <= 2 =>
@@ -1089,6 +1102,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
                 let message = match self
                     .common_state
+                    .recv
                     .decrypt_state
                     .decrypt_incoming(message)
                 {
@@ -1167,6 +1181,7 @@ impl<Side: SideData> ConnectionCore<Side> {
             if self.hs_deframer.has_message_ready() {
                 // trial decryption finishes with the first handshake message after it started.
                 self.common_state
+                    .recv
                     .decrypt_state
                     .finish_trial_decryption();
 
@@ -1190,6 +1205,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
         if !self
             .common_state
+            .send
             .sendable_tls
             .is_empty()
         {
@@ -1200,10 +1216,12 @@ impl<Side: SideData> ConnectionCore<Side> {
 
         let read_seq = self
             .common_state
+            .recv
             .decrypt_state
             .read_seq();
         let write_seq = self
             .common_state
+            .send
             .encrypt_state
             .write_seq();
 
@@ -1238,6 +1256,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         if mem::take(
             &mut self
                 .common_state
+                .send
                 .refresh_traffic_keys_pending,
         ) {
             let _ = self.refresh_traffic_keys();

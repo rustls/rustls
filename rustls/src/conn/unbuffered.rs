@@ -8,6 +8,7 @@ use core::{fmt, mem};
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
+use crate::common_state::Context;
 use crate::conn::SideData;
 use crate::crypto::cipher::Payload;
 use crate::error::Error;
@@ -62,6 +63,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
             if let Some(chunk) = self
                 .core
                 .common_state
+                .send
                 .sendable_tls
                 .pop()
             {
@@ -74,6 +76,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
             let deframer_output = if self
                 .core
                 .common_state
+                .recv
                 .has_received_close_notify
             {
                 None
@@ -85,6 +88,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     Err(err) => {
                         self.core
                             .common_state
+                            .send
                             .maybe_send_fatal_alert(&err);
                         buffer.queue_discard(buffer_progress.take_discard());
                         return UnbufferedStatus {
@@ -111,17 +115,13 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     };
 
                 let mut received_plaintext = None;
-                match self
-                    .core
-                    .common_state
-                    .process_main_protocol(
-                        msg,
-                        self.core.hs_deframer.aligned(),
-                        state,
-                        &mut self.core.side,
-                        &plaintext_locator,
-                        &mut received_plaintext,
-                    ) {
+                let mut cx = Context {
+                    common: &mut self.core.common_state,
+                    data: &mut self.core.side,
+                    plaintext_locator: &plaintext_locator,
+                    received_plaintext: &mut received_plaintext,
+                };
+                match cx.process_main_protocol(msg, self.core.hs_deframer.aligned(), state) {
                     Ok(new) => {
                         buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Ok(new);
@@ -135,6 +135,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     Err(e) => {
                         self.core
                             .common_state
+                            .send
                             .maybe_send_fatal_alert(&e);
                         buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Err(e.clone());
@@ -152,6 +153,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
             } else if self
                 .core
                 .common_state
+                .recv
                 .has_received_close_notify
                 && !self.emitted_peer_closed_state
             {
@@ -160,16 +162,19 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
             } else if self
                 .core
                 .common_state
+                .recv
                 .has_received_close_notify
                 && self
                     .core
                     .common_state
+                    .send
                     .has_sent_close_notify
             {
                 break (buffer.pending_discard(), ConnectionState::Closed);
             } else if self
                 .core
                 .common_state
+                .send
                 .may_send_application_data
             {
                 break (
@@ -438,6 +443,7 @@ impl<Side: SideData> WriteTraffic<'_, Side> {
         self.conn
             .core
             .common_state
+            .send
             .write_plaintext(application_data.into(), outgoing_tls)
     }
 
@@ -449,6 +455,7 @@ impl<Side: SideData> WriteTraffic<'_, Side> {
         self.conn
             .core
             .common_state
+            .send
             .eager_send_close_notify(outgoing_tls)
     }
 
@@ -526,6 +533,7 @@ impl<Side: SideData> TransmitTlsData<'_, Side> {
             .conn
             .core
             .common_state
+            .send
             .may_send_application_data
         {
             Some(WriteTraffic { conn: self.conn })
