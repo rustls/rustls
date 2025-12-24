@@ -645,9 +645,6 @@ impl CommonState {
         &mut self,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<bool, Error> {
-        self.temper_counters
-            .received_key_update_request()?;
-
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => Ok(false),
             KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
@@ -783,9 +780,6 @@ impl<Data> Output for Context<'_, Data> {
                 // passed [`Payload`] will have it's lifetime erased by storing an index
                 // into the receive buffer as an [`UnborrowedPayload`]. This enables the
                 // data to be later reborrowed after it has been decrypted in-place.
-                self.common
-                    .temper_counters
-                    .received_app_data();
                 let previous = self
                     .received_plaintext
                     .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
@@ -992,7 +986,6 @@ impl Protocol {
 struct TemperCounters {
     allowed_warning_alerts: u8,
     allowed_renegotiation_requests: u8,
-    allowed_key_update_requests: u8,
     allowed_middlebox_ccs: u8,
 }
 
@@ -1017,16 +1010,6 @@ impl TemperCounters {
         }
     }
 
-    fn received_key_update_request(&mut self) -> Result<(), Error> {
-        match self.allowed_key_update_requests {
-            0 => Err(PeerMisbehaved::TooManyKeyUpdateRequests.into()),
-            _ => {
-                self.allowed_key_update_requests -= 1;
-                Ok(())
-            }
-        }
-    }
-
     fn received_tls13_change_cipher_spec(&mut self) -> Result<(), Error> {
         match self.allowed_middlebox_ccs {
             0 => Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into()),
@@ -1036,14 +1019,6 @@ impl TemperCounters {
             }
         }
     }
-
-    fn received_app_data(&mut self) {
-        self.allowed_key_update_requests = Self::INITIAL_KEY_UPDATE_REQUESTS;
-    }
-
-    // cf. BoringSSL `kMaxKeyUpdates`
-    // <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls13_both.cc#L35-L38>
-    const INITIAL_KEY_UPDATE_REQUESTS: u8 = 32;
 }
 
 impl Default for TemperCounters {
@@ -1057,13 +1032,43 @@ impl Default for TemperCounters {
             // a second request after this is fatal.
             allowed_renegotiation_requests: 1,
 
-            allowed_key_update_requests: Self::INITIAL_KEY_UPDATE_REQUESTS,
-
             // At most two CCS are allowed: one after each ClientHello (recall a second
             // ClientHello happens after a HelloRetryRequest).
             //
             // note BoringSSL allows up to 32.
             allowed_middlebox_ccs: 2,
+        }
+    }
+}
+
+pub(crate) struct TrafficTemperCounters {
+    allowed_key_update_requests: u8,
+}
+
+impl TrafficTemperCounters {
+    pub(crate) fn received_key_update_request(&mut self) -> Result<(), Error> {
+        match self.allowed_key_update_requests {
+            0 => Err(PeerMisbehaved::TooManyKeyUpdateRequests.into()),
+            _ => {
+                self.allowed_key_update_requests -= 1;
+                Ok(())
+            }
+        }
+    }
+
+    pub(crate) fn received_app_data(&mut self) {
+        self.allowed_key_update_requests = Self::INITIAL_KEY_UPDATE_REQUESTS;
+    }
+
+    // cf. BoringSSL `kMaxKeyUpdates`
+    // <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls13_both.cc#L35-L38>
+    const INITIAL_KEY_UPDATE_REQUESTS: u8 = 32;
+}
+
+impl Default for TrafficTemperCounters {
+    fn default() -> Self {
+        Self {
+            allowed_key_update_requests: Self::INITIAL_KEY_UPDATE_REQUESTS,
         }
     }
 }
