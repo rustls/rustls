@@ -1463,12 +1463,13 @@ impl ExpectTraffic {
 
         self.counters
             .received_key_update_request()?;
-        if cx
-            .common
-            .should_update_key(key_update_request)?
-        {
-            self.key_schedule
-                .update_encrypter_and_notify(cx);
+
+        match key_update_request {
+            KeyUpdateRequest::UpdateNotRequested => {}
+            KeyUpdateRequest::UpdateRequested => {
+                cx.emit(Event::MaybeKeyUpdateRequest(&mut self.key_schedule))
+            }
+            _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
         // Update our read-side keys.
