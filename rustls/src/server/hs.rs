@@ -74,7 +74,7 @@ impl<'a> ExtensionProcessing<'a> {
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&persist::CommonServerSessionValue>,
-    ) -> Result<CertificateTypes, Error> {
+    ) -> Result<(CertificateTypes, Option<ProtocolName>), Error> {
         let config = self.config;
         let hello = self.client_hello;
 
@@ -94,15 +94,15 @@ impl<'a> ExtensionProcessing<'a> {
 
                 self.extensions.selected_protocol =
                     Some(SingleProtocolName::new(selected_protocol.clone()));
-                cx.emit(Event::ApplicationProtocol(selected_protocol));
-                true
+                cx.emit(Event::ApplicationProtocol(selected_protocol.clone()));
+                Some(selected_protocol)
             } else if !our_protocols.is_empty() {
                 return Err(Error::NoApplicationProtocol);
             } else {
-                false
+                None
             }
         } else {
-            false
+            None
         };
 
         if self.protocol.is_quic() {
@@ -113,7 +113,8 @@ impl<'a> ExtensionProcessing<'a> {
             // protocols were configured locally or offered by the client. This helps prevent
             // successful establishment of connections between peers that can't understand
             // each other.
-            if !chosen_protocol && (!our_protocols.is_empty() || hello.protocols.is_some()) {
+            if chosen_protocol.is_none() && (!our_protocols.is_empty() || hello.protocols.is_some())
+            {
                 return Err(Error::NoApplicationProtocol);
             }
 
@@ -167,9 +168,12 @@ impl<'a> ExtensionProcessing<'a> {
         if hello.server_certificate_types.is_some() {
             self.extensions.server_certificate_type = Some(expected_server_type);
         }
-        Ok(CertificateTypes {
-            client: expected_client_type,
-        })
+        Ok((
+            CertificateTypes {
+                client: expected_client_type,
+            },
+            chosen_protocol,
+        ))
     }
 
     pub(super) fn process_tls12(&mut self, ocsp_response: &mut Option<&[u8]>, using_ems: bool) {
