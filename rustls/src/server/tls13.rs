@@ -22,7 +22,7 @@ use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
     CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
-    NewSessionTicketPayloadTls13,
+    NewSessionTicketPayloadTls13, ProtocolName,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -286,7 +286,7 @@ mod client_hello {
 
             let mut ocsp_response = signer.ocsp.as_deref();
             let mut flight = HandshakeFlightTls13::new(&mut transcript);
-            let (cert_types, doing_early_data) = emit_encrypted_extensions(
+            let (cert_types, doing_early_data, alpn_protocol) = emit_encrypted_extensions(
                 &mut flight,
                 suite,
                 st.protocol,
@@ -366,6 +366,7 @@ mod client_hello {
                         transcript,
                         suite,
                         key_schedule: key_schedule_traffic,
+                        alpn_protocol,
                         send_tickets: st.send_tickets,
                         message_already_in_transcript: false,
                         expected_certificate_type: cert_types.client,
@@ -376,6 +377,7 @@ mod client_hello {
                         transcript,
                         suite,
                         key_schedule: key_schedule_traffic,
+                        alpn_protocol,
                         send_tickets: st.send_tickets,
                         expected_certificate_type: cert_types.client,
                     }))
@@ -389,6 +391,7 @@ mod client_hello {
                     transcript,
                     suite,
                     key_schedule: key_schedule_traffic,
+                    alpn_protocol,
                     peer_identity: resumedata.and_then(|r| r.common.peer_identity),
                     send_tickets: st.send_tickets,
                 }))
@@ -398,6 +401,7 @@ mod client_hello {
                     transcript,
                     suite,
                     key_schedule: key_schedule_traffic,
+                    alpn_protocol,
                     peer_identity: resumedata.and_then(|r| r.common.peer_identity),
                     send_tickets: st.send_tickets,
                 }))
@@ -592,6 +596,7 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         client_hello: &ClientHelloPayload,
         resumedata: Option<&Tls13ServerSessionValue>,
+        chosen_alpn_protocol: &Option<ProtocolName>,
         suite: &'static Tls13CipherSuite,
         protocol: Protocol,
         config: &ServerConfig,
@@ -632,7 +637,7 @@ mod client_hello {
         let early_data_possible = early_data_requested
             && resume.is_fresh()
             && resume.common.cipher_suite == suite.common.suite
-            && resume.common.alpn == cx.common.alpn_protocol;
+            && &resume.common.alpn == chosen_alpn_protocol;
 
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
@@ -655,12 +660,20 @@ mod client_hello {
         resumedata: Option<&Tls13ServerSessionValue>,
         extra_exts: ServerExtensionsInput<'static>,
         config: &ServerConfig,
-    ) -> Result<(CertificateTypes, EarlyDataDecision), Error> {
+    ) -> Result<(CertificateTypes, EarlyDataDecision, Option<ProtocolName>), Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, protocol, hello, config);
-        let cert_types = ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
+        let (cert_types, alpn_protocol) =
+            ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
 
-        let early_data =
-            decide_if_early_data_allowed(cx, hello, resumedata, suite, protocol, config);
+        let early_data = decide_if_early_data_allowed(
+            cx,
+            hello,
+            resumedata,
+            &alpn_protocol,
+            suite,
+            protocol,
+            config,
+        );
         if early_data == EarlyDataDecision::Accepted {
             ep.extensions.early_data_ack = Some(());
         }
@@ -669,7 +682,7 @@ mod client_hello {
 
         trace!("sending encrypted extensions {ee:?}");
         flight.add(ee);
-        Ok((cert_types, early_data))
+        Ok((cert_types, early_data, alpn_protocol))
     }
 
     fn emit_certificate_req_tls13(
@@ -826,6 +839,7 @@ struct ExpectCertificateOrCompressedCertificate {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    alpn_protocol: Option<ProtocolName>,
     send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
@@ -845,6 +859,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 transcript: self.transcript,
                 suite: self.suite,
                 key_schedule: self.key_schedule,
+                alpn_protocol: self.alpn_protocol,
                 send_tickets: self.send_tickets,
                 message_already_in_transcript: false,
                 expected_certificate_type: self.expected_certificate_type,
@@ -859,6 +874,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 transcript: self.transcript,
                 suite: self.suite,
                 key_schedule: self.key_schedule,
+                alpn_protocol: self.alpn_protocol,
                 send_tickets: self.send_tickets,
                 expected_certificate_type: self.expected_certificate_type,
             })
@@ -881,6 +897,7 @@ struct ExpectCompressedCertificate {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    alpn_protocol: Option<ProtocolName>,
     send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
@@ -943,6 +960,7 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             transcript: self.transcript,
             suite: self.suite,
             key_schedule: self.key_schedule,
+            alpn_protocol: self.alpn_protocol,
             send_tickets: self.send_tickets,
             message_already_in_transcript: true,
             expected_certificate_type: self.expected_certificate_type,
@@ -962,6 +980,7 @@ struct ExpectCertificate {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    alpn_protocol: Option<ProtocolName>,
     send_tickets: usize,
     message_already_in_transcript: bool,
     expected_certificate_type: CertificateType,
@@ -1011,6 +1030,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                     suite: self.suite,
                     key_schedule: self.key_schedule,
                     peer_identity: None,
+                    alpn_protocol: self.alpn_protocol,
                     send_tickets: self.send_tickets,
                 }));
             }
@@ -1030,6 +1050,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             transcript: self.transcript,
             suite: self.suite,
             key_schedule: self.key_schedule,
+            alpn_protocol: self.alpn_protocol,
             peer_identity: peer_identity.into_owned(),
             send_tickets: self.send_tickets,
         }))
@@ -1041,6 +1062,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    alpn_protocol: Option<ProtocolName>,
     peer_identity: Identity<'static>,
     send_tickets: usize,
 }
@@ -1075,6 +1097,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             transcript: self.transcript,
             suite: self.suite,
             key_schedule: self.key_schedule,
+            alpn_protocol: self.alpn_protocol,
             peer_identity: Some(self.peer_identity),
             send_tickets: self.send_tickets,
         }))
@@ -1089,6 +1112,7 @@ struct ExpectEarlyData {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    alpn_protocol: Option<ProtocolName>,
     peer_identity: Option<Identity<'static>>,
     send_tickets: usize,
 }
@@ -1124,6 +1148,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: self.key_schedule,
+                    alpn_protocol: self.alpn_protocol,
                     peer_identity: self.peer_identity,
                     send_tickets: self.send_tickets,
                 }))
@@ -1143,6 +1168,7 @@ fn get_server_session_value(
     resumption: &KeyScheduleResumption,
     cx: &ServerContext<'_>,
     peer_identity: Option<Identity<'static>>,
+    chosen_alpn_protocol: Option<ProtocolName>,
     nonce: &[u8],
     time_now: UnixTime,
     age_obfuscation_offset: u32,
@@ -1154,7 +1180,7 @@ fn get_server_session_value(
             cx.data.sni.as_ref(),
             suite.common.suite,
             peer_identity,
-            cx.common.alpn_protocol.clone(),
+            chosen_alpn_protocol,
             cx.data.resumption_data.clone(),
             time_now,
         ),
@@ -1169,6 +1195,7 @@ struct ExpectFinished {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    alpn_protocol: Option<ProtocolName>,
     peer_identity: Option<Identity<'static>>,
     send_tickets: usize,
 }
@@ -1179,6 +1206,7 @@ impl ExpectFinished {
         suite: &'static Tls13CipherSuite,
         cx: &ServerContext<'_>,
         peer_identity: Option<Identity<'static>>,
+        chosen_alpn_protocol: Option<ProtocolName>,
         resumption: &KeyScheduleResumption,
         config: &ServerConfig,
     ) -> Result<(), Error> {
@@ -1188,9 +1216,17 @@ impl ExpectFinished {
 
         let now = config.current_time()?;
 
-        let plain =
-            get_server_session_value(suite, resumption, cx, peer_identity, &nonce, now, age_add)
-                .get_encoding();
+        let plain = get_server_session_value(
+            suite,
+            resumption,
+            cx,
+            peer_identity,
+            chosen_alpn_protocol,
+            &nonce,
+            now,
+            age_add,
+        )
+        .get_encoding();
 
         let ticketer = config.ticketer.as_deref();
         let (ticket, lifetime) = if let Some(ticketer) = ticketer {
@@ -1273,6 +1309,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                 self.suite,
                 cx,
                 self.peer_identity.clone(),
+                self.alpn_protocol.clone(),
                 &resumption,
                 &self.config,
             )?;
