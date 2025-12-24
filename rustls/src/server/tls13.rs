@@ -9,7 +9,9 @@ use subtle::ConstantTimeEq;
 use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State};
+use crate::common_state::{
+    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
+};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::kx::NamedGroup;
@@ -1315,6 +1317,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                 true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
                 false => Box::new(ExpectTraffic {
                     config: self.config,
+                    counters: TrafficTemperCounters::default(),
                     key_schedule: key_schedule_traffic,
                     _fin_verified: fin,
                 }),
@@ -1327,6 +1330,7 @@ impl State<ServerConnectionData> for ExpectFinished {
 struct ExpectTraffic {
     config: Arc<ServerConfig>,
     key_schedule: KeyScheduleTraffic,
+    counters: TrafficTemperCounters,
     _fin_verified: verify::FinishedMessageVerified,
 }
 
@@ -1343,6 +1347,8 @@ impl ExpectTraffic {
 
         let proof = input.check_aligned_handshake()?;
 
+        self.counters
+            .received_key_update_request()?;
         if cx
             .common
             .should_update_key(key_update_request)?
@@ -1365,7 +1371,10 @@ impl State<ServerConnectionData> for ExpectTraffic {
         input: Input<'_>,
     ) -> hs::NextStateOrError {
         match input.message.payload {
-            MessagePayload::ApplicationData(payload) => cx.emit(Event::ApplicationData(payload)),
+            MessagePayload::ApplicationData(payload) => {
+                self.counters.received_app_data();
+                cx.emit(Event::ApplicationData(payload));
+            }
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..

@@ -13,7 +13,9 @@ use super::hs::{
 };
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State};
+use crate::common_state::{
+    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
+};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::cipher::Payload;
@@ -1378,6 +1380,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             session_precursor: st.session_precursor,
             key_schedule,
             resumption,
+            counters: TrafficTemperCounters::default(),
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
             _fin_verified: fin,
@@ -1400,6 +1403,7 @@ struct ExpectTraffic {
     session_precursor: persist::Tls13ClientSessionPrecursor,
     key_schedule: KeyScheduleTraffic,
     resumption: KeyScheduleResumption,
+    counters: TrafficTemperCounters,
     _cert_verified: verify::PeerVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
@@ -1461,6 +1465,8 @@ impl ExpectTraffic {
         // Mustn't be interleaved with other handshake messages.
         let proof = input.check_aligned_handshake()?;
 
+        self.counters
+            .received_key_update_request()?;
         if cx
             .common
             .should_update_key(key_update_request)?
@@ -1483,7 +1489,10 @@ impl State<ClientConnectionData> for ExpectTraffic {
         input: Input<'_>,
     ) -> hs::NextStateOrError {
         match input.message.payload {
-            MessagePayload::ApplicationData(payload) => cx.emit(Event::ApplicationData(payload)),
+            MessagePayload::ApplicationData(payload) => {
+                self.counters.received_app_data();
+                cx.emit(Event::ApplicationData(payload));
+            }
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
                 ..
