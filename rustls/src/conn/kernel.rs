@@ -81,6 +81,7 @@ pub struct KernelConnection<Side> {
 impl<Side> KernelConnection<Side> {
     pub(crate) fn new(state: Box<dyn KernelState>, common: CommonState) -> Result<Self, Error> {
         let (negotiated_version, suite) = common
+            .outputs
             .into_kernel_parts()
             .ok_or(Error::HandshakeNotComplete)?;
         Ok(Self {
