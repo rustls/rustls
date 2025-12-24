@@ -195,7 +195,7 @@ mod client_hello {
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
-            let send_ticket = emit_server_hello(
+            let (send_ticket, alpn_protocol) = emit_server_hello(
                 &mut flight,
                 &st.config,
                 cx,
@@ -228,6 +228,7 @@ mod client_hello {
                     suite,
                     using_ems: st.using_ems,
                     server_kx,
+                    alpn_protocol,
                     send_ticket,
                 }))
             } else {
@@ -239,6 +240,7 @@ mod client_hello {
                     suite,
                     using_ems: st.using_ems,
                     server_kx,
+                    alpn_protocol,
                     peer_identity: None,
                     send_ticket,
                 }))
@@ -268,7 +270,7 @@ mod client_hello {
 
         let session_id = input.client_hello.session_id;
         let mut flight = HandshakeFlightTls12::new(&mut transcript);
-        let send_ticket = emit_server_hello(
+        let (send_ticket, alpn_protocol) = emit_server_hello(
             &mut flight,
             &config,
             cx,
@@ -308,6 +310,7 @@ mod client_hello {
                     &mut transcript,
                     using_ems,
                     resumedata.common.peer_identity.as_ref(),
+                    alpn_protocol.as_ref(),
                     cx,
                     ticketer,
                     now,
@@ -331,6 +334,7 @@ mod client_hello {
             secrets,
             transcript,
             session_id,
+            alpn_protocol,
             peer_identity: resumedata.common.peer_identity,
             using_ems,
             resuming_decrypter: Some(dec),
@@ -350,9 +354,10 @@ mod client_hello {
         resumedata: Option<&persist::Tls12ServerSessionValue>,
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput<'static>,
-    ) -> Result<bool, Error> {
+    ) -> Result<(bool, Option<ProtocolName>), Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
-        ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
+        let (_, alpn_protocol) =
+            ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
         ep.process_tls12(ocsp_response, using_ems);
 
         let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
@@ -366,7 +371,7 @@ mod client_hello {
         trace!("sending server hello {sh:?}");
         flight.add(sh);
 
-        Ok(ep.send_ticket)
+        Ok((ep.send_ticket, alpn_protocol))
     }
 
     fn emit_certificate(flight: &mut HandshakeFlightTls12<'_>, credentials: &SelectedCredential) {
@@ -459,6 +464,7 @@ struct ExpectCertificate {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: GroupAndKeyExchange,
+    alpn_protocol: Option<ProtocolName>,
     send_ticket: bool,
 }
 
@@ -511,6 +517,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             suite: self.suite,
             using_ems: self.using_ems,
             server_kx: self.server_kx,
+            alpn_protocol: self.alpn_protocol,
             peer_identity,
             send_ticket: self.send_ticket,
         }))
@@ -526,6 +533,7 @@ struct ExpectClientKx {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: GroupAndKeyExchange,
+    alpn_protocol: Option<ProtocolName>,
     peer_identity: Option<Identity<'static>>,
     send_ticket: bool,
 }
@@ -573,6 +581,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 transcript: self.transcript,
                 session_id: self.session_id,
                 using_ems: self.using_ems,
+                alpn_protocol: self.alpn_protocol,
                 peer_identity,
                 send_ticket: self.send_ticket,
             })),
@@ -581,6 +590,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 secrets,
                 transcript: self.transcript,
                 session_id: self.session_id,
+                alpn_protocol: self.alpn_protocol,
                 peer_identity: None,
                 using_ems: self.using_ems,
                 resuming_decrypter: None,
@@ -597,6 +607,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     session_id: SessionId,
     using_ems: bool,
+    alpn_protocol: Option<ProtocolName>,
     peer_identity: Identity<'static>,
     send_ticket: bool,
 }
@@ -641,6 +652,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             secrets: self.secrets,
             transcript: self.transcript,
             session_id: self.session_id,
+            alpn_protocol: self.alpn_protocol,
             peer_identity: Some(self.peer_identity),
             using_ems: self.using_ems,
             resuming_decrypter: None,
@@ -655,6 +667,7 @@ struct ExpectCcs {
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
+    alpn_protocol: Option<ProtocolName>,
     peer_identity: Option<Identity<'static>>,
     using_ems: bool,
     resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
@@ -698,6 +711,7 @@ impl State<ServerConnectionData> for ExpectCcs {
             secrets: self.secrets,
             transcript: self.transcript,
             session_id: self.session_id,
+            alpn_protocol: self.alpn_protocol,
             peer_identity: self.peer_identity,
             using_ems: self.using_ems,
             resuming: pending_encrypter.is_none(),
@@ -712,6 +726,7 @@ fn get_server_connection_value_tls12(
     secrets: &ConnectionSecrets,
     using_ems: bool,
     peer_identity: Option<&Identity<'static>>,
+    alpn_protocol: Option<&ProtocolName>,
     cx: &ServerContext<'_>,
     time_now: UnixTime,
 ) -> persist::ServerSessionValue {
@@ -720,10 +735,7 @@ fn get_server_connection_value_tls12(
             cx.data.sni.as_ref(),
             secrets.suite().common.suite,
             peer_identity.cloned(),
-            cx.common
-                .alpn_protocol
-                .as_ref()
-                .map(|p| ProtocolName::from(p.as_ref().to_vec())),
+            alpn_protocol.cloned(),
             cx.data.resumption_data.clone(),
             time_now,
         ),
@@ -738,12 +750,20 @@ fn emit_ticket(
     transcript: &mut HandshakeHash,
     using_ems: bool,
     peer_identity: Option<&Identity<'static>>,
+    alpn_protocol: Option<&ProtocolName>,
     cx: &mut ServerContext<'_>,
     ticketer: &dyn TicketProducer,
     now: UnixTime,
 ) -> Result<(), Error> {
-    let plain = get_server_connection_value_tls12(secrets, using_ems, peer_identity, cx, now)
-        .get_encoding();
+    let plain = get_server_connection_value_tls12(
+        secrets,
+        using_ems,
+        peer_identity,
+        alpn_protocol,
+        cx,
+        now,
+    )
+    .get_encoding();
 
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
@@ -800,6 +820,7 @@ struct ExpectFinished {
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
+    alpn_protocol: Option<ProtocolName>,
     peer_identity: Option<Identity<'static>>,
     using_ems: bool,
     resuming: bool,
@@ -842,6 +863,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                 &self.secrets,
                 self.using_ems,
                 self.peer_identity.as_ref(),
+                self.alpn_protocol.as_ref(),
                 cx,
                 now,
             );
@@ -870,6 +892,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                         &mut self.transcript,
                         self.using_ems,
                         self.peer_identity.as_ref(),
+                        self.alpn_protocol.as_ref(),
                         cx,
                         ticketer,
                         now,
