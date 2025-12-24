@@ -25,7 +25,7 @@ mod connection {
 
     use super::{DirectionalKeys, KeyChange, Version};
     use crate::client::{ClientConfig, ClientConnectionData};
-    use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, Protocol};
+    use crate::common_state::{CommonState, ConnectionOutputs, DEFAULT_BUFFER_LIMIT, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ContentType, ProtocolVersion};
@@ -90,12 +90,12 @@ mod connection {
     }
 
     impl Deref for Connection {
-        type Target = CommonState;
+        type Target = ConnectionOutputs;
 
         fn deref(&self) -> &Self::Target {
             match self {
-                Self::Client(conn) => &conn.core.common_state,
-                Self::Server(conn) => &conn.core.common_state,
+                Self::Client(conn) => &conn.core.common_state.outputs,
+                Self::Server(conn) => &conn.core.common_state.outputs,
             }
         }
     }
@@ -103,8 +103,8 @@ mod connection {
     impl DerefMut for Connection {
         fn deref_mut(&mut self) -> &mut Self::Target {
             match self {
-                Self::Client(conn) => &mut conn.core.common_state,
-                Self::Server(conn) => &mut conn.core.common_state,
+                Self::Client(conn) => &mut conn.core.common_state.outputs,
+                Self::Server(conn) => &mut conn.core.common_state.outputs,
             }
         }
     }
