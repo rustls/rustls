@@ -12,18 +12,19 @@ use crate::crypto::cipher::{
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
+use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::deframer::{Delocator, HandshakeAlignedProof, Locator};
-use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
+use crate::msgs::enums::AlertLevel;
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
+use crate::tls13::key_schedule::KeyScheduleTraffic;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -641,24 +642,17 @@ impl CommonState {
         }
     }
 
-    pub(crate) fn should_update_key(
-        &mut self,
-        key_update_request: &KeyUpdateRequest,
-    ) -> Result<bool, Error> {
-        match key_update_request {
-            KeyUpdateRequest::UpdateNotRequested => Ok(false),
-            KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
-            _ => Err(InvalidMessage::InvalidKeyUpdate.into()),
+    pub(crate) fn maybe_enqueue_key_update_notification(&mut self) -> bool {
+        if self.queued_key_update_message.is_some() {
+            return false;
         }
-    }
-
-    pub(crate) fn enqueue_key_update_notification(&mut self) {
         let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
         self.queued_key_update_message = Some(
             self.encrypt_state
                 .encrypt_outgoing(message.borrow_outbound())
                 .encode(),
         );
+        true
     }
 }
 
@@ -792,9 +786,6 @@ impl<Data> Output for Context<'_, Data> {
                 Protocol::Tcp => self.common.send_msg(m, true),
                 Protocol::Quic(_) => self.common.quic.send_msg(m, true),
             },
-            Event::EnqueueKeyUpdateNotification => self
-                .common
-                .enqueue_key_update_notification(),
             Event::Exporter(exporter) => self.common.exporter = Some(exporter),
             Event::HandshakeKind(hk) => {
                 assert!(self.common.handshake_kind.is_none());
@@ -807,6 +798,14 @@ impl<Data> Output for Context<'_, Data> {
                         .is_none()
                 );
                 self.common.negotiated_kx_group = Some(kxg);
+            }
+            Event::MaybeKeyUpdateRequest(ks) => {
+                if self
+                    .common
+                    .maybe_enqueue_key_update_notification()
+                {
+                    ks.update_encrypter_for_key_update(self);
+                }
             }
             Event::MessageDecrypter { decrypter, proof } => self
                 .common
@@ -874,10 +873,10 @@ pub(crate) enum Event<'a> {
     CipherSuite(SupportedCipherSuite),
     EarlyExporter(Box<dyn Exporter>),
     EncryptMessage(Message<'a>),
-    EnqueueKeyUpdateNotification,
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
+    MaybeKeyUpdateRequest(&'a mut KeyScheduleTraffic),
     MessageDecrypter {
         decrypter: Box<dyn MessageDecrypter>,
         proof: HandshakeAlignedProof,
