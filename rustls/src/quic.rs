@@ -164,7 +164,7 @@ mod connection {
             let inner =
                 ConnectionCore::for_client(config, name, exts, Protocol::Quic(quic_version))?;
             Ok(Self {
-                inner: inner.into(),
+                inner: ConnectionCommon::new(inner, quic_version),
             })
         }
 
@@ -265,7 +265,8 @@ mod connection {
             };
 
             let core = ConnectionCore::for_server(config, exts, Protocol::Quic(quic_version))?;
-            Ok(Self { inner: core.into() })
+            let inner = ConnectionCommon::new(core, quic_version);
+            Ok(Self { inner })
         }
 
         /// Explicitly discard early data, notifying the client
@@ -370,9 +371,19 @@ mod connection {
         core: ConnectionCore<Side>,
         deframer_buffer: DeframerVecBuffer,
         sendable_plaintext: ChunkVecBuffer,
+        version: Version,
     }
 
     impl<Side: SideData> ConnectionCommon<Side> {
+        fn new(core: ConnectionCore<Side>, version: Version) -> Self {
+            Self {
+                core,
+                deframer_buffer: DeframerVecBuffer::default(),
+                sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+                version,
+            }
+        }
+
         /// Return the TLS-encoded transport parameters for the session's peer.
         ///
         /// While the transport parameters are technically available prior to the
@@ -399,9 +410,7 @@ mod connection {
                     SupportedCipherSuite::Tls13(suite) => Some(suite),
                     _ => None,
                 })?;
-            let Protocol::Quic(version) = self.core.common_state.protocol else {
-                return None;
-            };
+
             Some(DirectionalKeys::new(
                 suite,
                 suite.quic?,
@@ -410,7 +419,7 @@ mod connection {
                     .quic
                     .early_secret
                     .as_ref()?,
-                version,
+                self.version,
             ))
         }
 
@@ -467,16 +476,6 @@ mod connection {
     impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.core.common_state
-        }
-    }
-
-    impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
-        fn from(core: ConnectionCore<Side>) -> Self {
-            Self {
-                core,
-                deframer_buffer: DeframerVecBuffer::default(),
-                sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
-            }
         }
     }
 }
