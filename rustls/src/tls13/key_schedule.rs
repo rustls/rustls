@@ -132,7 +132,7 @@ impl KeyScheduleEarly {
             client_random,
         );
 
-        if common.is_quic() {
+        if self.ks.protocol.is_quic() {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
             // before the application can see.
             common.quic.early_secret = Some(client_early_traffic_secret.clone());
@@ -340,7 +340,7 @@ impl KeyScheduleHandshakeStart {
             client_random,
         );
 
-        if common.is_quic() {
+        if self.ks.protocol.is_quic() {
             common.quic.hs_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
@@ -424,7 +424,7 @@ impl KeyScheduleHandshake {
             .ks
             .set_encrypter(server_secret, common);
 
-        if common.is_quic() {
+        if before_finished.ks.protocol.is_quic() {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
@@ -570,7 +570,7 @@ impl KeyScheduleClientBeforeFinished {
         next.ks
             .set_encrypter(client_secret, common);
 
-        if common.is_quic() {
+        if next.ks.protocol.is_quic() {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),

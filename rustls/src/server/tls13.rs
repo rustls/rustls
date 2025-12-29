@@ -375,7 +375,9 @@ mod client_hello {
                         expected_certificate_type: cert_types.client,
                     }))
                 }
-            } else if doing_early_data == EarlyDataDecision::Accepted && !cx.common.is_quic() {
+            } else if doing_early_data == EarlyDataDecision::Accepted
+                && !cx.common.protocol.is_quic()
+            {
                 // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
                 // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
                 // connection error of type PROTOCOL_VIOLATION.
@@ -544,7 +546,7 @@ mod client_hello {
     }
 
     fn emit_fake_ccs(common: &mut CommonState) {
-        if common.is_quic() {
+        if common.protocol.is_quic() {
             return;
         }
         let m = Message {
@@ -633,7 +635,7 @@ mod client_hello {
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
         } else {
-            if cx.common.is_quic() {
+            if cx.common.protocol.is_quic() {
                 // Clobber value set in tls13::emit_server_hello
                 cx.common.quic.early_secret = None;
             }
@@ -1279,7 +1281,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         cx.common.peer_identity = self.peer_identity;
         cx.common.exporter = Some(Box::new(exporter));
 
-        Ok(match cx.common.is_quic() {
+        Ok(match cx.common.protocol.is_quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
             false => Box::new(ExpectTraffic {
                 config: self.config,

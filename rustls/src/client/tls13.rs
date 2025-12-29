@@ -407,7 +407,7 @@ pub(super) fn derive_early_traffic_secret(
 }
 
 pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonState) {
-    if common.is_quic() {
+    if common.protocol.is_quic() {
         return;
     }
 
@@ -501,7 +501,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         };
 
         // QUIC transport parameters
-        if cx.common.is_quic() {
+        if cx.common.protocol.is_quic() {
             match exts.transport_parameters.as_ref() {
                 Some(params) => cx.common.quic.params = Some(params.clone().into_vec()),
                 None => {
@@ -1181,7 +1181,7 @@ fn emit_finished_tls13(
 }
 
 fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut CommonState) {
-    if common.is_quic() {
+    if common.protocol.is_quic() {
         return;
     }
 
@@ -1339,7 +1339,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             _fin_verified: fin,
         };
 
-        Ok(match cx.common.is_quic() {
+        Ok(match cx.common.protocol.is_quic() {
             true => Box::new(ExpectQuicTraffic(st)),
             false => Box::new(st),
         })
