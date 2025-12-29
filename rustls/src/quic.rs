@@ -294,7 +294,7 @@ mod connection {
         ///
         /// The server name is also used to match sessions during session resumption.
         pub fn server_name(&self) -> Option<&DnsName<'_>> {
-            self.inner.core.side.sni.as_ref()
+            self.inner.core.side.server_name()
         }
 
         /// Set the resumption data to embed in future resumption tickets supplied to the client.

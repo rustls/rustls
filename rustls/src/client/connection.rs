@@ -6,7 +6,7 @@ use pki_types::ServerName;
 use super::config::ClientConfig;
 use super::hs::{self, ClientHelloInput};
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, Protocol, Side};
+use crate::common_state::{CommonState, Event, Output, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -574,6 +574,10 @@ impl ClientConnectionData {
             ech_status: EchStatus::NotOffered,
         }
     }
+}
+
+impl Output for ClientConnectionData {
+    fn emit(&mut self, _ev: Event<'_>) {}
 }
 
 impl crate::conn::SideData for ClientConnectionData {}
