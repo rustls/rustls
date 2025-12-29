@@ -1,6 +1,6 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use core::{cmp, mem};
+use core::mem;
 #[cfg(feature = "std")]
 use std::io;
 #[cfg(feature = "std")]
@@ -59,18 +59,6 @@ impl ChunkVecBuffer {
             - self.prefix_used
     }
 
-    /// For a proposed append of `len` bytes, how many
-    /// bytes should we actually append to adhere to the
-    /// currently set `limit`?
-    pub(crate) fn apply_limit(&self, len: usize) -> usize {
-        if let Some(limit) = self.limit {
-            let space = limit.saturating_sub(self.len());
-            cmp::min(len, space)
-        } else {
-            len
-        }
-    }
-
     /// Take and append the given `bytes`.
     pub(crate) fn append(&mut self, bytes: Vec<u8>) -> usize {
         let len = bytes.len();
@@ -123,6 +111,18 @@ impl ChunkVecBuffer {
         let take = self.apply_limit(payload.len());
         self.append(payload.split_at(take).0.to_vec());
         take
+    }
+
+    /// For a proposed append of `len` bytes, how many
+    /// bytes should we actually append to adhere to the
+    /// currently set `limit`?
+    pub(crate) fn apply_limit(&self, len: usize) -> usize {
+        if let Some(limit) = self.limit {
+            let space = limit.saturating_sub(self.len());
+            core::cmp::min(len, space)
+        } else {
+            len
+        }
     }
 
     /// Read data out of this object, writing it into `buf`
@@ -186,7 +186,7 @@ impl ChunkVecBuffer {
             *iov = io::IoSlice::new(&chunk[prefix..]);
             prefix = 0;
         }
-        let len = cmp::min(bufs.len(), self.chunks.len());
+        let len = core::cmp::min(bufs.len(), self.chunks.len());
         let bufs = &bufs[..len];
         let used = wr.write_vectored(bufs)?;
         let available_bytes = bufs.iter().map(|ch| ch.len()).sum();

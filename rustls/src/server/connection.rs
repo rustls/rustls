@@ -627,15 +627,13 @@ pub(super) enum EarlyDataState {
     New,
     Accepted {
         received: ChunkVecBuffer,
-        left: usize,
     },
 }
 
 impl EarlyDataState {
-    pub(super) fn accept(&mut self, max_size: usize) {
+    pub(super) fn accept(&mut self) {
         *self = Self::Accepted {
-            received: ChunkVecBuffer::new(Some(max_size)),
-            left: max_size,
+            received: ChunkVecBuffer::new(None),
         };
     }
 
@@ -666,19 +664,12 @@ impl EarlyDataState {
         }
     }
 
-    pub(super) fn take_received_plaintext(&mut self, bytes: Payload<'_>) -> bool {
-        let available = bytes.bytes().len();
-        let Self::Accepted { received, left } = self else {
-            return false;
+    pub(super) fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
+        let Self::Accepted { received } = self else {
+            return;
         };
 
-        if received.apply_limit(available) != available || available > *left {
-            return false;
-        }
-
         received.append(bytes.into_vec());
-        *left -= available;
-        true
     }
 }
 
@@ -686,11 +677,10 @@ impl Debug for EarlyDataState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::New => write!(f, "EarlyDataState::New"),
-            Self::Accepted { received, left } => write!(
+            Self::Accepted { received } => write!(
                 f,
-                "EarlyDataState::Accepted {{ received: {}, left: {} }}",
+                "EarlyDataState::Accepted {{ received: {} }}",
                 received.len(),
-                left
             ),
         }
     }
