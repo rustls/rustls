@@ -42,7 +42,7 @@ use crate::{ConnectionTrafficSecrets, compress, verify};
 
 mod client_hello {
     use super::*;
-    use crate::common_state::Protocol;
+    use crate::common_state::{EarlyDataEvent, Protocol};
     use crate::compress::CertCompressor;
     use crate::crypto::cipher::Payload;
     use crate::crypto::kx::SupportedKxGroup;
@@ -346,7 +346,7 @@ mod client_hello {
                     );
                 }
                 EarlyDataDecision::Accepted { .. } => {
-                    cx.data.early_data.accept();
+                    cx.emit(Event::EarlyData(EarlyDataEvent::Accepted));
                 }
             }
 
@@ -1161,9 +1161,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     None => return Err(PeerMisbehaved::TooMuchEarlyDataReceived.into()),
                 };
 
-                cx.data
-                    .early_data
-                    .take_received_plaintext(payload);
+                cx.emit(Event::EarlyApplicationData(payload));
                 Ok(self)
             }
             MessagePayload::Handshake {
