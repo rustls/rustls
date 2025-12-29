@@ -115,9 +115,7 @@ mod buffered {
             self.inner
                 .core
                 .side
-                .received_resumption_data
-                .as_ref()
-                .map(|x| &x[..])
+                .received_resumption_data()
         }
 
         /// Set the resumption data to embed in future resumption tickets supplied to the client.
@@ -740,12 +738,17 @@ impl ConnectionCore<ServerConnectionData> {
 #[derive(Default, Debug)]
 pub struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
-    pub(crate) received_resumption_data: Option<Vec<u8>>,
+    received_resumption_data: Option<Vec<u8>>,
     pub(crate) resumption_data: Vec<u8>,
     pub(super) early_data: EarlyDataState,
 }
 
 impl ServerConnectionData {
+    #[cfg(feature = "std")]
+    pub(crate) fn received_resumption_data(&self) -> Option<&[u8]> {
+        self.received_resumption_data.as_deref()
+    }
+
     #[cfg(feature = "std")]
     pub(crate) fn server_name(&self) -> Option<&DnsName<'static>> {
         self.sni.as_ref()
@@ -754,8 +757,10 @@ impl ServerConnectionData {
 
 impl Output for ServerConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
-        if let Event::ReceivedServerName(sni) = ev {
-            self.sni = sni;
+        match ev {
+            Event::ReceivedServerName(sni) => self.sni = sni,
+            Event::ResumptionData(data) => self.received_resumption_data = Some(data),
+            _ => {}
         }
     }
 }
