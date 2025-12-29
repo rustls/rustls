@@ -58,8 +58,6 @@ pub(crate) static TLS13_HANDLER: &dyn ClientHandler<Tls13CipherSuite> = &Handler
 struct Handler;
 
 impl ClientHandler<Tls13CipherSuite> for Handler {
-    /// `early_data_key_schedule` is `Some` if we sent the
-    /// "early_data" extension to the server.
     fn handle_server_hello(
         &self,
         suite: &'static Tls13CipherSuite,

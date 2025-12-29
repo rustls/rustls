@@ -131,12 +131,10 @@ mod buffered {
             self.inner.core.side.resumption_data = data.into();
         }
 
-        /// Explicitly discard early data, notifying the client
+        /// Explicitly discard early data, notifying the client.
         ///
         /// Useful if invariants encoded in `received_resumption_data()` cannot be respected.
-        ///
-        /// Must be called while `is_handshaking` is true.
-        pub fn reject_early_data(&mut self) {
+        pub fn reject_early_data(&mut self) -> Result<(), Error> {
             self.inner.core.reject_early_data()
         }
 
@@ -631,14 +629,9 @@ pub(super) enum EarlyDataState {
         received: ChunkVecBuffer,
         left: usize,
     },
-    Rejected,
 }
 
 impl EarlyDataState {
-    pub(super) fn reject(&mut self) {
-        *self = Self::Rejected;
-    }
-
     pub(super) fn accept(&mut self, max_size: usize) {
         *self = Self::Accepted {
             received: ChunkVecBuffer::new(Some(max_size)),
@@ -649,10 +642,6 @@ impl EarlyDataState {
     #[cfg(feature = "std")]
     fn was_accepted(&self) -> bool {
         matches!(self, Self::Accepted { .. })
-    }
-
-    pub(super) fn was_rejected(&self) -> bool {
-        matches!(self, Self::Rejected)
     }
 
     fn peek(&self) -> Option<&[u8]> {
@@ -703,7 +692,6 @@ impl Debug for EarlyDataState {
                 received.len(),
                 left
             ),
-            Self::Rejected => write!(f, "EarlyDataState::Rejected"),
         }
     }
 }
@@ -725,12 +713,11 @@ impl ConnectionCore<ServerConnectionData> {
     }
 
     #[cfg(feature = "std")]
-    pub(crate) fn reject_early_data(&mut self) {
-        assert!(
-            self.common_state.is_handshaking(),
-            "cannot retroactively reject early data"
-        );
-        self.side.early_data.reject();
+    pub(crate) fn reject_early_data(&mut self) -> Result<(), Error> {
+        match &mut self.state {
+            Ok(s) => s.reject_early_data(),
+            Err(e) => Err(e.clone()),
+        }
     }
 }
 

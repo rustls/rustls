@@ -191,7 +191,7 @@ fn test_quic_handshake() {
             server_params.into(),
         )
         .unwrap();
-        server.reject_early_data();
+        server.reject_early_data().unwrap();
 
         step(&mut client, &mut server).unwrap();
         assert_eq!(client.quic_transport_parameters(), Some(server_params));
