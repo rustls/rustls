@@ -16,7 +16,7 @@ use super::config::ServerConfig;
 use super::hs;
 #[cfg(feature = "std")]
 use super::hs::ClientHelloInput;
-use crate::common_state::{CommonState, Event, Output, Protocol, Side};
+use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
 #[cfg(feature = "std")]
 use crate::common_state::{Input, State};
 #[cfg(feature = "std")]
@@ -615,7 +615,7 @@ pub(super) enum EarlyDataState {
 }
 
 impl EarlyDataState {
-    pub(super) fn accept(&mut self) {
+    fn accept(&mut self) {
         *self = Self::Accepted {
             received: ChunkVecBuffer::new(None),
         };
@@ -648,7 +648,7 @@ impl EarlyDataState {
         }
     }
 
-    pub(super) fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
+    fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
         let Self::Accepted { received } = self else {
             return;
         };
@@ -693,7 +693,7 @@ pub struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
     pub(crate) resumption_data: Vec<u8>,
-    pub(super) early_data: EarlyDataState,
+    early_data: EarlyDataState,
 }
 
 impl ServerConnectionData {
@@ -721,6 +721,10 @@ impl ServerConnectionData {
 impl Output for ServerConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
+            Event::EarlyApplicationData(data) => self
+                .early_data
+                .take_received_plaintext(data),
+            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
             Event::ReceivedServerName(sni) => self.sni = sni,
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
             _ => {}
