@@ -253,7 +253,9 @@ mod client_hello {
             }
 
             if let Some(resume) = &resumedata {
-                cx.data.received_resumption_data = Some(resume.common.application_data.0.clone());
+                cx.emit(Event::ResumptionData(
+                    resume.common.application_data.0.clone(),
+                ));
             }
 
             let full_handshake = resumedata.is_none();
