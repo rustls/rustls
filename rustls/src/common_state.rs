@@ -783,6 +783,7 @@ impl<Data: SideData> Output for Context<'_, Data> {
             }
             Event::ApplicationProtocol(protocol) => self.common.alpn_protocol = Some(protocol),
             Event::CipherSuite(suite) => self.common.suite = Some(suite),
+            Event::EarlyData(_) | Event::EarlyApplicationData(_) => self.data.emit(ev),
             Event::EarlyExporter(exporter) => self.common.early_exporter = Some(exporter),
             Event::EncryptMessage(m) => match self.common.protocol {
                 Protocol::Tcp => self.common.send_msg(m, true),
@@ -871,6 +872,8 @@ pub(crate) enum Event<'a> {
     ApplicationData(Payload<'a>),
     ApplicationProtocol(ProtocolName),
     CipherSuite(SupportedCipherSuite),
+    EarlyApplicationData(Payload<'a>),
+    EarlyData(EarlyDataEvent),
     EarlyExporter(Box<dyn Exporter>),
     EncryptMessage(Message<'a>),
     Exporter(Box<dyn Exporter>),
@@ -894,6 +897,11 @@ pub(crate) enum Event<'a> {
     StartOutgoingTraffic,
     /// Mark the connection as ready to send and receive application data.
     StartTraffic,
+}
+
+pub(crate) enum EarlyDataEvent {
+    /// server: we accepted an early_data offer
+    Accepted,
 }
 
 /// Lifetime-erased equivalent to [`Payload`]
