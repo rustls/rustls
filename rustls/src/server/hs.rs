@@ -261,6 +261,7 @@ pub(crate) struct ExpectClientHello {
     pub(super) transcript: HandshakeHashOrBuffer,
     pub(super) session_id: SessionId,
     pub(super) sni: Option<DnsName<'static>>,
+    pub(super) resumption_data: Vec<u8>,
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
     pub(super) send_tickets: usize,
@@ -285,6 +286,7 @@ impl ExpectClientHello {
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
             session_id: SessionId::empty(),
             sni: None,
+            resumption_data: Vec::new(),
             using_ems: false,
             done_retry: false,
             send_tickets: 0,
@@ -539,6 +541,11 @@ impl State<ServerConnectionData> for ExpectClientHello {
     ) -> NextStateOrError {
         let input = ClientHelloInput::from_input(&input)?;
         self.with_input(input, cx)
+    }
+
+    fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
+        self.resumption_data = resumption_data.to_vec();
+        Ok(())
     }
 }
 
