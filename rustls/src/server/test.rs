@@ -4,10 +4,9 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use std::vec;
 
-use super::ServerConnectionData;
 use super::hs::ClientHelloInput;
 use crate::TEST_PROVIDERS;
-use crate::common_state::{CommonState, Context, Input, Protocol, Side};
+use crate::common_state::Input;
 use crate::crypto::cipher::FakeAead;
 use crate::crypto::hash::FakeHash;
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
@@ -24,7 +23,6 @@ use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::deframer::Locator;
 use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
     ClientExtensions, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, KeyShareEntry,
@@ -58,19 +56,10 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
         ))),
     };
 
-    ClientHelloInput::from_input(
-        &Input {
-            message: m,
-            aligned_handshake: None,
-        },
-        false,
-        &mut Context {
-            common: &mut CommonState::new(Side::Server, Protocol::Tcp),
-            data: &mut ServerConnectionData::default(),
-            plaintext_locator: &Locator::new(&[]),
-            received_plaintext: &mut None,
-        },
-    )
+    ClientHelloInput::from_input(&Input {
+        message: m,
+        aligned_handshake: None,
+    })
     .map(|_| ())
 }
 

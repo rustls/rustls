@@ -9,7 +9,7 @@ use kernel::KernelConnection;
 
 #[cfg(feature = "std")]
 use crate::common_state::Input;
-use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
+use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, Output, State};
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
@@ -1258,7 +1258,8 @@ impl<Side: SideData> ConnectionCore<Side> {
 }
 
 /// Data specific to the peer's side (client or server).
-pub trait SideData: Debug {}
+#[expect(private_bounds)]
+pub trait SideData: Debug + Output {}
 
 /// An [`EncodedMessage<Payload<'_>>`] which does not borrow its payload, but
 /// references a range that can later be borrowed.

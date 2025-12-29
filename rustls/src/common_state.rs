@@ -2,6 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ops::Range;
 
+use pki_types::DnsName;
+
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
@@ -22,11 +24,11 @@ use crate::msgs::enums::AlertLevel;
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
 use crate::msgs::message::{Message, MessagePayload};
-use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTraffic;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
+use crate::{SideData, quic};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -764,7 +766,7 @@ pub(crate) struct Context<'a, Data> {
     pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
 }
 
-impl<Data> Output for Context<'_, Data> {
+impl<Data: SideData> Output for Context<'_, Data> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::ApplicationData(payload) => {
@@ -833,6 +835,7 @@ impl<Data> Output for Context<'_, Data> {
                 Protocol::Quic(_) => self.common.quic.send_msg(m, false),
             },
             Event::ProtocolVersion(ver) => self.common.negotiated_version = Some(ver),
+            Event::ReceivedServerName(_) => self.data.emit(ev),
             Event::ReceivedTicket => {
                 self.common.tls13_tickets_received = self
                     .common
@@ -897,6 +900,7 @@ pub(crate) enum Event<'a> {
     QuicHandshakeSecrets(quic::Secrets),
     QuicTrafficSecrets(quic::Secrets),
     QuicTransportParameters(Vec<u8>),
+    ReceivedServerName(Option<DnsName<'static>>),
     ReceivedTicket,
     /// Mark the connection as ready to send application data.
     StartOutgoingTraffic,
