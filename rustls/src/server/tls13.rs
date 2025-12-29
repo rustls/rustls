@@ -250,13 +250,13 @@ mod client_hello {
             }
 
             if let Some(resume) = &resumedata {
-                cx.data.received_resumption_data = Some(
+                cx.emit(Event::ResumptionData(
                     resume
                         .common
                         .application_data
                         .bytes()
                         .to_vec(),
-                );
+                ));
             }
 
             let full_handshake = resumedata.is_none();

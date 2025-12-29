@@ -310,8 +310,7 @@ mod connection {
             self.inner
                 .core
                 .side
-                .received_resumption_data
-                .as_deref()
+                .received_resumption_data()
         }
 
         /// Returns an object that can derive key material from the agreed connection secrets.

@@ -296,13 +296,13 @@ mod client_hello {
         );
 
         cx.emit(Event::HandshakeKind(HandshakeKind::Resumed));
-        cx.data.received_resumption_data = Some(
+        cx.emit(Event::ResumptionData(
             resumedata
                 .common
                 .application_data
                 .bytes()
                 .to_vec(),
-        );
+        ));
 
         if send_ticket {
             let now = config.current_time()?;
