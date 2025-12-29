@@ -651,10 +651,6 @@ impl CommonState {
         }
     }
 
-    pub(crate) fn is_quic(&self) -> bool {
-        self.protocol == Protocol::Quic
-    }
-
     pub(crate) fn should_update_key(
         &mut self,
         key_update_request: &KeyUpdateRequest,
@@ -883,6 +879,12 @@ impl Side {
 pub(crate) enum Protocol {
     Tcp,
     Quic,
+}
+
+impl Protocol {
+    pub(crate) fn is_quic(&self) -> bool {
+        matches!(self, Self::Quic)
+    }
 }
 
 /// Tracking technically-allowed protocol actions

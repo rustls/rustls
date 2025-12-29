@@ -96,7 +96,7 @@ impl<'a> ExtensionProcessing<'a> {
             }
         }
 
-        if cx.common.is_quic() {
+        if cx.common.protocol.is_quic() {
             // QUIC has strict ALPN, unlike TLS's more backwards-compatible behavior. RFC 9001
             // says: "The server MUST treat the inability to select a compatible application
             // protocol as a connection error of type 0x0178". We judge that ALPN was desired
@@ -299,7 +299,7 @@ impl ExpectClientHello {
                 self.with_version::<Tls13CipherSuite>(input, cx)
             } else if !versions.tls12 || !tls12_enabled {
                 Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
-            } else if cx.common.is_quic() {
+            } else if cx.common.protocol.is_quic() {
                 Err(PeerIncompatible::Tls13RequiredForQuic.into())
             } else {
                 self.with_version::<Tls12CipherSuite>(input, cx)
@@ -309,7 +309,7 @@ impl ExpectClientHello {
             Err(PeerIncompatible::Tls12NotOffered.into())
         } else if !tls12_enabled && tls13_enabled {
             Err(PeerIncompatible::SupportedVersionsExtensionRequired.into())
-        } else if cx.common.is_quic() {
+        } else if cx.common.protocol.is_quic() {
             Err(PeerIncompatible::Tls13RequiredForQuic.into())
         } else {
             self.with_version::<Tls12CipherSuite>(input, cx)
