@@ -572,7 +572,7 @@ fn early_data_can_be_rejected_by_server() {
             .unwrap(),
         5
     );
-    server.reject_early_data();
+    server.reject_early_data().unwrap();
     do_handshake(&mut client, &mut server);
 
     assert!(!client.is_early_data_accepted());

@@ -268,6 +268,7 @@ pub(crate) struct ExpectClientHello {
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
     pub(super) send_tickets: usize,
+    pub(super) early_data_rejected: bool,
 }
 
 impl ExpectClientHello {
@@ -292,6 +293,7 @@ impl ExpectClientHello {
             using_ems: false,
             done_retry: false,
             send_tickets: 0,
+            early_data_rejected: false,
         }
     }
 
@@ -543,6 +545,11 @@ impl State<ServerConnectionData> for ExpectClientHello {
     ) -> NextStateOrError {
         let input = ClientHelloInput::from_input(&input)?;
         self.with_input(input, cx)
+    }
+
+    fn reject_early_data(&mut self) -> Result<(), Error> {
+        self.early_data_rejected = true;
+        Ok(())
     }
 }
 

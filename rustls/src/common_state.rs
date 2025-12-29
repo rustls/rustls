@@ -14,7 +14,7 @@ use crate::crypto::cipher::{
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -739,6 +739,11 @@ pub(crate) trait State<Side>: Send + Sync {
     }
 
     fn handle_decrypt_error(&self) {}
+
+    #[allow(dead_code)]
+    fn reject_early_data(&mut self) -> Result<(), Error> {
+        Err(ApiMisuse::EarlyDataRejectedAtWrongTime.into())
+    }
 
     fn into_external_state(
         self: Box<Self>,
