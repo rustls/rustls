@@ -47,6 +47,7 @@ fn tls12(sym: &str) -> bool {
         && !sym.ends_with("::send_key_update_request")
         && !sym.ends_with("::handle_decrypt_error")
         && !sym.ends_with("::into_external_state")
+        && !sym.ends_with("::reject_early_data")
 }
 
 fn find_symbols_in_executable(f: impl Fn(&str) -> bool, exe: &str) -> Vec<String> {

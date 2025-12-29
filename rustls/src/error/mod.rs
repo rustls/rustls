@@ -1342,6 +1342,17 @@ fn join<T: fmt::Debug>(items: &[T]) -> String {
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApiMisuse {
+    /// It is too late to reject early data.
+    ///
+    /// Rejection of early data (aka "0RTT data") by the server must happen in a small
+    /// window before the server issues its `EncryptedExtensions` message.
+    ///
+    /// At the moment rustls issues its `EncryptedExtensions` message immediately
+    /// as it processes a `ClientHello`, so it is not possible to conditionally reject
+    /// early data based on the data.  This is a shortcoming that may be addressed in
+    /// the future.
+    EarlyDataRejectedAtWrongTime,
+
     /// The [`KeyingMaterialExporter`][] was already consumed.
     ///
     /// Methods that obtain an exporter (eg, [`ConnectionCommon::exporter()`][]) can only

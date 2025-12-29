@@ -299,6 +299,7 @@ mod client_hello {
                 input.client_hello,
                 resumedata.as_ref(),
                 st.extra_exts,
+                st.early_data_rejected,
                 &st.config,
             )?;
 
@@ -333,7 +334,6 @@ mod client_hello {
             match doing_early_data {
                 EarlyDataDecision::Disabled => {
                     key_schedule.set_handshake_decrypter(None, cx, &input.proof);
-                    cx.data.early_data.reject();
                 }
                 EarlyDataDecision::RequestedButRejected => {
                     debug!(
@@ -344,7 +344,6 @@ mod client_hello {
                         cx,
                         &input.proof,
                     );
-                    cx.data.early_data.reject();
                 }
                 EarlyDataDecision::Accepted => {
                     cx.data
@@ -601,6 +600,7 @@ mod client_hello {
 
     fn decide_if_early_data_allowed(
         cx: &mut ServerContext<'_>,
+        early_data_rejected: bool,
         client_hello: &ClientHelloPayload,
         resumedata: Option<&Tls13ServerSessionValue>,
         chosen_alpn_protocol: &Option<ProtocolName>,
@@ -646,7 +646,7 @@ mod client_hello {
             && resume.common.cipher_suite == suite.common.suite
             && &resume.common.alpn == chosen_alpn_protocol;
 
-        if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
+        if early_data_configured && early_data_possible && !early_data_rejected {
             EarlyDataDecision::Accepted
         } else {
             if protocol.is_quic() {
@@ -666,6 +666,7 @@ mod client_hello {
         hello: &ClientHelloPayload,
         resumedata: Option<&Tls13ServerSessionValue>,
         extra_exts: ServerExtensionsInput<'static>,
+        early_data_rejected: bool,
         config: &ServerConfig,
     ) -> Result<(CertificateTypes, EarlyDataDecision, Option<ProtocolName>), Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, protocol, hello, config);
@@ -674,6 +675,7 @@ mod client_hello {
 
         let early_data = decide_if_early_data_allowed(
             cx,
+            early_data_rejected,
             hello,
             resumedata,
             &alpn_protocol,
