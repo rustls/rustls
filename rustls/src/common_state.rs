@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::Range;
 
-use pki_types::FipsStatus;
+use pki_types::{DnsName, FipsStatus};
 
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
@@ -831,6 +831,7 @@ impl<Data: SideData> Output for Context<'_, Data> {
                 Protocol::Quic(_) => self.data.quic.send_msg(m, false),
             },
             Event::ProtocolVersion(ver) => self.data.negotiated_version = Some(ver),
+            Event::ReceivedServerName(_) => self.data.emit(ev),
             Event::ReceivedTicket => {
                 self.data.tls13_tickets_received = self
                     .data
@@ -895,6 +896,7 @@ pub(crate) enum Event<'a> {
     QuicHandshakeSecrets(quic::Secrets),
     QuicTrafficSecrets(quic::Secrets),
     QuicTransportParameters(Vec<u8>),
+    ReceivedServerName(Option<DnsName<'static>>),
     ReceivedTicket,
     /// Mark the connection as ready to send application data.
     StartOutgoingTraffic,

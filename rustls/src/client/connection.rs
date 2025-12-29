@@ -7,7 +7,7 @@ use pki_types::ServerName;
 use super::config::ClientConfig;
 use super::hs::{self, ClientHelloInput};
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, Protocol, Side};
+use crate::common_state::{CommonState, Event, Output, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -584,6 +584,10 @@ impl crate::conn::private::SideData for ClientConnectionData {
     fn into_common(self) -> CommonState {
         self.common
     }
+}
+
+impl Output for ClientConnectionData {
+    fn emit(&mut self, _ev: Event<'_>) {}
 }
 
 impl Deref for ClientConnectionData {

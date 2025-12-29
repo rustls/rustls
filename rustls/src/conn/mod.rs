@@ -10,7 +10,7 @@ use kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::common_state::Input;
 use crate::common_state::{
-    CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State, process_main_protocol,
+    CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, Output, State, process_main_protocol,
 };
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
@@ -1238,7 +1238,9 @@ pub trait SideData: private::SideData {}
 pub(crate) mod private {
     use super::*;
 
-    pub(crate) trait SideData: Debug + Deref<Target = CommonState> + DerefMut {
+    pub(crate) trait SideData:
+        Output + Debug + Deref<Target = CommonState> + DerefMut
+    {
         fn into_common(self) -> CommonState;
     }
 }

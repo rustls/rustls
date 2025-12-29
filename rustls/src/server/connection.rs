@@ -16,7 +16,7 @@ use super::config::ServerConfig;
 use super::hs;
 #[cfg(feature = "std")]
 use super::hs::ClientHelloInput;
-use crate::common_state::{CommonState, Protocol, Side};
+use crate::common_state::{CommonState, Event, Output, Protocol, Side};
 #[cfg(feature = "std")]
 use crate::common_state::{Input, State};
 #[cfg(feature = "std")]
@@ -58,8 +58,7 @@ mod buffered {
     use crate::conn::private::SideData;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::{ApiMisuse, Error};
-    use crate::msgs::Locator;
-    use crate::server::hs::{ClientHelloInput, ServerContext};
+    use crate::server::hs::ClientHelloInput;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
@@ -101,7 +100,7 @@ mod buffered {
         ///
         /// The server name is also used to match sessions during session resumption.
         pub fn server_name(&self) -> Option<&DnsName<'_>> {
-            self.inner.core.side.sni.as_ref()
+            self.inner.core.side.server_name()
         }
 
         /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -307,20 +306,12 @@ mod buffered {
                 Err(err) => return Err(AcceptedAlert::from_error(err, connection.core.side)),
             };
 
-            let cx = ServerContext {
-                data: &mut connection.core.side,
-                // `ClientHelloInput::from_message` won't read borrowed plaintext
-                plaintext_locator: &Locator::new(&[]),
-                received_plaintext: &mut None,
-            };
-
-            let sig_schemes = match ClientHelloInput::from_input(&input, false, &cx) {
+            let sig_schemes = match ClientHelloInput::from_input(&input) {
                 Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
                     return Err(AcceptedAlert::from_error(err, connection.core.side));
                 }
             };
-            debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
             Ok(Some(Accepted {
                 connection,
@@ -721,7 +712,7 @@ impl ConnectionCore<ServerConnectionData> {
 #[derive(Debug)]
 pub struct ServerConnectionData {
     common: CommonState,
-    pub(crate) sni: Option<DnsName<'static>>,
+    sni: Option<DnsName<'static>>,
     pub(crate) received_resumption_data: Option<Vec<u8>>,
     pub(crate) resumption_data: Vec<u8>,
     pub(super) early_data: EarlyDataState,
@@ -735,6 +726,19 @@ impl ServerConnectionData {
             received_resumption_data: None,
             resumption_data: Vec::new(),
             early_data: EarlyDataState::default(),
+        }
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn server_name(&self) -> Option<&DnsName<'static>> {
+        self.sni.as_ref()
+    }
+}
+
+impl Output for ServerConnectionData {
+    fn emit(&mut self, ev: Event<'_>) {
+        if let Event::ReceivedServerName(sni) = ev {
+            self.sni = sni;
         }
     }
 }
