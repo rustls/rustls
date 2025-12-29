@@ -747,6 +747,11 @@ pub(crate) trait State<Side>: Send + Sync {
         Err(ApiMisuse::EarlyDataRejectedAtWrongTime.into())
     }
 
+    #[allow(dead_code)]
+    fn set_resumption_data(&mut self, _resumption_data: &[u8]) -> Result<(), Error> {
+        Err(ApiMisuse::ResumptionDataProvidedTooLate.into())
+    }
+
     fn into_external_state(
         self: Box<Self>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {

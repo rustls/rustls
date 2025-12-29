@@ -126,9 +126,12 @@ mod buffered {
         ///
         /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
         /// from the client is desired, encrypt the data separately.
-        pub fn set_resumption_data(&mut self, data: &[u8]) {
+        pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
             assert!(data.len() < 2usize.pow(15));
-            self.inner.core.side.resumption_data = data.into();
+            match &mut self.core.state {
+                Ok(st) => st.set_resumption_data(data),
+                Err(e) => Err(e.clone()),
+            }
         }
 
         /// Explicitly discard early data, notifying the client.
@@ -716,7 +719,6 @@ impl ConnectionCore<ServerConnectionData> {
 pub struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
-    pub(crate) resumption_data: Vec<u8>,
     early_data: EarlyDataState,
 }
 
