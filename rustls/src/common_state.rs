@@ -843,6 +843,7 @@ impl<Data: SideData> Output for Context<'_, Data> {
                     .tls13_tickets_received
                     .saturating_add(1)
             }
+            Event::ResumptionData(_) => self.data.emit(ev),
             Event::StartOutgoingTraffic => self.common.start_outgoing_traffic(),
             Event::StartTraffic => self.common.start_traffic(),
         }
@@ -903,6 +904,7 @@ pub(crate) enum Event<'a> {
     QuicTransportParameters(Vec<u8>),
     ReceivedServerName(Option<DnsName<'static>>),
     ReceivedTicket,
+    ResumptionData(Vec<u8>),
     /// Mark the connection as ready to send application data.
     StartOutgoingTraffic,
     /// Mark the connection as ready to send and receive application data.
