@@ -345,10 +345,8 @@ mod client_hello {
                         &input.proof,
                     );
                 }
-                EarlyDataDecision::Accepted => {
-                    cx.data
-                        .early_data
-                        .accept(st.config.max_early_data_size as usize);
+                EarlyDataDecision::Accepted { .. } => {
+                    cx.data.early_data.accept();
                 }
             }
 
@@ -387,7 +385,12 @@ mod client_hello {
                         expected_certificate_type: cert_types.client,
                     }))
                 }
-            } else if doing_early_data == EarlyDataDecision::Accepted && !st.protocol.is_quic() {
+            } else if matches!(doing_early_data, EarlyDataDecision::Accepted { .. })
+                && !st.protocol.is_quic()
+            {
+                let EarlyDataDecision::Accepted { max_length } = doing_early_data else {
+                    unreachable!(); // FIXME: `else if let`
+                };
                 // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
                 // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
                 // connection error of type PROTOCOL_VIOLATION.
@@ -400,6 +403,7 @@ mod client_hello {
                     sni: st.sni,
                     peer_identity: resumedata.and_then(|r| r.common.peer_identity),
                     send_tickets: st.send_tickets,
+                    remaining_length: max_length as usize,
                 }))
             } else {
                 Ok(Box::new(ExpectFinished {
@@ -422,7 +426,7 @@ mod client_hello {
     pub(super) enum EarlyDataDecision {
         Disabled,
         RequestedButRejected,
-        Accepted,
+        Accepted { max_length: u32 },
     }
 
     fn max_early_data_size(configured: u32) -> usize {
@@ -648,7 +652,9 @@ mod client_hello {
             && &resume.common.alpn == chosen_alpn_protocol;
 
         if early_data_configured && early_data_possible && !early_data_rejected {
-            EarlyDataDecision::Accepted
+            EarlyDataDecision::Accepted {
+                max_length: config.max_early_data_size,
+            }
         } else {
             if protocol.is_quic() {
                 cx.emit(Event::QuicEarlySecret(None));
@@ -684,7 +690,7 @@ mod client_hello {
             protocol,
             config,
         );
-        if early_data == EarlyDataDecision::Accepted {
+        if let EarlyDataDecision::Accepted { .. } = early_data {
             ep.extensions.early_data_ack = Some(());
         }
 
@@ -1136,6 +1142,7 @@ struct ExpectEarlyData {
     sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
     send_tickets: usize,
+    remaining_length: usize,
 }
 
 impl State<ServerConnectionData> for ExpectEarlyData {
@@ -1146,14 +1153,18 @@ impl State<ServerConnectionData> for ExpectEarlyData {
     ) -> hs::NextStateOrError {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
-                match cx
-                    .data
-                    .early_data
-                    .take_received_plaintext(payload)
+                self.remaining_length = match self
+                    .remaining_length
+                    .checked_sub(payload.bytes().len())
                 {
-                    true => Ok(self),
-                    false => Err(PeerMisbehaved::TooMuchEarlyDataReceived.into()),
-                }
+                    Some(sub) => sub,
+                    None => return Err(PeerMisbehaved::TooMuchEarlyDataReceived.into()),
+                };
+
+                cx.data
+                    .early_data
+                    .take_received_plaintext(payload);
+                Ok(self)
             }
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::EndOfEarlyData),
