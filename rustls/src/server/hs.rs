@@ -4,6 +4,8 @@ use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::fmt;
 
+use pki_types::DnsName;
+
 use super::connection::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
@@ -262,6 +264,7 @@ pub(crate) struct ExpectClientHello {
     pub(super) extra_exts: ServerExtensionsInput<'static>,
     pub(super) transcript: HandshakeHashOrBuffer,
     pub(super) session_id: SessionId,
+    pub(super) sni: Option<DnsName<'static>>,
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
     pub(super) send_tickets: usize,
@@ -285,6 +288,7 @@ impl ExpectClientHello {
             extra_exts,
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
             session_id: SessionId::empty(),
+            sni: None,
             using_ems: false,
             done_retry: false,
             send_tickets: 0,
@@ -303,11 +307,6 @@ impl ExpectClientHello {
         let tls12_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_2);
-
-        cx.data.sni = self
-            .config
-            .invalid_sni_policy
-            .accept(input.client_hello.server_name.as_ref())?;
 
         // Are we doing TLS1.3?
         if let Some(versions) = &input.client_hello.supported_versions {
@@ -333,7 +332,7 @@ impl ExpectClientHello {
     }
 
     fn with_version<T: Suite + 'static>(
-        self,
+        mut self,
         mut input: ClientHelloInput<'_>,
         cx: &mut ServerContext<'_>,
     ) -> NextStateOrError
@@ -342,6 +341,23 @@ impl ExpectClientHello {
         SupportedCipherSuite: From<&'static T>,
     {
         cx.emit(Event::ProtocolVersion(T::VERSION));
+
+        let sni = self
+            .config
+            .invalid_sni_policy
+            .accept(input.client_hello.server_name.as_ref())?;
+        cx.emit(Event::ReceivedServerName(sni.clone()));
+
+        if self.done_retry {
+            let ch_sni = input
+                .client_hello
+                .server_name
+                .as_ref()
+                .and_then(ServerNamePayload::to_dns_name_normalized);
+            if self.sni != ch_sni {
+                return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
+            }
+        }
 
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
@@ -375,7 +391,8 @@ impl ExpectClientHello {
         let credentials = self
             .config
             .cert_resolver
-            .resolve(&ClientHello::new(&input, cx.data.sni.as_ref(), T::VERSION))?;
+            .resolve(&ClientHello::new(&input, sni.as_ref(), T::VERSION))?;
+        self.sni = sni;
 
         let (suite, skxg) = self.choose_suite_and_kx_group(
             suites,
@@ -524,7 +541,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
         cx: &mut ServerContext<'_>,
         input: Input<'m>,
     ) -> NextStateOrError {
-        let input = ClientHelloInput::from_input(&input, self.done_retry, cx)?;
+        let input = ClientHelloInput::from_input(&input)?;
         self.with_input(input, cx)
     }
 }
@@ -556,11 +573,7 @@ impl<'a> ClientHelloInput<'a> {
     /// [`ClientHello`] value for a [`ServerCredentialResolver`].
     ///
     /// [`ServerCredentialResolver`]: crate::server::ServerCredentialResolver
-    pub(super) fn from_input(
-        input: &'a Input<'a>,
-        done_retry: bool,
-        cx: &mut ServerContext<'_>,
-    ) -> Result<Self, Error> {
+    pub(super) fn from_input(input: &'a Input<'a>) -> Result<Self, Error> {
         let client_hello = require_handshake_msg!(
             input.message,
             HandshakeType::ClientHello,
@@ -577,18 +590,6 @@ impl<'a> ClientHelloInput<'a> {
 
         // No handshake messages should follow this one in this flight.
         let proof = input.check_aligned_handshake()?;
-
-        if done_retry {
-            let ch_sni = client_hello
-                .server_name
-                .as_ref()
-                .and_then(ServerNamePayload::to_dns_name_normalized);
-            if cx.data.sni != ch_sni {
-                return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
-            }
-        } else {
-            assert!(cx.data.sni.is_none())
-        }
 
         let sig_schemes = client_hello
             .signature_schemes
