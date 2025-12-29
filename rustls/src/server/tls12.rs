@@ -174,6 +174,7 @@ mod client_hello {
                     cx,
                     input,
                     st.sni,
+                    &st.resumption_data,
                     transcript,
                     randoms,
                     st.extra_exts,
@@ -231,6 +232,7 @@ mod client_hello {
                     server_kx,
                     alpn_protocol,
                     sni: st.sni,
+                    resumption_data: st.resumption_data,
                     send_ticket,
                 }))
             } else {
@@ -245,6 +247,7 @@ mod client_hello {
                     alpn_protocol,
                     sni: st.sni,
                     peer_identity: None,
+                    resumption_data: st.resumption_data,
                     send_ticket,
                 }))
             }
@@ -259,6 +262,7 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         input: ClientHelloInput<'_>,
         sni: Option<DnsName<'static>>,
+        resumption_data: &[u8],
         mut transcript: HandshakeHash,
         randoms: ConnectionRandoms,
         extra_exts: ServerExtensionsInput<'static>,
@@ -316,6 +320,7 @@ mod client_hello {
                     resumedata.common.peer_identity.as_ref(),
                     alpn_protocol.as_ref(),
                     sni.as_ref(),
+                    resumption_data,
                     cx,
                     ticketer,
                     now,
@@ -342,6 +347,7 @@ mod client_hello {
             alpn_protocol,
             sni,
             peer_identity: resumedata.common.peer_identity,
+            resumption_data: Vec::new(),
             using_ems,
             resuming_decrypter: Some(dec),
             send_ticket,
@@ -472,6 +478,7 @@ struct ExpectCertificate {
     server_kx: GroupAndKeyExchange,
     alpn_protocol: Option<ProtocolName>,
     sni: Option<DnsName<'static>>,
+    resumption_data: Vec<u8>,
     send_ticket: bool,
 }
 
@@ -527,6 +534,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             alpn_protocol: self.alpn_protocol,
             sni: self.sni,
             peer_identity,
+            resumption_data: self.resumption_data,
             send_ticket: self.send_ticket,
         }))
     }
@@ -544,6 +552,7 @@ struct ExpectClientKx {
     alpn_protocol: Option<ProtocolName>,
     sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
+    resumption_data: Vec<u8>,
     send_ticket: bool,
 }
 
@@ -593,6 +602,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 alpn_protocol: self.alpn_protocol,
                 sni: self.sni,
                 peer_identity,
+                resumption_data: self.resumption_data,
                 send_ticket: self.send_ticket,
             })),
             _ => Ok(Box::new(ExpectCcs {
@@ -603,6 +613,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 alpn_protocol: self.alpn_protocol,
                 sni: self.sni,
                 peer_identity: None,
+                resumption_data: self.resumption_data,
                 using_ems: self.using_ems,
                 resuming_decrypter: None,
                 send_ticket: self.send_ticket,
@@ -621,6 +632,7 @@ struct ExpectCertificateVerify {
     alpn_protocol: Option<ProtocolName>,
     sni: Option<DnsName<'static>>,
     peer_identity: Identity<'static>,
+    resumption_data: Vec<u8>,
     send_ticket: bool,
 }
 
@@ -667,6 +679,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             alpn_protocol: self.alpn_protocol,
             sni: self.sni,
             peer_identity: Some(self.peer_identity),
+            resumption_data: self.resumption_data,
             using_ems: self.using_ems,
             resuming_decrypter: None,
             send_ticket: self.send_ticket,
@@ -683,6 +696,7 @@ struct ExpectCcs {
     alpn_protocol: Option<ProtocolName>,
     sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
+    resumption_data: Vec<u8>,
     using_ems: bool,
     resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
     send_ticket: bool,
@@ -728,6 +742,7 @@ impl State<ServerConnectionData> for ExpectCcs {
             alpn_protocol: self.alpn_protocol,
             sni: self.sni,
             peer_identity: self.peer_identity,
+            resumption_data: self.resumption_data,
             using_ems: self.using_ems,
             resuming: pending_encrypter.is_none(),
             send_ticket: self.send_ticket,
@@ -743,7 +758,7 @@ fn get_server_connection_value_tls12(
     peer_identity: Option<&Identity<'static>>,
     alpn_protocol: Option<&ProtocolName>,
     sni: Option<&DnsName<'static>>,
-    cx: &ServerContext<'_>,
+    resumption_data: &[u8],
     time_now: UnixTime,
 ) -> persist::ServerSessionValue {
     persist::Tls12ServerSessionValue::new(
@@ -752,7 +767,7 @@ fn get_server_connection_value_tls12(
             secrets.suite().common.suite,
             peer_identity.cloned(),
             alpn_protocol.cloned(),
-            cx.data.resumption_data.clone(),
+            resumption_data.to_vec(),
             time_now,
         ),
         secrets.master_secret(),
@@ -768,6 +783,7 @@ fn emit_ticket(
     peer_identity: Option<&Identity<'static>>,
     alpn_protocol: Option<&ProtocolName>,
     sni: Option<&DnsName<'static>>,
+    resumption_data: &[u8],
     cx: &mut ServerContext<'_>,
     ticketer: &dyn TicketProducer,
     now: UnixTime,
@@ -778,7 +794,7 @@ fn emit_ticket(
         peer_identity,
         alpn_protocol,
         sni,
-        cx,
+        resumption_data,
         now,
     )
     .get_encoding();
@@ -841,6 +857,7 @@ struct ExpectFinished {
     alpn_protocol: Option<ProtocolName>,
     sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
+    resumption_data: Vec<u8>,
     using_ems: bool,
     resuming: bool,
     send_ticket: bool,
@@ -884,7 +901,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                 self.peer_identity.as_ref(),
                 self.alpn_protocol.as_ref(),
                 self.sni.as_ref(),
-                cx,
+                &self.resumption_data,
                 now,
             );
 
@@ -914,6 +931,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                         self.peer_identity.as_ref(),
                         self.alpn_protocol.as_ref(),
                         self.sni.as_ref(),
+                        &self.resumption_data,
                         cx,
                         ticketer,
                         now,
