@@ -59,18 +59,6 @@ impl ChunkVecBuffer {
             - self.prefix_used
     }
 
-    /// For a proposed append of `len` bytes, how many
-    /// bytes should we actually append to adhere to the
-    /// currently set `limit`?
-    pub(crate) fn apply_limit(&self, len: usize) -> usize {
-        let Some(limit) = self.limit else {
-            return len;
-        };
-
-        let space = limit.saturating_sub(self.len());
-        Ord::min(len, space)
-    }
-
     /// Take and append the given `bytes`.
     pub(crate) fn append(&mut self, bytes: Vec<u8>) -> usize {
         let len = bytes.len();
@@ -123,6 +111,18 @@ impl ChunkVecBuffer {
         let take = self.apply_limit(payload.len());
         self.append(payload.split_at(take).0.to_vec());
         take
+    }
+
+    /// For a proposed append of `len` bytes, how many
+    /// bytes should we actually append to adhere to the
+    /// currently set `limit`?
+    pub(crate) fn apply_limit(&self, len: usize) -> usize {
+        let Some(limit) = self.limit else {
+            return len;
+        };
+
+        let space = limit.saturating_sub(self.len());
+        Ord::min(len, space)
     }
 
     /// Read data out of this object, writing it into `buf`
