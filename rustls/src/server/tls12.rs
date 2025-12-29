@@ -3,7 +3,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 pub(crate) use client_hello::TLS12_HANDLER;
-use pki_types::UnixTime;
+use pki_types::{DnsName, UnixTime};
 use subtle::ConstantTimeEq;
 
 use super::config::ServerConfig;
@@ -160,7 +160,7 @@ mod client_hello {
                 .filter(|resumedata| {
                     resumedata
                         .common
-                        .can_resume(suite.common.suite, cx.data.sni.as_ref())
+                        .can_resume(suite.common.suite, st.sni.as_ref())
                         && (resumedata.extended_ms == st.using_ems
                             || (resumedata.extended_ms && !st.using_ems))
                 });
@@ -172,6 +172,7 @@ mod client_hello {
                     st.using_ems,
                     cx,
                     input,
+                    st.sni,
                     transcript,
                     randoms,
                     st.extra_exts,
@@ -228,6 +229,7 @@ mod client_hello {
                     using_ems: st.using_ems,
                     server_kx,
                     alpn_protocol,
+                    sni: st.sni,
                     send_ticket,
                 }))
             } else {
@@ -240,6 +242,7 @@ mod client_hello {
                     using_ems: st.using_ems,
                     server_kx,
                     alpn_protocol,
+                    sni: st.sni,
                     peer_identity: None,
                     send_ticket,
                 }))
@@ -254,6 +257,7 @@ mod client_hello {
         using_ems: bool,
         cx: &mut ServerContext<'_>,
         input: ClientHelloInput<'_>,
+        sni: Option<DnsName<'static>>,
         mut transcript: HandshakeHash,
         randoms: ConnectionRandoms,
         extra_exts: ServerExtensionsInput,
@@ -310,6 +314,7 @@ mod client_hello {
                     using_ems,
                     resumedata.common.peer_identity.as_ref(),
                     alpn_protocol.as_ref(),
+                    sni.as_ref(),
                     cx,
                     ticketer,
                     now,
@@ -334,6 +339,7 @@ mod client_hello {
             transcript,
             session_id,
             alpn_protocol,
+            sni,
             peer_identity: resumedata.common.peer_identity,
             using_ems,
             resuming_decrypter: Some(dec),
@@ -464,6 +470,7 @@ struct ExpectCertificate {
     using_ems: bool,
     server_kx: GroupAndKeyExchange,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     send_ticket: bool,
 }
 
@@ -517,6 +524,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             using_ems: self.using_ems,
             server_kx: self.server_kx,
             alpn_protocol: self.alpn_protocol,
+            sni: self.sni,
             peer_identity,
             send_ticket: self.send_ticket,
         }))
@@ -533,6 +541,7 @@ struct ExpectClientKx {
     using_ems: bool,
     server_kx: GroupAndKeyExchange,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
     send_ticket: bool,
 }
@@ -581,6 +590,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 session_id: self.session_id,
                 using_ems: self.using_ems,
                 alpn_protocol: self.alpn_protocol,
+                sni: self.sni,
                 peer_identity,
                 send_ticket: self.send_ticket,
             })),
@@ -590,6 +600,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 transcript: self.transcript,
                 session_id: self.session_id,
                 alpn_protocol: self.alpn_protocol,
+                sni: self.sni,
                 peer_identity: None,
                 using_ems: self.using_ems,
                 resuming_decrypter: None,
@@ -607,6 +618,7 @@ struct ExpectCertificateVerify {
     session_id: SessionId,
     using_ems: bool,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Identity<'static>,
     send_ticket: bool,
 }
@@ -652,6 +664,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             transcript: self.transcript,
             session_id: self.session_id,
             alpn_protocol: self.alpn_protocol,
+            sni: self.sni,
             peer_identity: Some(self.peer_identity),
             using_ems: self.using_ems,
             resuming_decrypter: None,
@@ -667,6 +680,7 @@ struct ExpectCcs {
     transcript: HandshakeHash,
     session_id: SessionId,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
     using_ems: bool,
     resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
@@ -711,6 +725,7 @@ impl State<ServerConnectionData> for ExpectCcs {
             transcript: self.transcript,
             session_id: self.session_id,
             alpn_protocol: self.alpn_protocol,
+            sni: self.sni,
             peer_identity: self.peer_identity,
             using_ems: self.using_ems,
             resuming: pending_encrypter.is_none(),
@@ -726,12 +741,13 @@ fn get_server_connection_value_tls12(
     using_ems: bool,
     peer_identity: Option<&Identity<'static>>,
     alpn_protocol: Option<&ApplicationProtocol<'_>>,
+    sni: Option<&DnsName<'static>>,
     cx: &ServerContext<'_>,
     time_now: UnixTime,
 ) -> ServerSessionValue {
     Tls12ServerSessionValue::new(
         CommonServerSessionValue::new(
-            cx.data.sni.as_ref(),
+            sni,
             secrets.suite().common.suite,
             peer_identity.cloned(),
             alpn_protocol.map(|p| p.to_owned()),
@@ -750,6 +766,7 @@ fn emit_ticket(
     using_ems: bool,
     peer_identity: Option<&Identity<'static>>,
     alpn_protocol: Option<&ApplicationProtocol<'_>>,
+    sni: Option<&DnsName<'static>>,
     cx: &mut ServerContext<'_>,
     ticketer: &dyn TicketProducer,
     now: UnixTime,
@@ -759,6 +776,7 @@ fn emit_ticket(
         using_ems,
         peer_identity,
         alpn_protocol,
+        sni,
         cx,
         now,
     )
@@ -820,6 +838,7 @@ struct ExpectFinished {
     transcript: HandshakeHash,
     session_id: SessionId,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
     using_ems: bool,
     resuming: bool,
@@ -863,6 +882,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                 self.using_ems,
                 self.peer_identity.as_ref(),
                 self.alpn_protocol.as_ref(),
+                self.sni.as_ref(),
                 cx,
                 now,
             );
@@ -892,6 +912,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                         self.using_ems,
                         self.peer_identity.as_ref(),
                         self.alpn_protocol.as_ref(),
+                        self.sni.as_ref(),
                         cx,
                         ticketer,
                         now,

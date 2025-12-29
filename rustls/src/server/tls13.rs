@@ -3,7 +3,7 @@ use alloc::vec;
 use core::time::Duration;
 
 pub(crate) use client_hello::TLS13_HANDLER;
-use pki_types::UnixTime;
+use pki_types::{DnsName, UnixTime};
 use subtle::ConstantTimeEq;
 
 use super::connection::ServerConnectionData;
@@ -212,7 +212,7 @@ mod client_hello {
                             .filter(|resumedata| {
                                 resumedata
                                     .common
-                                    .can_resume(suite.common.suite, cx.data.sni.as_ref())
+                                    .can_resume(suite.common.suite, st.sni.as_ref())
                             });
 
                     let Some(resume) = maybe_resume_data else {
@@ -372,6 +372,7 @@ mod client_hello {
                         suite,
                         key_schedule: key_schedule_traffic,
                         alpn_protocol,
+                        sni: st.sni,
                         send_tickets: st.send_tickets,
                         expected_certificate_type: cert_types.client,
                     }))
@@ -382,6 +383,7 @@ mod client_hello {
                         suite,
                         key_schedule: key_schedule_traffic,
                         alpn_protocol,
+                        sni: st.sni,
                         send_tickets: st.send_tickets,
                         expected_certificate_type: cert_types.client,
                     }))
@@ -396,6 +398,7 @@ mod client_hello {
                     suite,
                     key_schedule: key_schedule_traffic,
                     alpn_protocol,
+                    sni: st.sni,
                     peer_identity: resumedata.and_then(|r| r.common.peer_identity),
                     send_tickets: st.send_tickets,
                 }))
@@ -406,6 +409,7 @@ mod client_hello {
                     suite,
                     key_schedule: key_schedule_traffic,
                     alpn_protocol,
+                    sni: st.sni,
                     peer_identity: resumedata.and_then(|r| r.common.peer_identity),
                     send_tickets: st.send_tickets,
                 }))
@@ -851,6 +855,7 @@ struct ExpectCertificateOrCompressedCertificate {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
@@ -871,6 +876,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 suite: self.suite,
                 key_schedule: self.key_schedule,
                 alpn_protocol: self.alpn_protocol,
+                sni: self.sni,
                 send_tickets: self.send_tickets,
                 expected_certificate_type: self.expected_certificate_type,
             }
@@ -885,6 +891,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 suite: self.suite,
                 key_schedule: self.key_schedule,
                 alpn_protocol: self.alpn_protocol,
+                sni: self.sni,
                 send_tickets: self.send_tickets,
                 expected_certificate_type: self.expected_certificate_type,
             }
@@ -908,6 +915,7 @@ struct ExpectCompressedCertificate {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
@@ -956,6 +964,7 @@ impl ExpectCompressedCertificate {
             suite: self.suite,
             key_schedule: self.key_schedule,
             alpn_protocol: self.alpn_protocol,
+            sni: self.sni,
             send_tickets: self.send_tickets,
             expected_certificate_type: self.expected_certificate_type,
         }
@@ -969,6 +978,7 @@ struct ExpectCertificate {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
@@ -1013,6 +1023,7 @@ impl ExpectCertificate {
                     suite: self.suite,
                     key_schedule: self.key_schedule,
                     peer_identity: None,
+                    sni: self.sni,
                     alpn_protocol: self.alpn_protocol,
                     send_tickets: self.send_tickets,
                 }));
@@ -1034,6 +1045,7 @@ impl ExpectCertificate {
             suite: self.suite,
             key_schedule: self.key_schedule,
             alpn_protocol: self.alpn_protocol,
+            sni: self.sni,
             peer_identity: peer_identity.into_owned(),
             send_tickets: self.send_tickets,
         }))
@@ -1056,6 +1068,7 @@ struct ExpectCertificateVerify {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Identity<'static>,
     send_tickets: usize,
 }
@@ -1091,6 +1104,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             suite: self.suite,
             key_schedule: self.key_schedule,
             alpn_protocol: self.alpn_protocol,
+            sni: self.sni,
             peer_identity: Some(self.peer_identity),
             send_tickets: self.send_tickets,
         }))
@@ -1106,6 +1120,7 @@ struct ExpectEarlyData {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
     send_tickets: usize,
 }
@@ -1142,6 +1157,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     suite: self.suite,
                     key_schedule: self.key_schedule,
                     alpn_protocol: self.alpn_protocol,
+                    sni: self.sni,
                     peer_identity: self.peer_identity,
                     send_tickets: self.send_tickets,
                 }))
@@ -1162,6 +1178,7 @@ fn get_server_session_value(
     cx: &ServerContext<'_>,
     peer_identity: Option<Identity<'static>>,
     chosen_alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     nonce: &[u8],
     time_now: UnixTime,
     age_obfuscation_offset: u32,
@@ -1170,7 +1187,7 @@ fn get_server_session_value(
 
     Tls13ServerSessionValue::new(
         CommonServerSessionValue::new(
-            cx.data.sni.as_ref(),
+            sni.as_ref(),
             suite.common.suite,
             peer_identity,
             chosen_alpn_protocol,
@@ -1189,6 +1206,7 @@ struct ExpectFinished {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
     send_tickets: usize,
 }
@@ -1200,6 +1218,7 @@ impl ExpectFinished {
         cx: &ServerContext<'_>,
         peer_identity: Option<Identity<'static>>,
         chosen_alpn_protocol: Option<ApplicationProtocol<'static>>,
+        sni: Option<DnsName<'static>>,
         resumption: &KeyScheduleResumption,
         config: &ServerConfig,
     ) -> Result<(), Error> {
@@ -1215,6 +1234,7 @@ impl ExpectFinished {
             cx,
             peer_identity,
             chosen_alpn_protocol,
+            sni,
             &nonce,
             now,
             age_add,
@@ -1303,6 +1323,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                 cx,
                 self.peer_identity.clone(),
                 self.alpn_protocol.clone(),
+                self.sni.clone(),
                 &resumption,
                 &self.config,
             )?;
