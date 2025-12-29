@@ -97,7 +97,9 @@ fn resumption_combinations() {
             let client_config = make_client_config(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
-            server.set_resumption_data(resumption_data.as_bytes());
+            server
+                .set_resumption_data(resumption_data.as_bytes())
+                .unwrap();
             do_handshake(&mut client, &mut server);
 
             let expected_kx = expected_kx_for_version(version);

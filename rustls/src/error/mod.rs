@@ -1475,6 +1475,12 @@ pub enum ApiMisuse {
         /// The maximum allowed IV length
         maximum: usize,
     },
+
+    /// Calling [`ServerConnection::set_resumption_data()`] must be done before
+    /// any resumption is offered.
+    ///
+    /// [`ServerConnection::set_resumption_data()`]: crate::server::ServerConnection::set_resumption_data()
+    ResumptionDataProvidedTooLate,
 }
 
 impl fmt::Display for ApiMisuse {

@@ -461,18 +461,22 @@ fn test_quic_resumption_data_basic() {
 
     // Set resumption data
     let test_data1 = b"test resumption data 1";
-    server.set_resumption_data(test_data1);
+    server
+        .set_resumption_data(test_data1)
+        .unwrap();
     // Still no received data (server has set data, but hasn't received any from client)
     assert_eq!(server.received_resumption_data(), None);
 
     // Update resumption data with different content
     let test_data2 = b"test resumption data 2";
-    server.set_resumption_data(test_data2);
+    server
+        .set_resumption_data(test_data2)
+        .unwrap();
     // Still no received data
     assert_eq!(server.received_resumption_data(), None);
 
     // Test empty resumption data
-    server.set_resumption_data(b"");
+    server.set_resumption_data(b"").unwrap();
     assert_eq!(server.received_resumption_data(), None);
 }
 
@@ -512,7 +516,9 @@ fn test_quic_resumption_data_0rtt() {
     )
     .unwrap();
 
-    server1.set_resumption_data(quic_0rtt_params);
+    server1
+        .set_resumption_data(quic_0rtt_params)
+        .unwrap();
     assert_eq!(server1.received_resumption_data(), None);
 
     let mut client1 = quic::ClientConnection::new(
