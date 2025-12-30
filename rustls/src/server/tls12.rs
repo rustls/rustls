@@ -8,7 +8,7 @@ use subtle::ConstantTimeEq;
 
 use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
-use super::hs::{self, ServerContext};
+use super::hs::{self};
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
@@ -62,7 +62,7 @@ mod client_hello {
             credentials: SelectedCredential,
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
-            cx: &mut ServerContext<'_>,
+            output: &mut dyn Output,
         ) -> hs::NextStateOrError {
             let mut randoms = st.randoms(&input)?;
             let mut transcript = st
@@ -170,7 +170,7 @@ mod client_hello {
                 return start_resumption(
                     suite,
                     st.using_ems,
-                    cx,
+                    output,
                     input,
                     st.sni,
                     &st.resumption_data,
@@ -192,14 +192,14 @@ mod client_hello {
                 st.session_id = SessionId::random(st.config.provider.secure_random)?;
             }
 
-            cx.emit(Event::HandshakeKind(HandshakeKind::Full));
+            output.emit(Event::HandshakeKind(HandshakeKind::Full));
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
             let (send_ticket, alpn_protocol) = emit_server_hello(
                 &mut flight,
                 &st.config,
-                cx,
+                output,
                 st.session_id,
                 suite,
                 st.using_ems,
@@ -218,7 +218,7 @@ mod client_hello {
             let doing_client_auth = emit_certificate_req(&mut flight, &st.config)?;
             emit_server_hello_done(&mut flight);
 
-            flight.finish(cx);
+            flight.finish(output);
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
@@ -258,7 +258,7 @@ mod client_hello {
     fn start_resumption(
         suite: &'static Tls12CipherSuite,
         using_ems: bool,
-        cx: &mut ServerContext<'_>,
+        output: &mut dyn Output,
         input: ClientHelloInput<'_>,
         sni: Option<DnsName<'static>>,
         resumption_data: &[u8],
@@ -280,7 +280,7 @@ mod client_hello {
         let (send_ticket, alpn_protocol) = emit_server_hello(
             &mut flight,
             &config,
-            cx,
+            output,
             session_id,
             suite,
             using_ems,
@@ -290,7 +290,7 @@ mod client_hello {
             &randoms,
             extra_exts,
         )?;
-        flight.finish(cx);
+        flight.finish(output);
 
         let secrets = ConnectionSecrets::new_resume(randoms, suite, &resumedata.master_secret);
         config.key_log.log(
@@ -299,8 +299,8 @@ mod client_hello {
             secrets.master_secret(),
         );
 
-        cx.emit(Event::HandshakeKind(HandshakeKind::Resumed));
-        cx.emit(Event::ResumptionData(
+        output.emit(Event::HandshakeKind(HandshakeKind::Resumed));
+        output.emit(Event::ResumptionData(
             resumedata
                 .common
                 .application_data
@@ -320,23 +320,23 @@ mod client_hello {
                     alpn_protocol.as_ref(),
                     sni.as_ref(),
                     resumption_data,
-                    cx,
+                    output,
                     ticketer,
                     now,
                 )?;
             }
         }
-        emit_ccs(cx);
+        emit_ccs(output);
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Server);
-        cx.emit(Event::MessageEncrypter {
+        output.emit(Event::MessageEncrypter {
             encrypter,
             limit: secrets
                 .suite()
                 .common
                 .confidentiality_limit,
         });
-        emit_finished(&secrets, &mut transcript, cx, &proof);
+        emit_finished(&secrets, &mut transcript, output, &proof);
 
         Ok(Box::new(ExpectCcs {
             config,
@@ -356,7 +356,7 @@ mod client_hello {
     fn emit_server_hello(
         flight: &mut HandshakeFlightTls12<'_>,
         config: &ServerConfig,
-        cx: &mut ServerContext<'_>,
+        output: &mut dyn Output,
         session_id: SessionId,
         suite: &'static Tls12CipherSuite,
         using_ems: bool,
@@ -368,8 +368,8 @@ mod client_hello {
     ) -> Result<(bool, Option<ApplicationProtocol<'static>>), Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
         let (_, alpn_protocol) =
-            ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
-        ep.process_tls12(ocsp_response.as_deref(), using_ems);
+            ep.process_common(output, ocsp_response, resumedata.map(|r| &r.common))?;
+        ep.process_tls12(*ocsp_response, using_ems);
 
         let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
             legacy_version: ProtocolVersion::TLSv1_2,
@@ -484,8 +484,8 @@ struct ExpectCertificate {
 impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
-        _cx: &mut ServerContext<'_>,
         Input { message, .. }: Input<'_>,
+        _output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&message);
         let cert_chain = require_handshake_msg_move!(
@@ -558,8 +558,8 @@ struct ExpectClientKx {
 impl State<ServerConnectionData> for ExpectClientKx {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ServerContext<'_>,
         Input { message, .. }: Input<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
             message,
@@ -583,7 +583,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
             self.randoms,
             self.suite,
         )?;
-        cx.emit(Event::KeyExchangeGroup(self.server_kx.group));
+        output.emit(Event::KeyExchangeGroup(self.server_kx.group));
 
         self.config.key_log.log(
             "CLIENT_RANDOM",
@@ -638,8 +638,8 @@ struct ExpectCertificateVerify {
 impl State<ServerConnectionData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
-        _cx: &mut ServerContext<'_>,
         Input { message, .. }: Input<'_>,
+        _output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         let signature = require_handshake_msg!(
             message,
@@ -702,11 +702,7 @@ struct ExpectCcs {
 }
 
 impl State<ServerConnectionData> for ExpectCcs {
-    fn handle(
-        self: Box<Self>,
-        cx: &mut ServerContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> hs::NextStateOrError {
         match input.message.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
@@ -731,7 +727,7 @@ impl State<ServerConnectionData> for ExpectCcs {
             }
         };
 
-        cx.emit(Event::MessageDecrypter { decrypter, proof });
+        output.emit(Event::MessageDecrypter { decrypter, proof });
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
@@ -783,7 +779,7 @@ fn emit_ticket(
     alpn_protocol: Option<&ApplicationProtocol<'_>>,
     sni: Option<&DnsName<'static>>,
     resumption_data: &[u8],
-    cx: &mut ServerContext<'_>,
+    output: &mut dyn Output,
     ticketer: &dyn TicketProducer,
     now: UnixTime,
 ) -> Result<(), Error> {
@@ -816,7 +812,7 @@ fn emit_ticket(
     };
 
     transcript.add_message(&m);
-    cx.emit(Event::PlainMessage(m));
+    output.emit(Event::PlainMessage(m));
     Ok(())
 }
 
@@ -866,8 +862,8 @@ struct ExpectFinished {
 impl State<ServerConnectionData> for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ServerContext<'_>,
         input: Input<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         let finished = require_handshake_msg!(
             input.message,
@@ -931,14 +927,14 @@ impl State<ServerConnectionData> for ExpectFinished {
                         self.alpn_protocol.as_ref(),
                         self.sni.as_ref(),
                         &self.resumption_data,
-                        cx,
+                        output,
                         ticketer,
                         now,
                     )?;
                 }
             }
-            emit_ccs(cx);
-            cx.emit(Event::MessageEncrypter {
+            emit_ccs(output);
+            output.emit(Event::MessageEncrypter {
                 encrypter,
                 limit: self
                     .secrets
@@ -946,11 +942,11 @@ impl State<ServerConnectionData> for ExpectFinished {
                     .common
                     .confidentiality_limit,
             });
-            emit_finished(&self.secrets, &mut self.transcript, cx, &proof);
+            emit_finished(&self.secrets, &mut self.transcript, output, &proof);
         }
 
         if let Some(identity) = self.peer_identity {
-            cx.emit(Event::PeerIdentity(identity));
+            output.emit(Event::PeerIdentity(identity));
         }
 
         let extracted_secrets = self
@@ -961,8 +957,8 @@ impl State<ServerConnectionData> for ExpectFinished {
                     .extract_secrets(Side::Server)
             });
 
-        cx.emit(Event::Exporter(self.secrets.into_exporter()));
-        cx.emit(Event::StartTraffic);
+        output.emit(Event::Exporter(self.secrets.into_exporter()));
+        output.emit(Event::StartTraffic);
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,
@@ -983,11 +979,13 @@ impl ExpectTraffic {}
 impl State<ServerConnectionData> for ExpectTraffic {
     fn handle(
         self: Box<Self>,
-        cx: &mut ServerContext<'_>,
         Input { message, .. }: Input<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         match message.payload {
-            MessagePayload::ApplicationData(payload) => cx.emit(Event::ApplicationData(payload)),
+            MessagePayload::ApplicationData(payload) => {
+                output.emit(Event::ApplicationData(payload))
+            }
             payload => {
                 return Err(inappropriate_message(
                     &payload,

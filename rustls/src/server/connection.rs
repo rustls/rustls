@@ -532,6 +532,8 @@ impl Accepted {
         mut self,
         config: Arc<ServerConfig>,
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
+        use crate::common_state::Context;
+
         if let Err(err) = self
             .connection
             .set_max_fragment_size(config.max_fragment_size)
@@ -549,7 +551,7 @@ impl Accepted {
                 return Err(AcceptedAlert::from_error(err, self.connection.core.side));
             }
         };
-        let mut cx = hs::ServerContext {
+        let mut cx = Context {
             data: &mut self.connection.core.side,
             // `ExpectClientHello::with_input` won't read borrowed plaintext
             plaintext_locator: &Locator::new(&[]),
@@ -601,8 +603,8 @@ impl State<ServerConnectionData> for Accepting {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle<'m>(
         self: Box<Self>,
-        _cx: &mut hs::ServerContext<'_>,
         _input: Input<'m>,
+        _output: &mut dyn Output,
     ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
         Err(Error::Unreachable("unreachable state"))
     }

@@ -89,11 +89,11 @@ pub(crate) fn process_main_protocol<Data: SideData>(
     };
 
     state.handle(
-        &mut cx,
         Input {
             message: msg,
             aligned_handshake,
         },
+        &mut cx,
     )
 }
 
@@ -734,8 +734,8 @@ impl IoState {
 pub(crate) trait State<Side: SideData>: Send + Sync {
     fn handle<'m>(
         self: Box<Self>,
-        cx: &mut Context<'_, Side>,
         input: Input<'m>,
+        output: &mut dyn Output,
     ) -> Result<Box<dyn State<Side>>, Error>;
 
     fn send_key_update_request(&mut self, _output: &mut dyn Output) -> Result<(), Error> {
