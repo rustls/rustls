@@ -13,7 +13,7 @@ use super::{
     Tls12ClientSessionValue, Tls12Resumption, Tls13ClientSessionValue, tls13,
 };
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{Event, Input, Output, Protocol, State};
+use crate::common_state::{EarlyDataEvent, Event, Input, Output, Protocol, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -52,7 +52,7 @@ pub(crate) struct ExpectServerHello {
     // Otherwise, it is thrown away.
     //
     // If this is `None` then we do not support early data.
-    pub(super) early_data_key_schedule: Option<KeyScheduleEarlyClient>,
+    pub(super) early_data_key_schedule: Option<(KeyScheduleEarlyClient, bool)>,
     pub(super) offered_key_share: Option<GroupAndKeyShare>,
     pub(super) suite: Option<SupportedCipherSuite>,
     pub(super) ech_state: Option<EchState>,
@@ -156,7 +156,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 self.with_version::<Tls13CipherSuite>(server_hello, &input, cx)
             }
             TLSv1_2 if config.supports_version(TLSv1_2) => {
-                if cx.data.early_data.is_sending() {
+                if let Some((_, true)) = &self.early_data_key_schedule {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
                     return Err(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion.into());
@@ -302,11 +302,6 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // ECH transcript with the hello retry request message.
         if let Some(ech_state) = self.next.ech_state.as_mut() {
             ech_state.transcript_hrr_update(cs.hash_provider(), &input.message, &proof);
-        }
-
-        // Early data is not allowed after HelloRetryrequest
-        if cx.data.early_data.is_enabled() {
-            cx.data.early_data.rejected();
         }
 
         let key_share = match hrr.key_share {
@@ -668,6 +663,10 @@ fn emit_client_hello_for_retry(
 
     // Do we have a SessionID or ticket cached for this host?
     let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
+    let (tls13_session, early_data_enabled) = match tls13_session {
+        Some((tls13_session, early_data_enabled)) => (Some(tls13_session), early_data_enabled),
+        _ => (None, false),
+    };
 
     // Extensions MAY be randomized
     // but they also need to keep the same order as the previous ClientHello
@@ -798,8 +797,10 @@ fn emit_client_hello_for_retry(
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_data_key_schedule =
         tls13_early_data_key_schedule.map(|(resuming_suite, schedule)| {
-            if !cx.data.early_data.is_enabled() {
-                return schedule;
+            if !early_data_enabled {
+                // No early data if a HelloRetryRequest happens
+                cx.emit(Event::EarlyData(EarlyDataEvent::Rejected));
+                return (schedule, false);
             }
 
             let (transcript_buffer, random) = match &ech_state {
@@ -821,7 +822,7 @@ fn emit_client_hello_for_retry(
                 transcript_buffer,
                 random,
             );
-            schedule
+            (schedule, true)
         });
 
     let mut next = Box::new(ExpectServerHello {
@@ -871,14 +872,15 @@ impl GroupAndKeyShare {
 /// (c) send a request for 1.3 early data if allowed and
 /// (d) send a 1.3 preshared key if we have one.
 ///
-/// It returns the TLS 1.3 PSKs, if any, for further processing.
+/// It returns the TLS 1.3 PSKs, if any, for further processing,
+/// and a flag indicated whether early data is being attempted.
 fn prepare_resumption<'a>(
     resuming: &'a Option<Retrieved<ClientSessionValue>>,
     exts: &mut ClientExtensions<'_>,
     suite: Option<SupportedCipherSuite>,
     cx: &mut ClientContext<'_>,
     config: &ClientConfig,
-) -> Option<Retrieved<&'a Tls13ClientSessionValue>> {
+) -> Option<(Retrieved<&'a Tls13ClientSessionValue>, bool)> {
     // Check whether we're resuming with a non-empty ticket.
     let resuming = match resuming {
         Some(resuming) if !resuming.ticket().is_empty() => resuming,
@@ -919,8 +921,8 @@ fn prepare_resumption<'a>(
         suite.can_resume_from(tls13.suite())?;
     }
 
-    tls13::prepare_resumption(config, cx, &tls13, exts, suite.is_some());
-    Some(tls13)
+    let early_data_enabled = tls13::prepare_resumption(config, cx, &tls13, exts, suite.is_some());
+    Some((tls13, early_data_enabled))
 }
 
 pub(super) fn process_alpn_protocol(
