@@ -35,7 +35,6 @@ use crate::tls13::Tls13CipherSuite;
 
 pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
-pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
 
 pub(super) struct ExtensionProcessing<'a> {
     // extensions to reply with
@@ -73,7 +72,7 @@ impl<'a> ExtensionProcessing<'a> {
 
     pub(super) fn process_common(
         &mut self,
-        cx: &mut ServerContext<'_>,
+        output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&persist::CommonServerSessionValue>,
     ) -> Result<(CertificateTypes, Option<ProtocolName>), Error> {
@@ -96,7 +95,7 @@ impl<'a> ExtensionProcessing<'a> {
 
                 self.extensions.selected_protocol =
                     Some(SingleProtocolName::new(selected_protocol.clone()));
-                cx.emit(Event::ApplicationProtocol(selected_protocol.clone()));
+                output.emit(Event::ApplicationProtocol(selected_protocol.clone()));
                 Some(selected_protocol)
             } else if !our_protocols.is_empty() {
                 return Err(Error::NoApplicationProtocol);
@@ -122,7 +121,7 @@ impl<'a> ExtensionProcessing<'a> {
 
             match hello.transport_parameters.as_ref() {
                 Some(params) => {
-                    cx.emit(Event::QuicTransportParameters(params.to_owned().into_vec()))
+                    output.emit(Event::QuicTransportParameters(params.to_owned().into_vec()))
                 }
                 None => {
                     return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
@@ -303,7 +302,7 @@ impl ExpectClientHello {
     pub(super) fn with_input(
         self,
         input: ClientHelloInput<'_>,
-        cx: &mut ServerContext<'_>,
+        output: &mut dyn Output,
     ) -> NextStateOrError {
         let tls13_enabled = self
             .config
@@ -315,13 +314,13 @@ impl ExpectClientHello {
         // Are we doing TLS1.3?
         if let Some(versions) = &input.client_hello.supported_versions {
             if versions.tls13 && tls13_enabled {
-                self.with_version::<Tls13CipherSuite>(input, cx)
+                self.with_version::<Tls13CipherSuite>(input, output)
             } else if !versions.tls12 || !tls12_enabled {
                 Err(PeerIncompatible::Tls12NotOfferedOrEnabled.into())
             } else if self.protocol.is_quic() {
                 Err(PeerIncompatible::Tls13RequiredForQuic.into())
             } else {
-                self.with_version::<Tls12CipherSuite>(input, cx)
+                self.with_version::<Tls12CipherSuite>(input, output)
             }
         } else if u16::from(input.client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2)
         {
@@ -331,26 +330,26 @@ impl ExpectClientHello {
         } else if self.protocol.is_quic() {
             Err(PeerIncompatible::Tls13RequiredForQuic.into())
         } else {
-            self.with_version::<Tls12CipherSuite>(input, cx)
+            self.with_version::<Tls12CipherSuite>(input, output)
         }
     }
 
     fn with_version<T: Suite + 'static>(
         mut self,
         mut input: ClientHelloInput<'_>,
-        cx: &mut ServerContext<'_>,
+        output: &mut dyn Output,
     ) -> NextStateOrError
     where
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
     {
-        cx.emit(Event::ProtocolVersion(T::VERSION));
+        output.emit(Event::ProtocolVersion(T::VERSION));
 
         let sni = self
             .config
             .invalid_sni_policy
             .accept(input.client_hello.server_name.as_ref())?;
-        cx.emit(Event::ReceivedServerName(sni.clone()));
+        output.emit(Event::ReceivedServerName(sni.clone()));
 
         if self.done_retry {
             let ch_sni = input
@@ -410,11 +409,11 @@ impl ExpectClientHello {
         )?;
 
         debug!("decided upon suite {suite:?}");
-        cx.emit(Event::CipherSuite(suite.into()));
+        output.emit(Event::CipherSuite(suite.into()));
 
         suite
             .server_handler()
-            .handle_client_hello(suite, skxg, credentials, input, self, cx)
+            .handle_client_hello(suite, skxg, credentials, input, self, output)
     }
 
     fn choose_suite_and_kx_group<T: Suite + 'static>(
@@ -540,13 +539,9 @@ impl ExpectClientHello {
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
-    fn handle<'m>(
-        self: Box<Self>,
-        cx: &mut ServerContext<'_>,
-        input: Input<'m>,
-    ) -> NextStateOrError {
+    fn handle<'m>(self: Box<Self>, input: Input<'m>, output: &mut dyn Output) -> NextStateOrError {
         let input = ClientHelloInput::from_input(&input)?;
-        self.with_input(input, cx)
+        self.with_input(input, output)
     }
 
     fn reject_early_data(&mut self) -> Result<(), Error> {
@@ -568,7 +563,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         credentials: SelectedCredential,
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
-        cx: &mut ServerContext<'_>,
+        output: &mut dyn Output,
     ) -> NextStateOrError;
 }
 
