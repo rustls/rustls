@@ -4,6 +4,7 @@ use core::ops::Range;
 
 use pki_types::DnsName;
 
+use crate::client::EchStatus;
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
@@ -796,6 +797,7 @@ impl<Data: SideData> Output for Context<'_, Data> {
             Event::CipherSuite(suite) => self.common.suite = Some(suite),
             Event::EarlyData(_) | Event::EarlyApplicationData(_) => self.data.emit(ev),
             Event::EarlyExporter(exporter) => self.common.early_exporter = Some(exporter),
+            Event::EchStatus(_) => self.data.emit(ev),
             Event::EncryptMessage(m) => match self.common.protocol {
                 Protocol::Tcp => self.common.send_msg(m, true),
                 Protocol::Quic(_) => self.common.quic.send_msg(m, true),
@@ -890,6 +892,7 @@ pub(crate) enum Event<'a> {
     EarlyApplicationData(Payload<'a>),
     EarlyData(EarlyDataEvent),
     EarlyExporter(Box<dyn Exporter>),
+    EchStatus(EchStatus),
     EncryptMessage(Message<'a>),
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
