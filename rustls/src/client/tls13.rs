@@ -14,7 +14,8 @@ use super::hs::{
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
+    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State,
+    TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
@@ -106,9 +107,9 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         let our_key_share = KeyExchangeChoice::new(&config, cx, our_key_share, their_key_share)
             .map_err(|_| PeerMisbehaved::WrongGroupForKeyShare)?;
 
-        let key_schedule_pre_handshake =
+        let (key_schedule_pre_handshake, in_early_traffic) =
             match (server_hello.preshared_key, st.early_data_key_schedule) {
-                (Some(selected_psk), Some(early_key_schedule)) => {
+                (Some(selected_psk), Some((early_key_schedule, in_early_traffic))) => {
                     match &resuming_session {
                         Some(resuming) => {
                             let Some(resuming_suite) = suite.can_resume_from(resuming.suite())
@@ -121,7 +122,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
                             // If the server varies the suite here, we will have encrypted early data with
                             // the wrong suite.
-                            if cx.data.early_data.is_enabled() && resuming_suite != suite {
+                            if in_early_traffic && resuming_suite != suite {
                                 return Err(
                                     PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite.into()
                                 );
@@ -138,14 +139,20 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                             return Err(PeerMisbehaved::SelectedUnofferedPsk.into());
                         }
                     }
-                    KeySchedulePreHandshake::from(early_key_schedule)
+                    (
+                        KeySchedulePreHandshake::from(early_key_schedule),
+                        in_early_traffic,
+                    )
                 }
                 _ => {
                     debug!("Not resuming");
                     // Discard the early data key schedule.
-                    cx.data.early_data.rejected();
+                    cx.emit(Event::EarlyData(EarlyDataEvent::Rejected));
                     resuming_session.take();
-                    KeySchedulePreHandshake::new(Side::Client, protocol, suite)
+                    (
+                        KeySchedulePreHandshake::new(Side::Client, protocol, suite),
+                        false,
+                    )
                 }
             };
 
@@ -201,7 +208,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         let hash_at_client_recvd_server_hello = transcript.current_hash();
         let key_schedule = key_schedule.derive_client_handshake_secrets(
-            cx.data.early_data.is_enabled(),
+            in_early_traffic,
             hash_at_client_recvd_server_hello,
             suite,
             &*config.key_log,
@@ -233,6 +240,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             key_schedule,
             hello,
             ech_status: st.ech_status,
+            in_early_traffic,
         }))
     }
 }
@@ -351,18 +359,22 @@ pub(super) fn prepare_resumption(
     resuming_session: &Retrieved<&persist::Tls13ClientSessionValue>,
     exts: &mut ClientExtensions<'_>,
     doing_retry: bool,
-) {
+) -> bool {
     let resuming_suite = resuming_session.suite();
     cx.emit(Event::CipherSuite(resuming_suite.into()));
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size();
-    if config.enable_early_data && max_early_data_size > 0 && !doing_retry {
-        cx.data
-            .early_data
-            .enable(max_early_data_size as usize);
+    let early_data_enabled = if config.enable_early_data && max_early_data_size > 0 && !doing_retry
+    {
+        cx.emit(Event::EarlyData(EarlyDataEvent::Enable(
+            max_early_data_size as usize,
+        )));
         exts.early_data_request = Some(());
-    }
+        true
+    } else {
+        false
+    };
 
     // Finally, and only for TLS1.3 with a ticket resumption, include a binder
     // for our ticket.  This must go last.
@@ -381,6 +393,7 @@ pub(super) fn prepare_resumption(
         PresharedKeyIdentity::new(resuming_session.ticket().to_vec(), obfuscated_ticket_age);
     let psk_offer = PresharedKeyOffer::new(psk_identity, binder);
     exts.preshared_key_offer = Some(psk_offer);
+    early_data_enabled
 }
 
 pub(super) fn derive_early_traffic_secret(
@@ -407,7 +420,7 @@ pub(super) fn derive_early_traffic_secret(
     )));
 
     // Now the client can send encrypted early data
-    cx.data.early_data.start();
+    cx.emit(Event::EarlyData(EarlyDataEvent::Start));
     trace!("Starting early data traffic");
 }
 
@@ -447,6 +460,7 @@ struct ExpectEncryptedExtensions {
     key_schedule: KeyScheduleHandshake,
     hello: ClientHelloDetails,
     ech_status: EchStatus,
+    in_early_traffic: bool,
 }
 
 impl State<ClientConnectionData> for ExpectEncryptedExtensions {
@@ -534,20 +548,17 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
         match self.resuming_session {
             Some(resuming_session) => {
-                let was_early_traffic = cx.data.early_data.is_sending();
-                if was_early_traffic {
+                if self.in_early_traffic {
                     match exts.early_data_ack {
-                        Some(()) => cx.data.early_data.accepted(),
+                        Some(()) => cx.emit(Event::EarlyData(EarlyDataEvent::Accepted)),
                         None => {
-                            cx.data.early_data.rejected();
+                            cx.emit(Event::EarlyData(EarlyDataEvent::Rejected));
+                            // If no early traffic, set the encryption key for handshakes
+                            self.key_schedule
+                                .set_handshake_encrypter(cx);
+                            self.in_early_traffic = false;
                         }
                     }
-                }
-
-                if was_early_traffic && !cx.data.early_data.is_sending() {
-                    // If no early traffic, set the encryption key for handshakes
-                    self.key_schedule
-                        .set_handshake_encrypter(cx);
                 }
 
                 // We *don't* reverify the certificate chain here: resumption is a
@@ -569,6 +580,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     cert_verified,
                     sig_verified,
                     ech,
+                    in_early_traffic: self.in_early_traffic,
                 }))
             }
             _ => {
@@ -1159,6 +1171,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             cert_verified,
             sig_verified,
             ech: self.ech,
+            in_early_traffic: false,
         }))
     }
 }
@@ -1254,6 +1267,7 @@ struct ExpectFinished {
     cert_verified: verify::PeerVerified,
     sig_verified: verify::HandshakeSignatureValid,
     ech: Ech,
+    in_early_traffic: bool,
 }
 
 impl State<ClientConnectionData> for ExpectFinished {
@@ -1289,11 +1303,11 @@ impl State<ClientConnectionData> for ExpectFinished {
         let hash_after_handshake = st.transcript.current_hash();
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
-        if cx.data.early_data.is_sending() {
+        if st.in_early_traffic {
             if !st.key_schedule.protocol().is_quic() {
                 emit_end_of_early_data_tls13(&mut st.transcript, cx);
             }
-            cx.data.early_data.finished();
+            cx.emit(Event::EarlyData(EarlyDataEvent::Finished));
             st.key_schedule
                 .set_handshake_encrypter(cx);
         }

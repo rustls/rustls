@@ -7,7 +7,7 @@ use pki_types::ServerName;
 use super::config::ClientConfig;
 use super::hs::{self, ClientHelloInput};
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, Event, Output, Protocol, Side};
+use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -452,17 +452,10 @@ impl EarlyData {
         }
     }
 
-    pub(super) fn is_enabled(&self) -> bool {
+    fn is_enabled(&self) -> bool {
         matches!(
             self.state,
             EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
-        )
-    }
-
-    pub(crate) fn is_sending(&self) -> bool {
-        matches!(
-            self.state,
-            EarlyDataState::Sending | EarlyDataState::Accepted
         )
     }
 
@@ -474,23 +467,23 @@ impl EarlyData {
         )
     }
 
-    pub(super) fn enable(&mut self, max_data: usize) {
+    fn enable(&mut self, max_data: usize) {
         assert_eq!(self.state, EarlyDataState::Disabled);
         self.state = EarlyDataState::Ready;
         self.left = max_data;
     }
 
-    pub(crate) fn start(&mut self) {
+    fn start(&mut self) {
         assert_eq!(self.state, EarlyDataState::Ready);
         self.state = EarlyDataState::Sending;
     }
 
-    pub(super) fn rejected(&mut self) {
+    fn rejected(&mut self) {
         trace!("EarlyData rejected");
         self.state = EarlyDataState::Rejected;
     }
 
-    pub(super) fn accepted(&mut self) {
+    fn accepted(&mut self) {
         trace!("EarlyData accepted");
         assert_eq!(self.state, EarlyDataState::Sending);
         self.state = EarlyDataState::Accepted;
@@ -563,7 +556,7 @@ impl core::error::Error for EarlyDataError {}
 /// State associated with a client connection.
 #[derive(Debug)]
 pub struct ClientConnectionData {
-    pub(super) early_data: EarlyData,
+    early_data: EarlyData,
     ech_status: EchStatus,
 }
 
@@ -578,8 +571,14 @@ impl ClientConnectionData {
 
 impl Output for ClientConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
-        if let Event::EchStatus(ech) = ev {
-            self.ech_status = ech;
+        match ev {
+            Event::EchStatus(ech) => self.ech_status = ech,
+            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accepted(),
+            Event::EarlyData(EarlyDataEvent::Enable(sz)) => self.early_data.enable(sz),
+            Event::EarlyData(EarlyDataEvent::Finished) => self.early_data.finished(),
+            Event::EarlyData(EarlyDataEvent::Start) => self.early_data.start(),
+            Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
+            _ => {}
         }
     }
 }
