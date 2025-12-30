@@ -58,6 +58,7 @@ pub(crate) struct ExpectServerHello {
     pub(super) offered_key_share: Option<GroupAndKeyShare>,
     pub(super) suite: Option<SupportedCipherSuite>,
     pub(super) ech_state: Option<EchState>,
+    pub(super) ech_status: EchStatus,
     pub(super) done_retry: bool,
 }
 
@@ -267,7 +268,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         };
 
         // Or offers ECH related extensions when we didn't offer ECH.
-        if cx.data.ech_status == EchStatus::NotOffered && hrr.encrypted_client_hello.is_some() {
+        if self.next.ech_status == EchStatus::NotOffered && hrr.encrypted_client_hello.is_some() {
             return Err(PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch.into());
         }
 
@@ -281,7 +282,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
                     // If the server did not confirm, then note the new ECH status but
                     // continue the handshake. We will abort with an ECH required error
                     // at the end.
-                    cx.data.ech_status = EchStatus::Rejected;
+                    self.next.ech_status = EchStatus::Rejected;
+                    cx.emit(Event::EchStatus(EchStatus::Rejected));
                 }
             }
             (Some(_), SupportedCipherSuite::Tls12(_)) => {
@@ -334,6 +336,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.input,
             cx,
             self.next.ech_state,
+            self.next.ech_status,
         )
     }
 }
@@ -480,6 +483,7 @@ impl ClientHelloInput {
             self,
             cx,
             ech_state,
+            EchStatus::default(),
         )
     }
 }
@@ -498,6 +502,7 @@ fn emit_client_hello_for_retry(
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
     mut ech_state: Option<EchState>,
+    mut ech_status: EchStatus,
 ) -> NextStateOrError {
     let config = &input.config;
     // Defense in depth: the ECH state should be None if ECH is disabled based on config
@@ -657,7 +662,7 @@ fn emit_client_hello_for_retry(
     // If this is a second client hello we're constructing in response to an HRR, and
     // we've rejected ECH or sent GREASE ECH, then we need to carry forward the
     // exact same ECH extension we used in the first hello.
-    if matches!(cx.data.ech_status, EchStatus::Rejected | EchStatus::Grease) & retryreq.is_some() {
+    if matches!(ech_status, EchStatus::Rejected | EchStatus::Grease) & retryreq.is_some() {
         if let Some(prev_ech_ext) = input.prev_ech_ext.take() {
             exts.encrypted_client_hello = Some(prev_ech_ext);
         }
@@ -706,13 +711,14 @@ fn emit_client_hello_for_retry(
             _ => None,
         });
 
-    match (cx.data.ech_status, &mut ech_state) {
+    match (ech_status, &mut ech_state) {
         // If we haven't offered ECH, or have offered ECH but got a non-rejecting HRR, then
         // we need to replace the client hello payload with an ECH client hello payload.
         (EchStatus::NotOffered | EchStatus::Offered, Some(ech_state)) => {
             // Replace the client hello payload with an ECH client hello payload.
             chp_payload = ech_state.ech_hello(chp_payload, retryreq, &tls13_session)?;
-            cx.data.ech_status = EchStatus::Offered;
+            ech_status = EchStatus::Offered;
+            cx.emit(Event::EchStatus(ech_status));
             // Store the ECH extension in case we need to carry it forward in a subsequent hello.
             input.prev_ech_ext = chp_payload
                 .encrypted_client_hello
@@ -725,7 +731,8 @@ fn emit_client_hello_for_retry(
                 // Add the GREASE ECH extension.
                 let grease_ext = grease_ext?;
                 chp_payload.encrypted_client_hello = Some(grease_ext.clone());
-                cx.data.ech_status = EchStatus::Grease;
+                ech_status = EchStatus::Grease;
+                cx.emit(Event::EchStatus(ech_status));
                 // Store the GREASE ECH extension in case we need to carry it forward in a
                 // subsequent hello.
                 input.prev_ech_ext = Some(grease_ext);
@@ -826,6 +833,7 @@ fn emit_client_hello_for_retry(
         offered_key_share: key_share,
         suite,
         ech_state,
+        ech_status,
         done_retry: false,
     });
 
