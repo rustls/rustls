@@ -930,6 +930,14 @@ pub(crate) enum Event<'a> {
 pub(crate) enum EarlyDataEvent {
     /// server: we accepted an early_data offer
     Accepted,
+    /// client: declares the maximum amount of early data that can be sent
+    Enable(usize),
+    /// client: early data can now be sent using the record layer as normal
+    Start,
+    /// client: early data phase has closed after sending EndOfEarlyData
+    Finished,
+    /// client: the server rejected our request for early data
+    Rejected,
 }
 
 /// Lifetime-erased equivalent to [`Payload`]
