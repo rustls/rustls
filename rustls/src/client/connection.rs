@@ -5,9 +5,9 @@ use core::{fmt, mem};
 use pki_types::ServerName;
 
 use super::config::ClientConfig;
-use super::hs::{self, ClientHelloInput};
+use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
+use crate::common_state::{CommonState, Context, EarlyDataEvent, Event, Output, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -274,7 +274,7 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.fips = config.fips();
         let mut data = ClientConnectionData::new(common_state);
 
-        let mut cx = hs::ClientContext {
+        let mut cx = Context {
             data: &mut data,
             // `start_handshake` won't read plaintext
             plaintext_locator: &Locator::new(&[]),

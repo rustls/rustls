@@ -8,8 +8,7 @@ use super::config::{ClientConfig, ClientSessionKey, ClientSessionStore};
 use super::connection::ClientConnectionData;
 use super::ech::EchStatus;
 use super::hs::{
-    self, ClientContext, ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello,
-    GroupAndKeyShare,
+    self, ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello, GroupAndKeyShare,
 };
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
@@ -64,7 +63,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
         mut st: ExpectServerHello,
-        cx: &mut ClientContext<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         // Start our handshake hash, and input the server-hello.
         let mut transcript = st
@@ -103,7 +102,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
 
         // We always send a key share when TLS 1.3 is enabled.
         let our_key_share = st.offered_key_share.unwrap();
-        let our_key_share = KeyExchangeChoice::new(&config, cx, our_key_share, their_key_share)
+        let our_key_share = KeyExchangeChoice::new(&config, output, our_key_share, their_key_share)
             .map_err(|_| PeerMisbehaved::WrongGroupForKeyShare)?;
 
         let (key_schedule_pre_handshake, in_early_traffic) =
@@ -146,7 +145,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 _ => {
                     debug!("Not resuming");
                     // Discard the early data key schedule.
-                    cx.emit(Event::EarlyData(EarlyDataEvent::Rejected));
+                    output.emit(Event::EarlyData(EarlyDataEvent::Rejected));
                     resuming_session.take();
                     (
                         KeySchedulePreHandshake::new(Side::Client, protocol, suite),
@@ -192,7 +191,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 // The server rejected our ECH offer.
                 None => EchStatus::Rejected,
             };
-            cx.emit(Event::EchStatus(st.ech_status));
+            output.emit(Event::EchStatus(st.ech_status));
         }
 
         // Remember what KX group the server liked for next time.
@@ -212,15 +211,15 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             suite,
             &*config.key_log,
             &randoms.client,
-            cx,
+            output,
             &proof,
         );
 
         if !key_schedule.protocol().is_quic() {
-            emit_fake_ccs(&mut sent_tls13_fake_ccs, cx);
+            emit_fake_ccs(&mut sent_tls13_fake_ccs, output);
         }
 
-        cx.emit(Event::HandshakeKind(
+        output.emit(Event::HandshakeKind(
             match (&resuming_session, st.done_retry) {
                 (Some(_), true) => HandshakeKind::ResumedWithHelloRetryRequest,
                 (None, true) => HandshakeKind::FullWithHelloRetryRequest,
@@ -256,12 +255,12 @@ impl KeyExchangeChoice {
     /// based on the selection of the server expressed in `their_key_share`.
     fn new(
         config: &Arc<ClientConfig>,
-        cx: &mut ClientContext<'_>,
+        output: &mut dyn Output,
         our_key_share: GroupAndKeyShare,
         their_key_share: &KeyShareEntry,
     ) -> Result<Self, ()> {
         if our_key_share.share.group() == their_key_share.group {
-            cx.emit(Event::KeyExchangeGroup(our_key_share.group));
+            output.emit(Event::KeyExchangeGroup(our_key_share.group));
             return Ok(Self::Whole(our_key_share.share.into_single()));
         }
 
@@ -280,7 +279,7 @@ impl KeyExchangeChoice {
 
         // correct the record for the benefit of accuracy of
         // `negotiated_key_exchange_group()`
-        cx.emit(Event::KeyExchangeGroup(actual_skxg));
+        output.emit(Event::KeyExchangeGroup(actual_skxg));
 
         Ok(Self::Component(hybrid_key_share))
     }
@@ -354,19 +353,19 @@ pub(super) fn fill_in_psk_binder(
 
 pub(super) fn prepare_resumption(
     config: &ClientConfig,
-    cx: &mut ClientContext<'_>,
+    output: &mut dyn Output,
     resuming_session: &Retrieved<&Tls13ClientSessionValue>,
     exts: &mut ClientExtensions<'_>,
     doing_retry: bool,
 ) -> bool {
     let resuming_suite = resuming_session.suite();
-    cx.emit(Event::CipherSuite(resuming_suite.into()));
+    output.emit(Event::CipherSuite(resuming_suite.into()));
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size();
     let early_data_enabled = if config.enable_early_data && max_early_data_size > 0 && !doing_retry
     {
-        cx.emit(Event::EarlyData(EarlyDataEvent::Enable(
+        output.emit(Event::EarlyData(EarlyDataEvent::Enable(
             max_early_data_size as usize,
         )));
         exts.early_data_request = Some(());
@@ -397,7 +396,7 @@ pub(super) fn prepare_resumption(
 
 pub(super) fn derive_early_traffic_secret(
     key_log: &dyn KeyLog,
-    cx: &mut ClientContext<'_>,
+    output: &mut dyn Output,
     hash_alg: &'static dyn Hash,
     early_key_schedule: &KeyScheduleEarlyClient,
     sent_tls13_fake_ccs: &mut bool,
@@ -406,20 +405,25 @@ pub(super) fn derive_early_traffic_secret(
 ) {
     if !early_key_schedule.protocol().is_quic() {
         // For middlebox compatibility
-        emit_fake_ccs(sent_tls13_fake_ccs, cx);
+        emit_fake_ccs(sent_tls13_fake_ccs, output);
     }
 
     let client_hello_hash = transcript_buffer.hash_given(hash_alg, &[]);
-    early_key_schedule.client_early_traffic_secret(&client_hello_hash, key_log, client_random, cx);
+    early_key_schedule.client_early_traffic_secret(
+        &client_hello_hash,
+        key_log,
+        client_random,
+        output,
+    );
 
-    cx.emit(Event::EarlyExporter(early_key_schedule.early_exporter(
+    output.emit(Event::EarlyExporter(early_key_schedule.early_exporter(
         &client_hello_hash,
         key_log,
         client_random,
     )));
 
     // Now the client can send encrypted early data
-    cx.emit(Event::EarlyData(EarlyDataEvent::Start));
+    output.emit(Event::EarlyData(EarlyDataEvent::Start));
     trace!("Starting early data traffic");
 }
 
@@ -465,8 +469,8 @@ struct ExpectEncryptedExtensions {
 impl State<ClientConnectionData> for ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
         Input { message, .. }: Input<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         let exts = require_handshake_msg!(
             message,
@@ -482,7 +486,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             .selected_protocol
             .as_ref()
             .map(|protocol| protocol.as_ref());
-        hs::process_alpn_protocol(cx, &self.hello.alpn_protocols, selected_alpn)?;
+        hs::process_alpn_protocol(output, &self.hello.alpn_protocols, selected_alpn)?;
 
         // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
         // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
@@ -537,7 +541,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
             };
 
-            cx.emit(Event::QuicTransportParameters(
+            output.emit(Event::QuicTransportParameters(
                 quic_params.clone().into_vec(),
             ));
             Some(SizedPayload::from(Payload::new(
@@ -551,12 +555,12 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             Some(resuming_session) => {
                 if self.in_early_traffic {
                     match exts.early_data_ack {
-                        Some(()) => cx.emit(Event::EarlyData(EarlyDataEvent::Accepted)),
+                        Some(()) => output.emit(Event::EarlyData(EarlyDataEvent::Accepted)),
                         None => {
-                            cx.emit(Event::EarlyData(EarlyDataEvent::Rejected));
+                            output.emit(Event::EarlyData(EarlyDataEvent::Rejected));
                             // If no early traffic, set the encryption key for handshakes
                             self.key_schedule
-                                .set_handshake_encrypter(cx);
+                                .set_handshake_encrypter(output);
                             self.in_early_traffic = false;
                         }
                     }
@@ -655,11 +659,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
-    fn handle(
-        self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -740,11 +740,7 @@ struct ExpectCertificateOrCompressedCertificate {
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
-    fn handle(
-        self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -806,11 +802,7 @@ struct ExpectCertificateOrCertReq {
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
-    fn handle(
-        self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -1086,11 +1078,7 @@ impl ExpectCertificate {
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
-    fn handle(
-        self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
         self.handle_input(input)
     }
 }
@@ -1113,8 +1101,8 @@ struct ExpectCertificateVerify {
 impl State<ClientConnectionData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
         Input { message, .. }: Input<'_>,
+        _output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         let cert_verify = require_handshake_msg!(
             message,
@@ -1272,11 +1260,7 @@ struct ExpectFinished {
 }
 
 impl State<ClientConnectionData> for ExpectFinished {
-    fn handle(
-        self: Box<Self>,
-        cx: &mut ClientContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> hs::NextStateOrError {
         let mut st = *self;
         let finished = require_handshake_msg!(
             input.message,
@@ -1306,11 +1290,11 @@ impl State<ClientConnectionData> for ExpectFinished {
          * but appears in the transcript after the server Finished. */
         if st.in_early_traffic {
             if !st.key_schedule.protocol().is_quic() {
-                emit_end_of_early_data_tls13(&mut st.transcript, cx);
+                emit_end_of_early_data_tls13(&mut st.transcript, output);
             }
-            cx.emit(Event::EarlyData(EarlyDataEvent::Finished));
+            output.emit(Event::EarlyData(EarlyDataEvent::Finished));
             st.key_schedule
-                .set_handshake_encrypter(cx);
+                .set_handshake_encrypter(output);
         }
 
         let mut flight = HandshakeFlightTls13::new(&mut st.transcript);
@@ -1363,7 +1347,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             );
 
         emit_finished_tls13(&mut flight, &verify_data);
-        flight.finish(cx);
+        flight.finish(output);
 
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
@@ -1374,10 +1358,10 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         /* Now move to our application traffic keys. */
         let (key_schedule, exporter, resumption) =
-            key_schedule_pre_finished.into_traffic(cx, st.transcript.current_hash(), &proof);
-        cx.emit(Event::PeerIdentity(st.session_input.peer_identity.clone()));
-        cx.emit(Event::Exporter(Box::new(exporter)));
-        cx.emit(Event::StartTraffic);
+            key_schedule_pre_finished.into_traffic(output, st.transcript.current_hash(), &proof);
+        output.emit(Event::PeerIdentity(st.session_input.peer_identity.clone()));
+        output.emit(Event::Exporter(Box::new(exporter)));
+        output.emit(Event::StartTraffic);
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
         // sending an alert and returning an error (potentially with retry configs) if the server
@@ -1461,18 +1445,18 @@ impl ExpectTraffic {
 
     fn handle_new_ticket_tls13(
         &self,
-        cx: &mut ClientContext<'_>,
+        output: &mut dyn Output,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        cx.emit(Event::ReceivedTicket);
+        output.emit(Event::ReceivedTicket);
 
         self.handle_new_ticket_impl(nst)
     }
 
     fn handle_key_update(
         &mut self,
-        cx: &mut ClientContext<'_>,
         input: Input<'_>,
+        output: &mut dyn Output,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         if self.key_schedule.protocol().is_quic() {
@@ -1488,14 +1472,14 @@ impl ExpectTraffic {
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
             KeyUpdateRequest::UpdateRequested => {
-                cx.emit(Event::MaybeKeyUpdateRequest(&mut self.key_schedule))
+                output.emit(Event::MaybeKeyUpdateRequest(&mut self.key_schedule))
             }
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
         // Update our read-side keys.
         self.key_schedule
-            .update_decrypter(cx, &proof);
+            .update_decrypter(output, &proof);
         Ok(())
     }
 }
@@ -1503,22 +1487,22 @@ impl ExpectTraffic {
 impl State<ClientConnectionData> for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ClientContext<'_>,
         input: Input<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
-                cx.emit(Event::ApplicationData(payload));
+                output.emit(Event::ApplicationData(payload));
             }
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
                 ..
-            } => self.handle_new_ticket_tls13(cx, &new_ticket)?,
+            } => self.handle_new_ticket_tls13(output, &new_ticket)?,
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } => self.handle_key_update(cx, input, &key_update)?,
+            } => self.handle_key_update(input, output, &key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,
@@ -1572,8 +1556,8 @@ struct ExpectQuicTraffic(ExpectTraffic);
 impl State<ClientConnectionData> for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
-        cx: &mut ClientContext<'_>,
         Input { message, .. }: Input<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         let nst = require_handshake_msg!(
             message,
@@ -1581,7 +1565,7 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
             HandshakePayload::NewSessionTicketTls13
         )?;
         self.0
-            .handle_new_ticket_tls13(cx, nst)?;
+            .handle_new_ticket_tls13(output, nst)?;
         Ok(self)
     }
 
