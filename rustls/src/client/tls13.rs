@@ -62,7 +62,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         suite: &'static Tls13CipherSuite,
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
-        st: ExpectServerHello,
+        mut st: ExpectServerHello,
         cx: &mut ClientContext<'_>,
     ) -> hs::NextStateOrError {
         // Start our handshake hash, and input the server-hello.
@@ -164,7 +164,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             else {
                 unreachable!("ServerHello is a handshake message");
             };
-            cx.data.ech_status = match ech_state.confirm_acceptance(
+            st.ech_status = match ech_state.confirm_acceptance(
                 &key_schedule,
                 server_hello,
                 server_hello_encoded,
@@ -185,6 +185,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 // The server rejected our ECH offer.
                 None => EchStatus::Rejected,
             };
+            cx.emit(Event::EchStatus(st.ech_status));
         }
 
         // Remember what KX group the server liked for next time.
@@ -230,6 +231,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             transcript,
             key_schedule,
             hello,
+            ech_status: st.ech_status,
         }))
     }
 }
@@ -443,6 +445,7 @@ struct ExpectEncryptedExtensions {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     hello: ClientHelloDetails,
+    ech_status: EchStatus,
 }
 
 impl State<ClientConnectionData> for ExpectEncryptedExtensions {
@@ -494,7 +497,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             exts.server_certificate_type,
         )?;
 
-        let ech_retry_configs = match (cx.data.ech_status, &exts.encrypted_client_hello_ack) {
+        let ech_retry_configs = match (self.ech_status, &exts.encrypted_client_hello_ack) {
             // If we didn't offer ECH, or ECH was accepted, but the server sent an ECH encrypted
             // extension with retry configs, we must error.
             (EchStatus::NotOffered | EchStatus::Accepted, Some(_)) => {
@@ -511,6 +514,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
         let ech = Ech {
             retry_configs: ech_retry_configs,
+            status: self.ech_status,
         };
 
         // QUIC transport parameters
@@ -1309,7 +1313,7 @@ impl State<ClientConnectionData> for ExpectFinished {
                 ClientAuthDetails::Verify {
                     auth_context_tls13: auth_context,
                     ..
-                } if cx.data.ech_status == EchStatus::Rejected => {
+                } if st.ech.status == EchStatus::Rejected => {
                     // If ECH was offered, and rejected, we MUST respond with
                     // an empty certificate message.
                     emit_certificate_tls13(&mut flight, None, auth_context);
@@ -1364,7 +1368,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
         // sending an alert and returning an error (potentially with retry configs) if the server
         // did not accept our ECH offer.
-        if cx.data.ech_status == EchStatus::Rejected {
+        if st.ech.status == EchStatus::Rejected {
             return Err(RejectedEch {
                 retry_configs: st.ech.retry_configs,
             }
@@ -1595,6 +1599,7 @@ impl KernelState for ExpectQuicTraffic {
 }
 
 struct Ech {
+    status: EchStatus,
     retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
