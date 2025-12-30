@@ -63,7 +63,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         suite: &'static Tls13CipherSuite,
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
-        st: ExpectServerHello,
+        mut st: ExpectServerHello,
         cx: &mut ClientContext<'_>,
     ) -> hs::NextStateOrError {
         // Start our handshake hash, and input the server-hello.
@@ -165,7 +165,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             else {
                 unreachable!("ServerHello is a handshake message");
             };
-            cx.data.ech_status = match ech_state.confirm_acceptance(
+            st.ech_status = match ech_state.confirm_acceptance(
                 &mut key_schedule,
                 server_hello,
                 server_hello_encoded,
@@ -186,6 +186,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 // The server rejected our ECH offer.
                 None => EchStatus::Rejected,
             };
+            cx.emit(Event::EchStatus(st.ech_status));
         }
 
         // Remember what KX group the server liked for next time.
@@ -231,6 +232,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             transcript,
             key_schedule,
             hello,
+            ech_status: st.ech_status,
         }))
     }
 }
@@ -444,6 +446,7 @@ struct ExpectEncryptedExtensions {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     hello: ClientHelloDetails,
+    ech_status: EchStatus,
 }
 
 impl State<ClientConnectionData> for ExpectEncryptedExtensions {
@@ -495,7 +498,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             exts.server_certificate_type,
         )?;
 
-        let ech_retry_configs = match (cx.data.ech_status, &exts.encrypted_client_hello_ack) {
+        let ech_retry_configs = match (self.ech_status, &exts.encrypted_client_hello_ack) {
             // If we didn't offer ECH, or ECH was accepted, but the server sent an ECH encrypted
             // extension with retry configs, we must error.
             (EchStatus::NotOffered | EchStatus::Accepted, Some(_)) => {
@@ -508,6 +511,11 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 .as_ref()
                 .map(|ext| ext.retry_configs.to_vec()),
             _ => None,
+        };
+
+        let ech = Ech {
+            retry_configs: ech_retry_configs,
+            status: self.ech_status,
         };
 
         // QUIC transport parameters
@@ -560,7 +568,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     client_auth: None,
                     cert_verified,
                     sig_verified,
-                    ech_retry_configs,
+                    ech,
                 }))
             }
             _ => {
@@ -580,7 +588,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         quic_params,
                         transcript: self.transcript,
                         key_schedule: self.key_schedule,
-                        ech_retry_configs,
+                        ech,
                         expected_certificate_type,
                         negotiated_client_type: exts.client_certificate_type,
                     })
@@ -593,7 +601,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         quic_params,
                         transcript: self.transcript,
                         key_schedule: self.key_schedule,
-                        ech_retry_configs,
+                        ech,
                         expected_certificate_type,
                         negotiated_client_type: exts.client_certificate_type,
                     })
@@ -628,7 +636,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     quic_params: Option<PayloadU16>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
     negotiated_client_type: Option<CertificateType>,
 }
@@ -652,7 +660,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, input),
@@ -668,7 +676,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, input),
@@ -684,7 +692,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 offered_cert_compression: true,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
             })
@@ -711,7 +719,7 @@ struct ExpectCertificateOrCompressedCertificate {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
 }
 
@@ -734,7 +742,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, input),
@@ -750,7 +758,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, input),
@@ -774,7 +782,7 @@ struct ExpectCertificateOrCertReq {
     quic_params: Option<PayloadU16>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
     negotiated_client_type: Option<CertificateType>,
 }
@@ -798,7 +806,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
             .handle(cx, input),
@@ -814,7 +822,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 offered_cert_compression: false,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
             })
@@ -843,7 +851,7 @@ struct ExpectCertificateRequest {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     offered_cert_compression: bool,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
     negotiated_client_type: Option<CertificateType>,
 }
@@ -920,7 +928,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
         } else {
@@ -933,7 +941,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
         })
@@ -949,7 +957,7 @@ struct ExpectCompressedCertificate {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
 }
 
@@ -1007,7 +1015,7 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
-            ech_retry_configs: self.ech_retry_configs,
+            ech: self.ech,
             expected_certificate_type: self.expected_certificate_type,
         }
         .handle_cert_payload(cert_payload)
@@ -1023,7 +1031,7 @@ struct ExpectCertificate {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
 }
 
@@ -1052,7 +1060,7 @@ impl ExpectCertificate {
             key_schedule: self.key_schedule,
             server_cert,
             client_auth: self.client_auth,
-            ech_retry_configs: self.ech_retry_configs,
+            ech: self.ech,
             expected_certificate_type: self.expected_certificate_type,
         }))
     }
@@ -1085,7 +1093,7 @@ struct ExpectCertificateVerify {
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
 }
 
@@ -1147,7 +1155,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             client_auth: self.client_auth,
             cert_verified,
             sig_verified,
-            ech_retry_configs: self.ech_retry_configs,
+            ech: self.ech,
         }))
     }
 }
@@ -1242,7 +1250,7 @@ struct ExpectFinished {
     client_auth: Option<ClientAuthDetails>,
     cert_verified: verify::PeerVerified,
     sig_verified: verify::HandshakeSignatureValid,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
 }
 
 impl State<ClientConnectionData> for ExpectFinished {
@@ -1301,7 +1309,7 @@ impl State<ClientConnectionData> for ExpectFinished {
                 ClientAuthDetails::Verify {
                     auth_context_tls13: auth_context,
                     ..
-                } if cx.data.ech_status == EchStatus::Rejected => {
+                } if st.ech.status == EchStatus::Rejected => {
                     // If ECH was offered, and rejected, we MUST respond with
                     // an empty certificate message.
                     emit_certificate_tls13(&mut flight, None, auth_context);
@@ -1360,9 +1368,9 @@ impl State<ClientConnectionData> for ExpectFinished {
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
         // sending an alert and returning an error (potentially with retry configs) if the server
         // did not accept our ECH offer.
-        if cx.data.ech_status == EchStatus::Rejected {
+        if st.ech.status == EchStatus::Rejected {
             return Err(RejectedEch {
-                retry_configs: st.ech_retry_configs,
+                retry_configs: st.ech.retry_configs,
             }
             .into());
         }
@@ -1591,6 +1599,11 @@ impl KernelState for ExpectQuicTraffic {
     ) -> Result<(), Error> {
         self.0.handle_new_ticket_impl(nst)
     }
+}
+
+struct Ech {
+    status: EchStatus,
+    retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 // Extensions we expect in plaintext in the ServerHello.
