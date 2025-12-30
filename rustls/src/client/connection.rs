@@ -565,7 +565,7 @@ impl core::error::Error for EarlyDataError {}
 pub struct ClientConnectionData {
     common: CommonState,
     pub(super) early_data: EarlyData,
-    pub(super) ech_status: EchStatus,
+    ech_status: EchStatus,
 }
 
 impl ClientConnectionData {
@@ -573,7 +573,7 @@ impl ClientConnectionData {
         Self {
             common,
             early_data: EarlyData::new(),
-            ech_status: EchStatus::NotOffered,
+            ech_status: EchStatus::default(),
         }
     }
 }
@@ -587,7 +587,11 @@ impl crate::conn::private::SideData for ClientConnectionData {
 }
 
 impl Output for ClientConnectionData {
-    fn emit(&mut self, _ev: Event<'_>) {}
+    fn emit(&mut self, ev: Event<'_>) {
+        if let Event::EchStatus(ech) = ev {
+            self.ech_status = ech;
+        }
+    }
 }
 
 impl Deref for ClientConnectionData {

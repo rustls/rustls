@@ -297,9 +297,10 @@ impl EchGreaseConfig {
 
 /// An enum representing ECH offer status.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
 pub enum EchStatus {
     /// ECH was not offered - it is a normal TLS handshake.
+    #[default]
     NotOffered,
     /// GREASE ECH was sent. This is not considered offering ECH.
     Grease,
