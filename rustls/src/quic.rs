@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 
 /// This module contains optional APIs for implementing QUIC TLS.
-use crate::common_state::Side;
+use crate::common_state::{Event, Output, Side};
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::Error;
@@ -495,7 +495,7 @@ pub(crate) struct Quic {
 }
 
 impl Quic {
-    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         if let MessagePayload::Alert(_) = m.payload {
             // alerts are sent out-of-band in QUIC mode
             return;
@@ -547,6 +547,20 @@ impl Quic {
         }
 
         None
+    }
+}
+
+impl Output for Quic {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::EncryptMessage(m) => self.send_msg(m, true),
+            Event::QuicEarlySecret(sec) => self.early_secret = sec,
+            Event::QuicHandshakeSecrets(sec) => self.hs_secrets = Some(sec),
+            Event::QuicTrafficSecrets(sec) => self.traffic_secrets = Some(sec),
+            Event::QuicTransportParameters(params) => self.params = Some(params),
+            Event::PlainMessage(m) => self.send_msg(m, false),
+            _ => {}
+        }
     }
 }
 
