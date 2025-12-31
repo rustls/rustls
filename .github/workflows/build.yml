@@ -248,7 +248,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo fuzz
-        uses: taiki-e/cache-cargo-install-action@v2
+        uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: cargo-fuzz
 
@@ -336,7 +336,7 @@ jobs:
           components: llvm-tools
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/cache-cargo-install-action@v2
+        uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: cargo-llvm-cov
 
@@ -406,14 +406,14 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install cross
-        uses: taiki-e/cache-cargo-install-action@v2
+        uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: cross
           git: https://github.com/cross-rs/cross
           # known-working main in feb 2025, bump as needed
           rev: c7dee4d
       - name: Install bindgen-cli
-        uses: taiki-e/cache-cargo-install-action@v2
+        uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: bindgen-cli
       - name: Enable bindgen feature for aws-lc-sys (as needed for many cross targets)
@@ -526,7 +526,7 @@ jobs:
           toolchain: nightly-2025-10-18
           # ^ sync with https://github.com/awslabs/cargo-check-external-types/blob/main/rust-toolchain.toml
       - name: Install cargo-check-external-types
-        uses: taiki-e/cache-cargo-install-action@v2
+        uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: cargo-check-external-types
       - name: run cargo-check-external-types for rustls/
@@ -545,7 +545,7 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install taplo-cli
-        uses: taiki-e/cache-cargo-install-action@v2
+        uses: taiki-e/cache-cargo-install-action@v3
         with:
           tool: taplo-cli
       - run: taplo format --check
