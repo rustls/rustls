@@ -6,7 +6,9 @@ use pki_types::ServerName;
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, Context, EarlyDataEvent, Event, Output, Protocol, Side};
+use crate::common_state::{
+    CommonState, Context, EarlyDataEvent, Event, NullOutput, Output, Protocol, Side,
+};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -14,7 +16,6 @@ use crate::enums::ApplicationProtocol;
 use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
-use crate::msgs::deframer::Locator;
 use crate::msgs::handshake::ClientExtensionsInput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -282,13 +283,11 @@ impl ConnectionCore<ClientConnectionData> {
             common: &mut common_state,
             data: &mut data,
             // `start_handshake` won't read plaintext
-            plaintext_locator: &Locator::new(&[]),
-            received_plaintext: &mut None,
+            app_data_output: &mut NullOutput,
         };
 
         let input = ClientHelloInput::new(name, &extra_exts, proto, &mut cx, config)?;
         let state = input.start_handshake(extra_exts, &mut cx)?;
-        debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
         Ok(Self::new(state, data, common_state))
     }

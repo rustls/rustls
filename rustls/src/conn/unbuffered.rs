@@ -8,7 +8,7 @@ use core::{fmt, mem};
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
-use crate::common_state::Context;
+use crate::common_state::{AppDataOutput, Context};
 use crate::conn::SideData;
 use crate::crypto::cipher::Payload;
 use crate::error::Error;
@@ -118,8 +118,10 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                 let mut cx = Context {
                     common: &mut self.core.common_state,
                     data: &mut self.core.side,
-                    plaintext_locator: &plaintext_locator,
-                    received_plaintext: &mut received_plaintext,
+                    app_data_output: &mut AppDataOutput {
+                        plaintext_locator: &plaintext_locator,
+                        received_plaintext: &mut received_plaintext,
+                    },
                 };
                 match cx.process_main_protocol(msg, self.core.hs_deframer.aligned(), state) {
                     Ok(new) => {

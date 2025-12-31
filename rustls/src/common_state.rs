@@ -786,18 +786,7 @@ pub(crate) trait State<Side>: Send + Sync {
 pub(crate) struct Context<'a, Data> {
     pub(crate) common: &'a mut CommonState,
     pub(crate) data: &'a mut Data,
-    /// Store a [`Locator`] initialized from the current receive buffer
-    ///
-    /// Allows received plaintext data to be unborrowed and stored in
-    /// `received_plaintext` for in-place decryption.
-    pub(crate) plaintext_locator: &'a Locator,
-    /// Unborrowed received plaintext data
-    ///
-    /// Set if plaintext data was received.
-    ///
-    /// Plaintext data may be reborrowed using a [`Delocator`] which was
-    /// initialized from the same slice as `plaintext_locator`.
-    pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
+    pub(crate) app_data_output: &'a mut dyn Output,
 }
 
 impl<Data: Output> Context<'_, Data> {
@@ -845,18 +834,7 @@ impl<Data: Output> Context<'_, Data> {
 impl<Data: Output> Output for Context<'_, Data> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
-            Event::ApplicationData(payload) => {
-                // Receive plaintext data [`Payload<'_>`].
-                //
-                // Since [`Context`] does not hold a lifetime to the receive buffer the
-                // passed [`Payload`] will have it's lifetime erased by storing an index
-                // into the receive buffer as an [`UnborrowedPayload`]. This enables the
-                // data to be later reborrowed after it has been decrypted in-place.
-                let previous = self
-                    .received_plaintext
-                    .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
-                debug_assert!(previous.is_none(), "overwrote plaintext data");
-            }
+            Event::ApplicationData(_) => self.app_data_output.emit(ev),
             Event::ApplicationProtocol(protocol) => {
                 self.common.alpn_protocol =
                     Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
@@ -941,6 +919,38 @@ impl<Data: Output> Output for Context<'_, Data> {
     }
 }
 
+pub(crate) struct AppDataOutput<'a> {
+    /// Store a [`Locator`] initialized from the current receive buffer
+    ///
+    /// Allows received plaintext data to be unborrowed and stored in
+    /// `received_plaintext` for in-place decryption.
+    pub(crate) plaintext_locator: &'a Locator,
+    /// Unborrowed received plaintext data
+    ///
+    /// Set if plaintext data was received.
+    ///
+    /// Plaintext data may be reborrowed using a [`Delocator`] which was
+    /// initialized from the same slice as `plaintext_locator`.
+    pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
+}
+
+impl Output for AppDataOutput<'_> {
+    fn emit(&mut self, ev: Event<'_>) {
+        if let Event::ApplicationData(payload) = ev {
+            // Receive plaintext data [`Payload<'_>`].
+            //
+            // Since [`Context`] does not hold a lifetime to the receive buffer the
+            // passed [`Payload`] will have it's lifetime erased by storing an index
+            // into the receive buffer as an [`UnborrowedPayload`]. This enables the
+            // data to be later reborrowed after it has been decrypted in-place.
+            let previous = self
+                .received_plaintext
+                .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
+            debug_assert!(previous.is_none(), "overwrote plaintext data");
+        }
+    }
+}
+
 pub(crate) struct Input<'a> {
     pub(crate) message: Message<'a>,
     pub(crate) aligned_handshake: Option<HandshakeAlignedProof>,
@@ -960,6 +970,13 @@ impl Input<'_> {
 /// The route for handshake state machine to surface determinations about the connection.
 pub(crate) trait Output {
     fn emit(&mut self, ev: Event<'_>);
+}
+
+/// An `Output` that throws everything away.
+pub(crate) struct NullOutput;
+
+impl Output for NullOutput {
+    fn emit(&mut self, _ev: Event<'_>) {}
 }
 
 /// The set of events output by the low-level handshake state machine.
