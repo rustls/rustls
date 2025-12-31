@@ -485,8 +485,25 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// [`process_new_packets`]: Connection::process_new_packets
     #[inline]
     pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        let io_state = self
+            .core
+            .process_new_packets(&mut self.deframer_buffer)?;
+
+        if !self
+            .core
+            .side
+            .send
+            .may_send_application_data
+            || self.sendable_plaintext.is_empty()
+        {
+            return Ok(io_state);
+        }
+
         self.core
-            .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)
+            .side
+            .send
+            .send_buffered_plaintext(&mut self.sendable_plaintext);
+        Ok(self.core.side.current_io_state())
     }
 
     /// Returns an object that can derive key material from the agreed connection secrets.
@@ -917,7 +934,6 @@ impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn process_new_packets(
         &mut self,
         deframer_buffer: &mut DeframerVecBuffer,
-        sendable_plaintext: &mut ChunkVecBuffer,
     ) -> Result<IoState, Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
@@ -977,12 +993,6 @@ impl<Side: SideData> ConnectionCore<Side> {
                     deframer_buffer.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
-            }
-
-            if self.side.send.may_send_application_data && !sendable_plaintext.is_empty() {
-                self.side
-                    .send
-                    .send_buffered_plaintext(sendable_plaintext);
             }
 
             if self.side.recv.has_received_close_notify {
