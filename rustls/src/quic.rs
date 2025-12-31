@@ -24,7 +24,7 @@ mod connection {
 
     use super::{DirectionalKeys, KeyChange, Version};
     use crate::client::{ClientConfig, ClientConnectionData};
-    use crate::common_state::{CommonState, ConnectionOutputs, DEFAULT_BUFFER_LIMIT, Protocol};
+    use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
@@ -36,7 +36,6 @@ mod connection {
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
-    use crate::vecbuf::ChunkVecBuffer;
 
     /// A QUIC client or server connection.
     #[expect(clippy::exhaustive_enums)]
@@ -370,7 +369,6 @@ mod connection {
     pub struct ConnectionCommon<Side: SideData> {
         core: ConnectionCore<Side>,
         deframer_buffer: DeframerVecBuffer,
-        sendable_plaintext: ChunkVecBuffer,
         version: Version,
     }
 
@@ -379,7 +377,6 @@ mod connection {
             Self {
                 core,
                 deframer_buffer: DeframerVecBuffer::default(),
-                sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
                 version,
             }
         }
@@ -449,7 +446,7 @@ mod connection {
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
             self.core
-                .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)?;
+                .process_new_packets(&mut self.deframer_buffer)?;
 
             Ok(())
         }
