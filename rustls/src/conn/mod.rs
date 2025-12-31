@@ -9,7 +9,9 @@ use kernel::KernelConnection;
 
 #[cfg(feature = "std")]
 use crate::common_state::Input;
-use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, Output, State};
+use crate::common_state::{
+    AppDataOutput, CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, NullOutput, Output, State,
+};
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
@@ -968,8 +970,10 @@ impl<Side: SideData> ConnectionCore<Side> {
             let mut cx = Context {
                 common: &mut self.common_state,
                 data: &mut self.side,
-                plaintext_locator: &locator,
-                received_plaintext: &mut plaintext,
+                app_data_output: &mut AppDataOutput {
+                    plaintext_locator: &locator,
+                    received_plaintext: &mut plaintext,
+                },
             };
             match cx.process_main_protocol(msg, self.hs_deframer.aligned(), state) {
                 Ok(new) => state = new,
@@ -1268,8 +1272,7 @@ impl<Side: SideData> ConnectionCore<Side> {
             Ok(st) => st.send_key_update_request(&mut Context {
                 common: &mut self.common_state,
                 data: &mut self.side,
-                plaintext_locator: &Locator::new(&[]),
-                received_plaintext: &mut None,
+                app_data_output: &mut NullOutput,
             }),
             Err(e) => Err(e.clone()),
         }
