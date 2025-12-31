@@ -119,6 +119,37 @@ impl ConnectionOutputs {
     }
 }
 
+impl Output for ConnectionOutputs {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::ApplicationProtocol(protocol) => {
+                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
+            }
+            Event::CipherSuite(suite) => self.suite = Some(suite),
+            Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
+            Event::Exporter(exporter) => self.exporter = Some(exporter),
+            Event::HandshakeKind(hk) => {
+                assert!(self.handshake_kind.is_none());
+                self.handshake_kind = Some(hk);
+            }
+            Event::KeyExchangeGroup(kxg) => {
+                assert!(self.negotiated_kx_group.is_none());
+                self.negotiated_kx_group = Some(kxg);
+            }
+            Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
+            Event::ProtocolVersion(ver) => {
+                self.negotiated_version = Some(ver);
+            }
+            Event::ReceivedTicket => {
+                self.tls13_tickets_received = self
+                    .tls13_tickets_received
+                    .saturating_add(1)
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// The data path from us to the peer.
 pub(crate) struct SendPath {
     pub(crate) encrypt_state: EncryptionState,
@@ -472,6 +503,26 @@ impl SendPath {
     }
 }
 
+impl Output for SendPath {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::EncryptMessage(m) => self.send_msg(m, true),
+            Event::MaybeKeyUpdateRequest(ks) => {
+                if self.maybe_enqueue_key_update_notification() {
+                    ks.update_encrypter_for_key_update(self);
+                }
+            }
+            Event::MessageEncrypter { encrypter, limit } => self
+                .encrypt_state
+                .set_message_encrypter(encrypter, limit),
+            Event::PlainMessage(m) => self.send_msg(m, false),
+            Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
+            Event::StartOutgoingTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
+            _ => unreachable!(),
+        }
+    }
+}
+
 pub(crate) struct ReceivePath {
     side: Side,
     pub(crate) decrypt_state: DecryptionState,
@@ -584,6 +635,26 @@ impl ReceivePath {
     }
 }
 
+impl Output for ReceivePath {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::MessageDecrypter { decrypter, proof } => self
+                .decrypt_state
+                .set_message_decrypter(decrypter, &proof),
+            Event::MessageDecrypterWithTrialDecryption {
+                decrypter,
+                max_length,
+                proof,
+            } => self
+                .decrypt_state
+                .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
+            Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
+            Event::StartTraffic => self.may_receive_application_data = true,
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) outputs: ConnectionOutputs,
@@ -631,11 +702,6 @@ impl CommonState {
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn send_close_notify(&mut self) {
         self.send.send_close_notify()
-    }
-
-    fn start_traffic(&mut self) {
-        self.recv.may_receive_application_data = true;
-        self.send.start_outgoing_traffic();
     }
 
     /// Returns true if the caller should call [`Connection::read_tls`] as soon
@@ -835,86 +901,70 @@ impl<Data: Output> Output for Context<'_, Data> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::ApplicationData(_) => self.app_data_output.emit(ev),
-            Event::ApplicationProtocol(protocol) => {
-                self.common.alpn_protocol =
-                    Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
-            }
-            Event::CipherSuite(suite) => self.common.suite = Some(suite),
-            Event::EarlyData(_) | Event::EarlyApplicationData(_) => self.data.emit(ev),
-            Event::EarlyExporter(exporter) => self.common.early_exporter = Some(exporter),
-            Event::EchStatus(_) => self.data.emit(ev),
-            Event::EncryptMessage(m) => match self.common.protocol {
-                Protocol::Tcp => self.common.send.send_msg(m, true),
-                Protocol::Quic(_) => self.common.quic.send_msg(m, true),
+
+            // side-specific events
+            Event::EarlyData(_)
+            | Event::EarlyApplicationData(_)
+            | Event::EchStatus(_)
+            | Event::ReceivedServerName(_)
+            | Event::ResumptionData(_) => self.data.emit(ev),
+
+            // message dispatch
+            Event::EncryptMessage(_) => match self.common.protocol {
+                Protocol::Tcp => self.common.send.emit(ev),
+                Protocol::Quic(_) => self.common.quic.emit(ev),
             },
-            Event::Exporter(exporter) => self.common.exporter = Some(exporter),
-            Event::HandshakeKind(hk) => {
-                assert!(self.common.handshake_kind.is_none());
-                self.common.handshake_kind = Some(hk);
-            }
-            Event::KeyExchangeGroup(kxg) => {
-                assert!(
-                    self.common
-                        .negotiated_kx_group
-                        .is_none()
-                );
-                self.common.negotiated_kx_group = Some(kxg);
-            }
-            Event::MaybeKeyUpdateRequest(ks) => {
-                if self
-                    .common
-                    .send
-                    .maybe_enqueue_key_update_notification()
-                {
-                    ks.update_encrypter_for_key_update(self);
-                }
-            }
-            Event::MessageDecrypter { decrypter, proof } => self
-                .common
-                .recv
-                .decrypt_state
-                .set_message_decrypter(decrypter, &proof),
-            Event::MessageDecrypterWithTrialDecryption {
-                decrypter,
-                max_length,
-                proof,
-            } => self
-                .common
-                .recv
-                .decrypt_state
-                .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
-            Event::MessageEncrypter { encrypter, limit } => self
-                .common
-                .send
-                .encrypt_state
-                .set_message_encrypter(encrypter, limit),
-            Event::QuicEarlySecret(sec) => self.common.quic.early_secret = sec,
-            Event::QuicHandshakeSecrets(sec) => self.common.quic.hs_secrets = Some(sec),
-            Event::QuicTrafficSecrets(sec) => self.common.quic.traffic_secrets = Some(sec),
-            Event::QuicTransportParameters(params) => self.common.quic.params = Some(params),
-            Event::PeerIdentity(identity) => self.common.peer_identity = Some(identity),
-            Event::PlainMessage(m) => match self.common.protocol {
-                Protocol::Tcp => self.common.send.send_msg(m, false),
-                Protocol::Quic(_) => self.common.quic.send_msg(m, false),
+            Event::PlainMessage(_) => match self.common.protocol {
+                Protocol::Tcp => self.common.send.emit(ev),
+                Protocol::Quic(_) => self.common.quic.emit(ev),
             },
+
+            // send-specific events
+            Event::MaybeKeyUpdateRequest(_)
+            | Event::MessageEncrypter { .. }
+            | Event::StartOutgoingTraffic => self.common.send.emit(ev),
+
+            // recv-specific events
+            Event::MessageDecrypter { .. } | Event::MessageDecrypterWithTrialDecryption { .. } => {
+                self.common.recv.emit(ev)
+            }
+
+            // presentation API events
+            Event::ApplicationProtocol(_)
+            | Event::CipherSuite(_)
+            | Event::EarlyExporter(_)
+            | Event::Exporter(_)
+            | Event::HandshakeKind(_)
+            | Event::KeyExchangeGroup(_)
+            | Event::PeerIdentity(_)
+            | Event::ReceivedTicket => self.common.outputs.emit(ev),
+
+            // quic-specific events
+            Event::QuicEarlySecret(_)
+            | Event::QuicHandshakeSecrets(_)
+            | Event::QuicTrafficSecrets(_)
+            | Event::QuicTransportParameters(_) => self.common.quic.emit(ev),
+
+            // broadcast events
             Event::ProtocolVersion(ver) => {
-                self.common.outputs.negotiated_version = Some(ver);
-                self.common.send.negotiated_version = Some(ver);
-                self.common.recv.negotiated_version = Some(ver);
+                self.common
+                    .outputs
+                    .emit(Event::ProtocolVersion(ver));
+                self.common
+                    .recv
+                    .emit(Event::ProtocolVersion(ver));
+                self.common
+                    .send
+                    .emit(Event::ProtocolVersion(ver));
             }
-            Event::ReceivedServerName(_) => self.data.emit(ev),
-            Event::ReceivedTicket => {
-                self.common.tls13_tickets_received = self
-                    .common
-                    .tls13_tickets_received
-                    .saturating_add(1)
+            Event::StartTraffic => {
+                self.common
+                    .recv
+                    .emit(Event::StartTraffic);
+                self.common
+                    .send
+                    .emit(Event::StartTraffic);
             }
-            Event::ResumptionData(_) => self.data.emit(ev),
-            Event::StartOutgoingTraffic => self
-                .common
-                .send
-                .start_outgoing_traffic(),
-            Event::StartTraffic => self.common.start_traffic(),
         }
     }
 }
