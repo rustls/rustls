@@ -6,11 +6,14 @@ information on how to run them.
 ## Throughput and memory usage benchmarks
 
 These benchmarks measure the throughput and memory footprint you get from rustls. They have been
-used in the past to compare performance against OpenSSL (see the results of [December
-2023](https://github.com/aochagavia/rustls-bench-results) and [July
-2019](https://jbp.io/2019/07/01/rustls-vs-openssl-performance.html)). You can also use them to
-evaluate rustls' performance on different hardware (e.g. a bare-metal server with support for
-AVX-512 instructions vs. a cloud VM with a consumer-grade CPU).
+used in the past to compare performance against OpenSSL:
+
+- See [the most up-to-date reports](https://rustls.dev/perf/).
+- See the [historical results from December 2023](https://github.com/aochagavia/rustls-bench-results).
+- See the [historical results from July 2019](https://jbp.io/2019/07/01/rustls-vs-openssl-performance.html).
+
+You can also use them to evaluate rustls' performance on different hardware (e.g. a bare-metal server
+with support for AVX-512 instructions vs. a cloud VM with a consumer-grade CPU).
 
 The measured aspects are:
 
