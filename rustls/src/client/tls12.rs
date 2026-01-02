@@ -607,7 +607,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
                 ..
             }
         ) {
-            Box::new(ExpectCertificateRequest {
+            ExpectCertificateRequest {
                 config: self.config,
                 session_id: self.session_id,
                 session_key: self.session_key,
@@ -619,8 +619,8 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
                 server_kx: self.server_kx,
                 must_issue_new_ticket: self.must_issue_new_ticket,
                 negotiated_client_type: self.negotiated_client_type,
-            })
-            .handle(cx, input)
+            }
+            .handle_input(input)
         } else {
             self.transcript.abandon_client_auth();
 
@@ -656,12 +656,8 @@ struct ExpectCertificateRequest {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateRequest {
-    fn handle(
-        mut self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        Input { message, .. }: Input<'_>,
-    ) -> hs::NextStateOrError {
+impl ExpectCertificateRequest {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
         let certreq = require_handshake_msg!(
             message,
             HandshakeType::CertificateRequest,
@@ -701,6 +697,16 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             client_auth: Some(client_auth),
             must_issue_new_ticket: self.must_issue_new_ticket,
         }))
+    }
+}
+
+impl State<ClientConnectionData> for ExpectCertificateRequest {
+    fn handle(
+        self: Box<Self>,
+        _cx: &mut ClientContext<'_>,
+        input: Input<'_>,
+    ) -> hs::NextStateOrError {
+        self.handle_input(input)
     }
 }
 
