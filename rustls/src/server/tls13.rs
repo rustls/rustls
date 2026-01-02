@@ -360,7 +360,6 @@ mod client_hello {
                         suite,
                         key_schedule: key_schedule_traffic,
                         send_tickets: st.send_tickets,
-                        message_already_in_transcript: false,
                         expected_certificate_type: cert_types.client,
                     }))
                 } else {
@@ -835,16 +834,15 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
-            } => Box::new(ExpectCertificate {
+            } => ExpectCertificate {
                 config: self.config,
                 transcript: self.transcript,
                 suite: self.suite,
                 key_schedule: self.key_schedule,
                 send_tickets: self.send_tickets,
-                message_already_in_transcript: false,
                 expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, input),
+            }
+            .handle_input(input),
 
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
@@ -883,7 +881,7 @@ struct ExpectCompressedCertificate {
 impl State<ServerConnectionData> for ExpectCompressedCertificate {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ServerContext<'_>,
+        _cx: &mut ServerContext<'_>,
         input: Input<'_>,
     ) -> hs::NextStateOrError {
         self.transcript
@@ -926,29 +924,15 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             compressed_cert.uncompressed_len,
         );
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::CertificateTls13(cert_payload.into_owned()),
-            )),
-        };
-
-        Box::new(ExpectCertificate {
+        ExpectCertificate {
             config: self.config,
             transcript: self.transcript,
             suite: self.suite,
             key_schedule: self.key_schedule,
             send_tickets: self.send_tickets,
-            message_already_in_transcript: true,
             expected_certificate_type: self.expected_certificate_type,
-        })
-        .handle(
-            cx,
-            Input {
-                message: m,
-                aligned_handshake: input.aligned_handshake,
-            },
-        )
+        }
+        .handle_certificate(cert_payload)
     }
 }
 
@@ -958,25 +942,20 @@ struct ExpectCertificate {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     send_tickets: usize,
-    message_already_in_transcript: bool,
     expected_certificate_type: CertificateType,
 }
 
-impl State<ServerConnectionData> for ExpectCertificate {
-    fn handle(
-        mut self: Box<Self>,
-        _cx: &mut ServerContext<'_>,
-        Input { message, .. }: Input<'_>,
-    ) -> hs::NextStateOrError {
-        if !self.message_already_in_transcript {
-            self.transcript.add_message(&message);
-        }
-        let certp = require_handshake_msg_move!(
+impl ExpectCertificate {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+        self.transcript.add_message(&message);
+        self.handle_certificate(require_handshake_msg_move!(
             message,
             HandshakeType::Certificate,
             HandshakePayload::CertificateTls13
-        )?;
+        )?)
+    }
 
+    fn handle_certificate(mut self, certp: CertificatePayloadTls13<'_>) -> hs::NextStateOrError {
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
         if certp
@@ -1028,6 +1007,16 @@ impl State<ServerConnectionData> for ExpectCertificate {
             peer_identity: peer_identity.into_owned(),
             send_tickets: self.send_tickets,
         }))
+    }
+}
+
+impl State<ServerConnectionData> for ExpectCertificate {
+    fn handle(
+        self: Box<Self>,
+        _cx: &mut ServerContext<'_>,
+        input: Input<'_>,
+    ) -> hs::NextStateOrError {
+        self.handle_input(input)
     }
 }
 
