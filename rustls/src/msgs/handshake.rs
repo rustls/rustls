@@ -1731,7 +1731,8 @@ impl<'a> CertificateEntry<'a> {
         }
     }
 
-    pub(crate) fn into_owned(self) -> CertificateEntry<'static> {
+    #[cfg(feature = "std")]
+    fn into_owned(self) -> CertificateEntry<'static> {
         CertificateEntry {
             cert: self.cert.into_owned(),
             extensions: self.extensions.into_owned(),
@@ -1784,7 +1785,8 @@ impl<'a> CertificatePayloadTls13<'a> {
         }
     }
 
-    pub(crate) fn into_owned(self) -> CertificatePayloadTls13<'static> {
+    #[cfg(feature = "std")]
+    fn into_owned(self) -> CertificatePayloadTls13<'static> {
         CertificatePayloadTls13 {
             context: self.context,
             entries: self
