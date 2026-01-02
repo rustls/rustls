@@ -614,7 +614,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
 impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
-        cx: &mut ClientContext<'_>,
+        _cx: &mut ClientContext<'_>,
         input: Input<'_>,
     ) -> hs::NextStateOrError {
         match input.message.payload {
@@ -653,7 +653,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
                 ..
-            } => Box::new(ExpectCertificateRequest {
+            } => ExpectCertificateRequest {
                 config: self.config,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -664,8 +664,9 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
-            })
-            .handle(cx, input),
+            }
+            .handle_input(input),
+
             payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::Handshake],
@@ -757,7 +758,7 @@ struct ExpectCertificateOrCertReq {
 impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
-        cx: &mut ClientContext<'_>,
+        _cx: &mut ClientContext<'_>,
         input: Input<'_>,
     ) -> hs::NextStateOrError {
         match input.message.payload {
@@ -780,7 +781,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
                 ..
-            } => Box::new(ExpectCertificateRequest {
+            } => ExpectCertificateRequest {
                 config: self.config,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -791,8 +792,9 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
-            })
-            .handle(cx, input),
+            }
+            .handle_input(input),
+
             payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::Handshake],
@@ -821,12 +823,8 @@ struct ExpectCertificateRequest {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateRequest {
-    fn handle(
-        mut self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        Input { message, .. }: Input<'_>,
-    ) -> hs::NextStateOrError {
+impl ExpectCertificateRequest {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
         let certreq = &require_handshake_msg!(
             message,
             HandshakeType::CertificateRequest,
@@ -908,6 +906,16 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 expected_certificate_type: self.expected_certificate_type,
             })
         })
+    }
+}
+
+impl State<ClientConnectionData> for ExpectCertificateRequest {
+    fn handle(
+        self: Box<Self>,
+        _cx: &mut ClientContext<'_>,
+        input: Input<'_>,
+    ) -> hs::NextStateOrError {
+        self.handle_input(input)
     }
 }
 
