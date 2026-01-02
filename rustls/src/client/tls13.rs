@@ -621,7 +621,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
-            } => Box::new(ExpectCertificate {
+            } => ExpectCertificate {
                 config: self.config,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -631,8 +631,9 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 client_auth: None,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, input),
+            }
+            .handle_input(input),
+
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
                 ..
@@ -699,7 +700,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
-            } => Box::new(ExpectCertificate {
+            } => ExpectCertificate {
                 config: self.config,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -709,8 +710,9 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 client_auth: self.client_auth,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, input),
+            }
+            .handle_input(input),
+
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
                 ..
@@ -760,7 +762,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
-            } => Box::new(ExpectCertificate {
+            } => ExpectCertificate {
                 config: self.config,
                 session_key: self.session_key,
                 randoms: self.randoms,
@@ -770,8 +772,9 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 client_auth: None,
                 ech_retry_configs: self.ech_retry_configs,
                 expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, input),
+            }
+            .handle_input(input),
+
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(..)),
                 ..
@@ -991,6 +994,16 @@ struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+        self.transcript.add_message(&message);
+
+        self.handle_cert_payload(require_handshake_msg_move!(
+            message,
+            HandshakeType::Certificate,
+            HandshakePayload::CertificateTls13
+        )?)
+    }
+
     fn handle_cert_payload(self, cert_chain: CertificatePayloadTls13<'_>) -> hs::NextStateOrError {
         // This is only non-empty for client auth.
         if !cert_chain.context.0.is_empty() {
@@ -1022,17 +1035,11 @@ impl ExpectCertificate {
 
 impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(
-        mut self: Box<Self>,
+        self: Box<Self>,
         _cx: &mut ClientContext<'_>,
-        Input { message, .. }: Input<'_>,
+        input: Input<'_>,
     ) -> hs::NextStateOrError {
-        self.transcript.add_message(&message);
-
-        self.handle_cert_payload(require_handshake_msg_move!(
-            message,
-            HandshakeType::Certificate,
-            HandshakePayload::CertificateTls13
-        )?)
+        self.handle_input(input)
     }
 }
 
