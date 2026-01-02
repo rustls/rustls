@@ -166,7 +166,7 @@ impl TestPki {
             .unwrap();
 
         // Create a root cert store that includes the CA certificate.
-        let mut roots = RootCertStore::empty();
+        let mut roots = RootCertStore::with_capacity(1);
         roots
             .add(ca_cert.der().clone())
             .unwrap();

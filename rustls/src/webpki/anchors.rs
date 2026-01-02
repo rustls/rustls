@@ -24,6 +24,13 @@ impl RootCertStore {
         Self { roots: Vec::new() }
     }
 
+    /// Make a new, empty `RootCertStore` with at least the specified capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            roots: Vec::with_capacity(capacity),
+        }
+    }
+
     /// Parse the given DER-encoded certificates and add all that can be parsed
     /// in a best-effort fashion.
     ///
@@ -99,6 +106,11 @@ impl RootCertStore {
     /// Say how many certificates are in the container.
     pub fn len(&self) -> usize {
         self.roots.len()
+    }
+
+    /// Returns the total number of certificates the store can hold without reallocating.
+    pub fn capacity(&self) -> usize {
+        self.roots.capacity()
     }
 }
 
