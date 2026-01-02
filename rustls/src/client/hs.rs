@@ -181,13 +181,13 @@ impl State<ClientConnectionData> for ExpectServerHello {
 }
 
 struct ExpectServerHelloOrHelloRetryRequest {
-    next: ExpectServerHello,
+    next: Box<ExpectServerHello>,
     extra_exts: ClientExtensionsInput<'static>,
 }
 
 impl ExpectServerHelloOrHelloRetryRequest {
     fn into_expect_server_hello(self) -> NextState {
-        Box::new(self.next)
+        self.next
     }
 
     fn handle_hello_retry_request(
@@ -816,7 +816,7 @@ fn emit_client_hello_for_retry(
             schedule
         });
 
-    let mut next = ExpectServerHello {
+    let mut next = Box::new(ExpectServerHello {
         input,
         transcript_buffer,
         early_data_key_schedule,
@@ -824,7 +824,7 @@ fn emit_client_hello_for_retry(
         suite,
         ech_state,
         done_retry: false,
-    };
+    });
 
     Ok(if supported_versions.tls13 && retryreq.is_none() {
         Box::new(ExpectServerHelloOrHelloRetryRequest {
@@ -833,7 +833,7 @@ fn emit_client_hello_for_retry(
         })
     } else {
         next.done_retry = retryreq.is_some();
-        Box::new(next)
+        next
     })
 }
 
