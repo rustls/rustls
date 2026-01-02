@@ -931,16 +931,6 @@ impl ExpectCompressedCertificate {
     }
 }
 
-impl State<ServerConnectionData> for ExpectCompressedCertificate {
-    fn handle(
-        self: Box<Self>,
-        _cx: &mut ServerContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
-        self.handle_input(input)
-    }
-}
-
 struct ExpectCertificate {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
