@@ -827,7 +827,7 @@ struct ExpectCertificateOrCompressedCertificate {
 impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
     fn handle(
         self: Box<Self>,
-        cx: &mut ServerContext<'_>,
+        _cx: &mut ServerContext<'_>,
         input: Input<'_>,
     ) -> hs::NextStateOrError {
         match input.message.payload {
@@ -847,15 +847,15 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
                 ..
-            } => Box::new(ExpectCompressedCertificate {
+            } => ExpectCompressedCertificate {
                 config: self.config,
                 transcript: self.transcript,
                 suite: self.suite,
                 key_schedule: self.key_schedule,
                 send_tickets: self.send_tickets,
                 expected_certificate_type: self.expected_certificate_type,
-            })
-            .handle(cx, input),
+            }
+            .handle_input(input),
 
             payload => Err(inappropriate_handshake_message(
                 &payload,
@@ -878,16 +878,11 @@ struct ExpectCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ServerConnectionData> for ExpectCompressedCertificate {
-    fn handle(
-        mut self: Box<Self>,
-        _cx: &mut ServerContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
-        self.transcript
-            .add_message(&input.message);
+impl ExpectCompressedCertificate {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+        self.transcript.add_message(&message);
         let compressed_cert = require_handshake_msg_move!(
-            input.message,
+            message,
             HandshakeType::CompressedCertificate,
             HandshakePayload::CompressedCertificate
         )?;
@@ -933,6 +928,16 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             expected_certificate_type: self.expected_certificate_type,
         }
         .handle_certificate(cert_payload)
+    }
+}
+
+impl State<ServerConnectionData> for ExpectCompressedCertificate {
+    fn handle(
+        self: Box<Self>,
+        _cx: &mut ServerContext<'_>,
+        input: Input<'_>,
+    ) -> hs::NextStateOrError {
+        self.handle_input(input)
     }
 }
 
