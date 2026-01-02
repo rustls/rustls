@@ -292,7 +292,7 @@ struct ExpectCertificateStatusOrServerKx {
 impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
     fn handle(
         self: Box<Self>,
-        cx: &mut ClientContext<'_>,
+        _cx: &mut ClientContext<'_>,
         input: Input<'_>,
     ) -> hs::NextStateOrError {
         match input.message.payload {
@@ -316,7 +316,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateStatus(..)),
                 ..
-            } => Box::new(ExpectCertificateStatus {
+            } => ExpectCertificateStatus {
                 config: self.config,
                 session_id: self.session_id,
                 session_key: self.session_key,
@@ -327,8 +327,9 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 server_cert_chain: self.server_cert_chain,
                 must_issue_new_ticket: self.must_issue_new_ticket,
                 negotiated_client_type: self.negotiated_client_type,
-            })
-            .handle(cx, input),
+            }
+            .handle_input(input),
+
             payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::Handshake],
@@ -354,12 +355,8 @@ struct ExpectCertificateStatus {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateStatus {
-    fn handle(
-        mut self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        Input { message, .. }: Input<'_>,
-    ) -> hs::NextStateOrError {
+impl ExpectCertificateStatus {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
         self.transcript.add_message(&message);
         let server_cert_ocsp_response = require_handshake_msg_move!(
             message,
@@ -387,6 +384,16 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
             must_issue_new_ticket: self.must_issue_new_ticket,
             negotiated_client_type: self.negotiated_client_type,
         }))
+    }
+}
+
+impl State<ClientConnectionData> for ExpectCertificateStatus {
+    fn handle(
+        self: Box<Self>,
+        _cx: &mut ClientContext<'_>,
+        input: Input<'_>,
+    ) -> hs::NextStateOrError {
+        self.handle_input(input)
     }
 }
 
