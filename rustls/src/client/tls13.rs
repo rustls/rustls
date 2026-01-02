@@ -909,16 +909,6 @@ impl ExpectCertificateRequest {
     }
 }
 
-impl State<ClientConnectionData> for ExpectCertificateRequest {
-    fn handle(
-        self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
-        self.handle_input(input)
-    }
-}
-
 struct ExpectCompressedCertificate {
     config: Arc<ClientConfig>,
     session_key: ClientSessionKey<'static>,
@@ -984,16 +974,6 @@ impl ExpectCompressedCertificate {
             expected_certificate_type: self.expected_certificate_type,
         }
         .handle_cert_payload(cert_payload)
-    }
-}
-
-impl State<ClientConnectionData> for ExpectCompressedCertificate {
-    fn handle(
-        self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
-        self.handle_input(input)
     }
 }
 

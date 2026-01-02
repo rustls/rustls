@@ -387,16 +387,6 @@ impl ExpectCertificateStatus {
     }
 }
 
-impl State<ClientConnectionData> for ExpectCertificateStatus {
-    fn handle(
-        self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
-        self.handle_input(input)
-    }
-}
-
 struct ExpectServerKx {
     config: Arc<ClientConfig>,
     session_id: SessionId,
@@ -697,16 +687,6 @@ impl ExpectCertificateRequest {
             client_auth: Some(client_auth),
             must_issue_new_ticket: self.must_issue_new_ticket,
         }))
-    }
-}
-
-impl State<ClientConnectionData> for ExpectCertificateRequest {
-    fn handle(
-        self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
-        self.handle_input(input)
     }
 }
 
