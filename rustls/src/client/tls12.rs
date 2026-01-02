@@ -624,7 +624,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
         } else {
             self.transcript.abandon_client_auth();
 
-            Box::new(ExpectServerDone {
+            ExpectServerDone {
                 config: self.config,
                 session_id: self.session_id,
                 session_key: self.session_key,
@@ -636,8 +636,8 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
                 server_kx: self.server_kx,
                 client_auth: None,
                 must_issue_new_ticket: self.must_issue_new_ticket,
-            })
-            .handle(cx, input)
+            }
+            .handle_input(cx, input)
         }
     }
 }
@@ -724,9 +724,9 @@ struct ExpectServerDone {
     must_issue_new_ticket: bool,
 }
 
-impl State<ClientConnectionData> for ExpectServerDone {
-    fn handle(
-        self: Box<Self>,
+impl ExpectServerDone {
+    fn handle_input(
+        mut self,
         cx: &mut ClientContext<'_>,
         input: Input<'_>,
     ) -> hs::NextStateOrError {
@@ -744,16 +744,15 @@ impl State<ClientConnectionData> for ExpectServerDone {
             }
         }
 
-        let mut st = *self;
-        st.transcript
+        self.transcript
             .add_message(&input.message);
 
         let proof = input.check_aligned_handshake()?;
 
-        trace!("Server cert is {:?}", st.server_cert.cert_chain);
-        debug!("Server DNS name is {:?}", st.session_key.server_name);
+        trace!("Server cert is {:?}", self.server_cert.cert_chain);
+        debug!("Server DNS name is {:?}", self.session_key.server_name);
 
-        let suite = st.suite;
+        let suite = self.suite;
 
         // 1. Verify the cert chain.
         // 2. Verify that the top certificate signed their kx.
@@ -768,17 +767,17 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // 5. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
-        let identity = Identity::from_peer(st.server_cert.cert_chain.0, CertificateType::X509)?
+        let identity = Identity::from_peer(self.server_cert.cert_chain.0, CertificateType::X509)?
             .ok_or(PeerMisbehaved::NoCertificatesPresented)?;
 
-        let cert_verified = st
+        let cert_verified = self
             .config
             .verifier()
             .verify_identity(&ServerIdentity {
                 identity: &identity,
-                server_name: &st.session_key.server_name,
-                ocsp_response: &st.server_cert.ocsp_response,
-                now: st.config.current_time()?,
+                server_name: &self.session_key.server_name,
+                ocsp_response: &self.server_cert.ocsp_response,
+                now: self.config.current_time()?,
             })?;
 
         // 2.
@@ -786,12 +785,12 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
         let sig_verified = {
             let mut message = Vec::new();
-            message.extend_from_slice(&st.randoms.client);
-            message.extend_from_slice(&st.randoms.server);
-            message.extend_from_slice(&st.server_kx.kx_params);
+            message.extend_from_slice(&self.randoms.client);
+            message.extend_from_slice(&self.randoms.server);
+            message.extend_from_slice(&self.server_kx.kx_params);
 
             // Check the signature is compatible with the ciphersuite.
-            let signature = &st.server_kx.kx_sig;
+            let signature = &self.server_kx.kx_sig;
             if !suite.usable_for_signature_scheme(signature.scheme) {
                 warn!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
@@ -801,7 +800,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 return Err(PeerMisbehaved::SignedKxWithWrongAlgorithm.into());
             }
 
-            st.config
+            self.config
                 .verifier()
                 .verify_tls12_signature(&SignatureVerificationInput {
                     message: &message,
@@ -811,30 +810,30 @@ impl State<ClientConnectionData> for ExpectServerDone {
         };
 
         // 3.
-        if let Some(client_auth) = &st.client_auth {
+        if let Some(client_auth) = &self.client_auth {
             let certs = match client_auth {
                 ClientAuthDetails::Empty { .. } => CertificateChain::default(),
                 ClientAuthDetails::Verify { credentials, .. } => {
                     CertificateChain::from_signer(credentials)
                 }
             };
-            emit_certificate(&mut st.transcript, certs, cx.common);
+            emit_certificate(&mut self.transcript, certs, cx.common);
         }
 
         // 4a.
         let kx_params = tls12::decode_kx_params::<ServerKeyExchangeParams>(
-            st.suite.kx,
-            &st.server_kx.kx_params,
+            self.suite.kx,
+            &self.server_kx.kx_params,
         )?;
         let maybe_skxg = match &kx_params {
-            ServerKeyExchangeParams::Ecdh(ecdh) => st
+            ServerKeyExchangeParams::Ecdh(ecdh) => self
                 .config
                 .provider()
                 .find_kx_group(ecdh.curve_params.named_group, ProtocolVersion::TLSv1_2),
             ServerKeyExchangeParams::Dh(dh) => {
                 let ffdhe_group = dh.as_ffdhe_group();
 
-                st.config
+                self.config
                     .provider()
                     .kx_groups
                     .iter()
@@ -848,15 +847,15 @@ impl State<ClientConnectionData> for ExpectServerDone {
         let kx = skxg.start()?.into_single();
 
         // 4b.
-        let mut transcript = st.transcript;
-        emit_client_kx(&mut transcript, st.suite.kx, cx.common, kx.pub_key());
+        let mut transcript = self.transcript;
+        emit_client_kx(&mut transcript, self.suite.kx, cx.common, kx.pub_key());
         // Note: EMS handshake hash only runs up to ClientKeyExchange.
-        let ems_seed = st
+        let ems_seed = self
             .using_ems
             .then(|| transcript.current_hash());
 
         // 4c.
-        if let Some(ClientAuthDetails::Verify { credentials, .. }) = st.client_auth {
+        if let Some(ClientAuthDetails::Verify { credentials, .. }) = self.client_auth {
             emit_certverify(&mut transcript, credentials.signer, cx.common)?;
         }
 
@@ -867,7 +866,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             kx,
             kx_params.pub_key(),
             ems_seed,
-            st.randoms,
+            self.randoms,
             suite,
         )?;
         cx.common.negotiated_kx_group = Some(skxg);
@@ -876,7 +875,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         emit_ccs(cx.common);
 
         // 4f. Now commit secrets.
-        st.config.key_log.log(
+        self.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
             secrets.master_secret(),
@@ -896,15 +895,15 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // 5.
         emit_finished(&secrets, &mut transcript, cx.common, &proof);
 
-        if st.must_issue_new_ticket {
+        if self.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
-                config: st.config,
+                config: self.config,
                 secrets,
                 peer_identity: identity,
                 resuming: None,
-                session_id: st.session_id,
-                session_key: st.session_key,
-                using_ems: st.using_ems,
+                session_id: self.session_id,
+                session_key: self.session_key,
+                using_ems: self.using_ems,
                 pending_decrypter: dec,
                 transcript,
                 cert_verified,
@@ -912,13 +911,13 @@ impl State<ClientConnectionData> for ExpectServerDone {
             }))
         } else {
             Ok(Box::new(ExpectCcs {
-                config: st.config,
+                config: self.config,
                 secrets,
                 peer_identity: identity,
                 resuming: None,
-                session_id: st.session_id,
-                session_key: st.session_key,
-                using_ems: st.using_ems,
+                session_id: self.session_id,
+                session_key: self.session_key,
+                using_ems: self.using_ems,
                 pending_decrypter: dec,
                 transcript,
                 ticket: None,
@@ -926,6 +925,16 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 sig_verified,
             }))
         }
+    }
+}
+
+impl State<ClientConnectionData> for ExpectServerDone {
+    fn handle(
+        self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        input: Input<'_>,
+    ) -> hs::NextStateOrError {
+        self.handle_input(cx, input)
     }
 }
 
