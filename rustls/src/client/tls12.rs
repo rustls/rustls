@@ -299,7 +299,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(..)),
                 ..
-            } => Box::new(ExpectServerKx {
+            } => ExpectServerKx {
                 config: self.config,
                 session_id: self.session_id,
                 session_key: self.session_key,
@@ -310,8 +310,9 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 server_cert: ServerCertDetails::new(self.server_cert_chain, vec![]),
                 must_issue_new_ticket: self.must_issue_new_ticket,
                 negotiated_client_type: self.negotiated_client_type,
-            })
-            .handle(cx, input),
+            }
+            .handle_input(input),
+
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateStatus(..)),
                 ..
@@ -402,12 +403,8 @@ struct ExpectServerKx {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientConnectionData> for ExpectServerKx {
-    fn handle(
-        mut self: Box<Self>,
-        _cx: &mut ClientContext<'_>,
-        Input { message, .. }: Input<'_>,
-    ) -> hs::NextStateOrError {
+impl ExpectServerKx {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
         let opaque_kx = require_handshake_msg!(
             message,
             HandshakeType::ServerKeyExchange,
@@ -446,6 +443,16 @@ impl State<ClientConnectionData> for ExpectServerKx {
             must_issue_new_ticket: self.must_issue_new_ticket,
             negotiated_client_type: self.negotiated_client_type,
         }))
+    }
+}
+
+impl State<ClientConnectionData> for ExpectServerKx {
+    fn handle(
+        self: Box<Self>,
+        _cx: &mut ClientContext<'_>,
+        input: Input<'_>,
+    ) -> hs::NextStateOrError {
+        self.handle_input(input)
     }
 }
 
