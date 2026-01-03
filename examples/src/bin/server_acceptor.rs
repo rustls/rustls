@@ -203,10 +203,12 @@ impl TestPki {
         crl_file.read_to_end(&mut crl).unwrap();
 
         // Construct a fresh verifier using the test PKI roots, and the updated CRL.
-        let verifier = WebPkiClientVerifier::builder(self.roots.clone(), &self.provider)
-            .with_crls([CertificateRevocationListDer::from(crl)])
-            .build()
-            .unwrap();
+        let verifier = Arc::new(
+            WebPkiClientVerifier::builder(self.roots.clone(), &self.provider)
+                .with_crls([CertificateRevocationListDer::from(crl)])
+                .build()
+                .unwrap(),
+        );
 
         // Build a server config using the fresh verifier. If necessary, this could be customized
         // based on the ClientHello (e.g. selecting a different certificate, or customizing

@@ -574,7 +574,7 @@ pub fn make_server_config_with_client_verifier(
     provider: &CryptoProvider,
 ) -> ServerConfig {
     ServerConfig::builder(provider.clone().into())
-        .with_client_cert_verifier(verifier_builder.build().unwrap())
+        .with_client_cert_verifier(Arc::new(verifier_builder.build().unwrap()))
         .with_single_cert(kt.identity(), kt.key())
         .unwrap()
 }
@@ -672,7 +672,7 @@ pub fn make_client_config_with_verifier(
 ) -> ClientConfig {
     ClientConfig::builder(provider.clone().into())
         .dangerous()
-        .with_custom_certificate_verifier(verifier_builder.build().unwrap())
+        .with_custom_certificate_verifier(Arc::new(verifier_builder.build().unwrap()))
         .with_no_client_auth()
         .unwrap()
 }
@@ -1262,9 +1262,11 @@ impl MockClientVerifier {
         provider: &CryptoProvider,
     ) -> Self {
         Self {
-            parent: webpki_client_verifier_builder(kt.client_root_store(), provider)
-                .build()
-                .unwrap(),
+            parent: Arc::new(
+                webpki_client_verifier_builder(kt.client_root_store(), provider)
+                    .build()
+                    .unwrap(),
+            ),
             verified,
             subjects: Arc::from(kt.client_root_store().subjects()),
             mandatory: true,

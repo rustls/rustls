@@ -228,9 +228,11 @@ fn client_can_request_certain_trusted_cas() {
         root_store
             .add(key_type.ca_cert())
             .unwrap();
-        let server_verifier = WebPkiServerVerifier::builder(Arc::new(root_store), &provider)
-            .build()
-            .unwrap();
+        let server_verifier = Arc::new(
+            WebPkiServerVerifier::builder(Arc::new(root_store), &provider)
+                .build()
+                .unwrap(),
+        );
 
         let cas_sending_server_verifier = Arc::new(ServerVerifierWithCasExt {
             verifier: server_verifier.clone(),
