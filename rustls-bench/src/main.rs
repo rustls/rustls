@@ -795,9 +795,11 @@ impl Parameters {
                         .unwrap();
                 }
 
-                WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
-                    .build()
-                    .unwrap()
+                Arc::new(
+                    WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
+                        .build()
+                        .unwrap(),
+                )
             }
             ClientAuth::No => WebPkiClientVerifier::no_client_auth(),
         };
