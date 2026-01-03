@@ -174,12 +174,12 @@ impl ClientVerifierBuilder {
     /// This function will return a [`VerifierBuilderError`] if:
     /// 1. No trust anchors have been provided.
     /// 2. DER encoded CRLs have been provided that can not be parsed successfully.
-    pub fn build(self) -> Result<Arc<dyn ClientVerifier>, VerifierBuilderError> {
+    pub fn build(self) -> Result<WebPkiClientVerifier, VerifierBuilderError> {
         if self.roots.is_empty() {
             return Err(VerifierBuilderError::NoRootAnchors);
         }
 
-        Ok(Arc::new(WebPkiClientVerifier::new(
+        Ok(WebPkiClientVerifier::new(
             self.roots,
             Arc::from(self.root_hint_subjects),
             parse_crls(self.crls)?,
@@ -188,7 +188,7 @@ impl ClientVerifierBuilder {
             self.revocation_expiration_policy,
             self.anon_policy,
             self.supported_algs,
-        )))
+        ))
     }
 }
 

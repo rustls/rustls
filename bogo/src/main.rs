@@ -910,12 +910,14 @@ impl DummyClientAuth {
         Self {
             mandatory,
             root_hint_subjects,
-            parent: WebPkiClientVerifier::builder(
-                load_root_certs(trusted_cert_file),
-                &SelectedProvider::from_env().provider(),
-            )
-            .build()
-            .unwrap(),
+            parent: Arc::new(
+                WebPkiClientVerifier::builder(
+                    load_root_certs(trusted_cert_file),
+                    &SelectedProvider::from_env().provider(),
+                )
+                .build()
+                .unwrap(),
+            ),
         }
     }
 }
@@ -967,12 +969,14 @@ struct DummyServerAuth {
 impl DummyServerAuth {
     fn new(trusted_cert_file: &str, ocsp: OcspValidation) -> Self {
         Self {
-            parent: WebPkiServerVerifier::builder(
-                load_root_certs(trusted_cert_file),
-                &SelectedProvider::from_env().provider(),
-            )
-            .build()
-            .unwrap(),
+            parent: Arc::new(
+                WebPkiServerVerifier::builder(
+                    load_root_certs(trusted_cert_file),
+                    &SelectedProvider::from_env().provider(),
+                )
+                .build()
+                .unwrap(),
+            ),
             ocsp,
         }
     }

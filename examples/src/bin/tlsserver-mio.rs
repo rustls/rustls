@@ -606,16 +606,20 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         }
         let crls = load_crls(args.crl.iter());
         if args.require_auth {
-            WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
-                .with_crls(crls)
-                .build()
-                .unwrap()
+            Arc::new(
+                WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
+                    .with_crls(crls)
+                    .build()
+                    .unwrap(),
+            )
         } else {
-            WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
-                .with_crls(crls)
-                .allow_unauthenticated()
-                .build()
-                .unwrap()
+            Arc::new(
+                WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
+                    .with_crls(crls)
+                    .allow_unauthenticated()
+                    .build()
+                    .unwrap(),
+            )
         }
     } else {
         WebPkiClientVerifier::no_client_auth()
