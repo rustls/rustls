@@ -600,7 +600,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let (versions, provider) = args.provider();
     let client_auth = if let Some(auth) = &args.auth {
         let roots = load_certs(auth);
-        let mut client_auth_roots = RootCertStore::empty();
+        let mut client_auth_roots = RootCertStore::with_capacity(roots.len());
         for root in roots {
             client_auth_roots.add(root).unwrap();
         }
