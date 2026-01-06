@@ -19,6 +19,7 @@ use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::Message;
 use crate::msgs::{
     BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator, Random,
+    ReceivedData,
 };
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
@@ -788,7 +789,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
     pub(crate) fn process_new_packets(
         &mut self,
-        deframer_buffer: &mut DeframerVecBuffer,
+        input: &mut dyn ReceivedData,
     ) -> Result<IoState, Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
@@ -808,7 +809,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         let mut buffer_progress = self.hs_deframer.progress();
 
         loop {
-            let buffer = deframer_buffer.filled_mut();
+            let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
             let res = self.deframe(buffer, &mut buffer_progress);
 
@@ -822,7 +823,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                         state.handle_decrypt_error();
                     }
                     self.state = Err(e.clone());
-                    deframer_buffer.discard(buffer_progress.take_discard());
+                    input.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
             };
@@ -845,7 +846,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                         .send
                         .maybe_send_fatal_alert(&e);
                     self.state = Err(e.clone());
-                    deframer_buffer.discard(buffer_progress.take_discard());
+                    input.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
             }
@@ -854,7 +855,8 @@ impl<Side: SideData> ConnectionCore<Side> {
                 // "Any data received after a closure alert has been received MUST be ignored."
                 // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
                 // This is data that has already been accepted in `read_tls`.
-                buffer_progress.add_discard(deframer_buffer.filled().len());
+                let entirety = input.slice_mut().len();
+                input.discard(entirety);
                 break;
             }
 
@@ -866,10 +868,10 @@ impl<Side: SideData> ConnectionCore<Side> {
                     .append(payload.into_vec());
             }
 
-            deframer_buffer.discard(buffer_progress.take_discard());
+            input.discard(buffer_progress.take_discard());
         }
 
-        deframer_buffer.discard(buffer_progress.take_discard());
+        input.discard(buffer_progress.take_discard());
         self.state = Ok(state);
         Ok(self.side.current_io_state())
     }
