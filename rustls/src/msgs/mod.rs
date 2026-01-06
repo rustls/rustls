@@ -59,7 +59,7 @@ use codec::{LengthPrefixedBuffer, U24};
 mod deframer;
 pub(crate) use deframer::{
     BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeAlignedProof,
-    HandshakeDeframer, Locator,
+    HandshakeDeframer, Locator, ReceivedData,
 };
 
 mod enums;
