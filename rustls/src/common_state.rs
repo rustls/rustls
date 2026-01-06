@@ -718,7 +718,6 @@ pub(crate) struct ReceivePath {
     /// If the peer has signaled end of stream.
     pub(crate) has_received_close_notify: bool,
     pub(crate) has_seen_eof: bool,
-    pub(crate) received_plaintext: ChunkVecBuffer,
     temper_counters: TemperCounters,
     negotiated_version: Option<ProtocolVersion>,
 }
@@ -731,7 +730,6 @@ impl ReceivePath {
             may_receive_application_data: false,
             has_received_close_notify: false,
             has_seen_eof: false,
-            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             temper_counters: TemperCounters::default(),
             negotiated_version: None,
         }
@@ -1280,5 +1278,4 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
 pub(crate) type HandshakeFlightTls12<'a> = HandshakeFlight<'a, false>;
 pub(crate) type HandshakeFlightTls13<'a> = HandshakeFlight<'a, true>;
 
-const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
 pub(crate) const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
