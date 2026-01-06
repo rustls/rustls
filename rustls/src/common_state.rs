@@ -703,35 +703,6 @@ impl CommonState {
     pub fn send_close_notify(&mut self) {
         self.send.send_close_notify()
     }
-
-    /// Returns true if the caller should call [`Connection::read_tls`] as soon
-    /// as possible.
-    ///
-    /// If there is pending plaintext data to read with [`Connection::reader`],
-    /// this returns false.  If your application respects this mechanism,
-    /// only one full TLS message will be buffered by rustls.
-    ///
-    /// [`Connection::reader`]: crate::Connection::reader
-    /// [`Connection::read_tls`]: crate::Connection::read_tls
-    pub fn wants_read(&self) -> bool {
-        // We want to read more data all the time, except when we have unprocessed plaintext.
-        // This provides back-pressure to the TCP buffers. We also don't want to read more after
-        // the peer has sent us a close notification.
-        //
-        // In the handshake case we don't have readable plaintext before the handshake has
-        // completed, but also don't want to read if we still have sendable tls.
-        self.recv.received_plaintext.is_empty()
-            && !self.recv.has_received_close_notify
-            && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
-    }
-
-    pub(crate) fn current_io_state(&self) -> IoState {
-        IoState {
-            tls_bytes_to_write: self.send.sendable_tls.len(),
-            plaintext_bytes_to_read: self.recv.received_plaintext.len(),
-            peer_has_closed: self.recv.has_received_close_notify,
-        }
-    }
 }
 
 impl Deref for CommonState {
@@ -778,45 +749,6 @@ pub enum HandshakeKind {
     /// is unacceptable for several reasons, but this does not prevent the client
     /// from resuming.
     ResumedWithHelloRetryRequest,
-}
-
-/// Values of this structure are returned from [`Connection::process_new_packets`]
-/// and tell the caller the current I/O state of the TLS connection.
-///
-/// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
-#[derive(Debug, Eq, PartialEq)]
-pub struct IoState {
-    tls_bytes_to_write: usize,
-    plaintext_bytes_to_read: usize,
-    peer_has_closed: bool,
-}
-
-impl IoState {
-    /// How many bytes could be written by [`Connection::write_tls`] if called
-    /// right now.  A non-zero value implies [`CommonState::wants_write`].
-    ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
-    pub fn tls_bytes_to_write(&self) -> usize {
-        self.tls_bytes_to_write
-    }
-
-    /// How many plaintext bytes could be obtained via [`std::io::Read`]
-    /// without further I/O.
-    pub fn plaintext_bytes_to_read(&self) -> usize {
-        self.plaintext_bytes_to_read
-    }
-
-    /// True if the peer has sent us a close_notify alert.  This is
-    /// the TLS mechanism to securely half-close a TLS connection,
-    /// and signifies that the peer will not send any further data
-    /// on this connection.
-    ///
-    /// This is also signalled via returning `Ok(0)` from
-    /// [`std::io::Read`], after all the received bytes have been
-    /// retrieved.
-    pub fn peer_has_closed(&self) -> bool {
-        self.peer_has_closed
-    }
 }
 
 pub(crate) trait State<Side>: Send + Sync {
