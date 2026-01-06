@@ -477,6 +477,7 @@ impl ConnectionRandoms {
 pub struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
     deframer_buffer: DeframerVecBuffer,
+    pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
 }
 
@@ -506,10 +507,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .process_new_packets(&mut self.deframer_buffer)?
         {
             let payload = payload.reborrow(&Delocator::new(self.deframer_buffer.slice_mut()));
-            self.core
-                .common_state
-                .recv
-                .received_plaintext
+            self.received_plaintext
                 .append(payload.into_vec());
             self.deframer_buffer
                 .discard(buffer_progress.take_discard());
@@ -548,7 +546,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         //
         // In the handshake case we don't have readable plaintext before the handshake has
         // completed, but also don't want to read if we still have sendable tls.
-        self.recv.received_plaintext.is_empty()
+        self.received_plaintext.is_empty()
             && !self.recv.has_received_close_notify
             && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
     }
@@ -632,11 +630,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     ///
     /// See [`Self::set_buffer_limit`] for more information on how limits are applied.
     pub fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
-        self.core
-            .common_state
-            .recv
-            .received_plaintext
-            .set_limit(limit);
+        self.received_plaintext.set_limit(limit);
     }
 
     /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
@@ -673,10 +667,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         let common_state = &self.core.common_state;
         IoState {
             tls_bytes_to_write: common_state.send.sendable_tls.len(),
-            plaintext_bytes_to_read: common_state
-                .recv
-                .received_plaintext
-                .len(),
+            plaintext_bytes_to_read: self.received_plaintext.len(),
             peer_has_closed: common_state
                 .recv
                 .has_received_close_notify,
@@ -709,13 +700,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
     /// [`reader()`]: ConnectionCommon::reader
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        if self
-            .core
-            .common_state
-            .recv
-            .received_plaintext
-            .is_full()
-        {
+        if self.received_plaintext.is_full() {
             return Err(io::Error::other("received plaintext buffer full"));
         }
 
@@ -741,7 +726,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub fn reader(&mut self) -> Reader<'_> {
         let common = &mut self.core.common_state;
         Reader {
-            received_plaintext: &mut common.recv.received_plaintext,
+            received_plaintext: &mut self.received_plaintext,
             // Are we done? i.e., have we processed all received messages, and received a
             // close_notify to indicate that no new messages will arrive?
             has_received_close_notify: common.recv.has_received_close_notify,
@@ -947,6 +932,7 @@ impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
         Self {
             core,
             deframer_buffer: DeframerVecBuffer::default(),
+            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
         }
     }
@@ -1058,12 +1044,6 @@ impl<Side: SideData> ConnectionCore<Side> {
             }
         };
 
-        // Should `EncodedMessage<Payload>` resolve to plaintext application
-        // data it will be allocated within `plaintext` and written to
-        // `CommonState.received_plaintext` buffer.
-        //
-        // TODO `CommonState.received_plaintext` should be hoisted into
-        // `ConnectionCommon`
         let mut plaintext = None;
         let mut buffer_progress = self.hs_deframer.progress();
 
@@ -1423,3 +1403,5 @@ impl InboundUnborrowedMessage {
 /// cf. BoringSSL's `kMaxEmptyRecords`
 /// <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls_record.cc#L124-L128>
 const ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX: u8 = 32;
+
+const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
