@@ -632,6 +632,57 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
 #[cfg(feature = "std")]
 impl<Side: SideData> ConnectionCommon<Side> {
+    /// Read TLS content from `rd` into the internal buffer.
+    ///
+    /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
+    /// a socket or pipe might).
+    ///
+    /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
+    /// to empty the incoming TLS data buffer.
+    ///
+    /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
+    /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
+    /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
+    ///
+    /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
+    ///   each time a call to this function succeeds.
+    /// * In order to empty the incoming plaintext data buffer, you should empty it through
+    ///   the [`reader()`] after the call to [`process_new_packets()`].
+    ///
+    /// This function also returns `Ok(0)` once a `close_notify` alert has been successfully
+    /// received.  No additional data is ever read in this state.
+    ///
+    /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
+    /// [`reader()`]: ConnectionCommon::reader
+    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+        if self
+            .core
+            .common_state
+            .recv
+            .received_plaintext
+            .is_full()
+        {
+            return Err(io::Error::other("received plaintext buffer full"));
+        }
+
+        if self
+            .core
+            .common_state
+            .recv
+            .has_received_close_notify
+        {
+            return Ok(0);
+        }
+
+        let res = self
+            .deframer_buffer
+            .read(rd, self.core.hs_deframer.is_active());
+        if let Ok(0) = res {
+            self.recv.has_seen_eof = true;
+        }
+        res
+    }
+
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader<'_> {
         let common = &mut self.core.common_state;
@@ -809,46 +860,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
     pub(crate) fn replace_state(&mut self, new: Box<dyn State<Side>>) {
         self.core.state = Ok(new);
-    }
-
-    /// Read TLS content from `rd` into the internal buffer.
-    ///
-    /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
-    /// a socket or pipe might).
-    ///
-    /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
-    /// to empty the incoming TLS data buffer.
-    ///
-    /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
-    /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
-    /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
-    ///
-    /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
-    ///   each time a call to this function succeeds.
-    /// * In order to empty the incoming plaintext data buffer, you should empty it through
-    ///   the [`reader()`] after the call to [`process_new_packets()`].
-    ///
-    /// This function also returns `Ok(0)` once a `close_notify` alert has been successfully
-    /// received.  No additional data is ever read in this state.
-    ///
-    /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
-    /// [`reader()`]: ConnectionCommon::reader
-    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        if self.recv.received_plaintext.is_full() {
-            return Err(io::Error::other("received plaintext buffer full"));
-        }
-
-        if self.recv.has_received_close_notify {
-            return Ok(0);
-        }
-
-        let res = self
-            .deframer_buffer
-            .read(rd, self.core.hs_deframer.is_active());
-        if let Ok(0) = res {
-            self.recv.has_seen_eof = true;
-        }
-        res
     }
 
     /// Writes TLS messages to `wr`.
