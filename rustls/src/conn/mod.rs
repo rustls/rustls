@@ -10,7 +10,7 @@ use kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::common_state::Input;
 use crate::common_state::{
-    AppDataOutput, CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, NullOutput, Output, State,
+    AppDataOutput, CommonState, Context, DEFAULT_BUFFER_LIMIT, NullOutput, Output, State,
     UnborrowedPayload,
 };
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
@@ -37,7 +37,7 @@ mod connection {
     use core::ops::{Deref, DerefMut};
     use std::io::{self, BufRead, Read};
 
-    use crate::common_state::{CommonState, IoState};
+    use crate::common_state::CommonState;
     use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::OutboundPlain;
     use crate::error::Error;
@@ -91,7 +91,7 @@ mod connection {
         /// Processes any new packets read by a previous call to [`Connection::read_tls`].
         ///
         /// See [`ConnectionCommon::process_new_packets()`] for more information.
-        pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        pub fn process_new_packets(&mut self) -> Result<super::IoState, Error> {
             match self {
                 Self::Client(conn) => conn.process_new_packets(),
                 Self::Server(conn) => conn.process_new_packets(),
@@ -157,6 +157,17 @@ mod connection {
             match self {
                 Self::Client(client) => client.refresh_traffic_keys(),
                 Self::Server(server) => server.refresh_traffic_keys(),
+            }
+        }
+
+        /// Returns true if the caller should call [`Connection::read_tls`] as soon
+        /// as possible.
+        ///
+        /// See [`ConnectionCommon::wants_read()`] for more information.
+        pub fn wants_read(&self) -> bool {
+            match self {
+                Self::Client(client) => client.wants_read(),
+                Self::Server(server) => server.wants_read(),
             }
         }
     }
@@ -518,10 +529,28 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 .send_buffered_plaintext(&mut self.sendable_plaintext);
         }
 
-        Ok(self
-            .core
-            .common_state
-            .current_io_state())
+        Ok(self.current_io_state())
+    }
+
+    /// Returns true if the caller should call [`Connection::read_tls`] as soon
+    /// as possible.
+    ///
+    /// If there is pending plaintext data to read with [`Connection::reader`],
+    /// this returns false.  If your application respects this mechanism,
+    /// only one full TLS message will be buffered by rustls.
+    ///
+    /// [`Connection::reader`]: crate::Connection::reader
+    /// [`Connection::read_tls`]: crate::Connection::read_tls
+    pub fn wants_read(&self) -> bool {
+        // We want to read more data all the time, except when we have unprocessed plaintext.
+        // This provides back-pressure to the TCP buffers. We also don't want to read more after
+        // the peer has sent us a close notification.
+        //
+        // In the handshake case we don't have readable plaintext before the handshake has
+        // completed, but also don't want to read if we still have sendable tls.
+        self.recv.received_plaintext.is_empty()
+            && !self.recv.has_received_close_notify
+            && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
     }
 
     /// Returns an object that can derive key material from the agreed connection secrets.
@@ -639,6 +668,20 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
         self.core.refresh_traffic_keys()
     }
+
+    pub(crate) fn current_io_state(&self) -> IoState {
+        let common_state = &self.core.common_state;
+        IoState {
+            tls_bytes_to_write: common_state.send.sendable_tls.len(),
+            plaintext_bytes_to_read: common_state
+                .recv
+                .received_plaintext
+                .len(),
+            peer_has_closed: common_state
+                .recv
+                .has_received_close_notify,
+        }
+    }
 }
 
 #[cfg(feature = "std")]
@@ -734,7 +777,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
     ///
     /// [`is_handshaking`]: CommonState::is_handshaking
-    /// [`wants_read`]: CommonState::wants_read
+    /// [`wants_read`]: ConnectionCommon::wants_read
     /// [`wants_write`]: CommonState::wants_write
     /// [`write_tls`]: ConnectionCommon::write_tls
     /// [`read_tls`]: ConnectionCommon::read_tls
@@ -906,6 +949,45 @@ impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
             deframer_buffer: DeframerVecBuffer::default(),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
         }
+    }
+}
+
+/// Values of this structure are returned from [`Connection::process_new_packets`]
+/// and tell the caller the current I/O state of the TLS connection.
+///
+/// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
+#[derive(Debug, Eq, PartialEq)]
+pub struct IoState {
+    tls_bytes_to_write: usize,
+    plaintext_bytes_to_read: usize,
+    peer_has_closed: bool,
+}
+
+impl IoState {
+    /// How many bytes could be written by [`Connection::write_tls`] if called
+    /// right now.  A non-zero value implies [`CommonState::wants_write`].
+    ///
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    pub fn tls_bytes_to_write(&self) -> usize {
+        self.tls_bytes_to_write
+    }
+
+    /// How many plaintext bytes could be obtained via [`std::io::Read`]
+    /// without further I/O.
+    pub fn plaintext_bytes_to_read(&self) -> usize {
+        self.plaintext_bytes_to_read
+    }
+
+    /// True if the peer has sent us a close_notify alert.  This is
+    /// the TLS mechanism to securely half-close a TLS connection,
+    /// and signifies that the peer will not send any further data
+    /// on this connection.
+    ///
+    /// This is also signalled via returning `Ok(0)` from
+    /// [`std::io::Read`], after all the received bytes have been
+    /// retrieved.
+    pub fn peer_has_closed(&self) -> bool {
+        self.peer_has_closed
     }
 }
 
