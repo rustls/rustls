@@ -7,7 +7,8 @@ use std::io;
 use kernel::KernelConnection;
 
 use crate::common_state::{
-    CommonState, DEFAULT_BUFFER_LIMIT, Input, IoState, Output, State, process_main_protocol,
+    CommonState, DEFAULT_BUFFER_LIMIT, Input, IoState, Output, State, UnborrowedPayload,
+    process_main_protocol,
 };
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
@@ -519,24 +520,34 @@ pub(crate) struct ConnectionCommon<Side: SideData> {
 impl<Side: SideData> ConnectionCommon<Side> {
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        let io_state = self
+        while let Some((payload, mut buffer_progress)) = self
             .core
-            .process_new_packets(&mut self.deframer_buffer)?;
+            .process_new_packets(&mut self.deframer_buffer)?
+        {
+            let payload = payload.reborrow(&Delocator::new(self.deframer_buffer.slice_mut()));
+            self.core
+                .side
+                .recv
+                .received_plaintext
+                .append(payload.into_vec());
+            self.deframer_buffer
+                .discard(buffer_progress.take_discard());
+        }
 
-        if !self
+        // Release unsent buffered plaintext.
+        if self
             .core
             .side
             .send
             .may_send_application_data
-            || self.sendable_plaintext.is_empty()
+            && !self.sendable_plaintext.is_empty()
         {
-            return Ok(io_state);
+            self.core
+                .side
+                .send
+                .send_buffered_plaintext(&mut self.sendable_plaintext);
         }
 
-        self.core
-            .side
-            .send
-            .send_buffered_plaintext(&mut self.sendable_plaintext);
         Ok(self.core.side.current_io_state())
     }
 
@@ -688,7 +699,7 @@ impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn process_new_packets(
         &mut self,
         input: &mut dyn TlsInputBuffer,
-    ) -> Result<IoState, Error> {
+    ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
             Err(e) => {
@@ -759,11 +770,8 @@ impl<Side: SideData> ConnectionCore<Side> {
             }
 
             if let Some(payload) = plaintext.take() {
-                let payload = payload.reborrow(&Delocator::new(buffer));
-                self.side
-                    .recv
-                    .received_plaintext
-                    .append(payload.into_vec());
+                self.state = Ok(state);
+                return Ok(Some((payload, buffer_progress)));
             }
 
             input.discard(buffer_progress.take_discard());
@@ -771,7 +779,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
         input.discard(buffer_progress.take_discard());
         self.state = Ok(state);
-        Ok(self.side.current_io_state())
+        Ok(None)
     }
 
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
