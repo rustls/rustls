@@ -184,9 +184,15 @@ impl DeframerVecBuffer {
     pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
         &mut self.buf[..self.used]
     }
+}
 
-    pub(crate) fn filled(&self) -> &[u8] {
-        &self.buf[..self.used]
+impl ReceivedData for DeframerVecBuffer {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        self.filled_mut()
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.discard(num_bytes)
     }
 }
 
@@ -261,6 +267,10 @@ impl DeframerVecBuffer {
         self.used += len;
         Range { start, end }
     }
+
+    pub(crate) fn filled(&self) -> &[u8] {
+        &self.buf[..self.used]
+    }
 }
 
 /// A borrowed version of [`DeframerVecBuffer`] that tracks discard operations
@@ -290,4 +300,42 @@ impl<'a> DeframerSliceBuffer<'a> {
     pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
         &mut self.buf[self.discard..]
     }
+}
+
+impl ReceivedData for DeframerSliceBuffer<'_> {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        self.filled_mut()
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.queue_discard(num_bytes)
+    }
+}
+
+/// An abstraction over received data buffers (either owned or borrowed)
+pub(crate) trait ReceivedData {
+    /// Return the buffer which contains the received data.
+    ///
+    /// If no data is available, return the empty slice.
+    ///
+    /// This is mutable, because the buffer is used for in-place decryption
+    /// and coalescing of TLS records.  Coalescing of TLS records can happen
+    /// incrementally over multiple calls into rustls.  As a result the
+    /// contents of this buffer must not be altered except to add new bytes
+    /// at the end.
+    fn slice_mut(&mut self) -> &mut [u8];
+
+    /// Discard `num_bytes` from the front of the buffer returned by `slice_mut()`.
+    ///
+    /// Multiple calls to `discard()` are cumulative, rather than "last wins".  In
+    /// other words, `discard(1)` followed by `discard(1)` gives the same result
+    /// as `discard(2)`.
+    ///
+    /// The next call to `slice_mut()` must reflect all previous `discard()`s. In
+    /// other words, if `slice_mut()` returns slice `[p..q]`, it should then
+    /// return `[p+n..q]` after `discard(n)`.
+    ///
+    /// Rustls guarantees it will not `discard()` more bytes than are returned
+    /// from `slice_mut()`.
+    fn discard(&mut self, num_bytes: usize);
 }
