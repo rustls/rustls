@@ -9,11 +9,11 @@ use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, IoState, Output, Protocol, Side,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, Side,
 };
 use crate::conn::unbuffered::EncryptError;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, Writer,
+    Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
