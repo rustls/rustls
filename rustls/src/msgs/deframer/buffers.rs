@@ -186,9 +186,15 @@ impl DeframerVecBuffer {
     pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
         &mut self.buf[..self.used]
     }
+}
 
-    pub(crate) fn filled(&self) -> &[u8] {
-        &self.buf[..self.used]
+impl ReceivedData for DeframerVecBuffer {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        self.filled_mut()
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.discard(num_bytes)
     }
 }
 
@@ -264,6 +270,10 @@ impl DeframerVecBuffer {
         self.used += len;
         Range { start, end }
     }
+
+    pub(crate) fn filled(&self) -> &[u8] {
+        &self.buf[..self.used]
+    }
 }
 
 /// A borrowed version of [`DeframerVecBuffer`] that tracks discard operations
@@ -292,4 +302,23 @@ impl<'a> DeframerSliceBuffer<'a> {
     pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
         &mut self.buf[self.discard..]
     }
+}
+
+impl ReceivedData for DeframerSliceBuffer<'_> {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        self.filled_mut()
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.queue_discard(num_bytes)
+    }
+}
+
+/// An abstraction over received data buffers (either owned or borrowed)
+pub(crate) trait ReceivedData {
+    /// TODO
+    fn slice_mut(&mut self) -> &mut [u8];
+
+    /// TODO
+    fn discard(&mut self, num_bytes: usize);
 }
