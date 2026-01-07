@@ -9,7 +9,7 @@ use pki_types::DnsName;
 use super::connection::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
-use crate::common_state::{Event, Input, Output, Protocol, State};
+use crate::common_state::{Event, Input, MidState, Output, Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -552,6 +552,10 @@ impl State<ServerConnectionData> for ExpectClientHello {
     fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
         self.resumption_data = resumption_data.to_vec();
         Ok(())
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 

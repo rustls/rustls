@@ -13,8 +13,8 @@ use super::hs::{
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State,
-    TrafficTemperCounters,
+    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, MidState, Output, Side,
+    State, TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
@@ -625,6 +625,10 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             }
         }
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 fn check_cert_type(
@@ -723,6 +727,10 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
             )),
         }
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 struct ExpectCertificateOrCompressedCertificate {
@@ -784,6 +792,10 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 ],
             )),
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -847,6 +859,10 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 ],
             )),
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -1083,6 +1099,10 @@ impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
         self.handle_input(input)
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 // --- TLS1.3 CertificateVerify ---
@@ -1161,6 +1181,10 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             ech: self.ech,
             in_early_traffic: false,
         }))
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -1395,6 +1419,10 @@ impl State<ClientConnectionData> for ExpectFinished {
             false => Box::new(st),
         })
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 // -- Traffic transit state (TLS1.3) --
@@ -1535,6 +1563,10 @@ impl State<ClientConnectionData> for ExpectTraffic {
             self,
         ))
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::Traffic
+    }
 }
 
 impl KernelState for ExpectTraffic {
@@ -1584,6 +1616,10 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
                 .extract_secrets(Side::Client)?,
             self,
         ))
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::Traffic
     }
 }
 

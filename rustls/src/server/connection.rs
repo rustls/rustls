@@ -18,7 +18,7 @@ use super::hs;
 use super::hs::ClientHelloInput;
 use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
 #[cfg(feature = "std")]
-use crate::common_state::{Input, State};
+use crate::common_state::{Input, MidState, State};
 #[cfg(feature = "std")]
 use crate::conn::ConnectionCommon;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
@@ -623,6 +623,10 @@ impl State<ServerConnectionData> for Accepting {
         _output: &mut dyn Output,
     ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
         Err(Error::Unreachable("unreachable state"))
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 

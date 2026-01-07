@@ -11,7 +11,8 @@ use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
-    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
+    Event, HandshakeFlightTls13, HandshakeKind, Input, MidState, Output, Side, State,
+    TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
@@ -858,6 +859,10 @@ impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
 
         self.next.handle(input, output)
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 struct ExpectCertificateOrCompressedCertificate {
@@ -916,6 +921,10 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 ],
             )),
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -1074,6 +1083,10 @@ impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
         self.handle_input(input)
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 struct ExpectCertificateVerify {
@@ -1124,6 +1137,10 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             resumption_data: self.resumption_data,
             send_tickets: self.send_tickets,
         }))
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -1189,6 +1206,10 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 &[HandshakeType::EndOfEarlyData],
             )),
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -1374,6 +1395,10 @@ impl State<ServerConnectionData> for ExpectFinished {
             },
         )
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 // --- Process traffic ---
@@ -1459,6 +1484,10 @@ impl State<ServerConnectionData> for ExpectTraffic {
             self,
         ))
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::Traffic
+    }
 }
 
 impl KernelState for ExpectTraffic {
@@ -1492,6 +1521,10 @@ impl State<ServerConnectionData> for ExpectQuicTraffic {
     ) -> hs::NextStateOrError {
         // reject all messages
         Err(inappropriate_message(&message.payload, &[]))
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::Traffic
     }
 }
 

@@ -956,6 +956,14 @@ pub(crate) trait State<Side>: Send + Sync {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
     }
+
+    /// Reveal the mid-level state for this concrete low-level state
+    fn mid_state(&self) -> MidState;
+}
+
+pub(crate) enum MidState {
+    AwaitPeerFlight,
+    Traffic,
 }
 
 pub(crate) struct Context<'a, Data> {

@@ -10,7 +10,9 @@ use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
 use super::hs::{self};
 use crate::check::inappropriate_message;
-use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
+use crate::common_state::{
+    Event, HandshakeFlightTls12, HandshakeKind, Input, MidState, Output, Side, State,
+};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -538,6 +540,10 @@ impl State<ServerConnectionData> for ExpectCertificate {
             send_ticket: self.send_ticket,
         }))
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 // --- Process client's KeyExchange ---
@@ -620,6 +626,10 @@ impl State<ServerConnectionData> for ExpectClientKx {
             })),
         }
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 // --- Process client's certificate proof ---
@@ -685,6 +695,10 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             send_ticket: self.send_ticket,
         }))
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 // --- Process client's ChangeCipherSpec ---
@@ -744,6 +758,10 @@ impl State<ServerConnectionData> for ExpectCcs {
             send_ticket: self.send_ticket,
             pending_encrypter,
         }))
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -966,6 +984,10 @@ impl State<ServerConnectionData> for ExpectFinished {
             _fin_verified: fin_verified,
         }))
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 // --- Process traffic ---
@@ -1004,6 +1026,10 @@ impl State<ServerConnectionData> for ExpectTraffic {
             Some(extracted_secrets) => Ok((extracted_secrets?, self)),
             None => Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into()),
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::Traffic
     }
 }
 

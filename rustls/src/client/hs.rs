@@ -14,7 +14,7 @@ use crate::client::ech::EchState;
 use crate::client::{
     ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
 };
-use crate::common_state::{EarlyDataEvent, Event, Input, Output, Protocol, State};
+use crate::common_state::{EarlyDataEvent, Event, Input, MidState, Output, Protocol, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -177,6 +177,10 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 Err(reason.into())
             }
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -354,6 +358,10 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
                 &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
             )),
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        self.next.mid_state()
     }
 }
 

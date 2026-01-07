@@ -13,7 +13,7 @@ use super::hs::{self};
 use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{Event, HandshakeKind, Input, Output, Side, State};
+use crate::common_state::{Event, HandshakeKind, Input, MidState, Output, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -274,6 +274,10 @@ impl State<ClientConnectionData> for ExpectCertificate {
             }))
         }
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 struct ExpectCertificateStatusOrServerKx {
@@ -335,6 +339,10 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 ],
             )),
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -442,6 +450,10 @@ impl ExpectServerKx {
 impl State<ClientConnectionData> for ExpectServerKx {
     fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
         self.handle_input(input)
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -619,6 +631,10 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
             }
             .handle_input(input, output)
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -896,6 +912,10 @@ impl State<ClientConnectionData> for ExpectServerDone {
     fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> hs::NextStateOrError {
         self.handle_input(input, output)
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 struct ExpectNewTicket {
@@ -940,6 +960,10 @@ impl State<ClientConnectionData> for ExpectNewTicket {
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
         }))
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -993,6 +1017,10 @@ impl State<ClientConnectionData> for ExpectCcs {
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
         }))
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
     }
 }
 
@@ -1128,6 +1156,10 @@ impl State<ClientConnectionData> for ExpectFinished {
                 .remove_tls12_session(&self.session_key);
         }
     }
+
+    fn mid_state(&self) -> MidState {
+        MidState::AwaitPeerFlight
+    }
 }
 
 // -- Traffic transit state --
@@ -1166,6 +1198,10 @@ impl State<ClientConnectionData> for ExpectTraffic {
             Some(extracted_secrets) => Ok((extracted_secrets?, self)),
             None => Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into()),
         }
+    }
+
+    fn mid_state(&self) -> MidState {
+        MidState::Traffic
     }
 }
 
