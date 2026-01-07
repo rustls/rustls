@@ -146,7 +146,7 @@ impl BufferProgress {
 }
 
 #[derive(Default, Debug)]
-pub(crate) struct DeframerVecBuffer {
+pub struct DeframerVecBuffer {
     /// Buffer of data read from the socket, in the process of being parsed into messages.
     ///
     /// For buffer size management, checkout out the [`DeframerVecBuffer::prepare_read()`] method.
@@ -183,6 +183,10 @@ impl DeframerVecBuffer {
 
     pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
         &mut self.buf[..self.used]
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.used == 0
     }
 }
 
@@ -275,7 +279,7 @@ impl DeframerVecBuffer {
 
 /// A borrowed version of [`DeframerVecBuffer`] that tracks discard operations
 #[derive(Debug)]
-pub(crate) struct DeframerSliceBuffer<'a> {
+pub struct DeframerSliceBuffer<'a> {
     // a fully initialized buffer that will be deframed
     buf: &'a mut [u8],
     // number of bytes to discard from the front of `buf` at a later time
@@ -284,8 +288,13 @@ pub(crate) struct DeframerSliceBuffer<'a> {
 
 #[expect(dead_code)]
 impl<'a> DeframerSliceBuffer<'a> {
-    pub(crate) fn new(buf: &'a mut [u8]) -> Self {
+    pub fn new(buf: &'a mut [u8]) -> Self {
         Self { buf, discard: 0 }
+    }
+
+    /// Returns how many bytes were consumed at the start of the original buffer.
+    pub fn into_used(self) -> usize {
+        self.discard
     }
 
     /// Tracks a pending discard operation of `num_bytes`
@@ -313,7 +322,7 @@ impl TlsInputBuffer for DeframerSliceBuffer<'_> {
 }
 
 /// An abstraction over received data buffers (either owned or borrowed)
-pub(crate) trait TlsInputBuffer {
+pub trait TlsInputBuffer {
     /// Return the buffer which contains the received data.
     ///
     /// If no data is available, return the empty slice.

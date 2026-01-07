@@ -16,7 +16,7 @@ use crate::crypto::cipher::{
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::{
@@ -24,10 +24,10 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeDeframer, HandshakeMessagePayload, Locator, Message,
     MessageFragmenter, MessagePayload,
 };
-use crate::quic;
 use crate::suites::SupportedCipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
+use crate::{KeyingMaterialExporter, quic};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -211,6 +211,13 @@ impl ConnectionOutputs {
     /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
     pub fn fips(&self) -> FipsStatus {
         self.fips
+    }
+
+    pub(crate) fn take_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
+        }
     }
 
     pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
@@ -506,7 +513,7 @@ impl SendPath {
         }
     }
 
-    fn send_close_notify(&mut self) {
+    pub(crate) fn send_close_notify(&mut self) {
         if self.has_sent_close_notify {
             return;
         }
@@ -535,6 +542,20 @@ impl SendPath {
             Message::build_alert(level, desc),
             self.encrypt_state.is_encrypting(),
         );
+    }
+
+    pub(crate) fn predict_required_len(&self, appdata: OutboundPlain<'_>) -> usize {
+        self.sendable_tls.len()
+            + self
+                .message_fragmenter
+                .fragment_payload(
+                    ContentType::ApplicationData,
+                    ProtocolVersion::TLSv1_2,
+                    appdata,
+                )
+                .fold(0usize, |sum, item| {
+                    sum + item.encoded_len(&self.encrypt_state)
+                })
     }
 
     fn check_required_size<'a>(

@@ -236,9 +236,9 @@ mod connection {
 
     /// A structure that implements [`std::io::Read`] for reading plaintext.
     pub struct Reader<'a> {
-        pub(super) received_plaintext: &'a mut ChunkVecBuffer,
-        pub(super) has_received_close_notify: bool,
-        pub(super) has_seen_eof: bool,
+        pub(crate) received_plaintext: &'a mut ChunkVecBuffer,
+        pub(crate) has_received_close_notify: bool,
+        pub(crate) has_seen_eof: bool,
     }
 
     impl<'a> Reader<'a> {
@@ -387,7 +387,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
                 .core
                 .common
                 .send
-                .buffer_plaintext(buf.into(), &mut self.sendable_plaintext);
+                .buffer_plaintext(buf.into(), &mut self.buffers.sendable_plaintext);
             self.send.maybe_refresh_traffic_keys();
             Ok(len)
         }
@@ -410,7 +410,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
                 .core
                 .common
                 .send
-                .buffer_plaintext(payload, &mut self.sendable_plaintext);
+                .buffer_plaintext(payload, &mut self.buffers.sendable_plaintext);
             self.send.maybe_refresh_traffic_keys();
             Ok(len)
         }
@@ -421,6 +421,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     }
 }
 
+pub(crate) use connection::PlaintextSink;
 pub use connection::{Connection, Reader, Writer};
 
 /// An object of this type can export keying material.
@@ -503,6 +504,27 @@ impl ConnectionRandoms {
     }
 }
 
+/// Buffer management for connection types with internal buffering.
+pub(crate) struct ConnectionBuffers {
+    pub(crate) deframer_buffer: DeframerVecBuffer,
+    pub(crate) received_plaintext: ChunkVecBuffer,
+    pub(crate) sendable_plaintext: ChunkVecBuffer,
+    pub(crate) sendable_tls: ChunkVecBuffer,
+    pub(crate) has_seen_eof: bool,
+}
+
+impl ConnectionBuffers {
+    pub(crate) fn new() -> Self {
+        Self {
+            deframer_buffer: DeframerVecBuffer::default(),
+            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
+            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            sendable_tls: ChunkVecBuffer::default(),
+            has_seen_eof: false,
+        }
+    }
+}
+
 /// TLS connection state with side-specific data (`Side`).
 ///
 /// This is one of the core abstractions of the rustls API. It represents a single connection
@@ -515,10 +537,7 @@ impl ConnectionRandoms {
 /// [`SideData`]. This is used to store side-specific data.
 pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
-    deframer_buffer: DeframerVecBuffer,
-    pub(crate) received_plaintext: ChunkVecBuffer,
-    pub(crate) sendable_plaintext: ChunkVecBuffer,
-    pub(crate) has_seen_eof: bool,
+    buffers: ConnectionBuffers,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
@@ -526,21 +545,29 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         while let Some((payload, mut buffer_progress)) = self
             .core
-            .process_new_packets(&mut self.deframer_buffer)?
+            .process_new_packets(&mut self.buffers.deframer_buffer)?
         {
-            let payload = payload.reborrow(&Delocator::new(self.deframer_buffer.slice_mut()));
-            self.received_plaintext
+            let payload =
+                payload.reborrow(&Delocator::new(self.buffers.deframer_buffer.slice_mut()));
+            self.buffers
+                .received_plaintext
                 .append(payload.into_vec());
-            self.deframer_buffer
+            self.buffers
+                .deframer_buffer
                 .discard(buffer_progress.take_discard());
         }
 
         // Release unsent buffered plaintext.
-        if self.send.may_send_application_data && !self.sendable_plaintext.is_empty() {
+        if self.send.may_send_application_data
+            && !self
+                .buffers
+                .sendable_plaintext
+                .is_empty()
+        {
             self.core
                 .common
                 .send
-                .send_buffered_plaintext(&mut self.sendable_plaintext);
+                .send_buffered_plaintext(&mut self.buffers.sendable_plaintext);
         }
 
         Ok(self.current_io_state())
@@ -553,7 +580,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
         //
         // In the handshake case we don't have readable plaintext before the handshake has
         // completed, but also don't want to read if we still have sendable tls.
-        self.received_plaintext.is_empty()
+        self.buffers
+            .received_plaintext
+            .is_empty()
             && !self.recv.has_received_close_notify
             && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
     }
@@ -569,12 +598,16 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     pub(crate) fn set_buffer_limit(&mut self, limit: Option<usize>) {
-        self.sendable_plaintext.set_limit(limit);
+        self.buffers
+            .sendable_plaintext
+            .set_limit(limit);
         self.send.sendable_tls.set_limit(limit);
     }
 
     pub(crate) fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
-        self.received_plaintext.set_limit(limit);
+        self.buffers
+            .received_plaintext
+            .set_limit(limit);
     }
 
     pub(crate) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
@@ -588,7 +621,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         let common_state = &self.core.common;
         IoState {
             tls_bytes_to_write: common_state.send.sendable_tls.len(),
-            plaintext_bytes_to_read: self.received_plaintext.len(),
+            plaintext_bytes_to_read: self.buffers.received_plaintext.len(),
             peer_has_closed: common_state
                 .recv
                 .has_received_close_notify,
@@ -602,11 +635,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
         let common = &mut self.core.common;
         let has_received_close_notify = common.recv.has_received_close_notify;
         Reader {
-            received_plaintext: &mut self.received_plaintext,
+            received_plaintext: &mut self.buffers.received_plaintext,
             // Are we done? i.e., have we processed all received messages, and received a
             // close_notify to indicate that no new messages will arrive?
             has_received_close_notify,
-            has_seen_eof: self.has_seen_eof,
+            has_seen_eof: self.buffers.has_seen_eof,
         }
     }
 
@@ -626,12 +659,18 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .core
             .common
             .recv
-            .deframe(self.deframer_buffer.filled_mut(), &mut buffer_progress)
+            .deframe(
+                self.buffers
+                    .deframer_buffer
+                    .filled_mut(),
+                &mut buffer_progress,
+            )
             .map(|opt| opt.map(|pm| Message::try_from(pm.plaintext).map(|m| m.into_owned())));
 
         match res? {
             Some(Ok(msg)) => {
-                self.deframer_buffer
+                self.buffers
+                    .deframer_buffer
                     .discard(buffer_progress.take_discard());
                 Ok(Some(Input {
                     message: msg,
@@ -648,7 +687,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     pub(crate) fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        if self.received_plaintext.is_full() {
+        if self
+            .buffers
+            .received_plaintext
+            .is_full()
+        {
             return Err(io::Error::other("received plaintext buffer full"));
         }
 
@@ -657,10 +700,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
         }
 
         let res = self
+            .buffers
             .deframer_buffer
             .read(rd, self.recv.hs_deframer.is_active());
         if let Ok(0) = res {
-            self.has_seen_eof = true;
+            self.buffers.has_seen_eof = true;
         }
         res
     }
@@ -688,10 +732,7 @@ impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
     fn from(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
-            deframer_buffer: DeframerVecBuffer::default(),
-            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
-            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
-            has_seen_eof: false,
+            buffers: ConnectionBuffers::new(),
         }
     }
 }
@@ -702,9 +743,9 @@ impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
 /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
 #[derive(Debug, Eq, PartialEq)]
 pub struct IoState {
-    tls_bytes_to_write: usize,
-    plaintext_bytes_to_read: usize,
-    peer_has_closed: bool,
+    pub(crate) tls_bytes_to_write: usize,
+    pub(crate) plaintext_bytes_to_read: usize,
+    pub(crate) peer_has_closed: bool,
 }
 
 impl IoState {
@@ -737,8 +778,8 @@ impl IoState {
 
 pub(crate) struct ConnectionProcessor<'a, Side: SideData> {
     pub(crate) state: Result<Side::StateMachine, Error>,
-    recv: &'a mut ReceivePath,
-    other: &'a mut dyn Output,
+    pub(crate) recv: &'a mut ReceivePath,
+    pub(crate) other: &'a mut dyn Output,
 }
 
 impl<Side: SideData> ConnectionProcessor<'_, Side> {
@@ -984,4 +1025,4 @@ pub(crate) trait StateMachine: Sized {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
 
-const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
+pub(crate) const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

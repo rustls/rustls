@@ -32,6 +32,12 @@ pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 mod hs;
 pub(crate) use hs::ServerHandler;
 
+mod state;
+pub use state::{
+    AwaitClientFlight, ProvideCredential, ReceiveEarlyData, SendServerFlight, ServerState,
+    VerifyClientIdentity,
+};
+
 mod tls12;
 pub(crate) use tls12::TLS12_HANDLER;
 use tls12::Tls12ServerSessionValue;
