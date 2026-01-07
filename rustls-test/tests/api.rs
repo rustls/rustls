@@ -19,6 +19,8 @@ mod tests_with_ring {
     mod io;
     #[path = "api/kx.rs"]
     mod kx;
+    #[path = "api/midstate.rs"]
+    mod midstate;
     #[path = "api/quic.rs"]
     mod quic;
     #[path = "api/raw_keys.rs"]
@@ -54,6 +56,8 @@ mod tests_with_aws_lc_rs {
     mod io;
     #[path = "api/kx.rs"]
     mod kx;
+    #[path = "api/midstate.rs"]
+    mod midstate;
     #[path = "api/quic.rs"]
     mod quic;
     #[path = "api/raw_keys.rs"]

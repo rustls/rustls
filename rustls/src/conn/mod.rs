@@ -1206,7 +1206,7 @@ impl<Side: SideData> ConnectionCore<Side> {
     }
 
     /// Trigger a `refresh_traffic_keys` if required by `CommonState`.
-    fn maybe_refresh_traffic_keys(&mut self) {
+    pub(crate) fn maybe_refresh_traffic_keys(&mut self) {
         if mem::take(
             &mut self
                 .common_state

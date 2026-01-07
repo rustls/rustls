@@ -492,6 +492,13 @@ pub use crate::verify::{DigitallySignedStruct, DistinguishedName, SignerPublicKe
 pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersion};
 pub use crate::webpki::RootCertStore;
 
+/// Types supporting the mid-level state-based API.
+pub mod state {
+    pub use crate::msgs::deframer::{
+        DeframerSliceBuffer as SliceInput, DeframerVecBuffer as BufferedInput, ReceivedData,
+    };
+}
+
 /// Items for use in a client.
 pub mod client;
 pub use client::ClientConfig;

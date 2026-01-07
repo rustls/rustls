@@ -251,12 +251,12 @@ mod buffered {
     }
 
     impl super::EarlyData {
-        fn check_write(&mut self, sz: usize) -> io::Result<usize> {
+        pub(crate) fn check_write(&mut self, sz: usize) -> io::Result<usize> {
             self.check_write_opt(sz)
                 .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
         }
 
-        fn bytes_left(&self) -> usize {
+        pub(crate) fn bytes_left(&self) -> usize {
             self.left
         }
     }
@@ -561,7 +561,7 @@ impl core::error::Error for EarlyDataError {}
 /// State associated with a client connection.
 #[derive(Debug)]
 pub struct ClientConnectionData {
-    early_data: EarlyData,
+    pub(crate) early_data: EarlyData,
     ech_status: EchStatus,
 }
 
@@ -571,6 +571,10 @@ impl ClientConnectionData {
             early_data: EarlyData::new(),
             ech_status: EchStatus::default(),
         }
+    }
+
+    pub(crate) fn early_data_is_enabled(&self) -> bool {
+        self.early_data.is_enabled()
     }
 }
 

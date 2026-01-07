@@ -6,9 +6,8 @@ use crate::msgs::codec::Reader;
 use crate::msgs::message::{HEADER_SIZE, read_opaque_message_header};
 
 mod buffers;
-pub(crate) use buffers::{
-    BufferProgress, DeframerSliceBuffer, DeframerVecBuffer, Delocator, Locator, ReceivedData,
-};
+pub(crate) use buffers::{BufferProgress, Delocator, Locator};
+pub use buffers::{DeframerSliceBuffer, DeframerVecBuffer, ReceivedData};
 
 mod handshake;
 pub(crate) use handshake::{HandshakeAlignedProof, HandshakeDeframer};
