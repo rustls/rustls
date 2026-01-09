@@ -21,7 +21,7 @@ use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::{
-    AlertLevel, AlertMessagePayload, Codec, Delocator, HandshakeAlignedProof,
+    AlertLevel, AlertMessagePayload, Codec, Delocator, HandshakeAlignedProof, HandshakeDeframer,
     HandshakeMessagePayload, Locator, Message, MessageFragmenter, MessagePayload,
 };
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
@@ -720,6 +720,11 @@ pub(crate) struct ReceivePath {
     pub(crate) has_seen_eof: bool,
     temper_counters: TemperCounters,
     negotiated_version: Option<ProtocolVersion>,
+    pub(crate) hs_deframer: HandshakeDeframer,
+
+    /// We limit consecutive empty fragments to avoid a route for the peer to send
+    /// us significant but fruitless traffic.
+    pub(crate) seen_consecutive_empty_fragments: u8,
 }
 
 impl ReceivePath {
@@ -732,6 +737,8 @@ impl ReceivePath {
             has_seen_eof: false,
             temper_counters: TemperCounters::default(),
             negotiated_version: None,
+            hs_deframer: HandshakeDeframer::default(),
+            seen_consecutive_empty_fragments: 0,
         }
     }
 
