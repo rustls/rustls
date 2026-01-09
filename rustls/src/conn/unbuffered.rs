@@ -88,6 +88,8 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
             } else {
                 match self
                     .core
+                    .common_state
+                    .recv
                     .deframe(buffer.filled_mut(), &mut buffer_progress)
                 {
                     Err(err) => {
