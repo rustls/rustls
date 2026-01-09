@@ -739,7 +739,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         let res = self
             .core
             .deframe(self.deframer_buffer.filled_mut(), &mut buffer_progress)
-            .map(|opt| opt.map(|pm| Message::try_from(&pm).map(|m| m.into_owned())));
+            .map(|opt| opt.map(|pm| Message::try_from(&pm.plaintext).map(|m| m.into_owned())));
 
         match res? {
             Some(Ok(msg)) => {
@@ -925,6 +925,15 @@ impl<Side: SideData> ConnectionCore<Side> {
                 break;
             };
 
+            let Decrypted {
+                plaintext: msg,
+                want_close_before_decrypt,
+            } = msg;
+
+            if want_close_before_decrypt {
+                self.side.send_close_notify();
+            }
+
             let hs_aligned = self.side.recv.hs_deframer.aligned();
             match process_main_protocol(
                 msg,
@@ -972,7 +981,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
+    ) -> Result<Option<Decrypted<'b>>, Error> {
         // before processing any more of `buffer`, return any extant messages from `hs_deframer`
         if self
             .side
@@ -990,7 +999,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         buffer: &'b [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Option<EncodedMessage<&'b [u8]>> {
+    ) -> Option<Decrypted<'b>> {
         self.side
             .recv
             .hs_deframer
@@ -998,7 +1007,10 @@ impl<Side: SideData> ConnectionCore<Side> {
             .next()
             .map(|(message, discard)| {
                 buffer_progress.add_discard(discard);
-                message
+                Decrypted {
+                    want_close_before_decrypt: false,
+                    plaintext: message,
+                }
             })
     }
 
@@ -1006,7 +1018,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
+    ) -> Result<Option<Decrypted<'b>>, Error> {
         let version_is_tls13 =
             matches!(self.side.negotiated_version, Some(ProtocolVersion::TLSv1_3));
 
@@ -1047,7 +1059,13 @@ impl<Side: SideData> ConnectionCore<Side> {
                 };
 
                 if allowed_plaintext && !self.side.recv.hs_deframer.is_active() {
-                    break (message.into_plain_message(), iter.bytes_consumed());
+                    break (
+                        Decrypted {
+                            plaintext: message.into_plain_message(),
+                            want_close_before_decrypt: false,
+                        },
+                        iter.bytes_consumed(),
+                    );
                 }
 
                 let message = match self
@@ -1079,17 +1097,13 @@ impl<Side: SideData> ConnectionCore<Side> {
                     Err(err) => return Err(err),
                 };
 
-                let Decrypted {
-                    want_close_before_decrypt,
-                    plaintext,
-                } = message;
-
-                if want_close_before_decrypt {
-                    self.side.send_close_notify();
-                }
-
-                break (plaintext, iter.bytes_consumed());
+                break (message, iter.bytes_consumed());
             };
+
+            let Decrypted {
+                plaintext: message,
+                want_close_before_decrypt,
+            } = message;
 
             if self
                 .side
@@ -1137,7 +1151,10 @@ impl<Side: SideData> ConnectionCore<Side> {
             if unborrowed.typ != ContentType::Handshake {
                 let message = unborrowed.reborrow(&Delocator::new(buffer));
                 buffer_progress.add_discard(processed);
-                return Ok(Some(message));
+                return Ok(Some(Decrypted {
+                    plaintext: message,
+                    want_close_before_decrypt,
+                }));
             }
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
@@ -1162,7 +1179,12 @@ impl<Side: SideData> ConnectionCore<Side> {
                     .decrypt_state
                     .finish_trial_decryption();
 
-                return Ok(self.take_handshake_message(buffer, buffer_progress));
+                return Ok(self
+                    .take_handshake_message(buffer, buffer_progress)
+                    .map(|decrypted| Decrypted {
+                        plaintext: decrypted.plaintext,
+                        want_close_before_decrypt,
+                    }));
             }
         }
     }
