@@ -50,7 +50,12 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
     ) -> UnbufferedStatus<'c, 'i, Side> {
         let plaintext_locator = Locator::new(incoming_tls);
         let mut buffer = DeframerSliceBuffer::new(incoming_tls);
-        let mut buffer_progress = self.core.hs_deframer.progress();
+        let mut buffer_progress = self
+            .core
+            .side
+            .recv
+            .hs_deframer
+            .progress();
 
         let (discard, state) = loop {
             if early_data_available(self) {
@@ -109,9 +114,16 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     };
 
                 let mut received_plaintext = None;
+
+                let hs_align = self
+                    .core
+                    .side
+                    .recv
+                    .hs_deframer
+                    .aligned();
                 match process_main_protocol(
                     msg,
-                    self.core.hs_deframer.aligned(),
+                    hs_align,
                     state,
                     &plaintext_locator,
                     &mut received_plaintext,
