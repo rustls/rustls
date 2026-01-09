@@ -10,7 +10,7 @@ use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
 use crate::common_state::{AppDataOutput, Context};
 use crate::conn::SideData;
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{Decrypted, Payload};
 use crate::error::Error;
 use crate::msgs::deframer::{DeframerSliceBuffer, Delocator, Locator};
 use crate::server::ServerConnectionData;
@@ -118,6 +118,17 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                             };
                         }
                     };
+
+                let Decrypted {
+                    plaintext: msg,
+                    want_close_before_decrypt,
+                } = msg;
+
+                if want_close_before_decrypt {
+                    self.core
+                        .common_state
+                        .send_close_notify();
+                }
 
                 let mut received_plaintext = None;
                 let hs_aligned = self
