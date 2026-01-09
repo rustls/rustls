@@ -9,8 +9,8 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter, MessageEncrypter,
-    OutboundOpaque, OutboundPlain, Payload, PreEncryptAction,
+    Decrypted, DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter,
+    MessageEncrypter, OutboundOpaque, OutboundPlain, Payload, PreEncryptAction,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
@@ -20,7 +20,9 @@ use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::codec::Codec;
-use crate::msgs::deframer::{Delocator, HandshakeAlignedProof, HandshakeDeframer, Locator};
+use crate::msgs::deframer::{
+    BufferProgress, DeframerIter, Delocator, HandshakeAlignedProof, HandshakeDeframer, Locator,
+};
 use crate::msgs::enums::AlertLevel;
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
@@ -553,6 +555,176 @@ impl ReceivePath {
             negotiated_version: None,
             hs_deframer: HandshakeDeframer::default(),
             seen_consecutive_empty_fragments: 0,
+        }
+    }
+
+    /// Pull a message out of the deframer and send any messages that need to be sent as a result.
+    pub(crate) fn deframe<'b>(
+        &mut self,
+        buffer: &'b mut [u8],
+        buffer_progress: &mut BufferProgress,
+    ) -> Result<Option<Decrypted<'b>>, Error> {
+        // before processing any more of `buffer`, return any extant messages from `hs_deframer`
+        if self.hs_deframer.has_message_ready() {
+            Ok(self.take_handshake_message(buffer, buffer_progress))
+        } else {
+            self.process_more_input(buffer, buffer_progress)
+        }
+    }
+
+    fn take_handshake_message<'b>(
+        &mut self,
+        buffer: &'b mut [u8],
+        buffer_progress: &mut BufferProgress,
+    ) -> Option<Decrypted<'b>> {
+        self.hs_deframer
+            .iter(buffer)
+            .next()
+            .map(|(message, discard)| {
+                buffer_progress.add_discard(discard);
+                Decrypted {
+                    want_close_before_decrypt: false,
+                    plaintext: message,
+                }
+            })
+    }
+
+    fn process_more_input<'b>(
+        &mut self,
+        buffer: &'b mut [u8],
+        buffer_progress: &mut BufferProgress,
+    ) -> Result<Option<Decrypted<'b>>, Error> {
+        let version_is_tls13 = matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3));
+
+        let locator = Locator::new(buffer);
+
+        loop {
+            let mut iter = DeframerIter::new(&mut buffer[buffer_progress.processed()..]);
+
+            let (message, processed) = loop {
+                let message = match iter.next().transpose() {
+                    Ok(Some(message)) => message,
+                    Ok(None) => return Ok(None),
+                    Err(err) => return Err(err),
+                };
+
+                let allowed_plaintext = match message.typ {
+                    // CCS messages are always plaintext.
+                    ContentType::ChangeCipherSpec => true,
+                    // Alerts are allowed to be plaintext if-and-only-if:
+                    // * The negotiated protocol version is TLS 1.3. - In TLS 1.2 it is unambiguous when
+                    //   keying changes based on the CCS message. Only TLS 1.3 requires these heuristics.
+                    // * We have not yet decrypted any messages from the peer - if we have we don't
+                    //   expect any plaintext.
+                    // * The payload size is indicative of a plaintext alert message.
+                    ContentType::Alert
+                        if version_is_tls13
+                            && !self.decrypt_state.has_decrypted()
+                            && message.payload.len() <= 2 =>
+                    {
+                        true
+                    }
+                    // In other circumstances, we expect all messages to be encrypted.
+                    _ => false,
+                };
+
+                if allowed_plaintext && !self.hs_deframer.is_active() {
+                    break (
+                        Decrypted {
+                            plaintext: message.into_plain_message(),
+                            want_close_before_decrypt: false,
+                        },
+                        iter.bytes_consumed(),
+                    );
+                }
+
+                let message = match self
+                    .decrypt_state
+                    .decrypt_incoming(message)
+                {
+                    // failed decryption during trial decryption is not allowed to be
+                    // interleaved with partial handshake data.
+                    Ok(None) if self.hs_deframer.aligned().is_none() => {
+                        return Err(
+                            PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
+                        );
+                    }
+
+                    // failed decryption during trial decryption.
+                    Ok(None) => continue,
+
+                    Ok(Some(message)) => message,
+
+                    Err(err) => return Err(err),
+                };
+
+                break (message, iter.bytes_consumed());
+            };
+
+            let Decrypted {
+                plaintext: message,
+                want_close_before_decrypt,
+            } = message;
+
+            if self.hs_deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+                // "Handshake messages MUST NOT be interleaved with other record
+                // types.  That is, if a handshake message is split over two or more
+                // records, there MUST NOT be any other records between them."
+                // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
+                return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
+            }
+
+            match message.payload.len() {
+                0 => {
+                    if self.seen_consecutive_empty_fragments
+                        == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
+                    {
+                        return Err(PeerMisbehaved::TooManyEmptyFragments.into());
+                    }
+                    self.seen_consecutive_empty_fragments += 1;
+                }
+                _ => {
+                    self.seen_consecutive_empty_fragments = 0;
+                }
+            };
+
+            buffer_progress.add_processed(processed);
+
+            // do an end-run around the borrow checker, converting `message` (containing
+            // a borrowed slice) to an unborrowed one (containing a `Range` into the
+            // same buffer).  the reborrow happens inside the branch that returns the
+            // message.
+            //
+            // is fixed by -Zpolonius
+            // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
+            let unborrowed = InboundUnborrowedMessage::unborrow(&locator, message);
+
+            if unborrowed.typ != ContentType::Handshake {
+                let message = unborrowed.reborrow(&Delocator::new(buffer));
+                buffer_progress.add_discard(processed);
+                return Ok(Some(Decrypted {
+                    plaintext: message,
+                    want_close_before_decrypt,
+                }));
+            }
+
+            let message = unborrowed.reborrow(&Delocator::new(buffer));
+            self.hs_deframer
+                .input_message(message, &locator, buffer_progress.processed());
+            self.hs_deframer.coalesce(buffer)?;
+
+            if self.hs_deframer.has_message_ready() {
+                // trial decryption finishes with the first handshake message after it started.
+                self.decrypt_state
+                    .finish_trial_decryption();
+
+                return Ok(self
+                    .take_handshake_message(buffer, buffer_progress)
+                    .map(|decrypted| Decrypted {
+                        plaintext: decrypted.plaintext,
+                        want_close_before_decrypt,
+                    }));
+            }
         }
     }
 
@@ -1225,5 +1397,35 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
 
 pub(crate) type HandshakeFlightTls12<'a> = HandshakeFlight<'a, false>;
 pub(crate) type HandshakeFlightTls13<'a> = HandshakeFlight<'a, true>;
+
+/// An [`EncodedMessage<Payload<'_>>`] which does not borrow its payload, but
+/// references a range that can later be borrowed.
+struct InboundUnborrowedMessage {
+    typ: ContentType,
+    version: ProtocolVersion,
+    bounds: Range<usize>,
+}
+
+impl InboundUnborrowedMessage {
+    fn unborrow(locator: &Locator, msg: EncodedMessage<&'_ [u8]>) -> Self {
+        Self {
+            typ: msg.typ,
+            version: msg.version,
+            bounds: locator.locate(msg.payload),
+        }
+    }
+
+    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> EncodedMessage<&'b [u8]> {
+        EncodedMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: delocator.slice_from_range(&self.bounds),
+        }
+    }
+}
+
+/// cf. BoringSSL's `kMaxEmptyRecords`
+/// <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls_record.cc#L124-L128>
+const ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX: u8 = 32;
 
 pub(crate) const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
