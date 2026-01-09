@@ -14,8 +14,8 @@ use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::{
-    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
-    Message, Random, TlsInputBuffer,
+    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, Locator, Message, Random,
+    TlsInputBuffer,
 };
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
@@ -621,7 +621,12 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Input<'static>>, Error> {
-        let mut buffer_progress = self.core.hs_deframer.progress();
+        let mut buffer_progress = self
+            .core
+            .side
+            .recv
+            .hs_deframer
+            .progress();
 
         let res = self
             .core
@@ -634,7 +639,12 @@ impl<Side: SideData> ConnectionCommon<Side> {
                     .discard(buffer_progress.take_discard());
                 Ok(Some(Input {
                     message: msg,
-                    aligned_handshake: self.core.hs_deframer.aligned(),
+                    aligned_handshake: self
+                        .core
+                        .side
+                        .recv
+                        .hs_deframer
+                        .aligned(),
                 }))
             }
             Some(Err(err)) => Err(err.into()),
@@ -657,7 +667,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
         let res = self
             .deframer_buffer
-            .read(rd, self.core.hs_deframer.is_active());
+            .read(rd, self.recv.hs_deframer.is_active());
         if let Ok(0) = res {
             self.recv.has_seen_eof = true;
         }
@@ -736,11 +746,6 @@ impl IoState {
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Box<dyn State<Side>>, Error>,
     pub(crate) side: Side,
-    pub(crate) hs_deframer: HandshakeDeframer,
-
-    /// We limit consecutive empty fragments to avoid a route for the peer to send
-    /// us significant but fruitless traffic.
-    seen_consecutive_empty_fragments: u8,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
@@ -748,8 +753,6 @@ impl<Side: SideData> ConnectionCore<Side> {
         Self {
             state: Ok(state),
             side,
-            hs_deframer: HandshakeDeframer::default(),
-            seen_consecutive_empty_fragments: 0,
         }
     }
 
@@ -766,7 +769,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         };
 
         let mut plaintext = None;
-        let mut buffer_progress = self.hs_deframer.progress();
+        let mut buffer_progress = self.side.recv.hs_deframer.progress();
 
         loop {
             let buffer = input.slice_mut();
@@ -792,9 +795,10 @@ impl<Side: SideData> ConnectionCore<Side> {
                 break;
             };
 
+            let hs_aligned = self.side.recv.hs_deframer.aligned();
             match process_main_protocol(
                 msg,
-                self.hs_deframer.aligned(),
+                hs_aligned,
                 state,
                 &locator,
                 &mut plaintext,
@@ -840,7 +844,12 @@ impl<Side: SideData> ConnectionCore<Side> {
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
         // before processing any more of `buffer`, return any extant messages from `hs_deframer`
-        if self.hs_deframer.has_message_ready() {
+        if self
+            .side
+            .recv
+            .hs_deframer
+            .has_message_ready()
+        {
             Ok(self.take_handshake_message(buffer, buffer_progress))
         } else {
             self.process_more_input(buffer, buffer_progress)
@@ -852,7 +861,9 @@ impl<Side: SideData> ConnectionCore<Side> {
         buffer: &'b [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Option<EncodedMessage<&'b [u8]>> {
-        self.hs_deframer
+        self.side
+            .recv
+            .hs_deframer
             .iter(buffer)
             .next()
             .map(|(message, discard)| {
@@ -905,7 +916,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                     _ => false,
                 };
 
-                if allowed_plaintext && !self.hs_deframer.is_active() {
+                if allowed_plaintext && !self.side.recv.hs_deframer.is_active() {
                     break (message.into_plain_message(), iter.bytes_consumed());
                 }
 
@@ -917,7 +928,14 @@ impl<Side: SideData> ConnectionCore<Side> {
                 {
                     // failed decryption during trial decryption is not allowed to be
                     // interleaved with partial handshake data.
-                    Ok(None) if self.hs_deframer.aligned().is_none() => {
+                    Ok(None)
+                        if self
+                            .side
+                            .recv
+                            .hs_deframer
+                            .aligned()
+                            .is_none() =>
+                    {
                         return Err(
                             PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
                         );
@@ -943,7 +961,14 @@ impl<Side: SideData> ConnectionCore<Side> {
                 break (plaintext, iter.bytes_consumed());
             };
 
-            if self.hs_deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+            if self
+                .side
+                .recv
+                .hs_deframer
+                .aligned()
+                .is_none()
+                && message.typ != ContentType::Handshake
+            {
                 // "Handshake messages MUST NOT be interleaved with other record
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
@@ -951,17 +976,20 @@ impl<Side: SideData> ConnectionCore<Side> {
                 return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 
+            let seen_consecutive_empty_fragments = &mut self
+                .side
+                .recv
+                .seen_consecutive_empty_fragments;
             match message.payload.len() {
                 0 => {
-                    if self.seen_consecutive_empty_fragments
-                        == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
+                    if *seen_consecutive_empty_fragments == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
                     {
                         return Err(PeerMisbehaved::TooManyEmptyFragments.into());
                     }
-                    self.seen_consecutive_empty_fragments += 1;
+                    *seen_consecutive_empty_fragments += 1;
                 }
                 _ => {
-                    self.seen_consecutive_empty_fragments = 0;
+                    *seen_consecutive_empty_fragments = 0;
                 }
             };
 
@@ -983,11 +1011,21 @@ impl<Side: SideData> ConnectionCore<Side> {
             }
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
-            self.hs_deframer
+            self.side
+                .recv
+                .hs_deframer
                 .input_message(message, &locator, buffer_progress.processed());
-            self.hs_deframer.coalesce(buffer)?;
+            self.side
+                .recv
+                .hs_deframer
+                .coalesce(buffer)?;
 
-            if self.hs_deframer.has_message_ready() {
+            if self
+                .side
+                .recv
+                .hs_deframer
+                .has_message_ready()
+            {
                 // trial decryption finishes with the first handshake message after it started.
                 self.side
                     .recv

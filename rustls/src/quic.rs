@@ -400,17 +400,23 @@ mod connection {
         fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             let range = self.deframer_buffer.extend(plaintext);
 
-            self.core.hs_deframer.input_message(
-                EncodedMessage {
-                    typ: ContentType::Handshake,
-                    version: ProtocolVersion::TLSv1_3,
-                    payload: &self.deframer_buffer.filled()[range.clone()],
-                },
-                &Locator::new(self.deframer_buffer.filled()),
-                range.end,
-            );
+            self.core
+                .side
+                .recv
+                .hs_deframer
+                .input_message(
+                    EncodedMessage {
+                        typ: ContentType::Handshake,
+                        version: ProtocolVersion::TLSv1_3,
+                        payload: &self.deframer_buffer.filled()[range.clone()],
+                    },
+                    &Locator::new(self.deframer_buffer.filled()),
+                    range.end,
+                );
 
             self.core
+                .side
+                .recv
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
