@@ -352,7 +352,8 @@ pub(super) fn prepare_resumption(
     doing_retry: bool,
 ) {
     let resuming_suite = resuming_session.suite();
-    cx.common.suite = Some(resuming_suite.into());
+    cx.common
+        .emit(Event::CipherSuite(resuming_suite.into()));
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size();
@@ -510,7 +511,9 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         // QUIC transport parameters
         if cx.common.protocol.is_quic() {
             match exts.transport_parameters.as_ref() {
-                Some(params) => cx.common.quic.params = Some(params.clone().into_vec()),
+                Some(params) => cx
+                    .common
+                    .emit(Event::QuicTransportParameters(params.clone().into_vec())),
                 None => {
                     return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
                 }
@@ -1421,14 +1424,13 @@ impl ExpectTraffic {
         cx: &mut ClientContext<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
+        cx.common.emit(Event::ReceivedTicket);
+
         let mut kcx = KernelContext {
             protocol: cx.common.protocol,
             quic: &cx.common.quic,
         };
-        cx.common.tls13_tickets_received = cx
-            .common
-            .tls13_tickets_received
-            .saturating_add(1);
+
         self.handle_new_ticket_impl(&mut kcx, nst)
     }
 

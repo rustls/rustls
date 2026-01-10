@@ -863,15 +863,13 @@ impl ExpectServerDone {
         );
 
         let (dec, enc) = secrets.make_cipher_pair(Side::Client);
-        cx.common
-            .encrypt_state
-            .set_message_encrypter(
-                enc,
-                secrets
-                    .suite()
-                    .common
-                    .confidentiality_limit,
-            );
+        cx.common.emit(Event::MessageEncrypter(
+            enc,
+            secrets
+                .suite()
+                .common
+                .confidentiality_limit,
+        ));
 
         // 5.
         emit_finished(&secrets, &mut transcript, cx.common, &proof);
@@ -1001,8 +999,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 
         // Note: msgs layer validates trivial contents of CCS.
         cx.common
-            .decrypt_state
-            .set_message_decrypter(self.pending_decrypter, &proof);
+            .emit(Event::MessageDecrypter(self.pending_decrypter, proof));
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
@@ -1117,15 +1114,13 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         if let Some((_, encrypter)) = st.resuming.take() {
             emit_ccs(cx.common);
-            cx.common
-                .encrypt_state
-                .set_message_encrypter(
-                    encrypter,
-                    st.secrets
-                        .suite()
-                        .common
-                        .confidentiality_limit,
-                );
+            cx.common.emit(Event::MessageEncrypter(
+                encrypter,
+                st.secrets
+                    .suite()
+                    .common
+                    .confidentiality_limit,
+            ));
             emit_finished(&st.secrets, &mut st.transcript, cx.common, &proof);
         }
 

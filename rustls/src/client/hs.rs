@@ -85,7 +85,8 @@ impl ExpectServerHello {
             return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
 
-        cx.common.negotiated_version = Some(T::VERSION);
+        cx.common
+            .emit(Event::ProtocolVersion(T::VERSION));
 
         // Extract ALPN protocol
         if T::VERSION != ProtocolVersion::TLSv1_3 {
@@ -119,7 +120,8 @@ impl ExpectServerHello {
             _ => {
                 debug!("Using ciphersuite {suite:?}");
                 self.suite = Some(SupportedCipherSuite::from(suite));
-                cx.common.suite = Some(SupportedCipherSuite::from(suite));
+                cx.common
+                    .emit(Event::CipherSuite(SupportedCipherSuite::from(suite)));
             }
         }
 
@@ -254,7 +256,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
         match hrr.supported_versions {
             Some(ProtocolVersion::TLSv1_3) => {
-                cx.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
+                cx.common
+                    .emit(Event::ProtocolVersion(ProtocolVersion::TLSv1_3));
             }
             _ => {
                 return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
@@ -272,7 +275,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // HRR selects the ciphersuite.
-        cx.common.suite = Some(cs);
+        cx.common.emit(Event::CipherSuite(cs));
 
         // If we offered ECH, we need to confirm that the server accepted it.
         match (self.next.ech_state.as_ref(), cs) {
@@ -922,9 +925,7 @@ pub(super) fn process_alpn_protocol(
     offered_protocols: &[ProtocolName],
     selected: Option<&ProtocolName>,
 ) -> Result<(), Error> {
-    common.alpn_protocol = selected.map(ToOwned::to_owned);
-
-    if let Some(alpn_protocol) = &common.alpn_protocol {
+    if let Some(alpn_protocol) = selected {
         if !offered_protocols.contains(alpn_protocol) {
             return Err(PeerMisbehaved::SelectedUnofferedApplicationProtocol.into());
         }
@@ -936,18 +937,21 @@ pub(super) fn process_alpn_protocol(
     // mechanism) if and only if any ALPN protocols were configured. This defends against badly-behaved
     // servers which accept a connection that requires an application-layer protocol they do not
     // understand.
-    if common.protocol.is_quic() && common.alpn_protocol.is_none() && !offered_protocols.is_empty()
-    {
+    if common.protocol.is_quic() && selected.is_none() && !offered_protocols.is_empty() {
         return Err(Error::NoApplicationProtocol);
     }
 
     debug!(
         "ALPN protocol is {:?}",
-        common
-            .alpn_protocol
+        selected
             .as_ref()
             .map(|v| bs_debug::BsDebug(v.as_ref()))
     );
+
+    if let Some(protocol) = selected {
+        common.emit(Event::ApplicationProtocol(protocol.to_owned()));
+    }
+
     Ok(())
 }
 
@@ -991,12 +995,12 @@ impl ClientSessionValue {
                 None
             });
 
-        if let Some(resuming) = &found {
-            if cx.common.protocol.is_quic() {
-                cx.common.quic.params = resuming
-                    .tls13()
-                    .map(|v| v.quic_params());
-            }
+        if let Some(quic_params) = found
+            .as_ref()
+            .and_then(|r| r.tls13().map(|v| v.quic_params()))
+        {
+            cx.common
+                .emit(Event::QuicTransportParameters(quic_params));
         }
 
         found

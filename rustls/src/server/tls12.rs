@@ -320,15 +320,13 @@ mod client_hello {
         emit_ccs(cx.common);
 
         let (dec, enc) = secrets.make_cipher_pair(Side::Server);
-        cx.common
-            .encrypt_state
-            .set_message_encrypter(
-                enc,
-                secrets
-                    .suite()
-                    .common
-                    .confidentiality_limit,
-            );
+        cx.common.emit(Event::MessageEncrypter(
+            enc,
+            secrets
+                .suite()
+                .common
+                .confidentiality_limit,
+        ));
         emit_finished(&secrets, &mut transcript, cx.common, &proof);
 
         Ok(Box::new(ExpectCcs {
@@ -698,8 +696,7 @@ impl State<ServerConnectionData> for ExpectCcs {
         };
 
         cx.common
-            .decrypt_state
-            .set_message_decrypter(dec, &proof);
+            .emit(Event::MessageDecrypter(dec, proof));
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
@@ -882,15 +879,13 @@ impl State<ServerConnectionData> for ExpectFinished {
                 }
             }
             emit_ccs(cx.common);
-            cx.common
-                .encrypt_state
-                .set_message_encrypter(
-                    pending_encrypter,
-                    self.secrets
-                        .suite()
-                        .common
-                        .confidentiality_limit,
-                );
+            cx.common.emit(Event::MessageEncrypter(
+                pending_encrypter,
+                self.secrets
+                    .suite()
+                    .common
+                    .confidentiality_limit,
+            ));
             emit_finished(&self.secrets, &mut self.transcript, cx.common, &proof);
         }
 

@@ -6,10 +6,11 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    DecryptionState, EncodedMessage, EncryptionState, OutboundOpaque, OutboundPlain, Payload,
-    PreEncryptAction,
+    DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter, MessageEncrypter,
+    OutboundOpaque, OutboundPlain, Payload, PreEncryptAction,
 };
 use crate::crypto::kx::SupportedKxGroup;
+use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -676,8 +677,11 @@ impl CommonState {
 impl Output for CommonState {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
+            Event::ApplicationProtocol(protocol) => self.alpn_protocol = Some(protocol),
+            Event::CipherSuite(suite) => self.suite = Some(suite),
             Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
             Event::EncryptMessage(m) => self.send_msg(m, true),
+            Event::EnqueueKeyUpdateNotification => self.enqueue_key_update_notification(),
             Event::Exporter(exporter) => self.exporter = Some(exporter),
             Event::HandshakeKind(hk) => {
                 assert!(self.handshake_kind.is_none());
@@ -687,8 +691,27 @@ impl Output for CommonState {
                 assert!(self.negotiated_kx_group.is_none());
                 self.negotiated_kx_group = Some(kxg);
             }
+            Event::MessageDecrypter(dec, proof) => self
+                .decrypt_state
+                .set_message_decrypter(dec, &proof),
+            Event::MessageDecrypterWithTrialDecryption(dec, max_length, proof) => self
+                .decrypt_state
+                .set_message_decrypter_with_trial_decryption(dec, max_length, &proof),
+            Event::MessageEncrypter(enc, limit) => self
+                .encrypt_state
+                .set_message_encrypter(enc, limit),
+            Event::QuicEarlySecret(sec) => self.quic.early_secret = sec,
+            Event::QuicHandshakeSecrets(sec) => self.quic.hs_secrets = Some(sec),
+            Event::QuicTrafficSecrets(sec) => self.quic.traffic_secrets = Some(sec),
+            Event::QuicTransportParameters(params) => self.quic.params = Some(params),
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
             Event::PlainMessage(m) => self.send_msg(m, false),
+            Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
+            Event::ReceivedTicket => {
+                self.tls13_tickets_received = self
+                    .tls13_tickets_received
+                    .saturating_add(1)
+            }
             Event::StartOutgoingTraffic => self.start_outgoing_traffic(),
             Event::StartTraffic => self.start_traffic(),
         }
@@ -844,13 +867,25 @@ pub(crate) trait Output {
 
 /// The set of events output by the low-level handshake state machine.
 pub(crate) enum Event<'a> {
+    ApplicationProtocol(ProtocolName),
+    CipherSuite(SupportedCipherSuite),
     EarlyExporter(Box<dyn Exporter>),
     EncryptMessage(Message<'a>),
+    EnqueueKeyUpdateNotification,
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
+    MessageDecrypter(Box<dyn MessageDecrypter>, HandshakeAlignedProof),
+    MessageDecrypterWithTrialDecryption(Box<dyn MessageDecrypter>, usize, HandshakeAlignedProof),
+    MessageEncrypter(Box<dyn MessageEncrypter>, u64),
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
+    ProtocolVersion(ProtocolVersion),
+    QuicEarlySecret(Option<OkmBlock>),
+    QuicHandshakeSecrets(quic::Secrets),
+    QuicTrafficSecrets(quic::Secrets),
+    QuicTransportParameters(Vec<u8>),
+    ReceivedTicket,
     /// Mark the connection as ready to send application data.
     StartOutgoingTraffic,
     /// Mark the connection as ready to send and receive application data.
