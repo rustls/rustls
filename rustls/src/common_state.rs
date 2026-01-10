@@ -31,17 +31,17 @@ use crate::vecbuf::ChunkVecBuffer;
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
     handshake_kind: Option<HandshakeKind>,
-    pub(crate) side: Side,
+    side: Side,
     pub(crate) decrypt_state: DecryptionState,
     pub(crate) encrypt_state: EncryptionState,
-    pub(crate) suite: Option<SupportedCipherSuite>,
+    suite: Option<SupportedCipherSuite>,
     negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
     pub(crate) alpn_protocol: Option<ProtocolName>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) may_send_application_data: bool,
     may_receive_application_data: bool,
-    sent_fatal_alert: bool,
+    has_sent_fatal_alert: bool,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
     /// If the peer has signaled end of stream.
@@ -64,7 +64,7 @@ pub struct CommonState {
 }
 
 impl CommonState {
-    pub(crate) fn new(side: Side) -> Self {
+    pub(crate) fn new(side: Side, protocol: Protocol) -> Self {
         Self {
             negotiated_version: None,
             handshake_kind: None,
@@ -78,7 +78,7 @@ impl CommonState {
             early_exporter: None,
             may_send_application_data: false,
             may_receive_application_data: false,
-            sent_fatal_alert: false,
+            has_sent_fatal_alert: false,
             has_sent_close_notify: false,
             has_received_close_notify: false,
             #[cfg(feature = "std")]
@@ -88,7 +88,7 @@ impl CommonState {
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             queued_key_update_message: None,
-            protocol: Protocol::Tcp,
+            protocol,
             quic: quic::Quic::default(),
             temper_counters: TemperCounters::default(),
             refresh_traffic_keys_pending: false,
@@ -179,6 +179,16 @@ impl CommonState {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
     }
 
+    pub(super) fn into_kernel_parts(
+        self,
+    ) -> Option<(ProtocolVersion, Protocol, SupportedCipherSuite, quic::Quic)> {
+        if let (Some(negotiated_version), Some(suite)) = (self.negotiated_version, self.suite) {
+            Some((negotiated_version, self.protocol, suite, self.quic))
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
         msg: EncodedMessage<&'_ [u8]>,
@@ -253,10 +263,10 @@ impl CommonState {
         let Ok(alert) = AlertDescription::try_from(error) else {
             return;
         };
-        debug_assert!(!self.sent_fatal_alert);
+        debug_assert!(!self.has_sent_fatal_alert);
         let m = Message::build_alert(AlertLevel::Fatal, alert);
         self.send_msg(m, self.encrypt_state.is_encrypting());
-        self.sent_fatal_alert = true;
+        self.has_sent_fatal_alert = true;
     }
 
     pub(crate) fn write_plaintext(
@@ -466,28 +476,6 @@ impl CommonState {
 
     /// Send a raw TLS message, fragmenting it if needed.
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        {
-            if self.protocol.is_quic() {
-                if let MessagePayload::Alert(_) = m.payload {
-                    // alerts are sent out-of-band in QUIC mode
-                    return;
-                } else {
-                    debug_assert!(
-                        matches!(
-                            m.payload,
-                            MessagePayload::Handshake { .. } | MessagePayload::HandshakeFlight(_)
-                        ),
-                        "QUIC uses TLS for the cryptographic handshake only"
-                    );
-                    let mut bytes = Vec::new();
-                    m.payload.encode(&mut bytes);
-                    self.quic
-                        .hs_queue
-                        .push_back((must_encrypt, bytes));
-                }
-                return;
-            }
-        }
         if !must_encrypt {
             let msg = &m.into();
             let iter = self
@@ -544,11 +532,11 @@ impl CommonState {
     ///
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn send_close_notify(&mut self) {
-        if self.sent_fatal_alert {
+        if self.has_sent_fatal_alert {
             return;
         }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-        self.sent_fatal_alert = true;
+        self.has_sent_fatal_alert = true;
         self.has_sent_close_notify = true;
         self.send_warning_alert_no_log(AlertDescription::CloseNotify);
     }
@@ -680,7 +668,10 @@ impl Output for CommonState {
             Event::ApplicationProtocol(protocol) => self.alpn_protocol = Some(protocol),
             Event::CipherSuite(suite) => self.suite = Some(suite),
             Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
-            Event::EncryptMessage(m) => self.send_msg(m, true),
+            Event::EncryptMessage(m) => match self.protocol {
+                Protocol::Tcp => self.send_msg(m, true),
+                Protocol::Quic(_) => self.quic.send_msg(m, true),
+            },
             Event::EnqueueKeyUpdateNotification => self.enqueue_key_update_notification(),
             Event::Exporter(exporter) => self.exporter = Some(exporter),
             Event::HandshakeKind(hk) => {
@@ -705,7 +696,10 @@ impl Output for CommonState {
             Event::QuicTrafficSecrets(sec) => self.quic.traffic_secrets = Some(sec),
             Event::QuicTransportParameters(params) => self.quic.params = Some(params),
             Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
-            Event::PlainMessage(m) => self.send_msg(m, false),
+            Event::PlainMessage(m) => match self.protocol {
+                Protocol::Tcp => self.send_msg(m, false),
+                Protocol::Quic(_) => self.quic.send_msg(m, false),
+            },
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
             Event::ReceivedTicket => {
                 self.tls13_tickets_received = self
@@ -796,7 +790,7 @@ pub(crate) trait State<Side>: Send + Sync {
         input: Input<'m>,
     ) -> Result<Box<dyn State<Side>>, Error>;
 
-    fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
+    fn send_key_update_request(&mut self, _output: &mut dyn Output) -> Result<(), Error> {
         Err(Error::HandshakeNotComplete)
     }
 
@@ -1066,7 +1060,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             .add(&self.body[start_len..]);
     }
 
-    pub(crate) fn finish(self, common: &mut CommonState) {
+    pub(crate) fn finish(self, output: &mut dyn Output) {
         let m = Message {
             version: match TLS13 {
                 true => ProtocolVersion::TLSv1_3,
@@ -1075,7 +1069,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
         };
 
-        common.emit(match TLS13 {
+        output.emit(match TLS13 {
             true => Event::EncryptMessage(m),
             false => Event::PlainMessage(m),
         });

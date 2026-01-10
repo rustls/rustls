@@ -10,9 +10,7 @@ use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
 use super::hs::{self, ServerContext};
 use crate::check::inappropriate_message;
-use crate::common_state::{
-    CommonState, Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State,
-};
+use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -39,6 +37,7 @@ use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
     use super::*;
+    use crate::common_state::Protocol;
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::msgs::enums::{ClientCertificateType, Compression};
@@ -354,7 +353,7 @@ mod client_hello {
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput<'static>,
     ) -> Result<bool, Error> {
-        let mut ep = hs::ExtensionProcessing::new(extra_exts, hello, config);
+        let mut ep = hs::ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
         ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
         ep.process_tls12(ocsp_response, using_ems);
 
@@ -769,8 +768,8 @@ fn emit_ticket(
     Ok(())
 }
 
-fn emit_ccs(common: &mut CommonState) {
-    common.emit(Event::PlainMessage(Message {
+fn emit_ccs(output: &mut dyn Output) {
+    output.emit(Event::PlainMessage(Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     }));
@@ -779,7 +778,7 @@ fn emit_ccs(common: &mut CommonState) {
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
-    common: &mut CommonState,
+    output: &mut dyn Output,
     proof: &HandshakeAlignedProof,
 ) {
     let vh = transcript.current_hash();
@@ -794,7 +793,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    common.emit(Event::EncryptMessage(f));
+    output.emit(Event::EncryptMessage(f));
 }
 
 struct ExpectFinished {

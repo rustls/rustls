@@ -268,9 +268,8 @@ impl ConnectionCore<ClientConnectionData> {
         extra_exts: ClientExtensionsInput<'static>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client);
+        let mut common_state = CommonState::new(Side::Client, proto);
         common_state.set_max_fragment_size(config.max_fragment_size)?;
-        common_state.protocol = proto;
         common_state.fips = config.fips();
         let mut data = ClientConnectionData::new();
 
@@ -282,7 +281,7 @@ impl ConnectionCore<ClientConnectionData> {
             received_plaintext: &mut None,
         };
 
-        let input = ClientHelloInput::new(name, &extra_exts, &mut cx, config)?;
+        let input = ClientHelloInput::new(name, &extra_exts, proto, &mut cx, config)?;
         let state = input.start_handshake(extra_exts, &mut cx)?;
         debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
