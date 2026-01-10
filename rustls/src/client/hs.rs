@@ -14,7 +14,7 @@ use crate::client::ech::EchState;
 use crate::client::{
     ClientConnectionData, ClientHelloDetails, ClientSessionKey, EchMode, EchStatus, tls13,
 };
-use crate::common_state::{CommonState, Event, Input, Output, State};
+use crate::common_state::{EarlyDataEvent, Event, Input, Output, Protocol, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -42,7 +42,6 @@ use crate::{ClientConfig, bs_debug};
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
-pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
 pub(crate) struct ExpectServerHello {
     pub(super) input: ClientHelloInput,
@@ -54,10 +53,11 @@ pub(crate) struct ExpectServerHello {
     // Otherwise, it is thrown away.
     //
     // If this is `None` then we do not support early data.
-    pub(super) early_data_key_schedule: Option<KeyScheduleEarlyClient>,
+    pub(super) early_data_key_schedule: Option<(KeyScheduleEarlyClient, bool)>,
     pub(super) offered_key_share: Option<GroupAndKeyShare>,
     pub(super) suite: Option<SupportedCipherSuite>,
     pub(super) ech_state: Option<EchState>,
+    pub(super) ech_status: EchStatus,
     pub(super) done_retry: bool,
 }
 
@@ -66,7 +66,7 @@ impl ExpectServerHello {
         mut self,
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
-        cx: &mut ClientContext<'_>,
+        output: &mut dyn Output,
     ) -> NextStateOrError
     where
         CryptoProvider: Borrow<[&'static T]>,
@@ -85,12 +85,12 @@ impl ExpectServerHello {
             return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
 
-        cx.common.negotiated_version = Some(T::VERSION);
+        output.emit(Event::ProtocolVersion(T::VERSION));
 
         // Extract ALPN protocol
         if T::VERSION != ProtocolVersion::TLSv1_3 {
             process_alpn_protocol(
-                cx.common,
+                output,
                 &self.input.hello.alpn_protocols,
                 server_hello
                     .selected_protocol
@@ -119,7 +119,7 @@ impl ExpectServerHello {
             _ => {
                 debug!("Using ciphersuite {suite:?}");
                 self.suite = Some(SupportedCipherSuite::from(suite));
-                cx.common.suite = Some(SupportedCipherSuite::from(suite));
+                output.emit(Event::CipherSuite(SupportedCipherSuite::from(suite)));
             }
         }
 
@@ -127,12 +127,12 @@ impl ExpectServerHello {
         // handshake_traffic_secret.
         suite
             .client_handler()
-            .handle_server_hello(suite, server_hello, input, self, cx)
+            .handle_server_hello(suite, server_hello, input, self, output)
     }
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, input: Input<'_>) -> NextStateOrError {
+    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> NextStateOrError {
         let server_hello = require_handshake_msg!(
             &input.message,
             HandshakeType::ServerHello,
@@ -154,10 +154,10 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         match server_version {
             TLSv1_3 if tls13_supported => {
-                self.with_version::<Tls13CipherSuite>(server_hello, &input, cx)
+                self.with_version::<Tls13CipherSuite>(server_hello, &input, output)
             }
             TLSv1_2 if config.supports_version(TLSv1_2) => {
-                if cx.data.early_data.is_sending() {
+                if let Some((_, true)) = &self.early_data_key_schedule {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
                     return Err(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion.into());
@@ -167,7 +167,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     return Err(PeerMisbehaved::SelectedTls12UsingTls13VersionExtension.into());
                 }
 
-                self.with_version::<Tls12CipherSuite>(server_hello, &input, cx)
+                self.with_version::<Tls12CipherSuite>(server_hello, &input, output)
             }
             _ => {
                 let reason = match server_version {
@@ -192,8 +192,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
     fn handle_hello_retry_request(
         mut self,
-        cx: &mut ClientContext<'_>,
         input: Input<'_>,
+        output: &mut dyn Output,
     ) -> NextStateOrError {
         let hrr = require_handshake_msg!(
             input.message,
@@ -254,7 +254,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
         match hrr.supported_versions {
             Some(ProtocolVersion::TLSv1_3) => {
-                cx.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
+                output.emit(Event::ProtocolVersion(ProtocolVersion::TLSv1_3));
             }
             _ => {
                 return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
@@ -267,12 +267,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
         };
 
         // Or offers ECH related extensions when we didn't offer ECH.
-        if cx.data.ech_status == EchStatus::NotOffered && hrr.encrypted_client_hello.is_some() {
+        if self.next.ech_status == EchStatus::NotOffered && hrr.encrypted_client_hello.is_some() {
             return Err(PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch.into());
         }
 
         // HRR selects the ciphersuite.
-        cx.common.suite = Some(cs);
+        output.emit(Event::CipherSuite(cs));
 
         // If we offered ECH, we need to confirm that the server accepted it.
         match (self.next.ech_state.as_ref(), cs) {
@@ -281,7 +281,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
                     // If the server did not confirm, then note the new ECH status but
                     // continue the handshake. We will abort with an ECH required error
                     // at the end.
-                    cx.data.ech_status = EchStatus::Rejected;
+                    self.next.ech_status = EchStatus::Rejected;
+                    output.emit(Event::EchStatus(EchStatus::Rejected));
                 }
             }
             (Some(_), SupportedCipherSuite::Tls12(_)) => {
@@ -302,11 +303,6 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // ECH transcript with the hello retry request message.
         if let Some(ech_state) = self.next.ech_state.as_mut() {
             ech_state.transcript_hrr_update(cs.hash_provider(), &input.message, &proof);
-        }
-
-        // Early data is not allowed after HelloRetryrequest
-        if cx.data.early_data.is_enabled() {
-            cx.data.early_data.rejected();
         }
 
         let key_share = match hrr.key_share {
@@ -332,25 +328,26 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.extra_exts,
             Some(cs),
             self.next.input,
-            cx,
+            output,
             self.next.ech_state,
+            self.next.ech_status,
         )
     }
 }
 
 impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, input: Input<'_>) -> NextStateOrError {
+    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> NextStateOrError {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(..)),
                 ..
             } => self
                 .into_expect_server_hello()
-                .handle(cx, input),
+                .handle(input, output),
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(..)),
                 ..
-            } => self.handle_hello_retry_request(cx, input),
+            } => self.handle_hello_retry_request(input, output),
             payload => Err(inappropriate_handshake_message(
                 &payload,
                 &[ContentType::Handshake],
@@ -366,6 +363,7 @@ pub(crate) struct ClientHelloInput {
     pub(super) random: Random,
     pub(super) sent_tls13_fake_ccs: bool,
     pub(super) hello: ClientHelloDetails,
+    pub(super) protocol: Protocol,
     pub(super) session_id: SessionId,
     pub(super) session_key: ClientSessionKey<'static>,
     pub(super) prev_ech_ext: Option<EncryptedClientHello>,
@@ -375,14 +373,15 @@ impl ClientHelloInput {
     pub(super) fn new(
         server_name: ServerName<'static>,
         extra_exts: &ClientExtensionsInput<'_>,
-        cx: &mut ClientContext<'_>,
+        protocol: Protocol,
+        output: &mut dyn Output,
         config: Arc<ClientConfig>,
     ) -> Result<Self, Error> {
         let session_key = ClientSessionKey {
             config_hash: config.config_hash(),
             server_name,
         };
-        let mut resuming = ClientSessionValue::retrieve(&session_key, &config, cx);
+        let mut resuming = ClientSessionValue::retrieve(&session_key, &config, output);
         let session_id = match &mut resuming {
             Some(resuming) => {
                 debug!("Resuming session");
@@ -409,7 +408,7 @@ impl ClientHelloInput {
         // https://tools.ietf.org/html/rfc9001#section-8.4
         let session_id = match session_id {
             Some(session_id) => session_id,
-            None if cx.common.protocol.is_quic() => SessionId::empty(),
+            None if protocol.is_quic() => SessionId::empty(),
             None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
             None => SessionId::random(config.provider().secure_random)?,
         };
@@ -429,6 +428,7 @@ impl ClientHelloInput {
             random,
             sent_tls13_fake_ccs: false,
             hello,
+            protocol,
             session_id,
             session_key,
             prev_ech_ext: None,
@@ -438,7 +438,7 @@ impl ClientHelloInput {
     pub(super) fn start_handshake(
         self,
         extra_exts: ClientExtensionsInput<'static>,
-        cx: &mut ClientContext<'_>,
+        output: &mut dyn Output,
     ) -> NextStateOrError {
         let mut transcript_buffer = HandshakeHashBuffer::new();
         if !self
@@ -462,7 +462,7 @@ impl ClientHelloInput {
         let ech_state = match self.config.ech_mode.as_ref() {
             Some(EchMode::Enable(ech_config)) => Some(ech_config.state(
                 self.session_key.server_name.clone(),
-                cx.common.protocol,
+                self.protocol,
                 &self.config,
             )?),
             _ => None,
@@ -475,8 +475,9 @@ impl ClientHelloInput {
             extra_exts,
             None,
             self,
-            cx,
+            output,
             ech_state,
+            EchStatus::default(),
         )
     }
 }
@@ -493,13 +494,14 @@ fn emit_client_hello_for_retry(
     extra_exts: ClientExtensionsInput<'static>,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
-    cx: &mut ClientContext<'_>,
+    output: &mut dyn Output,
     mut ech_state: Option<EchState>,
+    mut ech_status: EchStatus,
 ) -> NextStateOrError {
     let config = &input.config;
     // Defense in depth: the ECH state should be None if ECH is disabled based on config
     // builder semantics.
-    let forbids_tls12 = cx.common.protocol.is_quic() || ech_state.is_some();
+    let forbids_tls12 = input.protocol.is_quic() || ech_state.is_some();
 
     let supported_versions = SupportedProtocolVersions {
         tls13: config.supports_version(ProtocolVersion::TLSv1_3),
@@ -654,14 +656,18 @@ fn emit_client_hello_for_retry(
     // If this is a second client hello we're constructing in response to an HRR, and
     // we've rejected ECH or sent GREASE ECH, then we need to carry forward the
     // exact same ECH extension we used in the first hello.
-    if matches!(cx.data.ech_status, EchStatus::Rejected | EchStatus::Grease) & retryreq.is_some() {
+    if matches!(ech_status, EchStatus::Rejected | EchStatus::Grease) & retryreq.is_some() {
         if let Some(prev_ech_ext) = input.prev_ech_ext.take() {
             exts.encrypted_client_hello = Some(prev_ech_ext);
         }
     }
 
     // Do we have a SessionID or ticket cached for this host?
-    let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
+    let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, output, config);
+    let (tls13_session, early_data_enabled) = match tls13_session {
+        Some((tls13_session, early_data_enabled)) => (Some(tls13_session), early_data_enabled),
+        _ => (None, false),
+    };
 
     // Extensions MAY be randomized
     // but they also need to keep the same order as the previous ClientHello
@@ -670,7 +676,7 @@ fn emit_client_hello_for_retry(
     let mut cipher_suites: Vec<_> = config
         .provider()
         .iter_cipher_suites()
-        .filter_map(|cs| match cs.usable_for_protocol(cx.common.protocol) {
+        .filter_map(|cs| match cs.usable_for_protocol(input.protocol) {
             true => Some(cs.suite()),
             false => None,
         })
@@ -696,20 +702,21 @@ fn emit_client_hello_for_retry(
         .and_then(|mode| match mode {
             EchMode::Grease(cfg) => Some(cfg.grease_ext(
                 config.provider().secure_random,
-                cx.common.protocol,
+                input.protocol,
                 input.session_key.server_name.clone(),
                 &chp_payload,
             )),
             _ => None,
         });
 
-    match (cx.data.ech_status, &mut ech_state) {
+    match (ech_status, &mut ech_state) {
         // If we haven't offered ECH, or have offered ECH but got a non-rejecting HRR, then
         // we need to replace the client hello payload with an ECH client hello payload.
         (EchStatus::NotOffered | EchStatus::Offered, Some(ech_state)) => {
             // Replace the client hello payload with an ECH client hello payload.
             chp_payload = ech_state.ech_hello(chp_payload, retryreq, &tls13_session)?;
-            cx.data.ech_status = EchStatus::Offered;
+            ech_status = EchStatus::Offered;
+            output.emit(Event::EchStatus(ech_status));
             // Store the ECH extension in case we need to carry it forward in a subsequent hello.
             input.prev_ech_ext = chp_payload
                 .encrypted_client_hello
@@ -722,7 +729,8 @@ fn emit_client_hello_for_retry(
                 // Add the GREASE ECH extension.
                 let grease_ext = grease_ext?;
                 chp_payload.encrypted_client_hello = Some(grease_ext.clone());
-                cx.data.ech_status = EchStatus::Grease;
+                ech_status = EchStatus::Grease;
+                output.emit(Event::EchStatus(ech_status));
                 // Store the GREASE ECH extension in case we need to carry it forward in a
                 // subsequent hello.
                 input.prev_ech_ext = Some(grease_ext);
@@ -748,7 +756,7 @@ fn emit_client_hello_for_retry(
         // normal.
         (_, Some(tls13_session)) => {
             let key_schedule = KeyScheduleEarlyClient::new(
-                cx.common.protocol,
+                input.protocol,
                 tls13_session.suite(),
                 tls13_session.secret(),
             );
@@ -779,19 +787,21 @@ fn emit_client_hello_for_retry(
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, cx.common);
+        tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, output);
     }
 
     trace!("Sending ClientHello {ch:#?}");
 
     transcript_buffer.add_message(&ch);
-    cx.common.emit(Event::PlainMessage(ch));
+    output.emit(Event::PlainMessage(ch));
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_data_key_schedule =
         tls13_early_data_key_schedule.map(|(resuming_suite, schedule)| {
-            if !cx.data.early_data.is_enabled() {
-                return schedule;
+            if !early_data_enabled {
+                // No early data if a HelloRetryRequest happens
+                output.emit(Event::EarlyData(EarlyDataEvent::Rejected));
+                return (schedule, false);
             }
 
             let (transcript_buffer, random) = match &ech_state {
@@ -806,14 +816,14 @@ fn emit_client_hello_for_retry(
 
             tls13::derive_early_traffic_secret(
                 &*config.key_log,
-                cx,
+                output,
                 resuming_suite.common.hash_provider,
                 &schedule,
                 &mut input.sent_tls13_fake_ccs,
                 transcript_buffer,
                 random,
             );
-            schedule
+            (schedule, true)
         });
 
     let mut next = Box::new(ExpectServerHello {
@@ -823,6 +833,7 @@ fn emit_client_hello_for_retry(
         offered_key_share: key_share,
         suite,
         ech_state,
+        ech_status,
         done_retry: false,
     });
 
@@ -865,14 +876,18 @@ impl GroupAndKeyShare {
 /// (c) send a request for 1.3 early data if allowed and
 /// (d) send a 1.3 preshared key if we have one.
 ///
-/// It returns the TLS 1.3 PSKs, if any, for further processing.
+/// It returns the TLS 1.3 PSKs, if any, for further processing,
+/// and a flag indicated whether early data is being attempted.
 fn prepare_resumption<'a>(
     resuming: &'a Option<persist::Retrieved<ClientSessionValue>>,
     exts: &mut ClientExtensions<'_>,
     suite: Option<SupportedCipherSuite>,
-    cx: &mut ClientContext<'_>,
+    output: &mut dyn Output,
     config: &ClientConfig,
-) -> Option<persist::Retrieved<&'a persist::Tls13ClientSessionValue>> {
+) -> Option<(
+    persist::Retrieved<&'a persist::Tls13ClientSessionValue>,
+    bool,
+)> {
     // Check whether we're resuming with a non-empty ticket.
     let resuming = match resuming {
         Some(resuming) if !resuming.ticket().is_empty() => resuming,
@@ -913,41 +928,33 @@ fn prepare_resumption<'a>(
         suite.can_resume_from(tls13.suite())?;
     }
 
-    tls13::prepare_resumption(config, cx, &tls13, exts, suite.is_some());
-    Some(tls13)
+    let early_data_enabled =
+        tls13::prepare_resumption(config, output, &tls13, exts, suite.is_some());
+    Some((tls13, early_data_enabled))
 }
 
 pub(super) fn process_alpn_protocol(
-    common: &mut CommonState,
+    output: &mut dyn Output,
     offered_protocols: &[ProtocolName],
     selected: Option<&ProtocolName>,
 ) -> Result<(), Error> {
-    common.alpn_protocol = selected.map(ToOwned::to_owned);
-
-    if let Some(alpn_protocol) = &common.alpn_protocol {
+    if let Some(alpn_protocol) = selected {
         if !offered_protocols.contains(alpn_protocol) {
             return Err(PeerMisbehaved::SelectedUnofferedApplicationProtocol.into());
         }
     }
 
-    // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
-    // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
-    // the user intended to use ALPN (rather than some out-of-band protocol negotiation
-    // mechanism) if and only if any ALPN protocols were configured. This defends against badly-behaved
-    // servers which accept a connection that requires an application-layer protocol they do not
-    // understand.
-    if common.protocol.is_quic() && common.alpn_protocol.is_none() && !offered_protocols.is_empty()
-    {
-        return Err(Error::NoApplicationProtocol);
-    }
-
     debug!(
         "ALPN protocol is {:?}",
-        common
-            .alpn_protocol
+        selected
             .as_ref()
             .map(|v| bs_debug::BsDebug(v.as_ref()))
     );
+
+    if let Some(protocol) = selected {
+        output.emit(Event::ApplicationProtocol(protocol.to_owned()));
+    }
+
     Ok(())
 }
 
@@ -960,7 +967,7 @@ impl ClientSessionValue {
     fn retrieve(
         key: &ClientSessionKey<'static>,
         config: &ClientConfig,
-        cx: &mut ClientContext<'_>,
+        output: &mut dyn Output,
     ) -> Option<persist::Retrieved<Self>> {
         let found = config
             .resumption
@@ -992,10 +999,11 @@ impl ClientSessionValue {
             });
 
         if let Some(resuming) = &found {
-            if cx.common.protocol.is_quic() {
-                cx.common.quic.params = resuming
-                    .tls13()
-                    .map(|v| v.quic_params());
+            if let Some(quic_params) = resuming
+                .tls13()
+                .map(|v| v.quic_params())
+            {
+                output.emit(Event::QuicTransportParameters(quic_params));
             }
         }
 
@@ -1032,6 +1040,6 @@ pub(crate) trait ClientHandler<T>: fmt::Debug + Sealed + Send + Sync {
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
         st: ExpectServerHello,
-        cx: &mut ClientContext<'_>,
+        output: &mut dyn Output,
     ) -> NextStateOrError;
 }

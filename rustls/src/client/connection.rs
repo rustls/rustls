@@ -5,16 +5,17 @@ use core::{fmt, mem};
 use pki_types::ServerName;
 
 use super::config::ClientConfig;
-use super::hs::{self, ClientHelloInput};
+use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, Protocol, Side};
+use crate::common_state::{
+    CommonState, Context, EarlyDataEvent, Event, NullOutput, Output, Protocol, Side,
+};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
 use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
-use crate::msgs::deframer::Locator;
 use crate::msgs::handshake::ClientExtensionsInput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -149,6 +150,9 @@ mod buffered {
                 .check_write(data.len())
                 .map(|sz| {
                     self.inner
+                        .core
+                        .common_state
+                        .send
                         .send_early_plaintext(&data[..sz])
                 })
         }
@@ -268,23 +272,22 @@ impl ConnectionCore<ClientConnectionData> {
         extra_exts: ClientExtensionsInput<'static>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client);
-        common_state.set_max_fragment_size(config.max_fragment_size)?;
-        common_state.protocol = proto;
+        let mut common_state = CommonState::new(Side::Client, proto);
+        common_state
+            .send
+            .set_max_fragment_size(config.max_fragment_size)?;
         common_state.fips = config.fips();
         let mut data = ClientConnectionData::new();
 
-        let mut cx = hs::ClientContext {
+        let mut cx = Context {
             common: &mut common_state,
             data: &mut data,
             // `start_handshake` won't read plaintext
-            plaintext_locator: &Locator::new(&[]),
-            received_plaintext: &mut None,
+            app_data_output: &mut NullOutput,
         };
 
-        let input = ClientHelloInput::new(name, &extra_exts, &mut cx, config)?;
+        let input = ClientHelloInput::new(name, &extra_exts, proto, &mut cx, config)?;
         let state = input.start_handshake(extra_exts, &mut cx)?;
-        debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
         Ok(Self::new(state, data, common_state))
     }
@@ -434,6 +437,7 @@ impl MayEncryptEarlyData<'_> {
         self.conn
             .core
             .common_state
+            .send
             .write_plaintext(early_data[..allowed].into(), outgoing_tls)
             .map_err(|e| e.into())
     }
@@ -453,17 +457,10 @@ impl EarlyData {
         }
     }
 
-    pub(super) fn is_enabled(&self) -> bool {
+    fn is_enabled(&self) -> bool {
         matches!(
             self.state,
             EarlyDataState::Ready | EarlyDataState::Sending | EarlyDataState::Accepted
-        )
-    }
-
-    pub(crate) fn is_sending(&self) -> bool {
-        matches!(
-            self.state,
-            EarlyDataState::Sending | EarlyDataState::Accepted
         )
     }
 
@@ -475,23 +472,23 @@ impl EarlyData {
         )
     }
 
-    pub(super) fn enable(&mut self, max_data: usize) {
+    fn enable(&mut self, max_data: usize) {
         assert_eq!(self.state, EarlyDataState::Disabled);
         self.state = EarlyDataState::Ready;
         self.left = max_data;
     }
 
-    pub(crate) fn start(&mut self) {
+    fn start(&mut self) {
         assert_eq!(self.state, EarlyDataState::Ready);
         self.state = EarlyDataState::Sending;
     }
 
-    pub(super) fn rejected(&mut self) {
+    fn rejected(&mut self) {
         trace!("EarlyData rejected");
         self.state = EarlyDataState::Rejected;
     }
 
-    pub(super) fn accepted(&mut self) {
+    fn accepted(&mut self) {
         trace!("EarlyData accepted");
         assert_eq!(self.state, EarlyDataState::Sending);
         self.state = EarlyDataState::Accepted;
@@ -564,15 +561,29 @@ impl core::error::Error for EarlyDataError {}
 /// State associated with a client connection.
 #[derive(Debug)]
 pub struct ClientConnectionData {
-    pub(super) early_data: EarlyData,
-    pub(super) ech_status: EchStatus,
+    early_data: EarlyData,
+    ech_status: EchStatus,
 }
 
 impl ClientConnectionData {
     fn new() -> Self {
         Self {
             early_data: EarlyData::new(),
-            ech_status: EchStatus::NotOffered,
+            ech_status: EchStatus::default(),
+        }
+    }
+}
+
+impl Output for ClientConnectionData {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::EchStatus(ech) => self.ech_status = ech,
+            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accepted(),
+            Event::EarlyData(EarlyDataEvent::Enable(sz)) => self.early_data.enable(sz),
+            Event::EarlyData(EarlyDataEvent::Finished) => self.early_data.finished(),
+            Event::EarlyData(EarlyDataEvent::Start) => self.early_data.start(),
+            Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
+            _ => {}
         }
     }
 }
