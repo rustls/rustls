@@ -931,16 +931,6 @@ pub(super) fn process_alpn_protocol(
         }
     }
 
-    // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
-    // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
-    // the user intended to use ALPN (rather than some out-of-band protocol negotiation
-    // mechanism) if and only if any ALPN protocols were configured. This defends against badly-behaved
-    // servers which accept a connection that requires an application-layer protocol they do not
-    // understand.
-    if common.protocol.is_quic() && selected.is_none() && !offered_protocols.is_empty() {
-        return Err(Error::NoApplicationProtocol);
-    }
-
     debug!(
         "ALPN protocol is {:?}",
         selected
