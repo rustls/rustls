@@ -471,13 +471,25 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         self.transcript.add_message(&message);
 
         validate_encrypted_extensions(&self.hello, exts)?;
-        hs::process_alpn_protocol(
-            cx.common,
-            &self.hello.alpn_protocols,
-            exts.selected_protocol
-                .as_ref()
-                .map(|protocol| protocol.as_ref()),
-        )?;
+
+        let selected_alpn = exts
+            .selected_protocol
+            .as_ref()
+            .map(|protocol| protocol.as_ref());
+        hs::process_alpn_protocol(cx.common, &self.hello.alpn_protocols, selected_alpn)?;
+
+        // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
+        // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
+        // the user intended to use ALPN (rather than some out-of-band protocol negotiation
+        // mechanism) if and only if any ALPN protocols were configured. This defends against badly-behaved
+        // servers which accept a connection that requires an application-layer protocol they do not
+        // understand.
+        if cx.common.protocol.is_quic()
+            && selected_alpn.is_none()
+            && !self.hello.alpn_protocols.is_empty()
+        {
+            return Err(Error::NoApplicationProtocol);
+        }
 
         check_cert_type(
             self.config
