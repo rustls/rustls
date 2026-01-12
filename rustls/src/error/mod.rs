@@ -3,18 +3,21 @@
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt;
+use core::ops::Deref;
+use core::{fmt, mem};
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
 
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 use webpki::ExtendedKeyUsage;
 
+use crate::common_state::SendPath;
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{GetRandomFailed, InconsistentKeys};
 use crate::enums::{ContentType, HandshakeType};
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::EchConfigPayload;
+use crate::vecbuf::ChunkVecBuffer;
 
 #[cfg(test)]
 mod tests;
@@ -1555,3 +1558,49 @@ mod other_error {
 }
 
 pub use other_error::OtherError;
+
+/// An [`Error`] along with the (possibly encrypted) alert to send to
+/// the peer.
+pub struct ErrorWithAlert {
+    /// The error
+    pub error: Error,
+    data: ChunkVecBuffer,
+}
+
+impl ErrorWithAlert {
+    pub(crate) fn new(error: Error, send_path: &mut SendPath) -> Self {
+        send_path.maybe_send_fatal_alert(&error);
+        Self {
+            error,
+            data: mem::take(&mut send_path.sendable_tls),
+        }
+    }
+
+    /// Consume one pending TLS message.
+    ///
+    /// Potentially many may be present and all must be sent to the peer,
+    /// in order.
+    ///
+    /// The final one will contain the alert, if one is to be sent.
+    pub fn take_tls_data(&mut self) -> Option<Vec<u8>> {
+        self.data.pop()
+    }
+}
+
+impl Deref for ErrorWithAlert {
+    type Target = Error;
+
+    fn deref(&self) -> &Self::Target {
+        &self.error
+    }
+}
+
+/// Direct conversion with no alert.
+impl From<Error> for ErrorWithAlert {
+    fn from(error: Error) -> Self {
+        Self {
+            error,
+            data: ChunkVecBuffer::new(None),
+        }
+    }
+}
