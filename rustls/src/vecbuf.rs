@@ -209,6 +209,12 @@ impl ChunkVecBuffer {
     }
 }
 
+impl Default for ChunkVecBuffer {
+    fn default() -> Self {
+        Self::new(None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::vec;
