@@ -1043,13 +1043,13 @@ impl Version {
     }
 }
 
-#[cfg(all(test, feature = "aws-lc-rs"))]
+#[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
 mod tests {
     use std::prelude::v1::*;
 
-    use super::PacketKey;
+    use super::*;
     use crate::Side;
-    use crate::crypto::aws_lc_rs::tls13::TLS13_AES_128_GCM_SHA256;
+    use crate::crypto::TLS13_TEST_SUITE;
     use crate::crypto::tls13::OkmBlock;
     use crate::quic::{HeaderProtectionKey, Secrets, Version};
 
@@ -1075,10 +1075,8 @@ mod tests {
                     0x4e, 0xb1, 0xe4, 0x38, 0xd8, 0x55,
                 ][..],
             ),
-            suite: TLS13_AES_128_GCM_SHA256,
-            quic: TLS13_AES_128_GCM_SHA256
-                .quic
-                .expect("TLS13_AES_128_GCM_SHA256 has a QUIC algorithm"),
+            suite: TLS13_TEST_SUITE,
+            quic: &FakeAlgorithm,
             side: Side::Client,
             version: Version::V1,
         };
@@ -1104,6 +1102,22 @@ mod tests {
                 ][..]
             )
         ));
+    }
+
+    struct FakeAlgorithm;
+
+    impl Algorithm for FakeAlgorithm {
+        fn packet_key(&self, _key: AeadKey, _iv: Iv) -> Box<dyn PacketKey> {
+            unimplemented!()
+        }
+
+        fn header_protection_key(&self, _key: AeadKey) -> Box<dyn HeaderProtectionKey> {
+            unimplemented!()
+        }
+
+        fn aead_key_len(&self) -> usize {
+            16
+        }
     }
 
     #[test]

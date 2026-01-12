@@ -155,7 +155,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
                 HandshakePayload::ServerHello(ServerHelloPayload {
                     random: Random::new(config.provider().secure_random).unwrap(),
                     compression_method: Compression::Null,
-                    cipher_suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                    cipher_suite: CipherSuite::Unknown(0xff12),
                     legacy_version: ProtocolVersion::TLSv1_2,
                     session_id: SessionId::empty(),
                     extensions: Box::new(ServerExtensions::default()),
