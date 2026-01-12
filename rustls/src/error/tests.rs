@@ -5,9 +5,10 @@ use std::{println, vec};
 use pki_types::ServerName;
 
 use super::{
-    AlertDescription, CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError,
-    UnixTime,
+    AlertDescription, CertRevocationListError, Error, ErrorWithAlert, InconsistentKeys,
+    InvalidMessage, OtherError, UnixTime,
 };
+use crate::common_state::SendPath;
 use crate::crypto::GetRandomFailed;
 use crate::msgs::test_enum8_display;
 
@@ -311,4 +312,22 @@ fn time_error_mapping() {
         .unwrap_err();
     let err: Error = time_error.into();
     assert_eq!(err, Error::FailedToGetCurrentTime);
+}
+
+#[test]
+fn error_with_alert() {
+    let mut e = ErrorWithAlert::new(Error::NoApplicationProtocol, &mut SendPath::default());
+    assert_eq!(
+        std::format!("{e:?}"),
+        "ErrorWithAlert { error: NoApplicationProtocol, data: 7, .. }"
+    );
+    assert_eq!(e.take_tls_data(), Some(vec![21, 3, 3, 0, 2, 2, 120]));
+    assert_eq!(e.take_tls_data(), None);
+
+    let mut e = ErrorWithAlert::from(Error::NoApplicationProtocol);
+    assert_eq!(e.take_tls_data(), None);
+    assert_eq!(
+        std::format!("{e:?}"),
+        "ErrorWithAlert { error: NoApplicationProtocol, data: 0, .. }"
+    );
 }
