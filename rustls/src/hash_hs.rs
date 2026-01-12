@@ -184,12 +184,9 @@ impl Clone for HandshakeHash {
 
 #[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
 mod tests {
-    use graviola::hashing::sha2::Sha256Context;
-    use graviola::hashing::{Hash as _, HashContext as _};
-
     use super::*;
     use crate::crypto::cipher::Payload;
-    use crate::crypto::hash::Hash;
+    use crate::crypto::test_provider::SHA256;
     use crate::enums::ProtocolVersion;
     use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 
@@ -349,45 +346,5 @@ mod tests {
         hh_prime.add_raw(b"goodbye");
         assert_eq!(hh.current_hash().as_ref(), hh_hash);
         assert_ne!(hh_prime.current_hash().as_ref(), hh_hash);
-    }
-
-    const SHA256: &'static dyn Hash = &graviola::hashing::Sha256;
-
-    impl Hash for graviola::hashing::Sha256 {
-        fn start(&self) -> Box<dyn hash::Context> {
-            Box::new(Sha256Context::new())
-        }
-
-        fn hash(&self, data: &[u8]) -> hash::Output {
-            let mut cx = Self::new();
-            cx.update(data);
-            hash::Output::new(cx.finish().as_ref())
-        }
-
-        fn output_len(&self) -> usize {
-            Sha256Context::OUTPUT_SZ
-        }
-
-        fn algorithm(&self) -> HashAlgorithm {
-            HashAlgorithm::SHA256
-        }
-    }
-
-    impl hash::Context for Sha256Context {
-        fn fork_finish(&self) -> hash::Output {
-            hash::Output::new(self.clone().finish().as_ref())
-        }
-
-        fn fork(&self) -> Box<dyn hash::Context> {
-            Box::new(self.clone())
-        }
-
-        fn finish(self: Box<Self>) -> hash::Output {
-            hash::Output::new((*self).finish().as_ref())
-        }
-
-        fn update(&mut self, data: &[u8]) {
-            self.update(data);
-        }
     }
 }

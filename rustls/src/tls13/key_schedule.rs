@@ -1215,13 +1215,13 @@ impl SecretKind {
     }
 }
 
-#[cfg(all(test, feature = "aws-lc-rs"))]
+#[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
 mod tests {
     use core::fmt::Debug;
     use std::prelude::v1::*;
 
     use super::*;
-    use crate::crypto::aws_lc_rs::tls13::TLS13_AES_128_GCM_SHA256;
+    use crate::crypto::TLS13_TEST_SUITE;
     use crate::key_log::KeyLog;
 
     #[test]
@@ -1305,7 +1305,7 @@ mod tests {
             0x0d, 0xb2, 0x8f, 0x98, 0x85, 0x86, 0xa1, 0xb7, 0xe4, 0xd5, 0xc6, 0x9c,
         ];
 
-        let suite = TLS13_AES_128_GCM_SHA256;
+        let suite = TLS13_TEST_SUITE;
         let mut ks = KeySchedule::new_with_empty_secret(Side::Server, Protocol::Tcp, suite);
         ks.input_secret(&ecdhe_secret);
 

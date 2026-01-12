@@ -47,6 +47,11 @@ pub mod tls13;
 /// Hybrid public key encryption (RFC 9180).
 pub mod hpke;
 
+#[cfg(test)]
+pub(crate) mod test_provider;
+#[cfg(test)]
+pub(crate) use test_provider::{TEST_PROVIDER, TLS13_TEST_SUITE};
+
 // Message signing interfaces.
 mod signer;
 pub use signer::{

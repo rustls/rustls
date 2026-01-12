@@ -553,10 +553,7 @@ mod sealed {
 }
 
 #[cfg(test)]
-const TEST_PROVIDERS: &[&crypto::CryptoProvider] = &[
-    #[cfg(feature = "aws-lc-rs")]
-    &crypto::aws_lc_rs::DEFAULT_PROVIDER,
-];
+const TEST_PROVIDERS: &[&crypto::CryptoProvider] = &[&crypto::TEST_PROVIDER];
 
 mod core_hash_polyfill {
     use core::hash::Hasher;

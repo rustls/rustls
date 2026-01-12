@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn test_scs_is_debug() {
         for &provider in TEST_PROVIDERS {
-            let aes_128_gcm = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, provider);
+            let aes_128_gcm = tls13_suite(CipherSuite::Unknown(0xff13), provider);
             println!("{:?}", SupportedCipherSuite::Tls13(aes_128_gcm));
         }
     }

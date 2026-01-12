@@ -243,10 +243,7 @@ mod tests {
                 c.set_tls12_session(
                     key.clone(),
                     Tls12ClientSessionValue::new(
-                        tls12_suite(
-                            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-                            provider,
-                        ),
+                        tls12_suite(CipherSuite::Unknown(0xff12), provider),
                         SessionId::empty(),
                         Arc::new(PayloadU16::empty()),
                         &[0u8; 48],
@@ -266,7 +263,7 @@ mod tests {
             c.insert_tls13_ticket(
                 key.clone(),
                 Tls13ClientSessionValue::new(
-                    tls13_suite(CipherSuite::TLS13_AES_256_GCM_SHA384, provider),
+                    tls13_suite(CipherSuite::Unknown(0xff13), provider),
                     Arc::new(PayloadU16::empty()),
                     &[],
                     Identity::X509(CertificateIdentity {

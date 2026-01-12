@@ -310,7 +310,7 @@ fn server_credentials(provider: &CryptoProvider) -> Credentials {
 
 fn server_key() -> PrivateKeyDer<'static> {
     PrivateKeyDer::from_pem_reader(
-        &mut include_bytes!("../../../test-ca/rsa-2048/end.key").as_slice(),
+        &mut include_bytes!("../../../test-ca/ecdsa-p256/end.key").as_slice(),
     )
     .unwrap()
 }
@@ -318,8 +318,8 @@ fn server_key() -> PrivateKeyDer<'static> {
 fn server_identity() -> Arc<Identity<'static>> {
     Arc::new(
         Identity::from_cert_chain(vec![
-            CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/end.der")[..]),
-            CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/inter.der")[..]),
+            CertificateDer::from(&include_bytes!("../../../test-ca/ecdsa-p256/end.der")[..]),
+            CertificateDer::from(&include_bytes!("../../../test-ca/ecdsa-p256/inter.der")[..]),
         ])
         .unwrap(),
     )
@@ -383,7 +383,7 @@ static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite 
     kx: KeyExchangeAlgorithm::DHE,
     protocol_version: TLS12_VERSION,
     prf_provider: &FakePrf,
-    sign: &[SignatureScheme::RSA_PKCS1_SHA256],
+    sign: &[SignatureScheme::ECDSA_NISTP256_SHA256],
     aead_alg: &FakeAead,
 };
 
@@ -392,20 +392,17 @@ fn minimal_client_hello() -> ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_3,
         random: Random::from([0u8; 32]),
         session_id: SessionId::empty(),
-        cipher_suites: vec![
-            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-            CipherSuite::TLS13_AES_128_GCM_SHA256,
-        ],
+        cipher_suites: vec![CipherSuite::Unknown(0xff13), CipherSuite::Unknown(0xff12)],
         compression_methods: vec![Compression::Null],
         extensions: Box::new(ClientExtensions {
-            signature_schemes: Some(vec![SignatureScheme::RSA_PSS_SHA256]),
-            named_groups: Some(vec![NamedGroup::X25519, NamedGroup::secp256r1]),
+            signature_schemes: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
+            named_groups: Some(vec![NamedGroup::from(0xfe00)]),
             supported_versions: Some(SupportedProtocolVersions {
                 tls12: true,
                 tls13: true,
             }),
             key_shares: Some(vec![KeyShareEntry {
-                group: NamedGroup::X25519,
+                group: NamedGroup::from(0xfe00),
                 payload: PayloadU16::new(vec![0xab; 32]),
             }]),
             extended_master_secret_request: Some(()),
