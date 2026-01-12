@@ -92,6 +92,20 @@ impl ChunkVecBuffer {
             .front()
             .map(|ch| ch.as_slice())
     }
+
+    pub(crate) fn take_one_vec(&mut self) -> Vec<u8> {
+        match self.chunks.len() {
+            0 => Vec::new(),
+            1 => self.chunks.pop_front().unwrap(),
+            _ => {
+                let mut v = Vec::with_capacity(self.len());
+                while let Some(c) = self.chunks.pop_front() {
+                    v.extend_from_slice(&c);
+                }
+                v
+            }
+        }
+    }
 }
 
 impl ChunkVecBuffer {
