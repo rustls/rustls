@@ -1393,6 +1393,7 @@ mod tests {
         }
     }
 
+    #[track_caller]
     fn assert_traffic_secret(
         ks: &KeySchedule,
         kind: SecretKind,
