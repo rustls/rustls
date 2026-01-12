@@ -560,6 +560,7 @@ mod static_default {
 }
 
 #[cfg(test)]
+#[track_caller]
 pub(crate) fn tls13_suite(
     suite: CipherSuite,
     provider: &CryptoProvider,
@@ -572,6 +573,7 @@ pub(crate) fn tls13_suite(
 }
 
 #[cfg(test)]
+#[track_caller]
 pub(crate) fn tls12_suite(
     suite: CipherSuite,
     provider: &CryptoProvider,
@@ -584,6 +586,7 @@ pub(crate) fn tls12_suite(
 }
 
 #[cfg(test)]
+#[track_caller]
 pub(crate) fn tls13_only(provider: CryptoProvider) -> CryptoProvider {
     CryptoProvider {
         tls12_cipher_suites: Cow::default(),
@@ -592,6 +595,7 @@ pub(crate) fn tls13_only(provider: CryptoProvider) -> CryptoProvider {
 }
 
 #[cfg(test)]
+#[track_caller]
 pub(crate) fn tls12_only(provider: CryptoProvider) -> CryptoProvider {
     CryptoProvider {
         tls13_cipher_suites: Cow::default(),
