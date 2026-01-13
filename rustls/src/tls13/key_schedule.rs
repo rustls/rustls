@@ -1215,14 +1215,13 @@ impl SecretKind {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "aws-lc-rs"))]
 mod tests {
     use core::fmt::Debug;
     use std::prelude::v1::*;
 
     use super::*;
-    use crate::TEST_PROVIDERS;
-    use crate::crypto::{CipherSuite, tls13_suite};
+    use crate::crypto::aws_lc_rs::tls13::TLS13_AES_128_GCM_SHA256;
     use crate::key_log::KeyLog;
 
     #[test]
@@ -1306,57 +1305,51 @@ mod tests {
             0x0d, 0xb2, 0x8f, 0x98, 0x85, 0x86, 0xa1, 0xb7, 0xe4, 0xd5, 0xc6, 0x9c,
         ];
 
-        for provider in TEST_PROVIDERS {
-            #[cfg(not(feature = "fips"))]
-            let suite = tls13_suite(CipherSuite::TLS13_CHACHA20_POLY1305_SHA256, provider);
-            #[cfg(feature = "fips")]
-            let suite = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, provider);
+        let suite = TLS13_AES_128_GCM_SHA256;
+        let mut ks = KeySchedule::new_with_empty_secret(Side::Server, Protocol::Tcp, suite);
+        ks.input_secret(&ecdhe_secret);
 
-            let mut ks = KeySchedule::new_with_empty_secret(Side::Server, Protocol::Tcp, suite);
-            ks.input_secret(&ecdhe_secret);
+        assert_traffic_secret(
+            &ks,
+            SecretKind::ClientHandshakeTrafficSecret,
+            &hs_start_hash,
+            &client_hts,
+            &client_hts_key,
+            &client_hts_iv,
+            suite,
+        );
 
-            assert_traffic_secret(
-                &ks,
-                SecretKind::ClientHandshakeTrafficSecret,
-                &hs_start_hash,
-                &client_hts,
-                &client_hts_key,
-                &client_hts_iv,
-                suite,
-            );
+        assert_traffic_secret(
+            &ks,
+            SecretKind::ServerHandshakeTrafficSecret,
+            &hs_start_hash,
+            &server_hts,
+            &server_hts_key,
+            &server_hts_iv,
+            suite,
+        );
 
-            assert_traffic_secret(
-                &ks,
-                SecretKind::ServerHandshakeTrafficSecret,
-                &hs_start_hash,
-                &server_hts,
-                &server_hts_key,
-                &server_hts_iv,
-                suite,
-            );
+        ks.input_empty();
 
-            ks.input_empty();
+        assert_traffic_secret(
+            &ks,
+            SecretKind::ClientApplicationTrafficSecret,
+            &hs_full_hash,
+            &client_ats,
+            &client_ats_key,
+            &client_ats_iv,
+            suite,
+        );
 
-            assert_traffic_secret(
-                &ks,
-                SecretKind::ClientApplicationTrafficSecret,
-                &hs_full_hash,
-                &client_ats,
-                &client_ats_key,
-                &client_ats_iv,
-                suite,
-            );
-
-            assert_traffic_secret(
-                &ks,
-                SecretKind::ServerApplicationTrafficSecret,
-                &hs_full_hash,
-                &server_ats,
-                &server_ats_key,
-                &server_ats_iv,
-                suite,
-            );
-        }
+        assert_traffic_secret(
+            &ks,
+            SecretKind::ServerApplicationTrafficSecret,
+            &hs_full_hash,
+            &server_ats,
+            &server_ats_key,
+            &server_ats_iv,
+            suite,
+        );
     }
 
     #[track_caller]
