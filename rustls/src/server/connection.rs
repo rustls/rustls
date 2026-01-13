@@ -58,7 +58,7 @@ mod buffered {
     use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
-    use crate::error::{ApiMisuse, Error};
+    use crate::error::{ApiMisuse, Error, ErrorWithAlert};
     use crate::server::hs::ClientHelloInput;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
@@ -342,11 +342,9 @@ mod buffered {
             error: Error,
             mut conn: ConnectionCommon<ServerConnectionData>,
         ) -> (Error, Self) {
-            conn.core
-                .common_state
-                .send
-                .maybe_send_fatal_alert(&error);
-            (error, Self(conn.core.common_state.send.sendable_tls))
+            let ErrorWithAlert { error, data } =
+                ErrorWithAlert::new(error, &mut conn.core.common_state.send);
+            (error, Self(data))
         }
 
         pub(super) fn empty() -> Self {

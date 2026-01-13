@@ -1564,7 +1564,7 @@ pub use other_error::OtherError;
 pub struct ErrorWithAlert {
     /// The error
     pub error: Error,
-    data: ChunkVecBuffer,
+    pub(crate) data: ChunkVecBuffer,
 }
 
 impl ErrorWithAlert {
