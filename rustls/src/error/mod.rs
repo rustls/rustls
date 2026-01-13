@@ -1547,7 +1547,7 @@ pub use other_error::OtherError;
 pub struct ErrorWithAlert {
     /// The error
     pub error: Error,
-    data: Vec<u8>,
+    pub(crate) data: Vec<u8>,
 }
 
 impl ErrorWithAlert {
