@@ -117,14 +117,14 @@ impl TicketProducer for Ticketer {
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 pub(crate) const FAKE_HASH: &dyn hash::Hash = SHA256;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Sha256Hmac;
+pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Sha256Hmac;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 pub(crate) use hash_impl::SHA256;
 
 #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
 pub(crate) const FAKE_HASH: &dyn hash::Hash = &hash_impl::Hash;
 #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
-const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Hmac;
+pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Hmac;
 
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod hash_impl {
