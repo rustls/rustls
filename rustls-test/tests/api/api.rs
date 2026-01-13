@@ -27,9 +27,10 @@ use rustls::{
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
     client::{EchConfig, EchGreaseConfig, EchMode},
-    crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES,
     pki_types::EchConfigListBytes,
 };
+#[cfg(feature = "aws-lc-rs")]
+use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_test::{
     Altered, ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType,
     MockServerVerifier, RawTls, ServerConfigExt, do_handshake, do_handshake_until_error,
@@ -1104,8 +1105,8 @@ fn test_explicit_provider_selection() {
     let client_config =
         ClientConfig::builder(rustls_ring::DEFAULT_PROVIDER.into()).finish(KeyType::Rsa2048);
 
-    let server_config = ServerConfig::builder(rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER.into())
-        .finish(KeyType::Rsa2048);
+    let server_config =
+        ServerConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into()).finish(KeyType::Rsa2048);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);

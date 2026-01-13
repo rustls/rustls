@@ -16,9 +16,7 @@ use rayon::iter::Either;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 use rustls::client::Resumption;
-use rustls::crypto::{
-    CipherSuite, CryptoProvider, GetRandomFailed, SecureRandom, TicketProducer, aws_lc_rs,
-};
+use rustls::crypto::{CipherSuite, CryptoProvider, GetRandomFailed, SecureRandom, TicketProducer};
 use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
@@ -383,7 +381,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
             None,
         ),
         (
-            derandomize(aws_lc_rs::DEFAULT_PROVIDER),
+            derandomize(rustls_aws_lc_rs::DEFAULT_PROVIDER),
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn TicketProducer>),
             "aws_lc_rs",
             Some(warm_up_aws_lc_rs as fn()),
@@ -466,7 +464,7 @@ fn ring_ticketer() -> Arc<dyn TicketProducer> {
 }
 
 fn aws_lc_rs_ticketer() -> Arc<dyn TicketProducer> {
-    aws_lc_rs::DEFAULT_PROVIDER
+    rustls_aws_lc_rs::DEFAULT_PROVIDER
         .ticketer_factory
         .ticketer()
         .unwrap()
@@ -495,7 +493,7 @@ fn warm_up_aws_lc_rs() {
     // "Warm up" provider's actual entropy source.  aws-lc-rs particularly
     // has an expensive process here, which is one-time (per calling thread)
     // so not useful to include in benchmark measurements.
-    aws_lc_rs::DEFAULT_PROVIDER
+    rustls_aws_lc_rs::DEFAULT_PROVIDER
         .secure_random
         .fill(&mut [0u8])
         .unwrap();

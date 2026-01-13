@@ -4,12 +4,12 @@ use core::fmt;
 
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::{agreement, kem};
-
-use crate::crypto::kx::{
-    ActiveKeyExchange, CompletedKeyExchange, Hybrid, HybridLayout, SharedSecret, StartedKeyExchange,
+use rustls::crypto::GetRandomFailed;
+use rustls::crypto::kx::{
+    ActiveKeyExchange, CompletedKeyExchange, Hybrid, HybridLayout, NamedGroup, SharedSecret,
+    StartedKeyExchange, SupportedKxGroup,
 };
-use crate::crypto::{GetRandomFailed, NamedGroup, SupportedKxGroup};
-use crate::error::{Error, PeerMisbehaved};
+use rustls::error::{Error, PeerMisbehaved};
 
 /// This is the [X25519MLKEM768] key exchange.
 ///

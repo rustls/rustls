@@ -11,12 +11,10 @@ use aws_lc_rs::cipher::{
 };
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use aws_lc_rs::{hmac, iv};
+use rustls::crypto::{GetRandomFailed, TicketProducer};
+use rustls::error::Error;
 
 use super::unspecified_err;
-use crate::crypto::{GetRandomFailed, TicketProducer};
-use crate::error::Error;
-#[cfg(debug_assertions)]
-use crate::log::debug;
 
 /// An RFC 5077 "Recommended Ticket Construction" implementation of a [`TicketProducer`].
 pub(super) struct Rfc5077Ticketer {
@@ -126,8 +124,6 @@ impl TicketProducer for Rfc5077Ticketer {
                 .maximum_ciphertext_len
                 .load(Ordering::SeqCst)
         {
-            #[cfg(debug_assertions)]
-            debug!("rejected over-length ticket");
             return None;
         }
 
@@ -189,8 +185,9 @@ impl Debug for Rfc5077Ticketer {
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto::TicketerFactory;
-    use crate::crypto::aws_lc_rs::AwsLcRs;
+    use rustls::crypto::TicketerFactory;
+
+    use crate::AwsLcRs;
 
     #[test]
     fn basic_pairwise_test() {

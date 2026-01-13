@@ -958,9 +958,9 @@ impl Provider {
     fn build(self) -> CryptoProvider {
         match self {
             #[cfg(feature = "aws-lc-rs")]
-            Self::AwsLcRs => rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER,
+            Self::AwsLcRs => rustls_aws_lc_rs::DEFAULT_PROVIDER,
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
-            Self::AwsLcRsFips => rustls::crypto::default_fips_provider(),
+            Self::AwsLcRsFips => rustls_aws_lc_rs::DEFAULT_FIPS_PROVIDER,
             #[cfg(feature = "graviola")]
             Self::Graviola => rustls_graviola::default_provider(),
             #[cfg(feature = "ring")]

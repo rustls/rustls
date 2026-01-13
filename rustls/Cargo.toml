@@ -15,15 +15,13 @@ exclude = ["src/testdata", "tests/**"]
 
 [features]
 default = ["log", "std"]
-aws-lc-rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
-fips = ["aws-lc-rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
+fips = []
 log = ["dep:log"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 zlib = ["dep:zlib-rs"]
 
 [dependencies]
-aws-lc-rs = { workspace = true, optional = true }
 brotli = { workspace = true, optional = true }
 brotli-decompressor = { workspace = true, optional = true }
 hashbrown = { workspace = true, optional = true }
@@ -39,13 +37,10 @@ zlib-rs = { workspace = true, optional = true }
 [dev-dependencies]
 bencher = { workspace = true }
 env_logger = { workspace = true }
-hex = { workspace = true }
 log = { workspace = true }
 macro_rules_attribute = { workspace = true }
 rcgen = { workspace = true }
 rustls-test = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 time = { workspace = true }
 webpki-roots = { workspace = true }
 
@@ -58,7 +53,7 @@ path = "examples/internal/test_ca.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["aws-lc-rs", "brotli", "hashbrown", "log", "std", "zlib"]
+features = ["brotli", "hashbrown", "log", "std", "zlib"]
 rustdoc-args = ["--cfg", "rustls_docsrs"]
 
 [package.metadata.cargo_check_external_types]

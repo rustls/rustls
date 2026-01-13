@@ -2069,7 +2069,7 @@ pub mod macros {
     macro_rules! provider_aws_lc_rs {
         () => {
             #[allow(unused_imports)]
-            use rustls::crypto::aws_lc_rs as provider;
+            use rustls_aws_lc_rs as provider;
             #[allow(dead_code)]
             const fn provider_is_aws_lc_rs() -> bool {
                 true

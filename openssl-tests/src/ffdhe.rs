@@ -5,7 +5,8 @@ use rustls::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
     SupportedKxGroup,
 };
-use rustls::crypto::{CipherSuite, CipherSuiteCommon, aws_lc_rs as provider};
+use rustls::crypto::{CipherSuite, CipherSuiteCommon};
+use rustls_aws_lc_rs as provider;
 
 pub(crate) const FFDHE2048_GROUP: &dyn SupportedKxGroup =
     &FfdheKxGroup(NamedGroup::FFDHE2048, FFDHE2048);

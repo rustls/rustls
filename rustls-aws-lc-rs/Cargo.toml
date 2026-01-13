@@ -1,0 +1,34 @@
+[package]
+name = "rustls-aws-lc-rs"
+version = "0.1.0-dev.0"
+edition = "2021"
+rust-version = "1.83"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "An aws-lc-based crypto provider for rustls."
+homepage = "https://github.com/rustls/rustls"
+repository = "https://github.com/rustls/rustls"
+categories = ["network-programming", "cryptography"]
+autobenches = false
+
+[features]
+default = ["aws-lc-rs/aws-lc-sys", "std"]
+fips = ["aws-lc-rs/fips", "webpki/aws-lc-rs-fips"]
+std = ["rustls/std"]
+
+[dependencies]
+aws-lc-rs = { workspace = true, features = ["prebuilt-nasm"] }
+pki-types = { workspace = true }
+rustls = { path = "../rustls", default-features = false }
+subtle = { workspace = true }
+webpki = { workspace = true, features = ["aws-lc-rs"] }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+bencher = { workspace = true }
+hex = { workspace = true }
+rustls-test = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

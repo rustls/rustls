@@ -1,6 +1,5 @@
 use std::fs::File;
 
-use rustls::crypto::aws_lc_rs;
 use rustls::crypto::hpke::{
     Hpke, HpkeAead, HpkeKdf, HpkeKem, HpkePrivateKey, HpkePublicKey, HpkeSuite,
     HpkeSymmetricCipherSuite,
@@ -79,7 +78,7 @@ impl TestVector {
         }
 
         match (
-            Self::lookup_suite(self.suite(), aws_lc_rs::hpke::ALL_SUPPORTED_SUITES),
+            Self::lookup_suite(self.suite(), rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES),
             Self::lookup_suite(self.suite(), provider_example::hpke::ALL_SUPPORTED_SUITES),
         ) {
             // Both providers support the suite. Test against themselves, and each other.

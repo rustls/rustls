@@ -6,12 +6,12 @@ use core::error::Error;
 use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, UnbufferedClientConnection};
-use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, UnbufferedStatus,
     WriteTraffic,
 };
 use rustls::{ClientConfig, RootCertStore};
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 

@@ -10,9 +10,10 @@ source <(cargo llvm-cov show-env --export-prefix $OPTIONS "$@")
 cargo llvm-cov clean --workspace
 
 cargo build --locked --all-targets --all-features
-cargo test --locked --all-features
-cargo test -p rustls --locked --no-default-features --features log,aws-lc-rs,fips,std
+cargo test --locked --all-features # this presumably enables `fips`
 cargo test -p rustls-ring --locked
+cargo test -p rustls-aws-lc-rs --locked
+cargo test -p rustls-test --locked --features aws-lc-rs # aws-lc-rs, but no fips
 
 # ensure both zlib and brotli are tested, irrespective of their order
 cargo test --locked $(admin/all-features-except zlib rustls)

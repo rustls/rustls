@@ -5,9 +5,10 @@ use std::{str, thread};
 
 use openssl::ssl::{SslConnector, SslMethod, SslSession, SslStream};
 use rustls::ServerConfig;
-use rustls::crypto::{Identity, aws_lc_rs as provider};
+use rustls::crypto::Identity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls_aws_lc_rs as provider;
 
 use crate::utils::verify_openssl3_available;
 

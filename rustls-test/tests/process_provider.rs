@@ -7,7 +7,7 @@
 use rustls::ClientConfig;
 use rustls::crypto::CryptoProvider;
 #[cfg(all(feature = "aws-lc-rs", not(feature = "ring")))]
-use rustls::crypto::aws_lc_rs as provider;
+use rustls_aws_lc_rs as provider;
 #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
 use rustls_ring as provider;
 #[cfg(all(feature = "ring", feature = "aws-lc-rs"))]

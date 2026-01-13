@@ -2,19 +2,16 @@ use alloc::boxed::Box;
 
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
-
-use crate::crypto;
-use crate::crypto::cipher::{
+use rustls::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
     OutboundOpaque, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
-use crate::crypto::enums::CipherSuite;
-use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::Error;
-use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
-use crate::tls13::Tls13CipherSuite;
-use crate::version::TLS13_VERSION;
+use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
+use rustls::crypto::{self, CipherSuite};
+use rustls::enums::{ContentType, ProtocolVersion};
+use rustls::error::Error;
+use rustls::version::TLS13_VERSION;
+use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite};
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: &Tls13CipherSuite = &Tls13CipherSuite {

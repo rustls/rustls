@@ -14,6 +14,8 @@ members = [
   "provider-example",
   # the main library and tests
   "rustls",
+  # AWS-LC based crypto provider
+  "rustls-aws-lc-rs",
   # the ring crypto provider
   "rustls-ring",
   # common code for testing the core crate

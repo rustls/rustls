@@ -15,10 +15,10 @@ use std::{fs, thread};
 use clap::Parser;
 use rcgen::{Issuer, KeyPair, SerialNumber};
 use rustls::RootCertStore;
-use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 
 fn main() {
     let args = Args::parse();

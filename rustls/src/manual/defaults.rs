@@ -28,7 +28,7 @@ it's _much_ more likely that both peers will have good quality implementations.
 
 ### About the post-quantum-secure key exchange `X25519MLKEM768`
 
-[`X25519MLKEM768`] -- a hybrid[^1], post-quantum-secure[^2] key exchange
+[X25519MLKEM768] -- a hybrid[^1], post-quantum-secure[^2] key exchange
 algorithm -- is available when using the aws-lc-rs provider, set as the highest-priority key
 exchange algorithm by default.
 
@@ -43,7 +43,7 @@ X25519 alone is already used by default by rustls, and tends to have
 higher quality implementations than other elliptic curves.
 ML-KEM-768 was standardized by NIST in [FIPS203].
 
-[`MLKEM768`] is available separately, but is not currently enabled
+MLKEM768 is available separately, but is not currently enabled
 by default out of conservatism.
 
 [^1]: meaning: a construction that runs a classical and post-quantum
@@ -57,8 +57,6 @@ by default out of conservatism.
       now and attacked later.
 
 [X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
-[`X25519MLKEM768`]: crate::crypto::aws_lc_rs::kx_group::X25519MLKEM768
-[`MLKEM768`]: crate::crypto::aws_lc_rs::kx_group::MLKEM768
 [FIPS203]: <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.203.pdf>
 [Chrome]: <https://security.googleblog.com/2024/09/a-new-path-for-kyber-on-web.html>
 [Cloudflare]: <https://blog.cloudflare.com/pq-2024/#ml-kem-768-and-x25519>

@@ -9,7 +9,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use rustls::crypto::Identity;
-use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::{ServerConfig, UnbufferedServerConnection};
@@ -17,6 +16,7 @@ use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus,
 };
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();

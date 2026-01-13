@@ -152,9 +152,6 @@ impl TicketRotator {
 
         self.state.read().ok()
     }
-
-    #[cfg(feature = "aws-lc-rs")]
-    pub(crate) const SIX_HOURS: Duration = Duration::from_secs(6 * 60 * 60);
 }
 
 impl TicketProducer for TicketRotator {
