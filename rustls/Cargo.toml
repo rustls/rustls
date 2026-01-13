@@ -51,6 +51,9 @@ serde_json = { workspace = true }
 time = { workspace = true }
 webpki-roots = { workspace = true }
 
+[target.'cfg(any(target_arch = "aarch64", target_arch = "x86_64"))'.dev-dependencies]
+graviola = { workspace = true }
+
 [[example]]
 name = "test_ca"
 path = "examples/internal/test_ca.rs"

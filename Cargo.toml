@@ -60,6 +60,7 @@ criterion = "0.8"
 der = "0.7"
 ecdsa = { version = "0.16.8", features = ["pem"] }
 env_logger = "0.11"
+graviola = "0.3"
 hashbrown = { version = "0.16", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
 hickory-resolver = { version = "0.25", features = ["https-aws-lc-rs", "webpki-roots"] }
