@@ -4,9 +4,6 @@ use alloc::vec::Vec;
 use core::time::Duration;
 use std::borrow::Cow;
 
-use graviola::hashing::sha2::Sha256Context;
-use graviola::hashing::{Hash as _, HashContext as _};
-
 use crate::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
     OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
@@ -17,7 +14,7 @@ use crate::crypto::kx::{
 };
 use crate::crypto::{
     self, CipherSuite, CipherSuiteCommon, GetRandomFailed, HashAlgorithm, SignatureScheme,
-    TicketProducer, WebPkiSupportedAlgorithms, hash, tls12, tls13,
+    TicketProducer, WebPkiSupportedAlgorithms, hash, hmac, tls12, tls13,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::PeerMisbehaved;
@@ -78,11 +75,11 @@ impl crypto::TicketerFactory for Provider {
 pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::Unknown(0xff13),
-        hash_provider: SHA256,
+        hash_provider: FAKE_HASH,
         confidentiality_limit: u64::MAX,
     },
     protocol_version: crate::version::TLS13_VERSION,
-    hkdf_provider: &tls13::HkdfUsingHmac(&hash_impl::Sha256Hmac),
+    hkdf_provider: &tls13::HkdfUsingHmac(FAKE_HMAC),
     aead_alg: &Aead,
     quic: None,
 };
@@ -90,13 +87,13 @@ pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
 const TLS_TEST_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::Unknown(0xff12),
-        hash_provider: SHA256,
+        hash_provider: FAKE_HASH,
         confidentiality_limit: u64::MAX,
     },
     protocol_version: crate::version::TLS12_VERSION,
     kx: KeyExchangeAlgorithm::ECDHE,
     sign: &[SIGNATURE_SCHEME],
-    prf_provider: &tls12::PrfUsingHmac(&hash_impl::Sha256Hmac),
+    prf_provider: &tls12::PrfUsingHmac(FAKE_HMAC),
     aead_alg: &Aead,
 };
 
@@ -117,10 +114,23 @@ impl TicketProducer for Ticketer {
     }
 }
 
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+pub(crate) const FAKE_HASH: &dyn hash::Hash = SHA256;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Sha256Hmac;
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 pub(crate) use hash_impl::SHA256;
+
+#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+pub(crate) const FAKE_HASH: &dyn hash::Hash = &hash_impl::Hash;
+#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Hmac;
 
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod hash_impl {
+    use graviola::hashing::sha2::Sha256Context;
+    use graviola::hashing::{Hash as _, HashContext as _};
+
     use super::*;
 
     pub(crate) const SHA256: &'static dyn hash::Hash = &graviola::hashing::Sha256;
@@ -165,8 +175,8 @@ mod hash_impl {
 
     pub(super) struct Sha256Hmac;
 
-    impl crypto::hmac::Hmac for Sha256Hmac {
-        fn with_key(&self, key: &[u8]) -> Box<dyn crypto::hmac::Key> {
+    impl hmac::Hmac for Sha256Hmac {
+        fn with_key(&self, key: &[u8]) -> Box<dyn hmac::Key> {
             Box::new(Sha256HmacKey(graviola::hashing::hmac::Hmac::<
                 graviola::hashing::Sha256,
             >::new(key)))
@@ -179,15 +189,15 @@ mod hash_impl {
 
     struct Sha256HmacKey(graviola::hashing::hmac::Hmac<graviola::hashing::Sha256>);
 
-    impl crypto::hmac::Key for Sha256HmacKey {
-        fn sign_concat(&self, first: &[u8], middle: &[&[u8]], last: &[u8]) -> crypto::hmac::Tag {
+    impl hmac::Key for Sha256HmacKey {
+        fn sign_concat(&self, first: &[u8], middle: &[&[u8]], last: &[u8]) -> hmac::Tag {
             let mut ctx = self.0.clone();
             ctx.update(first);
             for m in middle {
                 ctx.update(m);
             }
             ctx.update(last);
-            crypto::hmac::Tag::new(ctx.finish().as_ref())
+            hmac::Tag::new(ctx.finish().as_ref())
         }
 
         fn tag_len(&self) -> usize {
@@ -200,7 +210,7 @@ mod hash_impl {
 mod hash_impl {
     use super::*;
 
-    struct Hash;
+    pub(super) struct Hash;
 
     impl hash::Hash for Hash {
         fn start(&self) -> Box<dyn hash::Context> {
@@ -240,10 +250,10 @@ mod hash_impl {
 
     const HASH_OUTPUT: &[u8] = b"HashHashHashHashHashHashHashHash";
 
-    struct Hmac;
+    pub(super) struct Hmac;
 
-    impl crypto::hmac::Hmac for Hmac {
-        fn with_key(&self, _key: &[u8]) -> Box<dyn crypto::hmac::Key> {
+    impl hmac::Hmac for Hmac {
+        fn with_key(&self, _key: &[u8]) -> Box<dyn hmac::Key> {
             Box::new(HmacKey)
         }
 
@@ -254,9 +264,9 @@ mod hash_impl {
 
     struct HmacKey;
 
-    impl crypto::hmac::Key for HmacKey {
-        fn sign_concat(&self, _first: &[u8], _middle: &[&[u8]], _last: &[u8]) -> crypto::hmac::Tag {
-            crypto::hmac::Tag::new(HMAC_OUTPUT)
+    impl hmac::Key for HmacKey {
+        fn sign_concat(&self, _first: &[u8], _middle: &[&[u8]], _last: &[u8]) -> hmac::Tag {
+            hmac::Tag::new(HMAC_OUTPUT)
         }
 
         fn tag_len(&self) -> usize {
