@@ -424,10 +424,11 @@ mod tests {
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
     use super::WebPkiClientVerifier;
+    use crate::RootCertStore;
+    use crate::crypto::TEST_PROVIDER;
     use crate::error::CertRevocationListError;
     use crate::server::VerifierBuilderError;
     use crate::sync::Arc;
-    use crate::{RootCertStore, TEST_PROVIDERS};
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
         crls_der
@@ -468,64 +469,54 @@ mod tests {
 
     #[test]
     fn test_client_verifier_required_auth() {
-        for &provider in TEST_PROVIDERS {
-            // We should be able to build a verifier that requires client authentication, and does
-            // no revocation checking.
-            let builder = WebPkiClientVerifier::builder(test_roots(), provider);
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // We should be able to build a verifier that requires client authentication, and does
+        // no revocation checking.
+        let builder = WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER);
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_client_verifier_optional_auth() {
-        for &provider in TEST_PROVIDERS {
-            // We should be able to build a verifier that allows client authentication, and anonymous
-            // access, and does no revocation checking.
-            let builder =
-                WebPkiClientVerifier::builder(test_roots(), provider).allow_unauthenticated();
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // We should be able to build a verifier that allows client authentication, and anonymous
+        // access, and does no revocation checking.
+        let builder =
+            WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER).allow_unauthenticated();
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_client_verifier_without_crls_required_auth() {
-        for &provider in TEST_PROVIDERS {
-            // We should be able to build a verifier that requires client authentication, and does
-            // no revocation checking, that hasn't been configured to determine how to handle
-            // unauthenticated clients yet.
-            let builder = WebPkiClientVerifier::builder(test_roots(), provider);
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // We should be able to build a verifier that requires client authentication, and does
+        // no revocation checking, that hasn't been configured to determine how to handle
+        // unauthenticated clients yet.
+        let builder = WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER);
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_client_verifier_without_crls_optional_auth() {
-        for &provider in TEST_PROVIDERS {
-            // We should be able to build a verifier that allows client authentication,
-            // and anonymous access, that does no revocation checking.
-            let builder =
-                WebPkiClientVerifier::builder(test_roots(), provider).allow_unauthenticated();
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // We should be able to build a verifier that allows client authentication,
+        // and anonymous access, that does no revocation checking.
+        let builder =
+            WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER).allow_unauthenticated();
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_with_invalid_crls() {
-        for &provider in TEST_PROVIDERS {
-            // Trying to build a client verifier with invalid CRLs should error at build time.
-            let result = WebPkiClientVerifier::builder(test_roots(), provider)
-                .with_crls(vec![CertificateRevocationListDer::from(vec![0xFF])])
-                .build();
-            assert!(matches!(result, Err(VerifierBuilderError::InvalidCrl(_))));
-        }
+        // Trying to build a client verifier with invalid CRLs should error at build time.
+        let result = WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER)
+            .with_crls(vec![CertificateRevocationListDer::from(vec![0xFF])])
+            .build();
+        assert!(matches!(result, Err(VerifierBuilderError::InvalidCrl(_))));
     }
 
     #[test]
@@ -537,93 +528,79 @@ mod tests {
                 include_bytes!("../../../test-ca/eddsa/client.revoked.crl.pem").as_slice(),
             ]);
 
-        for &provider in TEST_PROVIDERS {
-            let builder = WebPkiClientVerifier::builder(test_roots(), provider)
-                .with_crls(initial_crls.clone())
-                .with_crls(extra_crls.clone());
+        let builder = WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER)
+            .with_crls(initial_crls.clone())
+            .with_crls(extra_crls.clone());
 
-            // There should be the expected number of crls.
-            assert_eq!(builder.crls.len(), initial_crls.len() + extra_crls.len());
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // There should be the expected number of crls.
+        assert_eq!(builder.crls.len(), initial_crls.len() + extra_crls.len());
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_client_verifier_with_crls_required_auth_implicit() {
-        for provider in TEST_PROVIDERS {
-            // We should be able to build a verifier that requires client authentication, and that does
-            // revocation checking with CRLs, and that does not allow any anonymous access.
-            let builder =
-                WebPkiClientVerifier::builder(test_roots(), provider).with_crls(test_crls());
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // We should be able to build a verifier that requires client authentication, and that does
+        // revocation checking with CRLs, and that does not allow any anonymous access.
+        let builder =
+            WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER).with_crls(test_crls());
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_client_verifier_with_crls_optional_auth() {
-        for provider in TEST_PROVIDERS {
-            // We should be able to build a verifier that supports client authentication, that does
-            // revocation checking with CRLs, and that allows anonymous access.
-            let builder = WebPkiClientVerifier::builder(test_roots(), provider)
-                .with_crls(test_crls())
-                .allow_unauthenticated();
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // We should be able to build a verifier that supports client authentication, that does
+        // revocation checking with CRLs, and that allows anonymous access.
+        let builder = WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER)
+            .with_crls(test_crls())
+            .allow_unauthenticated();
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_client_verifier_ee_only() {
-        for provider in TEST_PROVIDERS {
-            // We should be able to build a client verifier that only checks EE revocation status.
-            let builder = WebPkiClientVerifier::builder(test_roots(), provider)
-                .with_crls(test_crls())
-                .only_check_end_entity_revocation();
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // We should be able to build a client verifier that only checks EE revocation status.
+        let builder = WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER)
+            .with_crls(test_crls())
+            .only_check_end_entity_revocation();
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_client_verifier_allow_unknown() {
-        for provider in TEST_PROVIDERS {
-            // We should be able to build a client verifier that allows unknown revocation status
-            let builder = WebPkiClientVerifier::builder(test_roots(), provider)
-                .with_crls(test_crls())
-                .allow_unknown_revocation_status();
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // We should be able to build a client verifier that allows unknown revocation status
+        let builder = WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER)
+            .with_crls(test_crls())
+            .allow_unknown_revocation_status();
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_client_verifier_enforce_expiration() {
-        for provider in TEST_PROVIDERS {
-            // We should be able to build a client verifier that allows unknown revocation status
-            let builder = WebPkiClientVerifier::builder(test_roots(), provider)
-                .with_crls(test_crls())
-                .enforce_revocation_expiration();
-            // The builder should be Debug.
-            println!("{builder:?}");
-            builder.build().unwrap();
-        }
+        // We should be able to build a client verifier that allows unknown revocation status
+        let builder = WebPkiClientVerifier::builder(test_roots(), &TEST_PROVIDER)
+            .with_crls(test_crls())
+            .enforce_revocation_expiration();
+        // The builder should be Debug.
+        println!("{builder:?}");
+        builder.build().unwrap();
     }
 
     #[test]
     fn test_builder_no_roots() {
-        for provider in TEST_PROVIDERS {
-            // Trying to create a client verifier builder with no trust anchors should fail at build time
-            let result =
-                WebPkiClientVerifier::builder(RootCertStore::empty().into(), provider).build();
-            assert!(matches!(result, Err(VerifierBuilderError::NoRootAnchors)));
-        }
+        // Trying to create a client verifier builder with no trust anchors should fail at build time
+        let result =
+            WebPkiClientVerifier::builder(RootCertStore::empty().into(), &TEST_PROVIDER).build();
+        assert!(matches!(result, Err(VerifierBuilderError::NoRootAnchors)));
     }
 
     #[test]

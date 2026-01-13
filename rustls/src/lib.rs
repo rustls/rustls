@@ -552,9 +552,6 @@ mod sealed {
     pub trait Sealed {}
 }
 
-#[cfg(test)]
-const TEST_PROVIDERS: &[&crypto::CryptoProvider] = &[&crypto::TEST_PROVIDER];
-
 mod core_hash_polyfill {
     use core::hash::Hasher;
 
