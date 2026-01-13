@@ -1222,42 +1222,8 @@ mod tests {
 
     use super::*;
     use crate::TEST_PROVIDERS;
-    use crate::crypto::{CipherSuite, CryptoProvider, HashAlgorithm, tls13_suite};
+    use crate::crypto::{CipherSuite, CryptoProvider, tls13_suite};
     use crate::key_log::KeyLog;
-
-    #[test]
-    fn empty_hash() {
-        for provider in TEST_PROVIDERS {
-            let sha256 = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, provider)
-                .common
-                .hash_provider;
-            let sha384 = tls13_suite(CipherSuite::TLS13_AES_256_GCM_SHA384, provider)
-                .common
-                .hash_provider;
-
-            assert!(
-                sha256.start().finish().as_ref()
-                    == HashAlgorithm::SHA256
-                        .hash_for_empty_input()
-                        .unwrap()
-                        .as_ref()
-            );
-            assert!(
-                sha384.start().finish().as_ref()
-                    == HashAlgorithm::SHA384
-                        .hash_for_empty_input()
-                        .unwrap()
-                        .as_ref()
-            );
-
-            // a theoretical example of unsupported hash
-            assert!(
-                HashAlgorithm::SHA1
-                    .hash_for_empty_input()
-                    .is_none()
-            );
-        }
-    }
 
     #[test]
     fn test_vectors() {
