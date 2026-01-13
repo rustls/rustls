@@ -12,7 +12,7 @@ pub static X25519MLKEM768: &dyn SupportedKxGroup = &hybrid::Hybrid {
     classical: kx_group::X25519,
     post_quantum: MLKEM768,
     name: NamedGroup::X25519MLKEM768,
-    layout: hybrid::Layout {
+    layout: hybrid::HybridLayout {
         classical_share_len: X25519_LEN,
         post_quantum_client_share_len: MLKEM768_ENCAP_LEN,
         post_quantum_server_share_len: MLKEM768_CIPHERTEXT_LEN,
@@ -27,7 +27,7 @@ pub static SECP256R1MLKEM768: &dyn SupportedKxGroup = &hybrid::Hybrid {
     classical: kx_group::SECP256R1,
     post_quantum: MLKEM768,
     name: NamedGroup::secp256r1MLKEM768,
-    layout: hybrid::Layout {
+    layout: hybrid::HybridLayout {
         classical_share_len: SECP256R1_LEN,
         post_quantum_client_share_len: MLKEM768_ENCAP_LEN,
         post_quantum_server_share_len: MLKEM768_CIPHERTEXT_LEN,
