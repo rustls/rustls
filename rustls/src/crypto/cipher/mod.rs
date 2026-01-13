@@ -395,10 +395,10 @@ impl From<[u8; Self::MAX_LEN]> for AeadKey {
     }
 }
 
-#[cfg(all(test, feature = "aws-lc-rs"))]
+#[cfg(test)]
 pub(crate) struct FakeAead;
 
-#[cfg(all(test, feature = "aws-lc-rs"))]
+#[cfg(test)]
 impl Tls12AeadAlgorithm for FakeAead {
     fn encrypter(&self, _: AeadKey, _: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
         todo!()

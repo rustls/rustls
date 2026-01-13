@@ -1,5 +1,3 @@
-#![cfg(feature = "aws-lc-rs")]
-
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use std::vec;
@@ -8,16 +6,15 @@ use super::ServerConnectionData;
 use super::hs::ClientHelloInput;
 use crate::common_state::{CommonState, Context, Input, Protocol, Side};
 use crate::crypto::cipher::FakeAead;
-use crate::crypto::hash::FakeHash;
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
 use crate::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
     SupportedKxGroup,
 };
-use crate::crypto::tls12::FakePrf;
+use crate::crypto::test_provider::{FAKE_HASH, FAKE_HMAC};
 use crate::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
-    TEST_PROVIDER, tls12_only,
+    TEST_PROVIDER, tls12, tls12_only,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
@@ -355,12 +352,12 @@ impl ActiveKeyExchange for ActiveFakeFfdhe {
 static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-        hash_provider: &FakeHash,
+        hash_provider: FAKE_HASH,
         confidentiality_limit: 1,
     },
     kx: KeyExchangeAlgorithm::DHE,
     protocol_version: TLS12_VERSION,
-    prf_provider: &FakePrf,
+    prf_provider: &tls12::PrfUsingHmac(FAKE_HMAC),
     sign: &[SignatureScheme::ECDSA_NISTP256_SHA256],
     aead_alg: &FakeAead,
 };
