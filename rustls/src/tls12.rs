@@ -417,33 +417,28 @@ pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TEST_PROVIDERS;
+    use crate::crypto::TEST_PROVIDER;
     use crate::crypto::kx::NamedGroup;
     use crate::msgs::handshake::{ServerEcdhParams, ServerKeyExchangeParams};
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
-        for provider in TEST_PROVIDERS {
-            let Some(kx_group) =
-                provider.find_kx_group(NamedGroup::X25519, ProtocolVersion::TLSv1_3)
-            else {
-                continue;
-            };
+        let Some(kx_group) =
+            TEST_PROVIDER.find_kx_group(NamedGroup::X25519, ProtocolVersion::TLSv1_3)
+        else {
+            return;
+        };
 
-            let key = kx_group.start().unwrap();
-            let server_params = ServerEcdhParams::new(&*key);
-            let mut server_buf = Vec::new();
-            server_params.encode(&mut server_buf);
-            server_buf.push(34);
+        let key = kx_group.start().unwrap();
+        let server_params = ServerEcdhParams::new(&*key);
+        let mut server_buf = Vec::new();
+        server_params.encode(&mut server_buf);
+        server_buf.push(34);
 
-            assert!(
-                decode_kx_params::<ServerKeyExchangeParams>(
-                    KeyExchangeAlgorithm::ECDHE,
-                    &server_buf
-                )
+        assert!(
+            decode_kx_params::<ServerKeyExchangeParams>(KeyExchangeAlgorithm::ECDHE, &server_buf)
                 .is_err()
-            );
-        }
+        );
     }
 
     #[test]

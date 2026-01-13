@@ -216,10 +216,11 @@ mod tests {
     use pki_types::{CertificateDer, ServerName, UnixTime};
 
     use super::NoClientSessionStorage;
-    use crate::TEST_PROVIDERS;
     use crate::client::{ClientSessionKey, ClientSessionStore};
     use crate::crypto::kx::NamedGroup;
-    use crate::crypto::{CertificateIdentity, CipherSuite, Identity, tls12_suite, tls13_suite};
+    use crate::crypto::{
+        CertificateIdentity, CipherSuite, Identity, TEST_PROVIDER, tls12_suite, tls13_suite,
+    };
     use crate::msgs::base::PayloadU16;
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
@@ -238,46 +239,44 @@ mod tests {
         c.set_kx_hint(key.clone(), NamedGroup::X25519);
         assert_eq!(None, c.kx_hint(&key));
 
-        for provider in TEST_PROVIDERS {
-            {
-                c.set_tls12_session(
-                    key.clone(),
-                    Tls12ClientSessionValue::new(
-                        tls12_suite(CipherSuite::Unknown(0xff12), provider),
-                        SessionId::empty(),
-                        Arc::new(PayloadU16::empty()),
-                        &[0u8; 48],
-                        Identity::X509(CertificateIdentity {
-                            end_entity: CertificateDer::from(&[][..]),
-                            intermediates: Vec::new(),
-                        }),
-                        now,
-                        Duration::ZERO,
-                        true,
-                    ),
-                );
-                assert!(c.tls12_session(&key).is_none());
-                c.remove_tls12_session(&key);
-            }
-
-            c.insert_tls13_ticket(
+        {
+            c.set_tls12_session(
                 key.clone(),
-                Tls13ClientSessionValue::new(
-                    tls13_suite(CipherSuite::Unknown(0xff13), provider),
+                Tls12ClientSessionValue::new(
+                    tls12_suite(CipherSuite::Unknown(0xff12), &TEST_PROVIDER),
+                    SessionId::empty(),
                     Arc::new(PayloadU16::empty()),
-                    &[],
+                    &[0u8; 48],
                     Identity::X509(CertificateIdentity {
                         end_entity: CertificateDer::from(&[][..]),
                         intermediates: Vec::new(),
                     }),
                     now,
                     Duration::ZERO,
-                    0,
-                    0,
+                    true,
                 ),
             );
-
-            assert!(c.take_tls13_ticket(&key).is_none());
+            assert!(c.tls12_session(&key).is_none());
+            c.remove_tls12_session(&key);
         }
+
+        c.insert_tls13_ticket(
+            key.clone(),
+            Tls13ClientSessionValue::new(
+                tls13_suite(CipherSuite::Unknown(0xff13), &TEST_PROVIDER),
+                Arc::new(PayloadU16::empty()),
+                &[],
+                Identity::X509(CertificateIdentity {
+                    end_entity: CertificateDer::from(&[][..]),
+                    intermediates: Vec::new(),
+                }),
+                now,
+                Duration::ZERO,
+                0,
+                0,
+            ),
+        );
+
+        assert!(c.take_tls13_ticket(&key).is_none());
     }
 }

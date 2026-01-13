@@ -6,7 +6,6 @@ use std::vec;
 
 use super::ServerConnectionData;
 use super::hs::ClientHelloInput;
-use crate::TEST_PROVIDERS;
 use crate::common_state::{CommonState, Context, Input, Protocol, Side};
 use crate::crypto::cipher::FakeAead;
 use crate::crypto::hash::FakeHash;
@@ -18,7 +17,7 @@ use crate::crypto::kx::{
 use crate::crypto::tls12::FakePrf;
 use crate::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
-    tls12_only,
+    TEST_PROVIDER, tls12_only,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
@@ -76,117 +75,100 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
 
 #[test]
 fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
-    for &provider in TEST_PROVIDERS {
-        let provider = tls12_only(provider.clone());
-        let mut config = ServerConfig::builder(provider.into())
-            .with_no_client_auth()
-            .with_single_cert(server_identity(), server_key())
-            .unwrap();
+    let provider = tls12_only(TEST_PROVIDER.clone());
+    let mut config = ServerConfig::builder(provider.into())
+        .with_no_client_auth()
+        .with_single_cert(server_identity(), server_key())
+        .unwrap();
 
-        if config.provider.fips() {
-            assert!(config.require_ems);
-        } else {
-            config.require_ems = true;
-        }
-        let mut conn = ServerConnection::new(config.into()).unwrap();
-
-        let mut ch = minimal_client_hello();
-        ch.extensions
-            .extended_master_secret_request
-            .take();
-        let ch = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ClientHello(ch),
-            )),
-        };
-        conn.read_tls(&mut ch.into_wire_bytes().as_slice())
-            .unwrap();
-
-        assert_eq!(
-            conn.process_new_packets(),
-            Err(Error::PeerIncompatible(
-                PeerIncompatible::ExtendedMasterSecretExtensionRequired
-            ))
-        );
+    if config.provider.fips() {
+        assert!(config.require_ems);
+    } else {
+        config.require_ems = true;
     }
+    let mut conn = ServerConnection::new(config.into()).unwrap();
+
+    let mut ch = minimal_client_hello();
+    ch.extensions
+        .extended_master_secret_request
+        .take();
+    let ch = Message {
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
+            ch,
+        ))),
+    };
+    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+        .unwrap();
+
+    assert_eq!(
+        conn.process_new_packets(),
+        Err(Error::PeerIncompatible(
+            PeerIncompatible::ExtendedMasterSecretExtensionRequired
+        ))
+    );
 }
 
 #[test]
 fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
-    for &provider in TEST_PROVIDERS {
-        let config = ServerConfig::builder(Arc::new(CryptoProvider {
-            tls13_cipher_suites: Cow::default(),
-            ..ffdhe_provider(provider.clone())
-        }))
-        .with_no_client_auth()
-        .with_single_cert(server_identity(), server_key())
-        .unwrap();
+    let config = ServerConfig::builder(Arc::new(CryptoProvider {
+        tls13_cipher_suites: Cow::default(),
+        ..ffdhe_provider(TEST_PROVIDER.clone())
+    }))
+    .with_no_client_auth()
+    .with_single_cert(server_identity(), server_key())
+    .unwrap();
 
-        let mut ch = minimal_client_hello();
-        ch.cipher_suites.push(
-            TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
-                .common
-                .suite,
-        );
+    let mut ch = minimal_client_hello();
+    ch.cipher_suites.push(
+        TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
+            .common
+            .suite,
+    );
 
-        server_chooses_ffdhe_group_for_client_hello(
-            ServerConnection::new(config.into()).unwrap(),
-            ch,
-        );
-    }
+    server_chooses_ffdhe_group_for_client_hello(ServerConnection::new(config.into()).unwrap(), ch);
 }
 
 #[test]
 fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
-    for &provider in TEST_PROVIDERS {
-        let config = ServerConfig::builder(Arc::new(CryptoProvider {
-            tls13_cipher_suites: Cow::default(),
-            ..ffdhe_provider(provider.clone())
-        }))
-        .with_no_client_auth()
-        .with_single_cert(server_identity(), server_key())
-        .unwrap();
+    let config = ServerConfig::builder(Arc::new(CryptoProvider {
+        tls13_cipher_suites: Cow::default(),
+        ..ffdhe_provider(TEST_PROVIDER.clone())
+    }))
+    .with_no_client_auth()
+    .with_single_cert(server_identity(), server_key())
+    .unwrap();
 
-        let mut ch = minimal_client_hello();
-        ch.cipher_suites.push(
-            TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
-                .common
-                .suite,
-        );
-        ch.extensions.named_groups.take();
+    let mut ch = minimal_client_hello();
+    ch.cipher_suites.push(
+        TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
+            .common
+            .suite,
+    );
+    ch.extensions.named_groups.take();
 
-        server_chooses_ffdhe_group_for_client_hello(
-            ServerConnection::new(config.into()).unwrap(),
-            ch,
-        );
-    }
+    server_chooses_ffdhe_group_for_client_hello(ServerConnection::new(config.into()).unwrap(), ch);
 }
 
 #[test]
 fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites() {
-    for &provider in TEST_PROVIDERS {
-        let config = ServerConfig::builder(Arc::new(CryptoProvider {
-            tls13_cipher_suites: Cow::default(),
-            ..ffdhe_provider(provider.clone())
-        }))
-        .with_no_client_auth()
-        .with_single_cert(server_identity(), server_key())
-        .unwrap();
+    let config = ServerConfig::builder(Arc::new(CryptoProvider {
+        tls13_cipher_suites: Cow::default(),
+        ..ffdhe_provider(TEST_PROVIDER.clone())
+    }))
+    .with_no_client_auth()
+    .with_single_cert(server_identity(), server_key())
+    .unwrap();
 
-        let mut ch = minimal_client_hello();
-        ch.cipher_suites.push(
-            TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
-                .common
-                .suite,
-        );
-        ch.extensions.ec_point_formats.take();
+    let mut ch = minimal_client_hello();
+    ch.cipher_suites.push(
+        TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
+            .common
+            .suite,
+    );
+    ch.extensions.ec_point_formats.take();
 
-        server_chooses_ffdhe_group_for_client_hello(
-            ServerConnection::new(config.into()).unwrap(),
-            ch,
-        );
-    }
+    server_chooses_ffdhe_group_for_client_hello(ServerConnection::new(config.into()).unwrap(), ch);
 }
 
 fn server_chooses_ffdhe_group_for_client_hello(
@@ -229,55 +211,51 @@ fn server_chooses_ffdhe_group_for_client_hello(
 
 #[test]
 fn test_server_requiring_rpk_client_rejects_x509_client() {
-    for &provider in TEST_PROVIDERS {
-        let Some(server_config) = server_config_for_rpk(provider.clone()) else {
-            continue;
-        };
+    let Some(server_config) = server_config_for_rpk(TEST_PROVIDER.clone()) else {
+        return;
+    };
 
-        let mut ch = minimal_client_hello();
-        ch.extensions.client_certificate_types = Some(vec![CertificateType::X509]);
-        let ch = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ClientHello(ch),
-            )),
-        };
+    let mut ch = minimal_client_hello();
+    ch.extensions.client_certificate_types = Some(vec![CertificateType::X509]);
+    let ch = Message {
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
+            ch,
+        ))),
+    };
 
-        let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
-        conn.read_tls(&mut ch.into_wire_bytes().as_slice())
-            .unwrap();
-        assert_eq!(
-            conn.process_new_packets().unwrap_err(),
-            PeerIncompatible::IncorrectCertificateTypeExtension.into(),
-        );
-    }
+    let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
+    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+        .unwrap();
+    assert_eq!(
+        conn.process_new_packets().unwrap_err(),
+        PeerIncompatible::IncorrectCertificateTypeExtension.into(),
+    );
 }
 
 #[test]
 fn test_rpk_only_server_rejects_x509_only_client() {
-    for &provider in TEST_PROVIDERS {
-        let Some(server_config) = server_config_for_rpk(provider.clone()) else {
-            continue;
-        };
+    let Some(server_config) = server_config_for_rpk(TEST_PROVIDER.clone()) else {
+        return;
+    };
 
-        let mut ch = minimal_client_hello();
-        ch.extensions.server_certificate_types = Some(vec![CertificateType::X509]);
-        let ch = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ClientHello(ch),
-            )),
-        };
+    let mut ch = minimal_client_hello();
+    ch.extensions.server_certificate_types = Some(vec![CertificateType::X509]);
+    let ch = Message {
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
+            ch,
+        ))),
+    };
 
-        let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
-        conn.read_tls(&mut ch.into_wire_bytes().as_slice())
-            .unwrap();
+    let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
+    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+        .unwrap();
 
-        assert_eq!(
-            conn.process_new_packets().unwrap_err(),
-            PeerIncompatible::IncorrectCertificateTypeExtension.into(),
-        );
-    }
+    assert_eq!(
+        conn.process_new_packets().unwrap_err(),
+        PeerIncompatible::IncorrectCertificateTypeExtension.into(),
+    );
 }
 
 fn server_config_for_rpk(provider: CryptoProvider) -> Option<ServerConfig> {

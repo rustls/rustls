@@ -13,7 +13,7 @@ use crate::crypto::kx::NamedGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
-    tls12_only, tls13_only, tls13_suite,
+    TEST_PROVIDER, tls12_only, tls13_only, tls13_suite,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -35,267 +35,250 @@ use crate::verify::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
     SignatureVerificationInput,
 };
-use crate::{DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore, TEST_PROVIDERS};
+use crate::{DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore};
 
 /// Tests that session_ticket(35) extension
 /// is not sent if the client does not support TLS 1.2.
 #[test]
 fn test_no_session_ticket_request_on_tls_1_3() {
-    for &provider in TEST_PROVIDERS {
-        let mut config = ClientConfig::builder(Arc::new(tls13_only(provider.clone())))
-            .with_root_certificates(roots())
-            .with_no_client_auth()
-            .unwrap();
-        config.resumption = Resumption::in_memory_sessions(128)
-            .tls12_resumption(Tls12Resumption::SessionIdOrTickets);
-        let ch = client_hello_sent_for_config(config).unwrap();
-        assert!(ch.extensions.session_ticket.is_none());
-    }
+    let mut config = ClientConfig::builder(Arc::new(tls13_only(TEST_PROVIDER.clone())))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    config.resumption =
+        Resumption::in_memory_sessions(128).tls12_resumption(Tls12Resumption::SessionIdOrTickets);
+    let ch = client_hello_sent_for_config(config).unwrap();
+    assert!(ch.extensions.session_ticket.is_none());
 }
 
 #[test]
 fn test_no_renegotiation_scsv_on_tls_1_3() {
-    for &provider in TEST_PROVIDERS {
-        let ch = client_hello_sent_for_config(
-            ClientConfig::builder(Arc::new(tls13_only(provider.clone())))
-                .with_root_certificates(roots())
-                .with_no_client_auth()
-                .unwrap(),
-        )
-        .unwrap();
-        assert!(
-            !ch.cipher_suites
-                .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
-        );
-    }
+    let ch = client_hello_sent_for_config(
+        ClientConfig::builder(Arc::new(tls13_only(TEST_PROVIDER.clone())))
+            .with_root_certificates(roots())
+            .with_no_client_auth()
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        !ch.cipher_suites
+            .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
+    );
 }
 
 #[test]
 fn test_client_does_not_offer_sha1() {
-    for &provider in TEST_PROVIDERS {
-        for provider in [tls12_only(provider.clone()), tls13_only(provider.clone())] {
-            let config = ClientConfig::builder(Arc::new(provider))
-                .with_root_certificates(roots())
-                .with_no_client_auth()
-                .unwrap();
-            let ch = client_hello_sent_for_config(config).unwrap();
-            assert!(
-                !ch.extensions
-                    .signature_schemes
-                    .as_ref()
-                    .unwrap()
-                    .contains(&SignatureScheme::RSA_PKCS1_SHA1),
-                "sha1 unexpectedly offered"
-            );
-        }
+    for provider in [
+        tls12_only(TEST_PROVIDER.clone()),
+        tls13_only(TEST_PROVIDER.clone()),
+    ] {
+        let config = ClientConfig::builder(Arc::new(provider))
+            .with_root_certificates(roots())
+            .with_no_client_auth()
+            .unwrap();
+        let ch = client_hello_sent_for_config(config).unwrap();
+        assert!(
+            !ch.extensions
+                .signature_schemes
+                .as_ref()
+                .unwrap()
+                .contains(&SignatureScheme::RSA_PKCS1_SHA1),
+            "sha1 unexpectedly offered"
+        );
     }
 }
 
 #[test]
 fn test_client_rejects_hrr_with_varied_session_id() {
-    for &provider in TEST_PROVIDERS {
-        let config = ClientConfig::builder(Arc::new(provider.clone()))
-            .with_root_certificates(roots())
-            .with_no_client_auth()
-            .unwrap();
-        let mut conn =
-            ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())
-                .unwrap();
-        let mut sent = Vec::new();
-        conn.write_tls(&mut sent).unwrap();
+    let config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    let mut conn =
+        ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap()).unwrap();
+    let mut sent = Vec::new();
+    conn.write_tls(&mut sent).unwrap();
 
-        // server replies with HRR, but does not echo `session_id` as required.
-        let hrr = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::HelloRetryRequest(HelloRetryRequest {
-                    cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    session_id: SessionId::empty(),
-                    extensions: HelloRetryRequestExtensions {
-                        cookie: Some(PayloadU16::new(vec![1, 2, 3, 4])),
-                        ..HelloRetryRequestExtensions::default()
-                    },
-                }),
-            )),
-        };
+    // server replies with HRR, but does not echo `session_id` as required.
+    let hrr = Message {
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(
+            HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+                cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
+                legacy_version: ProtocolVersion::TLSv1_2,
+                session_id: SessionId::empty(),
+                extensions: HelloRetryRequestExtensions {
+                    cookie: Some(PayloadU16::new(vec![1, 2, 3, 4])),
+                    ..HelloRetryRequestExtensions::default()
+                },
+            }),
+        )),
+    };
 
-        conn.read_tls(&mut hrr.into_wire_bytes().as_slice())
-            .unwrap();
-        assert_eq!(
-            conn.process_new_packets().unwrap_err(),
-            PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into()
-        );
-    }
+    conn.read_tls(&mut hrr.into_wire_bytes().as_slice())
+        .unwrap();
+    assert_eq!(
+        conn.process_new_packets().unwrap_err(),
+        PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into()
+    );
 }
 
 #[test]
 fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
-    for &provider in TEST_PROVIDERS {
-        let mut config = ClientConfig::builder(Arc::new(provider.clone()))
-            .with_root_certificates(roots())
-            .with_no_client_auth()
-            .unwrap();
-        if config.provider().fips() {
-            assert!(config.require_ems);
-        } else {
-            config.require_ems = true;
-        }
-
-        let config = Arc::new(config);
-        let mut conn =
-            ClientConnection::new(config.clone(), ServerName::try_from("localhost").unwrap())
-                .unwrap();
-        let mut sent = Vec::new();
-        conn.write_tls(&mut sent).unwrap();
-
-        let sh = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ServerHello(ServerHelloPayload {
-                    random: Random::new(config.provider().secure_random).unwrap(),
-                    compression_method: Compression::Null,
-                    cipher_suite: CipherSuite::Unknown(0xff12),
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    session_id: SessionId::empty(),
-                    extensions: Box::new(ServerExtensions::default()),
-                }),
-            )),
-        };
-        conn.read_tls(&mut sh.into_wire_bytes().as_slice())
-            .unwrap();
-
-        assert_eq!(
-            conn.process_new_packets(),
-            Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into())
-        );
+    let mut config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
+        .with_root_certificates(roots())
+        .with_no_client_auth()
+        .unwrap();
+    if config.provider().fips() {
+        assert!(config.require_ems);
+    } else {
+        config.require_ems = true;
     }
+
+    let config = Arc::new(config);
+    let mut conn =
+        ClientConnection::new(config.clone(), ServerName::try_from("localhost").unwrap()).unwrap();
+    let mut sent = Vec::new();
+    conn.write_tls(&mut sent).unwrap();
+
+    let sh = Message {
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                random: Random::new(config.provider().secure_random).unwrap(),
+                compression_method: Compression::Null,
+                cipher_suite: CipherSuite::Unknown(0xff12),
+                legacy_version: ProtocolVersion::TLSv1_2,
+                session_id: SessionId::empty(),
+                extensions: Box::new(ServerExtensions::default()),
+            },
+        ))),
+    };
+    conn.read_tls(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+
+    assert_eq!(
+        conn.process_new_packets(),
+        Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into())
+    );
 }
 
 #[test]
 fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
-    for &provider in TEST_PROVIDERS {
-        let cas_sending_server_verifier =
-            ServerVerifierWithAuthorityNames(Arc::from(vec![DistinguishedName::from(
-                b"hello".to_vec(),
-            )]));
+    let cas_sending_server_verifier =
+        ServerVerifierWithAuthorityNames(Arc::from(vec![DistinguishedName::from(
+            b"hello".to_vec(),
+        )]));
 
-        let tls12_provider = tls12_only(provider.clone());
-        let tls13_provider = tls13_only(provider.clone());
-        for (provider, cas_extension_expected) in [(tls12_provider, false), (tls13_provider, true)]
-        {
-            let client_hello = client_hello_sent_for_config(
-                ClientConfig::builder(provider.into())
-                    .dangerous()
-                    .with_custom_certificate_verifier(Arc::new(cas_sending_server_verifier.clone()))
-                    .with_no_client_auth()
-                    .unwrap(),
-            )
-            .unwrap();
-            assert_eq!(
-                client_hello
-                    .extensions
-                    .certificate_authority_names
-                    .is_some(),
-                cas_extension_expected
-            );
-        }
+    let tls12_provider = tls12_only(TEST_PROVIDER.clone());
+    let tls13_provider = tls13_only(TEST_PROVIDER.clone());
+    for (provider, cas_extension_expected) in [(tls12_provider, false), (tls13_provider, true)] {
+        let client_hello = client_hello_sent_for_config(
+            ClientConfig::builder(provider.into())
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(cas_sending_server_verifier.clone()))
+                .with_no_client_auth()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            client_hello
+                .extensions
+                .certificate_authority_names
+                .is_some(),
+            cas_extension_expected
+        );
     }
 }
 
 /// Regression test for <https://github.com/seanmonstar/reqwest/issues/2191>
 #[test]
 fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
-    for &provider in TEST_PROVIDERS {
-        let Some(provider) = x25519_provider(provider.clone()) else {
-            continue;
-        };
+    let Some(provider) = x25519_provider(TEST_PROVIDER.clone()) else {
+        return;
+    };
 
-        let verifier = Arc::new(ExpectSha1EcdsaVerifier::default());
-        let config = ClientConfig::builder(Arc::new(provider))
-            .dangerous()
-            .with_custom_certificate_verifier(verifier.clone())
-            .with_no_client_auth()
-            .unwrap();
+    let verifier = Arc::new(ExpectSha1EcdsaVerifier::default());
+    let config = ClientConfig::builder(Arc::new(provider))
+        .dangerous()
+        .with_custom_certificate_verifier(verifier.clone())
+        .with_no_client_auth()
+        .unwrap();
 
-        let mut conn =
-            ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())
-                .unwrap();
-        let mut sent = Vec::new();
-        conn.write_tls(&mut sent).unwrap();
+    let mut conn =
+        ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap()).unwrap();
+    let mut sent = Vec::new();
+    conn.write_tls(&mut sent).unwrap();
 
-        let sh = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ServerHello(ServerHelloPayload {
-                    random: Random([0u8; 32]),
-                    compression_method: Compression::Null,
-                    cipher_suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    session_id: SessionId::empty(),
-                    extensions: Box::new(ServerExtensions {
-                        extended_master_secret_ack: Some(()),
-                        ..ServerExtensions::default()
-                    }),
+    let sh = Message {
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            ServerHelloPayload {
+                random: Random([0u8; 32]),
+                compression_method: Compression::Null,
+                cipher_suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                legacy_version: ProtocolVersion::TLSv1_2,
+                session_id: SessionId::empty(),
+                extensions: Box::new(ServerExtensions {
+                    extended_master_secret_ack: Some(()),
+                    ..ServerExtensions::default()
                 }),
-            )),
-        };
-        conn.read_tls(&mut sh.into_wire_bytes().as_slice())
-            .unwrap();
-        conn.process_new_packets().unwrap();
+            },
+        ))),
+    };
+    conn.read_tls(&mut sh.into_wire_bytes().as_slice())
+        .unwrap();
+    conn.process_new_packets().unwrap();
 
-        let cert = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::Certificate(CertificateChain(vec![CertificateDer::from(
-                    &b"does not matter"[..],
-                )])),
-            )),
-        };
-        conn.read_tls(&mut cert.into_wire_bytes().as_slice())
-            .unwrap();
-        conn.process_new_packets().unwrap();
+    let cert = Message {
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Certificate(
+            CertificateChain(vec![CertificateDer::from(&b"does not matter"[..])]),
+        ))),
+    };
+    conn.read_tls(&mut cert.into_wire_bytes().as_slice())
+        .unwrap();
+    conn.process_new_packets().unwrap();
 
-        let server_kx = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ServerKeyExchange(ServerKeyExchangePayload::Known(
-                    ServerKeyExchange {
-                        dss: DigitallySignedStruct::new(
-                            SignatureScheme::ECDSA_SHA1_Legacy,
-                            b"also does not matter".to_vec(),
-                        ),
-                        params: ServerKeyExchangeParams::Ecdh(ServerEcdhParams {
-                            curve_params: EcParameters {
-                                curve_type: ECCurveType::NamedCurve,
-                                named_group: NamedGroup::X25519,
-                            },
-                            public: PayloadU8::new(vec![0xab; 32]),
-                        }),
-                    },
-                )),
+    let server_kx = Message {
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(
+            HandshakePayload::ServerKeyExchange(ServerKeyExchangePayload::Known(
+                ServerKeyExchange {
+                    dss: DigitallySignedStruct::new(
+                        SignatureScheme::ECDSA_SHA1_Legacy,
+                        b"also does not matter".to_vec(),
+                    ),
+                    params: ServerKeyExchangeParams::Ecdh(ServerEcdhParams {
+                        curve_params: EcParameters {
+                            curve_type: ECCurveType::NamedCurve,
+                            named_group: NamedGroup::X25519,
+                        },
+                        public: PayloadU8::new(vec![0xab; 32]),
+                    }),
+                },
             )),
-        };
-        conn.read_tls(&mut server_kx.into_wire_bytes().as_slice())
-            .unwrap();
-        conn.process_new_packets().unwrap();
+        )),
+    };
+    conn.read_tls(&mut server_kx.into_wire_bytes().as_slice())
+        .unwrap();
+    conn.process_new_packets().unwrap();
 
-        let server_done = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ServerHelloDone,
-            )),
-        };
-        conn.read_tls(&mut server_done.into_wire_bytes().as_slice())
-            .unwrap();
-        conn.process_new_packets().unwrap();
+    let server_done = Message {
+        version: ProtocolVersion::TLSv1_2,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(
+            HandshakePayload::ServerHelloDone,
+        )),
+    };
+    conn.read_tls(&mut server_done.into_wire_bytes().as_slice())
+        .unwrap();
+    conn.process_new_packets().unwrap();
 
-        assert!(
-            verifier
-                .seen_sha1_signature
-                .load(Ordering::SeqCst)
-        );
-    }
+    assert!(
+        verifier
+            .seen_sha1_signature
+            .load(Ordering::SeqCst)
+    );
 }
 
 #[derive(Debug, Default)]
@@ -339,71 +322,61 @@ impl ServerVerifier for ExpectSha1EcdsaVerifier {
 
 #[test]
 fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id_by_omission() {
-    for provider in TEST_PROVIDERS {
-        client_requiring_rpk_receives_server_ee(
-            Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
-            ServerExtensions::default(),
-            provider,
-        );
-    }
+    client_requiring_rpk_receives_server_ee(
+        Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
+        ServerExtensions::default(),
+        &TEST_PROVIDER,
+    );
 }
 
 #[test]
 fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id() {
-    for provider in TEST_PROVIDERS {
-        client_requiring_rpk_receives_server_ee(
-            Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
-            ServerExtensions {
-                server_certificate_type: Some(CertificateType::X509),
-                ..ServerExtensions::default()
-            },
-            provider,
-        );
-    }
+    client_requiring_rpk_receives_server_ee(
+        Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
+        ServerExtensions {
+            server_certificate_type: Some(CertificateType::X509),
+            ..ServerExtensions::default()
+        },
+        &TEST_PROVIDER,
+    );
 }
 
 #[test]
 fn test_client_requiring_rpk_rejects_server_that_only_demands_x509_by_omission() {
-    for provider in TEST_PROVIDERS {
-        client_requiring_rpk_receives_server_ee(
-            Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
-            ServerExtensions {
-                server_certificate_type: Some(CertificateType::RawPublicKey),
-                ..ServerExtensions::default()
-            },
-            provider,
-        );
-    }
+    client_requiring_rpk_receives_server_ee(
+        Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
+        ServerExtensions {
+            server_certificate_type: Some(CertificateType::RawPublicKey),
+            ..ServerExtensions::default()
+        },
+        &TEST_PROVIDER,
+    );
 }
 
 #[test]
 fn test_client_requiring_rpk_rejects_server_that_only_demands_x509() {
-    for provider in TEST_PROVIDERS {
-        client_requiring_rpk_receives_server_ee(
-            Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
-            ServerExtensions {
-                client_certificate_type: Some(CertificateType::X509),
-                server_certificate_type: Some(CertificateType::RawPublicKey),
-                ..ServerExtensions::default()
-            },
-            provider,
-        );
-    }
+    client_requiring_rpk_receives_server_ee(
+        Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
+        ServerExtensions {
+            client_certificate_type: Some(CertificateType::X509),
+            server_certificate_type: Some(CertificateType::RawPublicKey),
+            ..ServerExtensions::default()
+        },
+        &TEST_PROVIDER,
+    );
 }
 
 #[test]
 fn test_client_requiring_rpk_accepts_rpk_server() {
-    for provider in TEST_PROVIDERS {
-        client_requiring_rpk_receives_server_ee(
-            Ok(()),
-            ServerExtensions {
-                client_certificate_type: Some(CertificateType::RawPublicKey),
-                server_certificate_type: Some(CertificateType::RawPublicKey),
-                ..ServerExtensions::default()
-            },
-            provider,
-        );
-    }
+    client_requiring_rpk_receives_server_ee(
+        Ok(()),
+        ServerExtensions {
+            client_certificate_type: Some(CertificateType::RawPublicKey),
+            server_certificate_type: Some(CertificateType::RawPublicKey),
+            ..ServerExtensions::default()
+        },
+        &TEST_PROVIDER,
+    );
 }
 
 #[track_caller]

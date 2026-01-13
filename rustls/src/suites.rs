@@ -184,14 +184,11 @@ mod tests {
     use std::println;
 
     use super::SupportedCipherSuite;
-    use crate::TEST_PROVIDERS;
-    use crate::crypto::{CipherSuite, tls13_suite};
+    use crate::crypto::{CipherSuite, TEST_PROVIDER, tls13_suite};
 
     #[test]
     fn test_scs_is_debug() {
-        for &provider in TEST_PROVIDERS {
-            let aes_128_gcm = tls13_suite(CipherSuite::Unknown(0xff13), provider);
-            println!("{:?}", SupportedCipherSuite::Tls13(aes_128_gcm));
-        }
+        let aes_128_gcm = tls13_suite(CipherSuite::Unknown(0xff13), &TEST_PROVIDER);
+        println!("{:?}", SupportedCipherSuite::Tls13(aes_128_gcm));
     }
 }
