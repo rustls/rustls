@@ -21,7 +21,7 @@ use crate::conn::{
 use crate::crypto;
 use crate::crypto::SignatureScheme;
 use crate::crypto::cipher::Payload;
-use crate::error::{ApiMisuse, Error};
+use crate::error::{ApiMisuse, Error, ErrorWithAlert};
 use crate::log::trace;
 use crate::msgs::{
     ClientHelloPayload, HandshakePayload, Message, MessagePayload, ServerExtensionsInput,
@@ -343,8 +343,8 @@ pub struct AcceptedAlert(ChunkVecBuffer);
 
 impl AcceptedAlert {
     pub(super) fn from_error(error: Error, mut send: SendPath) -> (Error, Self) {
-        SendPath::maybe_send_fatal_alert(&mut send, &error);
-        (error, Self(send.sendable_tls))
+        let ErrorWithAlert { error, data } = ErrorWithAlert::new(error, &mut send);
+        (error, Self(data))
     }
 
     pub(super) fn empty() -> Self {
