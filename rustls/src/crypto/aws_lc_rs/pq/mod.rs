@@ -1,6 +1,5 @@
 use crate::crypto::aws_lc_rs::kx_group;
 use crate::crypto::{NamedGroup, SupportedKxGroup};
-use crate::error::{Error, PeerMisbehaved};
 
 mod hybrid;
 mod mlkem;
@@ -39,8 +38,6 @@ pub static SECP256R1MLKEM768: &dyn SupportedKxGroup = &hybrid::Hybrid {
 ///
 /// [MLKEM]: https://datatracker.ietf.org/doc/draft-connolly-tls-mlkem-key-agreement
 pub static MLKEM768: &dyn SupportedKxGroup = &mlkem::MlKem768;
-
-const INVALID_KEY_SHARE: Error = Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare);
 
 const X25519_LEN: usize = 32;
 const SECP256R1_LEN: usize = 65;
