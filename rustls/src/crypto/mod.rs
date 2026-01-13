@@ -18,10 +18,6 @@ pub use crate::webpki::{
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};
 use crate::{SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite};
 
-/// aws-lc-rs-based CryptoProvider.
-#[cfg(feature = "aws-lc-rs")]
-pub mod aws_lc_rs;
-
 /// TLS message encryption/decryption interfaces.
 pub mod cipher;
 
@@ -47,10 +43,13 @@ pub mod tls13;
 /// Hybrid public key encryption (RFC 9180).
 pub mod hpke;
 
-#[cfg(test)]
+#[cfg(any(doc, test))]
 pub(crate) mod test_provider;
 #[cfg(test)]
 pub(crate) use test_provider::TEST_PROVIDER;
+#[cfg(doc)]
+#[doc(hidden)]
+pub use test_provider::TEST_PROVIDER;
 #[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
 pub(crate) use test_provider::TLS13_TEST_SUITE;
 
@@ -64,13 +63,6 @@ pub use signer::{
 pub use crate::suites::CipherSuiteCommon;
 
 /// Controls core cryptography used by rustls.
-///
-/// This crate comes with one built-in option, provided as
-/// `CryptoProvider` structures:
-///
-/// - [`crypto::aws_lc_rs::DEFAULT_PROVIDER`]: (behind the `aws-lc-rs` crate feature).
-///   This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
-///   crate.  The `fips` crate feature makes this option use FIPS140-3-approved cryptography.
 ///
 /// This structure provides defaults. Everything in it can be overridden at
 /// runtime by replacing field values as needed.
@@ -483,44 +475,6 @@ pub trait TicketProducer: Debug + Send + Sync {
     /// The objective is to limit damage to forward secrecy caused
     /// by tickets, not just limiting their lifetime.
     fn lifetime(&self) -> Duration;
-}
-
-/// This function returns a [`CryptoProvider`] that uses
-/// FIPS140-3-approved cryptography.
-///
-/// Using this function expresses in your code that you require
-/// FIPS-approved cryptography, and will not compile if you make
-/// a mistake with cargo features.
-///
-/// See our [FIPS documentation](crate::manual::_06_fips) for
-/// more detail.
-///
-/// Install this as the process-default provider, like:
-///
-/// ```rust
-/// # #[cfg(feature = "fips")] {
-/// rustls::crypto::default_fips_provider().install_default()
-///     .expect("default provider already set elsewhere");
-/// # }
-/// ```
-///
-/// You can also use this explicitly, like:
-///
-/// ```rust
-/// # #[cfg(feature = "fips")] {
-/// # let root_store = rustls::RootCertStore::empty();
-/// let config = rustls::ClientConfig::builder(
-///         rustls::crypto::default_fips_provider().into()
-///     )
-///     .with_root_certificates(root_store)
-///     .with_no_client_auth()
-///     .unwrap();
-/// # }
-/// ```
-#[cfg(all(feature = "aws-lc-rs", any(feature = "fips", rustls_docsrs)))]
-#[cfg_attr(rustls_docsrs, doc(cfg(feature = "fips")))]
-pub fn default_fips_provider() -> CryptoProvider {
-    aws_lc_rs::DEFAULT_PROVIDER
 }
 
 mod static_default {

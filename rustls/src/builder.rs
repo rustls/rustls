@@ -22,23 +22,8 @@ use crate::{ClientConfig, ServerConfig};
 /// For settings besides these, see the fields of [`ServerConfig`] and [`ClientConfig`].
 ///
 /// The rustls project recommends the crypto provider based on aws-lc-rs for production use.
-/// This can be selected by passing in [`crate::crypto::aws_lc_rs::DEFAULT_PROVIDER`],
+/// This can be selected by passing in `rustls_aws_lc_rs::DEFAULT_PROVIDER`,
 /// which includes safe defaults for cipher suites and protocol versions.
-///
-/// ```
-/// # #[cfg(feature = "aws-lc-rs")] {
-/// # use std::sync::Arc;
-/// use rustls::{ClientConfig, ServerConfig};
-/// use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
-/// ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
-/// //  ...
-/// # ;
-///
-/// ServerConfig::builder(Arc::new(DEFAULT_PROVIDER))
-/// //  ...
-/// # ;
-/// # }
-/// ```
 ///
 /// After choosing the `CryptoProvider`, you must choose (a) how to verify certificates and (b) what certificates
 /// (if any) to send to the peer. The methods to do this are specific to whether you're building a ClientConfig
@@ -62,17 +47,15 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// For example:
 ///
-/// ```
-/// # #[cfg(feature = "aws-lc-rs")] {
+/// ```ignore
 /// # use std::sync::Arc;
-/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 /// # use rustls::ClientConfig;
+/// # use rustls::crypto::TEST_PROVIDER as DEFAULT_PROVIDER;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
 ///     .with_root_certificates(root_certs)
 ///     .with_no_client_auth()
 ///     .unwrap();
-/// # }
 /// ```
 ///
 /// # ServerConfig certificate configuration
@@ -88,11 +71,10 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// For example:
 ///
-/// ```no_run
-/// # #[cfg(feature = "aws-lc-rs")] {
+/// ```ignore
 /// # use std::sync::Arc;
-/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 /// # use rustls::crypto::Identity;
+/// # use rustls::crypto::TEST_PROVIDER as DEFAULT_PROVIDER;
 /// # use rustls::ServerConfig;
 /// # let certs = vec![];
 /// # let private_key = pki_types::PrivateKeyDer::from(
@@ -102,7 +84,6 @@ use crate::{ClientConfig, ServerConfig};
 ///     .with_no_client_auth()
 ///     .with_single_cert(Arc::new(Identity::from_cert_chain(certs).unwrap()), private_key)
 ///     .expect("bad certificate/key/provider");
-/// # }
 /// ```
 ///
 /// # Types

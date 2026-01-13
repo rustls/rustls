@@ -7,12 +7,12 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
-use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, UnbufferedStatus,
     WriteTraffic,
 };
 use rustls::{ClientConfig, RootCertStore};
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let root_store = RootCertStore {

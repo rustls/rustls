@@ -7,7 +7,8 @@ use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
+use rustls::crypto::CryptoProvider;
+use rustls_aws_lc_rs as provider;
 
 fn main() {
     let root_store = rustls::RootCertStore::from_iter(

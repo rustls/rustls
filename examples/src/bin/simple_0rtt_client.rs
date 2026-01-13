@@ -20,9 +20,9 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::RootCertStore;
-use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 
 fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str, port: u16) {
     let server_name = ServerName::try_from(domain_name)

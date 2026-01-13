@@ -13,7 +13,8 @@ hickory-resolver = { workspace = true }
 log = { workspace = true }
 mio = { workspace = true }
 rcgen = { workspace = true }
-rustls = { path = "../rustls", features = ["aws-lc-rs", "log"] }
+rustls = { path = "../rustls", features = ["log"] }
+rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
 serde = { workspace = true }
 tokio = { workspace = true }
 webpki-roots = { workspace = true }

@@ -29,10 +29,11 @@ use clap::Parser;
 use mio::net::TcpStream;
 use rustls::RootCertStore;
 use rustls::crypto::kx::SupportedKxGroup;
-use rustls::crypto::{CryptoProvider, Identity, aws_lc_rs as provider};
+use rustls::crypto::{CryptoProvider, Identity};
 use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use rustls_aws_lc_rs as provider;
 
 const CLIENT: mio::Token = mio::Token(0);
 

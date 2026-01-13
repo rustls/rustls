@@ -43,11 +43,10 @@ use hickory_resolver::{ResolveError, Resolver, TokioResolver};
 use log::trace;
 use rustls::RootCertStore;
 use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
-use rustls::crypto::aws_lc_rs;
-use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
+use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -114,7 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Construct a rustls client config with a TLS1.3-only provider, and ECH enabled.
-    let mut config = rustls::ClientConfig::builder(aws_lc_rs::DEFAULT_TLS13_PROVIDER.into())
+    let mut config = rustls::ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_TLS13_PROVIDER.into())
         .with_ech(ech_mode)
         .with_root_certificates(root_store)
         .with_no_client_auth()?;
@@ -274,4 +273,4 @@ fn read_ech(path: &str) -> Result<EchConfigListBytes<'static>, Box<dyn Error>> {
 /// A HPKE suite to use for GREASE ECH.
 ///
 /// A real implementation should vary this suite across all of the suites that are supported.
-static GREASE_HPKE_SUITE: &dyn Hpke = aws_lc_rs::hpke::DH_KEM_X25519_HKDF_SHA256_AES_128;
+static GREASE_HPKE_SUITE: &dyn Hpke = rustls_aws_lc_rs::hpke::DH_KEM_X25519_HKDF_SHA256_AES_128;

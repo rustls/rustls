@@ -5,10 +5,11 @@ use std::sync::Arc;
 use std::{fs, str, thread};
 
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use rustls::crypto::{CryptoProvider, Identity, aws_lc_rs as provider};
+use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ClientConfig, RootCertStore, ServerConfig};
+use rustls_aws_lc_rs as provider;
 
 use crate::ffdhe::{self, FFDHE2048_GROUP};
 use crate::utils::verify_openssl3_available;

@@ -5,15 +5,16 @@ edition = "2021"
 publish = false
 
 [features]
-aws-lc-rs = ["rustls/aws-lc-rs"]
+aws-lc-rs = ["dep:rustls-aws-lc-rs"]
 brotli = ["rustls/brotli"]
-fips = ["rustls/fips"]
+fips = ["rustls-aws-lc-rs/fips"]
 log = ["rustls/log"]
 ring = ["dep:rustls-ring"]
 zlib = ["rustls/zlib"]
 
 [dependencies]
 rustls = { path = "../rustls", default-features = false, features = ["std"] }
+rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", features = ["std"], optional = true }
 rustls-ring = { path = "../rustls-ring", optional = true }
 
 [dev-dependencies]

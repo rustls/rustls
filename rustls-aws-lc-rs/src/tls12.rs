@@ -1,22 +1,21 @@
 use alloc::boxed::Box;
 
 use aws_lc_rs::{aead, tls_prf};
-use zeroize::Zeroizing;
-
-use crate::crypto::cipher::{
+use rustls::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
     NONCE_LEN, Nonce, OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, UnsupportedOperationError,
     make_tls12_aad,
 };
-use crate::crypto::enums::{CipherSuite, SignatureScheme};
-use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
-use crate::crypto::tls12::{Prf, PrfSecret};
-use crate::enums::ProtocolVersion;
-use crate::error::Error;
-use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets};
-use crate::tls12::Tls12CipherSuite;
-use crate::version::TLS12_VERSION;
+use rustls::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
+use rustls::crypto::tls12::{Prf, PrfSecret};
+use rustls::crypto::{CipherSuite, SignatureScheme};
+use rustls::enums::ProtocolVersion;
+use rustls::error::Error;
+use rustls::version::TLS12_VERSION;
+use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls12CipherSuite};
+use zeroize::Zeroizing;
+
+use crate::MAX_FRAGMENT_LEN;
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: &Tls12CipherSuite = &Tls12CipherSuite {

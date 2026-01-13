@@ -320,6 +320,7 @@ dependencies = [
  "env_logger",
  "nix",
  "rustls 0.24.0-dev.0",
+ "rustls-aws-lc-rs",
  "rustls-ring",
  "rustls-webpki 0.104.0-alpha.2",
 ]
@@ -2486,14 +2487,12 @@ dependencies = [
 name = "rustls"
 version = "0.24.0-dev.0"
 dependencies = [
- "aws-lc-rs",
  "bencher",
  "brotli",
  "brotli-decompressor",
  "env_logger",
  "graviola",
  "hashbrown",
- "hex",
  "log",
  "macro_rules_attribute",
  "once_cell",
@@ -2501,8 +2500,6 @@ dependencies = [
  "rustls-pki-types",
  "rustls-test",
  "rustls-webpki 0.104.0-alpha.2",
- "serde",
- "serde_json",
  "subtle",
  "time",
  "webpki-roots 1.0.4",
@@ -2511,11 +2508,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls-aws-lc-rs"
+version = "0.1.0-dev.0"
+dependencies = [
+ "aws-lc-rs",
+ "bencher",
+ "hex",
+ "rustls 0.24.0-dev.0",
+ "rustls-pki-types",
+ "rustls-test",
+ "rustls-webpki 0.104.0-alpha.2",
+ "serde",
+ "serde_json",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "rustls-bench"
 version = "0.1.0"
 dependencies = [
  "clap",
  "rustls 0.24.0-dev.0",
+ "rustls-aws-lc-rs",
  "rustls-graviola",
  "rustls-ring",
  "rustls-test",
@@ -2535,6 +2550,7 @@ dependencies = [
  "rayon",
  "rustc-hash",
  "rustls 0.24.0-dev.0",
+ "rustls-aws-lc-rs",
  "rustls-fuzzing-provider",
  "rustls-ring",
  "rustls-test",
@@ -2561,6 +2577,7 @@ dependencies = [
  "mio",
  "rcgen",
  "rustls 0.24.0-dev.0",
+ "rustls-aws-lc-rs",
  "serde",
  "tokio",
  "webpki-roots 1.0.4",
@@ -2595,6 +2612,7 @@ dependencies = [
  "once_cell",
  "openssl",
  "rustls 0.24.0-dev.0",
+ "rustls-aws-lc-rs",
 ]
 
 [[package]]
@@ -2651,6 +2669,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "rustls 0.24.0-dev.0",
+ "rustls-aws-lc-rs",
  "rustls-provider-example",
  "serde",
  "serde_json",
@@ -2677,6 +2696,7 @@ dependencies = [
  "log",
  "num-bigint",
  "rustls 0.24.0-dev.0",
+ "rustls-aws-lc-rs",
  "rustls-pki-types",
  "rustls-ring",
  "rustls-webpki 0.104.0-alpha.2",

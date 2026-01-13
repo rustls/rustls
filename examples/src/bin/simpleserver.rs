@@ -14,9 +14,9 @@ use std::net::TcpListener;
 use std::sync::Arc;
 
 use rustls::crypto::Identity;
-use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 
 fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();

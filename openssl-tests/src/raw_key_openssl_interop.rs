@@ -15,7 +15,7 @@ mod client {
     };
     use rustls::crypto::{
         Credentials, Identity, InconsistentKeys, SignatureScheme, SingleCredential,
-        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
+        WebPkiSupportedAlgorithms, verify_tls13_signature,
     };
     use rustls::enums::CertificateType;
     use rustls::error::{ApiMisuse, CertificateError, PeerIncompatible};
@@ -23,6 +23,7 @@ mod client {
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
     use rustls::{ClientConfig, ClientConnection, Error, Stream};
+    use rustls_aws_lc_rs as provider;
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
     pub(super) fn make_config(client_private_key: &str, server_pub_key: &str) -> ClientConfig {
@@ -147,7 +148,7 @@ mod server {
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{
         Credentials, Identity, InconsistentKeys, SignatureScheme, SingleCredential,
-        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature,
+        WebPkiSupportedAlgorithms, verify_tls13_signature,
     };
     use rustls::enums::CertificateType;
     use rustls::error::{ApiMisuse, CertificateError, Error, PeerIncompatible};
@@ -157,6 +158,7 @@ mod server {
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
     use rustls::{DistinguishedName, ServerConfig, ServerConnection};
+    use rustls_aws_lc_rs as provider;
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
     pub(super) fn make_config(server_private_key: &str, client_pub_key: &str) -> ServerConfig {
@@ -294,9 +296,10 @@ mod tests {
     use std::sync::mpsc::channel;
     use std::thread;
 
-    use rustls::crypto::{Identity, aws_lc_rs as provider};
+    use rustls::crypto::Identity;
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    use rustls_aws_lc_rs as provider;
 
     use super::{client, server};
     use crate::utils::verify_openssl3_available;

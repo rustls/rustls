@@ -23,12 +23,11 @@ use rustls::client::{
     self, ClientConfig, ClientConnection, ClientSessionKey, CredentialRequest, EchConfig,
     EchGreaseConfig, EchMode, EchStatus, Resumption, Tls12Resumption, WebPkiServerVerifier,
 };
-use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
-    SingleCredential, aws_lc_rs,
+    SingleCredential,
 };
 use rustls::enums::{
     ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
@@ -45,6 +44,7 @@ use rustls::pki_types::{
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{self, ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
 use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, compress};
+use rustls_aws_lc_rs::hpke;
 
 pub fn main() {
     let mut args: Vec<_> = env::args().collect();
@@ -597,7 +597,7 @@ impl Options {
             }
             #[cfg(feature = "fips")]
             "-fips-202205" if self.selected_provider == SelectedProvider::AwsLcRsFips => {
-                self.provider = rustls::crypto::default_fips_provider();
+                self.provider = rustls_aws_lc_rs::DEFAULT_FIPS_PROVIDER.clone();
             }
             "-fips-202205" => {
                 println!("Not a FIPS build");
@@ -833,10 +833,10 @@ impl SelectedProvider {
                 // this includes rustls-post-quantum, which just returns an altered
                 // version of `aws_lc_rs::default_provider()`
                 CryptoProvider {
-                    kx_groups: Cow::Borrowed(aws_lc_rs::ALL_KX_GROUPS),
-                    tls12_cipher_suites: Cow::Borrowed(aws_lc_rs::ALL_TLS12_CIPHER_SUITES),
-                    tls13_cipher_suites: Cow::Borrowed(aws_lc_rs::ALL_TLS13_CIPHER_SUITES),
-                    ..aws_lc_rs::DEFAULT_PROVIDER
+                    kx_groups: Cow::Borrowed(rustls_aws_lc_rs::ALL_KX_GROUPS),
+                    tls12_cipher_suites: Cow::Borrowed(rustls_aws_lc_rs::ALL_TLS12_CIPHER_SUITES),
+                    tls13_cipher_suites: Cow::Borrowed(rustls_aws_lc_rs::ALL_TLS13_CIPHER_SUITES),
+                    ..rustls_aws_lc_rs::DEFAULT_PROVIDER
                 }
             }
 

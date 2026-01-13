@@ -26,7 +26,8 @@ use crate::sync::Arc;
 use crate::{ConnectionTrafficSecrets, Error, Tls12CipherSuite, Tls13CipherSuite};
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for testing only.
-pub(crate) const TEST_PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {
+#[cfg_attr(not(doc), expect(unreachable_pub))]
+pub const TEST_PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {
     tls12_cipher_suites: Cow::Borrowed(&[TLS_TEST_SUITE]),
     tls13_cipher_suites: Cow::Borrowed(&[TLS13_TEST_SUITE]),
     kx_groups: Cow::Borrowed(&[KEY_EXCHANGE_GROUP]),
@@ -114,11 +115,11 @@ impl TicketProducer for Ticketer {
     }
 }
 
-#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(all(not(doc), any(target_arch = "aarch64", target_arch = "x86_64")))]
 pub(crate) use hash_impl::SHA256;
 pub(crate) use hash_impl::{FAKE_HASH, FAKE_HMAC};
 
-#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(all(not(doc), any(target_arch = "aarch64", target_arch = "x86_64")))]
 mod hash_impl {
     use graviola::hashing::sha2::Sha256Context;
     use graviola::hashing::{Hash as _, HashContext as _};
@@ -201,7 +202,7 @@ mod hash_impl {
     }
 }
 
-#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(any(doc, not(any(target_arch = "aarch64", target_arch = "x86_64"))))]
 mod hash_impl {
     use super::*;
 

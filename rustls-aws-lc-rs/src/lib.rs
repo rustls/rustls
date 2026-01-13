@@ -1,21 +1,35 @@
+//! A `CryptoProvider` implementation backed by *aws-lc-rs*.
+
+#![no_std]
+#![warn(clippy::exhaustive_enums, clippy::exhaustive_structs, missing_docs)]
+#![cfg_attr(bench, feature(test))]
+
+extern crate alloc;
+#[cfg(any(feature = "std", test))]
+extern crate std;
+
+// Import `test` sysroot crate for `Bencher` definitions.
+#[cfg(bench)]
+#[expect(unused_extern_crates)]
+extern crate test;
+
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::sync::Arc;
+#[cfg(feature = "std")]
+use core::time::Duration;
 
 use pki_types::PrivateKeyDer;
-use webpki::aws_lc_rs as webpki_algs;
-
-use super::signer::SigningKey;
-use crate::crypto::{
-    CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SignatureScheme, SupportedKxGroup,
-    TicketProducer, TicketerFactory,
+use rustls::crypto::kx::SupportedKxGroup;
+use rustls::crypto::{
+    CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SignatureScheme, SigningKey,
+    TicketProducer, TicketerFactory, WebPkiSupportedAlgorithms,
 };
-use crate::error::{Error, OtherError};
-use crate::sync::Arc;
+use rustls::error::{Error, OtherError};
 #[cfg(feature = "std")]
-use crate::ticketer::TicketRotator;
-use crate::tls12::Tls12CipherSuite;
-use crate::tls13::Tls13CipherSuite;
-use crate::webpki::WebPkiSupportedAlgorithms;
+use rustls::ticketer::TicketRotator;
+use rustls::{Tls12CipherSuite, Tls13CipherSuite};
+use webpki::aws_lc_rs as webpki_algs;
 
 /// Hybrid public key encryption (HPKE).
 pub mod hpke;
@@ -33,6 +47,17 @@ pub(crate) mod ticketer;
 use ticketer::Rfc5077Ticketer;
 pub(crate) mod tls12;
 pub(crate) mod tls13;
+
+/// A `CryptoProvider` backed by aws-lc-rs that uses FIPS140-3-approved cryptography.
+///
+/// Using this constant expresses in your code that you require FIPS-approved cryptography, and
+/// will not compile if you make a mistake with cargo features.
+///
+/// See our [FIPS documentation][fips] for more detail.
+///
+/// [fips]: https://docs.rs/rustls/latest/rustls/manual/_06_fips/index.html
+#[cfg(feature = "fips")]
+pub const DEFAULT_FIPS_PROVIDER: CryptoProvider = DEFAULT_PROVIDER;
 
 /// The default `CryptoProvider` backed by aws-lc-rs.
 pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
@@ -128,7 +153,7 @@ impl TicketerFactory for AwsLcRs {
         #[cfg(feature = "std")]
         {
             Ok(Arc::new(TicketRotator::new(
-                TicketRotator::SIX_HOURS,
+                SIX_HOURS,
                 Rfc5077Ticketer::new,
             )?))
         }
@@ -144,6 +169,9 @@ impl TicketerFactory for AwsLcRs {
         fips()
     }
 }
+
+#[cfg(feature = "std")]
+const SIX_HOURS: Duration = Duration::from_secs(6 * 60 * 60);
 
 /// The TLS1.2 cipher suite configuration that an application should use by default.
 ///
@@ -313,8 +341,7 @@ pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
 /// Compatibility shims between ring 0.16.x and 0.17.x API
 mod ring_shim {
     use aws_lc_rs::agreement::{self, EphemeralPrivateKey, UnparsedPublicKey};
-
-    use crate::crypto::kx::SharedSecret;
+    use rustls::crypto::kx::SharedSecret;
 
     pub(super) fn agree_ephemeral(
         priv_key: EphemeralPrivateKey,
@@ -327,13 +354,15 @@ mod ring_shim {
 }
 
 /// Are we in FIPS mode?
-pub(super) fn fips() -> bool {
+fn fips() -> bool {
     aws_lc_rs::try_fips_mode().is_ok()
 }
 
-pub(super) fn unspecified_err(e: aws_lc_rs::error::Unspecified) -> Error {
+fn unspecified_err(e: aws_lc_rs::error::Unspecified) -> Error {
     Error::Other(OtherError::new(e))
 }
+
+const MAX_FRAGMENT_LEN: usize = 16384;
 
 #[cfg(test)]
 mod tests {
