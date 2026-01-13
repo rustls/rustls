@@ -1,13 +1,13 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use super::INVALID_KEY_SHARE;
 use crate::Error;
 use crate::crypto::NamedGroup;
 use crate::crypto::kx::{
     ActiveKeyExchange, CompletedKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange,
     SupportedKxGroup,
 };
+use crate::error::PeerMisbehaved;
 
 /// A generalization of hybrid key exchange.
 #[derive(Debug)]
@@ -40,7 +40,7 @@ impl SupportedKxGroup for Hybrid {
         let (post_quantum_share, classical_share) = self
             .layout
             .split_received_client_share(client_share)
-            .ok_or(INVALID_KEY_SHARE)?;
+            .ok_or(PeerMisbehaved::InvalidKeyShare)?;
 
         let cl = self
             .classical
@@ -102,7 +102,7 @@ impl ActiveKeyExchange for ActiveHybrid {
         let (post_quantum_share, classical_share) = self
             .layout
             .split_received_server_share(peer_pub_key)
-            .ok_or(INVALID_KEY_SHARE)?;
+            .ok_or(PeerMisbehaved::InvalidKeyShare)?;
 
         let cl = self
             .classical

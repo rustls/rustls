@@ -3,12 +3,11 @@ use alloc::vec::Vec;
 
 use aws_lc_rs::kem;
 
-use super::INVALID_KEY_SHARE;
-use crate::Error;
 use crate::crypto::NamedGroup;
 use crate::crypto::kx::{
     ActiveKeyExchange, CompletedKeyExchange, SharedSecret, StartedKeyExchange, SupportedKxGroup,
 };
+use crate::error::{Error, PeerMisbehaved};
 
 #[derive(Debug)]
 pub(crate) struct MlKem768;
@@ -31,11 +30,11 @@ impl SupportedKxGroup for MlKem768 {
 
     fn start_and_complete(&self, client_share: &[u8]) -> Result<CompletedKeyExchange, Error> {
         let encaps_key = kem::EncapsulationKey::new(&kem::ML_KEM_768, client_share)
-            .map_err(|_| INVALID_KEY_SHARE)?;
+            .map_err(|_| PeerMisbehaved::InvalidKeyShare)?;
 
         let (ciphertext, shared_secret) = encaps_key
             .encapsulate()
-            .map_err(|_| INVALID_KEY_SHARE)?;
+            .map_err(|_| PeerMisbehaved::InvalidKeyShare)?;
 
         Ok(CompletedKeyExchange {
             group: self.name(),
@@ -78,7 +77,7 @@ impl ActiveKeyExchange for Active {
         let shared_secret = self
             .decaps_key
             .decapsulate(peer_pub_key.into())
-            .map_err(|_| INVALID_KEY_SHARE)?;
+            .map_err(|_| PeerMisbehaved::InvalidKeyShare)?;
 
         Ok(SharedSecret::from(shared_secret.as_ref()))
     }
