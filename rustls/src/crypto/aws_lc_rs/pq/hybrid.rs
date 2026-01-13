@@ -15,7 +15,7 @@ pub(crate) struct Hybrid {
     pub(crate) classical: &'static dyn SupportedKxGroup,
     pub(crate) post_quantum: &'static dyn SupportedKxGroup,
     pub(crate) name: NamedGroup,
-    pub(crate) layout: Layout,
+    pub(crate) layout: HybridLayout,
 }
 
 impl SupportedKxGroup for Hybrid {
@@ -93,7 +93,7 @@ struct ActiveHybrid {
     classical: Box<dyn ActiveKeyExchange>,
     post_quantum: Box<dyn ActiveKeyExchange>,
     name: NamedGroup,
-    layout: Layout,
+    layout: HybridLayout,
     combined_pub_key: Vec<u8>,
 }
 
@@ -145,7 +145,7 @@ impl HybridKeyExchange for ActiveHybrid {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Layout {
+pub(crate) struct HybridLayout {
     /// Length of classical key share.
     pub(crate) classical_share_len: usize,
 
@@ -162,7 +162,7 @@ pub(crate) struct Layout {
     pub(crate) post_quantum_first: bool,
 }
 
-impl Layout {
+impl HybridLayout {
     fn split_received_client_share<'a>(&self, share: &'a [u8]) -> Option<(&'a [u8], &'a [u8])> {
         self.split(share, self.post_quantum_client_share_len)
     }
