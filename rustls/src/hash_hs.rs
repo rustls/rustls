@@ -182,11 +182,12 @@ impl Clone for HandshakeHash {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
 mod tests {
+    use graviola::hashing::sha2::Sha256Context;
+    use graviola::hashing::{Hash as _, HashContext as _};
+
     use super::*;
-    use crate::TEST_PROVIDERS;
-    use crate::crypto::CryptoProvider;
     use crate::crypto::cipher::Payload;
     use crate::crypto::hash::Hash;
     use crate::enums::ProtocolVersion;
@@ -194,20 +195,18 @@ mod tests {
 
     #[test]
     fn hashes_correctly() {
-        for provider in TEST_PROVIDERS {
-            let mut hhb = HandshakeHashBuffer::new();
-            hhb.add_raw(b"hello");
-            assert_eq!(hhb.buffer.len(), 5);
-            let mut hh = hhb.start_hash(sha256(provider));
-            assert!(hh.client_auth.is_none());
-            hh.add_raw(b"world");
-            let h = hh.current_hash();
-            let h = h.as_ref();
-            assert_eq!(h[0], 0x93);
-            assert_eq!(h[1], 0x6a);
-            assert_eq!(h[2], 0x18);
-            assert_eq!(h[3], 0x5c);
-        }
+        let mut hhb = HandshakeHashBuffer::new();
+        hhb.add_raw(b"hello");
+        assert_eq!(hhb.buffer.len(), 5);
+        let mut hh = hhb.start_hash(SHA256);
+        assert!(hh.client_auth.is_none());
+        hh.add_raw(b"world");
+        let h = hh.current_hash();
+        let h = h.as_ref();
+        assert_eq!(h[0], 0x93);
+        assert_eq!(h[1], 0x6a);
+        assert_eq!(h[2], 0x18);
+        assert_eq!(h[3], 0x5c);
     }
 
     #[test]
@@ -231,147 +230,164 @@ mod tests {
         };
 
         // buffered mode
-        for provider in TEST_PROVIDERS {
-            let mut hhb = HandshakeHashBuffer::new();
-            hhb.add_message(&server_hello_done_message);
-            hhb.add_message(&app_data_ignored);
-            hhb.add_message(&end_of_early_data_flight);
+        let mut hhb = HandshakeHashBuffer::new();
+        hhb.add_message(&server_hello_done_message);
+        hhb.add_message(&app_data_ignored);
+        hhb.add_message(&end_of_early_data_flight);
 
-            let sha256 = sha256(provider);
-            assert_eq!(
-                hhb.start_hash(sha256)
-                    .current_hash()
-                    .as_ref(),
-                sha256
-                    .hash(b"\x0e\x00\x00\x00\x05\x00\x00\x00")
-                    .as_ref()
-            );
+        assert_eq!(
+            hhb.start_hash(SHA256)
+                .current_hash()
+                .as_ref(),
+            SHA256
+                .hash(b"\x0e\x00\x00\x00\x05\x00\x00\x00")
+                .as_ref()
+        );
 
-            // non-buffered mode
-            let mut hh = HandshakeHashBuffer::new().start_hash(sha256);
-            hh.add_message(&server_hello_done_message);
-            hh.add_message(&app_data_ignored);
-            hh.add_message(&end_of_early_data_flight);
-            assert_eq!(
-                hh.current_hash().as_ref(),
-                sha256
-                    .hash(b"\x0e\x00\x00\x00\x05\x00\x00\x00")
-                    .as_ref()
-            );
-        }
+        // non-buffered mode
+        let mut hh = HandshakeHashBuffer::new().start_hash(SHA256);
+        hh.add_message(&server_hello_done_message);
+        hh.add_message(&app_data_ignored);
+        hh.add_message(&end_of_early_data_flight);
+        assert_eq!(
+            hh.current_hash().as_ref(),
+            SHA256
+                .hash(b"\x0e\x00\x00\x00\x05\x00\x00\x00")
+                .as_ref()
+        );
     }
 
     #[test]
     fn buffers_correctly() {
-        for provider in TEST_PROVIDERS {
-            let mut hhb = HandshakeHashBuffer::new();
-            hhb.set_client_auth_enabled();
-            hhb.add_raw(b"hello");
-            assert_eq!(hhb.buffer.len(), 5);
+        let mut hhb = HandshakeHashBuffer::new();
+        hhb.set_client_auth_enabled();
+        hhb.add_raw(b"hello");
+        assert_eq!(hhb.buffer.len(), 5);
 
-            let mut hh = hhb.start_hash(sha256(provider));
-            assert_eq!(
-                hh.client_auth
-                    .as_ref()
-                    .map(|buf| buf.len()),
-                Some(5)
-            );
+        let mut hh = hhb.start_hash(SHA256);
+        assert_eq!(
+            hh.client_auth
+                .as_ref()
+                .map(|buf| buf.len()),
+            Some(5)
+        );
 
-            hh.add_raw(b"world");
-            assert_eq!(
-                hh.client_auth
-                    .as_ref()
-                    .map(|buf| buf.len()),
-                Some(10)
-            );
+        hh.add_raw(b"world");
+        assert_eq!(
+            hh.client_auth
+                .as_ref()
+                .map(|buf| buf.len()),
+            Some(10)
+        );
 
-            let h = hh.current_hash();
-            let h = h.as_ref();
-            assert_eq!(h[0], 0x93);
-            assert_eq!(h[1], 0x6a);
-            assert_eq!(h[2], 0x18);
-            assert_eq!(h[3], 0x5c);
-            let buf = hh.take_handshake_buf();
-            assert_eq!(Some(b"helloworld".to_vec()), buf);
-        }
+        let h = hh.current_hash();
+        let h = h.as_ref();
+        assert_eq!(h[0], 0x93);
+        assert_eq!(h[1], 0x6a);
+        assert_eq!(h[2], 0x18);
+        assert_eq!(h[3], 0x5c);
+        let buf = hh.take_handshake_buf();
+        assert_eq!(Some(b"helloworld".to_vec()), buf);
     }
 
     #[test]
     fn abandon() {
-        for provider in TEST_PROVIDERS {
-            let mut hhb = HandshakeHashBuffer::new();
-            hhb.set_client_auth_enabled();
-            hhb.add_raw(b"hello");
-            assert_eq!(hhb.buffer.len(), 5);
+        let mut hhb = HandshakeHashBuffer::new();
+        hhb.set_client_auth_enabled();
+        hhb.add_raw(b"hello");
+        assert_eq!(hhb.buffer.len(), 5);
 
-            let mut hh = hhb.start_hash(sha256(provider));
-            assert_eq!(
-                hh.client_auth
-                    .as_ref()
-                    .map(|buf| buf.len()),
-                Some(5)
-            );
+        let mut hh = hhb.start_hash(SHA256);
+        assert_eq!(
+            hh.client_auth
+                .as_ref()
+                .map(|buf| buf.len()),
+            Some(5)
+        );
 
-            hh.abandon_client_auth();
-            assert_eq!(hh.client_auth, None);
-            hh.add_raw(b"world");
-            assert_eq!(hh.client_auth, None);
+        hh.abandon_client_auth();
+        assert_eq!(hh.client_auth, None);
+        hh.add_raw(b"world");
+        assert_eq!(hh.client_auth, None);
 
-            let h = hh.current_hash();
-            let h = h.as_ref();
-            assert_eq!(h[0], 0x93);
-            assert_eq!(h[1], 0x6a);
-            assert_eq!(h[2], 0x18);
-            assert_eq!(h[3], 0x5c);
-        }
+        let h = hh.current_hash();
+        let h = h.as_ref();
+        assert_eq!(h[0], 0x93);
+        assert_eq!(h[1], 0x6a);
+        assert_eq!(h[2], 0x18);
+        assert_eq!(h[3], 0x5c);
     }
 
     #[test]
     fn clones_correctly() {
-        for provider in TEST_PROVIDERS {
-            let mut hhb = HandshakeHashBuffer::new();
-            hhb.set_client_auth_enabled();
-            hhb.add_raw(b"hello");
-            assert_eq!(hhb.buffer.len(), 5);
+        let mut hhb = HandshakeHashBuffer::new();
+        hhb.set_client_auth_enabled();
+        hhb.add_raw(b"hello");
+        assert_eq!(hhb.buffer.len(), 5);
 
-            // Cloning the HHB should result in the same buffer and client auth state.
-            let mut hhb_prime = hhb.clone();
-            assert_eq!(hhb_prime.buffer, hhb.buffer);
-            assert!(hhb_prime.client_auth_enabled);
+        // Cloning the HHB should result in the same buffer and client auth state.
+        let mut hhb_prime = hhb.clone();
+        assert_eq!(hhb_prime.buffer, hhb.buffer);
+        assert!(hhb_prime.client_auth_enabled);
 
-            // Updating the HHB clone shouldn't affect the original.
-            hhb_prime.add_raw(b"world");
-            assert_eq!(hhb_prime.buffer.len(), 10);
-            assert_ne!(hhb.buffer, hhb_prime.buffer);
+        // Updating the HHB clone shouldn't affect the original.
+        hhb_prime.add_raw(b"world");
+        assert_eq!(hhb_prime.buffer.len(), 10);
+        assert_ne!(hhb.buffer, hhb_prime.buffer);
 
-            let hh = hhb.start_hash(sha256(provider));
-            let hh_hash = hh.current_hash();
-            let hh_hash = hh_hash.as_ref();
+        let hh = hhb.start_hash(SHA256);
+        let hh_hash = hh.current_hash();
+        let hh_hash = hh_hash.as_ref();
 
-            // Cloning the HH should result in the same current hash.
-            let mut hh_prime = hh.clone();
-            let hh_prime_hash = hh_prime.current_hash();
-            let hh_prime_hash = hh_prime_hash.as_ref();
-            assert_eq!(hh_hash, hh_prime_hash);
+        // Cloning the HH should result in the same current hash.
+        let mut hh_prime = hh.clone();
+        let hh_prime_hash = hh_prime.current_hash();
+        let hh_prime_hash = hh_prime_hash.as_ref();
+        assert_eq!(hh_hash, hh_prime_hash);
 
-            // Updating the HH clone shouldn't affect the original.
-            hh_prime.add_raw(b"goodbye");
-            assert_eq!(hh.current_hash().as_ref(), hh_hash);
-            assert_ne!(hh_prime.current_hash().as_ref(), hh_hash);
+        // Updating the HH clone shouldn't affect the original.
+        hh_prime.add_raw(b"goodbye");
+        assert_eq!(hh.current_hash().as_ref(), hh_hash);
+        assert_ne!(hh_prime.current_hash().as_ref(), hh_hash);
+    }
+
+    const SHA256: &'static dyn Hash = &graviola::hashing::Sha256;
+
+    impl Hash for graviola::hashing::Sha256 {
+        fn start(&self) -> Box<dyn hash::Context> {
+            Box::new(Sha256Context::new())
+        }
+
+        fn hash(&self, data: &[u8]) -> hash::Output {
+            let mut cx = Self::new();
+            cx.update(data);
+            hash::Output::new(cx.finish().as_ref())
+        }
+
+        fn output_len(&self) -> usize {
+            Sha256Context::OUTPUT_SZ
+        }
+
+        fn algorithm(&self) -> HashAlgorithm {
+            HashAlgorithm::SHA256
         }
     }
 
-    fn sha256(provider: &CryptoProvider) -> &'static dyn Hash {
-        provider
-            .tls13_cipher_suites
-            .iter()
-            .find_map(|cs| {
-                let hash = cs.common.hash_provider;
-                match hash.algorithm() {
-                    HashAlgorithm::SHA256 => Some(hash),
-                    _ => None,
-                }
-            })
-            .unwrap()
+    impl hash::Context for Sha256Context {
+        fn fork_finish(&self) -> hash::Output {
+            hash::Output::new(self.clone().finish().as_ref())
+        }
+
+        fn fork(&self) -> Box<dyn hash::Context> {
+            Box::new(self.clone())
+        }
+
+        fn finish(self: Box<Self>) -> hash::Output {
+            hash::Output::new((*self).finish().as_ref())
+        }
+
+        fn update(&mut self, data: &[u8]) {
+            self.update(data);
+        }
     }
 }
