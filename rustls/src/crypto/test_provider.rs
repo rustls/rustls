@@ -277,7 +277,7 @@ mod hash_impl {
     const HMAC_OUTPUT: &[u8] = b"HmacHmacHmacHmacHmacHmacHmacHmac";
 }
 
-struct ActiveKeyExchange;
+struct ActiveKeyExchange(NamedGroup);
 
 impl crypto::kx::ActiveKeyExchange for ActiveKeyExchange {
     fn complete(self: Box<Self>, peer: &[u8]) -> Result<SharedSecret, Error> {
@@ -292,22 +292,25 @@ impl crypto::kx::ActiveKeyExchange for ActiveKeyExchange {
     }
 
     fn group(&self) -> NamedGroup {
-        NamedGroup::from(0xfe00)
+        self.0
     }
 }
 
-const KEY_EXCHANGE_GROUP: &dyn SupportedKxGroup = &KeyExchangeGroup;
+const KEY_EXCHANGE_GROUP: &dyn SupportedKxGroup =
+    &FakeKeyExchangeGroup(NamedGroup::Unknown(0xfe00));
 
 #[derive(Debug)]
-struct KeyExchangeGroup;
+pub(crate) struct FakeKeyExchangeGroup(pub(crate) NamedGroup);
 
-impl SupportedKxGroup for KeyExchangeGroup {
+impl SupportedKxGroup for FakeKeyExchangeGroup {
     fn start(&self) -> Result<StartedKeyExchange, Error> {
-        Ok(StartedKeyExchange::Single(Box::new(ActiveKeyExchange)))
+        Ok(StartedKeyExchange::Single(Box::new(ActiveKeyExchange(
+            self.0,
+        ))))
     }
 
     fn name(&self) -> NamedGroup {
-        NamedGroup::from(0xfe00)
+        self.0
     }
 }
 
