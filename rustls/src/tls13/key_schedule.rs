@@ -1222,7 +1222,7 @@ mod tests {
 
     use super::*;
     use crate::TEST_PROVIDERS;
-    use crate::crypto::{CipherSuite, CryptoProvider, tls13_suite};
+    use crate::crypto::{CipherSuite, tls13_suite};
     use crate::key_log::KeyLog;
 
     #[test]
@@ -1308,11 +1308,11 @@ mod tests {
 
         for provider in TEST_PROVIDERS {
             #[cfg(not(feature = "fips"))]
-            let aead = tls13_suite(CipherSuite::TLS13_CHACHA20_POLY1305_SHA256, provider);
+            let suite = tls13_suite(CipherSuite::TLS13_CHACHA20_POLY1305_SHA256, provider);
             #[cfg(feature = "fips")]
-            let aead = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, provider);
+            let suite = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, provider);
 
-            let mut ks = KeySchedule::new_with_empty_secret(Side::Server, Protocol::Tcp, aead);
+            let mut ks = KeySchedule::new_with_empty_secret(Side::Server, Protocol::Tcp, suite);
             ks.input_secret(&ecdhe_secret);
 
             assert_traffic_secret(
@@ -1322,7 +1322,7 @@ mod tests {
                 &client_hts,
                 &client_hts_key,
                 &client_hts_iv,
-                provider,
+                suite,
             );
 
             assert_traffic_secret(
@@ -1332,7 +1332,7 @@ mod tests {
                 &server_hts,
                 &server_hts_key,
                 &server_hts_iv,
-                provider,
+                suite,
             );
 
             ks.input_empty();
@@ -1344,7 +1344,7 @@ mod tests {
                 &client_ats,
                 &client_ats_key,
                 &client_ats_iv,
-                provider,
+                suite,
             );
 
             assert_traffic_secret(
@@ -1354,7 +1354,7 @@ mod tests {
                 &server_ats,
                 &server_ats_key,
                 &server_ats_iv,
-                provider,
+                suite,
             );
         }
     }
@@ -1367,20 +1367,19 @@ mod tests {
         expected_traffic_secret: &[u8],
         expected_key: &[u8],
         expected_iv: &[u8],
-        provider: &CryptoProvider,
+        suite: &Tls13CipherSuite,
     ) {
         let log = Log(expected_traffic_secret);
         let traffic_secret = ks.derive_logged_secret(kind, hash, &log, &[0; 32]);
 
         // Since we can't test key equality, we test the output of sealing with the key instead.
-        let aes_128_gcm = tls13_suite(CipherSuite::TLS13_AES_128_GCM_SHA256, provider);
-        let expander = aes_128_gcm
+        let expander = suite
             .hkdf_provider
             .expander_for_okm(&traffic_secret);
 
-        let actual_key = derive_traffic_key(expander.as_ref(), aes_128_gcm.aead_alg);
+        let actual_key = derive_traffic_key(expander.as_ref(), suite.aead_alg);
         assert_eq!(actual_key.as_ref(), expected_key);
-        let actual_iv = derive_traffic_iv(expander.as_ref(), aes_128_gcm.aead_alg.iv_len());
+        let actual_iv = derive_traffic_iv(expander.as_ref(), suite.aead_alg.iv_len());
         assert_eq!(actual_iv.as_ref(), expected_iv);
     }
 
