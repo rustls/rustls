@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 use subtle::ConstantTimeEq;
 
 use super::config::{ClientConfig, ClientSessionKey, ClientSessionStore};
-use super::connection::ClientConnectionData;
 use super::ech::EchStatus;
 use super::hs::{
     self, ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello, GroupAndKeyShare,
@@ -66,7 +65,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         input: &Input<'_>,
         mut st: ExpectServerHello,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         // Start our handshake hash, and input the server-hello.
         let mut transcript = st
             .transcript_buffer
@@ -465,12 +464,12 @@ struct ExpectEncryptedExtensions {
     in_early_traffic: bool,
 }
 
-impl State<ClientConnectionData> for ExpectEncryptedExtensions {
+impl State for ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let exts = require_handshake_msg!(
             message,
             HandshakeType::EncryptedExtensions,
@@ -653,8 +652,12 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificateOrCompressedCertificateOrCertReq {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -718,8 +721,12 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificateOrCompressedCertificate {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -768,8 +775,12 @@ struct ExpectCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificateOrCertReq {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -824,7 +835,7 @@ struct ExpectCertificateRequest {
 }
 
 impl ExpectCertificateRequest {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         let certreq = &require_handshake_msg!(
             message,
             HandshakeType::CertificateRequest,
@@ -914,7 +925,7 @@ struct ExpectCompressedCertificate {
 }
 
 impl ExpectCompressedCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         self.hs.transcript.add_message(&message);
         let compressed_cert = require_handshake_msg_move!(
             message,
@@ -974,7 +985,7 @@ struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         self.hs.transcript.add_message(&message);
 
         self.handle_cert_payload(require_handshake_msg_move!(
@@ -984,7 +995,10 @@ impl ExpectCertificate {
         )?)
     }
 
-    fn handle_cert_payload(self, cert_chain: CertificatePayloadTls13<'_>) -> hs::NextStateOrError {
+    fn handle_cert_payload(
+        self,
+        cert_chain: CertificatePayloadTls13<'_>,
+    ) -> Result<Box<dyn State>, Error> {
         // This is only non-empty for client auth.
         if !cert_chain.context.is_empty() {
             return Err(InvalidMessage::InvalidCertRequest.into());
@@ -1010,8 +1024,12 @@ impl ExpectCertificate {
     }
 }
 
-impl State<ClientConnectionData> for ExpectCertificate {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificate {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         self.handle_input(input)
     }
 }
@@ -1027,12 +1045,12 @@ struct ExpectCertificateVerify {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateVerify {
+impl State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let cert_verify = require_handshake_msg!(
             message,
             HandshakeType::CertificateVerify,
@@ -1182,8 +1200,12 @@ struct ExpectFinished {
     in_early_traffic: bool,
 }
 
-impl State<ClientConnectionData> for ExpectFinished {
-    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectFinished {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         let mut st = *self;
         let finished = require_handshake_msg!(
             input.message,
@@ -1431,12 +1453,12 @@ impl ExpectTraffic {
     }
 }
 
-impl State<ClientConnectionData> for ExpectTraffic {
+impl State for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
@@ -1505,12 +1527,12 @@ impl KernelState for ExpectTraffic {
 
 struct ExpectQuicTraffic(ExpectTraffic);
 
-impl State<ClientConnectionData> for ExpectQuicTraffic {
+impl State for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let nst = require_handshake_msg!(
             message,
             HandshakeType::NewSessionTicket,

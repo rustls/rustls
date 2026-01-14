@@ -8,7 +8,6 @@ use core::ops::Deref;
 use pki_types::ServerName;
 
 use super::config::{ClientSessionKey, Tls12Resumption};
-use super::connection::ClientConnectionData;
 use super::ech::{EchMode, EchState, EchStatus};
 use super::{
     ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12Session, Tls13Session, tls13,
@@ -39,9 +38,6 @@ use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarlyClient;
 use crate::{ClientConfig, bs_debug};
 
-pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
-pub(super) type NextStateOrError = Result<NextState, Error>;
-
 pub(crate) struct ExpectServerHello {
     pub(super) input: ClientHelloInput,
     pub(super) transcript_buffer: HandshakeHashBuffer,
@@ -66,7 +62,7 @@ impl ExpectServerHello {
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
         output: &mut dyn Output,
-    ) -> NextStateOrError
+    ) -> Result<Box<dyn State>, Error>
     where
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
@@ -130,8 +126,12 @@ impl ExpectServerHello {
     }
 }
 
-impl State<ClientConnectionData> for ExpectServerHello {
-    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> NextStateOrError {
+impl State for ExpectServerHello {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         let server_hello = require_handshake_msg!(
             &input.message,
             HandshakeType::ServerHello,
@@ -185,7 +185,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl ExpectServerHelloOrHelloRetryRequest {
-    fn into_expect_server_hello(self) -> NextState {
+    fn into_expect_server_hello(self) -> Box<dyn State> {
         self.next
     }
 
@@ -193,7 +193,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         mut self,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let hrr = require_handshake_msg!(
             input.message,
             HandshakeType::HelloRetryRequest,
@@ -334,8 +334,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> NextStateOrError {
+impl State for ExpectServerHelloOrHelloRetryRequest {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(..)),
@@ -438,7 +442,7 @@ impl ClientHelloInput {
         self,
         extra_exts: ClientExtensionsInput,
         output: &mut dyn Output,
-    ) -> NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let mut transcript_buffer = HandshakeHashBuffer::new();
         if !self
             .config
@@ -496,7 +500,7 @@ fn emit_client_hello_for_retry(
     output: &mut dyn Output,
     mut ech_state: Option<EchState>,
     mut ech_status: EchStatus,
-) -> NextStateOrError {
+) -> Result<Box<dyn State>, Error> {
     let config = &input.config;
     // Defense in depth: the ECH state should be None if ECH is disabled based on config
     // builder semantics.
@@ -1032,5 +1036,5 @@ pub(crate) trait ClientHandler<T>: fmt::Debug + Sealed + Send + Sync {
         input: &Input<'_>,
         st: ExpectServerHello,
         output: &mut dyn Output,
-    ) -> NextStateOrError;
+    ) -> Result<Box<dyn State>, Error>;
 }
