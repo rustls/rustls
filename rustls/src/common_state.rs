@@ -33,11 +33,11 @@ use crate::{SideData, quic};
 pub(crate) fn process_main_protocol<Data: SideData>(
     msg: EncodedMessage<&'_ [u8]>,
     aligned_handshake: Option<HandshakeAlignedProof>,
-    state: Box<dyn State<Data>>,
+    state: Box<dyn State>,
     plaintext_locator: &Locator,
     received_plaintext: &mut Option<UnborrowedPayload>,
     data: &mut Data,
-) -> Result<Box<dyn State<Data>>, Error> {
+) -> Result<Box<dyn State>, Error> {
     // Drop CCS messages during handshake in TLS1.3
     if msg.typ == ContentType::ChangeCipherSpec && data.recv.drop_tls13_ccs(&msg)? {
         trace!("Dropping CCS");
@@ -1049,12 +1049,12 @@ pub enum HandshakeKind {
     ResumedWithHelloRetryRequest,
 }
 
-pub(crate) trait State<Side: SideData>: Send + Sync {
+pub(crate) trait State: Send + Sync {
     fn handle<'m>(
         self: Box<Self>,
         input: Input<'m>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State<Side>>, Error>;
+    ) -> Result<Box<dyn State>, Error>;
 
     fn send_key_update_request(&mut self, _output: &mut dyn Output) -> Result<(), Error> {
         Err(Error::HandshakeNotComplete)

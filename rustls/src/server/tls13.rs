@@ -9,7 +9,6 @@ use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
 use super::config::ServerConfig;
-use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer};
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
@@ -80,7 +79,7 @@ mod client_hello {
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             output: &mut dyn Output,
-        ) -> hs::NextStateOrError {
+        ) -> Result<Box<dyn State>, Error> {
             let randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
@@ -834,12 +833,12 @@ struct ExpectAndSkipRejectedEarlyData {
     next: Box<hs::ExpectClientHello>,
 }
 
-impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
+impl State for ExpectAndSkipRejectedEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),
          *  up to the configured max_early_data_size."
@@ -861,8 +860,12 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificateOrCompressedCertificate {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -903,7 +906,7 @@ struct ExpectCompressedCertificate {
 }
 
 impl ExpectCompressedCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         self.hs.transcript.add_message(&message);
         let compressed_cert = require_handshake_msg_move!(
             message,
@@ -957,7 +960,7 @@ struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         self.hs.transcript.add_message(&message);
         self.handle_certificate(require_handshake_msg_move!(
             message,
@@ -966,7 +969,10 @@ impl ExpectCertificate {
         )?)
     }
 
-    fn handle_certificate(mut self, certp: CertificatePayloadTls13<'_>) -> hs::NextStateOrError {
+    fn handle_certificate(
+        mut self,
+        certp: CertificatePayloadTls13<'_>,
+    ) -> Result<Box<dyn State>, Error> {
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
         if certp
@@ -1017,8 +1023,12 @@ impl ExpectCertificate {
     }
 }
 
-impl State<ServerConnectionData> for ExpectCertificate {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificate {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         self.handle_input(input)
     }
 }
@@ -1029,12 +1039,12 @@ struct ExpectCertificateVerify {
     peer_identity: Identity<'static>,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateVerify {
+impl State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let signature = require_handshake_msg!(
             message,
             HandshakeType::CertificateVerify,
@@ -1073,12 +1083,12 @@ struct ExpectEarlyData {
     remaining_length: usize,
 }
 
-impl State<ServerConnectionData> for ExpectEarlyData {
+impl State for ExpectEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.remaining_length = match self
@@ -1318,12 +1328,12 @@ impl ExpectFinished {
     }
 }
 
-impl State<ServerConnectionData> for ExpectFinished {
+impl State for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let finished = require_handshake_msg!(
             input.message,
             HandshakeType::Finished,
@@ -1442,12 +1452,12 @@ impl ExpectTraffic {
     }
 }
 
-impl State<ServerConnectionData> for ExpectTraffic {
+impl State for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
@@ -1516,12 +1526,12 @@ struct ExpectQuicTraffic {
     _fin_verified: verify::FinishedMessageVerified,
 }
 
-impl State<ServerConnectionData> for ExpectQuicTraffic {
+impl State for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         // reject all messages
         Err(inappropriate_message(&message.payload, &[]))
     }
