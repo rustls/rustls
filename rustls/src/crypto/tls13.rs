@@ -193,7 +193,7 @@ pub trait Hkdf: Send + Sync {
 /// In other contexts (for example, hybrid public key encryption (HPKE)) it may be necessary
 /// to use the extracted PRK directly for purposes other than an immediate expansion.
 /// This trait can be implemented to offer this functionality when it is required.
-pub(crate) trait HkdfPrkExtract: Hkdf {
+pub trait HkdfPrkExtract: Hkdf {
     /// `HKDF-Extract(salt, secret)`
     ///
     /// A `salt` of `None` should be treated as a sequence of `HashLen` zero bytes.
