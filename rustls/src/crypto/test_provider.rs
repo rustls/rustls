@@ -115,16 +115,8 @@ impl TicketProducer for Ticketer {
 }
 
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-pub(crate) const FAKE_HASH: &dyn hash::Hash = SHA256;
-#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Sha256Hmac;
-#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 pub(crate) use hash_impl::SHA256;
-
-#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
-pub(crate) const FAKE_HASH: &dyn hash::Hash = &hash_impl::Hash;
-#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
-pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Hmac;
+pub(crate) use hash_impl::{FAKE_HASH, FAKE_HMAC};
 
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod hash_impl {
@@ -133,6 +125,7 @@ mod hash_impl {
 
     use super::*;
 
+    pub(crate) const FAKE_HASH: &dyn hash::Hash = SHA256;
     pub(crate) const SHA256: &'static dyn hash::Hash = &graviola::hashing::Sha256;
 
     impl hash::Hash for graviola::hashing::Sha256 {
@@ -173,6 +166,8 @@ mod hash_impl {
         }
     }
 
+    pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &Sha256Hmac;
+
     pub(super) struct Sha256Hmac;
 
     impl hmac::Hmac for Sha256Hmac {
@@ -209,6 +204,8 @@ mod hash_impl {
 #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
 mod hash_impl {
     use super::*;
+
+    pub(crate) const FAKE_HASH: &dyn hash::Hash = &hash_impl::Hash;
 
     pub(super) struct Hash;
 
@@ -249,6 +246,8 @@ mod hash_impl {
     }
 
     const HASH_OUTPUT: &[u8] = b"HashHashHashHashHashHashHashHash";
+
+    pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Hmac;
 
     pub(super) struct Hmac;
 
