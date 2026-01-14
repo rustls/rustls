@@ -30,7 +30,7 @@ use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
 use rustls::RootCertStore;
 use rustls::crypto::{CryptoProvider, Identity, aws_lc_rs as provider};
-use rustls::enums::ProtocolVersion;
+use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
@@ -666,7 +666,11 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         config.max_early_data_size = args.max_early_data;
     }
 
-    config.alpn_protocols = args.proto.clone();
+    config.alpn_protocols = args
+        .proto
+        .iter()
+        .map(|bytes| ApplicationProtocol::from(bytes.as_slice()).to_owned())
+        .collect();
 
     Arc::new(config)
 }

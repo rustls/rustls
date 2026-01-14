@@ -15,7 +15,7 @@ use crate::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme,
     SingleCredential, TicketProducer,
 };
-use crate::enums::{CertificateType, ProtocolVersion};
+use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::handshake::{ProtocolName, ServerNamePayload};
 use crate::sync::Arc;
@@ -118,7 +118,7 @@ pub struct ServerConfig {
 
     /// Protocol names we support, most preferred first.
     /// If empty we don't do ALPN at all.
-    pub alpn_protocols: Vec<Vec<u8>>,
+    pub alpn_protocols: Vec<ApplicationProtocol<'static>>,
 
     /// How to verify client certificates.
     pub(super) verifier: Arc<dyn ClientVerifier>,

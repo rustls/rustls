@@ -17,8 +17,8 @@ use crate::crypto::{
     CipherSuite, GetRandomFailed, SecureRandom, SelectedCredential, SignatureScheme,
 };
 use crate::enums::{
-    CertificateCompressionAlgorithm, CertificateType, EchClientHelloType, HandshakeType,
-    ProtocolVersion,
+    ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, EchClientHelloType,
+    HandshakeType, ProtocolVersion,
 };
 use crate::error::InvalidMessage;
 use crate::log::warn;
@@ -787,13 +787,15 @@ pub(crate) struct ClientExtensionsInput<'a> {
 }
 
 impl ClientExtensionsInput<'_> {
-    pub(crate) fn from_alpn(alpn_protocols: Vec<Vec<u8>>) -> ClientExtensionsInput<'static> {
+    pub(crate) fn from_alpn(
+        alpn_protocols: &[ApplicationProtocol<'_>],
+    ) -> ClientExtensionsInput<'static> {
         let protocols = match alpn_protocols.is_empty() {
             true => None,
             false => Some(
                 alpn_protocols
-                    .into_iter()
-                    .map(ProtocolName::from)
+                    .iter()
+                    .map(|p| ProtocolName::from(p.as_ref().to_vec()))
                     .collect::<Vec<_>>(),
             ),
         };

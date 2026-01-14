@@ -1,5 +1,110 @@
 #![expect(missing_docs)]
 
+use alloc::borrow::Cow;
+use alloc::vec::Vec;
+
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApplicationProtocol<'a> {
+    AcmeTls1,
+    DoT,
+    DoQ,
+    Ftp,
+    Http09,
+    Http10,
+    Http11,
+    Http2,
+    Http3,
+    Imap,
+    Mqtt,
+    Pop3,
+    Postgresql,
+    WebRtc,
+    Other(Cow<'a, [u8]>),
+}
+
+impl<'a> ApplicationProtocol<'a> {
+    fn new(data: Cow<'a, [u8]>) -> Self {
+        match data.as_ref() {
+            b"acme-tls/1" => Self::AcmeTls1,
+            b"dot" => Self::DoT,
+            b"doq" => Self::DoQ,
+            b"ftp" => Self::Ftp,
+            b"http/0.9" => Self::Http09,
+            b"http/1.0" => Self::Http10,
+            b"http/1.1" => Self::Http11,
+            b"h2" => Self::Http2,
+            b"h3" => Self::Http3,
+            b"imap" => Self::Imap,
+            b"mqtt" => Self::Mqtt,
+            b"pop3" => Self::Pop3,
+            b"postgresql" => Self::Postgresql,
+            b"webrtc" => Self::WebRtc,
+            _r => Self::Other(data),
+        }
+    }
+
+    pub fn to_owned(&self) -> ApplicationProtocol<'static> {
+        match self {
+            Self::AcmeTls1 => ApplicationProtocol::AcmeTls1,
+            Self::DoT => ApplicationProtocol::DoT,
+            Self::DoQ => ApplicationProtocol::DoQ,
+            Self::Ftp => ApplicationProtocol::Ftp,
+            Self::Http09 => ApplicationProtocol::Http09,
+            Self::Http10 => ApplicationProtocol::Http10,
+            Self::Http11 => ApplicationProtocol::Http11,
+            Self::Http2 => ApplicationProtocol::Http2,
+            Self::Http3 => ApplicationProtocol::Http3,
+            Self::Imap => ApplicationProtocol::Imap,
+            Self::Mqtt => ApplicationProtocol::Mqtt,
+            Self::Pop3 => ApplicationProtocol::Pop3,
+            Self::Postgresql => ApplicationProtocol::Postgresql,
+            Self::WebRtc => ApplicationProtocol::WebRtc,
+            Self::Other(data) => ApplicationProtocol::Other(Cow::Owned(data.to_vec())),
+        }
+    }
+}
+
+impl From<Vec<u8>> for ApplicationProtocol<'static> {
+    fn from(data: Vec<u8>) -> Self {
+        Self::new(Cow::Owned(data))
+    }
+}
+
+impl<'a, const N: usize> From<&'a [u8; N]> for ApplicationProtocol<'a> {
+    fn from(data: &'a [u8; N]) -> Self {
+        ApplicationProtocol::from(&data[..])
+    }
+}
+
+impl<'a> From<&'a [u8]> for ApplicationProtocol<'a> {
+    fn from(data: &'a [u8]) -> Self {
+        Self::new(Cow::Borrowed(data))
+    }
+}
+
+impl AsRef<[u8]> for ApplicationProtocol<'_> {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::AcmeTls1 => b"acme-tls/1",
+            Self::DoT => b"dot",
+            Self::DoQ => b"doq",
+            Self::Ftp => b"ftp",
+            Self::Http09 => b"http/0.9",
+            Self::Http10 => b"http/1.0",
+            Self::Http11 => b"http/1.1",
+            Self::Http2 => b"h2",
+            Self::Http3 => b"h3",
+            Self::Imap => b"imap",
+            Self::Mqtt => b"mqtt",
+            Self::Pop3 => b"pop3",
+            Self::Postgresql => b"postgresql",
+            Self::WebRtc => b"webrtc",
+            Self::Other(data) => data.as_ref(),
+        }
+    }
+}
+
 enum_builder! {
     /// The `HandshakeType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.

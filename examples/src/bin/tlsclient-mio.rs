@@ -30,7 +30,7 @@ use mio::net::TcpStream;
 use rustls::RootCertStore;
 use rustls::crypto::kx::SupportedKxGroup;
 use rustls::crypto::{CryptoProvider, Identity, aws_lc_rs as provider};
-use rustls::enums::ProtocolVersion;
+use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 
@@ -503,7 +503,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     config.alpn_protocols = args
         .proto
         .iter()
-        .map(|proto| proto.as_bytes().to_vec())
+        .map(|proto| ApplicationProtocol::from(proto.as_bytes()).to_owned())
         .collect();
     config.max_fragment_size = args.max_frag_size;
 

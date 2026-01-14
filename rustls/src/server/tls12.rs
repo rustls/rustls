@@ -25,7 +25,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::handshake::{
     CertificateChain, ClientKeyExchangeParams, HandshakeMessagePayload, HandshakePayload,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, SessionId,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, ProtocolName, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -724,7 +724,10 @@ fn get_server_connection_value_tls12(
             cx.data.sni.as_ref(),
             secrets.suite().common.suite,
             peer_identity.cloned(),
-            cx.common.alpn_protocol.clone(),
+            cx.common
+                .alpn_protocol
+                .as_ref()
+                .map(|p| ProtocolName::from(p.as_ref().to_vec())),
             cx.data.resumption_data.clone(),
             time_now,
         ),

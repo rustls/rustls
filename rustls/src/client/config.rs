@@ -18,7 +18,7 @@ use crate::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme,
     SingleCredential, hash,
 };
-use crate::enums::{CertificateType, ProtocolVersion};
+use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
 use crate::msgs::persist;
@@ -62,7 +62,7 @@ use crate::{DistinguishedName, DynHasher, KeyLog, compress, verify};
 pub struct ClientConfig {
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
-    pub alpn_protocols: Vec<Vec<u8>>,
+    pub alpn_protocols: Vec<ApplicationProtocol<'static>>,
 
     /// How and when the client can resume a previous session.
     ///

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use pki_types::{CertificateDer, DnsName};
 use rustls::client::{ClientCredentialResolver, CredentialRequest};
 use rustls::crypto::{CipherSuite, Credentials, Identity, SelectedCredential, SignatureScheme};
-use rustls::enums::{CertificateType, ProtocolVersion};
+use rustls::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use rustls::error::{CertificateError, Error, PeerMisbehaved};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::{
@@ -53,7 +53,10 @@ fn server_cert_resolve_with_alpn() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let mut client_config = make_client_config(*kt, &provider);
-        client_config.alpn_protocols = vec!["foo".into(), "bar".into()];
+        client_config.alpn_protocols = vec![
+            ApplicationProtocol::from(b"foo"),
+            ApplicationProtocol::from(b"bar"),
+        ];
 
         let mut server_config = make_server_config(*kt, &provider);
         server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
