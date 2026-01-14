@@ -221,9 +221,8 @@ impl quic::Algorithm for KeyBuilder {
 mod tests {
     use std::dbg;
 
-    use rustls::Side;
     use rustls::crypto::tls13::OkmBlock;
-    use rustls::quic::{KeyBuilder, Keys, Version};
+    use rustls::quic::{KeyBuilder, Keys, Side, Version};
 
     use crate::tls13::{TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256};
 

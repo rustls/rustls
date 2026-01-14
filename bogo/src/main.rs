@@ -42,7 +42,7 @@ use rustls::pki_types::{
 };
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{self, ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
-use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, Side, compress};
+use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, compress};
 
 pub fn main() {
     let mut args: Vec<_> = env::args().collect();
@@ -2161,6 +2161,12 @@ impl rustls::KeyLog for KeyLogMemo {
 struct KeyLogMemoInner {
     client_traffic_secret: Vec<u8>,
     server_traffic_secret: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+enum Side {
+    Client,
+    Server,
 }
 
 #[derive(Debug, PartialEq)]
