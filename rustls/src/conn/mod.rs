@@ -904,7 +904,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         }
     }
 
-    pub(crate) fn replace_state(&mut self, new: Box<dyn State<Side>>) {
+    pub(crate) fn replace_state(&mut self, new: Box<dyn State>) {
         self.core.state = Ok(new);
     }
 
@@ -1018,12 +1018,12 @@ impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
 }
 
 pub(crate) struct ConnectionCore<Side: SideData> {
-    pub(crate) state: Result<Box<dyn State<Side>>, Error>,
+    pub(crate) state: Result<Box<dyn State>, Error>,
     pub(crate) side: Side,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State<Side>>, side: Side) -> Self {
+    pub(crate) fn new(state: Box<dyn State>, side: Side) -> Self {
         Self {
             state: Ok(state),
             side,
