@@ -4,7 +4,6 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use core::fmt::Debug;
 
-/// This module contains optional APIs for implementing QUIC TLS.
 use crate::common_state::Side;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
