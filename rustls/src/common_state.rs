@@ -928,12 +928,12 @@ pub enum HandshakeKind {
     ResumedWithHelloRetryRequest,
 }
 
-pub(crate) trait State<Side>: Send + Sync {
+pub(crate) trait State: Send + Sync {
     fn handle<'m>(
         self: Box<Self>,
         input: Input<'m>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State<Side>>, Error>;
+    ) -> Result<Box<dyn State>, Error>;
 
     fn send_key_update_request(&mut self, _output: &mut dyn Output) -> Result<(), Error> {
         Err(Error::HandshakeNotComplete)
@@ -969,8 +969,8 @@ impl<Data: Output> Context<'_, Data> {
         &mut self,
         msg: EncodedMessage<&'_ [u8]>,
         aligned_handshake: Option<HandshakeAlignedProof>,
-        state: Box<dyn State<Data>>,
-    ) -> Result<Box<dyn State<Data>>, Error> {
+        state: Box<dyn State>,
+    ) -> Result<Box<dyn State>, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec && self.common.recv.drop_tls13_ccs(&msg)? {
             trace!("Dropping CCS");

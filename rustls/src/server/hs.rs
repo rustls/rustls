@@ -6,7 +6,6 @@ use core::fmt;
 
 use pki_types::DnsName;
 
-use super::connection::ServerConnectionData;
 use super::{ClientHello, ServerConfig};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Input, Output, Protocol, State};
@@ -32,9 +31,6 @@ use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-
-pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
-pub(super) type NextStateOrError = Result<NextState, Error>;
 
 pub(super) struct ExtensionProcessing<'a> {
     // extensions to reply with
@@ -303,7 +299,7 @@ impl ExpectClientHello {
         self,
         input: ClientHelloInput<'_>,
         output: &mut dyn Output,
-    ) -> NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3);
@@ -338,7 +334,7 @@ impl ExpectClientHello {
         mut self,
         mut input: ClientHelloInput<'_>,
         output: &mut dyn Output,
-    ) -> NextStateOrError
+    ) -> Result<Box<dyn State>, Error>
     where
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
@@ -538,8 +534,12 @@ impl ExpectClientHello {
     }
 }
 
-impl State<ServerConnectionData> for ExpectClientHello {
-    fn handle<'m>(self: Box<Self>, input: Input<'m>, output: &mut dyn Output) -> NextStateOrError {
+impl State for ExpectClientHello {
+    fn handle<'m>(
+        self: Box<Self>,
+        input: Input<'m>,
+        output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         let input = ClientHelloInput::from_input(&input)?;
         self.with_input(input, output)
     }
@@ -564,7 +564,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
         output: &mut dyn Output,
-    ) -> NextStateOrError;
+    ) -> Result<Box<dyn State>, Error>;
 }
 
 pub(crate) struct ClientHelloInput<'a> {

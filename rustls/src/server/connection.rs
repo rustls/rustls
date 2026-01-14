@@ -615,13 +615,13 @@ impl Debug for Accepted {
 struct Accepting;
 
 #[cfg(feature = "std")]
-impl State<ServerConnectionData> for Accepting {
+impl State for Accepting {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle<'m>(
         self: Box<Self>,
         _input: Input<'m>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
+    ) -> Result<Box<dyn State>, Error> {
         Err(Error::Unreachable("unreachable state"))
     }
 }
