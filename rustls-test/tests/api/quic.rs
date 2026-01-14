@@ -8,8 +8,8 @@ use rustls::client::Resumption;
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::quic::{self, ConnectionCommon};
-use rustls::{HandshakeKind, Side, SideData};
+use rustls::quic::{self, ConnectionCommon, Side};
+use rustls::{HandshakeKind, SideData};
 use rustls_test::{
     ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
 };

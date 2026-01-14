@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use core::fmt::Debug;
 
-use crate::common_state::Side;
+pub use crate::common_state::Side;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::Error;
@@ -1047,10 +1047,9 @@ mod tests {
     use std::prelude::v1::*;
 
     use super::*;
-    use crate::Side;
     use crate::crypto::TLS13_TEST_SUITE;
     use crate::crypto::tls13::OkmBlock;
-    use crate::quic::{HeaderProtectionKey, Secrets, Version};
+    use crate::quic::{HeaderProtectionKey, Secrets, Side, Version};
 
     #[test]
     fn key_update_test_vector() {
