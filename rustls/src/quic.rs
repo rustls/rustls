@@ -27,7 +27,7 @@ mod connection {
     use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
-    use crate::enums::{ContentType, ProtocolVersion};
+    use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
     use crate::msgs::deframer::{DeframerVecBuffer, Locator};
     use crate::msgs::handshake::{
@@ -129,7 +129,7 @@ mod connection {
                 quic_version,
                 name,
                 params,
-                config.alpn_protocols.clone(),
+                &config.alpn_protocols,
             )
         }
 
@@ -139,7 +139,7 @@ mod connection {
             quic_version: Version,
             name: ServerName<'static>,
             params: Vec<u8>,
-            alpn_protocols: Vec<Vec<u8>>,
+            alpn_protocols: &[ApplicationProtocol<'_>],
         ) -> Result<Self, Error> {
             let suites = &config.provider().tls13_cipher_suites;
             if suites.is_empty() {

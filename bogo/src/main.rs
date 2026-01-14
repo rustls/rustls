@@ -30,7 +30,9 @@ use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
     SingleCredential, aws_lc_rs,
 };
-use rustls::enums::{CertificateCompressionAlgorithm, CertificateType, ProtocolVersion};
+use rustls::enums::{
+    ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
+};
 use rustls::error::{
     AlertDescription, CertificateError, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
@@ -1332,12 +1334,12 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
         cfg.alpn_protocols = opts
             .protocols
             .iter()
-            .map(|proto| proto.as_bytes().to_vec())
+            .map(|proto| ApplicationProtocol::from(proto.as_bytes()).to_owned())
             .collect::<Vec<_>>();
     }
 
     if opts.reject_alpn {
-        cfg.alpn_protocols = vec![b"invalid".to_vec()];
+        cfg.alpn_protocols = vec![ApplicationProtocol::from(b"invalid")];
     }
 
     if opts.enable_early_data {
@@ -1511,7 +1513,7 @@ fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfi
         cfg.alpn_protocols = opts
             .protocols
             .iter()
-            .map(|proto| proto.as_bytes().to_vec())
+            .map(|proto| ApplicationProtocol::from(proto.as_bytes()).to_owned())
             .collect();
     }
 

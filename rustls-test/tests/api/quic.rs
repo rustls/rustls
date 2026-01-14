@@ -284,7 +284,7 @@ fn test_quic_rejects_missing_alpn() {
         let client_config = Arc::new(client_config);
 
         let mut server_config = make_server_config(kt, &provider);
-        server_config.alpn_protocols = vec!["foo".into()];
+        server_config.alpn_protocols = vec![b"foo".into()];
         let server_config = Arc::new(server_config);
 
         let mut client = quic::ClientConnection::new(
@@ -313,7 +313,7 @@ fn test_quic_rejects_missing_alpn() {
 fn test_quic_no_tls13_error() {
     let provider = provider::DEFAULT_TLS12_PROVIDER;
     let mut client_config = make_client_config(KeyType::Ed25519, &provider);
-    client_config.alpn_protocols = vec!["foo".into()];
+    client_config.alpn_protocols = vec![b"foo".into()];
     let client_config = Arc::new(client_config);
 
     assert!(
@@ -327,7 +327,7 @@ fn test_quic_no_tls13_error() {
     );
 
     let mut server_config = make_server_config(KeyType::Ed25519, &provider);
-    server_config.alpn_protocols = vec!["foo".into()];
+    server_config.alpn_protocols = vec![b"foo".into()];
     let server_config = Arc::new(server_config);
 
     assert!(
@@ -340,7 +340,7 @@ fn test_quic_no_tls13_error() {
 fn test_quic_invalid_early_data_size() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let mut server_config = make_server_config(KeyType::Ed25519, &provider);
-    server_config.alpn_protocols = vec!["foo".into()];
+    server_config.alpn_protocols = vec![b"foo".into()];
 
     let cases = [
         (None, true),
@@ -417,7 +417,7 @@ fn test_quic_server_no_params_received() {
 fn test_quic_server_no_tls12() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let mut server_config = make_server_config(KeyType::Ed25519, &provider);
-    server_config.alpn_protocols = vec!["foo".into()];
+    server_config.alpn_protocols = vec![b"foo".into()];
     let server_config = Arc::new(server_config);
 
     let mut server =
@@ -475,7 +475,7 @@ fn test_quic_resumption_data_basic() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
 
     let mut server_config = make_server_config(kt, &provider);
-    server_config.alpn_protocols = vec!["foo".into()];
+    server_config.alpn_protocols = vec![b"foo".into()];
     server_config.max_early_data_size = 0xffff_ffff;
     server_config.ticketer = Some(
         provider
@@ -518,13 +518,13 @@ fn test_quic_resumption_data_0rtt() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
 
     let mut client_config = make_client_config(kt, &provider);
-    client_config.alpn_protocols = vec!["foo".into()];
+    client_config.alpn_protocols = vec![b"foo".into()];
     client_config.enable_early_data = true;
     client_config.resumption = Resumption::store(Arc::new(ClientStorage::new()));
     let client_config = Arc::new(client_config);
 
     let mut server_config = make_server_config(kt, &provider);
-    server_config.alpn_protocols = vec!["foo".into()];
+    server_config.alpn_protocols = vec![b"foo".into()];
     server_config.max_early_data_size = 0xffff_ffff;
     server_config.ticketer = Some(
         provider

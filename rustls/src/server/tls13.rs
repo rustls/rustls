@@ -24,7 +24,7 @@ use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
     CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
-    NewSessionTicketPayloadTls13,
+    NewSessionTicketPayloadTls13, ProtocolName,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -636,7 +636,12 @@ mod client_hello {
         let early_data_possible = early_data_requested
             && resume.is_fresh()
             && resume.common.cipher_suite == suite.common.suite
-            && resume.common.alpn == cx.common.alpn_protocol;
+            && resume.common.alpn.as_deref()
+                == cx
+                    .common
+                    .alpn_protocol
+                    .as_ref()
+                    .map(|p| p.as_ref());
 
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
@@ -1144,7 +1149,10 @@ fn get_server_session_value(
             cx.data.sni.as_ref(),
             suite.common.suite,
             peer_identity,
-            cx.common.alpn_protocol.clone(),
+            cx.common
+                .alpn_protocol
+                .as_ref()
+                .map(|p| ProtocolName::from(p.as_ref().to_vec())),
             cx.data.resumption_data.clone(),
             time_now,
         ),

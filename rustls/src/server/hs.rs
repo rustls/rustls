@@ -86,9 +86,9 @@ impl<'a> ExtensionProcessing<'a> {
                 .find(|ours| {
                     their_protocols
                         .iter()
-                        .any(|theirs| theirs.as_ref() == ours.as_slice())
+                        .any(|theirs| theirs.as_ref() == ours.as_ref())
                 })
-                .map(|bytes| ProtocolName::from(bytes.clone()))
+                .map(|proto| ProtocolName::from(proto.as_ref().to_vec()))
             {
                 debug!("Chosen ALPN protocol {selected_protocol:?}");
 

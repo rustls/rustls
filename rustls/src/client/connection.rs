@@ -1,4 +1,3 @@
-use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 
@@ -11,6 +10,7 @@ use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
+use crate::enums::ApplicationProtocol;
 use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
@@ -22,7 +22,6 @@ use crate::unbuffered::{EncryptError, TransmitTlsData};
 
 #[cfg(feature = "std")]
 mod buffered {
-    use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
     use std::io;
@@ -35,6 +34,7 @@ mod buffered {
     use crate::client::config::ClientConfig;
     use crate::common_state::Protocol;
     use crate::conn::{ConnectionCommon, ConnectionCore};
+    use crate::enums::ApplicationProtocol;
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
@@ -56,14 +56,14 @@ mod buffered {
         /// we behave in the TLS protocol, `name` is the
         /// name of the server we want to talk to.
         pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
-            Self::new_with_alpn(config.clone(), name, config.alpn_protocols.clone())
+            Self::new_with_alpn(config.clone(), name, &config.alpn_protocols)
         }
 
         /// Make a new ClientConnection with custom ALPN protocols.
         pub fn new_with_alpn(
             config: Arc<ClientConfig>,
             name: ServerName<'static>,
-            alpn_protocols: Vec<Vec<u8>>,
+            alpn_protocols: &[ApplicationProtocol<'_>],
         ) -> Result<Self, Error> {
             Ok(Self {
                 inner: ConnectionCommon::from(ConnectionCore::for_client(
@@ -308,7 +308,7 @@ impl UnbufferedClientConnection {
         Self::new_with_extensions(
             config.clone(),
             name,
-            ClientExtensionsInput::from_alpn(config.alpn_protocols.clone()),
+            ClientExtensionsInput::from_alpn(&config.alpn_protocols),
         )
     }
 
@@ -316,7 +316,7 @@ impl UnbufferedClientConnection {
     pub fn new_with_alpn(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
-        alpn_protocols: Vec<Vec<u8>>,
+        alpn_protocols: &[ApplicationProtocol<'_>],
     ) -> Result<Self, Error> {
         Self::new_with_extensions(
             config,

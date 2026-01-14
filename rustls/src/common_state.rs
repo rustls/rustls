@@ -11,7 +11,7 @@ use crate::crypto::cipher::{
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
-use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
+use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
@@ -36,7 +36,7 @@ pub struct CommonState {
     pub(crate) encrypt_state: EncryptionState,
     suite: Option<SupportedCipherSuite>,
     negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
-    pub(crate) alpn_protocol: Option<ProtocolName>,
+    pub(crate) alpn_protocol: Option<ApplicationProtocol<'static>>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) may_send_application_data: bool,
@@ -132,10 +132,8 @@ impl CommonState {
     /// A return value of `None` after handshake completion
     /// means no protocol was agreed (because no protocols
     /// were offered or accepted by the peer).
-    pub fn alpn_protocol(&self) -> Option<&[u8]> {
-        self.alpn_protocol
-            .as_ref()
-            .map(AsRef::as_ref)
+    pub fn alpn_protocol(&self) -> Option<&ApplicationProtocol<'static>> {
+        self.alpn_protocol.as_ref()
     }
 
     /// Retrieves the cipher suite agreed with the peer.
@@ -672,7 +670,9 @@ impl CommonState {
 impl Output for CommonState {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
-            Event::ApplicationProtocol(protocol) => self.alpn_protocol = Some(protocol),
+            Event::ApplicationProtocol(protocol) => {
+                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
+            }
             Event::CipherSuite(suite) => self.suite = Some(suite),
             Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
             Event::EncryptMessage(m) => match self.protocol {
