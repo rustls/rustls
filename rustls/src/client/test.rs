@@ -9,7 +9,8 @@ use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
-use crate::crypto::kx::NamedGroup;
+use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
+use crate::crypto::test_provider::FakeKeyExchangeGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
@@ -608,11 +609,10 @@ impl KeyLog for FakeServerCrypto {
 }
 
 // invalid with fips, as we can't offer X25519 separately
-#[cfg(all(feature = "aws-lc-rs", not(feature = "fips")))]
 #[test]
 fn hybrid_kx_component_share_offered_if_supported_separately() {
     let ch = client_hello_sent_for_config(
-        ClientConfig::builder(crate::crypto::aws_lc_rs::DEFAULT_PROVIDER.into())
+        ClientConfig::builder(Arc::new(HYBRID_PROVIDER.clone()))
             .with_root_certificates(roots())
             .with_no_client_auth()
             .unwrap(),
@@ -625,17 +625,15 @@ fn hybrid_kx_component_share_offered_if_supported_separately() {
         .as_ref()
         .unwrap();
     assert_eq!(key_shares.len(), 2);
-    assert_eq!(key_shares[0].group, NamedGroup::X25519MLKEM768);
-    assert_eq!(key_shares[1].group, NamedGroup::X25519);
+    assert_eq!(key_shares[0].group, NamedGroup::Unknown(0xfe00));
+    assert_eq!(key_shares[1].group, NamedGroup::Unknown(0xfe01));
 }
 
-#[cfg(feature = "aws-lc-rs")]
 #[test]
 fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
-    use crate::crypto::aws_lc_rs;
     let provider = CryptoProvider {
-        kx_groups: Cow::Owned(vec![aws_lc_rs::kx_group::X25519MLKEM768]),
-        ..aws_lc_rs::DEFAULT_PROVIDER
+        kx_groups: Cow::Owned(vec![FAKE_HYBRID as _]),
+        ..HYBRID_PROVIDER
     };
     let ch = client_hello_sent_for_config(
         ClientConfig::builder(provider.into())
@@ -651,7 +649,7 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
         .as_ref()
         .unwrap();
     assert_eq!(key_shares.len(), 1);
-    assert_eq!(key_shares[0].group, NamedGroup::X25519MLKEM768);
+    assert_eq!(key_shares[0].group, NamedGroup::Unknown(0xfe00));
 }
 
 fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPayload, Error> {
@@ -675,6 +673,74 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
         other => panic!("unexpected message {other:?}"),
     }
 }
+
+const HYBRID_PROVIDER: CryptoProvider = CryptoProvider {
+    kx_groups: Cow::Borrowed(&[FAKE_HYBRID, FAKE_KX_GROUP]),
+    ..TEST_PROVIDER
+};
+
+const FAKE_HYBRID: &FakeHybrid = &FakeHybrid {
+    name: NamedGroup::Unknown(0xfe00),
+    classical: NamedGroup::Unknown(0xfe01),
+};
+const FAKE_KX_GROUP: &dyn SupportedKxGroup = &FakeKeyExchangeGroup(NamedGroup::Unknown(0xfe01));
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FakeHybrid {
+    name: NamedGroup,
+    classical: NamedGroup,
+}
+
+impl SupportedKxGroup for FakeHybrid {
+    fn start(&self) -> Result<StartedKeyExchange, Error> {
+        Ok(StartedKeyExchange::Hybrid(Box::new(*self)))
+    }
+
+    fn name(&self) -> NamedGroup {
+        self.name
+    }
+}
+
+impl kx::HybridKeyExchange for FakeHybrid {
+    fn component(&self) -> (NamedGroup, &[u8]) {
+        (self.classical, KX_PEER_SHARE)
+    }
+
+    fn complete_component(self: Box<Self>, peer_pub_key: &[u8]) -> Result<SharedSecret, Error> {
+        match peer_pub_key {
+            KX_PEER_SHARE => Ok(SharedSecret::from(KX_SHARED_SECRET)),
+            _ => Err(Error::from(PeerMisbehaved::InvalidKeyShare)),
+        }
+    }
+
+    fn as_key_exchange(&self) -> &(dyn kx::ActiveKeyExchange + 'static) {
+        FAKE_HYBRID
+    }
+
+    fn into_key_exchange(self: Box<Self>) -> Box<dyn kx::ActiveKeyExchange> {
+        self
+    }
+}
+
+impl kx::ActiveKeyExchange for FakeHybrid {
+    fn complete(self: Box<Self>, peer: &[u8]) -> Result<SharedSecret, Error> {
+        match peer {
+            KX_PEER_SHARE => Ok(SharedSecret::from(KX_SHARED_SECRET)),
+            _ => Err(Error::from(PeerMisbehaved::InvalidKeyShare)),
+        }
+    }
+
+    fn pub_key(&self) -> &[u8] {
+        KX_PEER_SHARE
+    }
+
+    fn group(&self) -> NamedGroup {
+        self.name
+    }
+}
+
+const KX_PEER_SHARE: &[u8] = b"KxPeerShareKxPeerShareKxPeerShare";
+const KX_SHARED_SECRET: &[u8] = b"KxSharedSecretKxSharedSecret";
 
 fn roots() -> RootCertStore {
     let mut r = RootCertStore::empty();
