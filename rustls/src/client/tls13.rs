@@ -15,7 +15,7 @@ use super::{
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State,
+    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side,
     TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
@@ -50,6 +50,41 @@ use crate::tls13::{
 use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
 
+#[expect(clippy::enum_variant_names, private_interfaces)]
+pub(crate) enum StateMachine {
+    ExpectEncryptedExtensions(Box<ExpectEncryptedExtensions>),
+    ExpectCertificateOrCompressedCertificateOrCertReq(
+        Box<ExpectCertificateOrCompressedCertificateOrCertReq>,
+    ),
+    ExpectCertificateOrCompressedCertificate(Box<ExpectCertificateOrCompressedCertificate>),
+    ExpectCertificateOrCertReq(Box<ExpectCertificateOrCertReq>),
+    ExpectCertificate(Box<ExpectCertificate>),
+    ExpectCertificateVerify(Box<ExpectCertificateVerify>),
+    ExpectFinished(Box<ExpectFinished>),
+    ExpectTraffic(Box<ExpectTraffic>),
+    ExpectQuicTraffic(Box<ExpectQuicTraffic>),
+}
+
+impl StateMachine {
+    pub(crate) fn handle(
+        self,
+        input: Input<'_>,
+        output: &mut dyn Output,
+    ) -> Result<hs::StateMachine, Error> {
+        match self {
+            Self::ExpectEncryptedExtensions(e) => e.handle(input, output),
+            Self::ExpectCertificateOrCompressedCertificateOrCertReq(e) => e.handle(input, output),
+            Self::ExpectCertificateOrCompressedCertificate(e) => e.handle(input, output),
+            Self::ExpectCertificateOrCertReq(e) => e.handle(input, output),
+            Self::ExpectCertificate(e) => e.handle(input, output),
+            Self::ExpectCertificateVerify(e) => e.handle(input, output),
+            Self::ExpectFinished(e) => e.handle(input, output),
+            Self::ExpectTraffic(e) => e.handle(input, output),
+            Self::ExpectQuicTraffic(e) => e.handle(input, output),
+        }
+    }
+}
+
 pub(crate) static TLS13_HANDLER: &dyn ClientHandler<Tls13CipherSuite> = &Handler;
 
 #[derive(Debug)]
@@ -65,7 +100,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         input: &Input<'_>,
         mut st: ExpectServerHello,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         // Start our handshake hash, and input the server-hello.
         let mut transcript = st
             .transcript_buffer
@@ -241,7 +276,8 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             hello,
             ech_status: st.ech_status,
             in_early_traffic,
-        }))
+        })
+        .into())
     }
 }
 
@@ -464,12 +500,12 @@ struct ExpectEncryptedExtensions {
     in_early_traffic: bool,
 }
 
-impl State for ExpectEncryptedExtensions {
+impl ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         let exts = require_handshake_msg!(
             message,
             HandshakeType::EncryptedExtensions,
@@ -592,7 +628,8 @@ impl State for ExpectEncryptedExtensions {
                     sig_verified,
                     ech,
                     in_early_traffic: self.in_early_traffic,
-                }))
+                })
+                .into())
             }
             _ => {
                 if exts.early_data_ack.is_some() {
@@ -611,6 +648,7 @@ impl State for ExpectEncryptedExtensions {
                         expected_certificate_type,
                         negotiated_client_type: exts.client_certificate_type,
                     })
+                    .into()
                 } else {
                     Box::new(ExpectCertificateOrCertReq {
                         hs: self.hs,
@@ -620,9 +658,16 @@ impl State for ExpectEncryptedExtensions {
                         expected_certificate_type,
                         negotiated_client_type: exts.client_certificate_type,
                     })
+                    .into()
                 })
             }
         }
+    }
+}
+
+impl From<Box<ExpectEncryptedExtensions>> for hs::StateMachine {
+    fn from(value: Box<ExpectEncryptedExtensions>) -> Self {
+        Self::Tls13(StateMachine::ExpectEncryptedExtensions(value))
     }
 }
 
@@ -652,12 +697,12 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State for ExpectCertificateOrCompressedCertificateOrCertReq {
+impl ExpectCertificateOrCompressedCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -712,6 +757,12 @@ impl State for ExpectCertificateOrCompressedCertificateOrCertReq {
     }
 }
 
+impl From<Box<ExpectCertificateOrCompressedCertificateOrCertReq>> for hs::StateMachine {
+    fn from(value: Box<ExpectCertificateOrCompressedCertificateOrCertReq>) -> Self {
+        Self::Tls13(StateMachine::ExpectCertificateOrCompressedCertificateOrCertReq(value))
+    }
+}
+
 struct ExpectCertificateOrCompressedCertificate {
     hs: HandshakeState,
     suite: &'static Tls13CipherSuite,
@@ -721,12 +772,12 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State for ExpectCertificateOrCompressedCertificate {
+impl ExpectCertificateOrCompressedCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -766,6 +817,14 @@ impl State for ExpectCertificateOrCompressedCertificate {
     }
 }
 
+impl From<Box<ExpectCertificateOrCompressedCertificate>> for hs::StateMachine {
+    fn from(value: Box<ExpectCertificateOrCompressedCertificate>) -> Self {
+        Self::Tls13(StateMachine::ExpectCertificateOrCompressedCertificate(
+            value,
+        ))
+    }
+}
+
 struct ExpectCertificateOrCertReq {
     hs: HandshakeState,
     suite: &'static Tls13CipherSuite,
@@ -775,12 +834,12 @@ struct ExpectCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State for ExpectCertificateOrCertReq {
+impl ExpectCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -821,6 +880,12 @@ impl State for ExpectCertificateOrCertReq {
     }
 }
 
+impl From<Box<ExpectCertificateOrCertReq>> for hs::StateMachine {
+    fn from(value: Box<ExpectCertificateOrCertReq>) -> Self {
+        Self::Tls13(StateMachine::ExpectCertificateOrCertReq(value))
+    }
+}
+
 // TLS1.3 version of CertificateRequest handling.  We then move to expecting the server
 // Certificate. Unfortunately the CertificateRequest type changed in an annoying way
 // in TLS1.3.
@@ -835,7 +900,7 @@ struct ExpectCertificateRequest {
 }
 
 impl ExpectCertificateRequest {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<hs::StateMachine, Error> {
         let certreq = &require_handshake_msg!(
             message,
             HandshakeType::CertificateRequest,
@@ -902,6 +967,7 @@ impl ExpectCertificateRequest {
                 ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
+            .into()
         } else {
             Box::new(ExpectCertificate {
                 hs: self.hs,
@@ -911,6 +977,7 @@ impl ExpectCertificateRequest {
                 ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
+            .into()
         })
     }
 }
@@ -925,7 +992,7 @@ struct ExpectCompressedCertificate {
 }
 
 impl ExpectCompressedCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<hs::StateMachine, Error> {
         self.hs.transcript.add_message(&message);
         let compressed_cert = require_handshake_msg_move!(
             message,
@@ -985,7 +1052,7 @@ struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<hs::StateMachine, Error> {
         self.hs.transcript.add_message(&message);
 
         self.handle_cert_payload(require_handshake_msg_move!(
@@ -998,7 +1065,7 @@ impl ExpectCertificate {
     fn handle_cert_payload(
         self,
         cert_chain: CertificatePayloadTls13<'_>,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         // This is only non-empty for client auth.
         if !cert_chain.context.is_empty() {
             return Err(InvalidMessage::InvalidCertRequest.into());
@@ -1020,17 +1087,24 @@ impl ExpectCertificate {
             client_auth: self.client_auth,
             ech: self.ech,
             expected_certificate_type: self.expected_certificate_type,
-        }))
+        })
+        .into())
     }
 }
 
-impl State for ExpectCertificate {
+impl ExpectCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         self.handle_input(input)
+    }
+}
+
+impl From<Box<ExpectCertificate>> for hs::StateMachine {
+    fn from(value: Box<ExpectCertificate>) -> Self {
+        Self::Tls13(StateMachine::ExpectCertificate(value))
     }
 }
 
@@ -1045,12 +1119,12 @@ struct ExpectCertificateVerify {
     expected_certificate_type: CertificateType,
 }
 
-impl State for ExpectCertificateVerify {
+impl ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         let cert_verify = require_handshake_msg!(
             message,
             HandshakeType::CertificateVerify,
@@ -1103,7 +1177,14 @@ impl State for ExpectCertificateVerify {
             sig_verified,
             ech: self.ech,
             in_early_traffic: false,
-        }))
+        })
+        .into())
+    }
+}
+
+impl From<Box<ExpectCertificateVerify>> for hs::StateMachine {
+    fn from(value: Box<ExpectCertificateVerify>) -> Self {
+        Self::Tls13(StateMachine::ExpectCertificateVerify(value))
     }
 }
 
@@ -1200,12 +1281,12 @@ struct ExpectFinished {
     in_early_traffic: bool,
 }
 
-impl State for ExpectFinished {
+impl ExpectFinished {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         let mut st = *self;
         let finished = require_handshake_msg!(
             input.message,
@@ -1342,9 +1423,15 @@ impl State for ExpectFinished {
         };
 
         Ok(match protocol.is_quic() {
-            true => Box::new(ExpectQuicTraffic(st)),
-            false => Box::new(st),
+            true => Box::new(ExpectQuicTraffic(st)).into(),
+            false => Box::new(st).into(),
         })
+    }
+}
+
+impl From<Box<ExpectFinished>> for hs::StateMachine {
+    fn from(value: Box<ExpectFinished>) -> Self {
+        Self::Tls13(StateMachine::ExpectFinished(value))
     }
 }
 
@@ -1359,7 +1446,7 @@ struct HandshakeState {
 // -- Traffic transit state (TLS1.3) --
 // In this state we can be sent tickets, key updates,
 // and application data.
-struct ExpectTraffic {
+pub(super) struct ExpectTraffic {
     config: Arc<ClientConfig>,
     session_storage: Arc<dyn ClientSessionStore>,
     session_key: ClientSessionKey<'static>,
@@ -1452,12 +1539,12 @@ impl ExpectTraffic {
     }
 }
 
-impl State for ExpectTraffic {
+impl ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
@@ -1480,10 +1567,10 @@ impl State for ExpectTraffic {
             }
         }
 
-        Ok(self)
+        Ok(self.into())
     }
 
-    fn into_external_state(
+    pub(super) fn into_external_state(
         self: Box<Self>,
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
@@ -1519,14 +1606,20 @@ impl KernelState for ExpectTraffic {
     }
 }
 
-struct ExpectQuicTraffic(ExpectTraffic);
+impl From<Box<ExpectTraffic>> for hs::StateMachine {
+    fn from(value: Box<ExpectTraffic>) -> Self {
+        Self::Tls13(StateMachine::ExpectTraffic(value))
+    }
+}
 
-impl State for ExpectQuicTraffic {
+pub(super) struct ExpectQuicTraffic(ExpectTraffic);
+
+impl ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<hs::StateMachine, Error> {
         let nst = require_handshake_msg!(
             message,
             HandshakeType::NewSessionTicket,
@@ -1534,10 +1627,10 @@ impl State for ExpectQuicTraffic {
         )?;
         self.0
             .handle_new_ticket_tls13(output, nst)?;
-        Ok(self)
+        Ok(self.into())
     }
 
-    fn into_external_state(
+    pub(super) fn into_external_state(
         self: Box<Self>,
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
@@ -1568,6 +1661,12 @@ impl KernelState for ExpectQuicTraffic {
 
     fn handle_new_session_ticket(&self, nst: &NewSessionTicketPayloadTls13) -> Result<(), Error> {
         self.0.handle_new_ticket_impl(nst)
+    }
+}
+
+impl From<Box<ExpectQuicTraffic>> for hs::StateMachine {
+    fn from(value: Box<ExpectQuicTraffic>) -> Self {
+        Self::Tls13(StateMachine::ExpectQuicTraffic(value))
     }
 }
 

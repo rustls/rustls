@@ -8,15 +8,17 @@ use kernel::KernelConnection;
 
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Input, JoinOutput,
-    Output, ReceivePath, SplitReceive, State, UnborrowedPayload, maybe_send_fatal_alert,
+    Output, ReceivePath, SplitReceive, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
+use crate::kernel::KernelState;
 use crate::msgs::{
     AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
     TlsInputBuffer,
 };
-use crate::suites::ExtractedSecrets;
+use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
+use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
 // pub so that it can be re-exported from the crate root
@@ -640,7 +642,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         }
     }
 
-    pub(crate) fn replace_state(&mut self, new: Box<dyn State>) {
+    pub(crate) fn replace_state(&mut self, new: Side::StateMachine) {
         self.core.state = Ok(new);
     }
 
@@ -732,9 +734,9 @@ impl IoState {
     }
 }
 
-pub(crate) fn process_new_packets(
+pub(crate) fn process_new_packets<Side: SideData>(
     input: &mut dyn TlsInputBuffer,
-    state: &mut Result<Box<dyn State>, Error>,
+    state: &mut Result<Side::StateMachine, Error>,
     recv: &mut ReceivePath,
     output: &mut dyn Output,
 ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
@@ -832,13 +834,13 @@ pub(crate) fn process_new_packets(
 }
 
 pub(crate) struct ConnectionCore<Side: SideData> {
-    pub(crate) state: Result<Box<dyn State>, Error>,
+    pub(crate) state: Result<Side::StateMachine, Error>,
     pub(crate) side: Side::Data,
     pub(crate) common: CommonState,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State>, side: Side::Data, common: CommonState) -> Self {
+    pub(crate) fn new(state: Side::StateMachine, side: Side::Data, common: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -857,7 +859,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         input: &mut dyn TlsInputBuffer,
     ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
-        process_new_packets(
+        process_new_packets::<Side>(
             input,
             &mut self.state,
             &mut self.common.recv,
@@ -957,7 +959,18 @@ pub(crate) mod private {
     pub(crate) trait SideData: Debug {
         /// Data storage type.
         type Data: Debug + Output;
+        /// State machine type.
+        type StateMachine: StateMachine;
     }
+}
+
+pub(crate) trait StateMachine: Sized {
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error>;
+    fn handle_decrypt_error(&mut self);
+    fn into_external_state(
+        self,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
