@@ -13,7 +13,7 @@ use super::hs;
 use super::hs::ClientHelloInput;
 use crate::common_state::{
     CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, Protocol, SendPath, Side,
-    State, maybe_send_fatal_alert,
+    maybe_send_fatal_alert,
 };
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, Writer,
@@ -267,7 +267,7 @@ impl Default for Acceptor {
         Self {
             inner: Some(
                 ConnectionCore::new(
-                    Box::new(Accepting),
+                    hs::ServerState::Accepting(Accepting),
                     ServerConnectionData::default(),
                     CommonState::new(Side::Server, Protocol::Tcp),
                 )
@@ -535,18 +535,7 @@ impl Debug for Accepted {
     }
 }
 
-struct Accepting;
-
-impl State for Accepting {
-    #[cfg_attr(coverage_nightly, coverage(off))]
-    fn handle<'m>(
-        self: Box<Self>,
-        _input: Input<'m>,
-        _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
-        Err(Error::Unreachable("unreachable state"))
-    }
-}
+pub(crate) struct Accepting;
 
 #[derive(Default)]
 pub(super) enum EarlyDataState {
@@ -625,7 +614,7 @@ impl ConnectionCore<ServerSide> {
             .set_max_fragment_size(config.max_fragment_size)?;
         common.fips = config.fips();
         Ok(Self::new(
-            Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
+            Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)).into(),
             ServerConnectionData::default(),
             common,
         ))
@@ -673,6 +662,7 @@ impl crate::conn::SideData for ServerSide {}
 
 impl crate::conn::private::Side for ServerSide {
     type Data = ServerConnectionData;
+    type State = hs::ServerState;
 }
 
 #[cfg(test)]
