@@ -295,13 +295,6 @@
 //!   use it as the default `CryptoProvider`, or provide it explicitly
 //!   when making a `ClientConfig` or `ServerConfig`.
 //!
-//! - `fips`: enable support for FIPS140-3-approved cryptography, via the [`aws-lc-rs`] crate.
-//!   This feature enables the `aws-lc-rs` crate feature, which makes the rustls crate depend
-//!   on [aws-lc-rs](https://github.com/aws/aws-lc-rs).  It also changes the default
-//!   for [`ServerConfig::require_ems`] and [`ClientConfig::require_ems`].
-//!
-//!   See [manual::_06_fips] for more details.
-//!
 //! - `log` (enabled by default): make the rustls crate depend on the `log` crate.
 //!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
 //!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
