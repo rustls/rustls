@@ -410,6 +410,7 @@ jobs:
         if: ${{ matrix.target != 'i686-unknown-linux-gnu' }}
         run: cargo add --dev --features bindgen 'aws-lc-sys@>0.20' --package rustls --verbose
       - run: cross test --package rustls --target ${{ matrix.target }}
+      - run: cross test --package rustls-test --features aws-lc-rs --target ${{ matrix.target }}
 
   semver:
     name: Check semver compatibility
