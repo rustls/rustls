@@ -8,16 +8,17 @@ use kernel::KernelConnection;
 
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Input, Output,
-    OutputSplitNonReceivePath, OutputSplitReceivePath, ReceivePath, SendPath, State,
-    UnborrowedPayload,
+    OutputSplitNonReceivePath, OutputSplitReceivePath, ReceivePath, SendPath, UnborrowedPayload,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
+use crate::kernel::KernelState;
 use crate::msgs::{
     AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
     TlsInputBuffer,
 };
-use crate::suites::ExtractedSecrets;
+use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
+use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
 // pub so that it can be re-exported from the crate root
@@ -641,7 +642,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         }
     }
 
-    pub(crate) fn replace_state(&mut self, new: Box<dyn State>) {
+    pub(crate) fn replace_state(&mut self, new: Side::StateMachine) {
         self.core.state = Ok(new);
     }
 
@@ -733,13 +734,13 @@ impl IoState {
     }
 }
 
-pub(crate) struct ConnectionProcessor<'a> {
-    pub(crate) state: Result<Box<dyn State>, Error>,
+pub(crate) struct ConnectionProcessor<'a, Side: SideData> {
+    pub(crate) state: Result<Side::StateMachine, Error>,
     recv: &'a mut ReceivePath,
     other: &'a mut dyn Output,
 }
 
-impl ConnectionProcessor<'_> {
+impl<Side: SideData> ConnectionProcessor<'_, Side> {
     pub(crate) fn process_new_packets(
         &mut self,
         input: &mut dyn TlsInputBuffer,
@@ -842,13 +843,13 @@ impl ConnectionProcessor<'_> {
 }
 
 pub(crate) struct ConnectionCore<Side: SideData> {
-    pub(crate) state: Result<Box<dyn State>, Error>,
+    pub(crate) state: Result<Side::StateMachine, Error>,
     pub(crate) side: Side::Data,
     pub(crate) common: CommonState,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State>, side: Side::Data, common: CommonState) -> Self {
+    pub(crate) fn new(state: Side::StateMachine, side: Side::Data, common: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -867,7 +868,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         input: &mut dyn TlsInputBuffer,
     ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
-        let mut p = ConnectionProcessor {
+        let mut p = ConnectionProcessor::<Side> {
             state: mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)),
             recv: &mut self.common.recv,
             other: &mut OutputSplitNonReceivePath {
@@ -969,7 +970,18 @@ pub(crate) mod private {
     pub(crate) trait SideData: Debug {
         /// Data storage type.
         type Data: Debug + Output;
+        /// State machine type.
+        type StateMachine: StateMachine;
     }
+}
+
+pub(crate) trait StateMachine: Sized {
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error>;
+    fn handle_decrypt_error(&mut self);
+    fn into_external_state(
+        self,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
