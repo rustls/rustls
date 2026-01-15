@@ -40,7 +40,7 @@ env_logger = { workspace = true }
 log = { workspace = true }
 macro_rules_attribute = { workspace = true }
 rcgen = { workspace = true }
-rustls-test = { workspace = true }
+rustls-test = { workspace = true, default-features = false }
 time = { workspace = true }
 webpki-roots = { workspace = true }
 

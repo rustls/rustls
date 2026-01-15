@@ -23,7 +23,7 @@ webpki = { workspace = true }
 criterion = { workspace = true }
 env_logger = { workspace = true }
 rcgen = { workspace = true }
-rustls-test = { workspace = true }
+rustls-test = { workspace = true, default-features = false }
 webpki-roots = { workspace = true }
 
 [[bench]]

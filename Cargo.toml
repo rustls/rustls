@@ -88,7 +88,7 @@ ring = "0.17"
 rsa = { version = "0.9", features = ["sha2"], default-features = false }
 rustc-hash = "2"
 rustls-graviola = { version = "0.3" }
-rustls-test = { path = "rustls-test/" }
+rustls-test = { path = "rustls-test/", default-features = false }
 rustls-fuzzing-provider = { path = "rustls-fuzzing-provider/" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

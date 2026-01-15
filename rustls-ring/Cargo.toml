@@ -23,7 +23,7 @@ webpki = { workspace = true, features = ["ring"] }
 
 [dev-dependencies]
 bencher = { workspace = true }
-rustls-test = { workspace = true }
+rustls-test = { workspace = true, default-features = false }
 
 [[bench]]
 name = "benchmarks"

@@ -10,7 +10,7 @@ rustls = { path = "../rustls" }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", optional = true }
 rustls-ring = { path = "../rustls-ring", optional = true }
 rustls-graviola = { workspace = true, optional = true }
-rustls-test = { workspace = true }
+rustls-test = { workspace = true, default-features = false }
 
 [features]
 default = []

@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [features]
+default = ["aws-lc-rs", "brotli", "log", "ring", "zlib"]
 aws-lc-rs = ["dep:rustls-aws-lc-rs"]
 brotli = ["rustls/brotli"]
 fips = ["rustls-aws-lc-rs/fips"]
