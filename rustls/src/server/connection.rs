@@ -16,9 +16,9 @@ use super::config::ServerConfig;
 use super::hs;
 #[cfg(feature = "std")]
 use super::hs::ClientHelloInput;
-use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
 #[cfg(feature = "std")]
-use crate::common_state::{Input, State};
+use crate::common_state::Input;
+use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
 #[cfg(feature = "std")]
 use crate::conn::ConnectionCommon;
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
@@ -44,7 +44,6 @@ use crate::vecbuf::ChunkVecBuffer;
 
 #[cfg(feature = "std")]
 mod buffered {
-    use alloc::boxed::Box;
     use core::fmt;
     use core::fmt::{Debug, Formatter};
     use core::ops::{Deref, DerefMut};
@@ -54,7 +53,7 @@ mod buffered {
 
     use super::{
         Accepted, Accepting, Protocol, ServerConfig, ServerConnectionData, ServerExtensionsInput,
-        ServerSide,
+        ServerSide, hs,
     };
     use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Side};
@@ -263,7 +262,7 @@ mod buffered {
             Self {
                 inner: Some(
                     ConnectionCore::new(
-                        Box::new(Accepting),
+                        hs::StateMachine::Accepting(Accepting),
                         ServerConnectionData::default(),
                         CommonState::new(Side::Server, Protocol::Tcp),
                     )
@@ -613,19 +612,7 @@ impl Debug for Accepted {
 }
 
 #[cfg(feature = "std")]
-struct Accepting;
-
-#[cfg(feature = "std")]
-impl State for Accepting {
-    #[cfg_attr(coverage_nightly, coverage(off))]
-    fn handle<'m>(
-        self: Box<Self>,
-        _input: Input<'m>,
-        _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
-        Err(Error::Unreachable("unreachable state"))
-    }
-}
+pub(crate) struct Accepting;
 
 #[derive(Default)]
 pub(super) enum EarlyDataState {
@@ -704,7 +691,7 @@ impl ConnectionCore<ServerSide> {
             .set_max_fragment_size(config.max_fragment_size)?;
         common.fips = config.fips();
         Ok(Self::new(
-            Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
+            Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)).into(),
             ServerConnectionData::default(),
             common,
         ))
@@ -762,6 +749,7 @@ impl crate::conn::SideData for ServerSide {}
 
 impl crate::conn::private::SideData for ServerSide {
     type Data = ServerConnectionData;
+    type StateMachine = hs::StateMachine;
 }
 
 #[cfg(feature = "std")]

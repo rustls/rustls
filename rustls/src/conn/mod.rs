@@ -10,16 +10,17 @@ use kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::common_state::Input;
 use crate::common_state::{
-    AppDataOutput, CommonState, Context, DEFAULT_BUFFER_LIMIT, NullOutput, Output, State,
+    AppDataOutput, CommonState, Context, DEFAULT_BUFFER_LIMIT, NullOutput, Output,
     UnborrowedPayload,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{ApiMisuse, Error};
+use crate::kernel::KernelState;
 use crate::msgs::deframer::{BufferProgress, DeframerVecBuffer, Delocator, Locator, ReceivedData};
 use crate::msgs::handshake::Random;
 #[cfg(feature = "std")]
 use crate::msgs::message::Message;
-use crate::suites::ExtractedSecrets;
+use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
 // pub so that it can be re-exported from the crate root
@@ -746,7 +747,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// This is a convenience function which solely uses other parts
     /// of the public API.
     ///
-    /// What this means depends on the connection  state:
+    /// What this means depends on the connection state:
     ///
     /// - If the connection [`is_handshaking`], then IO is performed until
     ///   the handshake is complete.
@@ -910,7 +911,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         }
     }
 
-    pub(crate) fn replace_state(&mut self, new: Box<dyn State>) {
+    pub(crate) fn replace_state(&mut self, new: Side::StateMachine) {
         self.core.state = Ok(new);
     }
 
@@ -1024,13 +1025,17 @@ impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
 }
 
 pub(crate) struct ConnectionCore<Side: SideData> {
-    pub(crate) state: Result<Box<dyn State>, Error>,
+    pub(crate) state: Result<Side::StateMachine, Error>,
     pub(crate) side: Side::Data,
     pub(crate) common_state: CommonState,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State>, side: Side::Data, common_state: CommonState) -> Self {
+    pub(crate) fn new(
+        state: Side::StateMachine,
+        side: Side::Data,
+        common_state: CommonState,
+    ) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -1237,7 +1242,19 @@ pub(crate) mod private {
     pub(crate) trait SideData: super::Debug {
         /// Data storage type.
         type Data: super::Debug + super::Output;
+
+        /// State machine type.
+        type StateMachine: super::StateMachine;
     }
+}
+
+pub(crate) trait StateMachine: Sized {
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error>;
+    fn handle_decrypt_error(&mut self);
+    fn send_key_update_request(&mut self, output: &mut dyn Output) -> Result<(), Error>;
+    fn into_external_state(
+        self,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

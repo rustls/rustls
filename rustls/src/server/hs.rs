@@ -6,9 +6,9 @@ use core::fmt;
 
 use pki_types::DnsName;
 
-use super::{ClientHello, ServerConfig};
+use super::{ClientHello, ServerConfig, tls12, tls13};
 use crate::SupportedCipherSuite;
-use crate::common_state::{Event, Input, Output, Protocol, State};
+use crate::common_state::{Event, Input, Output, Protocol};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -16,6 +16,7 @@ use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureSc
 use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
+use crate::kernel::KernelState;
 use crate::log::{debug, trace};
 use crate::msgs::base::PayloadU8;
 use crate::msgs::deframer::HandshakeAlignedProof;
@@ -27,10 +28,63 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sealed::Sealed;
-use crate::suites::Suite;
+use crate::suites::{PartiallyExtractedSecrets, Suite};
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
+
+pub(crate) enum StateMachine {
+    Accepting(super::connection::Accepting),
+    ExpectClientHello(Box<ExpectClientHello>),
+    Tls12(tls12::StateMachine),
+    Tls13(tls13::StateMachine),
+}
+
+impl StateMachine {
+    pub(crate) fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
+        match self {
+            Self::ExpectClientHello(e) => e.set_resumption_data(resumption_data),
+            _ => Err(ApiMisuse::ResumptionDataProvidedTooLate.into()),
+        }
+    }
+
+    pub(crate) fn reject_early_data(&mut self) -> Result<(), Error> {
+        match self {
+            Self::ExpectClientHello(e) => e.reject_early_data(),
+            _ => Err(ApiMisuse::EarlyDataRejectedAtWrongTime.into()),
+        }
+    }
+}
+
+impl crate::conn::StateMachine for StateMachine {
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error> {
+        match self {
+            Self::Accepting(_) => todo!(),
+            Self::ExpectClientHello(e) => e.handle(input, output),
+            Self::Tls12(sm) => sm.handle(input, output),
+            Self::Tls13(sm) => sm.handle(input, output),
+        }
+    }
+
+    fn handle_decrypt_error(&mut self) {}
+
+    fn send_key_update_request(&mut self, output: &mut dyn Output) -> Result<(), Error> {
+        match self {
+            Self::Tls13(tls13::StateMachine::ExpectTraffic(e)) => e.send_key_update_request(output),
+            _ => Err(Error::HandshakeNotComplete),
+        }
+    }
+
+    fn into_external_state(
+        self,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        match self {
+            Self::Tls12(tls12::StateMachine::ExpectTraffic(e)) => e.into_external_state(),
+            Self::Tls13(tls13::StateMachine::ExpectTraffic(e)) => e.into_external_state(),
+            _ => Err(Error::HandshakeNotComplete),
+        }
+    }
+}
 
 pub(super) struct ExtensionProcessing<'a> {
     // extensions to reply with
@@ -299,7 +353,7 @@ impl ExpectClientHello {
         self,
         input: ClientHelloInput<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<StateMachine, Error> {
         let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3);
@@ -334,7 +388,7 @@ impl ExpectClientHello {
         mut self,
         mut input: ClientHelloInput<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>
+    ) -> Result<StateMachine, Error>
     where
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
@@ -534,12 +588,12 @@ impl ExpectClientHello {
     }
 }
 
-impl State for ExpectClientHello {
-    fn handle<'m>(
-        self: Box<Self>,
+impl ExpectClientHello {
+    pub(crate) fn handle<'m>(
+        self,
         input: Input<'m>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<StateMachine, Error> {
         let input = ClientHelloInput::from_input(&input)?;
         self.with_input(input, output)
     }
@@ -555,6 +609,12 @@ impl State for ExpectClientHello {
     }
 }
 
+impl From<Box<ExpectClientHello>> for StateMachine {
+    fn from(value: Box<ExpectClientHello>) -> Self {
+        Self::ExpectClientHello(value)
+    }
+}
+
 pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
     fn handle_client_hello(
         &self,
@@ -564,7 +624,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>;
+    ) -> Result<StateMachine, Error>;
 }
 
 pub(crate) struct ClientHelloInput<'a> {

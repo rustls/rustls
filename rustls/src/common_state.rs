@@ -5,8 +5,7 @@ use core::ops::{Deref, DerefMut, Range};
 use pki_types::DnsName;
 
 use crate::client::EchStatus;
-use crate::conn::Exporter;
-use crate::conn::kernel::KernelState;
+use crate::conn::{Exporter, StateMachine};
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
     Decrypted, DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter,
@@ -15,7 +14,7 @@ use crate::crypto::cipher::{
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -28,7 +27,7 @@ use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::quic;
-use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
+use crate::suites::SupportedCipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTraffic;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
@@ -928,36 +927,6 @@ pub enum HandshakeKind {
     ResumedWithHelloRetryRequest,
 }
 
-pub(crate) trait State: Send + Sync {
-    fn handle<'m>(
-        self: Box<Self>,
-        input: Input<'m>,
-        output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>;
-
-    fn send_key_update_request(&mut self, _output: &mut dyn Output) -> Result<(), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
-
-    fn handle_decrypt_error(&self) {}
-
-    #[allow(dead_code)]
-    fn reject_early_data(&mut self) -> Result<(), Error> {
-        Err(ApiMisuse::EarlyDataRejectedAtWrongTime.into())
-    }
-
-    #[allow(dead_code)]
-    fn set_resumption_data(&mut self, _resumption_data: &[u8]) -> Result<(), Error> {
-        Err(ApiMisuse::ResumptionDataProvidedTooLate.into())
-    }
-
-    fn into_external_state(
-        self: Box<Self>,
-    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
-}
-
 pub(crate) struct Context<'a> {
     // receives events applicable to all connection types
     pub(crate) common: &'a mut CommonState,
@@ -968,12 +937,12 @@ pub(crate) struct Context<'a> {
 }
 
 impl Context<'_> {
-    pub(crate) fn process_main_protocol(
+    pub(crate) fn process_main_protocol<SM: StateMachine>(
         &mut self,
         msg: EncodedMessage<&'_ [u8]>,
         aligned_handshake: Option<HandshakeAlignedProof>,
-        state: Box<dyn State>,
-    ) -> Result<Box<dyn State>, Error> {
+        state: SM,
+    ) -> Result<SM, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec && self.common.recv.drop_tls13_ccs(&msg)? {
             trace!("Dropping CCS");
