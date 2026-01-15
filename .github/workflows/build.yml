@@ -88,16 +88,6 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
-      - name: cargo test (debug; aws-lc-rs)
-        run: cargo test --locked --no-default-features --features aws-lc-rs,log,std --all-targets
-        env:
-          RUST_BACKTRACE: 1
-
-      - name: cargo test (release; fips)
-        run: cargo test --locked --release --no-default-features --features fips,log,std --all-targets
-        env:
-          RUST_BACKTRACE: 1
-
       - name: cargo build (debug; no-std)
         run: |
           cargo build --locked --lib -p rustls $(admin/all-features-except std,brotli rustls)
@@ -192,7 +182,7 @@ jobs:
           cargo test --locked -p rustls-aws-lc-rs --no-default-features --features std
 
       - name: cargo test (debug; no default features; std+fips)
-        run: cargo test --locked --no-default-features --features fips,std
+        run: cargo test --locked --no-default-features --features std
         working-directory: rustls
 
       - name: cargo test (release; no run)

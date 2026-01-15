@@ -157,9 +157,5 @@ jobs:
             --package rustls
             --feature-powerset
             --no-dev-deps
-            --group-features fips,aws-lc-rs
-            --mutually-exclusive-features fips,ring
-            --mutually-exclusive-features custom_provider,aws-lc-rs
-            --mutually-exclusive-features custom_provider,ring
         env:
           RUSTFLAGS: --deny warnings
