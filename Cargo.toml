@@ -79,7 +79,7 @@ once_cell = { version = "1.16", default-features = false, features = ["alloc", "
 openssl = "0.10"
 p256 = { version = "0.13.2", default-features = false, features = ["alloc", "ecdsa", "pkcs8"] }
 pkcs8 = "0.10.2"
-pki-types = { package = "rustls-pki-types", version = "1.13", features = ["alloc"] }
+pki-types = { package = "rustls-pki-types", version = "1.14", features = ["alloc"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rayon = "1.7"
 rcgen = { version = "0.14.4", features = ["pem", "aws_lc_rs"], default-features = false }

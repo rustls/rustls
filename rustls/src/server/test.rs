@@ -28,7 +28,7 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{HEADER_SIZE, Message, MessagePayload};
 use crate::pki_types::pem::PemObject;
-use crate::pki_types::{CertificateDer, PrivateKeyDer};
+use crate::pki_types::{CertificateDer, FipsStatus, PrivateKeyDer};
 use crate::server::{ServerConfig, ServerConnection};
 use crate::suites::CipherSuiteCommon;
 use crate::sync::Arc;
@@ -78,7 +78,7 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
         .with_single_cert(server_identity(), server_key())
         .unwrap();
 
-    if config.provider.fips() {
+    if !matches!(config.provider.fips(), FipsStatus::Unvalidated) {
         assert!(config.require_ems);
     } else {
         config.require_ems = true;

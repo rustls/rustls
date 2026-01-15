@@ -4,6 +4,7 @@ use core::fmt;
 
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::{agreement, kem};
+use pki_types::FipsStatus;
 use rustls::crypto::GetRandomFailed;
 use rustls::crypto::kx::{
     ActiveKeyExchange, CompletedKeyExchange, Hybrid, HybridLayout, NamedGroup, SharedSecret,
@@ -84,7 +85,7 @@ impl SupportedKxGroup for MlKem768 {
         NamedGroup::MLKEM768
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         // AUDITORS:
         // At the time of writing, the ML-KEM implementation in AWS-LC-FIPS module 3.0
         // is FIPS-pending.  Some regulatory regimes (eg, FedRAMP rev 5 SC-13) allow
@@ -185,8 +186,11 @@ impl SupportedKxGroup for KxGroup {
         self.name
     }
 
-    fn fips(&self) -> bool {
-        self.fips_allowed && super::fips()
+    fn fips(&self) -> FipsStatus {
+        match self.fips_allowed {
+            true => super::fips(),
+            false => FipsStatus::Unvalidated,
+        }
     }
 }
 

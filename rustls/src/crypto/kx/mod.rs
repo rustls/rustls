@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::ops::Deref;
 
+use pki_types::FipsStatus;
 use zeroize::Zeroize;
 
 use crate::enums::ProtocolVersion;
@@ -74,7 +75,7 @@ impl SupportedKxGroup for Hybrid {
         self.name
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         // Behold! The Night Mare: SP800-56C rev 2:
         //
         // "In addition to the currently approved techniques for the generation of the
@@ -272,8 +273,8 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     fn name(&self) -> NamedGroup;
 
     /// Return `true` if this is backed by a FIPS-approved implementation.
-    fn fips(&self) -> bool {
-        false
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 

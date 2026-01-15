@@ -35,7 +35,7 @@ use alloc::sync::Arc;
 #[cfg(feature = "std")]
 use core::time::Duration;
 
-use pki_types::PrivateKeyDer;
+use pki_types::{FipsStatus, PrivateKeyDer};
 use rustls::crypto::kx::SupportedKxGroup;
 use rustls::crypto::{
     CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SignatureScheme, SigningKey,
@@ -118,7 +118,7 @@ impl SecureRandom for AwsLcRs {
             .map_err(|_| GetRandomFailed)
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         fips()
     }
 }
@@ -147,7 +147,7 @@ impl KeyProvider for AwsLcRs {
         ))
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         fips()
     }
 }
@@ -181,7 +181,7 @@ impl TicketerFactory for AwsLcRs {
         }
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         fips()
     }
 }
@@ -370,8 +370,11 @@ mod ring_shim {
 }
 
 /// Are we in FIPS mode?
-fn fips() -> bool {
-    aws_lc_rs::try_fips_mode().is_ok()
+fn fips() -> FipsStatus {
+    match aws_lc_rs::try_fips_mode().is_ok() {
+        true => FipsStatus::Pending,
+        false => FipsStatus::Unvalidated,
+    }
 }
 
 fn unspecified_err(e: aws_lc_rs::error::Unspecified) -> Error {
@@ -385,17 +388,20 @@ mod tests {
     use std::collections::HashSet;
 
     #[cfg(feature = "fips")]
+    use pki_types::FipsStatus;
+
+    #[cfg(feature = "fips")]
     #[test]
     fn default_suites_are_fips() {
         assert!(
             super::DEFAULT_TLS12_CIPHER_SUITES
                 .iter()
-                .all(|scs| scs.fips())
+                .all(|scs| !matches!(scs.fips(), FipsStatus::Unvalidated))
         );
         assert!(
             super::DEFAULT_TLS13_CIPHER_SUITES
                 .iter()
-                .all(|scs| scs.fips())
+                .all(|scs| !matches!(scs.fips(), FipsStatus::Unvalidated))
         );
     }
 

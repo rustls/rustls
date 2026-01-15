@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 
+use pki_types::FipsStatus;
 use ring::digest;
 use rustls::crypto::{self, HashAlgorithm};
 
@@ -27,7 +28,7 @@ impl crypto::hash::Hash for Hash {
         self.1
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }

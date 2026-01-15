@@ -4,6 +4,8 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use core::fmt::Debug;
 
+use pki_types::FipsStatus;
+
 pub use crate::common_state::Side;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -683,8 +685,8 @@ pub trait Algorithm: Send + Sync {
     fn aead_key_len(&self) -> usize;
 
     /// Whether this algorithm is FIPS-approved.
-    fn fips(&self) -> bool {
-        false
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 

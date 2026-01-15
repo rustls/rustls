@@ -212,6 +212,8 @@ impl HpkeOpener for HpkeRsReceiver {
 mod tests {
     use alloc::{format, vec};
 
+    use rustls::pki_types::FipsStatus;
+
     use super::*;
 
     #[test]
@@ -277,7 +279,7 @@ mod tests {
         assert!(
             ALL_SUPPORTED_SUITES
                 .iter()
-                .all(|suite| !suite.fips())
+                .all(|suite| matches!(suite.fips(), FipsStatus::Unvalidated))
         );
     }
 }

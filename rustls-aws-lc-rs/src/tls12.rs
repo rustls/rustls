@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
 use aws_lc_rs::{aead, tls_prf};
+use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
     NONCE_LEN, Nonce, OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, UnsupportedOperationError,
@@ -186,7 +187,7 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         })
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }
@@ -236,8 +237,8 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
         })
     }
 
-    fn fips(&self) -> bool {
-        false // not FIPS approved
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated // not FIPS approved
     }
 }
 
@@ -462,7 +463,7 @@ impl Prf for Tls12Prf {
         })
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }

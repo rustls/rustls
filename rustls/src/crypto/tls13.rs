@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use pki_types::FipsStatus;
 use zeroize::Zeroize;
 
 use super::hmac;
@@ -179,8 +180,8 @@ pub trait Hkdf: Send + Sync {
     fn hmac_sign(&self, key: &OkmBlock, message: &[u8]) -> hmac::Tag;
 
     /// Return `true` if this is backed by a FIPS-approved implementation.
-    fn fips(&self) -> bool {
-        false
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 
