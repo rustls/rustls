@@ -10,10 +10,11 @@ use pki_types::ServerName;
 use super::config::{ClientSessionKey, Tls12Resumption};
 use super::ech::{EchMode, EchState, EchStatus};
 use super::{
-    ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12Session, Tls13Session, tls13,
+    ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12Session, Tls13Session, tls12, tls13,
 };
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{EarlyDataEvent, Event, Input, Output, Protocol, State};
+use crate::common_state::{EarlyDataEvent, Event, Input, Output, Protocol};
+use crate::conn::StateMachine as _;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -22,6 +23,7 @@ use crate::enums::{
 };
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
+use crate::kernel::KernelState;
 use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
@@ -31,12 +33,49 @@ use crate::msgs::{
     SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 use crate::sealed::Sealed;
-use crate::suites::{Suite, SupportedCipherSuite};
+use crate::suites::{PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
-use crate::tls13::key_schedule::KeyScheduleEarlyClient;
+use crate::tls13::key_schedule::{KeyScheduleEarlyClient, KeyScheduleTrafficSend};
 use crate::{ClientConfig, bs_debug};
+
+#[expect(private_interfaces)]
+pub(crate) enum ClientState {
+    ServerHello(Box<ExpectServerHello>),
+    ServerHelloOrHelloRetryRequest(Box<ExpectServerHelloOrHelloRetryRequest>),
+    Tls12(tls12::StateMachine),
+    Tls13(tls13::StateMachine),
+}
+
+impl crate::conn::StateMachine for ClientState {
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error> {
+        match self {
+            Self::ServerHello(e) => e.handle(input, output),
+            Self::ServerHelloOrHelloRetryRequest(e) => e.handle(input, output),
+            Self::Tls12(sm) => sm.handle(input, output),
+            Self::Tls13(sm) => sm.handle(input, output),
+        }
+    }
+
+    fn handle_decrypt_error(&mut self) {
+        if let Self::Tls12(tls12::StateMachine::Finished(e)) = self {
+            e.handle_decrypt_error();
+        }
+    }
+
+    fn into_external_state(
+        self,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        match self {
+            Self::Tls12(tls12::StateMachine::Traffic(e)) => e.into_external_state(send_keys),
+            Self::Tls13(tls13::StateMachine::Traffic(e)) => e.into_external_state(send_keys),
+            Self::Tls13(tls13::StateMachine::QuicTraffic(e)) => e.into_external_state(send_keys),
+            _ => Err(Error::HandshakeNotComplete),
+        }
+    }
+}
 
 pub(crate) struct ExpectServerHello {
     pub(super) input: ClientHelloInput,
@@ -62,7 +101,7 @@ impl ExpectServerHello {
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>
+    ) -> Result<ClientState, Error>
     where
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
@@ -126,12 +165,12 @@ impl ExpectServerHello {
     }
 }
 
-impl State for ExpectServerHello {
+impl ExpectServerHello {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ClientState, Error> {
         let server_hello = require_handshake_msg!(
             &input.message,
             HandshakeType::ServerHello,
@@ -185,15 +224,15 @@ struct ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl ExpectServerHelloOrHelloRetryRequest {
-    fn into_expect_server_hello(self) -> Box<dyn State> {
-        self.next
+    fn into_expect_server_hello(self) -> ClientState {
+        ClientState::ServerHello(self.next)
     }
 
     fn handle_hello_retry_request(
         mut self,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ClientState, Error> {
         let hrr = require_handshake_msg!(
             input.message,
             HandshakeType::HelloRetryRequest,
@@ -334,12 +373,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-impl State for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(
-        self: Box<Self>,
-        input: Input<'_>,
-        output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+impl ExpectServerHelloOrHelloRetryRequest {
+    fn handle(self, input: Input<'_>, output: &mut dyn Output) -> Result<ClientState, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(..)),
@@ -442,7 +477,7 @@ impl ClientHelloInput {
         self,
         extra_exts: ClientExtensionsInput,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ClientState, Error> {
         let mut transcript_buffer = HandshakeHashBuffer::new();
         if !self
             .config
@@ -500,7 +535,7 @@ fn emit_client_hello_for_retry(
     output: &mut dyn Output,
     mut ech_state: Option<EchState>,
     mut ech_status: EchStatus,
-) -> Result<Box<dyn State>, Error> {
+) -> Result<ClientState, Error> {
     let config = &input.config;
     // Defense in depth: the ECH state should be None if ECH is disabled based on config
     // builder semantics.
@@ -841,10 +876,12 @@ fn emit_client_hello_for_retry(
     });
 
     Ok(if supported_versions.tls13 && retryreq.is_none() {
-        Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
+        ClientState::ServerHelloOrHelloRetryRequest(Box::new(
+            ExpectServerHelloOrHelloRetryRequest { next, extra_exts },
+        ))
     } else {
         next.done_retry = retryreq.is_some();
-        next
+        ClientState::ServerHello(next)
     })
 }
 
@@ -1036,5 +1073,5 @@ pub(crate) trait ClientHandler<T>: fmt::Debug + Sealed + Send + Sync {
         input: &Input<'_>,
         st: ExpectServerHello,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>;
+    ) -> Result<ClientState, Error>;
 }
