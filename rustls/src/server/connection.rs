@@ -268,7 +268,7 @@ impl Default for Acceptor {
             inner: Some(
                 ConnectionCore::new(
                     Box::new(Accepting),
-                    ServerSide::default(),
+                    ServerConnectionData::default(),
                     CommonState::new(Side::Server, Protocol::Tcp),
                 )
                 .into(),
@@ -626,7 +626,7 @@ impl ConnectionCore<ServerSide> {
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
-            ServerSide::default(),
+            ServerConnectionData::default(),
             common,
         ))
     }
@@ -634,13 +634,13 @@ impl ConnectionCore<ServerSide> {
 
 /// State associated with a server connection.
 #[derive(Debug, Default)]
-pub struct ServerSide {
+pub(crate) struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
     early_data: EarlyDataState,
 }
 
-impl ServerSide {
+impl ServerConnectionData {
     pub(crate) fn received_resumption_data(&self) -> Option<&[u8]> {
         self.received_resumption_data.as_deref()
     }
@@ -650,7 +650,7 @@ impl ServerSide {
     }
 }
 
-impl Output for ServerSide {
+impl Output for ServerConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EarlyApplicationData(data) => self
@@ -664,9 +664,16 @@ impl Output for ServerSide {
     }
 }
 
+/// State associated with a server connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ServerSide;
+
 impl crate::conn::SideData for ServerSide {}
 
-impl crate::conn::private::SideData for ServerSide {}
+impl crate::conn::private::SideData for ServerSide {
+    type Data = ServerConnectionData;
+}
 
 #[cfg(test)]
 mod tests {

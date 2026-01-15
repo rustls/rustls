@@ -833,12 +833,12 @@ pub(crate) fn process_new_packets(
 
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Box<dyn State>, Error>,
-    pub(crate) side: Side,
+    pub(crate) side: Side::Data,
     pub(crate) common: CommonState,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State>, side: Side, common: CommonState) -> Self {
+    pub(crate) fn new(state: Box<dyn State>, side: Side::Data, common: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -954,7 +954,10 @@ pub trait SideData: private::SideData {}
 pub(crate) mod private {
     use super::*;
 
-    pub(crate) trait SideData: Output + Debug {}
+    pub(crate) trait SideData: Debug {
+        /// Data storage type.
+        type Data: Debug + Output;
+    }
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

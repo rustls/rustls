@@ -293,7 +293,7 @@ impl ConnectionCore<ClientSide> {
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
         common_state.fips = config.fips();
-        let mut data = ClientSide::new();
+        let mut data = ClientConnectionData::new();
 
         let mut output = SideCommonOutput {
             side: &mut data,
@@ -433,14 +433,13 @@ impl fmt::Display for EarlyDataError {
 
 impl core::error::Error for EarlyDataError {}
 
-/// State associated with a client connection.
 #[derive(Debug)]
-pub struct ClientSide {
+pub(crate) struct ClientConnectionData {
     early_data: EarlyData,
     ech_status: EchStatus,
 }
 
-impl ClientSide {
+impl ClientConnectionData {
     fn new() -> Self {
         Self {
             early_data: EarlyData::new(),
@@ -449,11 +448,7 @@ impl ClientSide {
     }
 }
 
-impl crate::conn::SideData for ClientSide {}
-
-impl crate::conn::private::SideData for ClientSide {}
-
-impl Output for ClientSide {
+impl Output for ClientConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
@@ -465,4 +460,15 @@ impl Output for ClientSide {
             _ => unreachable!(),
         }
     }
+}
+
+/// State associated with a client connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ClientSide;
+
+impl crate::conn::SideData for ClientSide {}
+
+impl crate::conn::private::SideData for ClientSide {
+    type Data = ClientConnectionData;
 }
