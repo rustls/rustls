@@ -15,10 +15,8 @@ exclude = ["src/testdata", "tests/**"]
 
 [features]
 default = ["log", "std"]
-
 aws-lc-rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
-custom-provider = []
 fips = ["aws-lc-rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
 log = ["dep:log"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
@@ -60,7 +58,7 @@ path = "examples/internal/test_ca.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["aws-lc-rs", "brotli", "custom-provider", "hashbrown", "log", "std", "zlib"]
+features = ["aws-lc-rs", "brotli", "hashbrown", "log", "std", "zlib"]
 rustdoc-args = ["--cfg", "rustls_docsrs"]
 
 [package.metadata.cargo_check_external_types]

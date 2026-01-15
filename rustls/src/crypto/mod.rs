@@ -92,8 +92,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// - _libraries_ should use [`ClientConfig::builder()`]/[`ServerConfig::builder()`]
 ///   or otherwise rely on the [`CryptoProvider::get_default()`] provider.
 /// - _applications_ should call [`CryptoProvider::install_default()`] early
-///   in their `fn main()`. If _applications_ uses a custom provider based on the one built-in,
-///   they can activate the `custom-provider` feature to ensure its usage.
+///   in their `fn main()`.
 ///
 /// # Using a specific `CryptoProvider`
 ///
@@ -107,10 +106,6 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// - [`client::WebPkiServerVerifier::builder()`]
 /// - [`server::WebPkiClientVerifier::builder()`]
-///
-/// If you install a custom provider and want to avoid any accidental use of a built-in provider, the feature
-/// `custom-provider` can be activated to ensure your custom provider is used everywhere
-/// and not a built-in one. This will disable any implicit use of a built-in provider.
 ///
 /// # Making a custom `CryptoProvider`
 ///

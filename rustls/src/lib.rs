@@ -302,9 +302,6 @@
 //!
 //!   See [manual::_06_fips] for more details.
 //!
-//! - `custom-provider`: disables implicit use of built-in providers (`aws-lc-rs` or `ring`). This forces
-//!   applications to manually install one, for instance, when using a custom `CryptoProvider`.
-//!
 //! - `log` (enabled by default): make the rustls crate depend on the `log` crate.
 //!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
 //!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not

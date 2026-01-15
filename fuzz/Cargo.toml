@@ -11,7 +11,7 @@ cargo-fuzz = true
 [dependencies]
 env_logger = "0.11"
 libfuzzer-sys = "0.4"
-rustls = { path = "../rustls", default-features = false, features = ["std", "custom-provider"] }
+rustls = { path = "../rustls", default-features = false, features = ["std"] }
 rustls-fuzzing-provider = { path = "../rustls-fuzzing-provider" }
 
 # Prevent this from interfering with workspaces
