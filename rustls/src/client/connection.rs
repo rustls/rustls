@@ -591,4 +591,5 @@ impl crate::conn::SideData for ClientSide {}
 
 impl crate::conn::private::SideData for ClientSide {
     type Data = ClientConnectionData;
+    type StateMachine = super::hs::StateMachine;
 }

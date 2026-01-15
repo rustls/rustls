@@ -7,7 +7,6 @@ use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
 use crate::conn::Exporter;
-use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
     Decrypted, DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter,
@@ -16,7 +15,7 @@ use crate::crypto::cipher::{
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::{
@@ -25,7 +24,7 @@ use crate::msgs::{
     MessageFragmenter, MessagePayload,
 };
 use crate::quic;
-use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
+use crate::suites::SupportedCipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
@@ -1076,28 +1075,6 @@ pub enum HandshakeKind {
     /// is unacceptable for several reasons, but this does not prevent the client
     /// from resuming.
     ResumedWithHelloRetryRequest,
-}
-
-pub(crate) trait State: Send + Sync {
-    fn handle<'m>(
-        self: Box<Self>,
-        input: Input<'m>,
-        output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>;
-
-    fn handle_decrypt_error(&self) {}
-
-    #[cfg_attr(not(feature = "std"), expect(dead_code))]
-    fn set_resumption_data(&mut self, _resumption_data: &[u8]) -> Result<(), Error> {
-        Err(ApiMisuse::ResumptionDataProvidedTooLate.into())
-    }
-
-    fn into_external_state(
-        self: Box<Self>,
-        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
-    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
 }
 
 pub(crate) struct CaptureAppData<'a> {

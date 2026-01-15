@@ -9,7 +9,7 @@ use core::{fmt, mem};
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientSide;
 use crate::common_state::{CaptureAppData, SendPath};
-use crate::conn::SideData;
+use crate::conn::{SideData, StateMachine};
 use crate::crypto::cipher::{Decrypted, Payload};
 use crate::error::Error;
 use crate::msgs::{DeframerSliceBuffer, Delocator, Locator};
