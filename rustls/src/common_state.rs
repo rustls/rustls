@@ -2,6 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ops::Range;
 
+use pki_types::FipsStatus;
+
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
@@ -59,7 +61,7 @@ pub struct CommonState {
     pub(crate) quic: quic::Quic,
     temper_counters: TemperCounters,
     pub(crate) refresh_traffic_keys_pending: bool,
-    pub(crate) fips: bool,
+    pub(crate) fips: FipsStatus,
     pub(crate) tls13_tickets_received: u32,
 }
 
@@ -92,7 +94,7 @@ impl CommonState {
             quic: quic::Quic::default(),
             temper_counters: TemperCounters::default(),
             refresh_traffic_keys_pending: false,
-            fips: false,
+            fips: FipsStatus::Unvalidated,
             tls13_tickets_received: 0,
         }
     }

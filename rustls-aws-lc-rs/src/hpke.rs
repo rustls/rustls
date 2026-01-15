@@ -9,6 +9,7 @@ use aws_lc_rs::agreement;
 use aws_lc_rs::cipher::{AES_128_KEY_LEN, AES_256_KEY_LEN};
 use aws_lc_rs::digest::{SHA256_OUTPUT_LEN, SHA384_OUTPUT_LEN, SHA512_OUTPUT_LEN};
 use aws_lc_rs::encoding::{AsBigEndian, Curve25519SeedBin, EcPrivateKeyBin};
+use pki_types::FipsStatus;
 use rustls::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeAead, HpkeKdf, HpkeKem, HpkeOpener, HpkePrivateKey,
     HpkePublicKey, HpkeSealer, HpkeSuite, HpkeSymmetricCipherSuite,
@@ -356,8 +357,8 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Hpke for HpkeAwsLcRs<KEY_SIZE
         Ok(Box::new(Opener::new(self, enc, info, secret_key)?))
     }
 
-    fn fips(&self) -> bool {
-        matches!(
+    fn fips(&self) -> FipsStatus {
+        let allowed = matches!(
             // We make a FIPS determination based on the suite's DH KEM and AEAD choice.
             // We don't need to examine the KDF choice because all supported KDFs are FIPS
             // compatible.
@@ -370,7 +371,12 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Hpke for HpkeAwsLcRs<KEY_SIZE
                 // Only the AES AEADs are FIPS compatible.
                 HpkeAead::AES_128_GCM | HpkeAead::AES_256_GCM,
             )
-        )
+        );
+
+        match allowed {
+            true => super::fips(),
+            false => FipsStatus::Unvalidated,
+        }
     }
 
     fn generate_key_pair(&self) -> Result<(HpkePublicKey, HpkePrivateKey), Error> {
@@ -1017,8 +1023,15 @@ mod tests {
             (DH_KEM_X25519_HKDF_SHA256_AES_256, false),
             (DH_KEM_X25519_HKDF_SHA256_CHACHA20_POLY1305, false),
         ];
-        for (suite, expected) in testcases {
-            assert_eq!(suite.fips(), *expected);
+        for (suite, allowed) in testcases {
+            match allowed {
+                true => assert_eq!(suite.fips(), crate::fips()),
+                false => assert_eq!(
+                    suite.fips(),
+                    FipsStatus::Unvalidated,
+                    "expected non-FIPS compatible suite"
+                ),
+            }
         }
     }
 }

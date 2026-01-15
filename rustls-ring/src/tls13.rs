@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 
+use pki_types::FipsStatus;
 use ring::hkdf::{self, KeyType};
 use ring::{aead, hmac};
 use rustls::crypto::CipherSuite;
@@ -97,8 +98,8 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
         Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
 
-    fn fips(&self) -> bool {
-        false // chacha20poly1305 not FIPS approved
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated // chacha20poly1305 not FIPS approved
     }
 }
 
@@ -125,7 +126,7 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
         Ok(ConnectionTrafficSecrets::Aes256Gcm { key, iv })
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }
@@ -153,7 +154,7 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
         Ok(ConnectionTrafficSecrets::Aes128Gcm { key, iv })
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }
@@ -287,7 +288,7 @@ impl Hkdf for RingHkdf {
         crypto::hmac::Tag::new(hmac::sign(&hmac::Key::new(self.1, key.as_ref()), message).as_ref())
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }

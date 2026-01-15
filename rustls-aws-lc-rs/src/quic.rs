@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
 use aws_lc_rs::aead;
+use pki_types::FipsStatus;
 use rustls::crypto::cipher::{AeadKey, Iv, Nonce};
 use rustls::error::{ApiMisuse, Error};
 use rustls::quic;
@@ -212,7 +213,7 @@ impl quic::Algorithm for KeyBuilder {
         self.packet_alg.key_len()
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }

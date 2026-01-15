@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 
-use pki_types::{DnsName, PrivateKeyDer, UnixTime};
+use pki_types::{DnsName, FipsStatus, PrivateKeyDer, UnixTime};
 
 use super::handy;
 use super::hs::ClientHelloInput;
@@ -274,14 +274,16 @@ impl ServerConfig {
         }
     }
 
-    /// Return `true` if connections made with this `ServerConfig` will
-    /// operate in FIPS mode.
+    /// Return the FIPS validation status for connections made with this configuration.
     ///
     /// This is different from [`CryptoProvider::fips()`]: [`CryptoProvider::fips()`]
     /// is concerned only with cryptography, whereas this _also_ covers TLS-level
     /// configuration that NIST recommends.
-    pub fn fips(&self) -> bool {
-        self.provider.fips() && self.require_ems
+    pub fn fips(&self) -> FipsStatus {
+        match self.require_ems {
+            true => self.provider.fips(),
+            false => FipsStatus::Unvalidated,
+        }
     }
 
     /// Return the crypto provider used to construct this client configuration.
@@ -666,7 +668,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         cert_resolver: Arc<dyn ServerCredentialResolver>,
     ) -> Result<ServerConfig, Error> {
         self.provider.consistency_check()?;
-        let require_ems = self.provider.fips();
+        let require_ems = !matches!(self.provider.fips(), FipsStatus::Unvalidated);
         Ok(ServerConfig {
             provider: self.provider,
             ignore_client_order: false,

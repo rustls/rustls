@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
+use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
     OutboundOpaque, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
@@ -105,8 +106,8 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
         Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
 
-    fn fips(&self) -> bool {
-        false // not FIPS approved
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated // not FIPS approved
     }
 }
 
@@ -133,7 +134,7 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
         Ok(ConnectionTrafficSecrets::Aes256Gcm { key, iv })
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }
@@ -161,7 +162,7 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
         Ok(ConnectionTrafficSecrets::Aes128Gcm { key, iv })
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }
@@ -375,7 +376,7 @@ impl Hkdf for AwsLcHkdf {
         crypto::hmac::Tag::new(hmac::sign(&hmac::Key::new(self.1, key.as_ref()), message).as_ref())
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }

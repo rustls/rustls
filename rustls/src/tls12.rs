@@ -3,6 +3,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
+use pki_types::FipsStatus;
 use zeroize::Zeroizing;
 
 use crate::common_state::{Protocol, Side};
@@ -79,11 +80,12 @@ impl Tls12CipherSuite {
             .collect()
     }
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
+    /// Return the FIPS validation status of this implementation.
     ///
-    /// This means all the constituent parts that do cryptography return `true` for `fips()`.
-    pub fn fips(&self) -> bool {
-        self.common.fips() && self.prf_provider.fips() && self.aead_alg.fips()
+    /// This is the combination of the constituent parts of the cipher suite.
+    pub fn fips(&self) -> FipsStatus {
+        let status = Ord::min(self.common.fips(), self.prf_provider.fips());
+        Ord::min(status, self.aead_alg.fips())
     }
 }
 

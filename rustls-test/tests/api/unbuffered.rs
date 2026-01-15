@@ -3,6 +3,7 @@
 use core::num::NonZeroUsize;
 use std::sync::Arc;
 
+use pki_types::FipsStatus;
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage};
@@ -883,7 +884,10 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
 #[test]
 fn tls13_packed_handshake() {
     // transcript requires selection of X25519
-    if provider_is_fips() {
+    if matches!(
+        provider_is_fips(),
+        FipsStatus::Pending | FipsStatus::Certified { .. }
+    ) {
         return;
     }
 

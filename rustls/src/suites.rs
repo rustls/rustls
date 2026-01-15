@@ -1,5 +1,7 @@
 use core::fmt;
 
+use pki_types::FipsStatus;
+
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::kx::KeyExchangeAlgorithm;
@@ -51,7 +53,7 @@ impl CipherSuiteCommon {
     /// Return `true` if this is backed by a FIPS-approved implementation.
     ///
     /// This means all the constituent parts that do cryptography return `true` for `fips()`.
-    pub fn fips(&self) -> bool {
+    pub fn fips(&self) -> FipsStatus {
         self.hash_provider.fips()
     }
 }

@@ -1,8 +1,8 @@
 use alloc::boxed::Box;
 
 use aws_lc_rs::digest;
-use rustls::crypto;
-use rustls::crypto::HashAlgorithm;
+use pki_types::FipsStatus;
+use rustls::crypto::{self, HashAlgorithm};
 
 pub(crate) static SHA256: Hash = Hash(&digest::SHA256, HashAlgorithm::SHA256);
 pub(crate) static SHA384: Hash = Hash(&digest::SHA384, HashAlgorithm::SHA384);
@@ -28,7 +28,7 @@ impl crypto::hash::Hash for Hash {
         self.1
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }

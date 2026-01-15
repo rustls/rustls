@@ -7,6 +7,7 @@ use std::fmt;
 use std::io::{Read, Write};
 use std::sync::Arc;
 
+use pki_types::FipsStatus;
 use rustls::client::Resumption;
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{CertificateIdentity, Identity};
@@ -160,11 +161,11 @@ fn resumption_combinations() {
 }
 
 fn expected_kx_for_version(version: ProtocolVersion) -> NamedGroup {
-    match (
-        version,
-        super::provider_is_aws_lc_rs(),
+    let is_fips = matches!(
         super::provider_is_fips(),
-    ) {
+        FipsStatus::Pending | FipsStatus::Certified { .. }
+    );
+    match (version, super::provider_is_aws_lc_rs(), is_fips) {
         (ProtocolVersion::TLSv1_3, true, _) => NamedGroup::X25519MLKEM768,
         (_, _, true) => NamedGroup::secp256r1,
         (_, _, _) => NamedGroup::X25519,

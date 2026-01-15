@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use pki_types::{DnsName, SubjectPublicKeyInfoDer};
+use pki_types::{DnsName, FipsStatus, SubjectPublicKeyInfoDer};
 use provider::cipher_suite;
 use rustls::client::Resumption;
 use rustls::crypto::cipher::{EncodedMessage, Payload};
@@ -885,7 +885,7 @@ fn test_ciphersuites() -> Vec<(ProtocolVersion, KeyType, CipherSuite)> {
         ),
     ];
 
-    if !provider_is_fips() {
+    if matches!(provider_is_fips(), FipsStatus::Unvalidated) {
         v.extend_from_slice(&[
             (
                 ProtocolVersion::TLSv1_3,
@@ -1006,7 +1006,11 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
 }
 
 fn expected_kx_for_version(version: ProtocolVersion) -> NamedGroup {
-    match (version, provider_is_aws_lc_rs(), provider_is_fips()) {
+    let is_fips = matches!(
+        provider_is_fips(),
+        FipsStatus::Pending | FipsStatus::Certified { .. }
+    );
+    match (version, provider_is_aws_lc_rs(), is_fips) {
         (ProtocolVersion::TLSv1_3, true, _) => NamedGroup::X25519MLKEM768,
         (_, _, true) => NamedGroup::secp256r1,
         (_, _, _) => NamedGroup::X25519,
@@ -1297,32 +1301,47 @@ fn test_connection_fips_service_indicator() {
 
 #[test]
 fn test_client_fips_service_indicator_includes_require_ems() {
-    if !provider_is_fips() {
+    if !matches!(
+        provider_is_fips(),
+        FipsStatus::Pending | FipsStatus::Certified { .. }
+    ) {
         return;
     }
 
     let mut client_config = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-    assert!(client_config.fips());
+    assert!(matches!(
+        client_config.fips(),
+        FipsStatus::Pending | FipsStatus::Certified { .. }
+    ));
     client_config.require_ems = false;
-    assert!(!client_config.fips());
+    assert!(matches!(client_config.fips(), FipsStatus::Unvalidated));
 }
 
 #[test]
 fn test_server_fips_service_indicator_includes_require_ems() {
-    if !provider_is_fips() {
+    if !matches!(
+        provider_is_fips(),
+        FipsStatus::Pending | FipsStatus::Certified { .. }
+    ) {
         return;
     }
 
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-    assert!(server_config.fips());
+    assert!(matches!(
+        server_config.fips(),
+        FipsStatus::Pending | FipsStatus::Certified { .. }
+    ));
     server_config.require_ems = false;
-    assert!(!server_config.fips());
+    assert!(matches!(server_config.fips(), FipsStatus::Unvalidated));
 }
 
 #[cfg(feature = "aws-lc-rs")]
 #[test]
 fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
-    if !provider_is_fips() {
+    if !matches!(
+        provider_is_fips(),
+        FipsStatus::Pending | FipsStatus::Certified { .. }
+    ) {
         return;
     }
 
@@ -1491,7 +1510,10 @@ fn test_illegal_client_renegotiation_attempt_during_tls12_handshake() {
 #[test]
 fn tls13_packed_handshake() {
     // transcript requires selection of X25519
-    if provider_is_fips() {
+    if matches!(
+        provider_is_fips(),
+        FipsStatus::Pending | FipsStatus::Certified { .. }
+    ) {
         return;
     }
 

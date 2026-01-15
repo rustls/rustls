@@ -1,5 +1,7 @@
 use alloc::boxed::Box;
 
+use pki_types::FipsStatus;
+
 use super::hmac;
 use super::kx::ActiveKeyExchange;
 use crate::enums::ProtocolVersion;
@@ -76,9 +78,9 @@ pub trait Prf: Send + Sync {
     /// several `PRF(...)` calls.
     fn new_secret(&self, master_secret: &[u8; 48]) -> Box<dyn PrfSecret>;
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
-    fn fips(&self) -> bool {
-        false
+    /// Return the FIPS validation status of this implementation.
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 

@@ -5,7 +5,7 @@ use std::prelude::v1::*;
 use std::sync::OnceLock;
 use std::vec;
 
-use pki_types::{CertificateDer, ServerName};
+use pki_types::{CertificateDer, FipsStatus, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
@@ -130,7 +130,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
         .with_root_certificates(roots())
         .with_no_client_auth()
         .unwrap();
-    if config.provider().fips() {
+    if !matches!(config.provider().fips(), FipsStatus::Unvalidated) {
         assert!(config.require_ems);
     } else {
         config.require_ems = true;
