@@ -471,4 +471,5 @@ impl crate::conn::SideData for ClientSide {}
 
 impl crate::conn::private::Side for ClientSide {
     type Data = ClientConnectionData;
+    type State = super::hs::ClientState;
 }

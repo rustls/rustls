@@ -424,7 +424,7 @@ mod connection {
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
-            process_new_packets(
+            process_new_packets::<Side>(
                 &mut self.deframer_buffer,
                 &mut self.core.state,
                 &mut self.core.common.recv,
