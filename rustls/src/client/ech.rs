@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use pki_types::{DnsName, EchConfigListBytes, ServerName};
+use pki_types::{DnsName, EchConfigListBytes, FipsStatus, ServerName};
 use subtle::ConstantTimeEq;
 
 use super::config::ClientConfig;
@@ -55,7 +55,7 @@ pub enum EchMode {
 
 impl EchMode {
     /// Returns true if the ECH mode will use a FIPS approved HPKE suite.
-    pub fn fips(&self) -> bool {
+    pub fn fips(&self) -> FipsStatus {
         match self {
             Self::Enable(ech_config) => ech_config.suite.fips(),
             Self::Grease(grease_config) => grease_config.suite.fips(),

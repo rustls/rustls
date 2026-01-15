@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use core::mem;
 
+use pki_types::FipsStatus;
 use zeroize::Zeroize;
 
 /// A concrete HMAC implementation, for a single cryptographic hash function.
@@ -14,9 +15,9 @@ pub trait Hmac: Send + Sync {
     /// Give the length of the underlying hash function.  In RFC2104 terminology this is `L`.
     fn hash_output_len(&self) -> usize;
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
-    fn fips(&self) -> bool {
-        false
+    /// Return the FIPS validation status of this implementation.
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 

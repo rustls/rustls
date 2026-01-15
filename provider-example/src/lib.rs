@@ -27,7 +27,7 @@ use rustls::crypto::{
     SignatureScheme, SigningKey, TicketProducer, TicketerFactory,
 };
 use rustls::error::{Error, OtherError};
-use rustls::pki_types::PrivateKeyDer;
+use rustls::pki_types::{FipsStatus, PrivateKeyDer};
 use rustls::version::{TLS12_VERSION, TLS13_VERSION};
 use rustls::{Tls12CipherSuite, Tls13CipherSuite};
 
@@ -98,8 +98,8 @@ impl TicketerFactory for Provider {
         }
     }
 
-    fn fips(&self) -> bool {
-        false
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 

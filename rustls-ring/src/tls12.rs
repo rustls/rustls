@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 
+use pki_types::FipsStatus;
 use ring::aead;
 use rustls::crypto::cipher::{
     AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
@@ -167,7 +168,7 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         })
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }
@@ -217,8 +218,8 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
         })
     }
 
-    fn fips(&self) -> bool {
-        false // not fips approved
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated // not fips approved
     }
 }
 

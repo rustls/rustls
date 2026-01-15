@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 
+use pki_types::FipsStatus;
 use ring::hmac;
 use rustls::crypto;
 
@@ -19,7 +20,7 @@ impl crypto::hmac::Hmac for Hmac {
         self.0.digest_algorithm().output_len()
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }

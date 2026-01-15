@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 
 use aws_lc_rs::hmac;
+use pki_types::FipsStatus;
 use rustls::crypto;
 
 pub(crate) static HMAC_SHA256: Hmac = Hmac(&hmac::HMAC_SHA256);
@@ -19,7 +20,7 @@ impl crypto::hmac::Hmac for Hmac {
         self.0.digest_algorithm().output_len()
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         super::fips()
     }
 }

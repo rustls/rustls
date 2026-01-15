@@ -4,7 +4,7 @@ use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 
-use pki_types::{PrivateKeyDer, ServerName, UnixTime};
+use pki_types::{FipsStatus, PrivateKeyDer, ServerName, UnixTime};
 
 use super::ech::EchMode;
 #[cfg(feature = "std")]
@@ -212,20 +212,21 @@ impl ClientConfig {
         danger::DangerousClientConfig { cfg: self }
     }
 
-    /// Return true if connections made with this `ClientConfig` will
-    /// operate in FIPS mode.
+    /// Return the FIPS validation status for connections made with this configuration.
     ///
     /// This is different from [`CryptoProvider::fips()`]: [`CryptoProvider::fips()`]
     /// is concerned only with cryptography, whereas this _also_ covers TLS-level
     /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-    pub fn fips(&self) -> bool {
-        let mut is_fips = self.domain.provider.fips() && self.require_ems;
-
-        if let Some(ech_mode) = &self.ech_mode {
-            is_fips = is_fips && ech_mode.fips();
+    pub fn fips(&self) -> FipsStatus {
+        if !self.require_ems {
+            return FipsStatus::Unvalidated;
         }
 
-        is_fips
+        let status = self.domain.provider.fips();
+        match &self.ech_mode {
+            Some(ech) => Ord::min(status, ech.fips()),
+            None => status,
+        }
     }
 
     /// Return the crypto provider used to construct this client configuration.
@@ -738,7 +739,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             };
         }
 
-        let require_ems = self.provider.fips();
+        let require_ems = !matches!(self.provider.fips(), FipsStatus::Unvalidated);
         Ok(ClientConfig {
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),

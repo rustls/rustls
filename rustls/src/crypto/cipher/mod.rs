@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use core::fmt;
 
+use pki_types::FipsStatus;
 use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
@@ -44,8 +45,8 @@ pub trait Tls13AeadAlgorithm: Send + Sync {
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError>;
 
     /// Return `true` if this is backed by a FIPS-approved implementation.
-    fn fips(&self) -> bool {
-        false
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 
@@ -89,9 +90,9 @@ pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
         explicit: &[u8],
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError>;
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
-    fn fips(&self) -> bool {
-        false
+    /// Return the FIPS validation status of this implementation.
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 
@@ -421,8 +422,8 @@ impl Tls12AeadAlgorithm for FakeAead {
         Err(UnsupportedOperationError)
     }
 
-    fn fips(&self) -> bool {
-        false
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 

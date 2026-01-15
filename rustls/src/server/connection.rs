@@ -52,7 +52,7 @@ mod buffered {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use pki_types::DnsName;
+    use pki_types::{DnsName, FipsStatus};
 
     use super::{
         Accepted, Accepting, Protocol, ServerConfig, ServerConnectionData, ServerExtensionsInput,
@@ -167,12 +167,12 @@ mod buffered {
             }
         }
 
-        /// Return true if the connection was made with a `ServerConfig` that is FIPS compatible.
+        /// Return the FIPS validation status of the connection's `ServerConfig`.
         ///
         /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
         /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
         /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-        pub fn fips(&self) -> bool {
+        pub fn fips(&self) -> FipsStatus {
             self.inner.core.common_state.fips
         }
 

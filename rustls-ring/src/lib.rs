@@ -18,7 +18,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::time::Duration;
 
-use pki_types::PrivateKeyDer;
+use pki_types::{FipsStatus, PrivateKeyDer};
 use rustls::crypto::kx::SupportedKxGroup;
 use rustls::crypto::{
     CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom, SignatureScheme, SigningKey,
@@ -132,7 +132,7 @@ impl TicketerFactory for Ring {
         }
     }
 
-    fn fips(&self) -> bool {
+    fn fips(&self) -> FipsStatus {
         fips()
     }
 }
@@ -270,9 +270,9 @@ mod ring_shim {
     }
 }
 
-/// Return `true` if this is backed by a FIPS-approved implementation.
-pub fn fips() -> bool {
-    false
+/// Return the FIPS validation status of this implementation.
+pub fn fips() -> FipsStatus {
+    FipsStatus::Unvalidated
 }
 
 const SIX_HOURS: Duration = Duration::from_secs(6 * 60 * 60);

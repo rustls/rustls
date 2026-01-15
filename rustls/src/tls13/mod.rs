@@ -1,5 +1,7 @@
 use core::fmt;
 
+use pki_types::FipsStatus;
+
 use crate::common_state::Protocol;
 use crate::crypto::{self, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
@@ -57,10 +59,10 @@ impl Tls13CipherSuite {
             .then_some(prev)
     }
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
+    /// Return the FIPS validation status of this implementation.
     ///
-    /// This means all the constituent parts that do cryptography return `true` for `fips()`.
-    pub fn fips(&self) -> bool {
+    /// This is the combination of the constituent parts of the cipher suite.
+    pub fn fips(&self) -> FipsStatus {
         let Self {
             common,
             protocol_version: _,
@@ -68,10 +70,13 @@ impl Tls13CipherSuite {
             aead_alg,
             quic,
         } = self;
-        common.fips()
-            && hkdf_provider.fips()
-            && aead_alg.fips()
-            && quic.map(|q| q.fips()).unwrap_or(true)
+
+        let mut status = Ord::min(common.fips(), hkdf_provider.fips());
+        status = Ord::min(status, aead_alg.fips());
+        match quic {
+            Some(quic) => Ord::min(status, quic.fips()),
+            None => status,
+        }
     }
 
     /// Returns a `quic::Suite` for the ciphersuite, if supported.

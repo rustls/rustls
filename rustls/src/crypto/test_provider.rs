@@ -67,10 +67,6 @@ impl crypto::TicketerFactory for Provider {
     fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error> {
         Ok(Arc::new(Ticketer))
     }
-
-    fn fips(&self) -> bool {
-        false
-    }
 }
 
 pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {

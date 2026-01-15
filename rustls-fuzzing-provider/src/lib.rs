@@ -20,7 +20,7 @@ use rustls::crypto::{
 use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{PeerIncompatible, PeerMisbehaved};
 use rustls::pki_types::{
-    AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
+    AlgorithmIdentifier, CertificateDer, FipsStatus, InvalidSignature, PrivateKeyDer,
     SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
 use rustls::server::{ClientHello, ServerCredentialResolver};
@@ -114,8 +114,8 @@ impl crypto::TicketerFactory for Provider {
         Ok(Arc::new(Ticketer))
     }
 
-    fn fips(&self) -> bool {
-        false
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 

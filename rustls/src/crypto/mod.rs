@@ -5,7 +5,7 @@ use core::borrow::Borrow;
 use core::fmt::Debug;
 use core::time::Duration;
 
-use pki_types::PrivateKeyDer;
+use pki_types::{FipsStatus, PrivateKeyDer};
 
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error};
@@ -245,13 +245,13 @@ impl CryptoProvider {
         static_default::get_default()
     }
 
-    /// Returns `true` if this `CryptoProvider` is operating in FIPS mode.
+    /// Return the FIPS validation status for this `CryptoProvider`.
     ///
     /// This covers only the cryptographic parts of FIPS approval.  There are
     /// also TLS protocol-level recommendations made by NIST.  You should
     /// prefer to call [`ClientConfig::fips()`] or [`ServerConfig::fips()`]
     /// which take these into account.
-    pub fn fips(&self) -> bool {
+    pub fn fips(&self) -> FipsStatus {
         let Self {
             tls12_cipher_suites,
             tls13_cipher_suites,
@@ -261,17 +261,24 @@ impl CryptoProvider {
             key_provider,
             ticketer_factory,
         } = self;
-        tls12_cipher_suites
-            .iter()
-            .all(|cs| cs.fips())
-            && tls13_cipher_suites
-                .iter()
-                .all(|cs| cs.fips())
-            && kx_groups.iter().all(|kx| kx.fips())
-            && signature_verification_algorithms.fips()
-            && secure_random.fips()
-            && key_provider.fips()
-            && ticketer_factory.fips()
+
+        let mut status = Ord::min(
+            signature_verification_algorithms.fips(),
+            secure_random.fips(),
+        );
+        status = Ord::min(status, key_provider.fips());
+        status = Ord::min(status, ticketer_factory.fips());
+        for cs in tls12_cipher_suites.iter() {
+            status = Ord::min(status, cs.fips());
+        }
+        for cs in tls13_cipher_suites.iter() {
+            status = Ord::min(status, cs.fips());
+        }
+        for kx in kx_groups.iter() {
+            status = Ord::min(status, kx.fips());
+        }
+
+        status
     }
 
     pub(crate) fn consistency_check(&self) -> Result<(), Error> {
@@ -404,9 +411,9 @@ pub trait SecureRandom: Send + Sync + Debug {
     /// rustls: it is assumed that the cryptography library provides for this itself.
     fn fill(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed>;
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
-    fn fips(&self) -> bool {
-        false
+    /// Return the FIPS validation status of this implementation.
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 
@@ -431,12 +438,12 @@ pub trait KeyProvider: Send + Sync + Debug {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Box<dyn SigningKey>, Error>;
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
+    /// Return the FIPS validation status for this key provider.
     ///
-    /// If this returns `true`, that must be the case for all possible key types
-    /// supported by [`KeyProvider::load_private_key()`].
-    fn fips(&self) -> bool {
-        false
+    /// The returned status must cover all possible key types supported by
+    /// [`KeyProvider::load_private_key()`].
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 }
 
@@ -449,8 +456,10 @@ pub trait TicketerFactory: Debug + Send + Sync {
     /// Build a new `TicketProducer`.
     fn ticketer(&self) -> Result<Arc<dyn TicketProducer>, Error>;
 
-    /// Return `true` if this is backed by a FIPS-approved implementation.
-    fn fips(&self) -> bool;
+    /// Return the FIPS validation status of ticketers produced from here.
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
+    }
 }
 
 /// A trait for the ability to encrypt and decrypt tickets.

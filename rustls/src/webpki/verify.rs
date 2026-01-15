@@ -3,7 +3,8 @@ use core::fmt;
 use core::hash::{Hash, Hasher};
 
 use pki_types::{
-    CertificateDer, ServerName, SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, UnixTime,
+    CertificateDer, FipsStatus, ServerName, SignatureVerificationAlgorithm,
+    SubjectPublicKeyInfoDer, UnixTime,
 };
 use webpki::ExtendedKeyUsage;
 
@@ -104,13 +105,24 @@ impl WebPkiSupportedAlgorithms {
             .ok_or_else(|| PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into())
     }
 
-    /// Return `true` if all cryptography is FIPS-approved.
-    pub fn fips(&self) -> bool {
-        self.all.iter().all(|alg| alg.fips())
-            && self
-                .mapping
-                .iter()
-                .all(|item| item.1.iter().all(|alg| alg.fips()))
+    /// Return the FIPS validation status of this implementation.
+    pub fn fips(&self) -> FipsStatus {
+        let algs = self
+            .all
+            .iter()
+            .map(|alg| alg.fips_status())
+            .min();
+        let mapped = self
+            .mapping
+            .iter()
+            .flat_map(|(_, algs)| algs.iter().map(|alg| alg.fips_status()))
+            .min();
+
+        match (algs, mapped) {
+            (Some(algs), Some(mapped)) => Ord::min(algs, mapped),
+            (Some(status), None) | (None, Some(status)) => status,
+            (None, None) => FipsStatus::Unvalidated,
+        }
     }
 }
 
