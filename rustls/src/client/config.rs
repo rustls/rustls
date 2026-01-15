@@ -124,8 +124,8 @@ pub struct ClientConfig {
     /// If set to `true`, requires the server to support the extended
     /// master secret extraction method defined in [RFC 7627].
     ///
-    /// The default is `true` if the `fips` crate feature is enabled,
-    /// `false` otherwise.
+    /// The default is `true` if the configured [`CryptoProvider`] is FIPS-compliant,
+    /// false otherwise.
     ///
     /// It must be set to `true` to meet FIPS requirement mentioned in section
     /// **D.Q Transition of the TLS 1.2 KDF to Support the Extended Master
@@ -738,6 +738,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             };
         }
 
+        let require_ems = self.provider.fips();
         Ok(ClientConfig {
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
@@ -746,7 +747,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             key_log: Arc::new(NoKeyLog {}),
             enable_secret_extraction: false,
             enable_early_data: false,
-            require_ems: cfg!(feature = "fips"),
+            require_ems,
             domain: SecurityDomain::new(
                 self.provider,
                 client_auth_cert_resolver,

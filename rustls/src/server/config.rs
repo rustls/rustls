@@ -181,8 +181,8 @@ pub struct ServerConfig {
     /// If set to `true`, requires the client to support the extended
     /// master secret extraction method defined in [RFC 7627].
     ///
-    /// The default is `true` if the "fips" crate feature is enabled,
-    /// `false` otherwise.
+    /// The default is `true` if the configured [`CryptoProvider`] is FIPS-compliant,
+    /// false otherwise.
     ///
     /// It must be set to `true` to meet FIPS requirement mentioned in section
     /// **D.Q Transition of the TLS 1.2 KDF to Support the Extended Master
@@ -666,6 +666,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         cert_resolver: Arc<dyn ServerCredentialResolver>,
     ) -> Result<ServerConfig, Error> {
         self.provider.consistency_check()?;
+        let require_ems = self.provider.fips();
         Ok(ServerConfig {
             provider: self.provider,
             ignore_client_order: false,
@@ -683,7 +684,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             max_early_data_size: 0,
             send_half_rtt_data: false,
             send_tls13_tickets: 2,
-            require_ems: cfg!(feature = "fips"),
+            require_ems,
             time_provider: self.time_provider,
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),

@@ -167,7 +167,10 @@ pub use crate::suites::CipherSuiteCommon;
 /// [`dalek-cryptography`]: https://github.com/dalek-cryptography
 ///
 /// # FIPS-approved cryptography
-/// The `fips` crate feature enables use of the `aws-lc-rs` crate in FIPS mode.
+///
+/// Each element of a `CryptoProvider` may be implemented using FIPS-approved cryptography,
+/// and the FIPS status of the overall provider is derived from the status of its elements.
+/// Call [`CryptoProvider::fips()`] to determine the FIPS status of a given provider.
 ///
 /// You can verify the configuration at runtime by checking
 /// [`ServerConfig::fips()`]/[`ClientConfig::fips()`] return `true`.
