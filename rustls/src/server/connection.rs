@@ -54,6 +54,7 @@ mod buffered {
 
     use super::{
         Accepted, Accepting, Protocol, ServerConfig, ServerConnectionData, ServerExtensionsInput,
+        ServerSide,
     };
     use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Side};
@@ -69,7 +70,7 @@ mod buffered {
     /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
     /// Read data from the peer using the `io::Read` trait implementation.
     pub struct ServerConnection {
-        pub(super) inner: ConnectionCommon<ServerConnectionData>,
+        pub(super) inner: ConnectionCommon<ServerSide>,
     }
 
     impl ServerConnection {
@@ -187,7 +188,7 @@ mod buffered {
     }
 
     impl Deref for ServerConnection {
-        type Target = ConnectionCommon<ServerConnectionData>;
+        type Target = ConnectionCommon<ServerSide>;
 
         fn deref(&self) -> &Self::Target {
             &self.inner
@@ -253,7 +254,7 @@ mod buffered {
     /// # }
     /// ```
     pub struct Acceptor {
-        inner: Option<ConnectionCommon<ServerConnectionData>>,
+        inner: Option<ConnectionCommon<ServerSide>>,
     }
 
     impl Default for Acceptor {
@@ -340,7 +341,7 @@ mod buffered {
     impl AcceptedAlert {
         pub(super) fn from_error(
             error: Error,
-            mut conn: ConnectionCommon<ServerConnectionData>,
+            mut conn: ConnectionCommon<ServerSide>,
         ) -> (Error, Self) {
             conn.core
                 .common_state
@@ -382,11 +383,11 @@ mod buffered {
     ///
     /// This type implements [`io::Read`].
     pub struct ReadEarlyData<'a> {
-        common: &'a mut ConnectionCommon<ServerConnectionData>,
+        common: &'a mut ConnectionCommon<ServerSide>,
     }
 
     impl<'a> ReadEarlyData<'a> {
-        fn new(common: &'a mut ConnectionCommon<ServerConnectionData>) -> Self {
+        fn new(common: &'a mut ConnectionCommon<ServerSide>) -> Self {
             ReadEarlyData { common }
         }
 
@@ -431,7 +432,7 @@ pub use buffered::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 ///
 /// See the [`crate::unbuffered`] module docs for more details
 pub struct UnbufferedServerConnection {
-    inner: UnbufferedConnectionCommon<ServerConnectionData>,
+    inner: UnbufferedConnectionCommon<ServerSide>,
 }
 
 impl UnbufferedServerConnection {
@@ -465,7 +466,7 @@ impl UnbufferedServerConnection {
     /// for calling this method.
     pub fn dangerous_into_kernel_connection(
         self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<ServerConnectionData>), Error> {
+    ) -> Result<(ExtractedSecrets, KernelConnection<ServerSide>), Error> {
         self.inner
             .core
             .dangerous_into_kernel_connection()
@@ -473,7 +474,7 @@ impl UnbufferedServerConnection {
 }
 
 impl Deref for UnbufferedServerConnection {
-    type Target = UnbufferedConnectionCommon<ServerConnectionData>;
+    type Target = UnbufferedConnectionCommon<ServerSide>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -486,7 +487,7 @@ impl DerefMut for UnbufferedServerConnection {
     }
 }
 
-impl UnbufferedConnectionCommon<ServerConnectionData> {
+impl UnbufferedConnectionCommon<ServerSide> {
     pub(crate) fn pop_early_data(&mut self) -> Option<Vec<u8>> {
         self.core.side.early_data.pop()
     }
@@ -501,7 +502,7 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
 #[cfg(feature = "std")]
 pub struct Accepted {
-    connection: ConnectionCommon<ServerConnectionData>,
+    connection: ConnectionCommon<ServerSide>,
     input: Input<'static>,
     sig_schemes: Vec<SignatureScheme>,
 }
@@ -691,7 +692,7 @@ impl Debug for EarlyDataState {
     }
 }
 
-impl ConnectionCore<ServerConnectionData> {
+impl ConnectionCore<ServerSide> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput<'static>,
@@ -720,7 +721,7 @@ impl ConnectionCore<ServerConnectionData> {
 
 /// State associated with a server connection.
 #[derive(Default, Debug)]
-pub struct ServerConnectionData {
+pub(crate) struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
     early_data: EarlyDataState,
@@ -752,7 +753,16 @@ impl Output for ServerConnectionData {
     }
 }
 
-impl crate::conn::SideData for ServerConnectionData {}
+/// State associated with a server connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ServerSide;
+
+impl crate::conn::SideData for ServerSide {}
+
+impl crate::conn::private::SideData for ServerSide {
+    type Data = ServerConnectionData;
+}
 
 #[cfg(feature = "std")]
 #[cfg(test)]

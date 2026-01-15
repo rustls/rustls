@@ -12,7 +12,7 @@ pub use config::{
 mod connection;
 #[cfg(feature = "std")]
 pub use connection::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
-pub use connection::{ServerConnectionData, UnbufferedServerConnection};
+pub use connection::{ServerSide, UnbufferedServerConnection};
 
 pub(crate) mod handy;
 pub use handy::NoServerSessionStorage;

@@ -7,32 +7,32 @@ use core::num::NonZeroUsize;
 use core::{fmt, mem};
 
 use super::UnbufferedConnectionCommon;
-use crate::client::ClientConnectionData;
+use crate::client::ClientSide;
 use crate::common_state::{AppDataOutput, Context};
 use crate::conn::SideData;
 use crate::crypto::cipher::{Decrypted, Payload};
 use crate::error::Error;
 use crate::msgs::deframer::{DeframerSliceBuffer, Delocator, Locator};
-use crate::server::ServerConnectionData;
+use crate::server::ServerSide;
 
-impl UnbufferedConnectionCommon<ClientConnectionData> {
+impl UnbufferedConnectionCommon<ClientSide> {
     /// Processes the TLS records in `incoming_tls` buffer until a new [`UnbufferedStatus`] is
     /// reached.
     pub fn process_tls_records<'c, 'i>(
         &'c mut self,
         incoming_tls: &'i mut [u8],
-    ) -> UnbufferedStatus<'c, 'i, ClientConnectionData> {
+    ) -> UnbufferedStatus<'c, 'i, ClientSide> {
         self.process_tls_records_common(incoming_tls, |_| false, |_, _| unreachable!())
     }
 }
 
-impl UnbufferedConnectionCommon<ServerConnectionData> {
+impl UnbufferedConnectionCommon<ServerSide> {
     /// Processes the TLS records in `incoming_tls` buffer until a new [`UnbufferedStatus`] is
     /// reached.
     pub fn process_tls_records<'c, 'i>(
         &'c mut self,
         incoming_tls: &'i mut [u8],
-    ) -> UnbufferedStatus<'c, 'i, ServerConnectionData> {
+    ) -> UnbufferedStatus<'c, 'i, ServerSide> {
         self.process_tls_records_common(
             incoming_tls,
             |conn| conn.peek_early_data().is_some(),
@@ -401,9 +401,9 @@ pub struct ReadEarlyData<'c, 'i, Side: SideData> {
     chunk: Option<Vec<u8>>,
 }
 
-impl<'c, 'i> ReadEarlyData<'c, 'i, ServerConnectionData> {
+impl<'c, 'i> ReadEarlyData<'c, 'i, ServerSide> {
     fn new(
-        conn: &'c mut UnbufferedConnectionCommon<ServerConnectionData>,
+        conn: &'c mut UnbufferedConnectionCommon<ServerSide>,
         _incoming_tls: &'i mut [u8],
     ) -> Self {
         Self {

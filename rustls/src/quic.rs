@@ -24,7 +24,7 @@ mod connection {
     use pki_types::{DnsName, ServerName};
 
     use super::{DirectionalKeys, KeyChange, Version};
-    use crate::client::{ClientConfig, ClientConnectionData};
+    use crate::client::{ClientConfig, ClientSide};
     use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
@@ -34,7 +34,7 @@ mod connection {
     use crate::msgs::handshake::{
         ClientExtensionsInput, ServerExtensionsInput, TransportParameters,
     };
-    use crate::server::{ServerConfig, ServerConnectionData};
+    use crate::server::{ServerConfig, ServerSide};
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
 
@@ -110,7 +110,7 @@ mod connection {
 
     /// A QUIC client connection.
     pub struct ClientConnection {
-        inner: ConnectionCommon<ClientConnectionData>,
+        inner: ConnectionCommon<ClientSide>,
     }
 
     impl ClientConnection {
@@ -201,7 +201,7 @@ mod connection {
     }
 
     impl Deref for ClientConnection {
-        type Target = ConnectionCommon<ClientConnectionData>;
+        type Target = ConnectionCommon<ClientSide>;
 
         fn deref(&self) -> &Self::Target {
             &self.inner
@@ -229,7 +229,7 @@ mod connection {
 
     /// A QUIC server connection.
     pub struct ServerConnection {
-        inner: ConnectionCommon<ServerConnectionData>,
+        inner: ConnectionCommon<ServerSide>,
     }
 
     impl ServerConnection {
@@ -340,7 +340,7 @@ mod connection {
     }
 
     impl Deref for ServerConnection {
-        type Target = ConnectionCommon<ServerConnectionData>;
+        type Target = ConnectionCommon<ServerSide>;
 
         fn deref(&self) -> &Self::Target {
             &self.inner

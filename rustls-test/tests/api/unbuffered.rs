@@ -3,10 +3,10 @@
 use core::num::NonZeroUsize;
 use std::sync::Arc;
 
-use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
+use rustls::client::{ClientSide, EarlyDataError, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage};
-use rustls::server::{ServerConnectionData, UnbufferedServerConnection};
+use rustls::server::{ServerSide, UnbufferedServerConnection};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, ReadTraffic,
     UnbufferedConnectionCommon, UnbufferedStatus, WriteTraffic,
@@ -1083,7 +1083,7 @@ struct Outcome {
 }
 
 fn advance_client(
-    conn: &mut UnbufferedConnectionCommon<ClientConnectionData>,
+    conn: &mut UnbufferedConnectionCommon<ClientSide>,
     buffers: &mut Buffers,
     actions: Actions<'_>,
     transcript: &mut Vec<String>,
@@ -1129,7 +1129,7 @@ fn advance_client(
 }
 
 fn advance_server(
-    conn: &mut UnbufferedConnectionCommon<ServerConnectionData>,
+    conn: &mut UnbufferedConnectionCommon<ServerSide>,
     buffers: &mut Buffers,
     actions: Actions<'_>,
     transcript: &mut Vec<String>,

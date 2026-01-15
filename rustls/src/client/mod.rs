@@ -22,9 +22,7 @@ pub use config::{
 mod connection;
 #[cfg(feature = "std")]
 pub use connection::{ClientConnection, WriteEarlyData};
-pub use connection::{
-    ClientConnectionData, EarlyDataError, MayEncryptEarlyData, UnbufferedClientConnection,
-};
+pub use connection::{ClientSide, EarlyDataError, MayEncryptEarlyData, UnbufferedClientConnection};
 
 mod ech;
 pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};

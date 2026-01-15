@@ -1025,12 +1025,12 @@ impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
 
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Box<dyn State>, Error>,
-    pub(crate) side: Side,
+    pub(crate) side: Side::Data,
     pub(crate) common_state: CommonState,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State>, side: Side, common_state: CommonState) -> Self {
+    pub(crate) fn new(state: Box<dyn State>, side: Side::Data, common_state: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -1231,6 +1231,13 @@ impl<Side: SideData> ConnectionCore<Side> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: Debug + Output {}
+pub trait SideData: private::SideData {}
+
+pub(crate) mod private {
+    pub(crate) trait SideData: super::Debug {
+        /// Data storage type.
+        type Data: super::Debug + super::Output;
+    }
+}
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

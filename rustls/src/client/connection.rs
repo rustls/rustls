@@ -29,7 +29,7 @@ mod buffered {
 
     use pki_types::ServerName;
 
-    use super::{ClientConnectionData, ClientExtensionsInput};
+    use super::{ClientExtensionsInput, ClientSide};
     use crate::KeyingMaterialExporter;
     use crate::client::EchStatus;
     use crate::client::config::ClientConfig;
@@ -42,7 +42,7 @@ mod buffered {
 
     /// This represents a single TLS client connection.
     pub struct ClientConnection {
-        inner: ConnectionCommon<ClientConnectionData>,
+        inner: ConnectionCommon<ClientSide>,
     }
 
     impl fmt::Debug for ClientConnection {
@@ -159,7 +159,7 @@ mod buffered {
     }
 
     impl Deref for ClientConnection {
-        type Target = ConnectionCommon<ClientConnectionData>;
+        type Target = ConnectionCommon<ClientSide>;
 
         fn deref(&self) -> &Self::Target {
             &self.inner
@@ -265,7 +265,7 @@ mod buffered {
 #[cfg(feature = "std")]
 pub use buffered::{ClientConnection, WriteEarlyData};
 
-impl ConnectionCore<ClientConnectionData> {
+impl ConnectionCore<ClientSide> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
@@ -302,7 +302,7 @@ impl ConnectionCore<ClientConnectionData> {
 ///
 /// See the [`crate::unbuffered`] module docs for more details
 pub struct UnbufferedClientConnection {
-    inner: UnbufferedConnectionCommon<ClientConnectionData>,
+    inner: UnbufferedConnectionCommon<ClientSide>,
 }
 
 impl UnbufferedClientConnection {
@@ -363,7 +363,7 @@ impl UnbufferedClientConnection {
     /// for calling this method.
     pub fn dangerous_into_kernel_connection(
         self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<ClientConnectionData>), Error> {
+    ) -> Result<(ExtractedSecrets, KernelConnection<ClientSide>), Error> {
         self.inner
             .core
             .dangerous_into_kernel_connection()
@@ -376,7 +376,7 @@ impl UnbufferedClientConnection {
 }
 
 impl Deref for UnbufferedClientConnection {
-    type Target = UnbufferedConnectionCommon<ClientConnectionData>;
+    type Target = UnbufferedConnectionCommon<ClientSide>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -389,7 +389,7 @@ impl DerefMut for UnbufferedClientConnection {
     }
 }
 
-impl TransmitTlsData<'_, ClientConnectionData> {
+impl TransmitTlsData<'_, ClientSide> {
     /// returns an adapter that allows encrypting early (RTT-0) data before transmitting the
     /// already encoded TLS data
     ///
@@ -411,7 +411,7 @@ impl TransmitTlsData<'_, ClientConnectionData> {
 
 /// Allows encrypting early (RTT-0) data
 pub struct MayEncryptEarlyData<'c> {
-    conn: &'c mut UnbufferedConnectionCommon<ClientConnectionData>,
+    conn: &'c mut UnbufferedConnectionCommon<ClientSide>,
 }
 
 impl MayEncryptEarlyData<'_> {
@@ -558,9 +558,8 @@ impl fmt::Display for EarlyDataError {
 #[cfg(feature = "std")]
 impl core::error::Error for EarlyDataError {}
 
-/// State associated with a client connection.
 #[derive(Debug)]
-pub struct ClientConnectionData {
+pub(crate) struct ClientConnectionData {
     early_data: EarlyData,
     ech_status: EchStatus,
 }
@@ -588,4 +587,13 @@ impl Output for ClientConnectionData {
     }
 }
 
-impl crate::conn::SideData for ClientConnectionData {}
+/// State associated with a client connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ClientSide;
+
+impl crate::conn::SideData for ClientSide {}
+
+impl crate::conn::private::SideData for ClientSide {
+    type Data = ClientConnectionData;
+}
