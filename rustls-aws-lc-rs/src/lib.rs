@@ -1,4 +1,20 @@
 //! A `CryptoProvider` implementation backed by *aws-lc-rs*.
+//!
+//! # aws-lc-rs FIPS approval status
+//!
+//! This is covered by [FIPS 140-3 certificate #4816][cert-4816].
+//! See [the security policy][policy-4816] for precisely which
+//! environments and functions this certificate covers.
+//!
+//! Later releases of aws-lc-rs may be covered by later certificates,
+//! or be pending certification.
+//!
+//! For the most up-to-date details see the latest documentation
+//! for the [`aws-lc-fips-sys`] crate.
+//!
+//! [`aws-lc-fips-sys`]: https://crates.io/crates/aws-lc-fips-sys
+//! [cert-4816]: https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4816
+//! [policy-4816]: https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp4816.pdf
 
 #![no_std]
 #![warn(clippy::exhaustive_enums, clippy::exhaustive_structs, missing_docs)]
