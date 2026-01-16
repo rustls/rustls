@@ -141,7 +141,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     .aligned();
                 let mut cx = Context {
                     common: &mut self.core.common_state,
-                    data: &mut self.core.side,
+                    side: &mut self.core.side,
                     app_data_output: &mut AppDataOutput {
                         plaintext_locator: &plaintext_locator,
                         received_plaintext: &mut received_plaintext,

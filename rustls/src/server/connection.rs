@@ -571,7 +571,7 @@ impl Accepted {
         };
         let mut cx = Context {
             common: &mut self.connection.core.common_state,
-            data: &mut self.connection.core.side,
+            side: &mut self.connection.core.side,
             // `ExpectClientHello::with_input` won't read borrowed plaintext
             app_data_output: &mut NullOutput,
         };

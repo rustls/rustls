@@ -281,7 +281,7 @@ impl ConnectionCore<ClientSide> {
 
         let mut cx = Context {
             common: &mut common_state,
-            data: &mut data,
+            side: &mut data,
             // `start_handshake` won't read plaintext
             app_data_output: &mut NullOutput,
         };

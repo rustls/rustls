@@ -1100,7 +1100,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 .aligned();
             let mut cx = Context {
                 common: &mut self.common_state,
-                data: &mut self.side,
+                side: &mut self.side,
                 app_data_output: &mut AppDataOutput {
                     plaintext_locator: &locator,
                     received_plaintext: &mut plaintext,
@@ -1221,7 +1221,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         match &mut self.state {
             Ok(st) => st.send_key_update_request(&mut Context {
                 common: &mut self.common_state,
-                data: &mut self.side,
+                side: &mut self.side,
                 app_data_output: &mut NullOutput,
             }),
             Err(e) => Err(e.clone()),

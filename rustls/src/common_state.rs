@@ -958,13 +958,16 @@ pub(crate) trait State: Send + Sync {
     }
 }
 
-pub(crate) struct Context<'a, Data> {
+pub(crate) struct Context<'a> {
+    // receives events applicable to all connection types
     pub(crate) common: &'a mut CommonState,
-    pub(crate) data: &'a mut Data,
+    // side-specific events
+    pub(crate) side: &'a mut dyn Output,
+    // receives application data events
     pub(crate) app_data_output: &'a mut dyn Output,
 }
 
-impl<Data: Output> Context<'_, Data> {
+impl Context<'_> {
     pub(crate) fn process_main_protocol(
         &mut self,
         msg: EncodedMessage<&'_ [u8]>,
@@ -1006,7 +1009,7 @@ impl<Data: Output> Context<'_, Data> {
     }
 }
 
-impl<Data: Output> Output for Context<'_, Data> {
+impl Output for Context<'_> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::ApplicationData(_) => self.app_data_output.emit(ev),
@@ -1016,7 +1019,7 @@ impl<Data: Output> Output for Context<'_, Data> {
             | Event::EarlyApplicationData(_)
             | Event::EchStatus(_)
             | Event::ReceivedServerName(_)
-            | Event::ResumptionData(_) => self.data.emit(ev),
+            | Event::ResumptionData(_) => self.side.emit(ev),
 
             // message dispatch
             Event::EncryptMessage(_) => match self.common.protocol {
