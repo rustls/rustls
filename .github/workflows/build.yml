@@ -377,7 +377,7 @@ jobs:
           - armv7-linux-androideabi
           - i686-linux-android
           - thumbv7neon-linux-androideabi
-          # Other standard 32-bit (Linux) targets (SKIP bindgen for i686 only)
+          # Other standard 32-bit (Linux) targets
           - i586-unknown-linux-gnu
           - i686-unknown-linux-gnu
           # exotic Linux targets:
@@ -402,13 +402,6 @@ jobs:
           git: https://github.com/cross-rs/cross
           # known-working main in feb 2025, bump as needed
           rev: c7dee4d
-      - name: Install bindgen-cli
-        uses: taiki-e/cache-cargo-install-action@v3
-        with:
-          tool: bindgen-cli
-      - name: Enable bindgen feature for aws-lc-sys (as needed for many cross targets)
-        if: ${{ matrix.target != 'i686-unknown-linux-gnu' }}
-        run: cargo add --dev --features bindgen 'aws-lc-sys@>0.20' --package rustls --verbose
       - run: cross test --package rustls --target ${{ matrix.target }}
       - run: cross test --package rustls-test --features aws-lc-rs --no-default-features --target ${{ matrix.target }}
 
