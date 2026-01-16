@@ -2,16 +2,6 @@
 
 ## Rationale for defaults
 
-### Why is AES-256 preferred over AES-128?
-
-This is a trade-off between:
-
-1. classical security level: searching a 2^128 key space is as implausible as 2^256.
-2. post-quantum security level: the difference is more meaningful, and AES-256 seems like the conservative choice.
-3. performance: AES-256 is around 40% slower than AES-128, though hardware acceleration typically narrows this gap.
-
-The choice is frankly quite marginal.
-
 ### Why is AES-GCM preferred over chacha20-poly1305?
 
 Hardware support for accelerating AES-GCM is widespread, and hardware-accelerated AES-GCM
