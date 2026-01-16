@@ -39,8 +39,9 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionCommon, DistinguishedName,
-    RootCertStore, ServerConfig, ServerConnection, SideData, SupportedCipherSuite, WantsVerifier,
+    ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionCommon,
+    ConnectionTrafficSecrets, DistinguishedName, RootCertStore, ServerConfig, ServerConnection,
+    SideData, SupportedCipherSuite, WantsVerifier,
 };
 
 macro_rules! embed_files {
@@ -1375,12 +1376,16 @@ impl RawTls {
 
         let encrypter = match (tx_keys, suite) {
             (
-                rustls::ConnectionTrafficSecrets::Aes256Gcm { key, iv },
+                ConnectionTrafficSecrets::Aes128Gcm { key, iv }
+                | ConnectionTrafficSecrets::Aes256Gcm { key, iv }
+                | ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv },
                 SupportedCipherSuite::Tls13(tls13),
             ) => tls13.aead_alg.encrypter(key, iv),
 
             (
-                rustls::ConnectionTrafficSecrets::Aes256Gcm { key, iv },
+                ConnectionTrafficSecrets::Aes128Gcm { key, iv }
+                | ConnectionTrafficSecrets::Aes256Gcm { key, iv }
+                | ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv },
                 SupportedCipherSuite::Tls12(tls12),
             ) => tls12
                 .aead_alg
@@ -1391,12 +1396,16 @@ impl RawTls {
 
         let decrypter = match (rx_keys, suite) {
             (
-                rustls::ConnectionTrafficSecrets::Aes256Gcm { key, iv },
+                ConnectionTrafficSecrets::Aes128Gcm { key, iv }
+                | ConnectionTrafficSecrets::Aes256Gcm { key, iv }
+                | ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv },
                 SupportedCipherSuite::Tls13(tls13),
             ) => tls13.aead_alg.decrypter(key, iv),
 
             (
-                rustls::ConnectionTrafficSecrets::Aes256Gcm { key, iv },
+                ConnectionTrafficSecrets::Aes128Gcm { key, iv }
+                | ConnectionTrafficSecrets::Aes256Gcm { key, iv }
+                | ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv },
                 SupportedCipherSuite::Tls12(tls12),
             ) => tls12
                 .aead_alg

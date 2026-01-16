@@ -792,14 +792,14 @@ fn test_tls13_exporter_maximum_output_length() {
 
     assert_eq!(
         client.negotiated_cipher_suite(),
-        Some(find_suite(CipherSuite::TLS13_AES_256_GCM_SHA384))
+        Some(find_suite(CipherSuite::TLS13_AES_128_GCM_SHA256))
     );
 
     let client_exporter = client.exporter().unwrap();
     let server_exporter = server.exporter().unwrap();
 
-    let mut maximum_allowed_output_client = [0u8; 255 * 48];
-    let mut maximum_allowed_output_server = [0u8; 255 * 48];
+    let mut maximum_allowed_output_client = [0u8; 255 * 32];
+    let mut maximum_allowed_output_server = [0u8; 255 * 32];
 
     client_exporter
         .derive(
@@ -915,7 +915,7 @@ fn negotiated_ciphersuite_default() {
         do_suite_and_kx_test(
             make_client_config(*kt, &provider),
             make_server_config(*kt, &provider),
-            find_suite(CipherSuite::TLS13_AES_256_GCM_SHA384),
+            find_suite(CipherSuite::TLS13_AES_128_GCM_SHA256),
             expected_kx_for_version(ProtocolVersion::TLSv1_3),
             ProtocolVersion::TLSv1_3,
         );
