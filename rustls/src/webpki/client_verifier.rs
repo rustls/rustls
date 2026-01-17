@@ -445,7 +445,7 @@ mod tests {
     }
 
     fn load_roots(roots_der: &[&[u8]]) -> Arc<RootCertStore> {
-        let mut roots = RootCertStore::empty();
+        let mut roots = RootCertStore::with_capacity(roots_der.len());
         roots_der.iter().for_each(|der| {
             roots
                 .add(CertificateDer::from(der.to_vec()))
