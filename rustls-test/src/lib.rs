@@ -2063,8 +2063,8 @@ pub mod macros {
                 true
             }
             #[allow(dead_code)]
-            const fn provider_is_fips() -> bool {
-                false
+            const fn provider_is_fips() -> rustls::pki_types::FipsStatus {
+                rustls::pki_types::FipsStatus::Unvalidated
             }
             #[allow(dead_code)]
             const ALL_VERSIONS: [rustls::crypto::CryptoProvider; 2] = [
@@ -2088,8 +2088,12 @@ pub mod macros {
                 false
             }
             #[allow(dead_code)]
-            const fn provider_is_fips() -> bool {
-                cfg!(feature = "fips")
+            const fn provider_is_fips() -> rustls::pki_types::FipsStatus {
+                if cfg!(feature = "fips") {
+                    rustls::pki_types::FipsStatus::Pending
+                } else {
+                    rustls::pki_types::FipsStatus::Unvalidated
+                }
             }
             #[allow(dead_code)]
             const ALL_VERSIONS: [rustls::crypto::CryptoProvider; 2] = [

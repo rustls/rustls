@@ -26,7 +26,7 @@ mod buffered {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use pki_types::ServerName;
+    use pki_types::{FipsStatus, ServerName};
 
     use super::{ClientConnectionData, ClientExtensionsInput};
     use crate::KeyingMaterialExporter;
@@ -137,7 +137,7 @@ mod buffered {
         /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
         /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
         /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-        pub fn fips(&self) -> bool {
+        pub fn fips(&self) -> FipsStatus {
             self.inner.core.common_state.fips
         }
 

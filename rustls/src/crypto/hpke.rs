@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use pki_types::FipsStatus;
 use zeroize::Zeroize;
 
 use crate::Error;
@@ -80,8 +81,8 @@ pub trait Hpke: Debug + Send + Sync {
     fn generate_key_pair(&self) -> Result<(HpkePublicKey, HpkePrivateKey), Error>;
 
     /// Return whether the HPKE instance is FIPS compatible.
-    fn fips(&self) -> bool {
-        false
+    fn fips(&self) -> FipsStatus {
+        FipsStatus::Unvalidated
     }
 
     /// Return the [HpkeSuite] that this HPKE instance supports.
