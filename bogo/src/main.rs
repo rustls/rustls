@@ -537,10 +537,10 @@ impl Options {
                 self.only_write_one_byte_after_handshake_on_resume = true;
             }
             "-on-resume-early-write-after-message" => {
-                self.queue_early_data_after_received_messages= match args.remove(0).parse::<u8>().unwrap() {
+                self.queue_early_data_after_received_messages = match args.remove(0).parse::<u8>().unwrap() {
                     // estimate where these messages appear in the server's first flight.
-                    2 => vec![5 + 128 + 5 + 32],
-                    8 => vec![5 + 128 + 5 + 32, 5 + 64],
+                    2 => vec![5 + 112 + 5 + 32],
+                    8 => vec![5 + 112 + 5 + 32, 5 + 64],
                     _ => {
                         panic!("unhandled -on-resume-early-write-after-message");
                     }
