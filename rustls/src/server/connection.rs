@@ -16,7 +16,7 @@ use super::config::ServerConfig;
 use super::hs;
 #[cfg(feature = "std")]
 use super::hs::ClientHelloInput;
-use crate::common_state::{CommonState, Protocol, Side};
+use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
 #[cfg(feature = "std")]
 use crate::common_state::{Input, State};
 #[cfg(feature = "std")]
@@ -31,8 +31,6 @@ use crate::error::Error;
 use crate::kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::log::trace;
-#[cfg(feature = "std")]
-use crate::msgs::deframer::Locator;
 #[cfg(feature = "std")]
 use crate::msgs::handshake::ClientHelloPayload;
 use crate::msgs::handshake::ServerExtensionsInput;
@@ -61,8 +59,7 @@ mod buffered {
     use crate::common_state::{CommonState, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::{ApiMisuse, Error};
-    use crate::msgs::deframer::Locator;
-    use crate::server::hs::{ClientHelloInput, ServerContext};
+    use crate::server::hs::ClientHelloInput;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
@@ -104,7 +101,7 @@ mod buffered {
         ///
         /// The server name is also used to match sessions during session resumption.
         pub fn server_name(&self) -> Option<&DnsName<'_>> {
-            self.inner.core.side.sni.as_ref()
+            self.inner.core.side.server_name()
         }
 
         /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -116,9 +113,7 @@ mod buffered {
             self.inner
                 .core
                 .side
-                .received_resumption_data
-                .as_ref()
-                .map(|x| &x[..])
+                .received_resumption_data()
         }
 
         /// Set the resumption data to embed in future resumption tickets supplied to the client.
@@ -129,17 +124,18 @@ mod buffered {
         ///
         /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
         /// from the client is desired, encrypt the data separately.
-        pub fn set_resumption_data(&mut self, data: &[u8]) {
+        pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
             assert!(data.len() < 2usize.pow(15));
-            self.inner.core.side.resumption_data = data.into();
+            match &mut self.core.state {
+                Ok(st) => st.set_resumption_data(data),
+                Err(e) => Err(e.clone()),
+            }
         }
 
-        /// Explicitly discard early data, notifying the client
+        /// Explicitly discard early data, notifying the client.
         ///
         /// Useful if invariants encoded in `received_resumption_data()` cannot be respected.
-        ///
-        /// Must be called while `is_handshaking` is true.
-        pub fn reject_early_data(&mut self) {
+        pub fn reject_early_data(&mut self) -> Result<(), Error> {
             self.inner.core.reject_early_data()
         }
 
@@ -320,21 +316,12 @@ mod buffered {
                 Err(err) => return Err(AcceptedAlert::from_error(err, connection)),
             };
 
-            let mut cx = ServerContext {
-                common: &mut connection.core.common_state,
-                data: &mut connection.core.side,
-                // `ClientHelloInput::from_message` won't read borrowed plaintext
-                plaintext_locator: &Locator::new(&[]),
-                received_plaintext: &mut None,
-            };
-
-            let sig_schemes = match ClientHelloInput::from_input(&input, false, &mut cx) {
+            let sig_schemes = match ClientHelloInput::from_input(&input) {
                 Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
                     return Err(AcceptedAlert::from_error(err, connection));
                 }
             };
-            debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
             Ok(Some(Accepted {
                 connection,
@@ -357,8 +344,9 @@ mod buffered {
         ) -> (Error, Self) {
             conn.core
                 .common_state
+                .send
                 .maybe_send_fatal_alert(&error);
-            (error, Self(conn.core.common_state.sendable_tls))
+            (error, Self(conn.core.common_state.send.sendable_tls))
         }
 
         pub(super) fn empty() -> Self {
@@ -558,8 +546,13 @@ impl Accepted {
         mut self,
         config: Arc<ServerConfig>,
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
+        use crate::common_state::{Context, NullOutput};
+
         if let Err(err) = self
             .connection
+            .core
+            .common_state
+            .send
             .set_max_fragment_size(config.max_fragment_size)
         {
             // We have a connection here, but it won't contain an alert since the error
@@ -575,12 +568,11 @@ impl Accepted {
                 return Err(AcceptedAlert::from_error(err, self.connection));
             }
         };
-        let mut cx = hs::ServerContext {
+        let mut cx = Context {
             common: &mut self.connection.core.common_state,
             data: &mut self.connection.core.side,
             // `ExpectClientHello::with_input` won't read borrowed plaintext
-            plaintext_locator: &Locator::new(&[]),
-            received_plaintext: &mut None,
+            app_data_output: &mut NullOutput,
         };
 
         let input = ClientHelloInput {
@@ -594,7 +586,6 @@ impl Accepted {
             Ok(new) => new,
             Err(err) => return Err(AcceptedAlert::from_error(err, self.connection)),
         };
-        debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
         self.connection.replace_state(new);
         Ok(ServerConnection {
@@ -628,8 +619,8 @@ impl State<ServerConnectionData> for Accepting {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle<'m>(
         self: Box<Self>,
-        _cx: &mut hs::ServerContext<'_>,
         _input: Input<'m>,
+        _output: &mut dyn Output,
     ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
         Err(Error::Unreachable("unreachable state"))
     }
@@ -641,30 +632,19 @@ pub(super) enum EarlyDataState {
     New,
     Accepted {
         received: ChunkVecBuffer,
-        left: usize,
     },
-    Rejected,
 }
 
 impl EarlyDataState {
-    pub(super) fn reject(&mut self) {
-        *self = Self::Rejected;
-    }
-
-    pub(super) fn accept(&mut self, max_size: usize) {
+    fn accept(&mut self) {
         *self = Self::Accepted {
-            received: ChunkVecBuffer::new(Some(max_size)),
-            left: max_size,
+            received: ChunkVecBuffer::new(None),
         };
     }
 
     #[cfg(feature = "std")]
     fn was_accepted(&self) -> bool {
         matches!(self, Self::Accepted { .. })
-    }
-
-    pub(super) fn was_rejected(&self) -> bool {
-        matches!(self, Self::Rejected)
     }
 
     fn peek(&self) -> Option<&[u8]> {
@@ -689,19 +669,12 @@ impl EarlyDataState {
         }
     }
 
-    pub(super) fn take_received_plaintext(&mut self, bytes: Payload<'_>) -> bool {
-        let available = bytes.bytes().len();
-        let Self::Accepted { received, left } = self else {
-            return false;
+    fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
+        let Self::Accepted { received } = self else {
+            return;
         };
 
-        if received.apply_limit(available) != available || available > *left {
-            return false;
-        }
-
         received.append(bytes.into_vec());
-        *left -= available;
-        true
     }
 }
 
@@ -709,13 +682,11 @@ impl Debug for EarlyDataState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::New => write!(f, "EarlyDataState::New"),
-            Self::Accepted { received, left } => write!(
+            Self::Accepted { received } => write!(
                 f,
-                "EarlyDataState::Accepted {{ received: {}, left: {} }}",
+                "EarlyDataState::Accepted {{ received: {} }}",
                 received.len(),
-                left
             ),
-            Self::Rejected => write!(f, "EarlyDataState::Rejected"),
         }
     }
 }
@@ -727,7 +698,9 @@ impl ConnectionCore<ServerConnectionData> {
         protocol: Protocol,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server, protocol);
-        common.set_max_fragment_size(config.max_fragment_size)?;
+        common
+            .send
+            .set_max_fragment_size(config.max_fragment_size)?;
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
@@ -737,22 +710,46 @@ impl ConnectionCore<ServerConnectionData> {
     }
 
     #[cfg(feature = "std")]
-    pub(crate) fn reject_early_data(&mut self) {
-        assert!(
-            self.common_state.is_handshaking(),
-            "cannot retroactively reject early data"
-        );
-        self.side.early_data.reject();
+    pub(crate) fn reject_early_data(&mut self) -> Result<(), Error> {
+        match &mut self.state {
+            Ok(s) => s.reject_early_data(),
+            Err(e) => Err(e.clone()),
+        }
     }
 }
 
 /// State associated with a server connection.
 #[derive(Default, Debug)]
 pub struct ServerConnectionData {
-    pub(crate) sni: Option<DnsName<'static>>,
-    pub(crate) received_resumption_data: Option<Vec<u8>>,
-    pub(crate) resumption_data: Vec<u8>,
-    pub(super) early_data: EarlyDataState,
+    sni: Option<DnsName<'static>>,
+    received_resumption_data: Option<Vec<u8>>,
+    early_data: EarlyDataState,
+}
+
+impl ServerConnectionData {
+    #[cfg(feature = "std")]
+    pub(crate) fn received_resumption_data(&self) -> Option<&[u8]> {
+        self.received_resumption_data.as_deref()
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn server_name(&self) -> Option<&DnsName<'static>> {
+        self.sni.as_ref()
+    }
+}
+
+impl Output for ServerConnectionData {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::EarlyApplicationData(data) => self
+                .early_data
+                .take_received_plaintext(data),
+            Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
+            Event::ReceivedServerName(sni) => self.sni = sni,
+            Event::ResumptionData(data) => self.received_resumption_data = Some(data),
+            _ => {}
+        }
+    }
 }
 
 impl crate::conn::SideData for ServerConnectionData {}

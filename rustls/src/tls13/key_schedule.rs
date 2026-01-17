@@ -644,9 +644,8 @@ pub(crate) struct KeyScheduleTraffic {
 }
 
 impl KeyScheduleTraffic {
-    pub(crate) fn update_encrypter_and_notify(&mut self, output: &mut dyn Output) {
+    pub(crate) fn update_encrypter_for_key_update(&mut self, output: &mut dyn Output) {
         let secret = self.next_application_traffic_secret(self.ks.side);
-        output.emit(Event::EnqueueKeyUpdateNotification);
         self.ks.set_encrypter(&secret, output);
     }
 

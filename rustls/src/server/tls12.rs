@@ -3,16 +3,16 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 pub(crate) use client_hello::TLS12_HANDLER;
-use pki_types::UnixTime;
+use pki_types::{DnsName, UnixTime};
 use subtle::ConstantTimeEq;
 
 use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
-use super::hs::{self, ServerContext};
+use super::hs::{self};
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelContext, KernelState};
+use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
@@ -63,7 +63,7 @@ mod client_hello {
             credentials: SelectedCredential,
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
-            cx: &mut ServerContext<'_>,
+            output: &mut dyn Output,
         ) -> hs::NextStateOrError {
             let mut randoms = st.randoms(&input)?;
             let mut transcript = st
@@ -161,7 +161,7 @@ mod client_hello {
                 .filter(|resumedata| {
                     resumedata
                         .common
-                        .can_resume(suite.common.suite, &cx.data.sni)
+                        .can_resume(suite.common.suite, &st.sni)
                         && (resumedata.extended_ms == st.using_ems
                             || (resumedata.extended_ms && !st.using_ems))
                 });
@@ -171,8 +171,10 @@ mod client_hello {
                 return start_resumption(
                     suite,
                     st.using_ems,
-                    cx,
+                    output,
                     input,
+                    st.sni,
+                    &st.resumption_data,
                     transcript,
                     randoms,
                     st.extra_exts,
@@ -191,15 +193,14 @@ mod client_hello {
                 st.session_id = SessionId::random(st.config.provider.secure_random)?;
             }
 
-            cx.common
-                .emit(Event::HandshakeKind(HandshakeKind::Full));
+            output.emit(Event::HandshakeKind(HandshakeKind::Full));
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
-            let send_ticket = emit_server_hello(
+            let (send_ticket, alpn_protocol) = emit_server_hello(
                 &mut flight,
                 &st.config,
-                cx,
+                output,
                 st.session_id,
                 suite,
                 st.using_ems,
@@ -218,7 +219,7 @@ mod client_hello {
             let doing_client_auth = emit_certificate_req(&mut flight, &st.config)?;
             emit_server_hello_done(&mut flight);
 
-            flight.finish(cx.common);
+            flight.finish(output);
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
@@ -229,6 +230,9 @@ mod client_hello {
                     suite,
                     using_ems: st.using_ems,
                     server_kx,
+                    alpn_protocol,
+                    sni: st.sni,
+                    resumption_data: st.resumption_data,
                     send_ticket,
                 }))
             } else {
@@ -240,7 +244,10 @@ mod client_hello {
                     suite,
                     using_ems: st.using_ems,
                     server_kx,
+                    alpn_protocol,
+                    sni: st.sni,
                     peer_identity: None,
+                    resumption_data: st.resumption_data,
                     send_ticket,
                 }))
             }
@@ -252,8 +259,10 @@ mod client_hello {
     fn start_resumption(
         suite: &'static Tls12CipherSuite,
         using_ems: bool,
-        cx: &mut ServerContext<'_>,
+        output: &mut dyn Output,
         input: ClientHelloInput<'_>,
+        sni: Option<DnsName<'static>>,
+        resumption_data: &[u8],
         mut transcript: HandshakeHash,
         randoms: ConnectionRandoms,
         extra_exts: ServerExtensionsInput<'static>,
@@ -269,10 +278,10 @@ mod client_hello {
 
         let session_id = input.client_hello.session_id;
         let mut flight = HandshakeFlightTls12::new(&mut transcript);
-        let send_ticket = emit_server_hello(
+        let (send_ticket, alpn_protocol) = emit_server_hello(
             &mut flight,
             &config,
-            cx,
+            output,
             session_id,
             suite,
             using_ems,
@@ -282,7 +291,7 @@ mod client_hello {
             &randoms,
             extra_exts,
         )?;
-        flight.finish(cx.common);
+        flight.finish(output);
 
         let secrets = ConnectionSecrets::new_resume(randoms, suite, &resumedata.master_secret);
         config.key_log.log(
@@ -291,15 +300,14 @@ mod client_hello {
             secrets.master_secret(),
         );
 
-        cx.common
-            .emit(Event::HandshakeKind(HandshakeKind::Resumed));
-        cx.data.received_resumption_data = Some(
+        output.emit(Event::HandshakeKind(HandshakeKind::Resumed));
+        output.emit(Event::ResumptionData(
             resumedata
                 .common
                 .application_data
                 .0
                 .clone(),
-        );
+        ));
 
         if send_ticket {
             let now = config.current_time()?;
@@ -310,30 +318,36 @@ mod client_hello {
                     &mut transcript,
                     using_ems,
                     resumedata.common.peer_identity.as_ref(),
-                    cx,
+                    alpn_protocol.as_ref(),
+                    sni.as_ref(),
+                    resumption_data,
+                    output,
                     ticketer,
                     now,
                 )?;
             }
         }
-        emit_ccs(cx.common);
+        emit_ccs(output);
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Server);
-        cx.common.emit(Event::MessageEncrypter {
+        output.emit(Event::MessageEncrypter {
             encrypter,
             limit: secrets
                 .suite()
                 .common
                 .confidentiality_limit,
         });
-        emit_finished(&secrets, &mut transcript, cx.common, &proof);
+        emit_finished(&secrets, &mut transcript, output, &proof);
 
         Ok(Box::new(ExpectCcs {
             config,
             secrets,
             transcript,
             session_id,
+            alpn_protocol,
+            sni,
             peer_identity: resumedata.common.peer_identity,
+            resumption_data: Vec::new(),
             using_ems,
             resuming_decrypter: Some(dec),
             send_ticket,
@@ -343,7 +357,7 @@ mod client_hello {
     fn emit_server_hello(
         flight: &mut HandshakeFlightTls12<'_>,
         config: &ServerConfig,
-        cx: &mut ServerContext<'_>,
+        output: &mut dyn Output,
         session_id: SessionId,
         suite: &'static Tls12CipherSuite,
         using_ems: bool,
@@ -352,9 +366,10 @@ mod client_hello {
         resumedata: Option<&persist::Tls12ServerSessionValue>,
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput<'static>,
-    ) -> Result<bool, Error> {
+    ) -> Result<(bool, Option<ProtocolName>), Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
-        ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
+        let (_, alpn_protocol) =
+            ep.process_common(output, ocsp_response, resumedata.map(|r| &r.common))?;
         ep.process_tls12(ocsp_response, using_ems);
 
         let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
@@ -368,7 +383,7 @@ mod client_hello {
         trace!("sending server hello {sh:?}");
         flight.add(sh);
 
-        Ok(ep.send_ticket)
+        Ok((ep.send_ticket, alpn_protocol))
     }
 
     fn emit_certificate(flight: &mut HandshakeFlightTls12<'_>, credentials: &SelectedCredential) {
@@ -461,14 +476,17 @@ struct ExpectCertificate {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: GroupAndKeyExchange,
+    alpn_protocol: Option<ProtocolName>,
+    sni: Option<DnsName<'static>>,
+    resumption_data: Vec<u8>,
     send_ticket: bool,
 }
 
 impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
-        _cx: &mut ServerContext<'_>,
         Input { message, .. }: Input<'_>,
+        _output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         self.transcript.add_message(&message);
         let cert_chain = require_handshake_msg_move!(
@@ -513,7 +531,10 @@ impl State<ServerConnectionData> for ExpectCertificate {
             suite: self.suite,
             using_ems: self.using_ems,
             server_kx: self.server_kx,
+            alpn_protocol: self.alpn_protocol,
+            sni: self.sni,
             peer_identity,
+            resumption_data: self.resumption_data,
             send_ticket: self.send_ticket,
         }))
     }
@@ -528,15 +549,18 @@ struct ExpectClientKx {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: GroupAndKeyExchange,
+    alpn_protocol: Option<ProtocolName>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
+    resumption_data: Vec<u8>,
     send_ticket: bool,
 }
 
 impl State<ServerConnectionData> for ExpectClientKx {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ServerContext<'_>,
         Input { message, .. }: Input<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
             message,
@@ -560,8 +584,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
             self.randoms,
             self.suite,
         )?;
-        cx.common
-            .emit(Event::KeyExchangeGroup(self.server_kx.group));
+        output.emit(Event::KeyExchangeGroup(self.server_kx.group));
 
         self.config.key_log.log(
             "CLIENT_RANDOM",
@@ -576,7 +599,10 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 transcript: self.transcript,
                 session_id: self.session_id,
                 using_ems: self.using_ems,
+                alpn_protocol: self.alpn_protocol,
+                sni: self.sni,
                 peer_identity,
+                resumption_data: self.resumption_data,
                 send_ticket: self.send_ticket,
             })),
             _ => Ok(Box::new(ExpectCcs {
@@ -584,7 +610,10 @@ impl State<ServerConnectionData> for ExpectClientKx {
                 secrets,
                 transcript: self.transcript,
                 session_id: self.session_id,
+                alpn_protocol: self.alpn_protocol,
+                sni: self.sni,
                 peer_identity: None,
+                resumption_data: self.resumption_data,
                 using_ems: self.using_ems,
                 resuming_decrypter: None,
                 send_ticket: self.send_ticket,
@@ -600,15 +629,18 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     session_id: SessionId,
     using_ems: bool,
+    alpn_protocol: Option<ProtocolName>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Identity<'static>,
+    resumption_data: Vec<u8>,
     send_ticket: bool,
 }
 
 impl State<ServerConnectionData> for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
-        _cx: &mut ServerContext<'_>,
         Input { message, .. }: Input<'_>,
+        _output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         let signature = require_handshake_msg!(
             message,
@@ -644,7 +676,10 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             secrets: self.secrets,
             transcript: self.transcript,
             session_id: self.session_id,
+            alpn_protocol: self.alpn_protocol,
+            sni: self.sni,
             peer_identity: Some(self.peer_identity),
+            resumption_data: self.resumption_data,
             using_ems: self.using_ems,
             resuming_decrypter: None,
             send_ticket: self.send_ticket,
@@ -658,18 +693,17 @@ struct ExpectCcs {
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
+    alpn_protocol: Option<ProtocolName>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
+    resumption_data: Vec<u8>,
     using_ems: bool,
     resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
     send_ticket: bool,
 }
 
 impl State<ServerConnectionData> for ExpectCcs {
-    fn handle(
-        self: Box<Self>,
-        cx: &mut ServerContext<'_>,
-        input: Input<'_>,
-    ) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> hs::NextStateOrError {
         match input.message.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
@@ -694,15 +728,17 @@ impl State<ServerConnectionData> for ExpectCcs {
             }
         };
 
-        cx.common
-            .emit(Event::MessageDecrypter { decrypter, proof });
+        output.emit(Event::MessageDecrypter { decrypter, proof });
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
             secrets: self.secrets,
             transcript: self.transcript,
             session_id: self.session_id,
+            alpn_protocol: self.alpn_protocol,
+            sni: self.sni,
             peer_identity: self.peer_identity,
+            resumption_data: self.resumption_data,
             using_ems: self.using_ems,
             resuming: pending_encrypter.is_none(),
             send_ticket: self.send_ticket,
@@ -716,19 +752,18 @@ fn get_server_connection_value_tls12(
     secrets: &ConnectionSecrets,
     using_ems: bool,
     peer_identity: Option<&Identity<'static>>,
-    cx: &ServerContext<'_>,
+    alpn_protocol: Option<&ProtocolName>,
+    sni: Option<&DnsName<'static>>,
+    resumption_data: &[u8],
     time_now: UnixTime,
 ) -> persist::ServerSessionValue {
     persist::Tls12ServerSessionValue::new(
         persist::CommonServerSessionValue::new(
-            cx.data.sni.as_ref(),
+            sni,
             secrets.suite().common.suite,
             peer_identity.cloned(),
-            cx.common
-                .alpn_protocol
-                .as_ref()
-                .map(|p| ProtocolName::from(p.as_ref().to_vec())),
-            cx.data.resumption_data.clone(),
+            alpn_protocol.cloned(),
+            resumption_data.to_vec(),
             time_now,
         ),
         secrets.master_secret(),
@@ -742,12 +777,23 @@ fn emit_ticket(
     transcript: &mut HandshakeHash,
     using_ems: bool,
     peer_identity: Option<&Identity<'static>>,
-    cx: &mut ServerContext<'_>,
+    alpn_protocol: Option<&ProtocolName>,
+    sni: Option<&DnsName<'static>>,
+    resumption_data: &[u8],
+    output: &mut dyn Output,
     ticketer: &dyn TicketProducer,
     now: UnixTime,
 ) -> Result<(), Error> {
-    let plain = get_server_connection_value_tls12(secrets, using_ems, peer_identity, cx, now)
-        .get_encoding();
+    let plain = get_server_connection_value_tls12(
+        secrets,
+        using_ems,
+        peer_identity,
+        alpn_protocol,
+        sni,
+        resumption_data,
+        now,
+    )
+    .get_encoding();
 
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
@@ -767,7 +813,7 @@ fn emit_ticket(
     };
 
     transcript.add_message(&m);
-    cx.common.emit(Event::PlainMessage(m));
+    output.emit(Event::PlainMessage(m));
     Ok(())
 }
 
@@ -804,7 +850,10 @@ struct ExpectFinished {
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
+    alpn_protocol: Option<ProtocolName>,
+    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
+    resumption_data: Vec<u8>,
     using_ems: bool,
     resuming: bool,
     send_ticket: bool,
@@ -814,8 +863,8 @@ struct ExpectFinished {
 impl State<ServerConnectionData> for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
-        cx: &mut ServerContext<'_>,
         input: Input<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         let finished = require_handshake_msg!(
             input.message,
@@ -846,7 +895,9 @@ impl State<ServerConnectionData> for ExpectFinished {
                 &self.secrets,
                 self.using_ems,
                 self.peer_identity.as_ref(),
-                cx,
+                self.alpn_protocol.as_ref(),
+                self.sni.as_ref(),
+                &self.resumption_data,
                 now,
             );
 
@@ -874,14 +925,17 @@ impl State<ServerConnectionData> for ExpectFinished {
                         &mut self.transcript,
                         self.using_ems,
                         self.peer_identity.as_ref(),
-                        cx,
+                        self.alpn_protocol.as_ref(),
+                        self.sni.as_ref(),
+                        &self.resumption_data,
+                        output,
                         ticketer,
                         now,
                     )?;
                 }
             }
-            emit_ccs(cx.common);
-            cx.common.emit(Event::MessageEncrypter {
+            emit_ccs(output);
+            output.emit(Event::MessageEncrypter {
                 encrypter,
                 limit: self
                     .secrets
@@ -889,12 +943,11 @@ impl State<ServerConnectionData> for ExpectFinished {
                     .common
                     .confidentiality_limit,
             });
-            emit_finished(&self.secrets, &mut self.transcript, cx.common, &proof);
+            emit_finished(&self.secrets, &mut self.transcript, output, &proof);
         }
 
         if let Some(identity) = self.peer_identity {
-            cx.common
-                .emit(Event::PeerIdentity(identity));
+            output.emit(Event::PeerIdentity(identity));
         }
 
         let extracted_secrets = self
@@ -905,9 +958,8 @@ impl State<ServerConnectionData> for ExpectFinished {
                     .extract_secrets(Side::Server)
             });
 
-        cx.common
-            .emit(Event::Exporter(self.secrets.into_exporter()));
-        cx.common.emit(Event::StartTraffic);
+        output.emit(Event::Exporter(self.secrets.into_exporter()));
+        output.emit(Event::StartTraffic);
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,
@@ -928,11 +980,13 @@ impl ExpectTraffic {}
 impl State<ServerConnectionData> for ExpectTraffic {
     fn handle(
         self: Box<Self>,
-        cx: &mut ServerContext<'_>,
         Input { message, .. }: Input<'_>,
+        output: &mut dyn Output,
     ) -> hs::NextStateOrError {
         match message.payload {
-            MessagePayload::ApplicationData(payload) => cx.receive_plaintext(payload),
+            MessagePayload::ApplicationData(payload) => {
+                output.emit(Event::ApplicationData(payload))
+            }
             payload => {
                 return Err(inappropriate_message(
                     &payload,
@@ -964,7 +1018,6 @@ impl KernelState for ExpectTraffic {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle_new_session_ticket(
         &mut self,
-        _cx: &mut KernelContext<'_>,
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         unreachable!(

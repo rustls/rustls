@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 
 pub use crate::common_state::Side;
+use crate::common_state::{Event, Output};
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::Error;
@@ -24,7 +25,7 @@ mod connection {
 
     use super::{DirectionalKeys, KeyChange, Version};
     use crate::client::{ClientConfig, ClientConnectionData};
-    use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, Protocol};
+    use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
@@ -36,7 +37,6 @@ mod connection {
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
-    use crate::vecbuf::ChunkVecBuffer;
 
     /// A QUIC client or server connection.
     #[expect(clippy::exhaustive_enums)]
@@ -89,12 +89,12 @@ mod connection {
     }
 
     impl Deref for Connection {
-        type Target = CommonState;
+        type Target = ConnectionOutputs;
 
         fn deref(&self) -> &Self::Target {
             match self {
-                Self::Client(conn) => &conn.core.common_state,
-                Self::Server(conn) => &conn.core.common_state,
+                Self::Client(conn) => &conn.core.common_state.outputs,
+                Self::Server(conn) => &conn.core.common_state.outputs,
             }
         }
     }
@@ -102,8 +102,8 @@ mod connection {
     impl DerefMut for Connection {
         fn deref_mut(&mut self) -> &mut Self::Target {
             match self {
-                Self::Client(conn) => &mut conn.core.common_state,
-                Self::Server(conn) => &mut conn.core.common_state,
+                Self::Client(conn) => &mut conn.core.common_state.outputs,
+                Self::Server(conn) => &mut conn.core.common_state.outputs,
             }
         }
     }
@@ -164,7 +164,7 @@ mod connection {
             let inner =
                 ConnectionCore::for_client(config, name, exts, Protocol::Quic(quic_version))?;
             Ok(Self {
-                inner: inner.into(),
+                inner: ConnectionCommon::new(inner, quic_version),
             })
         }
 
@@ -265,15 +265,14 @@ mod connection {
             };
 
             let core = ConnectionCore::for_server(config, exts, Protocol::Quic(quic_version))?;
-            Ok(Self { inner: core.into() })
+            let inner = ConnectionCommon::new(core, quic_version);
+            Ok(Self { inner })
         }
 
         /// Explicitly discard early data, notifying the client
         ///
         /// Useful if invariants encoded in `received_resumption_data()` cannot be respected.
-        ///
-        /// Must be called while `is_handshaking` is true.
-        pub fn reject_early_data(&mut self) {
+        pub fn reject_early_data(&mut self) -> Result<(), Error> {
             self.inner.core.reject_early_data()
         }
 
@@ -293,20 +292,23 @@ mod connection {
         ///
         /// The server name is also used to match sessions during session resumption.
         pub fn server_name(&self) -> Option<&DnsName<'_>> {
-            self.inner.core.side.sni.as_ref()
+            self.inner.core.side.server_name()
         }
 
         /// Set the resumption data to embed in future resumption tickets supplied to the client.
         ///
         /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
         /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
-        /// resumption tickets are affected.
+        /// resumption tickets are affected (otherwise an error will be returned).
         ///
         /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
         /// from the client is desired, encrypt the data separately.
-        pub fn set_resumption_data(&mut self, data: &[u8]) {
-            assert!(data.len() < 2usize.pow(15));
-            self.inner.core.side.resumption_data = data.into();
+        pub fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
+            assert!(resumption_data.len() < 2usize.pow(15));
+            match &mut self.inner.core.state {
+                Ok(st) => st.set_resumption_data(resumption_data),
+                Err(e) => Err(e.clone()),
+            }
         }
 
         /// Retrieves the resumption data supplied by the client, if any.
@@ -316,8 +318,7 @@ mod connection {
             self.inner
                 .core
                 .side
-                .received_resumption_data
-                .as_deref()
+                .received_resumption_data()
         }
 
         /// Returns an object that can derive key material from the agreed connection secrets.
@@ -369,10 +370,18 @@ mod connection {
     pub struct ConnectionCommon<Side: SideData> {
         core: ConnectionCore<Side>,
         deframer_buffer: DeframerVecBuffer,
-        sendable_plaintext: ChunkVecBuffer,
+        version: Version,
     }
 
     impl<Side: SideData> ConnectionCommon<Side> {
+        fn new(core: ConnectionCore<Side>, version: Version) -> Self {
+            Self {
+                core,
+                deframer_buffer: DeframerVecBuffer::default(),
+                version,
+            }
+        }
+
         /// Return the TLS-encoded transport parameters for the session's peer.
         ///
         /// While the transport parameters are technically available prior to the
@@ -399,9 +408,7 @@ mod connection {
                     SupportedCipherSuite::Tls13(suite) => Some(suite),
                     _ => None,
                 })?;
-            let Protocol::Quic(version) = self.core.common_state.protocol else {
-                return None;
-            };
+
             Some(DirectionalKeys::new(
                 suite,
                 suite.quic?,
@@ -410,7 +417,7 @@ mod connection {
                     .quic
                     .early_secret
                     .as_ref()?,
-                version,
+                self.version,
             ))
         }
 
@@ -425,22 +432,28 @@ mod connection {
         pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             let range = self.deframer_buffer.extend(plaintext);
 
-            self.core.hs_deframer.input_message(
-                EncodedMessage {
-                    typ: ContentType::Handshake,
-                    version: ProtocolVersion::TLSv1_3,
-                    payload: &self.deframer_buffer.filled()[range.clone()],
-                },
-                &Locator::new(self.deframer_buffer.filled()),
-                range.end,
-            );
+            self.core
+                .common_state
+                .recv
+                .hs_deframer
+                .input_message(
+                    EncodedMessage {
+                        typ: ContentType::Handshake,
+                        version: ProtocolVersion::TLSv1_3,
+                        payload: &self.deframer_buffer.filled()[range.clone()],
+                    },
+                    &Locator::new(self.deframer_buffer.filled()),
+                    range.end,
+                );
 
             self.core
+                .common_state
+                .recv
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
             self.core
-                .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)?;
+                .process_new_packets(&mut self.deframer_buffer)?;
 
             Ok(())
         }
@@ -469,16 +482,6 @@ mod connection {
             &mut self.core.common_state
         }
     }
-
-    impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
-        fn from(core: ConnectionCore<Side>) -> Self {
-            Self {
-                core,
-                deframer_buffer: DeframerVecBuffer::default(),
-                sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
-            }
-        }
-    }
 }
 
 #[cfg(feature = "std")]
@@ -498,7 +501,7 @@ pub(crate) struct Quic {
 }
 
 impl Quic {
-    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         if let MessagePayload::Alert(_) = m.payload {
             // alerts are sent out-of-band in QUIC mode
             return;
@@ -550,6 +553,20 @@ impl Quic {
         }
 
         None
+    }
+}
+
+impl Output for Quic {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::EncryptMessage(m) => self.send_msg(m, true),
+            Event::QuicEarlySecret(sec) => self.early_secret = sec,
+            Event::QuicHandshakeSecrets(sec) => self.hs_secrets = Some(sec),
+            Event::QuicTrafficSecrets(sec) => self.traffic_secrets = Some(sec),
+            Event::QuicTransportParameters(params) => self.params = Some(params),
+            Event::PlainMessage(m) => self.send_msg(m, false),
+            _ => {}
+        }
     }
 }
 
