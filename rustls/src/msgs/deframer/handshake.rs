@@ -6,7 +6,7 @@ use super::buffers::{BufferProgress, Coalescer, Delocator, Locator};
 use crate::crypto::cipher::EncodedMessage;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::InvalidMessage;
-use crate::msgs::codec::{Codec, u24};
+use crate::msgs::codec::{Codec, U24};
 
 #[derive(Debug)]
 pub(crate) struct HandshakeDeframer {
@@ -277,7 +277,7 @@ impl Iterator for DissectHandshakeIter<'_, '_> {
         let (header, rest) = mem::take(&mut self.payload).split_at(HANDSHAKE_HEADER_LEN);
 
         // safety: header[1..] is exactly 3 bytes, so `u24::read_bytes` cannot fail
-        let size = u24::read_bytes(&header[1..])
+        let size = U24::read_bytes(&header[1..])
             .unwrap()
             .into();
 
