@@ -564,7 +564,7 @@ impl CommonState {
 
     fn check_required_size<'a>(
         &self,
-        outgoing_tls: &mut [u8],
+        outgoing_tls: &[u8],
         fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
     ) -> Result<(), EncryptError> {
         let mut required_size = self.sendable_tls.len();

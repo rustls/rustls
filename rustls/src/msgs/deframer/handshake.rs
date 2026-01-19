@@ -270,7 +270,7 @@ impl Iterator for DissectHandshakeIter<'_, '_> {
             return Some(FragmentSpan {
                 version: self.version,
                 size: None,
-                bounds: bounds.clone(),
+                bounds,
             });
         }
 
@@ -293,7 +293,7 @@ impl Iterator for DissectHandshakeIter<'_, '_> {
         Some(FragmentSpan {
             version: self.version,
             size: Some(size),
-            bounds: bounds.clone(),
+            bounds,
         })
     }
 }

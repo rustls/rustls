@@ -60,7 +60,7 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
             aligned_handshake: None,
         },
         false,
-        &mut Context {
+        &Context {
             common: &mut CommonState::new(Side::Server, Protocol::Tcp),
             data: &mut ServerConnectionData::default(),
             plaintext_locator: &Locator::new(&[]),

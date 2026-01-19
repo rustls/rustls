@@ -477,7 +477,7 @@ impl EchState {
     /// Confirm whether an ECH offer was accepted based on examining the server hello.
     pub(crate) fn confirm_acceptance(
         self,
-        ks: &mut KeyScheduleHandshakeStart,
+        ks: &KeyScheduleHandshakeStart,
         server_hello: &ServerHelloPayload,
         server_hello_encoded: &Payload<'_>,
         hash: &'static dyn Hash,

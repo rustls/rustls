@@ -173,7 +173,7 @@ impl<'a> ExtensionProcessing<'a> {
         })
     }
 
-    pub(super) fn process_tls12(&mut self, ocsp_response: &mut Option<&[u8]>, using_ems: bool) {
+    pub(super) fn process_tls12(&mut self, ocsp_response: &Option<&[u8]>, using_ems: bool) {
         let config = self.config;
         let hello = self.client_hello;
 
@@ -209,7 +209,7 @@ impl<'a> ExtensionProcessing<'a> {
     }
 
     fn process_cert_type_extension(
-        &mut self,
+        &self,
         client: Option<&[CertificateType]>,
         server: &[CertificateType],
     ) -> Result<CertificateType, Error> {
@@ -558,7 +558,7 @@ impl<'a> ClientHelloInput<'a> {
     pub(super) fn from_input(
         input: &'a Input<'a>,
         done_retry: bool,
-        cx: &mut ServerContext<'_>,
+        cx: &ServerContext<'_>,
     ) -> Result<Self, Error> {
         let client_hello = require_handshake_msg!(
             input.message,

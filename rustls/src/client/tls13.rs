@@ -152,7 +152,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             };
 
         let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
-        let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
+        let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
         // If we have ECH state, check that the server accepted our offer.
         if let Some(ech_state) = st.ech_state {
@@ -168,7 +168,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 unreachable!("ServerHello is a handshake message");
             };
             cx.data.ech_status = match ech_state.confirm_acceptance(
-                &mut key_schedule,
+                &key_schedule,
                 server_hello,
                 server_hello_encoded,
                 suite.common.hash_provider,
@@ -1391,8 +1391,8 @@ struct ExpectTraffic {
 
 impl ExpectTraffic {
     fn handle_new_ticket_impl(
-        &mut self,
-        cx: &mut KernelContext<'_>,
+        &self,
+        cx: &KernelContext<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         let secret = self
@@ -1432,18 +1432,18 @@ impl ExpectTraffic {
     }
 
     fn handle_new_ticket_tls13(
-        &mut self,
+        &self,
         cx: &mut ClientContext<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         cx.common.emit(Event::ReceivedTicket);
 
-        let mut kcx = KernelContext {
+        let kcx = KernelContext {
             protocol: self.key_schedule.protocol(),
             quic: &cx.common.quic,
         };
 
-        self.handle_new_ticket_impl(&mut kcx, nst)
+        self.handle_new_ticket_impl(&kcx, nst)
     }
 
     fn handle_key_update(
@@ -1528,7 +1528,7 @@ impl KernelState for ExpectTraffic {
     }
 
     fn handle_new_session_ticket(
-        &mut self,
+        &self,
         cx: &mut KernelContext<'_>,
         message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
@@ -1540,7 +1540,7 @@ struct ExpectQuicTraffic(ExpectTraffic);
 
 impl State<ClientConnectionData> for ExpectQuicTraffic {
     fn handle(
-        mut self: Box<Self>,
+        self: Box<Self>,
         cx: &mut ClientContext<'_>,
         Input { message, .. }: Input<'_>,
     ) -> hs::NextStateOrError {
@@ -1577,7 +1577,7 @@ impl KernelState for ExpectQuicTraffic {
     }
 
     fn handle_new_session_ticket(
-        &mut self,
+        &self,
         cx: &mut KernelContext<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
