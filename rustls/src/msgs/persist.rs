@@ -5,10 +5,11 @@ use core::time::Duration;
 use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
+use crate::crypto::cipher::Payload;
 use crate::crypto::{CipherSuite, Identity};
 use crate::enums::ProtocolVersion;
 use crate::error::InvalidMessage;
-use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
+use crate::msgs::base::{MaybeEmpty, PayloadU8, SizedPayload};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{ProtocolName, SessionId};
 use crate::sync::Arc;
@@ -73,13 +74,13 @@ pub struct Tls13ClientSessionValue {
     age_add: u32,
     max_early_data_size: u32,
     pub(crate) common: ClientSessionCommon,
-    quic_params: PayloadU16,
+    quic_params: SizedPayload<'static, u16, MaybeEmpty>,
 }
 
 impl Tls13ClientSessionValue {
     pub(crate) fn new(
         input: Tls13ClientSessionInput,
-        ticket: Arc<PayloadU16>,
+        ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
         secret: &[u8],
         time_now: UnixTime,
         lifetime: Duration,
@@ -94,7 +95,7 @@ impl Tls13ClientSessionValue {
             common: ClientSessionCommon::new(ticket, time_now, lifetime, input.peer_identity),
             quic_params: input
                 .quic_params
-                .unwrap_or_else(|| PayloadU16::new(Vec::new())),
+                .unwrap_or_else(|| SizedPayload::from(Payload::new(Vec::new()))),
         }
     }
 
@@ -123,7 +124,7 @@ impl Tls13ClientSessionValue {
     }
 
     pub fn quic_params(&self) -> Vec<u8> {
-        self.quic_params.0.clone()
+        self.quic_params.to_vec()
     }
 }
 
@@ -149,7 +150,7 @@ impl Tls12ClientSessionValue {
     pub(crate) fn new(
         suite: &'static Tls12CipherSuite,
         session_id: SessionId,
-        ticket: Arc<PayloadU16>,
+        ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
         master_secret: &[u8; 48],
         peer_identity: Identity<'static>,
         time_now: UnixTime,
@@ -169,7 +170,7 @@ impl Tls12ClientSessionValue {
         &self.master_secret
     }
 
-    pub(crate) fn ticket(&self) -> Arc<PayloadU16> {
+    pub(crate) fn ticket(&self) -> Arc<SizedPayload<'static, u16, MaybeEmpty>> {
         self.common.ticket.clone()
     }
 
@@ -198,7 +199,7 @@ impl core::ops::Deref for Tls12ClientSessionValue {
 
 #[derive(Debug, Clone)]
 pub struct ClientSessionCommon {
-    ticket: Arc<PayloadU16>,
+    ticket: Arc<SizedPayload<'static, u16>>,
     epoch: u64,
     lifetime: Duration,
     peer_identity: Arc<Identity<'static>>,
@@ -206,7 +207,7 @@ pub struct ClientSessionCommon {
 
 impl ClientSessionCommon {
     fn new(
-        ticket: Arc<PayloadU16>,
+        ticket: Arc<SizedPayload<'static, u16>>,
         time_now: UnixTime,
         lifetime: Duration,
         peer_identity: Identity<'static>,
@@ -224,7 +225,7 @@ impl ClientSessionCommon {
     }
 
     pub(crate) fn ticket(&self) -> &[u8] {
-        self.ticket.0.as_ref()
+        (*self.ticket).as_ref()
     }
 }
 
@@ -233,7 +234,7 @@ impl ClientSessionCommon {
 pub(crate) struct Tls13ClientSessionInput {
     pub(crate) suite: &'static Tls13CipherSuite,
     pub(crate) peer_identity: Identity<'static>,
-    pub(crate) quic_params: Option<PayloadU16>,
+    pub(crate) quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
 }
 
 static MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);
@@ -404,7 +405,7 @@ pub struct CommonServerSessionValue {
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) peer_identity: Option<Identity<'static>>,
     pub(crate) alpn: Option<ProtocolName>,
-    pub(crate) application_data: PayloadU16,
+    pub(crate) application_data: SizedPayload<'static, u16, MaybeEmpty>,
     #[doc(hidden)]
     pub creation_time_sec: u64,
 }
@@ -423,7 +424,7 @@ impl CommonServerSessionValue {
             cipher_suite,
             peer_identity,
             alpn,
-            application_data: PayloadU16::new(application_data),
+            application_data: SizedPayload::from(Payload::new(application_data)),
             creation_time_sec: creation_time.as_secs(),
         }
     }
@@ -494,7 +495,7 @@ impl Codec<'_> for CommonServerSessionValue {
                 1 => Some(ProtocolName::read(r)?),
                 _ => None,
             },
-            application_data: PayloadU16::read(r)?,
+            application_data: SizedPayload::read(r)?.into_owned(),
             creation_time_sec: u64::read(r)?,
         })
     }

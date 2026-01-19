@@ -22,7 +22,7 @@ use crate::enums::{
 };
 use crate::error::InvalidMessage;
 use crate::log::warn;
-use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, SizedPayload};
+use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, SizedPayload};
 use crate::msgs::codec::{
     CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement,
     TlsListIter, U24,
@@ -37,13 +37,40 @@ use crate::verify::{DigitallySignedStruct, DistinguishedName};
 /// Create a newtype wrapper around a given type.
 ///
 /// This is used to create newtypes for the various TLS message types which is used to wrap
-/// the `PayloadU8` or `PayloadU16` types. This is typically used for types where we don't need
+/// the `PayloadU8` or `SizedPayload` types. This is typically used for types where we don't need
 /// anything other than access to the underlying bytes.
 macro_rules! wrapped_payload(
-  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident$(<$inner_ty:ty>)?,) => {
+  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident$(<$len:ty, $cardinality:ty>)?,) => {
     $(#[$comment])*
     #[derive(Clone, Debug)]
-    $vis struct $name($inner$(<$inner_ty>)?);
+    $vis struct $name($inner$(<'static, $len, $cardinality>)?);
+
+    impl From<Vec<u8>> for $name {
+        fn from(v: Vec<u8>) -> Self {
+            Self($inner::from(v))
+        }
+    }
+
+    impl AsRef<[u8]> for $name {
+        fn as_ref(&self) -> &[u8] {
+            self.0.as_ref()
+        }
+    }
+
+    impl Codec<'_> for $name {
+        fn encode(&self, bytes: &mut Vec<u8>) {
+            self.0.encode(bytes);
+        }
+
+        fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+            Ok(Self($inner::read(r)?.into_owned()))
+        }
+    }
+  };
+  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident$(<$cardinality:ty>)?,) => {
+    $(#[$comment])*
+    #[derive(Clone, Debug)]
+    $vis struct $name($inner$(<$cardinality>)?);
 
     impl From<Vec<u8>> for $name {
         fn from(v: Vec<u8>) -> Self {
@@ -361,7 +388,7 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
                 HostNamePayload::Invalid(_invalid) => {
                     warn!(
                         "Illegal SNI hostname received {:?}",
-                        String::from_utf8_lossy(&_invalid.0)
+                        String::from_utf8_lossy(_invalid.as_ref())
                     );
                     Some(Self::Invalid)
                 }
@@ -381,19 +408,19 @@ impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
 #[derive(Clone, Debug)]
 pub(crate) enum HostNamePayload {
     HostName(DnsName<'static>),
-    IpAddress(PayloadU16<NonEmpty>),
-    Invalid(PayloadU16<NonEmpty>),
+    IpAddress(SizedPayload<'static, u16, NonEmpty>),
+    Invalid(SizedPayload<'static, u16, NonEmpty>),
 }
 
 impl HostNamePayload {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         use pki_types::ServerName;
-        let raw = PayloadU16::<NonEmpty>::read(r)?;
+        let raw = SizedPayload::<u16, NonEmpty>::read(r)?;
 
-        match ServerName::try_from(raw.0.as_slice()) {
+        match ServerName::try_from(raw.as_ref()) {
             Ok(ServerName::DnsName(d)) => Ok(Self::HostName(d.to_owned())),
-            Ok(ServerName::IpAddress(_)) => Ok(Self::IpAddress(raw)),
-            Ok(_) | Err(_) => Ok(Self::Invalid(raw)),
+            Ok(ServerName::IpAddress(_)) => Ok(Self::IpAddress(raw.into_owned())),
+            Ok(_) | Err(_) => Ok(Self::Invalid(raw.into_owned())),
         }
     }
 }
@@ -469,14 +496,14 @@ impl AsRef<ProtocolName> for SingleProtocolName {
 pub(crate) struct KeyShareEntry {
     pub(crate) group: NamedGroup,
     /// RFC8446: `opaque key_exchange<1..2^16-1>;`
-    pub(crate) payload: PayloadU16<NonEmpty>,
+    pub(crate) payload: SizedPayload<'static, u16, NonEmpty>,
 }
 
 impl KeyShareEntry {
     pub(crate) fn new(group: NamedGroup, payload: impl Into<Vec<u8>>) -> Self {
         Self {
             group,
-            payload: PayloadU16::new(payload.into()),
+            payload: SizedPayload::from(Payload::new(payload.into())),
         }
     }
 }
@@ -488,10 +515,10 @@ impl Codec<'_> for KeyShareEntry {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let group = NamedGroup::read(r)?;
-        let payload = PayloadU16::read(r)?;
-
-        Ok(Self { group, payload })
+        Ok(Self {
+            group: NamedGroup::read(r)?,
+            payload: SizedPayload::read(r)?.into_owned(),
+        })
     }
 }
 
@@ -499,14 +526,14 @@ impl Codec<'_> for KeyShareEntry {
 #[derive(Clone, Debug)]
 pub(crate) struct PresharedKeyIdentity {
     /// RFC8446: `opaque identity<1..2^16-1>;`
-    pub(crate) identity: PayloadU16<NonEmpty>,
+    pub(crate) identity: SizedPayload<'static, u16, NonEmpty>,
     pub(crate) obfuscated_ticket_age: u32,
 }
 
 impl PresharedKeyIdentity {
     pub(crate) fn new(id: Vec<u8>, age: u32) -> Self {
         Self {
-            identity: PayloadU16::new(id),
+            identity: SizedPayload::from(Payload::new(id)),
             obfuscated_ticket_age: age,
         }
     }
@@ -520,7 +547,7 @@ impl Codec<'_> for PresharedKeyIdentity {
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
-            identity: PayloadU16::read(r)?,
+            identity: SizedPayload::read(r)?.into_owned(),
             obfuscated_ticket_age: u32::read(r)?,
         })
     }
@@ -576,7 +603,7 @@ impl Codec<'_> for PresharedKeyOffer {
 }
 
 // --- RFC6066 certificate status request ---
-wrapped_payload!(pub(crate) struct ResponderId, PayloadU16,);
+wrapped_payload!(pub(crate) struct ResponderId, SizedPayload<u16, MaybeEmpty>,);
 
 /// RFC6066: `ResponderID responder_id_list<0..2^16-1>;`
 impl TlsListElement for ResponderId {
@@ -586,7 +613,7 @@ impl TlsListElement for ResponderId {
 #[derive(Clone, Debug)]
 pub(crate) struct OcspCertificateStatusRequest {
     pub(crate) responder_ids: Vec<ResponderId>,
-    pub(crate) extensions: PayloadU16,
+    pub(crate) extensions: SizedPayload<'static, u16, MaybeEmpty>,
 }
 
 impl Codec<'_> for OcspCertificateStatusRequest {
@@ -599,7 +626,7 @@ impl Codec<'_> for OcspCertificateStatusRequest {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             responder_ids: Vec::read(r)?,
-            extensions: PayloadU16::read(r)?,
+            extensions: SizedPayload::read(r)?.into_owned(),
         })
     }
 }
@@ -641,7 +668,7 @@ impl CertificateStatusRequest {
     pub(crate) fn build_ocsp() -> Self {
         let ocsp = OcspCertificateStatusRequest {
             responder_ids: Vec::new(),
-            extensions: PayloadU16::empty(),
+            extensions: SizedPayload::from(Payload::new(Vec::new())),
         };
         Self::Ocsp(ocsp)
     }
@@ -899,7 +926,7 @@ extension_struct! {
 
         /// Stateless HelloRetryRequest cookie (RFC8446)
         ExtensionType::Cookie =>
-            pub(crate) cookie: Option<PayloadU16<NonEmpty>>,
+            pub(crate) cookie: Option<SizedPayload<'a, u16, NonEmpty>>,
 
         /// Offered preshared key modes (RFC8446)
         ExtensionType::PSKKeyExchangeModes =>
@@ -980,7 +1007,7 @@ impl ClientExtensions<'_> {
             preshared_key_offer,
             early_data_request,
             supported_versions,
-            cookie,
+            cookie: cookie.map(|x| x.into_owned()),
             preshared_key_modes,
             certificate_authority_names,
             key_shares,
@@ -1398,7 +1425,7 @@ extension_struct! {
             pub(crate) key_share: Option<NamedGroup>,
 
         ExtensionType::Cookie =>
-            pub(crate) cookie: Option<PayloadU16<NonEmpty>>,
+            pub(crate) cookie: Option<SizedPayload<'a, u16, NonEmpty>>,
 
         ExtensionType::SupportedVersions =>
             pub(crate) supported_versions: Option<ProtocolVersion>,
@@ -1422,7 +1449,7 @@ impl HelloRetryRequestExtensions<'_> {
         } = self;
         HelloRetryRequestExtensions {
             key_share,
-            cookie,
+            cookie: cookie.map(|x| x.into_owned()),
             supported_versions,
             encrypted_client_hello: encrypted_client_hello.map(|x| x.into_owned()),
             order,
@@ -1883,7 +1910,7 @@ impl ClientKeyExchangeParams {
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
             Self::Ecdh(ecdh) => &ecdh.public.0,
-            Self::Dh(dh) => &dh.public.0,
+            Self::Dh(dh) => dh.public.as_ref(),
         }
     }
 
@@ -1925,7 +1952,7 @@ impl Codec<'_> for ClientEcdhParams {
 #[derive(Debug)]
 pub(crate) struct ClientDhParams {
     /// RFC5246: `opaque dh_Yc<1..2^16-1>;`
-    pub(crate) public: PayloadU16<NonEmpty>,
+    pub(crate) public: SizedPayload<'static, u16, NonEmpty>,
 }
 
 impl Codec<'_> for ClientDhParams {
@@ -1935,7 +1962,7 @@ impl Codec<'_> for ClientDhParams {
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
-            public: PayloadU16::read(r)?,
+            public: SizedPayload::read(r)?.into_owned(),
         })
     }
 }
@@ -1979,11 +2006,11 @@ impl Codec<'_> for ServerEcdhParams {
 #[derive(Debug)]
 pub(crate) struct ServerDhParams {
     /// RFC5246: `opaque dh_p<1..2^16-1>;`
-    pub(crate) dh_p: PayloadU16<NonEmpty>,
+    pub(crate) dh_p: SizedPayload<'static, u16, NonEmpty>,
     /// RFC5246: `opaque dh_g<1..2^16-1>;`
-    pub(crate) dh_g: PayloadU16<NonEmpty>,
+    pub(crate) dh_g: SizedPayload<'static, u16, NonEmpty>,
     /// RFC5246: `opaque dh_Ys<1..2^16-1>;`
-    pub(crate) dh_ys: PayloadU16<NonEmpty>,
+    pub(crate) dh_ys: SizedPayload<'static, u16, NonEmpty>,
 }
 
 impl ServerDhParams {
@@ -1993,14 +2020,14 @@ impl ServerDhParams {
         };
 
         Self {
-            dh_p: PayloadU16::new(params.p.to_vec()),
-            dh_g: PayloadU16::new(params.g.to_vec()),
-            dh_ys: PayloadU16::new(kx.pub_key().to_vec()),
+            dh_p: SizedPayload::from(Payload::new(params.p.to_vec())),
+            dh_g: SizedPayload::from(Payload::new(params.g.to_vec())),
+            dh_ys: SizedPayload::from(Payload::new(kx.pub_key().to_vec())),
         }
     }
 
     pub(crate) fn as_ffdhe_group(&self) -> FfdheGroup<'_> {
-        FfdheGroup::from_params_trimming_leading_zeros(&self.dh_p.0, &self.dh_g.0)
+        FfdheGroup::from_params_trimming_leading_zeros(self.dh_p.as_ref(), self.dh_g.as_ref())
     }
 }
 
@@ -2013,9 +2040,9 @@ impl Codec<'_> for ServerDhParams {
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
-            dh_p: PayloadU16::read(r)?,
-            dh_g: PayloadU16::read(r)?,
-            dh_ys: PayloadU16::read(r)?,
+            dh_p: SizedPayload::read(r)?.into_owned(),
+            dh_g: SizedPayload::read(r)?.into_owned(),
+            dh_ys: SizedPayload::read(r)?.into_owned(),
         })
     }
 }
@@ -2037,7 +2064,7 @@ impl ServerKeyExchangeParams {
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
             Self::Ecdh(ecdh) => &ecdh.public.0,
-            Self::Dh(dh) => &dh.dh_ys.0,
+            Self::Dh(dh) => dh.dh_ys.as_ref(),
         }
     }
 
@@ -2234,14 +2261,14 @@ pub(crate) struct NewSessionTicketPayload {
     // Tickets can be large (KB), so we deserialise this straight
     // into an Arc, so it can be passed directly into the client's
     // session object without copying.
-    pub(crate) ticket: Arc<PayloadU16>,
+    pub(crate) ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
 }
 
 impl NewSessionTicketPayload {
     pub(crate) fn new(lifetime_hint: Duration, ticket: Vec<u8>) -> Self {
         Self {
             lifetime_hint,
-            ticket: Arc::new(PayloadU16::new(ticket)),
+            ticket: Arc::new(SizedPayload::from(Payload::new(ticket))),
         }
     }
 }
@@ -2255,7 +2282,7 @@ impl Codec<'_> for NewSessionTicketPayload {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             lifetime_hint: Duration::from_secs(u32::read(r)? as u64),
-            ticket: Arc::new(PayloadU16::read(r)?),
+            ticket: Arc::new(SizedPayload::read(r)?.into_owned()),
         })
     }
 }
@@ -2298,7 +2325,7 @@ pub(crate) struct NewSessionTicketPayloadTls13 {
     pub(crate) lifetime: Duration,
     pub(crate) age_add: u32,
     pub(crate) nonce: PayloadU8,
-    pub(crate) ticket: Arc<PayloadU16>,
+    pub(crate) ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
     pub(crate) extensions: NewSessionTicketExtensions,
 }
 
@@ -2308,7 +2335,7 @@ impl NewSessionTicketPayloadTls13 {
             lifetime,
             age_add,
             nonce: PayloadU8::new(nonce.to_vec()),
-            ticket: Arc::new(PayloadU16::new(ticket)),
+            ticket: Arc::new(SizedPayload::from(Payload::new(ticket))),
             extensions: NewSessionTicketExtensions::default(),
         }
     }
@@ -2328,10 +2355,10 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
         let age_add = u32::read(r)?;
         let nonce = PayloadU8::read(r)?;
         // nb. RFC8446: `opaque ticket<1..2^16-1>;`
-        let ticket = Arc::new(match PayloadU16::<NonEmpty>::read(r) {
+        let ticket = Arc::new(match SizedPayload::<u16, NonEmpty>::read(r) {
             Err(InvalidMessage::IllegalEmptyValue) => Err(InvalidMessage::EmptyTicketValue),
             Err(err) => Err(err),
-            Ok(pl) => Ok(PayloadU16::new(pl.0)),
+            Ok(pl) => Ok(SizedPayload::from(Payload::new(pl.into_vec()))),
         }?);
         let extensions = NewSessionTicketExtensions::read(r)?;
 
@@ -2727,7 +2754,7 @@ pub(crate) struct HpkeKeyConfig {
     pub config_id: u8,
     pub kem_id: HpkeKem,
     /// draft-ietf-tls-esni-24: `opaque HpkePublicKey<1..2^16-1>;`
-    pub public_key: PayloadU16<NonEmpty>,
+    pub public_key: SizedPayload<'static, u16, NonEmpty>,
     pub symmetric_cipher_suites: Vec<HpkeSymmetricCipherSuite>,
 }
 
@@ -2744,7 +2771,7 @@ impl Codec<'_> for HpkeKeyConfig {
         Ok(Self {
             config_id: u8::read(r)?,
             kem_id: HpkeKem::read(r)?,
-            public_key: PayloadU16::read(r)?,
+            public_key: SizedPayload::read(r)?.into_owned(),
             symmetric_cipher_suites: Vec::<HpkeSymmetricCipherSuite>::read(r)?,
         })
     }
@@ -2817,7 +2844,7 @@ pub(crate) enum EchConfigPayload {
     /// An unknown version ECH configuration.
     Unknown {
         version: EchVersion,
-        contents: PayloadU16,
+        contents: SizedPayload<'static, u16, MaybeEmpty>,
     },
 }
 
@@ -2850,8 +2877,8 @@ impl Codec<'_> for EchConfigPayload {
         Ok(match version {
             EchVersion::V18 => Self::V18(EchConfigContents::read(&mut contents)?),
             _ => {
-                // Note: we don't PayloadU16::read() here because we've already read the length prefix.
-                let data = PayloadU16::new(contents.rest().into());
+                // Note: we don't SizedPayload::read() here because we've already read the length prefix.
+                let data = SizedPayload::from(Payload::new(contents.rest()));
                 Self::Unknown {
                     version,
                     contents: data,
@@ -2955,9 +2982,9 @@ pub(crate) struct EncryptedClientHelloOuter {
     pub config_id: u8,
     /// The HPKE encapsulated key, used by servers to decrypt the corresponding payload field.
     /// This field is empty in a ClientHelloOuter sent in response to a HelloRetryRequest.
-    pub enc: PayloadU16,
+    pub enc: SizedPayload<'static, u16, MaybeEmpty>,
     /// The serialized and encrypted ClientHelloInner structure, encrypted using HPKE.
-    pub payload: PayloadU16<NonEmpty>,
+    pub payload: SizedPayload<'static, u16, NonEmpty>,
 }
 
 impl Codec<'_> for EncryptedClientHelloOuter {
@@ -2972,8 +2999,8 @@ impl Codec<'_> for EncryptedClientHelloOuter {
         Ok(Self {
             cipher_suite: HpkeSymmetricCipherSuite::read(r)?,
             config_id: u8::read(r)?,
-            enc: PayloadU16::read(r)?,
-            payload: PayloadU16::read(r)?,
+            enc: SizedPayload::read(r)?.into_owned(),
+            payload: SizedPayload::read(r)?.into_owned(),
         })
     }
 }
@@ -3097,7 +3124,7 @@ mod tests {
             key_config: HpkeKeyConfig {
                 config_id: 0,
                 kem_id: HpkeKem::DHKEM_P256_HKDF_SHA256,
-                public_key: PayloadU16::new(b"xxx".into()),
+                public_key: SizedPayload::from(b"xxx".to_vec()),
                 symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite {
                     kdf_id: HpkeKdf::HKDF_SHA256,
                     aead_id: HpkeAead::AES_128_GCM,

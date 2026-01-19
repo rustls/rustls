@@ -18,7 +18,7 @@ use crate::crypto::{
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
-use crate::msgs::base::PayloadU16;
+use crate::msgs::base::SizedPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::deframer::Locator;
 use crate::msgs::enums::Compression;
@@ -378,7 +378,7 @@ fn minimal_client_hello() -> ClientHelloPayload {
             }),
             key_shares: Some(vec![KeyShareEntry {
                 group: NamedGroup::from(0xfe00),
-                payload: PayloadU16::new(vec![0xab; 32]),
+                payload: SizedPayload::from(vec![0xab; 32]),
             }]),
             extended_master_secret_request: Some(()),
             ..ClientExtensions::default()

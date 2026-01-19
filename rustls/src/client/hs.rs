@@ -224,7 +224,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or has an empty cookie.
         if let Some(cookie) = &hrr.cookie {
-            if cookie.0.is_empty() {
+            if cookie.is_empty() {
                 return Err(PeerMisbehaved::IllegalHelloRetryRequestWithEmptyCookie.into());
             }
         }
@@ -393,7 +393,7 @@ impl ClientHelloInput {
                         // If we have a ticket, we use the sessionid as a signal that
                         // we're  doing an abbreviated handshake.  See section 3.4 in
                         // RFC5077.
-                        if !inner.ticket().0.is_empty() {
+                        if !inner.ticket().is_empty() {
                             inner.session_id = SessionId::random(config.provider().secure_random)?;
                         }
                         Some(inner.session_id)
@@ -607,7 +607,7 @@ fn emit_client_hello_for_retry(
     }
 
     if let Some(cookie) = retryreq.and_then(|hrr| hrr.cookie.as_ref()) {
-        exts.cookie = Some(cookie.clone());
+        exts.cookie = Some(cookie.to_vec().into());
     }
 
     if supported_versions.tls13 {

@@ -21,7 +21,7 @@ use crate::enums::ProtocolVersion;
 use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::PayloadU16;
+use crate::msgs::base::SizedPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::enums::ExtensionType;
@@ -259,7 +259,7 @@ impl EchGreaseConfig {
                     key_config: HpkeKeyConfig {
                         config_id: config_id[0],
                         kem_id: HpkeKem::DHKEM_P256_HKDF_SHA256,
-                        public_key: PayloadU16::new(self.placeholder_key.0.clone()),
+                        public_key: SizedPayload::from(self.placeholder_key.0.clone()),
                         symmetric_cipher_suites: vec![suite.sym],
                     },
                     maximum_name_length: 0,
@@ -295,8 +295,8 @@ impl EchGreaseConfig {
         Ok(EncryptedClientHello::Outer(EncryptedClientHelloOuter {
             cipher_suite: suite.sym,
             config_id: config_id[0],
-            enc: PayloadU16::new(grease_state.enc.0),
-            payload: PayloadU16::new(payload),
+            enc: SizedPayload::from(Payload::new(grease_state.enc.0)),
+            payload: SizedPayload::from(Payload::new(payload)),
         }))
     }
 }
@@ -375,7 +375,7 @@ impl EchState {
         // we can use to seal messages.
         let (enc, sender) = config.suite.setup_sealer(
             &config.hpke_info(),
-            &HpkePublicKey(key_config.public_key.0.clone()),
+            &HpkePublicKey(key_config.public_key.to_vec()),
         )?;
 
         // Start a new transcript buffer for the inner hello.
@@ -446,8 +446,8 @@ impl EchState {
             EncryptedClientHello::Outer(EncryptedClientHelloOuter {
                 cipher_suite: ctx.cipher_suite,
                 config_id: ctx.config_id,
-                enc: PayloadU16::new(enc),
-                payload: PayloadU16::new(payload),
+                enc: SizedPayload::from(Payload::new(enc)),
+                payload: SizedPayload::from(Payload::new(payload)),
             })
         }
 
@@ -763,8 +763,11 @@ impl EchState {
         for ident in psk_offer.identities.iter_mut() {
             // "For each PSK identity advertised in the ClientHelloInner, the
             // client generates a random PSK identity with the same length."
-            self.secure_random
-                .fill(&mut ident.identity.0)?;
+            match ident.identity.as_mut() {
+                Some(ident) => self.secure_random.fill(ident)?,
+                None => unreachable!(),
+            }
+
             // "It also generates a random, 32-bit, unsigned integer to use as
             // the obfuscated_ticket_age."
             let mut ticket_age = [0_u8; 4];

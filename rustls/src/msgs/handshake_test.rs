@@ -4,7 +4,7 @@ use std::{format, println, vec};
 
 use pki_types::{CertificateDer, DnsName};
 
-use super::base::{PayloadU8, PayloadU16, SizedPayload};
+use super::base::{PayloadU8, SizedPayload};
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
     ClientCertificateType, Compression, ECCurveType, EchVersion, ExtensionType, KeyUpdateRequest,
@@ -248,7 +248,7 @@ fn can_round_trip_psk_identity() {
     let bytes = [0, 5, 0x1, 0x2, 0x3, 0x4, 0x5, 0x11, 0x22, 0x33, 0x44];
     let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes)).unwrap();
     println!("{psk_id:?}");
-    assert_eq!(psk_id.identity.0, vec![0x1, 0x2, 0x3, 0x4, 0x5]);
+    assert_eq!(psk_id.identity.as_ref(), &[0x1, 0x2, 0x3, 0x4, 0x5]);
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
     assert_eq!(psk_id.get_encoding(), bytes.to_vec());
 }
@@ -262,7 +262,7 @@ fn can_round_trip_psk_offer() {
     println!("{psko:?}");
 
     assert_eq!(psko.identities.len(), 1);
-    assert_eq!(psko.identities[0].identity.0, vec![0x99]);
+    assert_eq!(psko.identities[0].identity.as_ref(), &[0x99]);
     assert_eq!(psko.identities[0].obfuscated_ticket_age, 0x11223344);
     assert_eq!(psko.binders.len(), 1);
     assert_eq!(psko.binders[0].as_ref(), &[1, 2, 3]);
@@ -862,7 +862,7 @@ fn sample_hello_retry_request() -> HelloRetryRequest {
         cipher_suite: CipherSuite::TLS_PSK_DHE_WITH_AES_128_CCM_8,
         extensions: HelloRetryRequestExtensions {
             key_share: Some(NamedGroup::X25519),
-            cookie: Some(PayloadU16::new(vec![0])),
+            cookie: Some(SizedPayload::<u16, _>::from(vec![0])),
             supported_versions: Some(ProtocolVersion::TLSv1_2),
             encrypted_client_hello: Some(Payload::new(vec![1, 2, 3])),
             order: None,
@@ -881,7 +881,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             server_name: Some(ServerNamePayload::from(
                 &DnsName::try_from("hello").unwrap(),
             )),
-            cookie: Some(PayloadU16::new(vec![1, 2, 3])),
+            cookie: Some(SizedPayload::<u16, _>::from(vec![1, 2, 3])),
             signature_schemes: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             session_ticket: Some(ClientSessionTicket::Request),
             ec_point_formats: Some(SupportedEcPointFormats::default()),
@@ -1094,9 +1094,9 @@ fn sample_ecdhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
 fn sample_dhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
     ServerKeyExchangePayload::Known(ServerKeyExchange {
         params: ServerKeyExchangeParams::Dh(ServerDhParams {
-            dh_p: PayloadU16::new(vec![1, 2, 3]),
-            dh_g: PayloadU16::new(vec![2]),
-            dh_ys: PayloadU16::new(vec![1, 2]),
+            dh_p: SizedPayload::<u16, _>::from(vec![1, 2, 3]),
+            dh_g: SizedPayload::<u16, _>::from(vec![2]),
+            dh_ys: SizedPayload::<u16, _>::from(vec![1, 2]),
         }),
         dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
@@ -1128,7 +1128,7 @@ fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 
 fn sample_new_session_ticket_payload() -> NewSessionTicketPayload {
     NewSessionTicketPayload {
         lifetime_hint: Duration::from_secs(1234),
-        ticket: Arc::new(PayloadU16::new(vec![1, 2, 3])),
+        ticket: Arc::new(SizedPayload::<u16, _>::from(vec![1, 2, 3])),
     }
 }
 
@@ -1137,7 +1137,7 @@ fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
         lifetime: Duration::from_secs(123),
         age_add: 1234,
         nonce: PayloadU8::new(vec![1, 2, 3]),
-        ticket: Arc::new(PayloadU16::new(vec![4, 5, 6])),
+        ticket: Arc::new(SizedPayload::<u16, _>::from(vec![4, 5, 6])),
         extensions: NewSessionTicketExtensions {
             max_early_data_size: Some(1234),
         },

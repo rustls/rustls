@@ -18,7 +18,7 @@ use crate::crypto::{
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
-use crate::msgs::base::{PayloadU8, PayloadU16};
+use crate::msgs::base::{PayloadU8, SizedPayload};
 use crate::msgs::codec::Reader;
 use crate::msgs::enums::{Compression, ECCurveType};
 use crate::msgs::handshake::{
@@ -109,7 +109,7 @@ fn test_client_rejects_hrr_with_varied_session_id() {
                 legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: SessionId::empty(),
                 extensions: HelloRetryRequestExtensions {
-                    cookie: Some(PayloadU16::new(vec![1, 2, 3, 4])),
+                    cookie: Some(SizedPayload::from(vec![1, 2, 3, 4])),
                     ..HelloRetryRequestExtensions::default()
                 },
             }),
@@ -415,7 +415,7 @@ fn client_requiring_rpk_receives_server_ee(
                 extensions: Box::new(ServerExtensions {
                     key_share: Some(KeyShareEntry {
                         group: NamedGroup::X25519,
-                        payload: PayloadU16::new(vec![0xaa; 32]),
+                        payload: SizedPayload::from(vec![0xaa; 32]),
                     }),
                     ..ServerExtensions::default()
                 }),

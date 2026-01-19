@@ -9,7 +9,7 @@ use super::message::Message;
 use crate::crypto::cipher::{EncodedMessage, Payload};
 use crate::enums::HandshakeType;
 use crate::error::AlertDescription;
-use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, SizedPayload};
+use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, SizedPayload};
 use crate::msgs::codec::U24;
 
 #[test]
@@ -106,7 +106,10 @@ fn debug_payload() {
     );
     assert_eq!(
         "01020304",
-        format!("{:?}", PayloadU16::<MaybeEmpty>::new(vec![1, 2, 3, 4]))
+        format!(
+            "{:?}",
+            SizedPayload::<u16, MaybeEmpty>::from(vec![1, 2, 3, 4])
+        )
     );
     assert_eq!(
         "01020304",
