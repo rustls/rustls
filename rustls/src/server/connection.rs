@@ -55,6 +55,7 @@ mod buffered {
     };
     use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Side};
+    use crate::conn::private::SideData;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::{ApiMisuse, Error};
     use crate::msgs::Locator;
@@ -160,7 +161,7 @@ mod buffered {
         /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
         /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
         pub fn fips(&self) -> FipsStatus {
-            self.inner.core.common_state.fips
+            self.inner.core.side.fips
         }
 
         /// Extract secrets, so they can be used when configuring kTLS, for example.
@@ -254,8 +255,7 @@ mod buffered {
                 inner: Some(
                     ConnectionCore::new(
                         Box::new(Accepting),
-                        ServerConnectionData::default(),
-                        CommonState::new(Side::Server, Protocol::Tcp),
+                        ServerConnectionData::new(CommonState::new(Side::Server, Protocol::Tcp)),
                     )
                     .into(),
                 ),
@@ -304,11 +304,10 @@ mod buffered {
                     self.inner = Some(connection);
                     return Ok(None);
                 }
-                Err(err) => return Err(AcceptedAlert::from_error(err, connection)),
+                Err(err) => return Err(AcceptedAlert::from_error(err, connection.core.side)),
             };
 
             let cx = ServerContext {
-                common: &mut connection.core.common_state,
                 data: &mut connection.core.side,
                 // `ClientHelloInput::from_message` won't read borrowed plaintext
                 plaintext_locator: &Locator::new(&[]),
@@ -318,7 +317,7 @@ mod buffered {
             let sig_schemes = match ClientHelloInput::from_input(&input, false, &cx) {
                 Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
-                    return Err(AcceptedAlert::from_error(err, connection));
+                    return Err(AcceptedAlert::from_error(err, connection.core.side));
                 }
             };
             debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
@@ -338,14 +337,10 @@ mod buffered {
     pub struct AcceptedAlert(ChunkVecBuffer);
 
     impl AcceptedAlert {
-        pub(super) fn from_error(
-            error: Error,
-            mut conn: ConnectionCommon<ServerConnectionData>,
-        ) -> (Error, Self) {
-            conn.core
-                .common_state
-                .maybe_send_fatal_alert(&error);
-            (error, Self(conn.core.common_state.sendable_tls))
+        pub(super) fn from_error(error: Error, side: ServerConnectionData) -> (Error, Self) {
+            let mut common = side.into_common();
+            common.maybe_send_fatal_alert(&error);
+            (error, Self(common.sendable_tls))
         }
 
         pub(super) fn empty() -> Self {
@@ -559,11 +554,10 @@ impl Accepted {
         let proof = match self.input.check_aligned_handshake() {
             Ok(proof) => proof,
             Err(err) => {
-                return Err(AcceptedAlert::from_error(err, self.connection));
+                return Err(AcceptedAlert::from_error(err, self.connection.core.side));
             }
         };
         let mut cx = hs::ServerContext {
-            common: &mut self.connection.core.common_state,
             data: &mut self.connection.core.side,
             // `ExpectClientHello::with_input` won't read borrowed plaintext
             plaintext_locator: &Locator::new(&[]),
@@ -579,7 +573,7 @@ impl Accepted {
 
         let new = match state.with_input(input, &mut cx) {
             Ok(new) => new,
-            Err(err) => return Err(AcceptedAlert::from_error(err, self.connection)),
+            Err(err) => return Err(AcceptedAlert::from_error(err, self.connection.core.side)),
         };
         debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
@@ -718,22 +712,54 @@ impl ConnectionCore<ServerConnectionData> {
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
-            ServerConnectionData::default(),
-            common,
+            ServerConnectionData::new(common),
         ))
     }
 }
 
 /// State associated with a server connection.
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct ServerConnectionData {
+    common: CommonState,
     pub(crate) sni: Option<DnsName<'static>>,
     pub(crate) received_resumption_data: Option<Vec<u8>>,
     pub(crate) resumption_data: Vec<u8>,
     pub(super) early_data: EarlyDataState,
 }
 
+impl ServerConnectionData {
+    pub(crate) fn new(common: CommonState) -> Self {
+        Self {
+            common,
+            sni: None,
+            received_resumption_data: None,
+            resumption_data: Vec::new(),
+            early_data: EarlyDataState::default(),
+        }
+    }
+}
+
 impl crate::conn::SideData for ServerConnectionData {}
+
+impl crate::conn::private::SideData for ServerConnectionData {
+    fn into_common(self) -> CommonState {
+        self.common
+    }
+}
+
+impl Deref for ServerConnectionData {
+    type Target = CommonState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.common
+    }
+}
+
+impl DerefMut for ServerConnectionData {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.common
+    }
+}
 
 #[cfg(feature = "std")]
 #[cfg(test)]

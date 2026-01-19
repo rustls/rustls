@@ -95,8 +95,8 @@ mod connection {
 
         fn deref(&self) -> &Self::Target {
             match self {
-                Self::Client(conn) => &conn.core.common_state,
-                Self::Server(conn) => &conn.core.common_state,
+                Self::Client(conn) => &conn.core.side,
+                Self::Server(conn) => &conn.core.side,
             }
         }
     }
@@ -104,8 +104,8 @@ mod connection {
     impl DerefMut for Connection {
         fn deref_mut(&mut self) -> &mut Self::Target {
             match self {
-                Self::Client(conn) => &mut conn.core.common_state,
-                Self::Server(conn) => &mut conn.core.common_state,
+                Self::Client(conn) => &mut conn.core.side,
+                Self::Server(conn) => &mut conn.core.side,
             }
         }
     }
@@ -386,7 +386,7 @@ mod connection {
         /// to fail.
         pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
             self.core
-                .common_state
+                .side
                 .quic
                 .params
                 .as_ref()
@@ -397,7 +397,7 @@ mod connection {
         pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
             let suite = self
                 .core
-                .common_state
+                .side
                 .negotiated_cipher_suite()
                 .and_then(|suite| match suite {
                     SupportedCipherSuite::Tls13(suite) => Some(suite),
@@ -408,7 +408,7 @@ mod connection {
                 suite,
                 suite.quic?,
                 self.core
-                    .common_state
+                    .side
                     .quic
                     .early_secret
                     .as_ref()?,
@@ -451,10 +451,7 @@ mod connection {
         ///
         /// When this returns `Some(_)`, the new keys must be used for future handshake data.
         pub fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
-            self.core
-                .common_state
-                .quic
-                .write_hs(buf)
+            self.core.side.quic.write_hs(buf)
         }
     }
 
@@ -462,13 +459,13 @@ mod connection {
         type Target = CommonState;
 
         fn deref(&self) -> &Self::Target {
-            &self.core.common_state
+            &self.core.side
         }
     }
 
     impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
         fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.core.common_state
+            &mut self.core.side
         }
     }
 }

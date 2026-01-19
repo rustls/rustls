@@ -163,8 +163,8 @@ mod connection {
 
         fn deref(&self) -> &Self::Target {
             match self {
-                Self::Client(conn) => &conn.core.common_state,
-                Self::Server(conn) => &conn.core.common_state,
+                Self::Client(conn) => conn.core.side.deref(),
+                Self::Server(conn) => conn.core.side.deref(),
             }
         }
     }
@@ -172,8 +172,8 @@ mod connection {
     impl DerefMut for Connection {
         fn deref_mut(&mut self) -> &mut Self::Target {
             match self {
-                Self::Client(conn) => &mut conn.core.common_state,
-                Self::Server(conn) => &mut conn.core.common_state,
+                Self::Client(conn) => &mut conn.core.side,
+                Self::Server(conn) => &mut conn.core.side,
             }
         }
     }
@@ -329,7 +329,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             let len = self
                 .core
-                .common_state
+                .side
                 .buffer_plaintext(buf.into(), &mut self.sendable_plaintext);
             self.core.maybe_refresh_traffic_keys();
             Ok(len)
@@ -351,7 +351,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             };
             let len = self
                 .core
-                .common_state
+                .side
                 .buffer_plaintext(payload, &mut self.sendable_plaintext);
             self.core.maybe_refresh_traffic_keys();
             Ok(len)
@@ -565,7 +565,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// See [`Self::set_buffer_limit`] for more information on how limits are applied.
     pub fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
         self.core
-            .common_state
+            .side
             .received_plaintext
             .set_limit(limit);
     }
@@ -605,13 +605,15 @@ impl<Side: SideData> ConnectionCommon<Side> {
 impl<Side: SideData> ConnectionCommon<Side> {
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader<'_> {
-        let common = &mut self.core.common_state;
+        let common = &mut self.core.side;
+        let has_seen_eof = common.has_seen_eof;
+        let has_received_close_notify = common.has_received_close_notify;
         Reader {
             received_plaintext: &mut common.received_plaintext,
             // Are we done? i.e., have we processed all received messages, and received a
             // close_notify to indicate that no new messages will arrive?
-            has_received_close_notify: common.has_received_close_notify,
-            has_seen_eof: common.has_seen_eof,
+            has_received_close_notify,
+            has_seen_eof,
         }
     }
 
@@ -838,13 +840,13 @@ impl<Side: SideData> Deref for ConnectionCommon<Side> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
-        &self.core.common_state
+        &self.core.side
     }
 }
 
 impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core.common_state
+        &mut self.core.side
     }
 }
 
@@ -887,14 +889,13 @@ impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
     type Target = CommonState;
 
     fn deref(&self) -> &Self::Target {
-        &self.core.common_state
+        &self.core.side
     }
 }
 
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Box<dyn State<Side>>, Error>,
     pub(crate) side: Side,
-    pub(crate) common_state: CommonState,
     pub(crate) hs_deframer: HandshakeDeframer,
 
     /// We limit consecutive empty fragments to avoid a route for the peer to send
@@ -903,11 +904,10 @@ pub(crate) struct ConnectionCore<Side: SideData> {
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State<Side>>, side: Side, common_state: CommonState) -> Self {
+    pub(crate) fn new(state: Box<dyn State<Side>>, side: Side) -> Self {
         Self {
             state: Ok(state),
             side,
-            common_state,
             hs_deframer: HandshakeDeframer::default(),
             seen_consecutive_empty_fragments: 0,
         }
@@ -943,8 +943,7 @@ impl<Side: SideData> ConnectionCore<Side> {
             let opt_msg = match res {
                 Ok(opt_msg) => opt_msg,
                 Err(e) => {
-                    self.common_state
-                        .maybe_send_fatal_alert(&e);
+                    self.side.maybe_send_fatal_alert(&e);
                     if let Error::DecryptError = e {
                         state.handle_decrypt_error();
                     }
@@ -962,34 +961,25 @@ impl<Side: SideData> ConnectionCore<Side> {
                 msg,
                 self.hs_deframer.aligned(),
                 state,
-                &mut self.side,
                 &locator,
                 &mut plaintext,
-                &mut self.common_state,
+                &mut self.side,
             ) {
                 Ok(new) => state = new,
                 Err(e) => {
-                    self.common_state
-                        .maybe_send_fatal_alert(&e);
+                    self.side.maybe_send_fatal_alert(&e);
                     self.state = Err(e.clone());
                     deframer_buffer.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
             }
 
-            if self
-                .common_state
-                .may_send_application_data
-                && !sendable_plaintext.is_empty()
-            {
-                self.common_state
+            if self.side.may_send_application_data && !sendable_plaintext.is_empty() {
+                self.side
                     .send_buffered_plaintext(sendable_plaintext);
             }
 
-            if self
-                .common_state
-                .has_received_close_notify
-            {
+            if self.side.has_received_close_notify {
                 // "Any data received after a closure alert has been received MUST be ignored."
                 // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
                 // This is data that has already been accepted in `read_tls`.
@@ -999,7 +989,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
             if let Some(payload) = plaintext.take() {
                 let payload = payload.reborrow(&Delocator::new(buffer));
-                self.common_state
+                self.side
                     .received_plaintext
                     .append(payload.into_vec());
             }
@@ -1009,7 +999,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
         deframer_buffer.discard(buffer_progress.take_discard());
         self.state = Ok(state);
-        Ok(self.common_state.current_io_state())
+        Ok(self.side.current_io_state())
     }
 
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
@@ -1045,10 +1035,8 @@ impl<Side: SideData> ConnectionCore<Side> {
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<EncodedMessage<&'b [u8]>>, Error> {
-        let version_is_tls13 = matches!(
-            self.common_state.negotiated_version,
-            Some(ProtocolVersion::TLSv1_3)
-        );
+        let version_is_tls13 =
+            matches!(self.side.negotiated_version, Some(ProtocolVersion::TLSv1_3));
 
         let locator = Locator::new(buffer);
 
@@ -1073,10 +1061,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                     // * The payload size is indicative of a plaintext alert message.
                     ContentType::Alert
                         if version_is_tls13
-                            && !self
-                                .common_state
-                                .decrypt_state
-                                .has_decrypted()
+                            && !self.side.decrypt_state.has_decrypted()
                             && message.payload.len() <= 2 =>
                     {
                         true
@@ -1090,7 +1075,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 }
 
                 let message = match self
-                    .common_state
+                    .side
                     .decrypt_state
                     .decrypt_incoming(message)
                 {
@@ -1116,7 +1101,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 } = message;
 
                 if want_close_before_decrypt {
-                    self.common_state.send_close_notify();
+                    self.side.send_close_notify();
                 }
 
                 break (plaintext, iter.bytes_consumed());
@@ -1168,7 +1153,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
             if self.hs_deframer.has_message_ready() {
                 // trial decryption finishes with the first handshake message after it started.
-                self.common_state
+                self.side
                     .decrypt_state
                     .finish_trial_decryption();
 
@@ -1186,50 +1171,42 @@ impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn dangerous_into_kernel_connection(
         self,
     ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
-        if self.common_state.is_handshaking() {
+        let common = self.side.into_common();
+
+        if common.is_handshaking() {
             return Err(Error::HandshakeNotComplete);
         }
 
-        if !self
-            .common_state
-            .sendable_tls
-            .is_empty()
-        {
+        if !common.sendable_tls.is_empty() {
             return Err(ApiMisuse::SecretExtractionWithPendingSendableData.into());
         }
 
         let state = self.state?;
 
-        let read_seq = self
-            .common_state
-            .decrypt_state
-            .read_seq();
-        let write_seq = self
-            .common_state
-            .encrypt_state
-            .write_seq();
+        let read_seq = common.decrypt_state.read_seq();
+        let write_seq = common.encrypt_state.write_seq();
 
         let (secrets, state) = state.into_external_state()?;
         let secrets = ExtractedSecrets {
             tx: (write_seq, secrets.tx),
             rx: (read_seq, secrets.rx),
         };
-        let external = KernelConnection::new(state, self.common_state)?;
+        let external = KernelConnection::new(state, common)?;
 
         Ok((secrets, external))
     }
 
     pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match self.common_state.exporter.take() {
+        match self.side.exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
-            None if self.common_state.is_handshaking() => Err(Error::HandshakeNotComplete),
+            None if self.side.is_handshaking() => Err(Error::HandshakeNotComplete),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }
 
     #[cfg(feature = "std")]
     pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match self.common_state.early_exporter.take() {
+        match self.side.early_exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
@@ -1237,11 +1214,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
     /// Trigger a `refresh_traffic_keys` if required by `CommonState`.
     fn maybe_refresh_traffic_keys(&mut self) {
-        if mem::take(
-            &mut self
-                .common_state
-                .refresh_traffic_keys_pending,
-        ) {
+        if mem::take(&mut self.side.refresh_traffic_keys_pending) {
             let _ = self.refresh_traffic_keys();
         }
     }
@@ -1249,7 +1222,6 @@ impl<Side: SideData> ConnectionCore<Side> {
     fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
         match &mut self.state {
             Ok(st) => st.send_key_update_request(&mut Context {
-                common: &mut self.common_state,
                 data: &mut self.side,
                 plaintext_locator: &Locator::new(&[]),
                 received_plaintext: &mut None,
@@ -1260,7 +1232,16 @@ impl<Side: SideData> ConnectionCore<Side> {
 }
 
 /// Data specific to the peer's side (client or server).
-pub trait SideData: Debug {}
+#[expect(private_bounds)]
+pub trait SideData: private::SideData {}
+
+pub(crate) mod private {
+    use super::*;
+
+    pub(crate) trait SideData: Debug + Deref<Target = CommonState> + DerefMut {
+        fn into_common(self) -> CommonState;
+    }
+}
 
 /// An [`EncodedMessage<Payload<'_>>`] which does not borrow its payload, but
 /// references a range that can later be borrowed.
