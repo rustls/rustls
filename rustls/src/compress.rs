@@ -41,7 +41,7 @@ use std::sync::Mutex;
 
 use crate::crypto::cipher::Payload;
 use crate::enums::CertificateCompressionAlgorithm;
-use crate::msgs::base::PayloadU24;
+use crate::msgs::base::SizedPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{CertificatePayloadTls13, CompressedCertificatePayload};
 use crate::sync::Arc;
@@ -378,7 +378,7 @@ impl CompressionCache {
             compressed: CompressedCertificatePayload {
                 alg: algorithm,
                 uncompressed_len,
-                compressed: PayloadU24::from(Payload::new(compressed)),
+                compressed: SizedPayload::from(Payload::new(compressed)),
             },
         });
 
@@ -411,7 +411,7 @@ impl CompressionCache {
             compressed: CompressedCertificatePayload {
                 alg: algorithm,
                 uncompressed_len,
-                compressed: PayloadU24::from(Payload::new(compressed)),
+                compressed: SizedPayload::from(Payload::new(compressed)),
             },
         }))
     }

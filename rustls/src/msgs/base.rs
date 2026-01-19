@@ -48,14 +48,14 @@ impl<'a> Codec<'a> for SubjectPublicKeyInfoDer<'a> {
 
 /// An arbitrary, unknown-content, u24-length-prefixed payload
 #[derive(Clone, Eq, PartialEq)]
-pub(crate) struct PayloadU24<'a, C: Cardinality = MaybeEmpty> {
-    inner: Payload<'a>,
-    _marker: PhantomData<C>,
+pub(crate) struct SizedPayload<'a, L, C: Cardinality = MaybeEmpty> {
+    pub(crate) inner: Payload<'a>,
+    pub(crate) _marker: PhantomData<(L, C)>,
 }
 
-impl<C: Cardinality> PayloadU24<'_, C> {
-    pub(crate) fn into_owned(self) -> PayloadU24<'static, C> {
-        PayloadU24 {
+impl<L, C: Cardinality> SizedPayload<'_, L, C> {
+    pub(crate) fn into_owned(self) -> SizedPayload<'static, L, C> {
+        SizedPayload {
             inner: self.inner.into_owned(),
             _marker: PhantomData,
         }
@@ -64,20 +64,25 @@ impl<C: Cardinality> PayloadU24<'_, C> {
     pub(crate) fn into_vec(self) -> Vec<u8> {
         self.inner.into_owned().into_vec()
     }
+
+    pub(crate) fn to_vec(&self) -> Vec<u8> {
+        self.inner.bytes().to_vec()
+    }
 }
 
-impl<'a, C: Cardinality> Codec<'a> for PayloadU24<'a, C> {
+impl<'a, L: PayloadSize<'a>, C: Cardinality> Codec<'a> for SizedPayload<'a, L, C> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let inner = self.inner.bytes();
         debug_assert!(inner.len() >= C::MIN);
-        U24(inner.len() as u32).encode(bytes);
+        debug_assert!(inner.len() <= L::MAX);
+        L::length(inner).encode(bytes);
         bytes.extend_from_slice(inner);
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let len = U24::read(r)?.0 as usize;
+        let len = L::read(r)?.into();
         if len < C::MIN {
-            return Err(InvalidMessage::IllegalEmptyList("PayloadU24"));
+            return Err(InvalidMessage::IllegalEmptyList("SizedPayload"));
         }
         let mut sub = r.sub(len)?;
         Ok(Self {
@@ -87,9 +92,10 @@ impl<'a, C: Cardinality> Codec<'a> for PayloadU24<'a, C> {
     }
 }
 
-impl<'a, C: Cardinality> From<Payload<'a>> for PayloadU24<'a, C> {
+impl<'a, L: PayloadSize<'a>, C: Cardinality> From<Payload<'a>> for SizedPayload<'a, L, C> {
     fn from(inner: Payload<'a>) -> Self {
         debug_assert!(inner.bytes().len() >= C::MIN);
+        debug_assert!(inner.bytes().len() <= L::MAX);
         Self {
             inner,
             _marker: PhantomData,
@@ -97,13 +103,13 @@ impl<'a, C: Cardinality> From<Payload<'a>> for PayloadU24<'a, C> {
     }
 }
 
-impl<C: Cardinality> AsRef<[u8]> for PayloadU24<'_, C> {
+impl<'a, L: PayloadSize<'a>, C: Cardinality> AsRef<[u8]> for SizedPayload<'a, L, C> {
     fn as_ref(&self) -> &[u8] {
         self.inner.bytes()
     }
 }
 
-impl<C: Cardinality> fmt::Debug for PayloadU24<'_, C> {
+impl<'a, L: PayloadSize<'a>, C: Cardinality> fmt::Debug for SizedPayload<'a, L, C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
@@ -205,6 +211,20 @@ impl<C: Cardinality> fmt::Debug for PayloadU8<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         hex(f, &self.0)
     }
+}
+
+impl<'a> PayloadSize<'a> for U24 {
+    fn length(bytes: &[u8]) -> Self {
+        Self(bytes.len() as u32)
+    }
+
+    const MAX: usize = 0xFFFFFF;
+}
+
+trait PayloadSize<'a>: Codec<'a> + Into<usize> {
+    fn length(bytes: &[u8]) -> Self;
+
+    const MAX: usize;
 }
 
 pub(crate) trait Cardinality: Clone + Eq + PartialEq {
