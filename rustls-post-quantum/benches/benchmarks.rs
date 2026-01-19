@@ -92,7 +92,7 @@ fn bench_clienthello(c: &mut Criterion) {
         ClientConfig::builder_with_provider(separate_provider().into())
             .with_safe_default_protocol_versions()
             .unwrap()
-            .with_root_certificates(anchors.clone())
+            .with_root_certificates(anchors)
             .with_no_client_auth()
             .into();
 

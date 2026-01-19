@@ -459,7 +459,7 @@ fn sni_resolver_works() {
     let err = do_handshake_until_error(&mut client1, &mut server1);
     assert_eq!(err, Ok(()));
 
-    let mut server2 = ServerConnection::new(server_config.clone()).unwrap();
+    let mut server2 = ServerConnection::new(server_config).unwrap();
     let mut client2 = ClientConnection::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("notlocalhost"),
@@ -516,7 +516,7 @@ fn sni_resolver_lower_cases_configured_names() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
+    let mut server1 = ServerConnection::new(server_config).unwrap();
     let mut client1 = ClientConnection::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("localhost"),
@@ -546,7 +546,7 @@ fn sni_resolver_lower_cases_queried_names() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
+    let mut server1 = ServerConnection::new(server_config).unwrap();
     let mut client1 = ClientConnection::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("LOCALHOST"),
