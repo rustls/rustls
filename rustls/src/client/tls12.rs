@@ -1206,7 +1206,7 @@ impl KernelState for ExpectTraffic {
 
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle_new_session_ticket(
-        &mut self,
+        &self,
         _cx: &mut KernelContext<'_>,
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {

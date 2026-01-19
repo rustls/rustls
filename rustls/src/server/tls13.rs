@@ -223,7 +223,7 @@ mod client_hello {
                     };
 
                     if !check_binder(
-                        &mut transcript,
+                        &transcript,
                         &KeyScheduleEarlyServer::new(st.protocol, suite, &resume.secret.0),
                         input.message,
                         psk_offer.binders[i].as_ref(),
@@ -432,7 +432,7 @@ mod client_hello {
     }
 
     fn check_binder(
-        transcript: &mut HandshakeHash,
+        transcript: &HandshakeHash,
         key_schedule: &KeyScheduleEarlyServer,
         client_hello: &Message<'_>,
         binder: &[u8],
@@ -1387,7 +1387,7 @@ impl KernelState for ExpectTraffic {
     }
 
     fn handle_new_session_ticket(
-        &mut self,
+        &self,
         _cx: &mut KernelContext<'_>,
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
@@ -1422,7 +1422,7 @@ impl KernelState for ExpectQuicTraffic {
 
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle_new_session_ticket(
-        &mut self,
+        &self,
         _cx: &mut KernelContext<'_>,
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {

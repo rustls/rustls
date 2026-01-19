@@ -172,7 +172,7 @@ impl Tls12ClientSessionValue {
         &self.master_secret
     }
 
-    pub(crate) fn ticket(&mut self) -> Arc<PayloadU16> {
+    pub(crate) fn ticket(&self) -> Arc<PayloadU16> {
         self.common.ticket.clone()
     }
 

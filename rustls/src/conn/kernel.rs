@@ -240,7 +240,7 @@ pub(crate) trait KernelState: Send + Sync {
     /// This will only ever be called for client connections, as [`KernelConnection`]
     /// only exposes the relevant API for client connections.
     fn handle_new_session_ticket(
-        &mut self,
+        &self,
         cx: &mut KernelContext<'_>,
         message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error>;

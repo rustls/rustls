@@ -301,7 +301,7 @@ impl KeyScheduleHandshakeStart {
     }
 
     pub(crate) fn server_ech_confirmation_secret(
-        &mut self,
+        &self,
         client_hello_inner_random: &[u8],
         hs_hash: hash::Output,
     ) -> [u8; 8] {

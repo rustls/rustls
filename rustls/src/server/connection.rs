@@ -320,7 +320,7 @@ mod buffered {
                 Err(err) => return Err(AcceptedAlert::from_error(err, connection)),
             };
 
-            let mut cx = ServerContext {
+            let cx = ServerContext {
                 common: &mut connection.core.common_state,
                 data: &mut connection.core.side,
                 // `ClientHelloInput::from_message` won't read borrowed plaintext
@@ -328,7 +328,7 @@ mod buffered {
                 received_plaintext: &mut None,
             };
 
-            let sig_schemes = match ClientHelloInput::from_input(&input, false, &mut cx) {
+            let sig_schemes = match ClientHelloInput::from_input(&input, false, &cx) {
                 Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
                 Err(err) => {
                     return Err(AcceptedAlert::from_error(err, connection));

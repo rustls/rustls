@@ -1026,7 +1026,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
     fn take_handshake_message<'b>(
         &mut self,
-        buffer: &'b mut [u8],
+        buffer: &'b [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Option<EncodedMessage<&'b [u8]>> {
         self.hs_deframer
