@@ -139,7 +139,7 @@ mod buffered {
         /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
         /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
         pub fn fips(&self) -> FipsStatus {
-            self.inner.core.common_state.fips
+            self.inner.core.side.fips
         }
 
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
@@ -272,10 +272,9 @@ impl ConnectionCore<ClientConnectionData> {
         let mut common_state = CommonState::new(Side::Client, proto);
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.fips = config.fips();
-        let mut data = ClientConnectionData::new();
+        let mut data = ClientConnectionData::new(common_state);
 
         let mut cx = hs::ClientContext {
-            common: &mut common_state,
             data: &mut data,
             // `start_handshake` won't read plaintext
             plaintext_locator: &Locator::new(&[]),
@@ -286,7 +285,7 @@ impl ConnectionCore<ClientConnectionData> {
         let state = input.start_handshake(extra_exts, &mut cx)?;
         debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
-        Ok(Self::new(state, data, common_state))
+        Ok(Self::new(state, data))
     }
 
     #[cfg(feature = "std")]
@@ -433,7 +432,7 @@ impl MayEncryptEarlyData<'_> {
 
         self.conn
             .core
-            .common_state
+            .side
             .write_plaintext(early_data[..allowed].into(), outgoing_tls)
             .map_err(|e| e.into())
     }
@@ -564,13 +563,15 @@ impl core::error::Error for EarlyDataError {}
 /// State associated with a client connection.
 #[derive(Debug)]
 pub struct ClientConnectionData {
+    common: CommonState,
     pub(super) early_data: EarlyData,
     pub(super) ech_status: EchStatus,
 }
 
 impl ClientConnectionData {
-    fn new() -> Self {
+    fn new(common: CommonState) -> Self {
         Self {
+            common,
             early_data: EarlyData::new(),
             ech_status: EchStatus::NotOffered,
         }
@@ -578,3 +579,23 @@ impl ClientConnectionData {
 }
 
 impl crate::conn::SideData for ClientConnectionData {}
+
+impl crate::conn::private::SideData for ClientConnectionData {
+    fn into_common(self) -> CommonState {
+        self.common
+    }
+}
+
+impl Deref for ClientConnectionData {
+    type Target = CommonState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.common
+    }
+}
+
+impl DerefMut for ClientConnectionData {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.common
+    }
+}

@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::Range;
 
 use pki_types::FipsStatus;
@@ -21,25 +22,24 @@ use crate::msgs::{
     AlertLevel, AlertMessagePayload, Codec, Delocator, HandshakeAlignedProof,
     HandshakeMessagePayload, Locator, Message, MessageFragmenter, MessagePayload,
 };
-use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTraffic;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
+use crate::{SideData, quic};
 
-pub(crate) fn process_main_protocol<Data>(
+pub(crate) fn process_main_protocol<Data: SideData>(
     msg: EncodedMessage<&'_ [u8]>,
     aligned_handshake: Option<HandshakeAlignedProof>,
     state: Box<dyn State<Data>>,
-    data: &mut Data,
     plaintext_locator: &Locator,
     received_plaintext: &mut Option<UnborrowedPayload>,
-    common: &mut CommonState,
+    data: &mut Data,
 ) -> Result<Box<dyn State<Data>>, Error> {
     // Drop CCS messages during handshake in TLS1.3
     if msg.typ == ContentType::ChangeCipherSpec
-        && !common.may_receive_application_data
-        && common.is_tls13()
+        && !data.may_receive_application_data
+        && data.is_tls13()
     {
         if !msg.is_valid_ccs() {
             // "An implementation which receives any other change_cipher_spec value or
@@ -48,8 +48,7 @@ pub(crate) fn process_main_protocol<Data>(
             return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
         }
 
-        common
-            .temper_counters
+        data.temper_counters
             .received_tls13_change_cipher_spec()?;
         trace!("Dropping CCS");
         return Ok(state);
@@ -60,31 +59,29 @@ pub(crate) fn process_main_protocol<Data>(
 
     // For alerts, we have separate logic.
     if let MessagePayload::Alert(alert) = &msg.payload {
-        common.process_alert(alert)?;
+        data.process_alert(alert)?;
         return Ok(state);
     }
 
     // For TLS1.2, outside of the handshake, send rejection alerts for
     // renegotiation requests.  These can occur any time.
-    if common.may_receive_application_data && !common.is_tls13() {
-        let reject_ty = match common.side {
+    if data.may_receive_application_data && !data.is_tls13() {
+        let reject_ty = match data.side {
             Side::Client => HandshakeType::HelloRequest,
             Side::Server => HandshakeType::ClientHello,
         };
 
         if msg.handshake_type() == Some(reject_ty) {
-            common
-                .temper_counters
+            data.temper_counters
                 .received_renegotiation_request()?;
             let desc = AlertDescription::NoRenegotiation;
             warn!("sending warning alert {desc:?}");
-            common.send_warning_alert_no_log(desc);
+            data.send_warning_alert_no_log(desc);
             return Ok(state);
         }
     }
 
     let mut cx = Context {
-        common,
         data,
         plaintext_locator,
         received_plaintext,
@@ -655,6 +652,13 @@ impl CommonState {
     }
 }
 
+impl fmt::Debug for CommonState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CommonState")
+            .finish_non_exhaustive()
+    }
+}
+
 /// Describes which sort of handshake happened.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[non_exhaustive]
@@ -726,7 +730,7 @@ impl IoState {
     }
 }
 
-pub(crate) trait State<Side>: Send + Sync {
+pub(crate) trait State<Side: SideData>: Send + Sync {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut Context<'_, Side>,
@@ -746,8 +750,7 @@ pub(crate) trait State<Side>: Send + Sync {
     }
 }
 
-pub(crate) struct Context<'a, Data> {
-    pub(crate) common: &'a mut CommonState,
+pub(crate) struct Context<'a, Data: SideData> {
     pub(crate) data: &'a mut Data,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
@@ -763,7 +766,7 @@ pub(crate) struct Context<'a, Data> {
     pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
 }
 
-impl<Data> Output for Context<'_, Data> {
+impl<Data: SideData> Output for Context<'_, Data> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::ApplicationData(payload) => {
@@ -779,35 +782,31 @@ impl<Data> Output for Context<'_, Data> {
                 debug_assert!(previous.is_none(), "overwrote plaintext data");
             }
             Event::ApplicationProtocol(protocol) => {
-                self.common.alpn_protocol =
+                self.data.alpn_protocol =
                     Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
             }
-            Event::CipherSuite(suite) => self.common.suite = Some(suite),
-            Event::EarlyExporter(exporter) => self.common.early_exporter = Some(exporter),
-            Event::EncryptMessage(m) => match self.common.protocol {
-                Protocol::Tcp => self.common.send_msg(m, true),
-                Protocol::Quic(_) => self.common.quic.send_msg(m, true),
+            Event::CipherSuite(suite) => self.data.suite = Some(suite),
+            Event::EarlyExporter(exporter) => self.data.early_exporter = Some(exporter),
+            Event::EncryptMessage(m) => match self.data.protocol {
+                Protocol::Tcp => self.data.send_msg(m, true),
+                Protocol::Quic(_) => self.data.quic.send_msg(m, true),
             },
-            Event::Exporter(exporter) => self.common.exporter = Some(exporter),
+            Event::Exporter(exporter) => self.data.exporter = Some(exporter),
             Event::HandshakeKind(hk) => {
-                assert!(self.common.handshake_kind.is_none());
-                self.common.handshake_kind = Some(hk);
+                assert!(self.data.handshake_kind.is_none());
+                self.data.handshake_kind = Some(hk);
             }
             Event::KeyExchangeGroup(kxg) => {
-                assert!(
-                    self.common
-                        .negotiated_kx_group
-                        .is_none()
-                );
-                self.common.negotiated_kx_group = Some(kxg);
+                assert!(self.data.negotiated_kx_group.is_none());
+                self.data.negotiated_kx_group = Some(kxg);
             }
             Event::MaybeKeyUpdateRequest(ks) => {
-                if self.common.ensure_key_update_queued() {
+                if self.data.ensure_key_update_queued() {
                     ks.update_encrypter_for_key_update(self);
                 }
             }
             Event::MessageDecrypter { decrypter, proof } => self
-                .common
+                .data
                 .decrypt_state
                 .set_message_decrypter(decrypter, &proof),
             Event::MessageDecrypterWithTrialDecryption {
@@ -815,31 +814,31 @@ impl<Data> Output for Context<'_, Data> {
                 max_length,
                 proof,
             } => self
-                .common
+                .data
                 .decrypt_state
                 .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
             Event::MessageEncrypter { encrypter, limit } => self
-                .common
+                .data
                 .encrypt_state
                 .set_message_encrypter(encrypter, limit),
-            Event::QuicEarlySecret(sec) => self.common.quic.early_secret = sec,
-            Event::QuicHandshakeSecrets(sec) => self.common.quic.hs_secrets = Some(sec),
-            Event::QuicTrafficSecrets(sec) => self.common.quic.traffic_secrets = Some(sec),
-            Event::QuicTransportParameters(params) => self.common.quic.params = Some(params),
-            Event::PeerIdentity(identity) => self.common.peer_identity = Some(identity),
-            Event::PlainMessage(m) => match self.common.protocol {
-                Protocol::Tcp => self.common.send_msg(m, false),
-                Protocol::Quic(_) => self.common.quic.send_msg(m, false),
+            Event::QuicEarlySecret(sec) => self.data.quic.early_secret = sec,
+            Event::QuicHandshakeSecrets(sec) => self.data.quic.hs_secrets = Some(sec),
+            Event::QuicTrafficSecrets(sec) => self.data.quic.traffic_secrets = Some(sec),
+            Event::QuicTransportParameters(params) => self.data.quic.params = Some(params),
+            Event::PeerIdentity(identity) => self.data.peer_identity = Some(identity),
+            Event::PlainMessage(m) => match self.data.protocol {
+                Protocol::Tcp => self.data.send_msg(m, false),
+                Protocol::Quic(_) => self.data.quic.send_msg(m, false),
             },
-            Event::ProtocolVersion(ver) => self.common.negotiated_version = Some(ver),
+            Event::ProtocolVersion(ver) => self.data.negotiated_version = Some(ver),
             Event::ReceivedTicket => {
-                self.common.tls13_tickets_received = self
-                    .common
+                self.data.tls13_tickets_received = self
+                    .data
                     .tls13_tickets_received
                     .saturating_add(1)
             }
-            Event::StartOutgoingTraffic => self.common.start_outgoing_traffic(),
-            Event::StartTraffic => self.common.start_traffic(),
+            Event::StartOutgoingTraffic => self.data.start_outgoing_traffic(),
+            Event::StartTraffic => self.data.start_traffic(),
         }
     }
 }

@@ -57,8 +57,7 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
         },
         false,
         &Context {
-            common: &mut CommonState::new(Side::Server, Protocol::Tcp),
-            data: &mut ServerConnectionData::default(),
+            data: &mut ServerConnectionData::new(CommonState::new(Side::Server, Protocol::Tcp)),
             plaintext_locator: &Locator::new(&[]),
             received_plaintext: &mut None,
         },
