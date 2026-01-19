@@ -179,7 +179,7 @@ impl<'a> ExtensionProcessing<'a> {
         ))
     }
 
-    pub(super) fn process_tls12(&mut self, ocsp_response: &Option<&[u8]>, using_ems: bool) {
+    pub(super) fn process_tls12(&mut self, ocsp_response: Option<&[u8]>, using_ems: bool) {
         let config = self.config;
         let hello = self.client_hello;
 
@@ -208,7 +208,7 @@ impl<'a> ExtensionProcessing<'a> {
         }
 
         // Send confirmation of OCSP staple request if we will send one.
-        if let Some([_, ..]) = &ocsp_response {
+        if let Some([_, ..]) = ocsp_response {
             self.extensions
                 .certificate_status_request_ack = Some(());
         }
