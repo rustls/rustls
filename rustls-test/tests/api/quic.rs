@@ -174,40 +174,6 @@ fn test_quic_handshake() {
         .unwrap()
         .unwrap();
     assert!(client.is_early_data_accepted());
-    // 0-RTT rejection
-    {
-        let client_config = (*client_config).clone();
-        let mut client = quic::ClientConnection::new(
-            Arc::new(client_config),
-            quic::Version::V1,
-            server_name("localhost"),
-            client_params.into(),
-        )
-        .unwrap();
-
-        let mut server = quic::ServerConnection::new(
-            server_config.clone(),
-            quic::Version::V1,
-            server_params.into(),
-        )
-        .unwrap();
-        server.reject_early_data();
-
-        step(&mut client, &mut server).unwrap();
-        assert_eq!(client.quic_transport_parameters(), Some(server_params));
-        assert!(client.zero_rtt_keys().is_some());
-        assert!(server.zero_rtt_keys().is_none());
-        step(&mut server, &mut client)
-            .unwrap()
-            .unwrap();
-        step(&mut client, &mut server)
-            .unwrap()
-            .unwrap();
-        step(&mut server, &mut client)
-            .unwrap()
-            .unwrap();
-        assert!(!client.is_early_data_accepted());
-    }
 
     // failed handshake
     let mut client = quic::ClientConnection::new(

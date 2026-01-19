@@ -271,15 +271,6 @@ mod connection {
             Ok(Self { inner })
         }
 
-        /// Explicitly discard early data, notifying the client
-        ///
-        /// Useful if invariants encoded in `received_resumption_data()` cannot be respected.
-        ///
-        /// Must be called while `is_handshaking` is true.
-        pub fn reject_early_data(&mut self) {
-            self.inner.core.reject_early_data()
-        }
-
         /// Retrieves the server name, if any, used to select the certificate and
         /// private key.
         ///
