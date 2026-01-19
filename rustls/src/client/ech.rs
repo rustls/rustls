@@ -277,7 +277,7 @@ impl EchGreaseConfig {
 
         // Construct an inner hello using the outer hello - this allows us to know the size of
         // dummy payload we should use for the GREASE extension.
-        let encoded_inner_hello = grease_state.encode_inner_hello(outer_hello, None, &None);
+        let encoded_inner_hello = grease_state.encode_inner_hello(outer_hello, None, None);
 
         // Generate a payload of random data equivalent in length to a real inner hello.
         let payload_len = encoded_inner_hello.len()
@@ -414,7 +414,7 @@ impl EchState {
         &mut self,
         mut outer_hello: ClientHelloPayload,
         retry_req: Option<&HelloRetryRequest>,
-        resuming: &Option<Retrieved<&persist::Tls13ClientSessionValue>>,
+        resuming: Option<&Retrieved<&persist::Tls13ClientSessionValue>>,
     ) -> Result<ClientHelloPayload, Error> {
         trace!(
             "Preparing ECH offer {}",
@@ -592,7 +592,7 @@ impl EchState {
         &mut self,
         outer_hello: &ClientHelloPayload,
         retryreq: Option<&HelloRetryRequest>,
-        resuming: &Option<Retrieved<&persist::Tls13ClientSessionValue>>,
+        resuming: Option<&Retrieved<&persist::Tls13ClientSessionValue>>,
     ) -> Vec<u8> {
         // Start building an inner hello using the outer_hello as a template.
         let mut inner_hello = ClientHelloPayload {

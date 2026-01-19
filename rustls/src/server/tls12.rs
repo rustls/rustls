@@ -161,7 +161,7 @@ mod client_hello {
                 .filter(|resumedata| {
                     resumedata
                         .common
-                        .can_resume(suite.common.suite, &cx.data.sni)
+                        .can_resume(suite.common.suite, cx.data.sni.as_ref())
                         && (resumedata.extended_ms == st.using_ems
                             || (resumedata.extended_ms && !st.using_ems))
                 });
@@ -358,7 +358,7 @@ mod client_hello {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
         let (_, alpn_protocol) =
             ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
-        ep.process_tls12(ocsp_response, using_ems);
+        ep.process_tls12(ocsp_response.as_deref(), using_ems);
 
         let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
             legacy_version: ProtocolVersion::TLSv1_2,

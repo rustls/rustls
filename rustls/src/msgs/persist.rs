@@ -428,7 +428,7 @@ impl CommonServerSessionValue {
         }
     }
 
-    pub(crate) fn can_resume(&self, suite: CipherSuite, sni: &Option<DnsName<'_>>) -> bool {
+    pub(crate) fn can_resume(&self, suite: CipherSuite, sni: Option<&DnsName<'_>>) -> bool {
         // The RFCs underspecify what happens if we try to resume to
         // an unoffered/varying suite.  We merely don't resume in weird cases.
         //
@@ -439,7 +439,7 @@ impl CommonServerSessionValue {
         //
         // RFC 8446: "The server MUST ensure that it selects
         // a compatible PSK (if any) and cipher suite."
-        self.cipher_suite == suite && &self.sni == sni
+        self.cipher_suite == suite && self.sni.as_ref() == sni
     }
 }
 

@@ -215,7 +215,7 @@ mod client_hello {
                             .filter(|resumedata| {
                                 resumedata
                                     .common
-                                    .can_resume(suite.common.suite, &cx.data.sni)
+                                    .can_resume(suite.common.suite, cx.data.sni.as_ref())
                             });
 
                     let Some(resume) = maybe_resume_data else {
@@ -597,7 +597,7 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         client_hello: &ClientHelloPayload,
         resumedata: Option<&Tls13ServerSessionValue>,
-        chosen_alpn_protocol: &Option<ProtocolName>,
+        chosen_alpn_protocol: Option<&ProtocolName>,
         suite: &'static Tls13CipherSuite,
         protocol: Protocol,
         config: &ServerConfig,
@@ -638,7 +638,7 @@ mod client_hello {
         let early_data_possible = early_data_requested
             && resume.is_fresh()
             && resume.common.cipher_suite == suite.common.suite
-            && &resume.common.alpn == chosen_alpn_protocol;
+            && resume.common.alpn.as_ref() == chosen_alpn_protocol;
 
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
@@ -670,7 +670,7 @@ mod client_hello {
             cx,
             hello,
             resumedata,
-            &alpn_protocol,
+            alpn_protocol.as_ref(),
             suite,
             protocol,
             config,

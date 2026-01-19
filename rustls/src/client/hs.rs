@@ -711,7 +711,7 @@ fn emit_client_hello_for_retry(
         // we need to replace the client hello payload with an ECH client hello payload.
         (EchStatus::NotOffered | EchStatus::Offered, Some(ech_state)) => {
             // Replace the client hello payload with an ECH client hello payload.
-            chp_payload = ech_state.ech_hello(chp_payload, retryreq, &tls13_session)?;
+            chp_payload = ech_state.ech_hello(chp_payload, retryreq, tls13_session.as_ref())?;
             cx.data.ech_status = EchStatus::Offered;
             // Store the ECH extension in case we need to carry it forward in a subsequent hello.
             input.prev_ech_ext = chp_payload
