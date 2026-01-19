@@ -159,7 +159,7 @@ impl TestPki {
         client_ee_params.is_ca = rcgen::IsCa::NoCa;
         client_ee_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
         let client_serial = SerialNumber::from(vec![0xC0, 0xFF, 0xEE]);
-        client_ee_params.serial_number = Some(client_serial.clone());
+        client_ee_params.serial_number = Some(client_serial);
         let client_key = KeyPair::generate_for(alg).unwrap();
         let client_cert = client_ee_params
             .signed_by(&client_key, &ca)

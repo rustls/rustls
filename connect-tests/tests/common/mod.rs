@@ -103,7 +103,7 @@ impl TlsClient {
         self
     }
 
-    pub(super) fn go(&mut self) -> Option<()> {
+    pub(super) fn go(&self) -> Option<()> {
         let fragstring;
         let portstring = self.port.to_string();
         let mut args = Vec::<&str>::new();

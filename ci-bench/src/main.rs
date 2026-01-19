@@ -535,7 +535,7 @@ fn add_benchmark_group(benchmarks: &mut Vec<Benchmark>, params: BenchmarkParams)
     benchmarks.push(Benchmark::new(
         format!("transfer_no_resume_{params_label}"),
         BenchmarkKind::Transfer,
-        params.clone(),
+        params,
     ));
 }
 

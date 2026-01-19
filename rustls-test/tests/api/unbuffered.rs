@@ -228,9 +228,9 @@ fn early_data() {
     };
 
     let outcome = run(
-        client_config.clone(),
+        client_config,
         &mut client_actions,
-        server_config.clone(),
+        server_config,
         &mut NO_ACTIONS.clone(),
     );
 
@@ -289,8 +289,8 @@ fn run(
     let mut server_handshake_done = false;
 
     let mut client =
-        UnbufferedClientConnection::new(client_config.clone(), server_name("localhost")).unwrap();
-    let mut server = UnbufferedServerConnection::new(server_config.clone()).unwrap();
+        UnbufferedClientConnection::new(client_config, server_name("localhost")).unwrap();
+    let mut server = UnbufferedServerConnection::new(server_config).unwrap();
     let mut buffers = BothBuffers::default();
 
     while !(client_handshake_done

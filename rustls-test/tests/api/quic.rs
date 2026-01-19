@@ -850,7 +850,7 @@ fn test_fragmented_append() {
     let client_config = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_TLS13_PROVIDER);
     let client_config = Arc::new(client_config);
     let mut client = quic::ClientConnection::new(
-        client_config.clone(),
+        client_config,
         quic::Version::V1,
         server_name("localhost"),
         b"client params"[..].into(),
