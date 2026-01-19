@@ -297,8 +297,8 @@ mod client_hello {
             resumedata
                 .common
                 .application_data
-                .0
-                .clone(),
+                .as_ref()
+                .to_vec(),
         );
 
         if send_ticket {

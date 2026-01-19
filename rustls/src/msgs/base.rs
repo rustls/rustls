@@ -65,8 +65,29 @@ impl<L, C: Cardinality> SizedPayload<'_, L, C> {
         self.inner.into_owned().into_vec()
     }
 
+    pub(crate) fn as_mut(&mut self) -> Option<&mut [u8]> {
+        match &mut self.inner {
+            Payload::Owned(vec) => Some(vec.as_mut_slice()),
+            Payload::Borrowed(_) => None,
+        }
+    }
+
     pub(crate) fn to_vec(&self) -> Vec<u8> {
         self.inner.bytes().to_vec()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.inner.bytes().is_empty()
+    }
+}
+
+impl<'a, L: PayloadSize<'a>> SizedPayload<'a, L, MaybeEmpty> {
+    #[cfg(test)]
+    pub(crate) fn empty() -> Self {
+        Self {
+            inner: Payload::Borrowed(&[]),
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -103,6 +124,17 @@ impl<'a, L: PayloadSize<'a>, C: Cardinality> From<Payload<'a>> for SizedPayload<
     }
 }
 
+impl<'a, L: PayloadSize<'a>, C: Cardinality> From<Vec<u8>> for SizedPayload<'a, L, C> {
+    fn from(inner: Vec<u8>) -> Self {
+        debug_assert!(inner.len() >= C::MIN);
+        debug_assert!(inner.len() <= L::MAX);
+        Self {
+            inner: Payload::Owned(inner),
+            _marker: PhantomData,
+        }
+    }
+}
+
 impl<'a, L: PayloadSize<'a>, C: Cardinality> AsRef<[u8]> for SizedPayload<'a, L, C> {
     fn as_ref(&self) -> &[u8] {
         self.inner.bytes()
@@ -112,50 +144,6 @@ impl<'a, L: PayloadSize<'a>, C: Cardinality> AsRef<[u8]> for SizedPayload<'a, L,
 impl<'a, L: PayloadSize<'a>, C: Cardinality> fmt::Debug for SizedPayload<'a, L, C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
-    }
-}
-
-/// An arbitrary, unknown-content, u16-length-prefixed payload
-///
-/// The `C` type parameter controls whether decoded values may
-/// be empty.
-#[derive(Clone, Eq, PartialEq)]
-pub(crate) struct PayloadU16<C: Cardinality = MaybeEmpty>(pub(crate) Vec<u8>, PhantomData<C>);
-
-impl<C: Cardinality> PayloadU16<C> {
-    pub(crate) fn new(bytes: Vec<u8>) -> Self {
-        debug_assert!(bytes.len() >= C::MIN);
-        Self(bytes, PhantomData)
-    }
-}
-
-impl PayloadU16<MaybeEmpty> {
-    pub(crate) fn empty() -> Self {
-        Self::new(Vec::new())
-    }
-}
-
-impl<C: Cardinality> Codec<'_> for PayloadU16<C> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        debug_assert!(self.0.len() >= C::MIN);
-        (self.0.len() as u16).encode(bytes);
-        bytes.extend_from_slice(&self.0);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let len = u16::read(r)? as usize;
-        if len < C::MIN {
-            return Err(InvalidMessage::IllegalEmptyValue);
-        }
-        let mut sub = r.sub(len)?;
-        let body = sub.rest().to_vec();
-        Ok(Self(body, PhantomData))
-    }
-}
-
-impl<C: Cardinality> fmt::Debug for PayloadU16<C> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.0)
     }
 }
 
@@ -221,7 +209,15 @@ impl<'a> PayloadSize<'a> for U24 {
     const MAX: usize = 0xFFFFFF;
 }
 
-trait PayloadSize<'a>: Codec<'a> + Into<usize> {
+impl<'a> PayloadSize<'a> for u16 {
+    fn length(bytes: &[u8]) -> Self {
+        bytes.len() as Self
+    }
+
+    const MAX: usize = 0xFFFF;
+}
+
+pub(crate) trait PayloadSize<'a>: Codec<'a> + Into<usize> {
     fn length(bytes: &[u8]) -> Self;
 
     const MAX: usize;

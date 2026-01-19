@@ -221,7 +221,7 @@ mod tests {
     use crate::crypto::{
         CertificateIdentity, CipherSuite, Identity, TEST_PROVIDER, tls12_suite, tls13_suite,
     };
-    use crate::msgs::base::PayloadU16;
+    use crate::msgs::base::SizedPayload;
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::{
         Tls12ClientSessionValue, Tls13ClientSessionInput, Tls13ClientSessionValue,
@@ -247,7 +247,7 @@ mod tests {
                 Tls12ClientSessionValue::new(
                     tls12_suite(CipherSuite::Unknown(0xff12), &TEST_PROVIDER),
                     SessionId::empty(),
-                    Arc::new(PayloadU16::empty()),
+                    Arc::new(SizedPayload::empty()),
                     &[0u8; 48],
                     Identity::X509(CertificateIdentity {
                         end_entity: CertificateDer::from(&[][..]),
@@ -273,7 +273,7 @@ mod tests {
                     }),
                     quic_params: None,
                 },
-                Arc::new(PayloadU16::empty()),
+                Arc::new(SizedPayload::empty()),
                 &[],
                 now,
                 Duration::ZERO,

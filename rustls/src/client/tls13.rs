@@ -28,7 +28,7 @@ use crate::error::{
 };
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::{PayloadU8, PayloadU16};
+use crate::msgs::base::{MaybeEmpty, PayloadU8, SizedPayload};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
@@ -151,7 +151,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 }
             };
 
-        let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
+        let shared_secret = our_key_share.complete(their_key_share.payload.as_ref())?;
         let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
         // If we have ECH state, check that the server accepted our offer.
@@ -521,7 +521,9 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             cx.emit(Event::QuicTransportParameters(
                 quic_params.clone().into_vec(),
             ));
-            Some(PayloadU16::new(quic_params.clone().into_vec()))
+            Some(SizedPayload::from(Payload::new(
+                quic_params.clone().into_vec(),
+            )))
         } else {
             None
         };
@@ -627,7 +629,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    quic_params: Option<PayloadU16>,
+    quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
@@ -712,7 +714,7 @@ struct ExpectCertificateOrCompressedCertificate {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    quic_params: Option<PayloadU16>,
+    quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -778,7 +780,7 @@ struct ExpectCertificateOrCertReq {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    quic_params: Option<PayloadU16>,
+    quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     ech_retry_configs: Option<Vec<EchConfigPayload>>,
@@ -848,7 +850,7 @@ struct ExpectCertificateRequest {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    quic_params: Option<PayloadU16>,
+    quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     offered_cert_compression: bool,
@@ -950,7 +952,7 @@ struct ExpectCompressedCertificate {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    quic_params: Option<PayloadU16>,
+    quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -1020,7 +1022,7 @@ struct ExpectCertificate {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    quic_params: Option<PayloadU16>,
+    quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
@@ -1085,7 +1087,7 @@ struct ExpectCertificateVerify {
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    quic_params: Option<PayloadU16>,
+    quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,

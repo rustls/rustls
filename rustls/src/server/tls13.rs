@@ -208,7 +208,7 @@ mod client_hello {
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
                     let maybe_resume_data =
-                        attempt_tls13_ticket_decryption(&psk_id.identity.0, &st.config)
+                        attempt_tls13_ticket_decryption(psk_id.identity.as_ref(), &st.config)
                             .map(|resumedata| {
                                 resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
                             })
@@ -253,7 +253,13 @@ mod client_hello {
             }
 
             if let Some(resume) = &resumedata {
-                cx.data.received_resumption_data = Some(resume.common.application_data.0.clone());
+                cx.data.received_resumption_data = Some(
+                    resume
+                        .common
+                        .application_data
+                        .as_ref()
+                        .to_vec(),
+                );
             }
 
             let full_handshake = resumedata.is_none();
@@ -486,7 +492,7 @@ mod client_hello {
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
-        let ckx = kxgroup.start_and_complete(&share.payload.0)?;
+        let ckx = kxgroup.start_and_complete(share.payload.as_ref())?;
         cx.emit(Event::KeyExchangeGroup(kxgroup));
 
         let extensions = Box::new(ServerExtensions {

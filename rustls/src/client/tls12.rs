@@ -23,7 +23,7 @@ use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion}
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::{PayloadU8, PayloadU16};
+use crate::msgs::base::{PayloadU8, SizedPayload};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::handshake::{
@@ -481,7 +481,7 @@ fn emit_client_kx(
             public: PayloadU8::new(pub_key.to_vec()),
         }),
         KeyExchangeAlgorithm::DHE => ClientKeyExchangeParams::Dh(ClientDhParams {
-            public: PayloadU16::new(pub_key.to_vec()),
+            public: SizedPayload::from(Payload::new(pub_key.to_vec())),
         }),
     }
     .encode(&mut buf);
@@ -1037,16 +1037,19 @@ impl ExpectFinished {
         // original ticket again.
         let (mut ticket, lifetime) = match self.ticket.take() {
             Some(nst) => (nst.ticket, nst.lifetime_hint),
-            None => (Arc::new(PayloadU16::empty()), Duration::ZERO),
+            None => (
+                Arc::new(SizedPayload::from(Payload::new(Vec::new()))),
+                Duration::ZERO,
+            ),
         };
 
-        if ticket.0.is_empty() {
+        if ticket.is_empty() {
             if let Some((resuming_session, _)) = &mut self.resuming {
                 ticket = resuming_session.ticket();
             }
         }
 
-        if self.session_id.is_empty() && ticket.0.is_empty() {
+        if self.session_id.is_empty() && ticket.is_empty() {
             debug!("Session not saved: server didn't allocate id or ticket");
             return;
         }
