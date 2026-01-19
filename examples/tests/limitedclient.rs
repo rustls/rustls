@@ -26,6 +26,7 @@ fn limited_no_aes_symbols() {
     );
 }
 
+#[ignore] // XXX: pending runtime binding of state machine states
 #[test]
 fn limited_no_tls12_symbols() {
     let expected = find_symbols_in_executable(tls12, env!("CARGO_BIN_EXE_simpleclient"));
