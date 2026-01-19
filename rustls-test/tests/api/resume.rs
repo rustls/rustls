@@ -545,41 +545,6 @@ fn early_data_not_available_on_server_before_client_hello() {
 }
 
 #[test]
-fn early_data_can_be_rejected_by_server() {
-    let (client_config, server_config) = early_data_configs();
-
-    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server);
-
-    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    assert!(client.early_data().is_some());
-    assert_eq!(
-        client
-            .early_data()
-            .unwrap()
-            .bytes_left(),
-        1234
-    );
-    client
-        .early_data()
-        .unwrap()
-        .flush()
-        .unwrap();
-    assert_eq!(
-        client
-            .early_data()
-            .unwrap()
-            .write(b"hello")
-            .unwrap(),
-        5
-    );
-    server.reject_early_data();
-    do_handshake(&mut client, &mut server);
-
-    assert!(!client.is_early_data_accepted());
-}
-
-#[test]
 fn early_data_is_limited_on_client() {
     let (client_config, server_config) = early_data_configs();
 

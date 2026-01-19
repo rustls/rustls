@@ -134,15 +134,6 @@ mod buffered {
             self.inner.core.side.resumption_data = data.into();
         }
 
-        /// Explicitly discard early data, notifying the client
-        ///
-        /// Useful if invariants encoded in `received_resumption_data()` cannot be respected.
-        ///
-        /// Must be called while `is_handshaking` is true.
-        pub fn reject_early_data(&mut self) {
-            self.inner.core.reject_early_data()
-        }
-
         /// Returns an `io::Read` implementer you can read bytes from that are
         /// received from a client as TLS1.3 0RTT/"early" data, during the handshake.
         ///
@@ -734,15 +725,6 @@ impl ConnectionCore<ServerConnectionData> {
             ServerConnectionData::default(),
             common,
         ))
-    }
-
-    #[cfg(feature = "std")]
-    pub(crate) fn reject_early_data(&mut self) {
-        assert!(
-            self.common_state.is_handshaking(),
-            "cannot retroactively reject early data"
-        );
-        self.side.early_data.reject();
     }
 }
 
