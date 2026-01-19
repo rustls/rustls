@@ -47,7 +47,7 @@ mod client_hello {
     use crate::crypto::cipher::Payload;
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
-    use crate::msgs::base::PayloadU8;
+    use crate::msgs::base::SizedPayload;
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::deframer::HandshakeAlignedProof;
     use crate::msgs::enums::Compression;
@@ -224,7 +224,7 @@ mod client_hello {
 
                     if !check_binder(
                         &transcript,
-                        &KeyScheduleEarlyServer::new(st.protocol, suite, &resume.secret.0),
+                        &KeyScheduleEarlyServer::new(st.protocol, suite, resume.secret.as_ref()),
                         input.message,
                         psk_offer.binders[i].as_ref(),
                     ) {
@@ -275,7 +275,7 @@ mod client_hello {
                 chosen_psk_index,
                 resumedata
                     .as_ref()
-                    .map(|x| &x.secret.0[..]),
+                    .map(|x| x.secret.as_ref()),
                 &input.proof,
                 &st.config,
             )?;
@@ -701,7 +701,7 @@ mod client_hello {
         }
 
         let cr = CertificateRequestPayloadTls13 {
-            context: PayloadU8::empty(),
+            context: SizedPayload::from(Payload::Borrowed(&[])),
             extensions: CertificateRequestExtensions {
                 signature_algorithms: Some(
                     config

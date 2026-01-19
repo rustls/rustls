@@ -16,7 +16,6 @@ use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
-use crate::msgs::base::PayloadU8;
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
@@ -190,7 +189,7 @@ impl<'a> ExtensionProcessing<'a> {
                 .cipher_suites
                 .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
         {
-            self.extensions.renegotiation_info = Some(PayloadU8::empty());
+            self.extensions.renegotiation_info = Some(Vec::new().into());
         }
 
         // Tickets:

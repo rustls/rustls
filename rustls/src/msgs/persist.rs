@@ -9,7 +9,7 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::{CipherSuite, Identity};
 use crate::enums::ProtocolVersion;
 use crate::error::InvalidMessage;
-use crate::msgs::base::{MaybeEmpty, PayloadU8, SizedPayload};
+use crate::msgs::base::{MaybeEmpty, SizedPayload};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{ProtocolName, SessionId};
 use crate::sync::Arc;
@@ -70,7 +70,7 @@ impl<T> core::ops::Deref for Retrieved<T> {
 #[derive(Debug)]
 pub struct Tls13ClientSessionValue {
     suite: &'static Tls13CipherSuite,
-    secret: Zeroizing<PayloadU8>,
+    secret: Zeroizing<SizedPayload<'static, u8>>,
     age_add: u32,
     max_early_data_size: u32,
     pub(crate) common: ClientSessionCommon,
@@ -89,7 +89,7 @@ impl Tls13ClientSessionValue {
     ) -> Self {
         Self {
             suite: input.suite,
-            secret: Zeroizing::new(PayloadU8::new(secret.to_vec())),
+            secret: Zeroizing::new(secret.to_vec().into()),
             age_add,
             max_early_data_size,
             common: ClientSessionCommon::new(ticket, time_now, lifetime, input.peer_identity),
@@ -100,7 +100,7 @@ impl Tls13ClientSessionValue {
     }
 
     pub(crate) fn secret(&self) -> &[u8] {
-        self.secret.0.as_ref()
+        self.secret.as_ref()
     }
 
     pub fn max_early_data_size(&self) -> u32 {
@@ -332,7 +332,7 @@ impl From<Tls12ServerSessionValue> for ServerSessionValue {
 pub struct Tls13ServerSessionValue {
     #[doc(hidden)]
     pub common: CommonServerSessionValue,
-    pub(crate) secret: Zeroizing<PayloadU8>,
+    pub(crate) secret: Zeroizing<SizedPayload<'static, u8>>,
     pub(crate) age_obfuscation_offset: u32,
 
     // not encoded vv
@@ -347,7 +347,7 @@ impl Tls13ServerSessionValue {
     ) -> Self {
         Self {
             common,
-            secret: Zeroizing::new(PayloadU8::new(secret.to_vec())),
+            secret: Zeroizing::new(secret.to_vec().into()),
             age_obfuscation_offset,
             freshness: None,
         }
@@ -386,7 +386,7 @@ impl Codec<'_> for Tls13ServerSessionValue {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             common: CommonServerSessionValue::read(r)?,
-            secret: Zeroizing::new(PayloadU8::read(r)?),
+            secret: Zeroizing::new(SizedPayload::read(r)?.into_owned()),
             age_obfuscation_offset: u32::read(r)?,
             freshness: None,
         })
@@ -449,7 +449,8 @@ impl Codec<'_> for CommonServerSessionValue {
         if let Some(sni) = &self.sni {
             1u8.encode(bytes);
             let sni_bytes: &str = sni.as_ref();
-            PayloadU8::<MaybeEmpty>::encode_slice(sni_bytes.as_bytes(), bytes);
+            SizedPayload::<u8, MaybeEmpty>::from(Payload::Borrowed(sni_bytes.as_bytes()))
+                .encode(bytes);
         } else {
             0u8.encode(bytes);
         }
@@ -473,8 +474,8 @@ impl Codec<'_> for CommonServerSessionValue {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let sni = match u8::read(r)? {
             1 => {
-                let dns_name = PayloadU8::<MaybeEmpty>::read(r)?;
-                let dns_name = match DnsName::try_from(dns_name.0.as_slice()) {
+                let dns_name = SizedPayload::<u8, MaybeEmpty>::read(r)?;
+                let dns_name = match DnsName::try_from(dns_name.as_ref()) {
                     Ok(dns_name) => dns_name.to_owned(),
                     Err(_) => return Err(InvalidMessage::InvalidServerName),
                 };

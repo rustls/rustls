@@ -1573,7 +1573,6 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidMessage(
             InvalidMessage::EmptyTicketValue | InvalidMessage::IllegalEmptyList(_),
         ) => quit(":DECODE_ERROR:"),
-        Error::InvalidMessage(InvalidMessage::IllegalEmptyValue) => quit(":ILLEGAL_EMPTY_VALUE:"),
         Error::InvalidMessage(
             InvalidMessage::InvalidKeyUpdate
             | InvalidMessage::MissingData(_)

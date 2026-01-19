@@ -18,7 +18,7 @@ use crate::crypto::{
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
-use crate::msgs::base::{PayloadU8, SizedPayload};
+use crate::msgs::base::SizedPayload;
 use crate::msgs::codec::Reader;
 use crate::msgs::enums::{Compression, ECCurveType};
 use crate::msgs::handshake::{
@@ -255,7 +255,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
                             curve_type: ECCurveType::NamedCurve,
                             named_group: NamedGroup::X25519,
                         },
-                        public: PayloadU8::new(vec![0xab; 32]),
+                        public: SizedPayload::from(vec![0xab; 32]),
                     }),
                 },
             )),
