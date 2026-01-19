@@ -28,7 +28,7 @@ use crate::error::{
 };
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::{MaybeEmpty, PayloadU8, SizedPayload};
+use crate::msgs::base::{MaybeEmpty, SizedPayload};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
@@ -873,7 +873,7 @@ impl ExpectCertificateRequest {
         // TLS1.3.
 
         // Must be empty during handshake.
-        if !certreq.context.0.is_empty() {
+        if !certreq.context.is_empty() {
             warn!("Server sent non-empty certreq context");
             return Err(InvalidMessage::InvalidCertRequest.into());
         }
@@ -913,7 +913,7 @@ impl ExpectCertificateRequest {
                 .authority_names
                 .as_deref(),
             &compat_sigschemes,
-            Some(certreq.context.0.clone()),
+            Some(certreq.context.to_vec()),
             compat_compressor,
         );
 
@@ -1043,7 +1043,7 @@ impl ExpectCertificate {
 
     fn handle_cert_payload(self, cert_chain: CertificatePayloadTls13<'_>) -> hs::NextStateOrError {
         // This is only non-empty for client auth.
-        if !cert_chain.context.0.is_empty() {
+        if !cert_chain.context.is_empty() {
             return Err(InvalidMessage::InvalidCertRequest.into());
         }
 
@@ -1168,7 +1168,10 @@ fn emit_compressed_certificate_tls13(
 ) {
     let mut cert_payload =
         CertificatePayloadTls13::new(credentials.identity.as_certificates(), None);
-    cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
+    cert_payload.context = auth_context
+        .clone()
+        .unwrap_or_default()
+        .into();
 
     let Ok(compressed) = config
         .cert_compression_cache
@@ -1194,7 +1197,7 @@ fn emit_certificate_tls13(
         None => CertificatePayloadTls13::new([].into_iter(), None),
     };
 
-    cert_payload.context = PayloadU8::new(auth_context.unwrap_or_default());
+    cert_payload.context = auth_context.unwrap_or_default().into();
     flight.add(HandshakeMessagePayload(HandshakePayload::CertificateTls13(
         cert_payload,
     )));
@@ -1411,7 +1414,7 @@ impl ExpectTraffic {
     fn handle_new_ticket_impl(&self, nst: &NewSessionTicketPayloadTls13) -> Result<(), Error> {
         let secret = self
             .resumption
-            .derive_ticket_psk(&nst.nonce.0);
+            .derive_ticket_psk(nst.nonce.as_ref());
 
         let now = self.config.current_time()?;
 

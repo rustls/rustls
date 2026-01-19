@@ -113,6 +113,14 @@ impl<'a, L: PayloadSize<'a>, C: Cardinality> Codec<'a> for SizedPayload<'a, L, C
     }
 }
 
+impl<C: Cardinality> Zeroize for SizedPayload<'_, u8, C> {
+    fn zeroize(&mut self) {
+        if let Payload::Owned(buf) = &mut self.inner {
+            buf.zeroize();
+        }
+    }
+}
+
 impl<'a, L: PayloadSize<'a>, C: Cardinality> From<Payload<'a>> for SizedPayload<'a, L, C> {
     fn from(inner: Payload<'a>) -> Self {
         debug_assert!(inner.bytes().len() >= C::MIN);
@@ -147,60 +155,6 @@ impl<'a, L: PayloadSize<'a>, C: Cardinality> fmt::Debug for SizedPayload<'a, L, 
     }
 }
 
-/// An arbitrary, unknown-content, u8-length-prefixed payload
-///
-/// `C` controls the minimum length accepted when decoding.
-#[derive(Clone, Eq, PartialEq)]
-pub(crate) struct PayloadU8<C: Cardinality = MaybeEmpty>(pub(crate) Vec<u8>, PhantomData<C>);
-
-impl<C: Cardinality> PayloadU8<C> {
-    pub(crate) fn encode_slice(slice: &[u8], bytes: &mut Vec<u8>) {
-        (slice.len() as u8).encode(bytes);
-        bytes.extend_from_slice(slice);
-    }
-
-    pub(crate) fn new(bytes: Vec<u8>) -> Self {
-        debug_assert!(bytes.len() >= C::MIN);
-        Self(bytes, PhantomData)
-    }
-}
-
-impl PayloadU8<MaybeEmpty> {
-    pub(crate) fn empty() -> Self {
-        Self(Vec::new(), PhantomData)
-    }
-}
-
-impl<C: Cardinality> Codec<'_> for PayloadU8<C> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        debug_assert!(self.0.len() >= C::MIN);
-        (self.0.len() as u8).encode(bytes);
-        bytes.extend_from_slice(&self.0);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let len = u8::read(r)? as usize;
-        if len < C::MIN {
-            return Err(InvalidMessage::IllegalEmptyValue);
-        }
-        let mut sub = r.sub(len)?;
-        let body = sub.rest().to_vec();
-        Ok(Self(body, PhantomData))
-    }
-}
-
-impl<C: Cardinality> Zeroize for PayloadU8<C> {
-    fn zeroize(&mut self) {
-        self.0.zeroize();
-    }
-}
-
-impl<C: Cardinality> fmt::Debug for PayloadU8<C> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.0)
-    }
-}
-
 impl<'a> PayloadSize<'a> for U24 {
     fn length(bytes: &[u8]) -> Self {
         Self(bytes.len() as u32)
@@ -215,6 +169,14 @@ impl<'a> PayloadSize<'a> for u16 {
     }
 
     const MAX: usize = 0xFFFF;
+}
+
+impl<'a> PayloadSize<'a> for u8 {
+    fn length(bytes: &[u8]) -> Self {
+        bytes.len() as Self
+    }
+
+    const MAX: usize = 0xFF;
 }
 
 pub(crate) trait PayloadSize<'a>: Codec<'a> + Into<usize> {

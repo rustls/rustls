@@ -348,7 +348,7 @@ impl CompressionCache {
 
         // context is a per-connection quantity, and included in the compressed data.
         // it is not suitable for inclusion in the cache.
-        if !original.context.0.is_empty() {
+        if !original.context.is_empty() {
             return Self::uncached_compression(compressor, original);
         }
 

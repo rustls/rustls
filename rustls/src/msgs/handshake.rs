@@ -22,7 +22,7 @@ use crate::enums::{
 };
 use crate::error::InvalidMessage;
 use crate::log::warn;
-use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, SizedPayload};
+use crate::msgs::base::{MaybeEmpty, NonEmpty, SizedPayload};
 use crate::msgs::codec::{
     CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement,
     TlsListIter, U24,
@@ -427,7 +427,7 @@ impl HostNamePayload {
 
 wrapped_payload!(
     /// RFC7301: `opaque ProtocolName<1..2^8-1>;`
-    pub(crate) struct ProtocolName, PayloadU8<NonEmpty>,
+    pub(crate) struct ProtocolName, SizedPayload<u8, NonEmpty>,
 );
 
 impl PartialEq for ProtocolName {
@@ -562,7 +562,7 @@ impl TlsListElement for PresharedKeyIdentity {
 
 wrapped_payload!(
     /// RFC8446: `opaque PskBinderEntry<32..255>;`
-    pub(crate) struct PresharedKeyBinder, PayloadU8<NonEmpty>,
+    pub(crate) struct PresharedKeyBinder, SizedPayload<u8, NonEmpty>,
 );
 
 /// RFC8446: `PskBinderEntry binders<33..2^16-1>;`
@@ -946,7 +946,7 @@ extension_struct! {
 
         /// Secure renegotiation (RFC5746)
         ExtensionType::RenegotiationInfo =>
-            pub(crate) renegotiation_info: Option<PayloadU8>,
+            pub(crate) renegotiation_info: Option<SizedPayload<'a, u8>>,
 
         /// Encrypted inner client hello (draft-ietf-tls-esni)
         ExtensionType::EncryptedClientHello =>
@@ -1012,7 +1012,7 @@ impl ClientExtensions<'_> {
             certificate_authority_names,
             key_shares,
             transport_parameters: transport_parameters.map(|x| x.into_owned()),
-            renegotiation_info,
+            renegotiation_info: renegotiation_info.map(|x| x.into_owned()),
             encrypted_client_hello,
             encrypted_client_hello_outer,
             order_seed,
@@ -1172,7 +1172,7 @@ extension_struct! {
             pub(crate) session_ticket_ack: Option<()>,
 
         ExtensionType::RenegotiationInfo =>
-            pub(crate) renegotiation_info: Option<PayloadU8>,
+            pub(crate) renegotiation_info: Option<SizedPayload<'a, u8>>,
 
         /// Selected ALPN protocol (RFC7301)
         ExtensionType::ALProtocolNegotiation =>
@@ -1246,7 +1246,7 @@ impl ServerExtensions<'_> {
             ec_point_formats,
             server_name_ack,
             session_ticket_ack,
-            renegotiation_info,
+            renegotiation_info: renegotiation_info.map(|x| x.into_owned()),
             selected_protocol,
             key_share,
             preshared_key,
@@ -1778,7 +1778,7 @@ impl TlsListElement for CertificateEntry<'_> {
 
 #[derive(Debug)]
 pub(crate) struct CertificatePayloadTls13<'a> {
-    pub(crate) context: PayloadU8,
+    pub(crate) context: SizedPayload<'a, u8>,
     pub(crate) entries: Vec<CertificateEntry<'a>>,
 }
 
@@ -1793,7 +1793,7 @@ impl<'a> CertificatePayloadTls13<'a> {
         };
 
         Self {
-            context: PayloadU8::empty(),
+            context: SizedPayload::from(Payload::Borrowed(&[])),
             entries: certs
                 // zip certificate iterator with `ocsp_response` followed by
                 // an infinite-length iterator of `None`.
@@ -1817,7 +1817,7 @@ impl<'a> CertificatePayloadTls13<'a> {
     #[cfg(feature = "std")]
     fn into_owned(self) -> CertificatePayloadTls13<'static> {
         CertificatePayloadTls13 {
-            context: self.context,
+            context: self.context.into_owned(),
             entries: self
                 .entries
                 .into_iter()
@@ -1856,7 +1856,7 @@ impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self {
-            context: PayloadU8::read(r)?,
+            context: SizedPayload::read(r)?.into_owned(),
             entries: Vec::read(r)?,
         })
     }
@@ -1909,7 +1909,7 @@ pub(crate) enum ClientKeyExchangeParams {
 impl ClientKeyExchangeParams {
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
-            Self::Ecdh(ecdh) => &ecdh.public.0,
+            Self::Ecdh(ecdh) => ecdh.public.as_ref(),
             Self::Dh(dh) => dh.public.as_ref(),
         }
     }
@@ -1935,7 +1935,7 @@ impl KxDecode<'_> for ClientKeyExchangeParams {
 #[derive(Debug)]
 pub(crate) struct ClientEcdhParams {
     /// RFC4492: `opaque point <1..2^8-1>;`
-    pub(crate) public: PayloadU8<NonEmpty>,
+    pub(crate) public: SizedPayload<'static, u8, NonEmpty>,
 }
 
 impl Codec<'_> for ClientEcdhParams {
@@ -1944,7 +1944,7 @@ impl Codec<'_> for ClientEcdhParams {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let pb = PayloadU8::read(r)?;
+        let pb = SizedPayload::read(r)?.into_owned();
         Ok(Self { public: pb })
     }
 }
@@ -1971,7 +1971,7 @@ impl Codec<'_> for ClientDhParams {
 pub(crate) struct ServerEcdhParams {
     pub(crate) curve_params: EcParameters,
     /// RFC4492: `opaque point <1..2^8-1>;`
-    pub(crate) public: PayloadU8<NonEmpty>,
+    pub(crate) public: SizedPayload<'static, u8, NonEmpty>,
 }
 
 impl ServerEcdhParams {
@@ -1981,7 +1981,7 @@ impl ServerEcdhParams {
                 curve_type: ECCurveType::NamedCurve,
                 named_group: kx.group(),
             },
-            public: PayloadU8::new(kx.pub_key().to_vec()),
+            public: kx.pub_key().to_vec().into(),
         }
     }
 }
@@ -1994,7 +1994,7 @@ impl Codec<'_> for ServerEcdhParams {
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let cp = EcParameters::read(r)?;
-        let pb = PayloadU8::read(r)?;
+        let pb = SizedPayload::read(r)?.into_owned();
 
         Ok(Self {
             curve_params: cp,
@@ -2063,7 +2063,7 @@ impl ServerKeyExchangeParams {
 
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
-            Self::Ecdh(ecdh) => &ecdh.public.0,
+            Self::Ecdh(ecdh) => ecdh.public.as_ref(),
             Self::Dh(dh) => dh.dh_ys.as_ref(),
         }
     }
@@ -2233,7 +2233,7 @@ impl Codec<'_> for CertificateRequestExtensions {
 
 #[derive(Debug)]
 pub(crate) struct CertificateRequestPayloadTls13 {
-    pub(crate) context: PayloadU8,
+    pub(crate) context: SizedPayload<'static, u8>,
     pub(crate) extensions: CertificateRequestExtensions,
 }
 
@@ -2244,7 +2244,7 @@ impl Codec<'_> for CertificateRequestPayloadTls13 {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let context = PayloadU8::read(r)?;
+        let context = SizedPayload::read(r)?.into_owned();
         let extensions = CertificateRequestExtensions::read(r)?;
 
         Ok(Self {
@@ -2324,7 +2324,7 @@ impl Codec<'_> for NewSessionTicketExtensions {
 pub(crate) struct NewSessionTicketPayloadTls13 {
     pub(crate) lifetime: Duration,
     pub(crate) age_add: u32,
-    pub(crate) nonce: PayloadU8,
+    pub(crate) nonce: SizedPayload<'static, u8>,
     pub(crate) ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
     pub(crate) extensions: NewSessionTicketExtensions,
 }
@@ -2334,7 +2334,7 @@ impl NewSessionTicketPayloadTls13 {
         Self {
             lifetime,
             age_add,
-            nonce: PayloadU8::new(nonce.to_vec()),
+            nonce: nonce.to_vec().into(),
             ticket: Arc::new(SizedPayload::from(Payload::new(ticket))),
             extensions: NewSessionTicketExtensions::default(),
         }
@@ -2353,10 +2353,10 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let lifetime = Duration::from_secs(u32::read(r)? as u64);
         let age_add = u32::read(r)?;
-        let nonce = PayloadU8::read(r)?;
+        let nonce = SizedPayload::read(r)?.into_owned();
         // nb. RFC8446: `opaque ticket<1..2^16-1>;`
         let ticket = Arc::new(match SizedPayload::<u16, NonEmpty>::read(r) {
-            Err(InvalidMessage::IllegalEmptyValue) => Err(InvalidMessage::EmptyTicketValue),
+            Err(InvalidMessage::IllegalEmptyList(_)) => Err(InvalidMessage::EmptyTicketValue),
             Err(err) => Err(err),
             Ok(pl) => Ok(SizedPayload::from(Payload::new(pl.into_vec()))),
         }?);
@@ -2813,7 +2813,8 @@ impl Codec<'_> for EchConfigContents {
         self.key_config.encode(bytes);
         self.maximum_name_length.encode(bytes);
         let dns_name = &self.public_name.borrow();
-        PayloadU8::<MaybeEmpty>::encode_slice(dns_name.as_ref().as_ref(), bytes);
+        SizedPayload::<u8, MaybeEmpty>::from(Payload::Borrowed(dns_name.as_ref().as_ref()))
+            .encode(bytes);
         self.extensions.encode(bytes);
     }
 
@@ -2822,13 +2823,9 @@ impl Codec<'_> for EchConfigContents {
             key_config: HpkeKeyConfig::read(r)?,
             maximum_name_length: u8::read(r)?,
             public_name: {
-                DnsName::try_from(
-                    PayloadU8::<MaybeEmpty>::read(r)?
-                        .0
-                        .as_slice(),
-                )
-                .map_err(|_| InvalidMessage::InvalidServerName)?
-                .to_owned()
+                DnsName::try_from(SizedPayload::<u8, MaybeEmpty>::read(r)?.as_ref())
+                    .map_err(|_| InvalidMessage::InvalidServerName)?
+                    .to_owned()
             },
             extensions: Vec::read(r)?,
         })

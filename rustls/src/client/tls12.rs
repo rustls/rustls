@@ -23,7 +23,7 @@ use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion}
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::{PayloadU8, SizedPayload};
+use crate::msgs::base::SizedPayload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::handshake::{
@@ -478,7 +478,7 @@ fn emit_client_kx(
     let mut buf = Vec::new();
     match kxa {
         KeyExchangeAlgorithm::ECDHE => ClientKeyExchangeParams::Ecdh(ClientEcdhParams {
-            public: PayloadU8::new(pub_key.to_vec()),
+            public: pub_key.to_vec().into(),
         }),
         KeyExchangeAlgorithm::DHE => ClientKeyExchangeParams::Dh(ClientDhParams {
             public: SizedPayload::from(Payload::new(pub_key.to_vec())),

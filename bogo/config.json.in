@@ -169,10 +169,10 @@
     ":WRONG_VERSION_NUMBER:": [":GARBAGE:"]
   },
   "TestErrorMap": {
-    "ALPNClient-EmptyProtocolName-TLS-TLS12": ":ILLEGAL_EMPTY_VALUE:",
-    "ALPNClient-EmptyProtocolName-TLS-TLS13": ":ILLEGAL_EMPTY_VALUE:",
-    "ALPNServer-EmptyProtocolName-TLS-TLS12": ":ILLEGAL_EMPTY_VALUE:",
-    "ALPNServer-EmptyProtocolName-TLS-TLS13": ":ILLEGAL_EMPTY_VALUE:",
+    "ALPNClient-EmptyProtocolName-TLS-TLS12": ":DECODE_ERROR:",
+    "ALPNClient-EmptyProtocolName-TLS-TLS13": ":DECODE_ERROR:",
+    "ALPNServer-EmptyProtocolName-TLS-TLS12": ":DECODE_ERROR:",
+    "ALPNServer-EmptyProtocolName-TLS-TLS13": ":DECODE_ERROR:",
     "AppDataBeforeTLS13KeyChange": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "AppDataBeforeTLS13KeyChange-Empty": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "CertCompressionTooLargeClient-TLS13": ":GARBAGE:",

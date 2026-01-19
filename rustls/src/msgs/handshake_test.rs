@@ -4,7 +4,7 @@ use std::{format, println, vec};
 
 use pki_types::{CertificateDer, DnsName};
 
-use super::base::{PayloadU8, SizedPayload};
+use super::base::SizedPayload;
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
     ClientCertificateType, Compression, ECCurveType, EchVersion, ExtensionType, KeyUpdateRequest,
@@ -931,7 +931,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             ec_point_formats: Some(SupportedEcPointFormats::default()),
             server_name_ack: Some(()),
             session_ticket_ack: Some(()),
-            renegotiation_info: Some(PayloadU8::new(vec![0])),
+            renegotiation_info: Some(SizedPayload::from(vec![0])),
             selected_protocol: Some(SingleProtocolName::new(ProtocolName::from(vec![0]))),
             key_share: Some(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
             preshared_key: Some(3),
@@ -1058,7 +1058,7 @@ fn all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
 
 fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
     CertificatePayloadTls13 {
-        context: PayloadU8::new(vec![1, 2, 3]),
+        context: SizedPayload::from(vec![1, 2, 3]),
         entries: vec![CertificateEntry {
             cert: CertificateDer::from(vec![3, 4, 5]),
             extensions: CertificateExtensions {
@@ -1085,7 +1085,7 @@ fn sample_ecdhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
                 curve_type: ECCurveType::NamedCurve,
                 named_group: NamedGroup::X25519,
             },
-            public: PayloadU8::new(vec![1, 2, 3]),
+            public: SizedPayload::from(vec![1, 2, 3]),
         }),
         dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
@@ -1116,7 +1116,7 @@ fn sample_certificate_request_payload() -> CertificateRequestPayload {
 
 fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 {
     CertificateRequestPayloadTls13 {
-        context: PayloadU8::new(vec![1, 2, 3]),
+        context: SizedPayload::from(vec![1, 2, 3]),
         extensions: CertificateRequestExtensions {
             signature_algorithms: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             authority_names: Some(vec![DistinguishedName::from(vec![1, 2, 3])]),
@@ -1136,7 +1136,7 @@ fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
     NewSessionTicketPayloadTls13 {
         lifetime: Duration::from_secs(123),
         age_add: 1234,
-        nonce: PayloadU8::new(vec![1, 2, 3]),
+        nonce: SizedPayload::from(vec![1, 2, 3]),
         ticket: Arc::new(SizedPayload::<u16, _>::from(vec![4, 5, 6])),
         extensions: NewSessionTicketExtensions {
             max_early_data_size: Some(1234),
