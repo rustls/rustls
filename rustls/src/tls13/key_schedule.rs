@@ -1075,8 +1075,7 @@ pub(crate) fn hkdf_expand_label_aead_key(
     context: &[u8],
 ) -> AeadKey {
     hkdf_expand_label_inner(expander, label, context, key_len, |e, info| {
-        let key: AeadKey = expand(e, info);
-        key.with_length(key_len)
+        expand::<AeadKey, { AeadKey::MAX_LEN }>(e, info).with_length(key_len)
     })
 }
 
