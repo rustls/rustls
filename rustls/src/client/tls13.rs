@@ -509,6 +509,10 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             _ => None,
         };
 
+        let ech = Ech {
+            retry_configs: ech_retry_configs,
+        };
+
         // QUIC transport parameters
         let quic_params = if self.key_schedule.protocol().is_quic() {
             let Some(quic_params) = exts.transport_parameters.as_ref() else {
@@ -561,7 +565,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     client_auth: None,
                     cert_verified,
                     sig_verified,
-                    ech_retry_configs,
+                    ech,
                 }))
             }
             _ => {
@@ -581,7 +585,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         quic_params,
                         transcript: self.transcript,
                         key_schedule: self.key_schedule,
-                        ech_retry_configs,
+                        ech,
                         expected_certificate_type,
                         negotiated_client_type: exts.client_certificate_type,
                     })
@@ -594,7 +598,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         quic_params,
                         transcript: self.transcript,
                         key_schedule: self.key_schedule,
-                        ech_retry_configs,
+                        ech,
                         expected_certificate_type,
                         negotiated_client_type: exts.client_certificate_type,
                     })
@@ -629,7 +633,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
     negotiated_client_type: Option<CertificateType>,
 }
@@ -653,7 +657,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             }
             .handle_input(input),
@@ -670,7 +674,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             }
             .handle_input(input),
@@ -687,7 +691,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 offered_cert_compression: true,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
             }
@@ -715,7 +719,7 @@ struct ExpectCertificateOrCompressedCertificate {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
 }
 
@@ -738,7 +742,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             }
             .handle_input(input),
@@ -755,7 +759,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             }
             .handle_input(input),
@@ -780,7 +784,7 @@ struct ExpectCertificateOrCertReq {
     quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
     negotiated_client_type: Option<CertificateType>,
 }
@@ -804,7 +808,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             }
             .handle_input(input),
@@ -821,7 +825,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 offered_cert_compression: false,
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
                 negotiated_client_type: self.negotiated_client_type,
             }
@@ -851,7 +855,7 @@ struct ExpectCertificateRequest {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     offered_cert_compression: bool,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
     negotiated_client_type: Option<CertificateType>,
 }
@@ -924,7 +928,7 @@ impl ExpectCertificateRequest {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
         } else {
@@ -937,7 +941,7 @@ impl ExpectCertificateRequest {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
-                ech_retry_configs: self.ech_retry_configs,
+                ech: self.ech,
                 expected_certificate_type: self.expected_certificate_type,
             })
         })
@@ -953,7 +957,7 @@ struct ExpectCompressedCertificate {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
 }
 
@@ -1004,7 +1008,7 @@ impl ExpectCompressedCertificate {
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
-            ech_retry_configs: self.ech_retry_configs,
+            ech: self.ech,
             expected_certificate_type: self.expected_certificate_type,
         }
         .handle_cert_payload(cert_payload)
@@ -1020,7 +1024,7 @@ struct ExpectCertificate {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
 }
 
@@ -1059,7 +1063,7 @@ impl ExpectCertificate {
             key_schedule: self.key_schedule,
             server_cert,
             client_auth: self.client_auth,
-            ech_retry_configs: self.ech_retry_configs,
+            ech: self.ech,
             expected_certificate_type: self.expected_certificate_type,
         }))
     }
@@ -1086,7 +1090,7 @@ struct ExpectCertificateVerify {
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails,
     client_auth: Option<ClientAuthDetails>,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
     expected_certificate_type: CertificateType,
 }
 
@@ -1148,7 +1152,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
             client_auth: self.client_auth,
             cert_verified,
             sig_verified,
-            ech_retry_configs: self.ech_retry_configs,
+            ech: self.ech,
         }))
     }
 }
@@ -1246,7 +1250,7 @@ struct ExpectFinished {
     client_auth: Option<ClientAuthDetails>,
     cert_verified: verify::PeerVerified,
     sig_verified: verify::HandshakeSignatureValid,
-    ech_retry_configs: Option<Vec<EchConfigPayload>>,
+    ech: Ech,
 }
 
 impl State<ClientConnectionData> for ExpectFinished {
@@ -1362,7 +1366,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         // did not accept our ECH offer.
         if cx.data.ech_status == EchStatus::Rejected {
             return Err(RejectedEch {
-                retry_configs: st.ech_retry_configs,
+                retry_configs: st.ech.retry_configs,
             }
             .into());
         }
@@ -1588,6 +1592,10 @@ impl KernelState for ExpectQuicTraffic {
     fn handle_new_session_ticket(&self, nst: &NewSessionTicketPayloadTls13) -> Result<(), Error> {
         self.0.handle_new_ticket_impl(nst)
     }
+}
+
+struct Ech {
+    retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 // Extensions we expect in plaintext in the ServerHello.
