@@ -22,7 +22,7 @@ use crate::enums::{
 };
 use crate::error::InvalidMessage;
 use crate::log::warn;
-use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, PayloadU24};
+use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, SizedPayload};
 use crate::msgs::codec::{
     CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement,
     TlsListIter, U24,
@@ -1807,7 +1807,7 @@ impl<'a> CertificatePayloadTls13<'a> {
             .extensions
             .status
             .as_ref()
-            .map(|status| status.ocsp_response.as_ref().to_vec())
+            .map(|status| status.ocsp_response.to_vec())
             .unwrap_or_default()
     }
 
@@ -2351,7 +2351,7 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
 #[derive(Clone, Debug)]
 pub(crate) struct CertificateStatus<'a> {
     /// `opaque OCSPResponse<1..2^24-1>;`
-    pub(crate) ocsp_response: PayloadU24<'a, NonEmpty>,
+    pub(crate) ocsp_response: SizedPayload<'a, U24, NonEmpty>,
 }
 
 impl<'a> Codec<'a> for CertificateStatus<'a> {
@@ -2365,7 +2365,7 @@ impl<'a> Codec<'a> for CertificateStatus<'a> {
 
         match typ {
             CertificateStatusType::OCSP => Ok(Self {
-                ocsp_response: PayloadU24::read(r)?,
+                ocsp_response: SizedPayload::read(r)?,
             }),
             _ => Err(InvalidMessage::InvalidCertificateStatusType),
         }
@@ -2375,7 +2375,7 @@ impl<'a> Codec<'a> for CertificateStatus<'a> {
 impl<'a> CertificateStatus<'a> {
     pub(crate) fn new(ocsp: &'a [u8]) -> Self {
         CertificateStatus {
-            ocsp_response: PayloadU24::from(Payload::Borrowed(ocsp)),
+            ocsp_response: SizedPayload::from(Payload::Borrowed(ocsp)),
         }
     }
 
@@ -2397,7 +2397,7 @@ pub(crate) struct CompressedCertificatePayload<'a> {
     pub(crate) alg: CertificateCompressionAlgorithm,
     pub(crate) uncompressed_len: u32,
     /// `opaque compressed_certificate_message<1..2^24-1>;`
-    pub(crate) compressed: PayloadU24<'a, NonEmpty>,
+    pub(crate) compressed: SizedPayload<'a, U24, NonEmpty>,
 }
 
 impl<'a> Codec<'a> for CompressedCertificatePayload<'a> {
@@ -2411,7 +2411,7 @@ impl<'a> Codec<'a> for CompressedCertificatePayload<'a> {
         Ok(Self {
             alg: CertificateCompressionAlgorithm::read(r)?,
             uncompressed_len: U24::read(r)?.0,
-            compressed: PayloadU24::read(r)?,
+            compressed: SizedPayload::read(r)?,
         })
     }
 }
@@ -2429,7 +2429,7 @@ impl CompressedCertificatePayload<'_> {
         CompressedCertificatePayload {
             alg: self.alg,
             uncompressed_len: self.uncompressed_len,
-            compressed: PayloadU24::from(Payload::Borrowed(self.compressed.as_ref())),
+            compressed: SizedPayload::from(Payload::Borrowed(self.compressed.as_ref())),
         }
     }
 }

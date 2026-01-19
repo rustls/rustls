@@ -9,7 +9,8 @@ use super::message::Message;
 use crate::crypto::cipher::{EncodedMessage, Payload};
 use crate::enums::HandshakeType;
 use crate::error::AlertDescription;
-use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, PayloadU24};
+use crate::msgs::base::{MaybeEmpty, NonEmpty, PayloadU8, PayloadU16, SizedPayload};
+use crate::msgs::codec::U24;
 
 #[test]
 fn test_read_fuzz_corpus() {
@@ -111,7 +112,7 @@ fn debug_payload() {
         "01020304",
         format!(
             "{:?}",
-            PayloadU24::<'static, NonEmpty>::from(Payload::new(vec![1, 2, 3, 4]))
+            SizedPayload::<'static, U24, NonEmpty>::from(Payload::new(vec![1, 2, 3, 4]))
         )
     );
 }
