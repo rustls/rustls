@@ -334,7 +334,6 @@ mod client_hello {
             match doing_early_data {
                 EarlyDataDecision::Disabled => {
                     key_schedule.set_handshake_decrypter(None, cx, &input.proof);
-                    cx.data.early_data.reject();
                 }
                 EarlyDataDecision::RequestedButRejected => {
                     debug!(
@@ -345,7 +344,6 @@ mod client_hello {
                         cx,
                         &input.proof,
                     );
-                    cx.data.early_data.reject();
                 }
                 EarlyDataDecision::Accepted => {
                     cx.data
@@ -647,7 +645,7 @@ mod client_hello {
             && resume.common.cipher_suite == suite.common.suite
             && resume.common.alpn.as_ref() == chosen_alpn_protocol;
 
-        if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
+        if early_data_configured && early_data_possible {
             EarlyDataDecision::Accepted
         } else {
             if protocol.is_quic() {

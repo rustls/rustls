@@ -613,14 +613,9 @@ pub(super) enum EarlyDataState {
         received: ChunkVecBuffer,
         left: usize,
     },
-    Rejected,
 }
 
 impl EarlyDataState {
-    pub(super) fn reject(&mut self) {
-        *self = Self::Rejected;
-    }
-
     pub(super) fn accept(&mut self, max_size: usize) {
         *self = Self::Accepted {
             received: ChunkVecBuffer::new(Some(max_size)),
@@ -631,10 +626,6 @@ impl EarlyDataState {
     #[cfg(feature = "std")]
     fn was_accepted(&self) -> bool {
         matches!(self, Self::Accepted { .. })
-    }
-
-    pub(super) fn was_rejected(&self) -> bool {
-        matches!(self, Self::Rejected)
     }
 
     fn peek(&self) -> Option<&[u8]> {
@@ -685,7 +676,6 @@ impl Debug for EarlyDataState {
                 received.len(),
                 left
             ),
-            Self::Rejected => write!(f, "EarlyDataState::Rejected"),
         }
     }
 }
