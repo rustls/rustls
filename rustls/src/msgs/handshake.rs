@@ -2403,14 +2403,14 @@ pub(crate) struct CompressedCertificatePayload<'a> {
 impl<'a> Codec<'a> for CompressedCertificatePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.alg.encode(bytes);
-        codec::u24(self.uncompressed_len).encode(bytes);
+        codec::U24(self.uncompressed_len).encode(bytes);
         self.compressed.encode(bytes);
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             alg: CertificateCompressionAlgorithm::read(r)?,
-            uncompressed_len: codec::u24::read(r)?.0,
+            uncompressed_len: codec::U24::read(r)?.0,
             compressed: PayloadU24::read(r)?,
         })
     }
@@ -2570,7 +2570,7 @@ impl<'a> HandshakeMessagePayload<'a> {
         vers: ProtocolVersion,
     ) -> Result<Self, InvalidMessage> {
         let typ = HandshakeType::read(r)?;
-        let len = codec::u24::read(r)?.0 as usize;
+        let len = codec::U24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
 
         let payload = match typ {

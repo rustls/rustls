@@ -156,19 +156,18 @@ impl Codec<'_> for u16 {
 }
 
 // Make a distinct type for u24, even though it's a u32 underneath
-#[expect(non_camel_case_types)]
 #[derive(Debug, Copy, Clone)]
-pub struct u24(pub u32);
+pub struct U24(pub u32);
 
 #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
-impl From<u24> for usize {
+impl From<U24> for usize {
     #[inline]
-    fn from(v: u24) -> Self {
+    fn from(v: U24) -> Self {
         v.0 as Self
     }
 }
 
-impl Codec<'_> for u24 {
+impl Codec<'_> for U24 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let be_bytes = u32::to_be_bytes(self.0);
         bytes.extend_from_slice(&be_bytes[1..]);
@@ -335,7 +334,7 @@ impl ListLength {
                 0 => return Err(*empty_error),
                 len => len,
             },
-            Self::U24 { max, error } => match usize::from(u24::read(r)?) {
+            Self::U24 { max, error } => match usize::from(U24::read(r)?) {
                 len if len > *max => return Err(*error),
                 len => len,
             },
@@ -343,7 +342,7 @@ impl ListLength {
                 max,
                 empty_error,
                 too_many_error,
-            } => match usize::from(u24::read(r)?) {
+            } => match usize::from(U24::read(r)?) {
                 0 => return Err(*empty_error),
                 len if len > *max => return Err(*too_many_error),
                 len => len,
