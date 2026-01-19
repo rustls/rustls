@@ -1,6 +1,6 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use core::{cmp, mem};
+use core::mem;
 #[cfg(feature = "std")]
 use std::io;
 #[cfg(feature = "std")]
@@ -63,12 +63,12 @@ impl ChunkVecBuffer {
     /// bytes should we actually append to adhere to the
     /// currently set `limit`?
     pub(crate) fn apply_limit(&self, len: usize) -> usize {
-        if let Some(limit) = self.limit {
-            let space = limit.saturating_sub(self.len());
-            cmp::min(len, space)
-        } else {
-            len
-        }
+        let Some(limit) = self.limit else {
+            return len;
+        };
+
+        let space = limit.saturating_sub(self.len());
+        Ord::min(len, space)
     }
 
     /// Take and append the given `bytes`.
@@ -186,7 +186,7 @@ impl ChunkVecBuffer {
             *iov = io::IoSlice::new(&chunk[prefix..]);
             prefix = 0;
         }
-        let len = cmp::min(bufs.len(), self.chunks.len());
+        let len = Ord::min(bufs.len(), self.chunks.len());
         let bufs = &bufs[..len];
         let used = wr.write_vectored(bufs)?;
         let available_bytes = bufs.iter().map(|ch| ch.len()).sum();
