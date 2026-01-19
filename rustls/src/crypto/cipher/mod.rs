@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
-use core::fmt;
+use core::{array, fmt};
 
 use pki_types::FipsStatus;
 use zeroize::Zeroize;
@@ -396,6 +396,15 @@ impl From<[u8; Self::MAX_LEN]> for AeadKey {
     }
 }
 
+impl From<[u8; 16]> for AeadKey {
+    fn from(buf: [u8; 16]) -> Self {
+        Self {
+            buf: array::from_fn(|i| if i < 16 { buf[i] } else { 0 }),
+            used: 16,
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) struct FakeAead;
 
@@ -568,5 +577,12 @@ mod tests {
                 maximum: 16
             }))
         ));
+    }
+
+    #[test]
+    fn aead_key_16_bytes() {
+        let bytes = [0xABu8; 16];
+        let key = AeadKey::from(bytes);
+        assert_eq!(key.as_ref(), &bytes);
     }
 }
