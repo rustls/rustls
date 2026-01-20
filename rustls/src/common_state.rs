@@ -17,7 +17,7 @@ use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVers
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
-use crate::msgs::alert::AlertMessagePayload;
+use crate::msgs::AlertMessagePayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::deframer::{Delocator, HandshakeAlignedProof, Locator};
 use crate::msgs::enums::AlertLevel;
