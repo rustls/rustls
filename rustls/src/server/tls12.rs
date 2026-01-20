@@ -297,7 +297,7 @@ mod client_hello {
             resumedata
                 .common
                 .application_data
-                .as_ref()
+                .bytes()
                 .to_vec(),
         );
 

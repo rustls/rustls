@@ -53,7 +53,7 @@ macro_rules! wrapped_payload(
 
     impl AsRef<[u8]> for $name {
         fn as_ref(&self) -> &[u8] {
-            self.0.as_ref()
+            self.0.bytes()
         }
     }
 
@@ -361,7 +361,7 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
                 HostNamePayload::Invalid(_invalid) => {
                     warn!(
                         "Illegal SNI hostname received {:?}",
-                        String::from_utf8_lossy(_invalid.as_ref())
+                        String::from_utf8_lossy(_invalid.bytes())
                     );
                     Some(Self::Invalid)
                 }
@@ -390,7 +390,7 @@ impl HostNamePayload {
         use pki_types::ServerName;
         let raw = SizedPayload::<u16, NonEmpty>::read(r)?;
 
-        match ServerName::try_from(raw.as_ref()) {
+        match ServerName::try_from(raw.bytes()) {
             Ok(ServerName::DnsName(d)) => Ok(Self::HostName(d.to_owned())),
             Ok(ServerName::IpAddress(_)) => Ok(Self::IpAddress(raw.into_owned())),
             Ok(_) | Err(_) => Ok(Self::Invalid(raw.into_owned())),
@@ -1882,8 +1882,8 @@ pub(crate) enum ClientKeyExchangeParams {
 impl ClientKeyExchangeParams {
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
-            Self::Ecdh(ecdh) => ecdh.public.as_ref(),
-            Self::Dh(dh) => dh.public.as_ref(),
+            Self::Ecdh(ecdh) => ecdh.public.bytes(),
+            Self::Dh(dh) => dh.public.bytes(),
         }
     }
 
@@ -2000,7 +2000,7 @@ impl ServerDhParams {
     }
 
     pub(crate) fn as_ffdhe_group(&self) -> FfdheGroup<'_> {
-        FfdheGroup::from_params_trimming_leading_zeros(self.dh_p.as_ref(), self.dh_g.as_ref())
+        FfdheGroup::from_params_trimming_leading_zeros(self.dh_p.bytes(), self.dh_g.bytes())
     }
 }
 
@@ -2036,8 +2036,8 @@ impl ServerKeyExchangeParams {
 
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
-            Self::Ecdh(ecdh) => ecdh.public.as_ref(),
-            Self::Dh(dh) => dh.dh_ys.as_ref(),
+            Self::Ecdh(ecdh) => ecdh.public.bytes(),
+            Self::Dh(dh) => dh.dh_ys.bytes(),
         }
     }
 
@@ -2429,7 +2429,7 @@ impl CompressedCertificatePayload<'_> {
         CompressedCertificatePayload {
             alg: self.alg,
             uncompressed_len: self.uncompressed_len,
-            compressed: SizedPayload::from(Payload::Borrowed(self.compressed.as_ref())),
+            compressed: SizedPayload::from(Payload::Borrowed(self.compressed.bytes())),
         }
     }
 }
@@ -2796,7 +2796,7 @@ impl Codec<'_> for EchConfigContents {
             key_config: HpkeKeyConfig::read(r)?,
             maximum_name_length: u8::read(r)?,
             public_name: {
-                DnsName::try_from(SizedPayload::<u8, MaybeEmpty>::read(r)?.as_ref())
+                DnsName::try_from(SizedPayload::<u8, MaybeEmpty>::read(r)?.bytes())
                     .map_err(|_| InvalidMessage::InvalidServerName)?
                     .to_owned()
             },

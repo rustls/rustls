@@ -151,7 +151,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 }
             };
 
-        let shared_secret = our_key_share.complete(their_key_share.payload.as_ref())?;
+        let shared_secret = our_key_share.complete(their_key_share.payload.bytes())?;
         let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
         // If we have ECH state, check that the server accepted our offer.
@@ -985,7 +985,7 @@ impl ExpectCompressedCertificate {
 
         let mut decompress_buffer = vec![0u8; compressed_cert.uncompressed_len as usize];
         if let Err(compress::DecompressionFailed) =
-            decompressor.decompress(compressed_cert.compressed.as_ref(), &mut decompress_buffer)
+            decompressor.decompress(compressed_cert.compressed.bytes(), &mut decompress_buffer)
         {
             return Err(PeerMisbehaved::InvalidCertCompression.into());
         }
@@ -994,10 +994,7 @@ impl ExpectCompressedCertificate {
         trace!(
             "Server certificate decompressed using {:?} ({} bytes -> {})",
             compressed_cert.alg,
-            compressed_cert
-                .compressed
-                .as_ref()
-                .len(),
+            compressed_cert.compressed.bytes().len(),
             compressed_cert.uncompressed_len,
         );
 
@@ -1414,7 +1411,7 @@ impl ExpectTraffic {
     fn handle_new_ticket_impl(&self, nst: &NewSessionTicketPayloadTls13) -> Result<(), Error> {
         let secret = self
             .resumption
-            .derive_ticket_psk(nst.nonce.as_ref());
+            .derive_ticket_psk(nst.nonce.bytes());
 
         let now = self.config.current_time()?;
 

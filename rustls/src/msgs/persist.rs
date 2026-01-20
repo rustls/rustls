@@ -100,7 +100,7 @@ impl Tls13ClientSessionValue {
     }
 
     pub(crate) fn secret(&self) -> &[u8] {
-        self.secret.as_ref()
+        self.secret.bytes()
     }
 
     pub fn max_early_data_size(&self) -> u32 {
@@ -225,7 +225,7 @@ impl ClientSessionCommon {
     }
 
     pub(crate) fn ticket(&self) -> &[u8] {
-        (*self.ticket).as_ref()
+        (*self.ticket).bytes()
     }
 }
 
@@ -475,7 +475,7 @@ impl Codec<'_> for CommonServerSessionValue {
         let sni = match u8::read(r)? {
             1 => {
                 let dns_name = SizedPayload::<u8, MaybeEmpty>::read(r)?;
-                let dns_name = match DnsName::try_from(dns_name.as_ref()) {
+                let dns_name = match DnsName::try_from(dns_name.bytes()) {
                     Ok(dns_name) => dns_name.to_owned(),
                     Err(_) => return Err(InvalidMessage::InvalidServerName),
                 };

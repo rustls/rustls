@@ -248,7 +248,7 @@ fn can_round_trip_psk_identity() {
     let bytes = [0, 5, 0x1, 0x2, 0x3, 0x4, 0x5, 0x11, 0x22, 0x33, 0x44];
     let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes)).unwrap();
     println!("{psk_id:?}");
-    assert_eq!(psk_id.identity.as_ref(), &[0x1, 0x2, 0x3, 0x4, 0x5]);
+    assert_eq!(psk_id.identity.bytes(), &[0x1, 0x2, 0x3, 0x4, 0x5]);
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
     assert_eq!(psk_id.get_encoding(), bytes.to_vec());
 }
@@ -262,7 +262,7 @@ fn can_round_trip_psk_offer() {
     println!("{psko:?}");
 
     assert_eq!(psko.identities.len(), 1);
-    assert_eq!(psko.identities[0].identity.as_ref(), &[0x99]);
+    assert_eq!(psko.identities[0].identity.bytes(), &[0x99]);
     assert_eq!(psko.identities[0].obfuscated_ticket_age, 0x11223344);
     assert_eq!(psko.binders.len(), 1);
     assert_eq!(psko.binders[0].as_ref(), &[1, 2, 3]);
