@@ -6,8 +6,7 @@ use pki_types::{DnsName, EchConfigListBytes, FipsStatus, ServerName};
 use subtle::ConstantTimeEq;
 
 use super::config::ClientConfig;
-use super::tls13;
-use crate::Tls13CipherSuite;
+use super::{Tls13ClientSessionValue, tls13};
 use crate::common_state::Protocol;
 use crate::crypto::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::crypto::SecureRandom;
@@ -32,8 +31,8 @@ use crate::msgs::handshake::{
     ServerHelloPayload, ServerNamePayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist;
 use crate::msgs::persist::Retrieved;
+use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     KeyScheduleEarlyClient, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
@@ -414,7 +413,7 @@ impl EchState {
         &mut self,
         mut outer_hello: ClientHelloPayload,
         retry_req: Option<&HelloRetryRequest>,
-        resuming: Option<&Retrieved<&persist::Tls13ClientSessionValue>>,
+        resuming: Option<&Retrieved<&Tls13ClientSessionValue>>,
     ) -> Result<ClientHelloPayload, Error> {
         trace!(
             "Preparing ECH offer {}",
@@ -592,7 +591,7 @@ impl EchState {
         &mut self,
         outer_hello: &ClientHelloPayload,
         retryreq: Option<&HelloRetryRequest>,
-        resuming: Option<&Retrieved<&persist::Tls13ClientSessionValue>>,
+        resuming: Option<&Retrieved<&Tls13ClientSessionValue>>,
     ) -> Vec<u8> {
         // Start building an inner hello using the outer_hello as a template.
         let mut inner_hello = ClientHelloPayload {

@@ -13,6 +13,7 @@ use super::hs::{self, ClientContext};
 use super::{ClientAuthDetails, ServerCertDetails};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
+use crate::client::Tls12ClientSessionValue;
 use crate::common_state::{Event, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
@@ -32,7 +33,6 @@ use crate::msgs::handshake::{
     NewSessionTicketPayloadTls13, ServerKeyExchangeParams, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist;
 use crate::suites::{PartiallyExtractedSecrets, Suite};
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -918,7 +918,7 @@ struct ExpectNewTicket {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     peer_identity: Identity<'static>,
-    resuming: Option<(persist::Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
+    resuming: Option<(Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
@@ -964,7 +964,7 @@ struct ExpectCcs {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     peer_identity: Identity<'static>,
-    resuming: Option<(persist::Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
+    resuming: Option<(Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
@@ -1019,7 +1019,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 struct ExpectFinished {
     config: Arc<ClientConfig>,
     peer_identity: Identity<'static>,
-    resuming: Option<(persist::Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
+    resuming: Option<(Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
@@ -1059,7 +1059,7 @@ impl ExpectFinished {
             return;
         };
 
-        let session_value = persist::Tls12ClientSessionValue::new(
+        let session_value = Tls12ClientSessionValue::new(
             self.secrets.suite(),
             self.session_id,
             ticket,

@@ -13,6 +13,7 @@ use super::hs::{
 };
 use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::check::inappropriate_handshake_message;
+use crate::client::{Tls13ClientSessionInput, Tls13ClientSessionValue};
 use crate::common_state::{
     Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
 };
@@ -38,7 +39,7 @@ use crate::msgs::handshake::{
     PresharedKeyIdentity, PresharedKeyOffer, ServerExtensions, ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist::{self, Retrieved};
+use crate::msgs::persist::Retrieved;
 use crate::sealed::Sealed;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
@@ -348,7 +349,7 @@ pub(super) fn fill_in_psk_binder(
 pub(super) fn prepare_resumption(
     config: &ClientConfig,
     cx: &mut ClientContext<'_>,
-    resuming_session: &Retrieved<&persist::Tls13ClientSessionValue>,
+    resuming_session: &Retrieved<&Tls13ClientSessionValue>,
     exts: &mut ClientExtensions<'_>,
     doing_retry: bool,
 ) {
@@ -439,7 +440,7 @@ fn validate_encrypted_extensions(
 
 struct ExpectEncryptedExtensions {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::Tls13ClientSessionValue>,
+    resuming_session: Option<Tls13ClientSessionValue>,
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -553,7 +554,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
                     session_key: self.session_key,
-                    session_input: persist::Tls13ClientSessionInput {
+                    session_input: Tls13ClientSessionInput {
                         suite: self.suite,
                         peer_identity: resuming_session.peer_identity().clone(),
                         quic_params,
@@ -1140,7 +1141,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
         Ok(Box::new(ExpectFinished {
             config: self.config,
             session_key: self.session_key,
-            session_input: persist::Tls13ClientSessionInput {
+            session_input: Tls13ClientSessionInput {
                 suite: self.suite,
                 peer_identity: identity,
                 quic_params: self.quic_params,
@@ -1242,7 +1243,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn
 struct ExpectFinished {
     config: Arc<ClientConfig>,
     session_key: ClientSessionKey<'static>,
-    session_input: persist::Tls13ClientSessionInput,
+    session_input: Tls13ClientSessionInput,
     randoms: ConnectionRandoms,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
@@ -1398,7 +1399,7 @@ struct ExpectTraffic {
     config: Arc<ClientConfig>,
     session_storage: Arc<dyn ClientSessionStore>,
     session_key: ClientSessionKey<'static>,
-    session_input: persist::Tls13ClientSessionInput,
+    session_input: Tls13ClientSessionInput,
     key_schedule: KeyScheduleTraffic,
     resumption: KeyScheduleResumption,
     counters: TrafficTemperCounters,
@@ -1415,7 +1416,7 @@ impl ExpectTraffic {
 
         let now = self.config.current_time()?;
 
-        let value = persist::Tls13ClientSessionValue::new(
+        let value = Tls13ClientSessionValue::new(
             self.session_input.clone(),
             nst.ticket.clone(),
             secret.as_ref(),
