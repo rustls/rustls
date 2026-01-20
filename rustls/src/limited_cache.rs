@@ -29,6 +29,8 @@ impl<K: Eq + Hash + Clone + Debug, V> LimitedCache<K, V> {
         }
     }
 
+    // TODO
+    #[allow(dead_code)]
     pub(crate) fn insert(&mut self, k: K, v: V) {
         let inserted_new_item = match self.map.entry(k) {
             Entry::Occupied(mut old) => {
@@ -67,6 +69,8 @@ impl<K: Eq + Hash + Clone + Debug, V> LimitedCache<K, V> {
         self.map.get(k)
     }
 
+    // TODO
+    #[allow(dead_code)]
     pub(crate) fn remove<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<V>
     where
         K: Borrow<Q>,
