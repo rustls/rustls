@@ -56,6 +56,47 @@ where
     }
 
     #[inline]
+    pub(crate) fn get_mut<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<&mut V>
+    where
+        K: Borrow<Q>,
+    {
+        let entry = self.map.get_mut(k)?;
+        entry
+            .state
+            .fetch_or(BIT_ACCESSED, Ordering::Relaxed);
+        Arc::get_mut(entry).map(|e| &mut e.value)
+    }
+    #[inline]
+    pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
+        let inserted_new_item = match self.map.entry(k) {
+            Entry::Occupied(value) => {
+                let entry = value.into_mut();
+                entry
+                    .state
+                    .fetch_or(BIT_ACCESSED, Ordering::Relaxed);
+                let value = Arc::get_mut(entry).unwrap();
+                edit(&mut value.value);
+                false
+            }
+            entry @ Entry::Vacant(_) => {
+                let entry = entry.or_insert_with(|| {
+                    Arc::new(CacheEntry {
+                        value: V::default(),
+                        state: AtomicU8::new(0),
+                    })
+                });
+                edit(&mut Arc::get_mut(entry).unwrap().value);
+                true
+            }
+        };
+
+        // ensure next insertion does not require a realloc
+        if inserted_new_item && self.map.len() > self.small_capacity + self.main_capacity {
+            self.evict_small();
+        }
+    }
+
+    #[inline]
     pub(crate) fn insert(&mut self, k: K, v: V) {
         match self.map.entry(k.clone()) {
             Entry::Occupied(mut occupied_entry) => {

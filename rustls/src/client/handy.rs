@@ -39,8 +39,8 @@ mod cache {
     use super::*;
     use crate::client::Tls13Session;
     use crate::crypto::kx::NamedGroup;
-    use crate::limited_cache;
     use crate::lock::Mutex;
+    use crate::s3fifo_shard;
 
     const MAX_TLS13_TICKETS_PER_SERVER: usize = 8;
 
@@ -69,7 +69,7 @@ mod cache {
     ///
     /// It enforces a limit on the number of entries to bound memory usage.
     pub struct ClientSessionMemoryCache {
-        servers: Mutex<limited_cache::LimitedCache<ClientSessionKey<'static>, ServerData>>,
+        servers: Mutex<s3fifo_shard::S3FifoShard<ClientSessionKey<'static>, ServerData>>,
     }
 
     impl ClientSessionMemoryCache {
@@ -79,7 +79,7 @@ mod cache {
             let max_servers = size.saturating_add(MAX_TLS13_TICKETS_PER_SERVER - 1)
                 / MAX_TLS13_TICKETS_PER_SERVER;
             Self {
-                servers: Mutex::new(limited_cache::LimitedCache::new(max_servers)),
+                servers: Mutex::new(s3fifo_shard::S3FifoShard::new(max_servers)),
             }
         }
     }

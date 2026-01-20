@@ -382,7 +382,6 @@ pub mod crypto;
 pub mod error;
 mod hash_hs;
 mod s3fifo_shard;
-mod limited_cache;
 mod tls12;
 mod tls13;
 mod vecbuf;
