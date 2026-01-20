@@ -29,9 +29,8 @@ mod cache {
     use core::fmt::{Debug, Formatter};
 
     use crate::lock::Mutex;
-    use crate::s3fifo_shard;
-    use crate::server;
     use crate::sync::Arc;
+    use crate::{s3fifo_shard, server};
 
     /// An implementer of `StoresServerSessions` that stores everything
     /// in memory.  If enforces a limit on the number of stored sessions
