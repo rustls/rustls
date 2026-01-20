@@ -1,13 +1,13 @@
 use alloc::vec::Vec;
 
+use super::AlertMessagePayload;
+use super::ccs::ChangeCipherSpecPayload;
+use super::codec::{Codec, Reader};
+use super::enums::{AlertLevel, KeyUpdateRequest};
+use super::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::crypto::cipher::{EncodedMessage, MessageError, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
-use crate::msgs::alert::AlertMessagePayload;
-use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
-use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 
 #[non_exhaustive]
 #[derive(Debug)]
