@@ -41,7 +41,6 @@ use crate::msgs::enums::AlertLevel;
 mod macros;
 
 pub(crate) mod base;
-pub(crate) mod ccs;
 mod client_hello;
 pub(crate) mod codec;
 pub(crate) mod deframer;
@@ -75,6 +74,25 @@ impl Codec<'_> for AlertMessagePayload {
         let description = AlertDescription::read(r)?;
         r.expect_empty("AlertMessagePayload")
             .map(|_| Self { level, description })
+    }
+}
+
+#[derive(Debug)]
+pub struct ChangeCipherSpecPayload;
+
+impl Codec<'_> for ChangeCipherSpecPayload {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        1u8.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let typ = u8::read(r)?;
+        if typ != 1 {
+            return Err(InvalidMessage::InvalidCcs);
+        }
+
+        r.expect_empty("ChangeCipherSpecPayload")
+            .map(|_| Self {})
     }
 }
 

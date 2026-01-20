@@ -50,8 +50,8 @@ mod client_hello {
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::enums::ApplicationProtocol;
+    use crate::msgs::ChangeCipherSpecPayload;
     use crate::msgs::base::SizedPayload;
-    use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::deframer::HandshakeAlignedProof;
     use crate::msgs::enums::Compression;
     use crate::msgs::handshake::{

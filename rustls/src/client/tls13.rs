@@ -29,8 +29,8 @@ use crate::error::{
 };
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
+use crate::msgs::ChangeCipherSpecPayload;
 use crate::msgs::base::{MaybeEmpty, SizedPayload};
-use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{

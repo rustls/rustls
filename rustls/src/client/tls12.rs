@@ -24,8 +24,8 @@ use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion}
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
+use crate::msgs::ChangeCipherSpecPayload;
 use crate::msgs::base::SizedPayload;
-use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::handshake::{
     CertificateChain, ClientDhParams, ClientEcdhParams, ClientKeyExchangeParams,
