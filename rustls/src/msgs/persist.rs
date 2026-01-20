@@ -5,16 +5,14 @@ use core::time::Duration;
 use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
+use crate::client::Tls13ClientSessionValue;
 use crate::crypto::cipher::Payload;
 use crate::crypto::{CipherSuite, Identity};
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, SizedPayload};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::handshake::SessionId;
 use crate::sync::Arc;
-use crate::tls12::Tls12CipherSuite;
-use crate::tls13::Tls13CipherSuite;
 
 pub(crate) struct Retrieved<T> {
     pub(crate) value: T,
@@ -67,146 +65,16 @@ impl<T> core::ops::Deref for Retrieved<T> {
     }
 }
 
-#[derive(Debug)]
-pub struct Tls13ClientSessionValue {
-    suite: &'static Tls13CipherSuite,
-    secret: Zeroizing<SizedPayload<'static, u8>>,
-    age_add: u32,
-    max_early_data_size: u32,
-    pub(crate) common: ClientSessionCommon,
-    quic_params: SizedPayload<'static, u16, MaybeEmpty>,
-}
-
-impl Tls13ClientSessionValue {
-    pub(crate) fn new(
-        input: Tls13ClientSessionInput,
-        ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
-        secret: &[u8],
-        time_now: UnixTime,
-        lifetime: Duration,
-        age_add: u32,
-        max_early_data_size: u32,
-    ) -> Self {
-        Self {
-            suite: input.suite,
-            secret: Zeroizing::new(secret.to_vec().into()),
-            age_add,
-            max_early_data_size,
-            common: ClientSessionCommon::new(ticket, time_now, lifetime, input.peer_identity),
-            quic_params: input
-                .quic_params
-                .unwrap_or_else(|| SizedPayload::from(Payload::new(Vec::new()))),
-        }
-    }
-
-    pub(crate) fn secret(&self) -> &[u8] {
-        self.secret.bytes()
-    }
-
-    pub fn max_early_data_size(&self) -> u32 {
-        self.max_early_data_size
-    }
-
-    pub fn suite(&self) -> &'static Tls13CipherSuite {
-        self.suite
-    }
-
-    /// Test only: rewind epoch by `delta` seconds.
-    #[doc(hidden)]
-    pub fn rewind_epoch(&mut self, delta: u32) {
-        self.common.epoch -= delta as u64;
-    }
-
-    /// Test only: replace `max_early_data_size` with `new`
-    #[doc(hidden)]
-    pub fn _private_set_max_early_data_size(&mut self, new: u32) {
-        self.max_early_data_size = new;
-    }
-
-    pub fn quic_params(&self) -> Vec<u8> {
-        self.quic_params.to_vec()
-    }
-}
-
-impl core::ops::Deref for Tls13ClientSessionValue {
-    type Target = ClientSessionCommon;
-
-    fn deref(&self) -> &Self::Target {
-        &self.common
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Tls12ClientSessionValue {
-    suite: &'static Tls12CipherSuite,
-    pub(crate) session_id: SessionId,
-    master_secret: Zeroizing<[u8; 48]>,
-    extended_ms: bool,
-    #[doc(hidden)]
-    pub(crate) common: ClientSessionCommon,
-}
-
-impl Tls12ClientSessionValue {
-    pub(crate) fn new(
-        suite: &'static Tls12CipherSuite,
-        session_id: SessionId,
-        ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
-        master_secret: &[u8; 48],
-        peer_identity: Identity<'static>,
-        time_now: UnixTime,
-        lifetime: Duration,
-        extended_ms: bool,
-    ) -> Self {
-        Self {
-            suite,
-            session_id,
-            master_secret: Zeroizing::new(*master_secret),
-            extended_ms,
-            common: ClientSessionCommon::new(ticket, time_now, lifetime, peer_identity),
-        }
-    }
-
-    pub(crate) fn master_secret(&self) -> &[u8; 48] {
-        &self.master_secret
-    }
-
-    pub(crate) fn ticket(&self) -> Arc<SizedPayload<'static, u16, MaybeEmpty>> {
-        self.common.ticket.clone()
-    }
-
-    pub(crate) fn extended_ms(&self) -> bool {
-        self.extended_ms
-    }
-
-    pub(crate) fn suite(&self) -> &'static Tls12CipherSuite {
-        self.suite
-    }
-
-    /// Test only: rewind epoch by `delta` seconds.
-    #[doc(hidden)]
-    pub fn rewind_epoch(&mut self, delta: u32) {
-        self.common.epoch -= delta as u64;
-    }
-}
-
-impl core::ops::Deref for Tls12ClientSessionValue {
-    type Target = ClientSessionCommon;
-
-    fn deref(&self) -> &Self::Target {
-        &self.common
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ClientSessionCommon {
-    ticket: Arc<SizedPayload<'static, u16>>,
-    epoch: u64,
+    pub(crate) ticket: Arc<SizedPayload<'static, u16>>,
+    pub(crate) epoch: u64,
     lifetime: Duration,
     peer_identity: Arc<Identity<'static>>,
 }
 
 impl ClientSessionCommon {
-    fn new(
+    pub(crate) fn new(
         ticket: Arc<SizedPayload<'static, u16>>,
         time_now: UnixTime,
         lifetime: Duration,
@@ -227,14 +95,6 @@ impl ClientSessionCommon {
     pub(crate) fn ticket(&self) -> &[u8] {
         (*self.ticket).bytes()
     }
-}
-
-/// A "template" for future TLS1.3 client session values.
-#[derive(Clone)]
-pub(crate) struct Tls13ClientSessionInput {
-    pub(crate) suite: &'static Tls13CipherSuite,
-    pub(crate) peer_identity: Identity<'static>,
-    pub(crate) quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
 }
 
 static MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);

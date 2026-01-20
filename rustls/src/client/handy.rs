@@ -1,11 +1,12 @@
 use core::hash::Hasher;
 
-use super::{ClientSessionKey, CredentialRequest};
+use super::{
+    ClientSessionKey, CredentialRequest, Tls12ClientSessionValue, Tls13ClientSessionValue,
+};
 use crate::client;
 use crate::crypto::SelectedCredential;
 use crate::crypto::kx::NamedGroup;
 use crate::enums::CertificateType;
-use crate::msgs::persist;
 
 /// An implementer of `ClientSessionStore` which does nothing.
 #[derive(Debug)]
@@ -18,26 +19,17 @@ impl client::ClientSessionStore for NoClientSessionStorage {
         None
     }
 
-    fn set_tls12_session(&self, _: ClientSessionKey<'static>, _: persist::Tls12ClientSessionValue) {
-    }
+    fn set_tls12_session(&self, _: ClientSessionKey<'static>, _: Tls12ClientSessionValue) {}
 
-    fn tls12_session(&self, _: &ClientSessionKey<'_>) -> Option<persist::Tls12ClientSessionValue> {
+    fn tls12_session(&self, _: &ClientSessionKey<'_>) -> Option<Tls12ClientSessionValue> {
         None
     }
 
     fn remove_tls12_session(&self, _: &ClientSessionKey<'_>) {}
 
-    fn insert_tls13_ticket(
-        &self,
-        _: ClientSessionKey<'static>,
-        _: persist::Tls13ClientSessionValue,
-    ) {
-    }
+    fn insert_tls13_ticket(&self, _: ClientSessionKey<'static>, _: Tls13ClientSessionValue) {}
 
-    fn take_tls13_ticket(
-        &self,
-        _: &ClientSessionKey<'_>,
-    ) -> Option<persist::Tls13ClientSessionValue> {
+    fn take_tls13_ticket(&self, _: &ClientSessionKey<'_>) -> Option<Tls13ClientSessionValue> {
         None
     }
 }
@@ -48,10 +40,10 @@ mod cache {
     use core::fmt;
 
     use super::ClientSessionKey;
+    use crate::client::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     use crate::crypto::kx::NamedGroup;
     use crate::limited_cache;
     use crate::lock::Mutex;
-    use crate::msgs::persist;
 
     const MAX_TLS13_TICKETS_PER_SERVER: usize = 8;
 
@@ -59,10 +51,10 @@ mod cache {
         kx_hint: Option<NamedGroup>,
 
         // Zero or one TLS1.2 sessions.
-        tls12: Option<persist::Tls12ClientSessionValue>,
+        tls12: Option<Tls12ClientSessionValue>,
 
         // Up to MAX_TLS13_TICKETS_PER_SERVER TLS1.3 tickets, oldest first.
-        tls13: VecDeque<persist::Tls13ClientSessionValue>,
+        tls13: VecDeque<Tls13ClientSessionValue>,
     }
 
     impl Default for ServerData {
@@ -126,7 +118,7 @@ mod cache {
         fn set_tls12_session(
             &self,
             key: ClientSessionKey<'static>,
-            value: persist::Tls12ClientSessionValue,
+            value: Tls12ClientSessionValue,
         ) {
             self.servers
                 .lock()
@@ -134,10 +126,7 @@ mod cache {
                 .get_or_insert_default_and_edit(key.clone(), |data| data.tls12 = Some(value));
         }
 
-        fn tls12_session(
-            &self,
-            key: &ClientSessionKey<'_>,
-        ) -> Option<persist::Tls12ClientSessionValue> {
+        fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<Tls12ClientSessionValue> {
             self.servers
                 .lock()
                 .unwrap()
@@ -156,7 +145,7 @@ mod cache {
         fn insert_tls13_ticket(
             &self,
             key: ClientSessionKey<'static>,
-            value: persist::Tls13ClientSessionValue,
+            value: Tls13ClientSessionValue,
         ) {
             self.servers
                 .lock()
@@ -172,7 +161,7 @@ mod cache {
         fn take_tls13_ticket(
             &self,
             key: &ClientSessionKey<'static>,
-        ) -> Option<persist::Tls13ClientSessionValue> {
+        ) -> Option<Tls13ClientSessionValue> {
             self.servers
                 .lock()
                 .unwrap()
@@ -216,16 +205,16 @@ mod tests {
     use pki_types::{CertificateDer, ServerName, UnixTime};
 
     use super::NoClientSessionStorage;
-    use crate::client::{ClientSessionKey, ClientSessionStore};
+    use crate::client::{
+        ClientSessionKey, ClientSessionStore, Tls12ClientSessionValue, Tls13ClientSessionInput,
+        Tls13ClientSessionValue,
+    };
     use crate::crypto::kx::NamedGroup;
     use crate::crypto::{
         CertificateIdentity, CipherSuite, Identity, TEST_PROVIDER, tls12_suite, tls13_suite,
     };
     use crate::msgs::base::SizedPayload;
     use crate::msgs::handshake::SessionId;
-    use crate::msgs::persist::{
-        Tls12ClientSessionValue, Tls13ClientSessionInput, Tls13ClientSessionValue,
-    };
     use crate::sync::Arc;
 
     #[test]
