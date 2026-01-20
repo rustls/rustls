@@ -665,7 +665,7 @@ mod client_hello {
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&Tls13ServerSessionValue>,
-        extra_exts: ServerExtensionsInput<'static>,
+        extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
     ) -> Result<(CertificateTypes, EarlyDataDecision, Option<ProtocolName>), Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, protocol, hello, config);

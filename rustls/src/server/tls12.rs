@@ -257,7 +257,7 @@ mod client_hello {
         input: ClientHelloInput<'_>,
         mut transcript: HandshakeHash,
         randoms: ConnectionRandoms,
-        extra_exts: ServerExtensionsInput<'static>,
+        extra_exts: ServerExtensionsInput,
         config: Arc<ServerConfig>,
         resumedata: persist::Tls12ServerSessionValue,
         proof: HandshakeAlignedProof,
@@ -353,7 +353,7 @@ mod client_hello {
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::Tls12ServerSessionValue>,
         randoms: &ConnectionRandoms,
-        extra_exts: ServerExtensionsInput<'static>,
+        extra_exts: ServerExtensionsInput,
     ) -> Result<(bool, Option<ProtocolName>), Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
         let (_, alpn_protocol) =

@@ -182,7 +182,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
 struct ExpectServerHelloOrHelloRetryRequest {
     next: Box<ExpectServerHello>,
-    extra_exts: ClientExtensionsInput<'static>,
+    extra_exts: ClientExtensionsInput,
 }
 
 impl ExpectServerHelloOrHelloRetryRequest {
@@ -375,7 +375,7 @@ pub(crate) struct ClientHelloInput {
 impl ClientHelloInput {
     pub(super) fn new(
         server_name: ServerName<'static>,
-        extra_exts: &ClientExtensionsInput<'_>,
+        extra_exts: &ClientExtensionsInput,
         protocol: Protocol,
         cx: &mut ClientContext<'_>,
         config: Arc<ClientConfig>,
@@ -440,7 +440,7 @@ impl ClientHelloInput {
 
     pub(super) fn start_handshake(
         self,
-        extra_exts: ClientExtensionsInput<'static>,
+        extra_exts: ClientExtensionsInput,
         cx: &mut ClientContext<'_>,
     ) -> NextStateOrError {
         let mut transcript_buffer = HandshakeHashBuffer::new();
@@ -493,7 +493,7 @@ fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
     key_share: Option<GroupAndKeyShare>,
-    extra_exts: ClientExtensionsInput<'static>,
+    extra_exts: ClientExtensionsInput,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
@@ -830,10 +830,7 @@ fn emit_client_hello_for_retry(
     });
 
     Ok(if supported_versions.tls13 && retryreq.is_none() {
-        Box::new(ExpectServerHelloOrHelloRetryRequest {
-            next,
-            extra_exts: extra_exts.into_owned(),
-        })
+        Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
     } else {
         next.done_retry = retryreq.is_some();
         next

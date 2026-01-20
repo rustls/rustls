@@ -265,7 +265,7 @@ impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
-        extra_exts: ClientExtensionsInput<'static>,
+        extra_exts: ClientExtensionsInput,
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client, proto);
@@ -328,7 +328,7 @@ impl UnbufferedClientConnection {
     fn new_with_extensions(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
-        extensions: ClientExtensionsInput<'static>,
+        extensions: ClientExtensionsInput,
     ) -> Result<Self, Error> {
         Ok(Self {
             inner: UnbufferedConnectionCommon::from(ConnectionCore::for_client(
