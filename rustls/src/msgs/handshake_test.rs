@@ -17,8 +17,8 @@ use super::handshake::{
     EchConfigPayload, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
     HelloRetryRequest, HelloRetryRequestExtensions, HpkeKeyConfig, KeyShareEntry,
     NewSessionTicketExtensions, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
-    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, PskKeyExchangeModes,
-    Random, ServerDhParams, ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions,
+    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, PskKeyExchangeModes, Random,
+    ServerDhParams, ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions,
     ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
     ServerNamePayload, SessionId, SingleProtocolName, SupportedEcPointFormats,
     SupportedProtocolVersions,
@@ -28,7 +28,8 @@ use crate::crypto::hpke::{HpkeAead, HpkeKdf, HpkeKem, HpkeSymmetricCipherSuite};
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{CipherSuite, SignatureScheme};
 use crate::enums::{
-    CertificateCompressionAlgorithm, CertificateType, HandshakeType, ProtocolVersion,
+    ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, HandshakeType,
+    ProtocolVersion,
 };
 use crate::error::InvalidMessage;
 use crate::sync::Arc;
@@ -886,7 +887,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             session_ticket: Some(ClientSessionTicket::Request),
             ec_point_formats: Some(SupportedEcPointFormats::default()),
             named_groups: Some(vec![NamedGroup::X25519]),
-            protocols: Some(vec![ProtocolName::from(vec![0])]),
+            protocols: Some(vec![ApplicationProtocol::from(vec![0])]),
             supported_versions: Some(SupportedProtocolVersions {
                 tls13: true,
                 ..Default::default()
@@ -932,7 +933,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             server_name_ack: Some(()),
             session_ticket_ack: Some(()),
             renegotiation_info: Some(SizedPayload::from(vec![0])),
-            selected_protocol: Some(SingleProtocolName::new(ProtocolName::from(vec![0]))),
+            selected_protocol: Some(SingleProtocolName::new(ApplicationProtocol::from(vec![0]))),
             key_share: Some(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
             preshared_key: Some(3),
             early_data_ack: Some(()),

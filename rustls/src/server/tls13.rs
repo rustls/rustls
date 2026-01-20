@@ -16,7 +16,9 @@ use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};
-use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
+use crate::enums::{
+    ApplicationProtocol, CertificateType, ContentType, HandshakeType, ProtocolVersion,
+};
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
@@ -24,7 +26,7 @@ use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
     CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
-    NewSessionTicketPayloadTls13, ProtocolName,
+    NewSessionTicketPayloadTls13,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -47,6 +49,7 @@ mod client_hello {
     use crate::crypto::cipher::Payload;
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
+    use crate::enums::ApplicationProtocol;
     use crate::msgs::base::SizedPayload;
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::deframer::HandshakeAlignedProof;
@@ -603,7 +606,7 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         client_hello: &ClientHelloPayload,
         resumedata: Option<&Tls13ServerSessionValue>,
-        chosen_alpn_protocol: Option<&ProtocolName>,
+        chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
         suite: &'static Tls13CipherSuite,
         protocol: Protocol,
         config: &ServerConfig,
@@ -667,7 +670,14 @@ mod client_hello {
         resumedata: Option<&Tls13ServerSessionValue>,
         extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
-    ) -> Result<(CertificateTypes, EarlyDataDecision, Option<ProtocolName>), Error> {
+    ) -> Result<
+        (
+            CertificateTypes,
+            EarlyDataDecision,
+            Option<ApplicationProtocol<'static>>,
+        ),
+        Error,
+    > {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, protocol, hello, config);
         let (cert_types, alpn_protocol) =
             ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
@@ -846,7 +856,7 @@ struct ExpectCertificateOrCompressedCertificate {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
@@ -903,7 +913,7 @@ struct ExpectCompressedCertificate {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
@@ -964,7 +974,7 @@ struct ExpectCertificate {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
@@ -1051,7 +1061,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Identity<'static>,
     send_tickets: usize,
 }
@@ -1101,7 +1111,7 @@ struct ExpectEarlyData {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Option<Identity<'static>>,
     send_tickets: usize,
 }
@@ -1157,7 +1167,7 @@ fn get_server_session_value(
     resumption: &KeyScheduleResumption,
     cx: &ServerContext<'_>,
     peer_identity: Option<Identity<'static>>,
-    chosen_alpn_protocol: Option<ProtocolName>,
+    chosen_alpn_protocol: Option<ApplicationProtocol<'static>>,
     nonce: &[u8],
     time_now: UnixTime,
     age_obfuscation_offset: u32,
@@ -1184,7 +1194,7 @@ struct ExpectFinished {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Option<Identity<'static>>,
     send_tickets: usize,
 }
@@ -1195,7 +1205,7 @@ impl ExpectFinished {
         suite: &'static Tls13CipherSuite,
         cx: &ServerContext<'_>,
         peer_identity: Option<Identity<'static>>,
-        chosen_alpn_protocol: Option<ProtocolName>,
+        chosen_alpn_protocol: Option<ApplicationProtocol<'static>>,
         resumption: &KeyScheduleResumption,
         config: &ServerConfig,
     ) -> Result<(), Error> {

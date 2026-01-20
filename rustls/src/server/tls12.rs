@@ -16,7 +16,9 @@ use crate::conn::kernel::{Direction, KernelState};
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
-use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
+use crate::enums::{
+    ApplicationProtocol, CertificateType, ContentType, HandshakeType, ProtocolVersion,
+};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
@@ -25,7 +27,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::handshake::{
     CertificateChain, ClientKeyExchangeParams, HandshakeMessagePayload, HandshakePayload,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, ProtocolName, SessionId,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -40,6 +42,7 @@ mod client_hello {
     use crate::common_state::Protocol;
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
+    use crate::enums::ApplicationProtocol;
     use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::{
         CertificateRequestPayload, CertificateStatus, ClientHelloPayload, ClientSessionTicket,
@@ -354,7 +357,7 @@ mod client_hello {
         resumedata: Option<&persist::Tls12ServerSessionValue>,
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput,
-    ) -> Result<(bool, Option<ProtocolName>), Error> {
+    ) -> Result<(bool, Option<ApplicationProtocol<'static>>), Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
         let (_, alpn_protocol) =
             ep.process_common(cx, ocsp_response, resumedata.map(|r| &r.common))?;
@@ -464,7 +467,7 @@ struct ExpectCertificate {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: GroupAndKeyExchange,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     send_ticket: bool,
 }
 
@@ -533,7 +536,7 @@ struct ExpectClientKx {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: GroupAndKeyExchange,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Option<Identity<'static>>,
     send_ticket: bool,
 }
@@ -607,7 +610,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     session_id: SessionId,
     using_ems: bool,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Identity<'static>,
     send_ticket: bool,
 }
@@ -667,7 +670,7 @@ struct ExpectCcs {
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Option<Identity<'static>>,
     using_ems: bool,
     resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
@@ -726,7 +729,7 @@ fn get_server_connection_value_tls12(
     secrets: &ConnectionSecrets,
     using_ems: bool,
     peer_identity: Option<&Identity<'static>>,
-    alpn_protocol: Option<&ProtocolName>,
+    alpn_protocol: Option<&ApplicationProtocol<'_>>,
     cx: &ServerContext<'_>,
     time_now: UnixTime,
 ) -> persist::ServerSessionValue {
@@ -735,7 +738,7 @@ fn get_server_connection_value_tls12(
             cx.data.sni.as_ref(),
             secrets.suite().common.suite,
             peer_identity.cloned(),
-            alpn_protocol.cloned(),
+            alpn_protocol.map(|p| p.to_owned()),
             cx.data.resumption_data.clone(),
             time_now,
         ),
@@ -750,7 +753,7 @@ fn emit_ticket(
     transcript: &mut HandshakeHash,
     using_ems: bool,
     peer_identity: Option<&Identity<'static>>,
-    alpn_protocol: Option<&ProtocolName>,
+    alpn_protocol: Option<&ApplicationProtocol<'_>>,
     cx: &mut ServerContext<'_>,
     ticketer: &dyn TicketProducer,
     now: UnixTime,
@@ -820,7 +823,7 @@ struct ExpectFinished {
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
-    alpn_protocol: Option<ProtocolName>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Option<Identity<'static>>,
     using_ems: bool,
     resuming: bool,

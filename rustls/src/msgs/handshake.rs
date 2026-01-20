@@ -398,38 +398,12 @@ impl HostNamePayload {
     }
 }
 
-wrapped_payload!(
-    /// RFC7301: `opaque ProtocolName<1..2^8-1>;`
-    pub(crate) struct ProtocolName, SizedPayload<u8, NonEmpty>,
-);
-
-impl PartialEq for ProtocolName {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl Deref for ProtocolName {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-/// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
-impl TlsListElement for ProtocolName {
-    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
-        empty_error: InvalidMessage::IllegalEmptyList("ProtocolNames"),
-    };
-}
-
 /// RFC7301 encodes a single protocol name as `Vec<ProtocolName>`
 #[derive(Clone, Debug)]
-pub(crate) struct SingleProtocolName(ProtocolName);
+pub(crate) struct SingleProtocolName(ApplicationProtocol<'static>);
 
 impl SingleProtocolName {
-    pub(crate) fn new(single: ProtocolName) -> Self {
+    pub(crate) fn new(single: ApplicationProtocol<'static>) -> Self {
         Self(single)
     }
 
@@ -448,18 +422,18 @@ impl Codec<'_> for SingleProtocolName {
         let len = Self::SIZE_LEN.read(reader)?;
         let mut sub = reader.sub(len)?;
 
-        let item = ProtocolName::read(&mut sub)?;
+        let item = ApplicationProtocol::read(&mut sub)?;
 
         if sub.any_left() {
             Err(InvalidMessage::TrailingData("SingleProtocolName"))
         } else {
-            Ok(Self(item))
+            Ok(Self(item.to_owned()))
         }
     }
 }
 
-impl AsRef<ProtocolName> for SingleProtocolName {
-    fn as_ref(&self) -> &ProtocolName {
+impl AsRef<ApplicationProtocol<'static>> for SingleProtocolName {
+    fn as_ref(&self) -> &ApplicationProtocol<'static> {
         &self.0
     }
 }
@@ -783,19 +757,14 @@ pub(crate) struct ClientExtensionsInput {
     pub(crate) transport_parameters: Option<TransportParameters>,
 
     /// ALPN protocols
-    pub(crate) protocols: Option<Vec<ProtocolName>>,
+    pub(crate) protocols: Option<Vec<ApplicationProtocol<'static>>>,
 }
 
 impl ClientExtensionsInput {
-    pub(crate) fn from_alpn(alpn_protocols: &[ApplicationProtocol<'_>]) -> Self {
+    pub(crate) fn from_alpn(alpn_protocols: Vec<ApplicationProtocol<'static>>) -> Self {
         let protocols = match alpn_protocols.is_empty() {
             true => None,
-            false => Some(
-                alpn_protocols
-                    .iter()
-                    .map(|p| ProtocolName::from(p.as_ref().to_vec()))
-                    .collect::<Vec<_>>(),
-            ),
+            false => Some(alpn_protocols),
         };
 
         Self {
@@ -843,7 +812,7 @@ extension_struct! {
 
         /// Offered ALPN protocols (RFC6066)
         ExtensionType::ALProtocolNegotiation =>
-            pub(crate) protocols: Option<Vec<ProtocolName>>,
+            pub(crate) protocols: Option<Vec<ApplicationProtocol<'a>>>,
 
         /// Available client certificate types (RFC7250)
         ExtensionType::ClientCertificateType =>
@@ -951,7 +920,11 @@ impl ClientExtensions<'_> {
             named_groups,
             ec_point_formats,
             signature_schemes,
-            protocols,
+            protocols: protocols.map(|ps| {
+                ps.into_iter()
+                    .map(|p| p.to_owned())
+                    .collect::<Vec<_>>()
+            }),
             client_certificate_types,
             server_certificate_types,
             extended_master_secret_request,

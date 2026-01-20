@@ -12,15 +12,15 @@ use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme};
-use crate::enums::{CertificateType, HandshakeType, ProtocolVersion};
+use crate::enums::{ApplicationProtocol, CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
-    ClientHelloPayload, HandshakePayload, ProtocolName, Random, ServerExtensions,
-    ServerExtensionsInput, ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
+    ClientHelloPayload, HandshakePayload, Random, ServerExtensions, ServerExtensionsInput,
+    ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -73,22 +73,18 @@ impl<'a> ExtensionProcessing<'a> {
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&persist::CommonServerSessionValue>,
-    ) -> Result<(CertificateTypes, Option<ProtocolName>), Error> {
+    ) -> Result<(CertificateTypes, Option<ApplicationProtocol<'static>>), Error> {
         let config = self.config;
         let hello = self.client_hello;
 
         // ALPN
         let our_protocols = &config.alpn_protocols;
         let chosen_protocol = if let Some(their_protocols) = &hello.protocols {
-            if let Some(selected_protocol) = our_protocols
-                .iter()
-                .find(|ours| {
-                    their_protocols
-                        .iter()
-                        .any(|theirs| theirs.as_ref() == ours.as_ref())
-                })
-                .map(|proto| ProtocolName::from(proto.as_ref().to_vec()))
-            {
+            if let Some(selected_protocol) = our_protocols.iter().find(|ours| {
+                their_protocols
+                    .iter()
+                    .any(|theirs| theirs.as_ref() == ours.as_ref())
+            }) {
                 debug!("Chosen ALPN protocol {selected_protocol:?}");
 
                 Some(selected_protocol)
@@ -103,8 +99,9 @@ impl<'a> ExtensionProcessing<'a> {
 
         // Enact ALPN selection by telling peer and high-level API.
         if let Some(protocol) = &chosen_protocol {
-            self.extensions.selected_protocol = Some(SingleProtocolName::new(protocol.clone()));
-            cx.emit(Event::ApplicationProtocol(protocol.clone()));
+            self.extensions.selected_protocol =
+                Some(SingleProtocolName::new((*protocol).to_owned()));
+            cx.emit(Event::ApplicationProtocol((*protocol).to_owned()));
         }
 
         if self.protocol.is_quic() {
@@ -174,7 +171,7 @@ impl<'a> ExtensionProcessing<'a> {
             CertificateTypes {
                 client: expected_client_type,
             },
-            chosen_protocol,
+            chosen_protocol.map(|p| p.to_owned()),
         ))
     }
 
