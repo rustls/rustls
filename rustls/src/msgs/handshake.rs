@@ -778,18 +778,16 @@ impl TlsListElement for CertificateCompressionAlgorithm {
 /// This is smaller than `ClientExtensions`, as it only contains the extensions
 /// we need to vary between different protocols (eg, TCP-TLS versus QUIC).
 #[derive(Clone, Default)]
-pub(crate) struct ClientExtensionsInput<'a> {
+pub(crate) struct ClientExtensionsInput {
     /// QUIC transport parameters
-    pub(crate) transport_parameters: Option<TransportParameters<'a>>,
+    pub(crate) transport_parameters: Option<TransportParameters>,
 
     /// ALPN protocols
     pub(crate) protocols: Option<Vec<ProtocolName>>,
 }
 
-impl ClientExtensionsInput<'_> {
-    pub(crate) fn from_alpn(
-        alpn_protocols: &[ApplicationProtocol<'_>],
-    ) -> ClientExtensionsInput<'static> {
+impl ClientExtensionsInput {
+    pub(crate) fn from_alpn(alpn_protocols: &[ApplicationProtocol<'_>]) -> Self {
         let protocols = match alpn_protocols.is_empty() {
             true => None,
             false => Some(
@@ -800,36 +798,18 @@ impl ClientExtensionsInput<'_> {
             ),
         };
 
-        ClientExtensionsInput {
+        Self {
             transport_parameters: None,
-            protocols,
-        }
-    }
-
-    pub(crate) fn into_owned(self) -> ClientExtensionsInput<'static> {
-        let Self {
-            transport_parameters,
-            protocols,
-        } = self;
-        ClientExtensionsInput {
-            transport_parameters: transport_parameters.map(|x| x.into_owned()),
             protocols,
         }
     }
 }
 
 #[derive(Clone)]
-pub(crate) enum TransportParameters<'a> {
+pub(crate) enum TransportParameters {
     /// QUIC transport parameters (RFC9001)
-    Quic(Payload<'a>),
-}
-
-impl TransportParameters<'_> {
-    pub(crate) fn into_owned(self) -> TransportParameters<'static> {
-        match self {
-            Self::Quic(v) => TransportParameters::Quic(v.into_owned()),
-        }
-    }
+    #[cfg_attr(not(feature = "std"), expect(dead_code))]
+    Quic(Payload<'static>),
 }
 
 extension_struct! {
@@ -1125,9 +1105,9 @@ impl<'a> Codec<'a> for ClientSessionTicket {
 }
 
 #[derive(Default)]
-pub(crate) struct ServerExtensionsInput<'a> {
+pub(crate) struct ServerExtensionsInput {
     /// QUIC transport parameters
-    pub(crate) transport_parameters: Option<TransportParameters<'a>>,
+    pub(crate) transport_parameters: Option<TransportParameters>,
 }
 
 extension_struct! {

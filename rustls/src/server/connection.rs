@@ -714,7 +714,7 @@ impl Debug for EarlyDataState {
 impl ConnectionCore<ServerConnectionData> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
-        extra_exts: ServerExtensionsInput<'static>,
+        extra_exts: ServerExtensionsInput,
         protocol: Protocol,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server, protocol);

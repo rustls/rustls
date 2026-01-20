@@ -45,7 +45,7 @@ pub(super) struct ExtensionProcessing<'a> {
 
 impl<'a> ExtensionProcessing<'a> {
     pub(super) fn new(
-        extra_exts: ServerExtensionsInput<'static>,
+        extra_exts: ServerExtensionsInput,
         protocol: Protocol,
         client_hello: &'a ClientHelloPayload,
         config: &'a ServerConfig,
@@ -261,7 +261,7 @@ pub(super) struct CertificateTypes {
 pub(crate) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) protocol: Protocol,
-    pub(super) extra_exts: ServerExtensionsInput<'static>,
+    pub(super) extra_exts: ServerExtensionsInput,
     pub(super) transcript: HandshakeHashOrBuffer,
     pub(super) session_id: SessionId,
     pub(super) using_ems: bool,
@@ -272,7 +272,7 @@ pub(crate) struct ExpectClientHello {
 impl ExpectClientHello {
     pub(super) fn new(
         config: Arc<ServerConfig>,
-        extra_exts: ServerExtensionsInput<'static>,
+        extra_exts: ServerExtensionsInput,
         protocol: Protocol,
     ) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
