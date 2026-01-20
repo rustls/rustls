@@ -67,6 +67,8 @@ where
         }
     }
 
+    // TODO
+    #[allow(dead_code)]
     pub(crate) fn insert(&mut self, k: K, v: V) {
         let inserted_new_item = match self.map.entry(k) {
             Entry::Occupied(mut old) => {
@@ -98,6 +100,8 @@ where
         self.map.get(k)
     }
 
+    // TODO
+    #[allow(dead_code)]
     pub(crate) fn remove<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<V>
     where
         K: Borrow<Q>,

@@ -375,6 +375,8 @@ pub mod error;
 mod hash_hs;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod limited_cache;
+#[cfg(any(feature = "std", feature = "hashbrown"))]
+mod s3fifo_shard;
 #[cfg(feature = "std")]
 mod stream;
 mod tls12;

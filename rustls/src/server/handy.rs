@@ -29,14 +29,15 @@ mod cache {
     use core::fmt::{Debug, Formatter};
 
     use crate::lock::Mutex;
+    use crate::s3fifo_shard;
+    use crate::server;
     use crate::sync::Arc;
-    use crate::{limited_cache, server};
 
     /// An implementer of `StoresServerSessions` that stores everything
     /// in memory.  If enforces a limit on the number of stored sessions
     /// to bound memory usage.
     pub struct ServerSessionMemoryCache {
-        cache: Mutex<limited_cache::LimitedCache<Vec<u8>, Vec<u8>>>,
+        cache: Mutex<s3fifo_shard::S3FifoShard<Vec<u8>, Vec<u8>>>,
     }
 
     impl ServerSessionMemoryCache {
@@ -46,7 +47,7 @@ mod cache {
         #[cfg(feature = "std")]
         pub fn new(size: usize) -> Arc<Self> {
             Arc::new(Self {
-                cache: Mutex::new(limited_cache::LimitedCache::new(size)),
+                cache: Mutex::new(s3fifo_shard::S3FifoShard::new(size)),
             })
         }
 
@@ -56,7 +57,7 @@ mod cache {
         #[cfg(not(feature = "std"))]
         pub fn new<M: crate::lock::MakeMutex>(size: usize) -> Arc<Self> {
             Arc::new(Self {
-                cache: Mutex::new::<M>(limited_cache::LimitedCache::new(size)),
+                cache: Mutex::new::<M>(s3fifo_shard::S3FifoShard::new(size)),
             })
         }
     }
