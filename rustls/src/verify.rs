@@ -316,7 +316,7 @@ impl DigitallySignedStruct {
 
     /// Get the signature.
     pub fn signature(&self) -> &[u8] {
-        self.sig.as_ref()
+        self.sig.bytes()
     }
 }
 
@@ -369,7 +369,7 @@ impl DistinguishedName {
 
 impl PartialEq for DistinguishedName {
     fn eq(&self, other: &Self) -> bool {
-        self.0.as_ref() == other.0.as_ref()
+        self.0.bytes() == other.0.bytes()
     }
 }
 

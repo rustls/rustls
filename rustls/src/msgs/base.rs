@@ -53,7 +53,7 @@ pub(crate) struct SizedPayload<'a, L, C: Cardinality = MaybeEmpty> {
     pub(crate) _marker: PhantomData<(L, C)>,
 }
 
-impl<L, C: Cardinality> SizedPayload<'_, L, C> {
+impl<'a, L, C: Cardinality> SizedPayload<'a, L, C> {
     pub(crate) fn into_owned(self) -> SizedPayload<'static, L, C> {
         SizedPayload {
             inner: self.inner.into_owned(),
@@ -74,6 +74,10 @@ impl<L, C: Cardinality> SizedPayload<'_, L, C> {
 
     pub(crate) fn to_vec(&self) -> Vec<u8> {
         self.inner.bytes().to_vec()
+    }
+
+    pub(crate) fn bytes(&'a self) -> &'a [u8] {
+        self.inner.bytes()
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -140,12 +144,6 @@ impl<'a, L: PayloadSize<'a>, C: Cardinality> From<Vec<u8>> for SizedPayload<'a, 
             inner: Payload::Owned(inner),
             _marker: PhantomData,
         }
-    }
-}
-
-impl<'a, L: PayloadSize<'a>, C: Cardinality> AsRef<[u8]> for SizedPayload<'a, L, C> {
-    fn as_ref(&self) -> &[u8] {
-        self.inner.bytes()
     }
 }
 

@@ -208,7 +208,7 @@ mod client_hello {
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
                     let maybe_resume_data =
-                        attempt_tls13_ticket_decryption(psk_id.identity.as_ref(), &st.config)
+                        attempt_tls13_ticket_decryption(psk_id.identity.bytes(), &st.config)
                             .map(|resumedata| {
                                 resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
                             })
@@ -224,7 +224,7 @@ mod client_hello {
 
                     if !check_binder(
                         &transcript,
-                        &KeyScheduleEarlyServer::new(st.protocol, suite, resume.secret.as_ref()),
+                        &KeyScheduleEarlyServer::new(st.protocol, suite, resume.secret.bytes()),
                         input.message,
                         psk_offer.binders[i].as_ref(),
                     ) {
@@ -257,7 +257,7 @@ mod client_hello {
                     resume
                         .common
                         .application_data
-                        .as_ref()
+                        .bytes()
                         .to_vec(),
                 );
             }
@@ -275,7 +275,7 @@ mod client_hello {
                 chosen_psk_index,
                 resumedata
                     .as_ref()
-                    .map(|x| x.secret.as_ref()),
+                    .map(|x| x.secret.bytes()),
                 &input.proof,
                 &st.config,
             )?;
@@ -492,7 +492,7 @@ mod client_hello {
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
-        let ckx = kxgroup.start_and_complete(share.payload.as_ref())?;
+        let ckx = kxgroup.start_and_complete(share.payload.bytes())?;
         cx.emit(Event::KeyExchangeGroup(kxgroup));
 
         let extensions = Box::new(ServerExtensions {
@@ -933,7 +933,7 @@ impl ExpectCompressedCertificate {
 
         let mut decompress_buffer = vec![0u8; compressed_cert.uncompressed_len as usize];
         if let Err(compress::DecompressionFailed) =
-            decompressor.decompress(compressed_cert.compressed.as_ref(), &mut decompress_buffer)
+            decompressor.decompress(compressed_cert.compressed.bytes(), &mut decompress_buffer)
         {
             return Err(PeerMisbehaved::InvalidCertCompression.into());
         }
@@ -942,10 +942,7 @@ impl ExpectCompressedCertificate {
         trace!(
             "Client certificate decompressed using {:?} ({} bytes -> {})",
             compressed_cert.alg,
-            compressed_cert
-                .compressed
-                .as_ref()
-                .len(),
+            compressed_cert.compressed.bytes().len(),
             compressed_cert.uncompressed_len,
         );
 
