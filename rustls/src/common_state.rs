@@ -22,7 +22,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::deframer::{Delocator, HandshakeAlignedProof, Locator};
 use crate::msgs::enums::AlertLevel;
 use crate::msgs::fragmenter::MessageFragmenter;
-use crate::msgs::handshake::{HandshakeMessagePayload, ProtocolName};
+use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};
 use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
@@ -869,7 +869,7 @@ pub(crate) trait Output {
 /// The set of events output by the low-level handshake state machine.
 pub(crate) enum Event<'a> {
     ApplicationData(Payload<'a>),
-    ApplicationProtocol(ProtocolName),
+    ApplicationProtocol(ApplicationProtocol<'a>),
     CipherSuite(SupportedCipherSuite),
     EarlyExporter(Box<dyn Exporter>),
     EncryptMessage(Message<'a>),

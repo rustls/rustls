@@ -7,11 +7,11 @@ use zeroize::Zeroizing;
 
 use crate::crypto::cipher::Payload;
 use crate::crypto::{CipherSuite, Identity};
-use crate::enums::ProtocolVersion;
+use crate::enums::{ApplicationProtocol, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, SizedPayload};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::handshake::{ProtocolName, SessionId};
+use crate::msgs::handshake::SessionId;
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
@@ -404,7 +404,7 @@ pub struct CommonServerSessionValue {
     pub(crate) sni: Option<DnsName<'static>>,
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) peer_identity: Option<Identity<'static>>,
-    pub(crate) alpn: Option<ProtocolName>,
+    pub(crate) alpn: Option<ApplicationProtocol<'static>>,
     pub(crate) application_data: SizedPayload<'static, u16, MaybeEmpty>,
     #[doc(hidden)]
     pub creation_time_sec: u64,
@@ -415,7 +415,7 @@ impl CommonServerSessionValue {
         sni: Option<&DnsName<'_>>,
         cipher_suite: CipherSuite,
         peer_identity: Option<Identity<'static>>,
-        alpn: Option<ProtocolName>,
+        alpn: Option<ApplicationProtocol<'static>>,
         application_data: Vec<u8>,
         creation_time: UnixTime,
     ) -> Self {
@@ -493,7 +493,7 @@ impl Codec<'_> for CommonServerSessionValue {
                 _ => None,
             },
             alpn: match u8::read(r)? {
-                1 => Some(ProtocolName::read(r)?),
+                1 => Some(ApplicationProtocol::read(r)?.to_owned()),
                 _ => None,
             },
             application_data: SizedPayload::read(r)?.into_owned(),

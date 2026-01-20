@@ -131,7 +131,7 @@ mod connection {
                 quic_version,
                 name,
                 params,
-                &config.alpn_protocols,
+                config.alpn_protocols.clone(),
             )
         }
 
@@ -141,7 +141,7 @@ mod connection {
             quic_version: Version,
             name: ServerName<'static>,
             params: Vec<u8>,
-            alpn_protocols: &[ApplicationProtocol<'_>],
+            alpn_protocols: Vec<ApplicationProtocol<'static>>,
         ) -> Result<Self, Error> {
             let suites = &config.provider().tls13_cipher_suites;
             if suites.is_empty() {

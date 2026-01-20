@@ -2,10 +2,10 @@ use alloc::vec::Vec;
 
 use crate::compress;
 use crate::crypto::{SelectedCredential, SignatureScheme};
-use crate::enums::CertificateType;
+use crate::enums::{ApplicationProtocol, CertificateType};
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
-use crate::msgs::handshake::{CertificateChain, ProtocolName, ServerExtensions};
+use crate::msgs::handshake::{CertificateChain, ServerExtensions};
 pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
 use crate::verify::DistinguishedName;
 pub use crate::webpki::{
@@ -70,14 +70,14 @@ impl ServerCertDetails {
 }
 
 struct ClientHelloDetails {
-    alpn_protocols: Vec<ProtocolName>,
+    alpn_protocols: Vec<ApplicationProtocol<'static>>,
     sent_extensions: Vec<ExtensionType>,
     extension_order_seed: u16,
     offered_cert_compression: bool,
 }
 
 impl ClientHelloDetails {
-    fn new(alpn_protocols: Vec<ProtocolName>, extension_order_seed: u16) -> Self {
+    fn new(alpn_protocols: Vec<ApplicationProtocol<'static>>, extension_order_seed: u16) -> Self {
         Self {
             alpn_protocols,
             sent_extensions: Vec::new(),

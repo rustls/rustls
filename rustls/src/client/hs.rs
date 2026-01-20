@@ -1,4 +1,3 @@
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -18,7 +17,9 @@ use crate::common_state::{Event, Input, Output, Protocol, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
-use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
+use crate::enums::{
+    ApplicationProtocol, CertificateType, ContentType, HandshakeType, ProtocolVersion,
+};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
@@ -26,9 +27,9 @@ use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, KeyShareEntry, ProtocolName, PskKeyExchangeModes, Random,
-    ServerHelloPayload, ServerNamePayload, SessionId, SupportedEcPointFormats,
-    SupportedProtocolVersions, TransportParameters,
+    HelloRetryRequest, KeyShareEntry, PskKeyExchangeModes, Random, ServerHelloPayload,
+    ServerNamePayload, SessionId, SupportedEcPointFormats, SupportedProtocolVersions,
+    TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -919,8 +920,8 @@ fn prepare_resumption<'a>(
 
 pub(super) fn process_alpn_protocol(
     output: &mut dyn Output,
-    offered_protocols: &[ProtocolName],
-    selected: Option<&ProtocolName>,
+    offered_protocols: &[ApplicationProtocol<'_>],
+    selected: Option<&ApplicationProtocol<'_>>,
 ) -> Result<(), Error> {
     if let Some(alpn_protocol) = selected {
         if !offered_protocols.contains(alpn_protocol) {

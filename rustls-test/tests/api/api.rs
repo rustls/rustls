@@ -140,7 +140,7 @@ fn connection_level_alpn_protocols() {
     let mut client = ClientConnection::new_with_alpn(
         client_config,
         server_name("localhost"),
-        &[b"http/1.1".into()],
+        vec![b"http/1.1".into()],
     )
     .unwrap();
     let mut server = ServerConnection::new(server_config).unwrap();

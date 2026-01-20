@@ -3,6 +3,11 @@
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
+use crate::crypto::cipher::Payload;
+use crate::error::InvalidMessage;
+use crate::msgs::base::{NonEmpty, SizedPayload};
+use crate::msgs::codec::{Codec, ListLength, Reader, TlsListElement};
+
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApplicationProtocol<'a> {
@@ -63,6 +68,26 @@ impl<'a> ApplicationProtocol<'a> {
             Self::Other(data) => ApplicationProtocol::Other(Cow::Owned(data.to_vec())),
         }
     }
+}
+
+impl<'a> Codec<'a> for ApplicationProtocol<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        SizedPayload::<u8, NonEmpty>::from(Payload::Borrowed(self.as_ref())).encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        match SizedPayload::<u8, NonEmpty>::read(r)?.inner {
+            Payload::Borrowed(data) => Ok(Self::new(Cow::Borrowed(data))),
+            Payload::Owned(data) => Ok(Self::new(Cow::Owned(data))),
+        }
+    }
+}
+
+/// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
+impl TlsListElement for ApplicationProtocol<'_> {
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("ProtocolNames"),
+    };
 }
 
 impl From<Vec<u8>> for ApplicationProtocol<'static> {

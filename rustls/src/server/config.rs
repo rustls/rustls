@@ -17,7 +17,7 @@ use crate::crypto::{
 };
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
-use crate::msgs::handshake::{ProtocolName, ServerNamePayload};
+use crate::msgs::handshake::ServerNamePayload;
 use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
@@ -391,7 +391,7 @@ pub trait ServerCredentialResolver: Debug + Send + Sync {
 pub struct ClientHello<'a> {
     pub(super) server_name: Option<Cow<'a, DnsName<'a>>>,
     pub(super) signature_schemes: &'a [SignatureScheme],
-    pub(super) alpn: Option<&'a Vec<ProtocolName>>,
+    pub(super) alpn: Option<&'a Vec<ApplicationProtocol<'a>>>,
     pub(super) server_cert_types: Option<&'a [CertificateType]>,
     pub(super) client_cert_types: Option<&'a [CertificateType]>,
     pub(super) cipher_suites: &'a [CipherSuite],

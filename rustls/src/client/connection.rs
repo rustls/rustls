@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 
@@ -22,6 +23,7 @@ use crate::unbuffered::{EncryptError, TransmitTlsData};
 
 #[cfg(feature = "std")]
 mod buffered {
+    use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
     use std::io;
@@ -56,14 +58,14 @@ mod buffered {
         /// we behave in the TLS protocol, `name` is the
         /// name of the server we want to talk to.
         pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
-            Self::new_with_alpn(config.clone(), name, &config.alpn_protocols)
+            Self::new_with_alpn(config.clone(), name, config.alpn_protocols.clone())
         }
 
         /// Make a new ClientConnection with custom ALPN protocols.
         pub fn new_with_alpn(
             config: Arc<ClientConfig>,
             name: ServerName<'static>,
-            alpn_protocols: &[ApplicationProtocol<'_>],
+            alpn_protocols: Vec<ApplicationProtocol<'static>>,
         ) -> Result<Self, Error> {
             Ok(Self {
                 inner: ConnectionCommon::from(ConnectionCore::for_client(
@@ -308,7 +310,7 @@ impl UnbufferedClientConnection {
         Self::new_with_extensions(
             config.clone(),
             name,
-            ClientExtensionsInput::from_alpn(&config.alpn_protocols),
+            ClientExtensionsInput::from_alpn(config.alpn_protocols.clone()),
         )
     }
 
@@ -316,12 +318,12 @@ impl UnbufferedClientConnection {
     pub fn new_with_alpn(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
-        alpn_protocols: &[ApplicationProtocol<'_>],
+        alpn_protocols: Vec<ApplicationProtocol<'static>>,
     ) -> Result<Self, Error> {
         Self::new_with_extensions(
             config,
             name,
-            ClientExtensionsInput::from_alpn(alpn_protocols),
+            ClientExtensionsInput::from_alpn(alpn_protocols.clone()),
         )
     }
 
