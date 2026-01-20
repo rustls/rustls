@@ -66,33 +66,6 @@ macro_rules! wrapped_payload(
             Ok(Self($inner::read(r)?.into_owned()))
         }
     }
-  };
-  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident$(<$cardinality:ty>)?,) => {
-    $(#[$comment])*
-    #[derive(Clone, Debug)]
-    $vis struct $name($inner$(<$cardinality>)?);
-
-    impl From<Vec<u8>> for $name {
-        fn from(v: Vec<u8>) -> Self {
-            Self($inner::new(v))
-        }
-    }
-
-    impl AsRef<[u8]> for $name {
-        fn as_ref(&self) -> &[u8] {
-            self.0.0.as_slice()
-        }
-    }
-
-    impl Codec<'_> for $name {
-        fn encode(&self, bytes: &mut Vec<u8>) {
-            self.0.encode(bytes);
-        }
-
-        fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-            Ok(Self($inner::read(r)?))
-        }
-    }
   }
 );
 
