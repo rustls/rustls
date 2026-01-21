@@ -10,7 +10,7 @@ use core::{fmt, iter};
 use pki_types::{CertificateDer, DnsName};
 
 pub(crate) use super::client_hello::{
-    CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
+    CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
@@ -689,28 +689,6 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static
             .to_owned()
     } else {
         dns_name.to_owned()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum ClientSessionTicket {
-    Request,
-    Offer(Payload<'static>),
-}
-
-impl<'a> Codec<'a> for ClientSessionTicket {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        match self {
-            Self::Request => (),
-            Self::Offer(p) => p.encode(bytes),
-        }
-    }
-
-    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        Ok(match r.left() {
-            0 => Self::Request,
-            _ => Self::Offer(Payload::read(r).into_owned()),
-        })
     }
 }
 
