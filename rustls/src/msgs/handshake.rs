@@ -11,6 +11,7 @@ use pki_types::{CertificateDer, DnsName};
 
 pub(crate) use super::client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
+    EncryptedClientHello, EncryptedClientHelloOuter,
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
@@ -20,8 +21,8 @@ use crate::crypto::{
     CipherSuite, GetRandomFailed, SecureRandom, SelectedCredential, SignatureScheme,
 };
 use crate::enums::{
-    ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, EchClientHelloType,
-    HandshakeType, ProtocolVersion,
+    ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, HandshakeType,
+    ProtocolVersion,
 };
 use crate::error::InvalidMessage;
 use crate::log::warn;
@@ -2357,81 +2358,6 @@ impl Codec<'_> for EchConfigExtension {
 
 impl TlsListElement for EchConfigExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
-}
-
-/// Representation of the `ECHClientHello` client extension specified in
-/// [draft-ietf-tls-esni Section 5].
-///
-/// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-18.html#section-5>
-#[derive(Clone, Debug)]
-pub(crate) enum EncryptedClientHello {
-    /// A `ECHClientHello` with type [EchClientHelloType::ClientHelloOuter].
-    Outer(EncryptedClientHelloOuter),
-    /// An empty `ECHClientHello` with type [EchClientHelloType::ClientHelloInner].
-    ///
-    /// This variant has no payload.
-    Inner,
-}
-
-impl Codec<'_> for EncryptedClientHello {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        match self {
-            Self::Outer(payload) => {
-                EchClientHelloType::ClientHelloOuter.encode(bytes);
-                payload.encode(bytes);
-            }
-            Self::Inner => {
-                EchClientHelloType::ClientHelloInner.encode(bytes);
-                // Empty payload.
-            }
-        }
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        match EchClientHelloType::read(r)? {
-            EchClientHelloType::ClientHelloOuter => {
-                Ok(Self::Outer(EncryptedClientHelloOuter::read(r)?))
-            }
-            EchClientHelloType::ClientHelloInner => Ok(Self::Inner),
-            _ => Err(InvalidMessage::InvalidContentType),
-        }
-    }
-}
-
-/// Representation of the ECHClientHello extension with type outer specified in
-/// [draft-ietf-tls-esni Section 5].
-///
-/// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-18.html#section-5>
-#[derive(Clone, Debug)]
-pub(crate) struct EncryptedClientHelloOuter {
-    /// The cipher suite used to encrypt ClientHelloInner. Must match a value from
-    /// ECHConfigContents.cipher_suites list.
-    pub cipher_suite: HpkeSymmetricCipherSuite,
-    /// The ECHConfigContents.key_config.config_id for the chosen ECHConfig.
-    pub config_id: u8,
-    /// The HPKE encapsulated key, used by servers to decrypt the corresponding payload field.
-    /// This field is empty in a ClientHelloOuter sent in response to a HelloRetryRequest.
-    pub enc: SizedPayload<'static, u16, MaybeEmpty>,
-    /// The serialized and encrypted ClientHelloInner structure, encrypted using HPKE.
-    pub payload: SizedPayload<'static, u16, NonEmpty>,
-}
-
-impl Codec<'_> for EncryptedClientHelloOuter {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.cipher_suite.encode(bytes);
-        self.config_id.encode(bytes);
-        self.enc.encode(bytes);
-        self.payload.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        Ok(Self {
-            cipher_suite: HpkeSymmetricCipherSuite::read(r)?,
-            config_id: u8::read(r)?,
-            enc: SizedPayload::read(r)?.into_owned(),
-            payload: SizedPayload::read(r)?.into_owned(),
-        })
-    }
 }
 
 /// Representation of the ECHEncryptedExtensions extension specified in
