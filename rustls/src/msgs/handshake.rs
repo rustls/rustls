@@ -12,7 +12,7 @@ use pki_types::{CertificateDer, DnsName};
 pub(crate) use super::client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
     EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder, PresharedKeyIdentity,
-    PresharedKeyOffer,
+    PresharedKeyOffer, PskKeyExchangeModes,
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
@@ -34,7 +34,7 @@ use crate::msgs::codec::{
 };
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
-    EchVersion, ExtensionType, KeyUpdateRequest, PskKeyExchangeMode, ServerNameType,
+    EchVersion, ExtensionType, KeyUpdateRequest, ServerNameType,
 };
 use crate::sync::Arc;
 use crate::verify::{DigitallySignedStruct, DistinguishedName};
@@ -440,46 +440,6 @@ impl Codec<'_> for KeyShareEntry {
 }
 
 // ---
-
-/// RFC8446: `PskKeyExchangeMode ke_modes<1..255>;`
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct PskKeyExchangeModes {
-    pub(crate) psk_dhe: bool,
-    pub(crate) psk: bool,
-}
-
-impl Codec<'_> for PskKeyExchangeModes {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        let inner = LengthPrefixedBuffer::new(PskKeyExchangeMode::SIZE_LEN, bytes);
-        if self.psk_dhe {
-            PskKeyExchangeMode::PSK_DHE_KE.encode(inner.buf);
-        }
-        if self.psk {
-            PskKeyExchangeMode::PSK_KE.encode(inner.buf);
-        }
-    }
-
-    fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let mut psk_dhe = false;
-        let mut psk = false;
-
-        for ke in TlsListIter::<PskKeyExchangeMode>::new(reader)? {
-            match ke? {
-                PskKeyExchangeMode::PSK_DHE_KE => psk_dhe = true,
-                PskKeyExchangeMode::PSK_KE => psk = true,
-                _ => continue,
-            };
-        }
-
-        Ok(Self { psk_dhe, psk })
-    }
-}
-
-impl TlsListElement for PskKeyExchangeMode {
-    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
-        empty_error: InvalidMessage::IllegalEmptyList("PskKeyExchangeModes"),
-    };
-}
 
 /// RFC8446: `KeyShareEntry client_shares<0..2^16-1>;`
 impl TlsListElement for KeyShareEntry {
