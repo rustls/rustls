@@ -381,7 +381,7 @@ mod conn;
 pub mod crypto;
 pub mod error;
 mod hash_hs;
-mod s3fifo_shard;
+mod limited_cache;
 mod tls12;
 mod tls13;
 mod vecbuf;
@@ -463,7 +463,6 @@ pub mod lock;
 
 mod hash_map {
     pub(crate) use std::collections::HashMap;
-    pub(crate) use std::collections::hash_map::Entry;
 }
 
 mod sealed {
