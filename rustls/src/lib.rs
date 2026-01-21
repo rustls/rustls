@@ -374,7 +374,7 @@ pub mod crypto;
 pub mod error;
 mod hash_hs;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
-mod s3fifo_shard;
+mod limited_cache;
 #[cfg(feature = "std")]
 mod stream;
 mod tls12;
@@ -517,13 +517,9 @@ pub mod lock;
 mod hash_map {
     #[cfg(feature = "std")]
     pub(crate) use std::collections::HashMap;
-    #[cfg(feature = "std")]
-    pub(crate) use std::collections::hash_map::Entry;
 
     #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
     pub(crate) use hashbrown::HashMap;
-    #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
-    pub(crate) use hashbrown::hash_map::Entry;
 }
 
 mod sealed {
