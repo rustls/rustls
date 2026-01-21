@@ -331,3 +331,38 @@ macro_rules! extension_struct {
         }
     }
 }
+
+/// Create a newtype wrapper around a given type.
+///
+/// This is used to create newtypes for the various TLS message types which is used to wrap
+/// the `PayloadU8` or `SizedPayload` types. This is typically used for types where we don't need
+/// anything other than access to the underlying bytes.
+macro_rules! wrapped_payload(
+  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident$(<$len:ty, $cardinality:ty>)?,) => {
+    $(#[$comment])*
+    #[derive(Clone, Debug)]
+    $vis struct $name($inner$(<'static, $len, $cardinality>)?);
+
+    impl From<Vec<u8>> for $name {
+        fn from(v: Vec<u8>) -> Self {
+            Self($inner::from(v))
+        }
+    }
+
+    impl AsRef<[u8]> for $name {
+        fn as_ref(&self) -> &[u8] {
+            self.0.bytes()
+        }
+    }
+
+    impl Codec<'_> for $name {
+        fn encode(&self, bytes: &mut Vec<u8>) {
+            self.0.encode(bytes);
+        }
+
+        fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+            Ok(Self($inner::read(r)?.into_owned()))
+        }
+    }
+  }
+);
