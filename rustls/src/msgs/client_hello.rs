@@ -4,12 +4,11 @@ use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
 
 use super::base::{MaybeEmpty, NonEmpty, SizedPayload};
-use super::codec::{Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
-use super::enums::{CertificateStatusType, Compression, ExtensionType};
+use super::codec::{Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement, TlsListIter};
+use super::enums::{CertificateStatusType, Compression, ExtensionType, PskKeyExchangeMode};
 use super::handshake::{
-    DuplicateExtensionChecker, Encoding, KeyShareEntry, PskKeyExchangeModes, Random,
-    ServerNamePayload, SessionId, SupportedEcPointFormats, SupportedProtocolVersions,
-    has_duplicates,
+    DuplicateExtensionChecker, Encoding, KeyShareEntry, Random, ServerNamePayload, SessionId,
+    SupportedEcPointFormats, SupportedProtocolVersions, has_duplicates,
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::HpkeSymmetricCipherSuite;
@@ -616,6 +615,46 @@ wrapped_payload!(
 impl TlsListElement for PresharedKeyBinder {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("PskBinders"),
+    };
+}
+
+/// RFC8446: `PskKeyExchangeMode ke_modes<1..255>;`
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct PskKeyExchangeModes {
+    pub(crate) psk_dhe: bool,
+    pub(crate) psk: bool,
+}
+
+impl Codec<'_> for PskKeyExchangeModes {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let inner = LengthPrefixedBuffer::new(PskKeyExchangeMode::SIZE_LEN, bytes);
+        if self.psk_dhe {
+            PskKeyExchangeMode::PSK_DHE_KE.encode(inner.buf);
+        }
+        if self.psk {
+            PskKeyExchangeMode::PSK_KE.encode(inner.buf);
+        }
+    }
+
+    fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let mut psk_dhe = false;
+        let mut psk = false;
+
+        for ke in TlsListIter::<PskKeyExchangeMode>::new(reader)? {
+            match ke? {
+                PskKeyExchangeMode::PSK_DHE_KE => psk_dhe = true,
+                PskKeyExchangeMode::PSK_KE => psk = true,
+                _ => continue,
+            };
+        }
+
+        Ok(Self { psk_dhe, psk })
+    }
+}
+
+impl TlsListElement for PskKeyExchangeMode {
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("PskKeyExchangeModes"),
     };
 }
 
