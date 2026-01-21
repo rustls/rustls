@@ -9,7 +9,9 @@ use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
 
-pub(crate) use super::client_hello::{ClientHelloPayload, ClientExtensions};
+pub(crate) use super::client_hello::{
+    CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
+};
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::crypto::kx::ffdhe::FfdheGroup;
@@ -512,78 +514,6 @@ impl Codec<'_> for PresharedKeyOffer {
             identities: Vec::read(r)?,
             binders: Vec::read(r)?,
         })
-    }
-}
-
-// --- RFC6066 certificate status request ---
-wrapped_payload!(pub(crate) struct ResponderId, SizedPayload<u16, MaybeEmpty>,);
-
-/// RFC6066: `ResponderID responder_id_list<0..2^16-1>;`
-impl TlsListElement for ResponderId {
-    const SIZE_LEN: ListLength = ListLength::U16;
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct OcspCertificateStatusRequest {
-    pub(crate) responder_ids: Vec<ResponderId>,
-    pub(crate) extensions: SizedPayload<'static, u16, MaybeEmpty>,
-}
-
-impl Codec<'_> for OcspCertificateStatusRequest {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        CertificateStatusType::OCSP.encode(bytes);
-        self.responder_ids.encode(bytes);
-        self.extensions.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        Ok(Self {
-            responder_ids: Vec::read(r)?,
-            extensions: SizedPayload::read(r)?.into_owned(),
-        })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum CertificateStatusRequest {
-    Ocsp(OcspCertificateStatusRequest),
-    Unknown((CertificateStatusType, Payload<'static>)),
-}
-
-impl Codec<'_> for CertificateStatusRequest {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        match self {
-            Self::Ocsp(r) => r.encode(bytes),
-            Self::Unknown((typ, payload)) => {
-                typ.encode(bytes);
-                payload.encode(bytes);
-            }
-        }
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let typ = CertificateStatusType::read(r)?;
-
-        match typ {
-            CertificateStatusType::OCSP => {
-                let ocsp_req = OcspCertificateStatusRequest::read(r)?;
-                Ok(Self::Ocsp(ocsp_req))
-            }
-            _ => {
-                let data = Payload::read(r).into_owned();
-                Ok(Self::Unknown((typ, data)))
-            }
-        }
-    }
-}
-
-impl CertificateStatusRequest {
-    pub(crate) fn build_ocsp() -> Self {
-        let ocsp = OcspCertificateStatusRequest {
-            responder_ids: Vec::new(),
-            extensions: SizedPayload::from(Payload::new(Vec::new())),
-        };
-        Self::Ocsp(ocsp)
     }
 }
 
