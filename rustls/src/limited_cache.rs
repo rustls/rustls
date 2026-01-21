@@ -1,9 +1,10 @@
 use alloc::collections::VecDeque;
 use core::borrow::Borrow;
-use core::hash::Hash;
+use core::hash::{BuildHasher, Hash};
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use crate::hash_map::HashMap;
+use crate::hash_set::HashSet;
 use crate::sync::Arc;
 
 #[derive(Debug)]
@@ -44,8 +45,8 @@ pub(crate) struct LimitedCache<K: Clone + Hash + Eq, V> {
     map: HashMap<K, Arc<CacheEntry<V>>>,
     small: VecDeque<K>,
     main: VecDeque<K>,
-    // TODO: migrate ghost to a HashSet for O(1) removes
-    ghost: VecDeque<K>,
+    ghost: VecDeque<u64>,
+    ghost_set: HashSet<u64>,
     small_capacity: usize,
     main_capacity: usize,
     ghost_capacity: usize,
@@ -66,6 +67,7 @@ where
             small: VecDeque::with_capacity(small_capacity),
             main: VecDeque::with_capacity(main_capacity),
             ghost: VecDeque::with_capacity(ghost_capacity),
+            ghost_set: HashSet::with_capacity(ghost_capacity),
             small_capacity,
             main_capacity,
             ghost_capacity,
@@ -115,7 +117,10 @@ where
             },
         });
 
-        if self.ghost.iter().any(|x| x == &k) {
+        if self
+            .ghost_set
+            .contains(&self.hash_key(&k))
+        {
             self.insert_main(k, entry);
         } else {
             self.insert_small(k, entry);
@@ -134,7 +139,10 @@ where
             },
         });
 
-        if self.ghost.iter().any(|x| x == &k) {
+        let is_ghost_hit = self
+            .ghost_set
+            .contains(&self.hash_key(&k));
+        if is_ghost_hit {
             self.insert_main(k, entry);
         } else {
             self.insert_small(k, entry);
@@ -155,9 +163,9 @@ where
     }
 
     fn insert_small(&mut self, k: K, entry: Arc<CacheEntry<V>>) {
-        // if self.small.len() >= self.small_capacity {
-        //     self.evict_small();
-        // }
+        if self.small.len() >= self.small_capacity {
+            self.evict_small();
+        }
         self.small.push_back(k.clone());
         self.map.insert(k, entry);
     }
@@ -170,51 +178,52 @@ where
         self.map.insert(k, entry);
     }
 
-    fn insert_ghost(&mut self, k: K) {
-        if self.ghost.len() >= self.ghost_capacity {
-            self.ghost.pop_front();
+    fn insert_ghost(&mut self, k: &K) {
+        let h = self.hash_key(&k);
+        if self.ghost_set.len() >= self.ghost_capacity {
+            if let Some(old_h) = self.ghost.pop_front() {
+                self.ghost_set.remove(&old_h);
+            }
         }
-        self.ghost.push_back(k);
+        if self.ghost_set.insert(h) {
+            self.ghost.push_back(h);
+        }
     }
 
     fn evict(&mut self) {
         if self.small.len() >= self.small_capacity {
             self.evict_small();
-        } else {
+        } else if !self.main.is_empty() {
             self.evict_main();
+        } else {
+            self.evict_small();
         }
     }
 
     fn evict_small(&mut self) {
-        let mut evicted = false;
-        while !evicted && !self.small.is_empty() {
-            let Some(k) = self.small.pop_front() else {
-                break;
-            };
+        while let Some(k) = self.small.pop_front() {
             let Some(entry) = self.map.get(&k) else {
                 continue;
             };
 
             if entry.state.current_frequency() > 1 {
-                self.insert_main(k, entry.clone());
-                if self.main.len() >= self.main_capacity {
+                self.main.push_back(k);
+                if self.main.len() > self.main_capacity {
                     self.evict_main();
                 }
+                if self.map.len() >= self.main_capacity {
+                    return;
+                }
             } else {
-                self.insert_ghost(k.clone());
+                self.insert_ghost(&k);
                 self.map.remove(&k);
-                evicted = true;
+                return;
             }
         }
     }
 
     fn evict_main(&mut self) {
-        let mut evicted = false;
-        while !evicted && !self.main.is_empty() {
-            let Some(k) = self.main.pop_front() else {
-                break;
-            };
-
+        while let Some(k) = self.main.pop_front() {
             let Some(entry) = self.map.get(&k) else {
                 continue;
             };
@@ -224,9 +233,13 @@ where
                 self.main.push_back(k);
             } else {
                 self.map.remove(&k);
-                evicted = true;
+                return;
             }
         }
+    }
+
+    fn hash_key<Q: ?Sized + Hash>(&self, k: &Q) -> u64 {
+        self.map.hasher().hash_one(k)
     }
 }
 
@@ -269,7 +282,12 @@ mod tests {
             cache.main.contains(&k1),
             "k1 should be promoted to main due to freq > 1"
         );
-        assert!(!cache.ghost.contains(&k1), "k1 should not be in ghost");
+        assert!(
+            !cache
+                .ghost_set
+                .contains(&cache.hash_key(&k1)),
+            "k1 should not be in ghost"
+        );
         assert!(cache.map.contains_key(&k1), "k1 must still exist in map");
     }
 
@@ -281,7 +299,6 @@ mod tests {
         let k2 = String::from("key2");
 
         cache.insert(k1.clone(), 100);
-        cache.get(&k1);
 
         for i in 0..9 {
             cache.insert(format!("fill{}", i), i);
@@ -290,7 +307,11 @@ mod tests {
         cache.insert(k2, 200);
 
         assert!(!cache.map.contains_key(&k1));
-        assert!(cache.ghost.contains(&k1));
+        assert!(
+            cache
+                .ghost_set
+                .contains(&cache.hash_key(&k1))
+        );
     }
 
     #[test]
@@ -303,7 +324,12 @@ mod tests {
             cache.insert(format!("fill{}", i), i);
         }
 
-        assert!(cache.ghost.contains(&k1), "k1 should be in ghost");
+        assert!(
+            cache
+                .ghost_set
+                .contains(&cache.hash_key(&k1)),
+            "k1 should be in ghost"
+        );
 
         cache.insert(k1.clone(), 300);
 
@@ -320,13 +346,13 @@ mod tests {
             .collect();
 
         for (i, k) in keys.iter().take(3).enumerate() {
-            cache.insert_ghost(k.clone());
+            cache.insert_ghost(k);
             cache.insert(k.clone(), i);
         }
 
         cache.get(&keys[0]);
 
-        cache.insert_ghost(keys[3].clone());
+        cache.insert_ghost(&keys[3]);
         cache.insert(keys[3].clone(), 3);
 
         assert!(cache.main.contains(&keys[0]));
