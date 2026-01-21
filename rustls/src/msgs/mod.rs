@@ -37,6 +37,7 @@ mod macros;
 pub(crate) mod alert;
 pub(crate) mod base;
 pub(crate) mod ccs;
+mod client_hello;
 pub(crate) mod codec;
 pub(crate) mod deframer;
 pub(crate) mod enums;
