@@ -6,9 +6,9 @@ use super::base::{MaybeEmpty, NonEmpty, SizedPayload};
 use super::codec::{Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use super::enums::{CertificateStatusType, Compression, ExtensionType};
 use super::handshake::{
-    ClientSessionTicket, DuplicateExtensionChecker, Encoding, EncryptedClientHello, KeyShareEntry,
-    PresharedKeyOffer, PskKeyExchangeModes, Random, ServerNamePayload, SessionId,
-    SupportedEcPointFormats, SupportedProtocolVersions, has_duplicates,
+    DuplicateExtensionChecker, Encoding, EncryptedClientHello, KeyShareEntry, PresharedKeyOffer,
+    PskKeyExchangeModes, Random, ServerNamePayload, SessionId, SupportedEcPointFormats,
+    SupportedProtocolVersions, has_duplicates,
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
@@ -458,6 +458,28 @@ wrapped_payload!(pub(crate) struct ResponderId, SizedPayload<u16, MaybeEmpty>,);
 /// RFC6066: `ResponderID responder_id_list<0..2^16-1>;`
 impl TlsListElement for ResponderId {
     const SIZE_LEN: ListLength = ListLength::U16;
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum ClientSessionTicket {
+    Request,
+    Offer(Payload<'static>),
+}
+
+impl<'a> Codec<'a> for ClientSessionTicket {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Self::Request => (),
+            Self::Offer(p) => p.encode(bytes),
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(match r.left() {
+            0 => Self::Request,
+            _ => Self::Offer(Payload::read(r).into_owned()),
+        })
+    }
 }
 
 fn low_quality_integer_hash(mut x: u32) -> u32 {
