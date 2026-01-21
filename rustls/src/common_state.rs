@@ -27,6 +27,78 @@ use crate::tls13::key_schedule::KeyScheduleTraffic;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
 
+pub(crate) fn process_main_protocol<Data>(
+    msg: EncodedMessage<&'_ [u8]>,
+    aligned_handshake: Option<HandshakeAlignedProof>,
+    state: Box<dyn State<Data>>,
+    data: &mut Data,
+    plaintext_locator: &Locator,
+    received_plaintext: &mut Option<UnborrowedPayload>,
+    common: &mut CommonState,
+) -> Result<Box<dyn State<Data>>, Error> {
+    // Drop CCS messages during handshake in TLS1.3
+    if msg.typ == ContentType::ChangeCipherSpec
+        && !common.may_receive_application_data
+        && common.is_tls13()
+    {
+        if !msg.is_valid_ccs() {
+            // "An implementation which receives any other change_cipher_spec value or
+            //  which receives a protected change_cipher_spec record MUST abort the
+            //  handshake with an "unexpected_message" alert."
+            return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
+        }
+
+        common
+            .temper_counters
+            .received_tls13_change_cipher_spec()?;
+        trace!("Dropping CCS");
+        return Ok(state);
+    }
+
+    // Now we can fully parse the message payload.
+    let msg = Message::try_from(&msg)?;
+
+    // For alerts, we have separate logic.
+    if let MessagePayload::Alert(alert) = &msg.payload {
+        common.process_alert(alert)?;
+        return Ok(state);
+    }
+
+    // For TLS1.2, outside of the handshake, send rejection alerts for
+    // renegotiation requests.  These can occur any time.
+    if common.may_receive_application_data && !common.is_tls13() {
+        let reject_ty = match common.side {
+            Side::Client => HandshakeType::HelloRequest,
+            Side::Server => HandshakeType::ClientHello,
+        };
+
+        if msg.handshake_type() == Some(reject_ty) {
+            common
+                .temper_counters
+                .received_renegotiation_request()?;
+            let desc = AlertDescription::NoRenegotiation;
+            warn!("sending warning alert {desc:?}");
+            common.send_warning_alert_no_log(desc);
+            return Ok(state);
+        }
+    }
+
+    let mut cx = Context {
+        common,
+        data,
+        plaintext_locator,
+        received_plaintext,
+    };
+
+    state.handle(
+        &mut cx,
+        Input {
+            message: msg,
+            aligned_handshake,
+        },
+    )
+}
+
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
@@ -188,76 +260,6 @@ impl CommonState {
             (Some(version), Some(suite)) => Some((version, suite)),
             _ => None,
         }
-    }
-
-    pub(crate) fn process_main_protocol<Data>(
-        &mut self,
-        msg: EncodedMessage<&'_ [u8]>,
-        aligned_handshake: Option<HandshakeAlignedProof>,
-        state: Box<dyn State<Data>>,
-        data: &mut Data,
-        plaintext_locator: &Locator,
-        received_plaintext: &mut Option<UnborrowedPayload>,
-    ) -> Result<Box<dyn State<Data>>, Error> {
-        // Drop CCS messages during handshake in TLS1.3
-        if msg.typ == ContentType::ChangeCipherSpec
-            && !self.may_receive_application_data
-            && self.is_tls13()
-        {
-            if !msg.is_valid_ccs() {
-                // "An implementation which receives any other change_cipher_spec value or
-                //  which receives a protected change_cipher_spec record MUST abort the
-                //  handshake with an "unexpected_message" alert."
-                return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
-            }
-
-            self.temper_counters
-                .received_tls13_change_cipher_spec()?;
-            trace!("Dropping CCS");
-            return Ok(state);
-        }
-
-        // Now we can fully parse the message payload.
-        let msg = Message::try_from(&msg)?;
-
-        // For alerts, we have separate logic.
-        if let MessagePayload::Alert(alert) = &msg.payload {
-            self.process_alert(alert)?;
-            return Ok(state);
-        }
-
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if self.may_receive_application_data && !self.is_tls13() {
-            let reject_ty = match self.side {
-                Side::Client => HandshakeType::HelloRequest,
-                Side::Server => HandshakeType::ClientHello,
-            };
-
-            if msg.handshake_type() == Some(reject_ty) {
-                self.temper_counters
-                    .received_renegotiation_request()?;
-                let desc = AlertDescription::NoRenegotiation;
-                warn!("sending warning alert {desc:?}");
-                self.send_warning_alert_no_log(desc);
-                return Ok(state);
-            }
-        }
-
-        let mut cx = Context {
-            common: self,
-            data,
-            plaintext_locator,
-            received_plaintext,
-        };
-
-        state.handle(
-            &mut cx,
-            Input {
-                message: msg,
-                aligned_handshake,
-            },
-        )
     }
 
     pub(crate) fn maybe_send_fatal_alert(&mut self, error: &Error) {

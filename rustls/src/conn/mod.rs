@@ -9,7 +9,9 @@ use kernel::KernelConnection;
 
 #[cfg(feature = "std")]
 use crate::common_state::Input;
-use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
+use crate::common_state::{
+    CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State, process_main_protocol,
+};
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
@@ -956,13 +958,14 @@ impl<Side: SideData> ConnectionCore<Side> {
                 break;
             };
 
-            match self.common_state.process_main_protocol(
+            match process_main_protocol(
                 msg,
                 self.hs_deframer.aligned(),
                 state,
                 &mut self.side,
                 &locator,
                 &mut plaintext,
+                &mut self.common_state,
             ) {
                 Ok(new) => state = new,
                 Err(e) => {
