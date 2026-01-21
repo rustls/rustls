@@ -11,7 +11,8 @@ use pki_types::{CertificateDer, DnsName};
 
 pub(crate) use super::client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
-    EncryptedClientHello, EncryptedClientHelloOuter,
+    EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder, PresharedKeyIdentity,
+    PresharedKeyOffer,
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
@@ -434,86 +435,6 @@ impl Codec<'_> for KeyShareEntry {
         Ok(Self {
             group: NamedGroup::read(r)?,
             payload: SizedPayload::read(r)?.into_owned(),
-        })
-    }
-}
-
-// --- TLS 1.3 PresharedKey offers ---
-#[derive(Clone, Debug)]
-pub(crate) struct PresharedKeyIdentity {
-    /// RFC8446: `opaque identity<1..2^16-1>;`
-    pub(crate) identity: SizedPayload<'static, u16, NonEmpty>,
-    pub(crate) obfuscated_ticket_age: u32,
-}
-
-impl PresharedKeyIdentity {
-    pub(crate) fn new(id: Vec<u8>, age: u32) -> Self {
-        Self {
-            identity: SizedPayload::from(Payload::new(id)),
-            obfuscated_ticket_age: age,
-        }
-    }
-}
-
-impl Codec<'_> for PresharedKeyIdentity {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.identity.encode(bytes);
-        self.obfuscated_ticket_age.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        Ok(Self {
-            identity: SizedPayload::read(r)?.into_owned(),
-            obfuscated_ticket_age: u32::read(r)?,
-        })
-    }
-}
-
-/// RFC8446: `PskIdentity identities<7..2^16-1>;`
-impl TlsListElement for PresharedKeyIdentity {
-    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
-        empty_error: InvalidMessage::IllegalEmptyList("PskIdentities"),
-    };
-}
-
-wrapped_payload!(
-    /// RFC8446: `opaque PskBinderEntry<32..255>;`
-    pub(crate) struct PresharedKeyBinder, SizedPayload<u8, NonEmpty>,
-);
-
-/// RFC8446: `PskBinderEntry binders<33..2^16-1>;`
-impl TlsListElement for PresharedKeyBinder {
-    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
-        empty_error: InvalidMessage::IllegalEmptyList("PskBinders"),
-    };
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct PresharedKeyOffer {
-    pub(crate) identities: Vec<PresharedKeyIdentity>,
-    pub(crate) binders: Vec<PresharedKeyBinder>,
-}
-
-impl PresharedKeyOffer {
-    /// Make a new one with one entry.
-    pub(crate) fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> Self {
-        Self {
-            identities: vec![id],
-            binders: vec![PresharedKeyBinder::from(binder)],
-        }
-    }
-}
-
-impl Codec<'_> for PresharedKeyOffer {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.identities.encode(bytes);
-        self.binders.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        Ok(Self {
-            identities: Vec::read(r)?,
-            binders: Vec::read(r)?,
         })
     }
 }
