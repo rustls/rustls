@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
 
@@ -6,8 +7,8 @@ use super::base::{MaybeEmpty, NonEmpty, SizedPayload};
 use super::codec::{Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use super::enums::{CertificateStatusType, Compression, ExtensionType};
 use super::handshake::{
-    DuplicateExtensionChecker, Encoding, KeyShareEntry, PresharedKeyOffer, PskKeyExchangeModes,
-    Random, ServerNamePayload, SessionId, SupportedEcPointFormats, SupportedProtocolVersions,
+    DuplicateExtensionChecker, Encoding, KeyShareEntry, PskKeyExchangeModes, Random,
+    ServerNamePayload, SessionId, SupportedEcPointFormats, SupportedProtocolVersions,
     has_duplicates,
 };
 use crate::crypto::cipher::Payload;
@@ -535,6 +536,87 @@ wrapped_payload!(pub(crate) struct ResponderId, SizedPayload<u16, MaybeEmpty>,);
 /// RFC6066: `ResponderID responder_id_list<0..2^16-1>;`
 impl TlsListElement for ResponderId {
     const SIZE_LEN: ListLength = ListLength::U16;
+}
+
+// --- TLS 1.3 PresharedKey offers ---
+
+#[derive(Clone, Debug)]
+pub(crate) struct PresharedKeyOffer {
+    pub(crate) identities: Vec<PresharedKeyIdentity>,
+    pub(crate) binders: Vec<PresharedKeyBinder>,
+}
+
+impl PresharedKeyOffer {
+    /// Make a new one with one entry.
+    pub(crate) fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> Self {
+        Self {
+            identities: vec![id],
+            binders: vec![PresharedKeyBinder::from(binder)],
+        }
+    }
+}
+
+impl Codec<'_> for PresharedKeyOffer {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.identities.encode(bytes);
+        self.binders.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            identities: Vec::read(r)?,
+            binders: Vec::read(r)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PresharedKeyIdentity {
+    /// RFC8446: `opaque identity<1..2^16-1>;`
+    pub(crate) identity: SizedPayload<'static, u16, NonEmpty>,
+    pub(crate) obfuscated_ticket_age: u32,
+}
+
+impl PresharedKeyIdentity {
+    pub(crate) fn new(id: Vec<u8>, age: u32) -> Self {
+        Self {
+            identity: SizedPayload::from(Payload::new(id)),
+            obfuscated_ticket_age: age,
+        }
+    }
+}
+
+impl Codec<'_> for PresharedKeyIdentity {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.identity.encode(bytes);
+        self.obfuscated_ticket_age.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            identity: SizedPayload::read(r)?.into_owned(),
+            obfuscated_ticket_age: u32::read(r)?,
+        })
+    }
+}
+
+/// RFC8446: `PskIdentity identities<7..2^16-1>;`
+impl TlsListElement for PresharedKeyIdentity {
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("PskIdentities"),
+    };
+}
+
+wrapped_payload!(
+    /// RFC8446: `opaque PskBinderEntry<32..255>;`
+    pub(crate) struct PresharedKeyBinder, SizedPayload<u8, NonEmpty>,
+);
+
+/// RFC8446: `PskBinderEntry binders<33..2^16-1>;`
+impl TlsListElement for PresharedKeyBinder {
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("PskBinders"),
+    };
 }
 
 #[derive(Clone, Debug)]
