@@ -9,28 +9,30 @@ use crate::sync::Arc;
 #[derive(Debug)]
 struct CacheEntry<V> {
     value: V,
-    state: AtomicU8,
+    state: EntryState,
 }
 
-impl<V> CacheEntry<V> {
-    #[inline]
+#[derive(Debug)]
+struct EntryState {
+    frequency: AtomicU8,
+}
+
+impl EntryState {
     fn current_frequency(&self) -> u8 {
-        self.state.load(Ordering::Relaxed)
+        self.frequency.load(Ordering::Relaxed)
     }
 
-    #[inline]
     fn increase_frequency_max_3(&self) {
         let _ = self
-            .state
+            .frequency
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |f| {
                 if f < 3 { Some(f + 1) } else { None }
             });
     }
 
-    #[inline]
     fn decrease_frequency(&self) {
         let _ = self
-            .state
+            .frequency
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |f| {
                 Some(f.saturating_sub(1))
             });
@@ -71,29 +73,27 @@ where
         }
     }
 
-    #[inline]
     pub(crate) fn get<Q: Hash + Eq + ?Sized>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
     {
         let entry = self.map.get(k)?;
-        entry.increase_frequency_max_3();
+        entry.state.increase_frequency_max_3();
         Some(&entry.value)
     }
 
-    #[inline]
     pub(crate) fn get_mut<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
     {
         let entry = self.map.get_mut(k)?;
-        entry.increase_frequency_max_3();
+        entry.state.increase_frequency_max_3();
         Arc::get_mut(entry).map(|e| &mut e.value)
     }
-    #[inline]
+
     pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
         if let Some(entry) = self.map.get_mut(&k) {
-            entry.increase_frequency_max_3();
+            entry.state.increase_frequency_max_3();
             if let Some(v) = Arc::get_mut(entry) {
                 edit(&mut v.value);
                 return;
@@ -110,7 +110,9 @@ where
 
         let entry = Arc::new(CacheEntry {
             value: entry_val,
-            state: AtomicU8::new(0),
+            state: EntryState {
+                frequency: AtomicU8::new(0),
+            },
         });
 
         if self.ghost.iter().any(|x| x == &k) {
@@ -120,7 +122,6 @@ where
         }
     }
 
-    #[inline]
     pub(crate) fn insert(&mut self, k: K, v: V) {
         while self.map.len() >= self.max_capacity {
             self.evict();
@@ -128,7 +129,9 @@ where
 
         let entry = Arc::new(CacheEntry {
             value: v,
-            state: AtomicU8::new(0),
+            state: EntryState {
+                frequency: AtomicU8::new(0),
+            },
         });
 
         if self.ghost.iter().any(|x| x == &k) {
@@ -138,7 +141,6 @@ where
         }
     }
 
-    #[inline]
     pub(crate) fn remove<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<V>
     where
         K: Borrow<Q>,
@@ -152,7 +154,6 @@ where
         )
     }
 
-    #[inline]
     fn insert_small(&mut self, k: K, entry: Arc<CacheEntry<V>>) {
         // if self.small.len() >= self.small_capacity {
         //     self.evict_small();
@@ -161,7 +162,6 @@ where
         self.map.insert(k, entry);
     }
 
-    #[inline]
     fn insert_main(&mut self, k: K, entry: Arc<CacheEntry<V>>) {
         // if self.main.len() >= self.main_capacity {
         //     self.evict_main();
@@ -170,7 +170,6 @@ where
         self.map.insert(k, entry);
     }
 
-    #[inline]
     fn insert_ghost(&mut self, k: K) {
         if self.ghost.len() >= self.ghost_capacity {
             self.ghost.pop_front();
@@ -178,7 +177,6 @@ where
         self.ghost.push_back(k);
     }
 
-    #[inline]
     fn evict(&mut self) {
         if self.small.len() >= self.small_capacity {
             self.evict_small();
@@ -187,7 +185,6 @@ where
         }
     }
 
-    #[inline]
     fn evict_small(&mut self) {
         let mut evicted = false;
         while !evicted && !self.small.is_empty() {
@@ -198,7 +195,7 @@ where
                 continue;
             };
 
-            if entry.current_frequency() > 1 {
+            if entry.state.current_frequency() > 1 {
                 self.insert_main(k, entry.clone());
                 if self.main.len() >= self.main_capacity {
                     self.evict_main();
@@ -211,7 +208,6 @@ where
         }
     }
 
-    #[inline]
     fn evict_main(&mut self) {
         let mut evicted = false;
         while !evicted && !self.main.is_empty() {
@@ -223,8 +219,8 @@ where
                 continue;
             };
 
-            if entry.current_frequency() > 0 {
-                entry.decrease_frequency();
+            if entry.state.current_frequency() > 0 {
+                entry.state.decrease_frequency();
                 self.main.push_back(k);
             } else {
                 self.map.remove(&k);
