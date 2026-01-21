@@ -1,6 +1,5 @@
 use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
-use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
@@ -12,7 +11,7 @@ use pki_types::{CertificateDer, DnsName};
 pub(crate) use super::client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
     EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder, PresharedKeyIdentity,
-    PresharedKeyOffer, PskKeyExchangeModes,
+    PresharedKeyOffer, PskKeyExchangeModes, ServerNamePayload,
 };
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
@@ -34,7 +33,7 @@ use crate::msgs::codec::{
 };
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
-    EchVersion, ExtensionType, KeyUpdateRequest, ServerNameType,
+    EchVersion, ExtensionType, KeyUpdateRequest,
 };
 use crate::sync::Arc;
 use crate::verify::{DigitallySignedStruct, DistinguishedName};
@@ -232,142 +231,6 @@ impl TlsListElement for SignatureScheme {
     };
 }
 
-#[derive(Clone, Debug)]
-pub(crate) enum ServerNamePayload<'a> {
-    /// A successfully decoded value:
-    SingleDnsName(DnsName<'a>),
-
-    /// A DNS name which was actually an IP address
-    IpAddress,
-
-    /// A successfully decoded, but syntactically-invalid value.
-    Invalid,
-}
-
-impl ServerNamePayload<'_> {
-    pub(super) fn into_owned(self) -> ServerNamePayload<'static> {
-        match self {
-            Self::SingleDnsName(d) => ServerNamePayload::SingleDnsName(d.to_owned()),
-            Self::IpAddress => ServerNamePayload::IpAddress,
-            Self::Invalid => ServerNamePayload::Invalid,
-        }
-    }
-
-    /// RFC6066: `ServerName server_name_list<1..2^16-1>`
-    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
-        empty_error: InvalidMessage::IllegalEmptyList("ServerNames"),
-    };
-
-    /// Get the `DnsName` out of this `ServerNamePayload` if it contains one.
-    /// The returned `DnsName` will be normalized (converted to lowercase).
-    pub(crate) fn to_dns_name_normalized(&self) -> Option<DnsName<'static>> {
-        match self {
-            Self::SingleDnsName(dns_name) => Some(dns_name.to_lowercase_owned()),
-            Self::IpAddress => None,
-            Self::Invalid => None,
-        }
-    }
-}
-
-/// Simplified encoding/decoding for a `ServerName` extension payload to/from `DnsName`
-///
-/// This is possible because:
-///
-/// - the spec (RFC6066) disallows multiple names for a given name type
-/// - name types other than ServerNameType::HostName are not defined, and they and
-///   any data that follows them cannot be skipped over.
-impl<'a> Codec<'a> for ServerNamePayload<'a> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        let server_name_list = LengthPrefixedBuffer::new(Self::SIZE_LEN, bytes);
-
-        let ServerNamePayload::SingleDnsName(dns_name) = self else {
-            return;
-        };
-
-        ServerNameType::HostName.encode(server_name_list.buf);
-        let name_slice = dns_name.as_ref().as_bytes();
-        (name_slice.len() as u16).encode(server_name_list.buf);
-        server_name_list
-            .buf
-            .extend_from_slice(name_slice);
-    }
-
-    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let mut found = None;
-
-        let len = Self::SIZE_LEN.read(r)?;
-        let mut sub = r.sub(len)?;
-
-        while sub.any_left() {
-            let typ = ServerNameType::read(&mut sub)?;
-
-            let payload = match typ {
-                ServerNameType::HostName => HostNamePayload::read(&mut sub)?,
-                _ => {
-                    // Consume remainder of extension bytes.  Since the length of the item
-                    // is an unknown encoding, we cannot continue.
-                    sub.rest();
-                    break;
-                }
-            };
-
-            // "The ServerNameList MUST NOT contain more than one name of
-            // the same name_type." - RFC6066
-            if found.is_some() {
-                warn!("Illegal SNI extension: duplicate host_name received");
-                return Err(InvalidMessage::InvalidServerName);
-            }
-
-            found = match payload {
-                HostNamePayload::HostName(dns_name) => {
-                    Some(Self::SingleDnsName(dns_name.to_owned()))
-                }
-
-                HostNamePayload::IpAddress(_invalid) => {
-                    warn!("Illegal SNI extension: IP address presented as hostname ({_invalid:?})");
-                    Some(Self::IpAddress)
-                }
-
-                HostNamePayload::Invalid(_invalid) => {
-                    warn!(
-                        "Illegal SNI hostname received {:?}",
-                        String::from_utf8_lossy(_invalid.bytes())
-                    );
-                    Some(Self::Invalid)
-                }
-            };
-        }
-
-        Ok(found.unwrap_or(Self::Invalid))
-    }
-}
-
-impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
-    fn from(value: &DnsName<'a>) -> Self {
-        Self::SingleDnsName(trim_hostname_trailing_dot_for_sni(value))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum HostNamePayload {
-    HostName(DnsName<'static>),
-    IpAddress(SizedPayload<'static, u16, NonEmpty>),
-    Invalid(SizedPayload<'static, u16, NonEmpty>),
-}
-
-impl HostNamePayload {
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        use pki_types::ServerName;
-        let raw = SizedPayload::<u16, NonEmpty>::read(r)?;
-
-        match ServerName::try_from(raw.bytes()) {
-            Ok(ServerName::DnsName(d)) => Ok(Self::HostName(d.to_owned())),
-            Ok(ServerName::IpAddress(_)) => Ok(Self::IpAddress(raw.into_owned())),
-            Ok(_) | Err(_) => Ok(Self::Invalid(raw.into_owned())),
-        }
-    }
-}
-
 /// RFC7301 encodes a single protocol name as `Vec<ProtocolName>`
 #[derive(Clone, Debug)]
 pub(crate) struct SingleProtocolName(ApplicationProtocol<'static>);
@@ -557,21 +420,6 @@ pub(crate) enum TransportParameters {
     /// QUIC transport parameters (RFC9001)
     #[cfg_attr(not(feature = "std"), expect(dead_code))]
     Quic(Payload<'static>),
-}
-
-fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static> {
-    let dns_name_str = dns_name.as_ref();
-
-    // RFC6066: "The hostname is represented as a byte string using
-    // ASCII encoding without a trailing dot"
-    if dns_name_str.ends_with('.') {
-        let trimmed = &dns_name_str[0..dns_name_str.len() - 1];
-        DnsName::try_from(trimmed)
-            .unwrap()
-            .to_owned()
-    } else {
-        dns_name.to_owned()
-    }
 }
 
 #[derive(Default)]
