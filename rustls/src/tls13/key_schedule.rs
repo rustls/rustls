@@ -10,8 +10,7 @@ use crate::crypto::kx::SharedSecret;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{hash, hmac};
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::Message;
-use crate::msgs::deframer::HandshakeAlignedProof;
+use crate::msgs::{HandshakeAlignedProof, Message};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite, quic};
 

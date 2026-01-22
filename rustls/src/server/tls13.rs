@@ -47,12 +47,11 @@ mod client_hello {
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::enums::ApplicationProtocol;
-    use crate::msgs::deframer::HandshakeAlignedProof;
     use crate::msgs::persist::{ServerSessionValue, Tls13ServerSessionValue};
     use crate::msgs::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
-        ChangeCipherSpecPayload, ClientHelloPayload, Compression, HelloRetryRequest,
-        HelloRetryRequestExtensions, KeyShareEntry, Random, ServerExtensions,
+        ChangeCipherSpecPayload, ClientHelloPayload, Compression, HandshakeAlignedProof,
+        HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random, ServerExtensions,
         ServerExtensionsInput, ServerHelloPayload, SessionId, SizedPayload,
     };
     use crate::sealed::Sealed;

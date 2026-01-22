@@ -388,7 +388,7 @@ mod tests {
     use std::vec;
 
     use super::*;
-    use crate::msgs::deframer::DeframerIter;
+    use crate::msgs::DeframerIter;
 
     fn add_bytes(hs: &mut HandshakeDeframer, slice: &[u8], within: &[u8]) {
         let msg = EncodedMessage {

@@ -3,8 +3,7 @@ use alloc::vec::Vec;
 use core::mem;
 
 use crate::crypto::{HashAlgorithm, hash};
-use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::{Codec, HandshakeMessagePayload, Message, MessagePayload};
+use crate::msgs::{Codec, HandshakeAlignedProof, HandshakeMessagePayload, Message, MessagePayload};
 
 /// Early stage buffering of handshake payloads.
 ///

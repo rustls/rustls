@@ -31,8 +31,10 @@ mod connection {
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
-    use crate::msgs::deframer::{DeframerVecBuffer, Locator};
-    use crate::msgs::{ClientExtensionsInput, ServerExtensionsInput, TransportParameters};
+    use crate::msgs::{
+        ClientExtensionsInput, DeframerVecBuffer, Locator, ServerExtensionsInput,
+        TransportParameters,
+    };
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;

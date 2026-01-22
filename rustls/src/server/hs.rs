@@ -16,11 +16,10 @@ use crate::enums::{ApplicationProtocol, CertificateType, HandshakeType, Protocol
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
-use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::{
-    ClientHelloPayload, Compression, HandshakePayload, Message, MessagePayload, Random,
-    ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId, SingleProtocolName,
-    TransportParameters, persist,
+    ClientHelloPayload, Compression, HandshakeAlignedProof, HandshakePayload, Message,
+    MessagePayload, Random, ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId,
+    SingleProtocolName, TransportParameters, persist,
 };
 use crate::sealed::Sealed;
 use crate::suites::Suite;

@@ -420,7 +420,7 @@ pub mod internal {
     }
 
     pub mod fuzzing {
-        pub use crate::msgs::deframer::fuzz_deframer;
+        pub use crate::msgs::fuzz_deframer;
     }
 }
 

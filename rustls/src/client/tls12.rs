@@ -24,12 +24,11 @@ use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion}
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
-use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientDhParams, ClientEcdhParams,
-    ClientKeyExchangeParams, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, ServerKeyExchangeParams, SessionId,
-    SizedPayload,
+    ClientKeyExchangeParams, HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload,
+    Message, MessagePayload, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
+    ServerKeyExchangeParams, SessionId, SizedPayload,
 };
 use crate::suites::{PartiallyExtractedSecrets, Suite};
 use crate::sync::Arc;

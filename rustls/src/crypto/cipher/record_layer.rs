@@ -7,7 +7,7 @@ use crate::crypto::cipher::{
 };
 use crate::error::Error;
 use crate::log::trace;
-use crate::msgs::deframer::HandshakeAlignedProof;
+use crate::msgs::HandshakeAlignedProof;
 
 /// Record layer that tracks encryption keys.
 pub(crate) struct EncryptionState {
@@ -251,7 +251,7 @@ const SEQ_HARD_LIMIT: u64 = u64::MAX - 1;
 mod tests {
     use super::*;
     use crate::enums::{ContentType, ProtocolVersion};
-    use crate::msgs::deframer::HandshakeDeframer;
+    use crate::msgs::HandshakeDeframer;
 
     #[test]
     fn test_has_decrypted() {
