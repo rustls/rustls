@@ -80,10 +80,9 @@ pub(crate) use handshake::{
     ClientKeyExchangeParams, CompressedCertificatePayload, EchConfigContents, EchConfigPayload,
     Encoding, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
     HelloRetryRequestExtensions, HpkeKeyConfig, KeyShareEntry, KxDecode, NewSessionTicketPayload,
-    NewSessionTicketPayloadTls13, Random, ServerExtensions, ServerExtensionsInput,
-    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
-    SessionId, SingleProtocolName, SupportedEcPointFormats, SupportedProtocolVersions,
-    TransportParameters,
+    NewSessionTicketPayloadTls13, Random, ServerExtensionsInput, ServerKeyExchange,
+    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, SingleProtocolName,
+    SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 #[cfg(test)]
 pub(crate) use handshake::{EcParameters, ServerEcdhParams};
@@ -100,6 +99,9 @@ pub(crate) use persist::{
     ClientSessionCommon, CommonServerSessionValue, Retrieved, Tls12ServerSessionValue,
     Tls13ServerSessionValue,
 };
+
+mod server_hello;
+pub(crate) use server_hello::{ServerExtensions, ServerHelloPayload};
 
 #[cfg(test)]
 mod handshake_test;
