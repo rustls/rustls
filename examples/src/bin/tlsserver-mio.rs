@@ -362,13 +362,9 @@ impl OpenConnection {
             .register(&mut self.socket, self.token, event_set)
             .unwrap();
 
-        if self.back.is_some() {
+        if let Some(back) = &mut self.back {
             registry
-                .register(
-                    self.back.as_mut().unwrap(),
-                    self.token,
-                    mio::Interest::READABLE,
-                )
+                .register(back, self.token, mio::Interest::READABLE)
                 .unwrap();
         }
     }
