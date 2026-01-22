@@ -21,15 +21,13 @@ use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::handshake::{
-    EchConfigContents, EchConfigPayload, Encoding, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, HpkeKeyConfig, Random, ServerHelloPayload,
-};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::Retrieved;
 use crate::msgs::{
-    ClientExtensions, ClientHelloPayload, Codec, EncryptedClientHello, EncryptedClientHelloOuter,
-    ExtensionType, PresharedKeyBinder, PresharedKeyOffer, Reader, ServerNamePayload, SizedPayload,
+    ClientExtensions, ClientHelloPayload, Codec, EchConfigContents, EchConfigPayload, Encoding,
+    EncryptedClientHello, EncryptedClientHelloOuter, ExtensionType, HandshakeMessagePayload,
+    HandshakePayload, HelloRetryRequest, HpkeKeyConfig, PresharedKeyBinder, PresharedKeyOffer,
+    Random, Reader, ServerHelloPayload, ServerNamePayload, SizedPayload,
 };
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
@@ -858,8 +856,7 @@ pub(crate) struct EchAccepted {
 mod tests {
     use super::*;
     use crate::crypto::CipherSuite;
-    use crate::msgs::Compression;
-    use crate::msgs::handshake::{Random, ServerExtensions, SessionId};
+    use crate::msgs::{Compression, Random, ServerExtensions, SessionId};
 
     #[test]
     fn server_hello_conf_alters_server_hello_random() {

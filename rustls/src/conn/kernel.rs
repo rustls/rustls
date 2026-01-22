@@ -58,8 +58,7 @@ use core::marker::PhantomData;
 
 use crate::client::ClientConnectionData;
 use crate::enums::ProtocolVersion;
-use crate::msgs::Codec;
-use crate::msgs::handshake::NewSessionTicketPayloadTls13;
+use crate::msgs::{Codec, NewSessionTicketPayloadTls13};
 use crate::{CommonState, ConnectionTrafficSecrets, Error, SupportedCipherSuite};
 
 /// A kernel connection.

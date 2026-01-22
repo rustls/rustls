@@ -9,7 +9,7 @@ use pki_types::{FipsStatus, PrivateKeyDer};
 
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;
+use crate::msgs::ALL_KEY_EXCHANGE_ALGORITHMS;
 use crate::sync::Arc;
 pub use crate::webpki::{
     WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,

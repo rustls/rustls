@@ -15,8 +15,7 @@ use crate::crypto::{self, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::handshake::KxDecode;
-use crate::msgs::{Codec, Reader};
+use crate::msgs::{Codec, KxDecode, Reader};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
 use crate::version::Tls12Version;
 
@@ -421,7 +420,7 @@ mod tests {
     use super::*;
     use crate::crypto::TEST_PROVIDER;
     use crate::crypto::kx::NamedGroup;
-    use crate::msgs::handshake::{ServerEcdhParams, ServerKeyExchangeParams};
+    use crate::msgs::{ServerEcdhParams, ServerKeyExchangeParams};
 
     #[test]
     fn server_ecdhe_remaining_bytes() {

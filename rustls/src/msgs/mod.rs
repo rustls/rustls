@@ -67,7 +67,22 @@ pub(crate) use fragmenter::MAX_FRAGMENT_LEN;
 pub use fragmenter::MessageFragmenter;
 
 #[macro_use]
-pub(crate) mod handshake;
+mod handshake;
+pub(crate) use handshake::{
+    ALL_KEY_EXCHANGE_ALGORITHMS, CertificateChain, CertificatePayloadTls13,
+    CertificateRequestExtensions, CertificateRequestPayload, CertificateRequestPayloadTls13,
+    CertificateStatus, ClientDhParams, ClientEcdhParams, ClientExtensionsInput,
+    ClientKeyExchangeParams, CompressedCertificatePayload, EchConfigContents, EchConfigPayload,
+    Encoding, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
+    HelloRetryRequestExtensions, HpkeKeyConfig, KeyShareEntry, KxDecode, NewSessionTicketPayload,
+    NewSessionTicketPayloadTls13, Random, ServerExtensions, ServerExtensionsInput,
+    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+    SessionId, SingleProtocolName, SupportedEcPointFormats, SupportedProtocolVersions,
+    TransportParameters,
+};
+#[cfg(test)]
+pub(crate) use handshake::{EcParameters, ServerEcdhParams};
+
 pub(crate) mod message;
 pub(crate) mod persist;
 

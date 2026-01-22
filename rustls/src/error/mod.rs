@@ -13,8 +13,7 @@ use webpki::ExtendedKeyUsage;
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{GetRandomFailed, InconsistentKeys};
 use crate::enums::{ContentType, HandshakeType};
-use crate::msgs::Codec;
-use crate::msgs::handshake::EchConfigPayload;
+use crate::msgs::{Codec, EchConfigPayload};
 
 #[cfg(test)]
 mod tests;

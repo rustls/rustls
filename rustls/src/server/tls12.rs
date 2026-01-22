@@ -23,12 +23,12 @@ use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
 use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::handshake::{
-    CertificateChain, ClientKeyExchangeParams, HandshakeMessagePayload, HandshakePayload,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, SessionId,
-};
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::{ChangeCipherSpecPayload, Codec, persist};
+use crate::msgs::{
+    CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
+    HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
+    NewSessionTicketPayloadTls13, SessionId, persist,
+};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -41,12 +41,10 @@ mod client_hello {
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::enums::ApplicationProtocol;
-    use crate::msgs::handshake::{
-        CertificateRequestPayload, CertificateStatus, Random, ServerExtensionsInput,
-        ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
-    };
     use crate::msgs::{
-        ClientCertificateType, ClientHelloPayload, ClientSessionTicket, Compression,
+        CertificateRequestPayload, CertificateStatus, ClientCertificateType, ClientHelloPayload,
+        ClientSessionTicket, Compression, Random, ServerExtensionsInput, ServerHelloPayload,
+        ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
     use crate::sealed::Sealed;
     use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler};

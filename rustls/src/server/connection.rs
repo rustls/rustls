@@ -31,13 +31,13 @@ use crate::error::Error;
 use crate::kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::log::trace;
+use crate::msgs::ServerExtensionsInput;
 #[cfg(feature = "std")]
 use crate::msgs::deframer::Locator;
-use crate::msgs::handshake::ServerExtensionsInput;
 #[cfg(feature = "std")]
-use crate::msgs::message::Message;
+use crate::msgs::message::{Message, MessagePayload};
 #[cfg(feature = "std")]
-use crate::msgs::{ClientHelloPayload, ServerNamePayload};
+use crate::msgs::{ClientHelloPayload, HandshakePayload, ServerNamePayload};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::vecbuf::ChunkVecBuffer;
@@ -593,8 +593,8 @@ impl Accepted {
 
     fn client_hello_payload<'a>(message: &'a Message<'_>) -> &'a ClientHelloPayload {
         match &message.payload {
-            crate::msgs::message::MessagePayload::Handshake { parsed, .. } => match &parsed.0 {
-                crate::msgs::handshake::HandshakePayload::ClientHello(ch) => ch,
+            MessagePayload::Handshake { parsed, .. } => match &parsed.0 {
+                HandshakePayload::ClientHello(ch) => ch,
                 _ => unreachable!(),
             },
             _ => unreachable!(),

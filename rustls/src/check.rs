@@ -10,7 +10,7 @@ use crate::msgs::message::MessagePayload;
 macro_rules! require_handshake_msg(
   ( $m:expr, $handshake_type:path, $payload_type:path ) => (
     match &$m.payload {
-        MessagePayload::Handshake { parsed: $crate::msgs::handshake::HandshakeMessagePayload(
+        MessagePayload::Handshake { parsed: $crate::msgs::HandshakeMessagePayload(
             $payload_type(hm),
         ), .. } => Ok(hm),
         payload => Err($crate::check::inappropriate_handshake_message(
@@ -25,7 +25,7 @@ macro_rules! require_handshake_msg(
 macro_rules! require_handshake_msg_move(
   ( $m:expr, $handshake_type:path, $payload_type:path ) => (
     match $m.payload {
-        MessagePayload::Handshake { parsed: $crate::msgs::handshake::HandshakeMessagePayload(
+        MessagePayload::Handshake { parsed: $crate::msgs::HandshakeMessagePayload(
             $payload_type(hm),
         ), .. } => Ok(hm),
         payload =>
