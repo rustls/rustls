@@ -49,8 +49,13 @@ pub use codec::{Codec, Reader};
 
 pub(crate) mod deframer;
 
-pub(crate) mod enums;
-use enums::AlertLevel;
+mod enums;
+#[cfg(test)]
+pub(crate) use enums::ECCurveType;
+#[cfg(test)]
+pub(crate) use enums::tests::{test_enum8, test_enum8_display, test_enum16};
+pub use enums::{AlertLevel, ExtensionType};
+pub(crate) use enums::{ClientCertificateType, Compression, KeyUpdateRequest};
 
 pub(crate) mod fragmenter;
 #[macro_use]

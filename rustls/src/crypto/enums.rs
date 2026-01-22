@@ -499,7 +499,7 @@ enum_builder! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::msgs::enums::tests::test_enum8;
+    use crate::msgs::test_enum8;
 
     #[test]
     fn test_enums() {

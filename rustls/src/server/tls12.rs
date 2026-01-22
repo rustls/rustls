@@ -41,12 +41,12 @@ mod client_hello {
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::enums::ApplicationProtocol;
-    use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::{
         CertificateRequestPayload, CertificateStatus, ClientHelloPayload, ClientSessionTicket,
         Random, ServerExtensionsInput, ServerHelloPayload, ServerKeyExchange,
         ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
+    use crate::msgs::{ClientCertificateType, Compression};
     use crate::sealed::Sealed;
     use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler};
     use crate::verify::DigitallySignedStruct;

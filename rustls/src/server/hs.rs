@@ -17,13 +17,12 @@ use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
     ClientHelloPayload, HandshakePayload, Random, ServerExtensions, ServerExtensionsInput,
     ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist;
+use crate::msgs::{Compression, persist};
 use crate::sealed::Sealed;
 use crate::suites::Suite;
 use crate::sync::Arc;

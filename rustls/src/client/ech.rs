@@ -21,7 +21,6 @@ use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{
     ClientExtensions, ClientHelloPayload, EchConfigContents, EchConfigPayload, Encoding,
     EncryptedClientHello, EncryptedClientHelloOuter, HandshakeMessagePayload, HandshakePayload,
@@ -30,7 +29,7 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::Retrieved;
-use crate::msgs::{Codec, Reader, SizedPayload};
+use crate::msgs::{Codec, ExtensionType, Reader, SizedPayload};
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     KeyScheduleEarlyClient, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
@@ -858,6 +857,7 @@ pub(crate) struct EchAccepted {
 mod tests {
     use super::*;
     use crate::crypto::CipherSuite;
+    use crate::msgs::Compression;
     use crate::msgs::handshake::{Random, ServerExtensions, SessionId};
 
     #[test]
@@ -867,7 +867,7 @@ mod tests {
             random: Random([0xffu8; 32]),
             session_id: SessionId::empty(),
             cipher_suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
-            compression_method: crate::msgs::enums::Compression::Null,
+            compression_method: Compression::Null,
             extensions: Box::new(ServerExtensions::default()),
         };
         let message = Message {

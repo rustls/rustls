@@ -662,7 +662,7 @@ mod tests {
     use std::vec;
 
     use super::{NamedGroup, SharedSecret};
-    use crate::msgs::enums::tests::test_enum16;
+    use crate::msgs::test_enum16;
 
     #[test]
     fn test_shared_secret_strip_leading_zeros() {

@@ -29,7 +29,6 @@ use crate::error::{
 };
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
-use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
     CertificatePayloadTls13, ClientExtensions, EchConfigPayload, HandshakeMessagePayload,
     HandshakePayload, KeyShareEntry, NewSessionTicketPayloadTls13, PresharedKeyBinder,
@@ -38,7 +37,8 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::Retrieved;
 use crate::msgs::{
-    CERTIFICATE_MAX_SIZE_LIMIT, ChangeCipherSpecPayload, Codec, MaybeEmpty, Reader, SizedPayload,
+    CERTIFICATE_MAX_SIZE_LIMIT, ChangeCipherSpecPayload, Codec, ExtensionType, KeyUpdateRequest,
+    MaybeEmpty, Reader, SizedPayload,
 };
 use crate::sealed::Sealed;
 use crate::suites::PartiallyExtractedSecrets;
