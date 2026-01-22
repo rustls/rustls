@@ -514,15 +514,6 @@ pub mod time_provider;
 pub mod lock;
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
-mod hash_set {
-    #[cfg(feature = "std")]
-    pub(crate) use std::collections::HashSet;
-
-    #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
-    pub(crate) use hashbrown::HashSet;
-}
-
-#[cfg(any(feature = "std", feature = "hashbrown"))]
 mod hash_map {
     #[cfg(feature = "std")]
     pub(crate) use std::collections::HashMap;
