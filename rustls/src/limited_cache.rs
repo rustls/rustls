@@ -97,14 +97,9 @@ where
     /// we want the function to get value and modify it in place if it exists
     /// otherwise insert default and modify it in place
     pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
-        if self.small.contains(&k) || self.main.contains(&k) {
-            let entry = self.map.get_mut(&k).unwrap();
-            entry.state.increase_frequency_max_3();
-
-            if let Some(entry_arc) = Arc::get_mut(entry) {
-                edit(&mut entry_arc.value);
-                return;
-            }
+        if let Some(value) = self.get_mut(&k) {
+            edit(value);
+            return;
         }
 
         let mut value = V::default();
