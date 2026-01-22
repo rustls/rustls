@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::prelude::v1::*;
 use std::{format, fs, println, vec};
 
+use super::Message;
 use super::codec::Reader;
 use super::enums::AlertLevel;
-use super::message::Message;
 use crate::crypto::cipher::{EncodedMessage, Payload};
 use crate::enums::HandshakeType;
 use crate::error::AlertDescription;
