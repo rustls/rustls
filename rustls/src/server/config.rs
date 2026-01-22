@@ -17,7 +17,7 @@ use crate::crypto::{
 };
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
-use crate::msgs::handshake::ServerNamePayload;
+use crate::msgs::ServerNamePayload;
 use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;

@@ -8,11 +8,7 @@ use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
 
-pub(crate) use super::client_hello::{
-    CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
-    EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder, PresharedKeyIdentity,
-    PresharedKeyOffer, PskKeyExchangeModes, ServerNamePayload,
-};
+use super::client_hello::ClientHelloPayload;
 use crate::crypto::cipher::Payload;
 use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::crypto::kx::ffdhe::FfdheGroup;

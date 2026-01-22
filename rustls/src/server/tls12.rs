@@ -42,11 +42,12 @@ mod client_hello {
     use crate::crypto::{SelectedCredential, Signer};
     use crate::enums::ApplicationProtocol;
     use crate::msgs::handshake::{
-        CertificateRequestPayload, CertificateStatus, ClientHelloPayload, ClientSessionTicket,
-        Random, ServerExtensionsInput, ServerHelloPayload, ServerKeyExchange,
-        ServerKeyExchangeParams, ServerKeyExchangePayload,
+        CertificateRequestPayload, CertificateStatus, Random, ServerExtensionsInput,
+        ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
-    use crate::msgs::{ClientCertificateType, Compression};
+    use crate::msgs::{
+        ClientCertificateType, ClientHelloPayload, ClientSessionTicket, Compression,
+    };
     use crate::sealed::Sealed;
     use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler};
     use crate::verify::DigitallySignedStruct;
