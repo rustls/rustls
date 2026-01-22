@@ -52,7 +52,12 @@ mod codec;
 pub(crate) use codec::{CERTIFICATE_MAX_SIZE_LIMIT, ListLength, TlsListElement, put_u16, put_u64};
 pub use codec::{Codec, Reader};
 
-pub(crate) mod deframer;
+mod deframer;
+pub use deframer::fuzz_deframer;
+pub(crate) use deframer::{
+    BufferProgress, DeframerIter, DeframerSliceBuffer, DeframerVecBuffer, Delocator,
+    HandshakeAlignedProof, HandshakeDeframer, Locator,
+};
 
 mod enums;
 #[cfg(test)]

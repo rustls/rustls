@@ -11,7 +11,7 @@ use crate::client::ClientConnectionData;
 use crate::conn::SideData;
 use crate::crypto::cipher::Payload;
 use crate::error::Error;
-use crate::msgs::deframer::{DeframerSliceBuffer, Delocator, Locator};
+use crate::msgs::{DeframerSliceBuffer, Delocator, Locator};
 use crate::server::ServerConnectionData;
 
 impl UnbufferedConnectionCommon<ClientConnectionData> {

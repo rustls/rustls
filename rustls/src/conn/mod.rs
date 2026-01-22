@@ -15,9 +15,8 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 #[cfg(feature = "std")]
 use crate::msgs::Message;
-use crate::msgs::Random;
-use crate::msgs::deframer::{
-    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
+use crate::msgs::{
+    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator, Random,
 };
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;

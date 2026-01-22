@@ -22,11 +22,10 @@ use crate::enums::{
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
-use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
-    HandshakeMessagePayload, HandshakePayload, Message, MessagePayload, NewSessionTicketPayload,
-    NewSessionTicketPayloadTls13, SessionId, persist,
+    HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, SessionId, persist,
 };
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
