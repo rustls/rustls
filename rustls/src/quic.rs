@@ -32,9 +32,7 @@ mod connection {
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
     use crate::msgs::deframer::{DeframerVecBuffer, Locator};
-    use crate::msgs::handshake::{
-        ClientExtensionsInput, ServerExtensionsInput, TransportParameters,
-    };
+    use crate::msgs::{ClientExtensionsInput, ServerExtensionsInput, TransportParameters};
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;

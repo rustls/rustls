@@ -13,10 +13,10 @@ use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, S
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
+use crate::msgs::Random;
 use crate::msgs::deframer::{
     BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
 };
-use crate::msgs::handshake::Random;
 #[cfg(feature = "std")]
 use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;

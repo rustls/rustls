@@ -19,12 +19,12 @@ use crate::crypto::{
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
 use crate::msgs::deframer::Locator;
-use crate::msgs::handshake::{
-    HandshakeMessagePayload, HandshakePayload, KeyShareEntry, Random, SessionId,
+use crate::msgs::message::{HEADER_SIZE, Message, MessagePayload};
+use crate::msgs::{
+    ClientExtensions, ClientHelloPayload, Codec, Compression, HandshakeMessagePayload,
+    HandshakePayload, KeyShareEntry, Random, Reader, SessionId, SizedPayload,
     SupportedProtocolVersions,
 };
-use crate::msgs::message::{HEADER_SIZE, Message, MessagePayload};
-use crate::msgs::{ClientExtensions, ClientHelloPayload, Codec, Compression, Reader, SizedPayload};
 use crate::pki_types::pem::PemObject;
 use crate::pki_types::{CertificateDer, FipsStatus, PrivateKeyDer};
 use crate::server::{ServerConfig, ServerConnection};

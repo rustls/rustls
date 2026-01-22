@@ -25,13 +25,12 @@ use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbe
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
 use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::handshake::{
-    CertificateChain, ClientDhParams, ClientEcdhParams, ClientKeyExchangeParams,
-    HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
-    NewSessionTicketPayloadTls13, ServerKeyExchangeParams, SessionId,
-};
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::{ChangeCipherSpecPayload, SizedPayload};
+use crate::msgs::{
+    CertificateChain, ChangeCipherSpecPayload, ClientDhParams, ClientEcdhParams,
+    ClientKeyExchangeParams, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
+    NewSessionTicketPayloadTls13, ServerKeyExchangeParams, SessionId, SizedPayload,
+};
 use crate::suites::{PartiallyExtractedSecrets, Suite};
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -42,7 +41,7 @@ mod server_hello {
     use crate::client::hs::{
         ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello,
     };
-    use crate::msgs::handshake::ServerHelloPayload;
+    use crate::msgs::ServerHelloPayload;
     use crate::sealed::Sealed;
 
     pub(crate) static TLS12_HANDLER: &dyn ClientHandler<Tls12CipherSuite> = &Handler;
