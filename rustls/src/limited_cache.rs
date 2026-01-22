@@ -93,38 +93,18 @@ where
         Arc::get_mut(entry).map(|e| &mut e.value)
     }
 
+    /// A little difference from the original S3-FIFO `get` designed behavior
+    /// we want the function to get value and modify it in place if it exists
+    /// otherwise insert default and modify it in place
     pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
-        if let Some(entry) = self.map.get_mut(&k) {
-            entry.state.increase_frequency_max_3();
-            if let Some(v) = Arc::get_mut(entry) {
-                edit(&mut v.value);
-                return;
-            }
+        if let Some(value) = self.get_mut(&k) {
+            edit(value);
+            return;
         }
 
-        while self.map.len() >= self.max_capacity {
-            self.evict();
-        }
-
-        let mut entry_val = V::default();
-
-        edit(&mut entry_val);
-
-        let entry = Arc::new(CacheEntry {
-            value: entry_val,
-            state: EntryState {
-                frequency: AtomicU8::new(0),
-            },
-        });
-
-        if self
-            .ghost_set
-            .contains(&self.hash_key(&k))
-        {
-            self.insert_main(k, entry);
-        } else {
-            self.insert_small(k, entry);
-        }
+        let mut value = V::default();
+        edit(&mut value);
+        self.insert(k, value);
     }
 
     pub(crate) fn insert(&mut self, k: K, v: V) {
@@ -218,9 +198,7 @@ where
 
     fn evict_main(&mut self) {
         while let Some(k) = self.main.pop_front() {
-            let Some(entry) = self.map.get(&k) else {
-                continue;
-            };
+            let entry = self.map.get(&k).unwrap();
 
             if entry.state.current_frequency() > 0 {
                 entry.state.decrease_frequency();
