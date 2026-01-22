@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -8,7 +7,6 @@ use core::{fmt, iter};
 
 use pki_types::CertificateDer;
 
-use super::client_hello::ClientHelloPayload;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::ffdhe::FfdheGroup;
 use crate::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup};
@@ -16,8 +14,7 @@ use crate::crypto::{
     CipherSuite, GetRandomFailed, SecureRandom, SelectedCredential, SignatureScheme,
 };
 use crate::enums::{
-    ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, HandshakeType,
-    ProtocolVersion,
+    ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
 };
 use crate::error::InvalidMessage;
 use crate::log::warn;
@@ -28,9 +25,8 @@ use crate::msgs::codec::{
 };
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
-    ExtensionType, KeyUpdateRequest,
+    ExtensionType,
 };
-use crate::msgs::server_hello::{ServerExtensions, ServerHelloPayload};
 use crate::sync::Arc;
 use crate::verify::{DigitallySignedStruct, DistinguishedName};
 
@@ -43,7 +39,7 @@ impl fmt::Debug for Random {
     }
 }
 
-static HELLO_RETRY_REQUEST_RANDOM: Random = Random([
+pub(super) const HELLO_RETRY_REQUEST_RANDOM: Random = Random([
     0xcf, 0x21, 0xad, 0x74, 0xe5, 0x9a, 0x61, 0x11, 0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91,
     0xc2, 0xa2, 0x11, 0x16, 0x7a, 0xbb, 0x8c, 0x5e, 0x07, 0x9e, 0x09, 0xe2, 0xc8, 0xa8, 0x33, 0x9c,
 ]);
@@ -533,7 +529,7 @@ impl Codec<'_> for HelloRetryRequest {
 }
 
 impl HelloRetryRequest {
-    fn payload_encode(&self, bytes: &mut Vec<u8>, purpose: Encoding) {
+    pub(super) fn payload_encode(&self, bytes: &mut Vec<u8>, purpose: Encoding) {
         self.legacy_version.encode(bytes);
         HELLO_RETRY_REQUEST_RANDOM.encode(bytes);
         self.session_id.encode(bytes);
@@ -746,7 +742,7 @@ impl<'a> CertificatePayloadTls13<'a> {
     }
 
     #[cfg(feature = "std")]
-    fn into_owned(self) -> CertificatePayloadTls13<'static> {
+    pub(super) fn into_owned(self) -> CertificatePayloadTls13<'static> {
         CertificatePayloadTls13 {
             context: self.context.into_owned(),
             entries: self
@@ -1376,7 +1372,7 @@ impl<'a> Codec<'a> for CompressedCertificatePayload<'a> {
 
 impl CompressedCertificatePayload<'_> {
     #[cfg(feature = "std")]
-    fn into_owned(self) -> CompressedCertificatePayload<'static> {
+    pub(super) fn into_owned(self) -> CompressedCertificatePayload<'static> {
         CompressedCertificatePayload {
             compressed: self.compressed.into_owned(),
             ..self
@@ -1389,294 +1385,6 @@ impl CompressedCertificatePayload<'_> {
             uncompressed_len: self.uncompressed_len,
             compressed: SizedPayload::from(Payload::Borrowed(self.compressed.bytes())),
         }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum HandshakePayload<'a> {
-    HelloRequest,
-    ClientHello(ClientHelloPayload),
-    ServerHello(ServerHelloPayload),
-    HelloRetryRequest(HelloRetryRequest),
-    Certificate(CertificateChain<'a>),
-    CertificateTls13(CertificatePayloadTls13<'a>),
-    CompressedCertificate(CompressedCertificatePayload<'a>),
-    ServerKeyExchange(ServerKeyExchangePayload),
-    CertificateRequest(CertificateRequestPayload),
-    CertificateRequestTls13(CertificateRequestPayloadTls13),
-    CertificateVerify(DigitallySignedStruct),
-    ServerHelloDone,
-    EndOfEarlyData,
-    ClientKeyExchange(Payload<'a>),
-    NewSessionTicket(NewSessionTicketPayload),
-    NewSessionTicketTls13(NewSessionTicketPayloadTls13),
-    EncryptedExtensions(Box<ServerExtensions<'a>>),
-    KeyUpdate(KeyUpdateRequest),
-    Finished(Payload<'a>),
-    CertificateStatus(CertificateStatus<'a>),
-    MessageHash(Payload<'a>),
-    Unknown((HandshakeType, Payload<'a>)),
-}
-
-impl HandshakePayload<'_> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        use self::HandshakePayload::*;
-        match self {
-            HelloRequest | ServerHelloDone | EndOfEarlyData => {}
-            ClientHello(x) => x.encode(bytes),
-            ServerHello(x) => x.encode(bytes),
-            HelloRetryRequest(x) => x.encode(bytes),
-            Certificate(x) => x.encode(bytes),
-            CertificateTls13(x) => x.encode(bytes),
-            CompressedCertificate(x) => x.encode(bytes),
-            ServerKeyExchange(x) => x.encode(bytes),
-            ClientKeyExchange(x) => x.encode(bytes),
-            CertificateRequest(x) => x.encode(bytes),
-            CertificateRequestTls13(x) => x.encode(bytes),
-            CertificateVerify(x) => x.encode(bytes),
-            NewSessionTicket(x) => x.encode(bytes),
-            NewSessionTicketTls13(x) => x.encode(bytes),
-            EncryptedExtensions(x) => x.encode(bytes),
-            KeyUpdate(x) => x.encode(bytes),
-            Finished(x) => x.encode(bytes),
-            CertificateStatus(x) => x.encode(bytes),
-            MessageHash(x) => x.encode(bytes),
-            Unknown((_, x)) => x.encode(bytes),
-        }
-    }
-
-    pub(crate) fn handshake_type(&self) -> HandshakeType {
-        use self::HandshakePayload::*;
-        match self {
-            HelloRequest => HandshakeType::HelloRequest,
-            ClientHello(_) => HandshakeType::ClientHello,
-            ServerHello(_) => HandshakeType::ServerHello,
-            HelloRetryRequest(_) => HandshakeType::HelloRetryRequest,
-            Certificate(_) | CertificateTls13(_) => HandshakeType::Certificate,
-            CompressedCertificate(_) => HandshakeType::CompressedCertificate,
-            ServerKeyExchange(_) => HandshakeType::ServerKeyExchange,
-            CertificateRequest(_) | CertificateRequestTls13(_) => HandshakeType::CertificateRequest,
-            CertificateVerify(_) => HandshakeType::CertificateVerify,
-            ServerHelloDone => HandshakeType::ServerHelloDone,
-            EndOfEarlyData => HandshakeType::EndOfEarlyData,
-            ClientKeyExchange(_) => HandshakeType::ClientKeyExchange,
-            NewSessionTicket(_) | NewSessionTicketTls13(_) => HandshakeType::NewSessionTicket,
-            EncryptedExtensions(_) => HandshakeType::EncryptedExtensions,
-            KeyUpdate(_) => HandshakeType::KeyUpdate,
-            Finished(_) => HandshakeType::Finished,
-            CertificateStatus(_) => HandshakeType::CertificateStatus,
-            MessageHash(_) => HandshakeType::MessageHash,
-            Unknown((t, _)) => *t,
-        }
-    }
-
-    fn wire_handshake_type(&self) -> HandshakeType {
-        match self.handshake_type() {
-            // A `HelloRetryRequest` appears on the wire as a `ServerHello` with a magic `random` value.
-            HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
-            other => other,
-        }
-    }
-
-    #[cfg(feature = "std")]
-    fn into_owned(self) -> HandshakePayload<'static> {
-        use HandshakePayload::*;
-
-        match self {
-            HelloRequest => HelloRequest,
-            ClientHello(x) => ClientHello(x),
-            ServerHello(x) => ServerHello(x),
-            HelloRetryRequest(x) => HelloRetryRequest(x),
-            Certificate(x) => Certificate(x.into_owned()),
-            CertificateTls13(x) => CertificateTls13(x.into_owned()),
-            CompressedCertificate(x) => CompressedCertificate(x.into_owned()),
-            ServerKeyExchange(x) => ServerKeyExchange(x),
-            CertificateRequest(x) => CertificateRequest(x),
-            CertificateRequestTls13(x) => CertificateRequestTls13(x),
-            CertificateVerify(x) => CertificateVerify(x),
-            ServerHelloDone => ServerHelloDone,
-            EndOfEarlyData => EndOfEarlyData,
-            ClientKeyExchange(x) => ClientKeyExchange(x.into_owned()),
-            NewSessionTicket(x) => NewSessionTicket(x),
-            NewSessionTicketTls13(x) => NewSessionTicketTls13(x),
-            EncryptedExtensions(x) => EncryptedExtensions(Box::new(x.into_owned())),
-            KeyUpdate(x) => KeyUpdate(x),
-            Finished(x) => Finished(x.into_owned()),
-            CertificateStatus(x) => CertificateStatus(x.into_owned()),
-            MessageHash(x) => MessageHash(x.into_owned()),
-            Unknown((t, x)) => Unknown((t, x.into_owned())),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct HandshakeMessagePayload<'a>(pub(crate) HandshakePayload<'a>);
-
-impl<'a> Codec<'a> for HandshakeMessagePayload<'a> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.payload_encode(bytes, Encoding::Standard);
-    }
-
-    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        Self::read_version(r, ProtocolVersion::TLSv1_2)
-    }
-}
-
-impl<'a> HandshakeMessagePayload<'a> {
-    pub(crate) fn read_version(
-        r: &mut Reader<'a>,
-        vers: ProtocolVersion,
-    ) -> Result<Self, InvalidMessage> {
-        let typ = HandshakeType::read(r)?;
-        let len = U24::read(r)?.0 as usize;
-        let mut sub = r.sub(len)?;
-
-        let payload = match typ {
-            HandshakeType::HelloRequest if sub.left() == 0 => HandshakePayload::HelloRequest,
-            HandshakeType::ClientHello => {
-                HandshakePayload::ClientHello(ClientHelloPayload::read(&mut sub)?)
-            }
-            HandshakeType::ServerHello => {
-                let version = ProtocolVersion::read(&mut sub)?;
-                let random = Random::read(&mut sub)?;
-
-                if random == HELLO_RETRY_REQUEST_RANDOM {
-                    let mut hrr = HelloRetryRequest::read(&mut sub)?;
-                    hrr.legacy_version = version;
-                    HandshakePayload::HelloRetryRequest(hrr)
-                } else {
-                    let mut shp = ServerHelloPayload::read(&mut sub)?;
-                    shp.legacy_version = version;
-                    shp.random = random;
-                    HandshakePayload::ServerHello(shp)
-                }
-            }
-            HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
-                let p = CertificatePayloadTls13::read(&mut sub)?;
-                HandshakePayload::CertificateTls13(p)
-            }
-            HandshakeType::Certificate => {
-                HandshakePayload::Certificate(CertificateChain::read(&mut sub)?)
-            }
-            HandshakeType::ServerKeyExchange => {
-                let p = ServerKeyExchangePayload::read(&mut sub)?;
-                HandshakePayload::ServerKeyExchange(p)
-            }
-            HandshakeType::ServerHelloDone => {
-                sub.expect_empty("ServerHelloDone")?;
-                HandshakePayload::ServerHelloDone
-            }
-            HandshakeType::ClientKeyExchange => {
-                HandshakePayload::ClientKeyExchange(Payload::read(&mut sub))
-            }
-            HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
-                let p = CertificateRequestPayloadTls13::read(&mut sub)?;
-                HandshakePayload::CertificateRequestTls13(p)
-            }
-            HandshakeType::CertificateRequest => {
-                let p = CertificateRequestPayload::read(&mut sub)?;
-                HandshakePayload::CertificateRequest(p)
-            }
-            HandshakeType::CompressedCertificate => HandshakePayload::CompressedCertificate(
-                CompressedCertificatePayload::read(&mut sub)?,
-            ),
-            HandshakeType::CertificateVerify => {
-                HandshakePayload::CertificateVerify(DigitallySignedStruct::read(&mut sub)?)
-            }
-            HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
-                let p = NewSessionTicketPayloadTls13::read(&mut sub)?;
-                HandshakePayload::NewSessionTicketTls13(p)
-            }
-            HandshakeType::NewSessionTicket => {
-                let p = NewSessionTicketPayload::read(&mut sub)?;
-                HandshakePayload::NewSessionTicket(p)
-            }
-            HandshakeType::EncryptedExtensions => {
-                HandshakePayload::EncryptedExtensions(Box::new(ServerExtensions::read(&mut sub)?))
-            }
-            HandshakeType::KeyUpdate => {
-                HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)
-            }
-            HandshakeType::EndOfEarlyData => {
-                sub.expect_empty("EndOfEarlyData")?;
-                HandshakePayload::EndOfEarlyData
-            }
-            HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub)),
-            HandshakeType::CertificateStatus => {
-                HandshakePayload::CertificateStatus(CertificateStatus::read(&mut sub)?)
-            }
-            HandshakeType::MessageHash => {
-                // does not appear on the wire
-                return Err(InvalidMessage::UnexpectedMessage("MessageHash"));
-            }
-            HandshakeType::HelloRetryRequest => {
-                // not legal on wire
-                return Err(InvalidMessage::UnexpectedMessage("HelloRetryRequest"));
-            }
-            _ => HandshakePayload::Unknown((typ, Payload::read(&mut sub))),
-        };
-
-        sub.expect_empty("HandshakeMessagePayload")
-            .map(|_| Self(payload))
-    }
-
-    pub(crate) fn encoding_for_binder_signing(&self) -> Vec<u8> {
-        let mut ret = self.get_encoding();
-        let ret_len = ret.len() - self.total_binder_length();
-        ret.truncate(ret_len);
-        ret
-    }
-
-    pub(crate) fn total_binder_length(&self) -> usize {
-        match &self.0 {
-            HandshakePayload::ClientHello(ch) => match &ch.preshared_key_offer {
-                Some(offer) => {
-                    let mut binders_encoding = Vec::new();
-                    offer
-                        .binders
-                        .encode(&mut binders_encoding);
-                    binders_encoding.len()
-                }
-                _ => 0,
-            },
-            _ => 0,
-        }
-    }
-
-    pub(crate) fn payload_encode(&self, bytes: &mut Vec<u8>, encoding: Encoding) {
-        // output type, length, and encoded payload
-        self.0
-            .wire_handshake_type()
-            .encode(bytes);
-
-        let nested = LengthPrefixedBuffer::new(
-            ListLength::U24 {
-                max: usize::MAX,
-                error: InvalidMessage::MessageTooLarge,
-            },
-            bytes,
-        );
-
-        match &self.0 {
-            // for Server Hello and HelloRetryRequest payloads we need to encode the payload
-            // differently based on the purpose of the encoding.
-            HandshakePayload::ServerHello(payload) => payload.payload_encode(nested.buf, encoding),
-            HandshakePayload::HelloRetryRequest(payload) => {
-                payload.payload_encode(nested.buf, encoding)
-            }
-
-            // All other payload types are encoded the same regardless of purpose.
-            _ => self.0.encode(nested.buf),
-        }
-    }
-
-    pub(crate) fn build_handshake_hash(hash: &[u8]) -> Self {
-        Self(HandshakePayload::MessageHash(Payload::new(hash.to_vec())))
-    }
-
-    #[cfg(feature = "std")]
-    pub(crate) fn into_owned(self) -> HandshakeMessagePayload<'static> {
-        HandshakeMessagePayload(self.0.into_owned())
     }
 }
 
