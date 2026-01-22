@@ -406,7 +406,7 @@ pub mod internal {
             pub use crate::msgs::{Codec, Reader};
         }
         pub mod enums {
-            pub use crate::msgs::enums::{AlertLevel, ExtensionType};
+            pub use crate::msgs::{AlertLevel, ExtensionType};
         }
         pub mod fragmenter {
             pub use crate::msgs::fragmenter::MessageFragmenter;

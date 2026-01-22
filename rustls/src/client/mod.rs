@@ -9,10 +9,9 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::{Identity, SelectedCredential, SignatureScheme};
 use crate::enums::{ApplicationProtocol, CertificateType};
 use crate::log::{debug, trace};
-use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{CertificateChain, ServerExtensions, SessionId};
 use crate::msgs::persist::ClientSessionCommon;
-use crate::msgs::{MaybeEmpty, SizedPayload};
+use crate::msgs::{ExtensionType, MaybeEmpty, SizedPayload};
 use crate::sync::Arc;
 use crate::verify::DistinguishedName;
 pub use crate::webpki::{

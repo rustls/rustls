@@ -23,7 +23,6 @@ use crate::enums::{
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
-use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
@@ -32,7 +31,7 @@ use crate::msgs::handshake::{
     TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist;
+use crate::msgs::{Compression, ExtensionType, persist};
 use crate::sealed::Sealed;
 use crate::suites::{Suite, SupportedCipherSuite};
 use crate::sync::Arc;

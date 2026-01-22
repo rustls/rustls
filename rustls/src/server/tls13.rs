@@ -22,13 +22,12 @@ use crate::enums::{
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
-use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
     CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
     NewSessionTicketPayloadTls13,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader, persist};
+use crate::msgs::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, KeyUpdateRequest, Reader, persist};
 use crate::server::ServerConfig;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
@@ -50,14 +49,13 @@ mod client_hello {
     use crate::crypto::{SelectedCredential, Signer};
     use crate::enums::ApplicationProtocol;
     use crate::msgs::deframer::HandshakeAlignedProof;
-    use crate::msgs::enums::Compression;
     use crate::msgs::handshake::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
         ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
         ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
     };
     use crate::msgs::persist::{ServerSessionValue, Tls13ServerSessionValue};
-    use crate::msgs::{ChangeCipherSpecPayload, SizedPayload};
+    use crate::msgs::{ChangeCipherSpecPayload, Compression, SizedPayload};
     use crate::sealed::Sealed;
     use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello, ServerHandler};
     use crate::tls13::key_schedule::{

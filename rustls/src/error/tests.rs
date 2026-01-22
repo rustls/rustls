@@ -9,7 +9,7 @@ use super::{
     UnixTime,
 };
 use crate::crypto::GetRandomFailed;
-use crate::msgs::enums::tests::test_enum8_display;
+use crate::msgs::test_enum8_display;
 
 #[test]
 fn certificate_error_equality() {

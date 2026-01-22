@@ -18,7 +18,6 @@ use crate::crypto::{
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
-use crate::msgs::enums::{Compression, ECCurveType};
 use crate::msgs::handshake::{
     CertificateChain, ClientHelloPayload, EcParameters, HandshakeMessagePayload, HandshakePayload,
     HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random, ServerEcdhParams,
@@ -26,7 +25,7 @@ use crate::msgs::handshake::{
     ServerKeyExchangePayload, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::{Reader, SizedPayload};
+use crate::msgs::{Compression, ECCurveType, Reader, SizedPayload};
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
 use crate::sync::Arc;
