@@ -33,6 +33,8 @@
 
 use alloc::vec::Vec;
 
+use crate::crypto::cipher::{EncodedMessage, Payload};
+use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 
 #[macro_use]
@@ -89,8 +91,8 @@ pub(crate) use handshake::{EcParameters, ServerEcdhParams};
 mod message;
 #[cfg(feature = "std")]
 pub(crate) use message::MAX_WIRE_SIZE;
+pub use message::Message;
 pub(crate) use message::{HEADER_SIZE, read_opaque_message_header};
-pub use message::{Message, MessagePayload};
 
 mod persist;
 pub use persist::ServerSessionValue;
@@ -109,6 +111,106 @@ mod handshake_test;
 
 #[cfg(test)]
 mod message_test;
+
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum MessagePayload<'a> {
+    Alert(AlertMessagePayload),
+    // one handshake message, parsed
+    Handshake {
+        parsed: HandshakeMessagePayload<'a>,
+        encoded: Payload<'a>,
+    },
+    // (potentially) multiple handshake messages, unparsed
+    HandshakeFlight(Payload<'a>),
+    ChangeCipherSpec(ChangeCipherSpecPayload),
+    ApplicationData(Payload<'a>),
+}
+
+impl<'a> MessagePayload<'a> {
+    pub(crate) fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Self::Alert(x) => x.encode(bytes),
+            Self::Handshake { encoded, .. } => bytes.extend(encoded.bytes()),
+            Self::HandshakeFlight(x) => bytes.extend(x.bytes()),
+            Self::ChangeCipherSpec(x) => x.encode(bytes),
+            Self::ApplicationData(x) => x.encode(bytes),
+        }
+    }
+
+    pub(crate) fn handshake(parsed: HandshakeMessagePayload<'a>) -> Self {
+        Self::Handshake {
+            encoded: Payload::new(parsed.get_encoding()),
+            parsed,
+        }
+    }
+
+    pub(crate) fn new(
+        typ: ContentType,
+        vers: ProtocolVersion,
+        payload: &'a [u8],
+    ) -> Result<Self, InvalidMessage> {
+        let mut r = Reader::init(payload);
+        match typ {
+            ContentType::ApplicationData => Ok(Self::ApplicationData(Payload::Borrowed(payload))),
+            ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
+            ContentType::Handshake => {
+                HandshakeMessagePayload::read_version(&mut r, vers).map(|parsed| Self::Handshake {
+                    parsed,
+                    encoded: Payload::Borrowed(payload),
+                })
+            }
+            ContentType::ChangeCipherSpec => {
+                ChangeCipherSpecPayload::read(&mut r).map(MessagePayload::ChangeCipherSpec)
+            }
+            _ => Err(InvalidMessage::InvalidContentType),
+        }
+    }
+
+    pub(crate) fn content_type(&self) -> ContentType {
+        match self {
+            Self::Alert(_) => ContentType::Alert,
+            Self::Handshake { .. } | Self::HandshakeFlight(_) => ContentType::Handshake,
+            Self::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
+            Self::ApplicationData(_) => ContentType::ApplicationData,
+        }
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn into_owned(self) -> MessagePayload<'static> {
+        use MessagePayload::*;
+        match self {
+            Alert(x) => Alert(x),
+            Handshake { parsed, encoded } => Handshake {
+                parsed: parsed.into_owned(),
+                encoded: encoded.into_owned(),
+            },
+            HandshakeFlight(x) => HandshakeFlight(x.into_owned()),
+            ChangeCipherSpec(x) => ChangeCipherSpec(x),
+            ApplicationData(x) => ApplicationData(x.into_owned()),
+        }
+    }
+}
+
+impl From<Message<'_>> for EncodedMessage<Payload<'_>> {
+    fn from(msg: Message<'_>) -> Self {
+        let typ = msg.payload.content_type();
+        let payload = match msg.payload {
+            MessagePayload::ApplicationData(payload) => payload.into_owned(),
+            _ => {
+                let mut buf = Vec::new();
+                msg.payload.encode(&mut buf);
+                Payload::Owned(buf)
+            }
+        };
+
+        Self {
+            typ,
+            version: msg.version,
+            payload,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct AlertMessagePayload {
