@@ -41,9 +41,8 @@ use std::sync::Mutex;
 
 use crate::crypto::cipher::Payload;
 use crate::enums::CertificateCompressionAlgorithm;
-use crate::msgs::SizedPayload;
-use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{CertificatePayloadTls13, CompressedCertificatePayload};
+use crate::msgs::{Codec, SizedPayload};
 use crate::sync::Arc;
 
 /// Returns the supported `CertDecompressor` implementations enabled

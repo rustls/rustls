@@ -18,8 +18,6 @@ use crate::crypto::{
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
-use crate::msgs::SizedPayload;
-use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::deframer::Locator;
 use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
@@ -27,6 +25,7 @@ use crate::msgs::handshake::{
     Random, SessionId, SupportedProtocolVersions,
 };
 use crate::msgs::message::{HEADER_SIZE, Message, MessagePayload};
+use crate::msgs::{Codec, Reader, SizedPayload};
 use crate::pki_types::pem::PemObject;
 use crate::pki_types::{CertificateDer, FipsStatus, PrivateKeyDer};
 use crate::server::{ServerConfig, ServerConnection};

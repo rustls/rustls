@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::mem;
 
 use crate::crypto::{HashAlgorithm, hash};
-use crate::msgs::codec::Codec;
+use crate::msgs::Codec;
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};

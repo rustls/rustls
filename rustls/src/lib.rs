@@ -403,7 +403,7 @@ pub mod internal {
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
         pub mod codec {
-            pub use crate::msgs::codec::{Codec, Reader};
+            pub use crate::msgs::{Codec, Reader};
         }
         pub mod enums {
             pub use crate::msgs::enums::{AlertLevel, ExtensionType};
