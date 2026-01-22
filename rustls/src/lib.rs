@@ -461,10 +461,6 @@ pub mod time_provider;
 /// APIs abstracting over locking primitives.
 pub mod lock;
 
-mod hash_set {
-    pub(crate) use std::collections::HashSet;
-}
-
 mod hash_map {
     pub(crate) use std::collections::HashMap;
 }

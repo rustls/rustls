@@ -4,7 +4,6 @@ use core::hash::{BuildHasher, Hash};
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use crate::hash_map::HashMap;
-use crate::hash_set::HashSet;
 use crate::sync::Arc;
 
 #[derive(Debug)]
@@ -45,8 +44,8 @@ pub(crate) struct LimitedCache<K: Clone + Hash + Eq, V> {
     map: HashMap<K, Arc<CacheEntry<V>>>,
     small: VecDeque<K>,
     main: VecDeque<K>,
-    ghost: VecDeque<u64>,
-    ghost_set: HashSet<u64>,
+    ghost_map: HashMap<u32, u64>,
+    ghost_timer: u64,
     small_capacity: usize,
     main_capacity: usize,
     ghost_capacity: usize,
@@ -66,8 +65,8 @@ where
             map: HashMap::with_capacity(capacity),
             small: VecDeque::with_capacity(small_capacity),
             main: VecDeque::with_capacity(main_capacity),
-            ghost: VecDeque::with_capacity(ghost_capacity),
-            ghost_set: HashSet::with_capacity(ghost_capacity),
+            ghost_map: HashMap::with_capacity(ghost_capacity),
+            ghost_timer: 0,
             small_capacity,
             main_capacity,
             ghost_capacity,
@@ -119,9 +118,7 @@ where
             },
         });
 
-        let is_ghost_hit = self
-            .ghost_set
-            .contains(&self.hash_key(&k));
+        let is_ghost_hit = self.is_ghost_hit(&k);
         if is_ghost_hit {
             self.insert_main(k, entry);
         } else {
@@ -159,13 +156,11 @@ where
     }
 
     fn insert_ghost(&mut self, k: &K) {
-        let h = self.hash_key(&k);
-        if self.ghost_set.len() >= self.ghost_capacity {
-            let old_h = self.ghost.pop_front().unwrap();
-            self.ghost_set.remove(&old_h);
-        }
-        self.ghost_set.insert(h);
-        self.ghost.push_back(h);
+        let fp = self.fingerprint(k);
+        self.ghost_timer += 1;
+
+        self.ghost_map
+            .insert(fp, self.ghost_timer);
     }
 
     fn evict(&mut self) {
@@ -210,8 +205,26 @@ where
         }
     }
 
-    fn hash_key<Q: ?Sized + Hash>(&self, k: &Q) -> u64 {
-        self.map.hasher().hash_one(k)
+    fn is_ghost_hit(&mut self, k: &K) -> bool {
+        let fp = self.fingerprint(k);
+        if let Some(&insertion_time) = self.ghost_map.get(&fp) {
+            if self
+                .ghost_timer
+                .saturating_sub(insertion_time)
+                < self.ghost_capacity as u64
+            {
+                self.ghost_map.remove(&fp);
+                return true;
+            } else {
+                self.ghost_map.remove(&fp);
+            }
+        }
+        false
+    }
+
+    fn fingerprint(&self, k: &K) -> u32 {
+        let h = self.map.hasher().hash_one(k);
+        (h ^ (h >> 32)) as u32
     }
 }
 
@@ -254,12 +267,7 @@ mod tests {
             cache.main.contains(&k1),
             "k1 should be promoted to main due to freq > 1"
         );
-        assert!(
-            !cache
-                .ghost_set
-                .contains(&cache.hash_key(&k1)),
-            "k1 should not be in ghost"
-        );
+        assert!(!cache.is_ghost_hit(&k1), "k1 should not be in ghost");
         assert!(cache.map.contains_key(&k1), "k1 must still exist in map");
     }
 
@@ -279,11 +287,7 @@ mod tests {
         cache.insert(k2, 200);
 
         assert!(!cache.map.contains_key(&k1));
-        assert!(
-            cache
-                .ghost_set
-                .contains(&cache.hash_key(&k1))
-        );
+        assert!(cache.is_ghost_hit(&k1));
     }
 
     #[test]
@@ -298,8 +302,8 @@ mod tests {
 
         assert!(
             cache
-                .ghost_set
-                .contains(&cache.hash_key(&k1)),
+                .ghost_map
+                .contains_key(&cache.fingerprint(&k1)),
             "k1 should be in ghost"
         );
 
@@ -354,8 +358,7 @@ mod tests {
         }
 
         let k0 = String::from("0");
-        let h0 = cache.hash_key(&k0);
-        assert!(!cache.ghost_set.contains(&h0), "ghost 0 should be evicted");
+        assert!(!cache.is_ghost_hit(&k0));
 
         let k21 = String::from("21");
         assert!(cache.map.contains_key(&k21));
