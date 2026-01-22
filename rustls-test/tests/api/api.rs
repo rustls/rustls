@@ -18,7 +18,7 @@ use rustls::crypto::{
 };
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
-use rustls::internal::msgs::message::{Message, MessagePayload};
+use rustls::internal::msgs::{Message, MessagePayload};
 use rustls::server::{Acceptor, ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
     ClientConfig, ClientConnection, HandshakeKind, KeyingMaterialExporter, ServerConfig,

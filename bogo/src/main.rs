@@ -35,8 +35,7 @@ use rustls::enums::{
 use rustls::error::{
     AlertDescription, CertificateError, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::persist::ServerSessionValue;
+use rustls::internal::msgs::{Codec, ServerSessionValue};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,

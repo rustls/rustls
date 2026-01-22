@@ -23,8 +23,7 @@ use rustls::crypto::{
 };
 use rustls::enums::{CertificateType, ContentType, ProtocolVersion};
 use rustls::error::{CertificateError, Error};
-use rustls::internal::msgs::codec::{Codec, Reader};
-use rustls::internal::msgs::message::Message;
+use rustls::internal::msgs::{Codec, Message, Reader};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
     CertificateDer, CertificateRevocationListDer, DnsName, PrivateKeyDer, PrivatePkcs8KeyDer,
@@ -2110,8 +2109,7 @@ pub mod encoding {
     use rustls::crypto::{CipherSuite, SignatureScheme};
     use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
     use rustls::error::AlertDescription;
-    use rustls::internal::msgs::codec::Codec;
-    use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
+    use rustls::internal::msgs::{AlertLevel, Codec, ExtensionType};
 
     /// Return a client hello with mandatory extensions added to `extensions`
     ///
