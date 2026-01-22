@@ -5,8 +5,8 @@ use alloc::vec::Vec;
 
 use crate::crypto::cipher::Payload;
 use crate::error::InvalidMessage;
-use crate::msgs::base::{NonEmpty, SizedPayload};
 use crate::msgs::codec::{Codec, ListLength, Reader, TlsListElement};
+use crate::msgs::{NonEmpty, SizedPayload};
 
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]

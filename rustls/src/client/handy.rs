@@ -213,7 +213,7 @@ mod tests {
     use crate::crypto::{
         CertificateIdentity, CipherSuite, Identity, TEST_PROVIDER, tls12_suite, tls13_suite,
     };
-    use crate::msgs::base::SizedPayload;
+    use crate::msgs::SizedPayload;
     use crate::msgs::handshake::SessionId;
     use crate::sync::Arc;
 

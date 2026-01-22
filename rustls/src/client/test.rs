@@ -18,7 +18,7 @@ use crate::crypto::{
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
-use crate::msgs::base::SizedPayload;
+use crate::msgs::SizedPayload;
 use crate::msgs::codec::Reader;
 use crate::msgs::enums::{Compression, ECCurveType};
 use crate::msgs::handshake::{

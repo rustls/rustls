@@ -5,9 +5,9 @@ use core::ops::{Deref, DerefMut, Range};
 use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
-use crate::msgs::base::hex;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
+use crate::msgs::hex;
 use crate::msgs::message::{HEADER_SIZE, read_opaque_message_header};
 
 /// A TLS message with encoded (but not necessarily encrypted) payload.
