@@ -23,9 +23,9 @@ use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbe
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
 use crate::msgs::{
-    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, HandshakeMessagePayload,
-    HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
-    Reader, persist,
+    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, CommonServerSessionValue,
+    HandshakeMessagePayload, HandshakePayload, KeyUpdateRequest, Message, MessagePayload,
+    NewSessionTicketPayloadTls13, Reader, ServerSessionValue, Tls13ServerSessionValue,
 };
 use crate::server::ServerConfig;
 use crate::suites::PartiallyExtractedSecrets;
@@ -47,12 +47,12 @@ mod client_hello {
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::enums::ApplicationProtocol;
-    use crate::msgs::persist::{ServerSessionValue, Tls13ServerSessionValue};
     use crate::msgs::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
         ChangeCipherSpecPayload, ClientHelloPayload, Compression, HandshakeAlignedProof,
         HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random, ServerExtensions,
-        ServerExtensionsInput, ServerHelloPayload, SessionId, SizedPayload,
+        ServerExtensionsInput, ServerHelloPayload, ServerSessionValue, SessionId, SizedPayload,
+        Tls13ServerSessionValue,
     };
     use crate::sealed::Sealed;
     use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello, ServerHandler};
@@ -1165,11 +1165,11 @@ fn get_server_session_value(
     nonce: &[u8],
     time_now: UnixTime,
     age_obfuscation_offset: u32,
-) -> persist::ServerSessionValue {
+) -> ServerSessionValue {
     let secret = resumption.derive_ticket_psk(nonce);
 
-    persist::Tls13ServerSessionValue::new(
-        persist::CommonServerSessionValue::new(
+    Tls13ServerSessionValue::new(
+        CommonServerSessionValue::new(
             cx.data.sni.as_ref(),
             suite.common.suite,
             peer_identity,

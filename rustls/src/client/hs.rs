@@ -25,10 +25,10 @@ use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
-    ClientSessionTicket, Compression, EncryptedClientHello, ExtensionType, HandshakeMessagePayload,
-    HandshakePayload, HelloRetryRequest, KeyShareEntry, Message, MessagePayload,
-    PskKeyExchangeModes, Random, ServerHelloPayload, ServerNamePayload, SessionId,
-    SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters, persist,
+    ClientSessionCommon, ClientSessionTicket, Compression, EncryptedClientHello, ExtensionType,
+    HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, KeyShareEntry, Message,
+    MessagePayload, PskKeyExchangeModes, Random, Retrieved, ServerHelloPayload, ServerNamePayload,
+    SessionId, SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 use crate::sealed::Sealed;
 use crate::suites::{Suite, SupportedCipherSuite};
@@ -360,7 +360,7 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
 
 pub(crate) struct ClientHelloInput {
     pub(super) config: Arc<ClientConfig>,
-    pub(super) resuming: Option<persist::Retrieved<ClientSessionValue>>,
+    pub(super) resuming: Option<Retrieved<ClientSessionValue>>,
     pub(super) random: Random,
     pub(super) sent_tls13_fake_ccs: bool,
     pub(super) hello: ClientHelloDetails,
@@ -865,12 +865,12 @@ impl GroupAndKeyShare {
 ///
 /// It returns the TLS 1.3 PSKs, if any, for further processing.
 fn prepare_resumption<'a>(
-    resuming: &'a Option<persist::Retrieved<ClientSessionValue>>,
+    resuming: &'a Option<Retrieved<ClientSessionValue>>,
     exts: &mut ClientExtensions<'_>,
     suite: Option<SupportedCipherSuite>,
     cx: &mut ClientContext<'_>,
     config: &ClientConfig,
-) -> Option<persist::Retrieved<&'a Tls13ClientSessionValue>> {
+) -> Option<Retrieved<&'a Tls13ClientSessionValue>> {
     // Check whether we're resuming with a non-empty ticket.
     let resuming = match resuming {
         Some(resuming) if !resuming.ticket().is_empty() => resuming,
@@ -950,7 +950,7 @@ impl ClientSessionValue {
         key: &ClientSessionKey<'static>,
         config: &ClientConfig,
         cx: &mut ClientContext<'_>,
-    ) -> Option<persist::Retrieved<Self>> {
+    ) -> Option<Retrieved<Self>> {
         let found = config
             .resumption
             .store
@@ -969,7 +969,7 @@ impl ClientSessionValue {
                     .map_err(|_err| debug!("Could not get current time: {_err}"))
                     .ok()?;
 
-                let retrieved = persist::Retrieved::new(resuming, now);
+                let retrieved = Retrieved::new(resuming, now);
                 match retrieved.has_expired() {
                     false => Some(retrieved),
                     true => None,
@@ -990,7 +990,7 @@ impl ClientSessionValue {
         found
     }
 
-    fn common(&self) -> &persist::ClientSessionCommon {
+    fn common(&self) -> &ClientSessionCommon {
         match self {
             Self::Tls13(inner) => &inner.common,
             Self::Tls12(inner) => &inner.common,
@@ -1006,7 +1006,7 @@ impl ClientSessionValue {
 }
 
 impl Deref for ClientSessionValue {
-    type Target = persist::ClientSessionCommon;
+    type Target = ClientSessionCommon;
 
     fn deref(&self) -> &Self::Target {
         self.common()

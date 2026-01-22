@@ -24,8 +24,9 @@ use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
-    HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, SessionId, persist,
+    CommonServerSessionValue, HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload,
+    Message, MessagePayload, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
+    ServerSessionValue, SessionId, Tls12ServerSessionValue,
 };
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
@@ -151,9 +152,9 @@ mod client_hello {
                         .session_storage
                         .get(input.client_hello.session_id.as_ref())
                 })
-                .and_then(|x| persist::ServerSessionValue::read_bytes(&x).ok())
+                .and_then(|x| ServerSessionValue::read_bytes(&x).ok())
                 .and_then(|resumedata| match resumedata {
-                    persist::ServerSessionValue::Tls12(tls12) => Some(tls12),
+                    ServerSessionValue::Tls12(tls12) => Some(tls12),
                     _ => None,
                 })
                 .filter(|resumedata| {
@@ -257,7 +258,7 @@ mod client_hello {
         randoms: ConnectionRandoms,
         extra_exts: ServerExtensionsInput,
         config: Arc<ServerConfig>,
-        resumedata: persist::Tls12ServerSessionValue,
+        resumedata: Tls12ServerSessionValue,
         proof: HandshakeAlignedProof,
     ) -> hs::NextStateOrError {
         debug!("Resuming connection");
@@ -349,7 +350,7 @@ mod client_hello {
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&persist::Tls12ServerSessionValue>,
+        resumedata: Option<&Tls12ServerSessionValue>,
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput,
     ) -> Result<(bool, Option<ApplicationProtocol<'static>>), Error> {
@@ -727,9 +728,9 @@ fn get_server_connection_value_tls12(
     alpn_protocol: Option<&ApplicationProtocol<'_>>,
     cx: &ServerContext<'_>,
     time_now: UnixTime,
-) -> persist::ServerSessionValue {
-    persist::Tls12ServerSessionValue::new(
-        persist::CommonServerSessionValue::new(
+) -> ServerSessionValue {
+    Tls12ServerSessionValue::new(
+        CommonServerSessionValue::new(
             cx.data.sni.as_ref(),
             secrets.suite().common.suite,
             peer_identity.cloned(),
