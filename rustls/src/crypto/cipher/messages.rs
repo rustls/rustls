@@ -5,7 +5,7 @@ use core::ops::{Deref, DerefMut, Range};
 use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
-use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
+use crate::msgs::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{HEADER_SIZE, read_opaque_message_header};
 use crate::msgs::{Codec, Reader, hex};
 

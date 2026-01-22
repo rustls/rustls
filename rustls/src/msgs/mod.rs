@@ -57,7 +57,10 @@ pub(crate) use enums::tests::{test_enum8, test_enum8_display, test_enum16};
 pub use enums::{AlertLevel, ExtensionType};
 pub(crate) use enums::{ClientCertificateType, Compression, KeyUpdateRequest};
 
-pub(crate) mod fragmenter;
+mod fragmenter;
+pub(crate) use fragmenter::MAX_FRAGMENT_LEN;
+pub use fragmenter::MessageFragmenter;
+
 #[macro_use]
 pub(crate) mod handshake;
 pub(crate) mod message;

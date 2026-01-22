@@ -409,7 +409,7 @@ pub mod internal {
             pub use crate::msgs::{AlertLevel, ExtensionType};
         }
         pub mod fragmenter {
-            pub use crate::msgs::fragmenter::MessageFragmenter;
+            pub use crate::msgs::MessageFragmenter;
         }
         pub mod message {
             pub use crate::msgs::message::{Message, MessagePayload};
