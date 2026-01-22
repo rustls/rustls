@@ -34,17 +34,23 @@
 use alloc::vec::Vec;
 
 use crate::error::{AlertDescription, InvalidMessage};
-use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::AlertLevel;
 
 #[macro_use]
 mod macros;
 
-pub(crate) mod base;
+mod base;
+pub(crate) use base::{MaybeEmpty, NonEmpty, SizedPayload, hex};
+
 mod client_hello;
+
 pub(crate) mod codec;
+use codec::{Codec, Reader};
+
 pub(crate) mod deframer;
+
 pub(crate) mod enums;
+use enums::AlertLevel;
+
 pub(crate) mod fragmenter;
 #[macro_use]
 pub(crate) mod handshake;

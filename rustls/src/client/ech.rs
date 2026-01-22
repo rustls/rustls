@@ -20,7 +20,7 @@ use crate::enums::ProtocolVersion;
 use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::SizedPayload;
+use crate::msgs::SizedPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::enums::ExtensionType;
