@@ -17,9 +17,9 @@ use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 use crate::msgs::{
-    ClientHelloPayload, Compression, HandshakeAlignedProof, HandshakePayload, Message,
-    MessagePayload, Random, ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId,
-    SingleProtocolName, TransportParameters, persist,
+    ClientHelloPayload, CommonServerSessionValue, Compression, HandshakeAlignedProof,
+    HandshakePayload, Message, MessagePayload, Random, ServerExtensions, ServerExtensionsInput,
+    ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
 };
 use crate::sealed::Sealed;
 use crate::suites::Suite;
@@ -69,7 +69,7 @@ impl<'a> ExtensionProcessing<'a> {
         &mut self,
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
-        resumedata: Option<&persist::CommonServerSessionValue>,
+        resumedata: Option<&CommonServerSessionValue>,
     ) -> Result<(CertificateTypes, Option<ApplicationProtocol<'static>>), Error> {
         let config = self.config;
         let hello = self.client_hello;

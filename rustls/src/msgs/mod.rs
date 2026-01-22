@@ -94,7 +94,12 @@ pub(crate) use message::MAX_WIRE_SIZE;
 pub(crate) use message::{HEADER_SIZE, read_opaque_message_header};
 pub use message::{Message, MessagePayload};
 
-pub(crate) mod persist;
+mod persist;
+pub use persist::ServerSessionValue;
+pub(crate) use persist::{
+    ClientSessionCommon, CommonServerSessionValue, Retrieved, Tls12ServerSessionValue,
+    Tls13ServerSessionValue,
+};
 
 #[cfg(test)]
 mod handshake_test;

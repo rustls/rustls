@@ -415,7 +415,7 @@ pub mod internal {
             pub use crate::msgs::{Message, MessagePayload};
         }
         pub mod persist {
-            pub use crate::msgs::persist::ServerSessionValue;
+            pub use crate::msgs::ServerSessionValue;
         }
     }
 
