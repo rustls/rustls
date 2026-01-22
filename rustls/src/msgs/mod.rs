@@ -42,6 +42,11 @@ mod base;
 pub(crate) use base::{MaybeEmpty, NonEmpty, SizedPayload, hex};
 
 mod client_hello;
+pub(crate) use client_hello::{
+    CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
+    EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder, PresharedKeyIdentity,
+    PresharedKeyOffer, PskKeyExchangeModes, ServerNamePayload,
+};
 
 mod codec;
 pub(crate) use codec::{CERTIFICATE_MAX_SIZE_LIMIT, ListLength, TlsListElement, put_u16, put_u64};

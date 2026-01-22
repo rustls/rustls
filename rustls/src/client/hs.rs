@@ -24,14 +24,16 @@ use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
 use crate::msgs::handshake::{
-    CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
-    ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, KeyShareEntry, PskKeyExchangeModes, Random, ServerHelloPayload,
-    ServerNamePayload, SessionId, SupportedEcPointFormats, SupportedProtocolVersions,
-    TransportParameters,
+    ClientExtensionsInput, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
+    KeyShareEntry, Random, ServerHelloPayload, SessionId, SupportedEcPointFormats,
+    SupportedProtocolVersions, TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::{Compression, ExtensionType, persist};
+use crate::msgs::{
+    CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
+    Compression, EncryptedClientHello, ExtensionType, PskKeyExchangeModes, ServerNamePayload,
+    persist,
+};
 use crate::sealed::Sealed;
 use crate::suites::{Suite, SupportedCipherSuite};
 use crate::sync::Arc;

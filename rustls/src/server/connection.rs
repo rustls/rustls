@@ -33,13 +33,11 @@ use crate::kernel::KernelConnection;
 use crate::log::trace;
 #[cfg(feature = "std")]
 use crate::msgs::deframer::Locator;
-#[cfg(feature = "std")]
-use crate::msgs::handshake::ClientHelloPayload;
 use crate::msgs::handshake::ServerExtensionsInput;
 #[cfg(feature = "std")]
-use crate::msgs::handshake::ServerNamePayload;
-#[cfg(feature = "std")]
 use crate::msgs::message::Message;
+#[cfg(feature = "std")]
+use crate::msgs::{ClientHelloPayload, ServerNamePayload};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::vecbuf::ChunkVecBuffer;
