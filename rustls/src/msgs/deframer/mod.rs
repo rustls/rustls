@@ -1,9 +1,9 @@
 use core::mem;
 
+use super::{HEADER_SIZE, read_opaque_message_header};
 use crate::crypto::cipher::{EncodedMessage, InboundOpaque, MessageError};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::Reader;
-use crate::msgs::message::{HEADER_SIZE, read_opaque_message_header};
 
 mod buffers;
 pub(crate) use buffers::{

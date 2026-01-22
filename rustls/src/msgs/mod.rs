@@ -83,7 +83,12 @@ pub(crate) use handshake::{
 #[cfg(test)]
 pub(crate) use handshake::{EcParameters, ServerEcdhParams};
 
-pub(crate) mod message;
+mod message;
+#[cfg(feature = "std")]
+pub(crate) use message::MAX_WIRE_SIZE;
+pub(crate) use message::{HEADER_SIZE, read_opaque_message_header};
+pub use message::{Message, MessagePayload};
+
 pub(crate) mod persist;
 
 #[cfg(test)]

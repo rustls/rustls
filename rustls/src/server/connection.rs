@@ -35,9 +35,9 @@ use crate::msgs::ServerExtensionsInput;
 #[cfg(feature = "std")]
 use crate::msgs::deframer::Locator;
 #[cfg(feature = "std")]
-use crate::msgs::message::{Message, MessagePayload};
-#[cfg(feature = "std")]
-use crate::msgs::{ClientHelloPayload, HandshakePayload, ServerNamePayload};
+use crate::msgs::{
+    ClientHelloPayload, HandshakePayload, Message, MessagePayload, ServerNamePayload,
+};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::vecbuf::ChunkVecBuffer;

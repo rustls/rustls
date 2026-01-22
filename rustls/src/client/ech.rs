@@ -21,13 +21,13 @@ use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::Retrieved;
 use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, EchConfigContents, EchConfigPayload, Encoding,
     EncryptedClientHello, EncryptedClientHelloOuter, ExtensionType, HandshakeMessagePayload,
-    HandshakePayload, HelloRetryRequest, HpkeKeyConfig, PresharedKeyBinder, PresharedKeyOffer,
-    Random, Reader, ServerHelloPayload, ServerNamePayload, SizedPayload,
+    HandshakePayload, HelloRetryRequest, HpkeKeyConfig, Message, MessagePayload,
+    PresharedKeyBinder, PresharedKeyOffer, Random, Reader, ServerHelloPayload, ServerNamePayload,
+    SizedPayload,
 };
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{

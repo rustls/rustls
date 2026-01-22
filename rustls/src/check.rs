@@ -1,7 +1,7 @@
 use crate::enums::{ContentType, HandshakeType};
 use crate::error::Error;
 use crate::log::warn;
-use crate::msgs::message::MessagePayload;
+use crate::msgs::MessagePayload;
 
 /// For a Message $m, and a HandshakePayload enum member $payload_type,
 /// return Ok(payload) if $m is both a handshake message and one that

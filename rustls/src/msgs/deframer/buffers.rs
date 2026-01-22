@@ -5,7 +5,7 @@ use core::ops::Range;
 use std::io;
 
 #[cfg(feature = "std")]
-use crate::msgs::message::MAX_WIRE_SIZE;
+use crate::msgs::MAX_WIRE_SIZE;
 
 /// Conversion from a slice within a larger buffer into
 /// a `Range` offset within.

@@ -23,10 +23,9 @@ use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
 use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
-    HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
+    HandshakeMessagePayload, HandshakePayload, Message, MessagePayload, NewSessionTicketPayload,
     NewSessionTicketPayloadTls13, SessionId, persist,
 };
 use crate::suites::PartiallyExtractedSecrets;
