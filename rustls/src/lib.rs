@@ -402,21 +402,10 @@ mod webpki;
 pub mod internal {
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
-        pub mod codec {
-            pub use crate::msgs::{Codec, Reader};
-        }
-        pub mod enums {
-            pub use crate::msgs::{AlertLevel, ExtensionType};
-        }
-        pub mod fragmenter {
-            pub use crate::msgs::MessageFragmenter;
-        }
-        pub mod message {
-            pub use crate::msgs::{Message, MessagePayload};
-        }
-        pub mod persist {
-            pub use crate::msgs::ServerSessionValue;
-        }
+        pub use crate::msgs::{
+            AlertLevel, Codec, ExtensionType, Message, MessageFragmenter, MessagePayload, Reader,
+            ServerSessionValue,
+        };
     }
 
     pub mod fuzzing {

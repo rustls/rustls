@@ -13,7 +13,7 @@ use rustls::crypto::kx::{
 };
 use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
-use rustls::internal::msgs::enums::ExtensionType;
+use rustls::internal::msgs::ExtensionType;
 use rustls::{ClientConfig, HandshakeKind, ServerConfig};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, KeyType, OtherSession, ServerConfigExt,
