@@ -23,13 +23,12 @@ use crate::enums::{
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
-use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, Compression, EncryptedClientHello, ExtensionType, HandshakeMessagePayload,
-    HandshakePayload, HelloRetryRequest, KeyShareEntry, PskKeyExchangeModes, Random,
-    ServerHelloPayload, ServerNamePayload, SessionId, SupportedEcPointFormats,
-    SupportedProtocolVersions, TransportParameters, persist,
+    HandshakePayload, HelloRetryRequest, KeyShareEntry, Message, MessagePayload,
+    PskKeyExchangeModes, Random, ServerHelloPayload, ServerNamePayload, SessionId,
+    SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters, persist,
 };
 use crate::sealed::Sealed;
 use crate::suites::{Suite, SupportedCipherSuite};

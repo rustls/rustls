@@ -18,9 +18,9 @@ use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::deframer::{Delocator, HandshakeAlignedProof, Locator};
-use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::{
-    AlertLevel, AlertMessagePayload, Codec, HandshakeMessagePayload, MessageFragmenter,
+    AlertLevel, AlertMessagePayload, Codec, HandshakeMessagePayload, Message, MessageFragmenter,
+    MessagePayload,
 };
 use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};

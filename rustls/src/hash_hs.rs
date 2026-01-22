@@ -4,8 +4,7 @@ use core::mem;
 
 use crate::crypto::{HashAlgorithm, hash};
 use crate::msgs::deframer::HandshakeAlignedProof;
-use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::{Codec, HandshakeMessagePayload};
+use crate::msgs::{Codec, HandshakeMessagePayload, Message, MessagePayload};
 
 /// Early stage buffering of handshake payloads.
 ///

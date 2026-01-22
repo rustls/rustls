@@ -5,8 +5,7 @@ use core::ops::{Deref, DerefMut, Range};
 use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
-use crate::msgs::message::{HEADER_SIZE, read_opaque_message_header};
-use crate::msgs::{Codec, MAX_FRAGMENT_LEN, Reader, hex};
+use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_opaque_message_header};
 
 /// A TLS message with encoded (but not necessarily encrypted) payload.
 #[expect(clippy::exhaustive_structs)]

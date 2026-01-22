@@ -22,10 +22,10 @@ use crate::enums::{
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
-use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, HandshakeMessagePayload,
-    HandshakePayload, KeyUpdateRequest, NewSessionTicketPayloadTls13, Reader, persist,
+    HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
+    Reader, persist,
 };
 use crate::server::ServerConfig;
 use crate::suites::PartiallyExtractedSecrets;

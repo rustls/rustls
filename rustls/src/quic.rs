@@ -10,7 +10,7 @@ pub use crate::common_state::Side;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::Error;
-use crate::msgs::message::{Message, MessagePayload};
+use crate::msgs::{Message, MessagePayload};
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
