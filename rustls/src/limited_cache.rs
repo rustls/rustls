@@ -181,22 +181,18 @@ where
     fn insert_ghost(&mut self, k: &K) {
         let h = self.hash_key(&k);
         if self.ghost_set.len() >= self.ghost_capacity {
-            if let Some(old_h) = self.ghost.pop_front() {
-                self.ghost_set.remove(&old_h);
-            }
+            let old_h = self.ghost.pop_front().unwrap();
+            self.ghost_set.remove(&old_h);
         }
-        if self.ghost_set.insert(h) {
-            self.ghost.push_back(h);
-        }
+        self.ghost_set.insert(h);
+        self.ghost.push_back(h);
     }
 
     fn evict(&mut self) {
         if self.small.len() >= self.small_capacity {
             self.evict_small();
-        } else if !self.main.is_empty() {
-            self.evict_main();
         } else {
-            self.evict_small();
+            self.evict_main();
         }
     }
 
@@ -211,9 +207,7 @@ where
                 if self.main.len() > self.main_capacity {
                     self.evict_main();
                 }
-                if self.map.len() >= self.main_capacity {
-                    return;
-                }
+                return;
             } else {
                 self.insert_ghost(&k);
                 self.map.remove(&k);
@@ -357,5 +351,200 @@ mod tests {
 
         assert!(cache.main.contains(&keys[0]));
         assert!(!cache.map.contains_key(&keys[1]));
+    }
+
+    #[test]
+    fn test_frequency_saturation() {
+        let mut cache = TestCache::new(10);
+        let k = String::from("key");
+        cache.insert(k.clone(), 0);
+
+        for _ in 0..5 {
+            cache.get(&k);
+        }
+
+        let entry = cache.map.get(&k).unwrap();
+        assert_eq!(entry.state.current_frequency(), 3);
+    }
+
+    #[test]
+    fn test_ghost_capacity_eviction() {
+        let mut cache = TestCache::new(10);
+
+        for i in 0..22 {
+            cache.insert(format!("{}", i), i);
+        }
+
+        let k0 = String::from("0");
+        let h0 = cache.hash_key(&k0);
+        assert!(!cache.ghost_set.contains(&h0), "ghost 0 should be evicted");
+
+        let k21 = String::from("21");
+        assert!(cache.map.contains_key(&k21));
+    }
+
+    #[test]
+    fn test_arc_interference() {
+        let mut cache = TestCache::new(10);
+        let k = String::from("key");
+        cache.insert(k.clone(), 100);
+
+        let entry_arc = cache.map.get(&k).unwrap().clone();
+
+        cache.get_or_insert_default_and_edit(k.clone(), |v| *v = 200);
+
+        assert_eq!(*cache.get(&k).unwrap(), 200);
+        assert_eq!(entry_arc.value, 100);
+    }
+
+    #[test]
+    fn test_main_saturation() {
+        let mut cache = TestCache::new(10);
+
+        for i in 0..10 {
+            let k = format!("{}", i);
+            cache.insert(k.clone(), i);
+            cache.get(&k);
+            cache.get(&k);
+        }
+
+        cache.insert(String::from("overflow"), 999);
+
+        assert_eq!(cache.main.len(), 9);
+        assert!(!cache.map.contains_key("0"));
+    }
+
+    #[test]
+    fn test_remove_missing() {
+        let mut cache = TestCache::new(10);
+        assert_eq!(cache.remove("missing"), None);
+    }
+
+    #[test]
+    fn test_get_missing() {
+        let cache = TestCache::new(10);
+        assert_eq!(cache.get("missing"), None);
+    }
+
+    #[test]
+    fn test_get_mut_missing() {
+        let mut cache = TestCache::new(10);
+        assert_eq!(cache.get_mut("missing"), None);
+    }
+
+    #[test]
+    fn test_zombie_in_small() {
+        let mut cache = TestCache::new(2);
+
+        cache.insert(String::from("A"), 1);
+        cache.remove("A");
+
+        cache.insert(String::from("B"), 2);
+        cache.insert(String::from("C"), 3);
+
+        assert!(!cache.map.contains_key("A"));
+        assert!(cache.map.contains_key("C"));
+    }
+
+    #[test]
+    fn test_zombie_in_main() {
+        let mut cache = TestCache::new(10);
+        let k = String::from("A");
+        cache.insert(k.clone(), 1);
+        cache.get(&k);
+        cache.get(&k);
+
+        for i in 0..10 {
+            cache.insert(format!("fill{}", i), i);
+        }
+
+        assert!(cache.main.contains(&k));
+
+        cache.remove(&k);
+
+        for i in 0..20 {
+            let k2 = format!("m{}", i);
+            cache.insert(k2.clone(), i);
+            cache.get(&k2);
+        }
+        assert!(!cache.map.contains_key("A"));
+    }
+
+    #[test]
+    fn test_get_or_insert_eviction() {
+        let mut cache = TestCache::new(2);
+        cache.insert(String::from("A"), 1);
+        cache.insert(String::from("B"), 2);
+
+        cache.get_or_insert_default_and_edit(String::from("C"), |v| *v = 3);
+
+        assert!(cache.map.contains_key("C"));
+        assert!(cache.map.len() <= 2);
+    }
+
+    // ? Do we actually need Debug impl and tests for it?
+    #[test]
+    fn test_debug_impls() {
+        let mut cache = TestCache::new(10);
+        cache.insert(String::from("A"), 1);
+        let output = format!("{:?}", cache);
+        assert!(output.contains("LimitedCache"));
+        assert!(output.contains("A"));
+
+        assert!(output.contains("CacheEntry"));
+        assert!(output.contains("EntryState"));
+    }
+
+    #[test]
+    fn test_get_or_insert_simple_update() {
+        let mut cache = TestCache::new(10);
+        cache.insert(String::from("key"), 100);
+
+        cache.get_or_insert_default_and_edit(String::from("key"), |v| *v = 200);
+
+        assert_eq!(*cache.get("key").unwrap(), 200);
+    }
+
+    #[test]
+    fn test_entry_state_logic() {
+        let state = EntryState {
+            frequency: AtomicU8::new(0),
+        };
+
+        state.decrease_frequency();
+        assert_eq!(state.current_frequency(), 0);
+
+        state.increase_frequency_max_3();
+        assert_eq!(state.current_frequency(), 1);
+
+        state.increase_frequency_max_3();
+        state.increase_frequency_max_3();
+        state.increase_frequency_max_3();
+        assert_eq!(state.current_frequency(), 3);
+
+        state.decrease_frequency();
+        assert_eq!(state.current_frequency(), 2);
+    }
+
+    #[test]
+    fn test_minimal_capacity() {
+        let mut cache = TestCache::new(1);
+
+        cache.insert(String::from("A"), 1);
+        cache.get("A");
+
+        cache.insert(String::from("B"), 2);
+
+        assert!(cache.map.contains_key("B"));
+        assert!(!cache.map.contains_key("A"));
+    }
+
+    #[test]
+    fn test_decrease_frequency_saturation() {
+        let state = EntryState {
+            frequency: AtomicU8::new(0),
+        };
+        state.decrease_frequency();
+        assert_eq!(state.current_frequency(), 0);
     }
 }
