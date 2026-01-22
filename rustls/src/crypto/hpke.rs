@@ -7,7 +7,7 @@ use zeroize::Zeroize;
 
 use crate::Error;
 use crate::error::InvalidMessage;
-use crate::msgs::codec::{Codec, ListLength, Reader, TlsListElement};
+use crate::msgs::{Codec, ListLength, Reader, TlsListElement};
 
 /// An HPKE suite, specifying a key encapsulation mechanism and a symmetric cipher suite.
 #[expect(clippy::exhaustive_structs)]

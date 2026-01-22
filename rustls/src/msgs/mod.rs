@@ -43,8 +43,9 @@ pub(crate) use base::{MaybeEmpty, NonEmpty, SizedPayload, hex};
 
 mod client_hello;
 
-pub(crate) mod codec;
-use codec::{Codec, Reader};
+mod codec;
+pub(crate) use codec::{CERTIFICATE_MAX_SIZE_LIMIT, ListLength, TlsListElement, put_u16, put_u64};
+pub use codec::{Codec, Reader};
 
 pub(crate) mod deframer;
 

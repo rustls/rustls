@@ -20,8 +20,6 @@ use crate::enums::ProtocolVersion;
 use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
-use crate::msgs::SizedPayload;
-use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{
@@ -32,6 +30,7 @@ use crate::msgs::handshake::{
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist::Retrieved;
+use crate::msgs::{Codec, Reader, SizedPayload};
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     KeyScheduleEarlyClient, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,

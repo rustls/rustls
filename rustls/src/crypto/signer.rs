@@ -11,7 +11,7 @@ use crate::client::{ClientCredentialResolver, CredentialRequest};
 use crate::crypto::SignatureScheme;
 use crate::enums::CertificateType;
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::{Codec, Reader};
 use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
 use crate::sync::Arc;
 use crate::{DynHasher, SignerPublicKey, x509};

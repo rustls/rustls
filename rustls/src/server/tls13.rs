@@ -22,14 +22,13 @@ use crate::enums::{
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
-use crate::msgs::codec::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
     CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
     NewSessionTicketPayloadTls13,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist;
+use crate::msgs::{CERTIFICATE_MAX_SIZE_LIMIT, Codec, Reader, persist};
 use crate::server::ServerConfig;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;

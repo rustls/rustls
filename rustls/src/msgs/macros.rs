@@ -60,12 +60,12 @@ macro_rules! enum_builder {
             }
         }
 
-        impl crate::msgs::codec::Codec<'_> for $enum_name {
+        impl crate::msgs::Codec<'_> for $enum_name {
             fn encode(&self, bytes: &mut alloc::vec::Vec<u8>) {
                 <$uint>::from(*self).encode(bytes);
             }
 
-            fn read(r: &mut crate::msgs::codec::Reader<'_>) -> Result<Self, crate::error::InvalidMessage> {
+            fn read(r: &mut crate::msgs::Reader<'_>) -> Result<Self, crate::error::InvalidMessage> {
                 match <$uint>::read(r) {
                     Ok(x) => Ok($enum_name::from(x)),
                     Err(_) => Err(crate::error::InvalidMessage::MissingData(stringify!($enum_name))),

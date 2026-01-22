@@ -8,8 +8,7 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::{Identity, SignatureScheme};
 use crate::enums::CertificateType;
 use crate::error::{Error, InvalidMessage};
-use crate::msgs::codec::{Codec, ListLength, Reader, TlsListElement};
-use crate::msgs::{MaybeEmpty, NonEmpty, SizedPayload};
+use crate::msgs::{Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload, TlsListElement};
 use crate::sync::Arc;
 use crate::x509::wrap_in_sequence;
 

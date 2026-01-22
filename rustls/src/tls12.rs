@@ -14,9 +14,9 @@ use crate::crypto::tls12::PrfSecret;
 use crate::crypto::{self, SignatureScheme, hash};
 use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error, InvalidMessage};
-use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::deframer::HandshakeAlignedProof;
 use crate::msgs::handshake::KxDecode;
+use crate::msgs::{Codec, Reader};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, Suite, SupportedCipherSuite};
 use crate::version::Tls12Version;
 

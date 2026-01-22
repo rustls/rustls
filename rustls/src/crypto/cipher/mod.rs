@@ -7,7 +7,7 @@ use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::codec;
+use crate::msgs::{put_u16, put_u64};
 use crate::suites::ConnectionTrafficSecrets;
 
 mod messages;
@@ -250,7 +250,7 @@ impl Nonce {
         let mut buf = [0u8; Iv::MAX_LEN];
 
         if iv_len >= 8 {
-            codec::put_u64(seq, &mut buf[iv_len - 8..iv_len]);
+            put_u64(seq, &mut buf[iv_len - 8..iv_len]);
             if let Some(path_id) = path_id {
                 if iv_len >= 12 {
                     buf[iv_len - 12..iv_len - 8].copy_from_slice(&path_id.to_be_bytes());
@@ -337,10 +337,10 @@ pub fn make_tls12_aad(
     len: usize,
 ) -> [u8; TLS12_AAD_SIZE] {
     let mut out = [0; TLS12_AAD_SIZE];
-    codec::put_u64(seq, &mut out[0..]);
+    put_u64(seq, &mut out[0..]);
     out[8] = typ.into();
-    codec::put_u16(vers.into(), &mut out[9..]);
-    codec::put_u16(len as u16, &mut out[11..]);
+    put_u16(vers.into(), &mut out[9..]);
+    put_u16(len as u16, &mut out[11..]);
     out
 }
 
