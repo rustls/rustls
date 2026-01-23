@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 base64 = { workspace = true }
 env_logger = { workspace = true }
-nix = { version = "0.30", default-features = false, features = ["signal"] }
+nix = { version = "0.31", default-features = false, features = ["signal"] }
 rustls = { path = "../rustls" }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
 rustls-ring = { path = "../rustls-ring" }
