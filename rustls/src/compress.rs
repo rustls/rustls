@@ -127,8 +127,9 @@ pub struct CompressionFailed;
 
 #[cfg(feature = "zlib")]
 mod feat_zlib_rs {
-    use zlib_rs::c_api::Z_BEST_COMPRESSION;
-    use zlib_rs::{ReturnCode, deflate, inflate};
+    use zlib_rs::{
+        DeflateConfig, InflateConfig, ReturnCode, compress_bound, compress_slice, decompress_slice,
+    };
 
     use super::*;
 
@@ -141,7 +142,7 @@ mod feat_zlib_rs {
     impl CertDecompressor for ZlibRsDecompressor {
         fn decompress(&self, input: &[u8], output: &mut [u8]) -> Result<(), DecompressionFailed> {
             let output_len = output.len();
-            match inflate::uncompress_slice(output, input, inflate::InflateConfig::default()) {
+            match decompress_slice(output, input, InflateConfig::default()) {
                 (output_filled, ReturnCode::Ok) if output_filled.len() == output_len => Ok(()),
                 (_, _) => Err(DecompressionFailed),
             }
@@ -164,12 +165,12 @@ mod feat_zlib_rs {
             input: Vec<u8>,
             level: CompressionLevel,
         ) -> Result<Vec<u8>, CompressionFailed> {
-            let mut output = alloc::vec![0u8; deflate::compress_bound(input.len())];
+            let mut output = alloc::vec![0u8; compress_bound(input.len())];
             let config = match level {
-                CompressionLevel::Interactive => deflate::DeflateConfig::default(),
-                CompressionLevel::Amortized => deflate::DeflateConfig::new(Z_BEST_COMPRESSION),
+                CompressionLevel::Interactive => DeflateConfig::default(),
+                CompressionLevel::Amortized => DeflateConfig::best_compression(),
             };
-            let (output_filled, rc) = deflate::compress_slice(&mut output, &input, config);
+            let (output_filled, rc) = compress_slice(&mut output, &input, config);
             if rc != ReturnCode::Ok {
                 return Err(CompressionFailed);
             }
