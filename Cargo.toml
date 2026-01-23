@@ -96,7 +96,7 @@ webpki-roots = "1"
 x25519-dalek = "2"
 x509-parser = "0.17"
 zeroize = "1.8"
-zlib-rs = "0.5"
+zlib-rs = "0.6"
 
 [profile.bench]
 codegen-units = 1
