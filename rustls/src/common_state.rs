@@ -38,49 +38,17 @@ pub(crate) fn process_main_protocol<Data: SideData>(
     data: &mut Data,
 ) -> Result<Box<dyn State<Data>>, Error> {
     // Drop CCS messages during handshake in TLS1.3
-    if msg.typ == ContentType::ChangeCipherSpec
-        && !data.may_receive_application_data
-        && data.is_tls13()
-    {
-        if !msg.is_valid_ccs() {
-            // "An implementation which receives any other change_cipher_spec value or
-            //  which receives a protected change_cipher_spec record MUST abort the
-            //  handshake with an "unexpected_message" alert."
-            return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
-        }
-
-        data.temper_counters
-            .received_tls13_change_cipher_spec()?;
+    if msg.typ == ContentType::ChangeCipherSpec && data.drop_tls13_ccs(&msg)? {
         trace!("Dropping CCS");
         return Ok(state);
     }
 
-    // Now we can fully parse the message payload.
-    let msg = Message::try_from(&msg)?;
+    let msg = data.parse_and_maybe_drop(&msg)?;
 
-    // For alerts, we have separate logic.
-    if let MessagePayload::Alert(alert) = &msg.payload {
-        data.process_alert(alert)?;
+    let Some(msg) = msg else {
+        // Message is dropped.
         return Ok(state);
-    }
-
-    // For TLS1.2, outside of the handshake, send rejection alerts for
-    // renegotiation requests.  These can occur any time.
-    if data.may_receive_application_data && !data.is_tls13() {
-        let reject_ty = match data.side {
-            Side::Client => HandshakeType::HelloRequest,
-            Side::Server => HandshakeType::ClientHello,
-        };
-
-        if msg.handshake_type() == Some(reject_ty) {
-            data.temper_counters
-                .received_renegotiation_request()?;
-            let desc = AlertDescription::NoRenegotiation;
-            warn!("sending warning alert {desc:?}");
-            data.send_warning_alert_no_log(desc);
-            return Ok(state);
-        }
-    }
+    };
 
     let mut cx = Context {
         data,
@@ -650,6 +618,70 @@ impl CommonState {
                 .encode(),
         );
         true
+    }
+
+    fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
+        if self.may_receive_application_data
+            || !matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+        {
+            return Ok(false);
+        }
+
+        if !msg.is_valid_ccs() {
+            // "An implementation which receives any other change_cipher_spec value or
+            //  which receives a protected change_cipher_spec record MUST abort the
+            //  handshake with an "unexpected_message" alert."
+            return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
+        }
+
+        self.temper_counters
+            .received_tls13_change_cipher_spec()?;
+        Ok(true)
+    }
+
+    fn parse_and_maybe_drop<'a>(
+        &mut self,
+        msg: &'a EncodedMessage<&'a [u8]>,
+    ) -> Result<Option<Message<'a>>, Error> {
+        // Now we can fully parse the message payload.
+        let msg = Message::try_from(msg)?;
+
+        // For alerts, we have separate logic.
+        if let MessagePayload::Alert(alert) = &msg.payload {
+            self.process_alert(alert)?;
+            return Ok(None);
+        }
+
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotiation requests.  These can occur any time.
+        if self.reject_renegotiation_request(&msg)? {
+            return Ok(None);
+        }
+
+        Ok(Some(msg))
+    }
+
+    fn reject_renegotiation_request(&mut self, msg: &Message<'_>) -> Result<bool, Error> {
+        if !self.may_receive_application_data
+            || matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+        {
+            return Ok(false);
+        }
+
+        let reject_ty = match self.side {
+            Side::Client => HandshakeType::HelloRequest,
+            Side::Server => HandshakeType::ClientHello,
+        };
+
+        if msg.handshake_type() != Some(reject_ty) {
+            return Ok(false);
+        }
+        self.temper_counters
+            .received_renegotiation_request()?;
+        let desc = AlertDescription::NoRenegotiation;
+        warn!("sending warning alert {desc:?}");
+        self.send_warning_alert_no_log(desc);
+        Ok(true)
     }
 }
 
