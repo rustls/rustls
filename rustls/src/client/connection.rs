@@ -601,7 +601,7 @@ impl Output for ClientConnectionData {
             Event::EarlyData(EarlyDataEvent::Finished) => self.early_data.finished(),
             Event::EarlyData(EarlyDataEvent::Start) => self.early_data.start(),
             Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
-            _ => {}
+            _ => self.common.emit(ev),
         }
     }
 }

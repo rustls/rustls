@@ -685,6 +685,73 @@ impl CommonState {
     }
 }
 
+impl Output for CommonState {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::ApplicationProtocol(protocol) => {
+                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
+            }
+            Event::CipherSuite(suite) => self.suite = Some(suite),
+            Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
+            Event::EncryptMessage(m) => match self.protocol {
+                Protocol::Tcp => self.send_msg(m, true),
+                Protocol::Quic(_) => self.quic.send_msg(m, true),
+            },
+            Event::Exporter(exporter) => self.exporter = Some(exporter),
+            Event::HandshakeKind(hk) => {
+                assert!(self.handshake_kind.is_none());
+                self.handshake_kind = Some(hk);
+            }
+            Event::KeyExchangeGroup(kxg) => {
+                assert!(self.negotiated_kx_group.is_none());
+                self.negotiated_kx_group = Some(kxg);
+            }
+            Event::MaybeKeyUpdateRequest(ks) => {
+                if self.ensure_key_update_queued() {
+                    ks.update_encrypter_for_key_update(self);
+                }
+            }
+            Event::MessageDecrypter { decrypter, proof } => self
+                .decrypt_state
+                .set_message_decrypter(decrypter, &proof),
+            Event::MessageDecrypterWithTrialDecryption {
+                decrypter,
+                max_length,
+                proof,
+            } => self
+                .decrypt_state
+                .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
+            Event::MessageEncrypter { encrypter, limit } => self
+                .encrypt_state
+                .set_message_encrypter(encrypter, limit),
+            Event::QuicEarlySecret(sec) => self.quic.early_secret = sec,
+            Event::QuicHandshakeSecrets(sec) => self.quic.hs_secrets = Some(sec),
+            Event::QuicTrafficSecrets(sec) => self.quic.traffic_secrets = Some(sec),
+            Event::QuicTransportParameters(params) => self.quic.params = Some(params),
+            Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
+            Event::PlainMessage(m) => match self.protocol {
+                Protocol::Tcp => self.send_msg(m, false),
+                Protocol::Quic(_) => self.quic.send_msg(m, false),
+            },
+            Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
+            Event::ReceivedTicket => {
+                self.tls13_tickets_received = self
+                    .tls13_tickets_received
+                    .saturating_add(1)
+            }
+            Event::StartOutgoingTraffic => self.start_outgoing_traffic(),
+            Event::StartTraffic => self.start_traffic(),
+
+            Event::ApplicationData(_)
+            | Event::EarlyApplicationData(_)
+            | Event::EarlyData(_)
+            | Event::EchStatus(_)
+            | Event::ReceivedServerName(_)
+            | Event::ResumptionData(_) => unreachable!(),
+        }
+    }
+}
+
 impl fmt::Debug for CommonState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CommonState")
@@ -819,68 +886,7 @@ impl<Data: SideData> Output for Context<'_, Data> {
                     .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
                 debug_assert!(previous.is_none(), "overwrote plaintext data");
             }
-            Event::ApplicationProtocol(protocol) => {
-                self.data.alpn_protocol =
-                    Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
-            }
-            Event::CipherSuite(suite) => self.data.suite = Some(suite),
-            Event::EarlyData(_) | Event::EarlyApplicationData(_) => self.data.emit(ev),
-            Event::EarlyExporter(exporter) => self.data.early_exporter = Some(exporter),
-            Event::EchStatus(_) => self.data.emit(ev),
-            Event::EncryptMessage(m) => match self.data.protocol {
-                Protocol::Tcp => self.data.send_msg(m, true),
-                Protocol::Quic(_) => self.data.quic.send_msg(m, true),
-            },
-            Event::Exporter(exporter) => self.data.exporter = Some(exporter),
-            Event::HandshakeKind(hk) => {
-                assert!(self.data.handshake_kind.is_none());
-                self.data.handshake_kind = Some(hk);
-            }
-            Event::KeyExchangeGroup(kxg) => {
-                assert!(self.data.negotiated_kx_group.is_none());
-                self.data.negotiated_kx_group = Some(kxg);
-            }
-            Event::MaybeKeyUpdateRequest(ks) => {
-                if self.data.ensure_key_update_queued() {
-                    ks.update_encrypter_for_key_update(self);
-                }
-            }
-            Event::MessageDecrypter { decrypter, proof } => self
-                .data
-                .decrypt_state
-                .set_message_decrypter(decrypter, &proof),
-            Event::MessageDecrypterWithTrialDecryption {
-                decrypter,
-                max_length,
-                proof,
-            } => self
-                .data
-                .decrypt_state
-                .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
-            Event::MessageEncrypter { encrypter, limit } => self
-                .data
-                .encrypt_state
-                .set_message_encrypter(encrypter, limit),
-            Event::QuicEarlySecret(sec) => self.data.quic.early_secret = sec,
-            Event::QuicHandshakeSecrets(sec) => self.data.quic.hs_secrets = Some(sec),
-            Event::QuicTrafficSecrets(sec) => self.data.quic.traffic_secrets = Some(sec),
-            Event::QuicTransportParameters(params) => self.data.quic.params = Some(params),
-            Event::PeerIdentity(identity) => self.data.peer_identity = Some(identity),
-            Event::PlainMessage(m) => match self.data.protocol {
-                Protocol::Tcp => self.data.send_msg(m, false),
-                Protocol::Quic(_) => self.data.quic.send_msg(m, false),
-            },
-            Event::ProtocolVersion(ver) => self.data.negotiated_version = Some(ver),
-            Event::ReceivedServerName(_) => self.data.emit(ev),
-            Event::ReceivedTicket => {
-                self.data.tls13_tickets_received = self
-                    .data
-                    .tls13_tickets_received
-                    .saturating_add(1)
-            }
-            Event::ResumptionData(_) => self.data.emit(ev),
-            Event::StartOutgoingTraffic => self.data.start_outgoing_traffic(),
-            Event::StartTraffic => self.data.start_traffic(),
+            _ => self.data.emit(ev),
         }
     }
 }
