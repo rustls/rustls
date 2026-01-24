@@ -732,7 +732,7 @@ impl Output for ServerConnectionData {
             Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
             Event::ReceivedServerName(sni) => self.sni = sni,
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
-            _ => {}
+            _ => self.common.emit(ev),
         }
     }
 }
