@@ -38,7 +38,7 @@ pub(crate) fn process_main_protocol<Data: SideData>(
     data: &mut Data,
 ) -> Result<Box<dyn State<Data>>, Error> {
     // Drop CCS messages during handshake in TLS1.3
-    if msg.typ == ContentType::ChangeCipherSpec && data.drop_tls13_ccs(&msg)? {
+    if msg.typ == ContentType::ChangeCipherSpec && data.recv.drop_tls13_ccs(&msg)? {
         trace!("Dropping CCS");
         return Ok(state);
     }
@@ -69,19 +69,11 @@ pub(crate) fn process_main_protocol<Data: SideData>(
 pub struct CommonState {
     pub(crate) outputs: ConnectionOutputs,
     pub(crate) send: SendPath,
-    side: Side,
-    pub(crate) decrypt_state: DecryptionState,
-    may_receive_application_data: bool,
-    /// If the peer has signaled end of stream.
-    pub(crate) has_received_close_notify: bool,
-    #[cfg(feature = "std")]
-    pub(crate) has_seen_eof: bool,
-    pub(crate) received_plaintext: ChunkVecBuffer,
+    pub(crate) recv: ReceivePath,
+    pub(crate) quic: quic::Quic,
 
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
-    pub(crate) protocol: Protocol,
-    pub(crate) quic: quic::Quic,
-    temper_counters: TemperCounters,
+    protocol: Protocol,
 }
 
 impl CommonState {
@@ -89,16 +81,9 @@ impl CommonState {
         Self {
             outputs: ConnectionOutputs::default(),
             send: SendPath::default(),
-            side,
-            decrypt_state: DecryptionState::new(),
-            may_receive_application_data: false,
-            has_received_close_notify: false,
-            #[cfg(feature = "std")]
-            has_seen_eof: false,
-            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
-            protocol,
+            recv: ReceivePath::new(side),
             quic: quic::Quic::default(),
-            temper_counters: TemperCounters::default(),
+            protocol,
         }
     }
 
@@ -128,51 +113,7 @@ impl CommonState {
     ///
     /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
     pub fn is_handshaking(&self) -> bool {
-        !(self.send.may_send_application_data && self.may_receive_application_data)
-    }
-
-    fn is_tls13(&self) -> bool {
-        matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
-    }
-
-    fn start_traffic(&mut self) {
-        self.may_receive_application_data = true;
-        self.send.start_outgoing_traffic();
-    }
-
-    pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
-        // Reject unknown AlertLevels.
-        if let AlertLevel::Unknown(level) = alert.level {
-            return Err(PeerMisbehaved::IllegalAlertLevel(level, alert.description).into());
-        }
-
-        // If we get a CloseNotify, make a note to declare EOF to our
-        // caller.  But do not treat unauthenticated alerts like this.
-        if self.may_receive_application_data && alert.description == AlertDescription::CloseNotify {
-            self.has_received_close_notify = true;
-            return Ok(());
-        }
-
-        // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
-        // (except, for no good reason, user_cancelled).
-        let err = Error::AlertReceived(alert.description);
-        if alert.level == AlertLevel::Warning {
-            self.temper_counters
-                .received_warning_alert()?;
-            if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
-                return Err(PeerMisbehaved::IllegalWarningAlert(alert.description).into());
-            }
-
-            // Some implementations send pointless `user_canceled` alerts, don't log them
-            // in release mode (https://bugs.openjdk.org/browse/JDK-8323517).
-            if alert.description != AlertDescription::UserCanceled || cfg!(debug_assertions) {
-                warn!("TLS alert warning received: {alert:?}");
-            }
-
-            return Ok(());
-        }
-
-        Err(err)
+        !(self.send.may_send_application_data && self.recv.may_receive_application_data)
     }
 
     /// Returns true if the caller should call [`Connection::read_tls`] as soon
@@ -191,36 +132,17 @@ impl CommonState {
         //
         // In the handshake case we don't have readable plaintext before the handshake has
         // completed, but also don't want to read if we still have sendable tls.
-        self.received_plaintext.is_empty()
-            && !self.has_received_close_notify
+        self.recv.received_plaintext.is_empty()
+            && !self.recv.has_received_close_notify
             && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
     }
 
     pub(crate) fn current_io_state(&self) -> IoState {
         IoState {
             tls_bytes_to_write: self.send.sendable_tls.len(),
-            plaintext_bytes_to_read: self.received_plaintext.len(),
-            peer_has_closed: self.has_received_close_notify,
+            plaintext_bytes_to_read: self.recv.received_plaintext.len(),
+            peer_has_closed: self.recv.has_received_close_notify,
         }
-    }
-
-    fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
-        if self.may_receive_application_data
-            || !matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
-        {
-            return Ok(false);
-        }
-
-        if !msg.is_valid_ccs() {
-            // "An implementation which receives any other change_cipher_spec value or
-            //  which receives a protected change_cipher_spec record MUST abort the
-            //  handshake with an "unexpected_message" alert."
-            return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
-        }
-
-        self.temper_counters
-            .received_tls13_change_cipher_spec()?;
-        Ok(true)
     }
 
     fn parse_and_maybe_drop<'a>(
@@ -232,41 +154,20 @@ impl CommonState {
 
         // For alerts, we have separate logic.
         if let MessagePayload::Alert(alert) = &msg.payload {
-            self.process_alert(alert)?;
+            self.recv.process_alert(alert)?;
             return Ok(None);
         }
 
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if self.reject_renegotiation_request(&msg)? {
+        if self
+            .recv
+            .reject_renegotiation_request(&mut self.send, &msg)?
+        {
             return Ok(None);
         }
 
         Ok(Some(msg))
-    }
-
-    fn reject_renegotiation_request(&mut self, msg: &Message<'_>) -> Result<bool, Error> {
-        if !self.may_receive_application_data
-            || matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
-        {
-            return Ok(false);
-        }
-
-        let reject_ty = match self.side {
-            Side::Client => HandshakeType::HelloRequest,
-            Side::Server => HandshakeType::ClientHello,
-        };
-
-        if msg.handshake_type() != Some(reject_ty) {
-            return Ok(false);
-        }
-        self.temper_counters
-            .received_renegotiation_request()?;
-        let desc = AlertDescription::NoRenegotiation;
-        warn!("sending warning alert {desc:?}");
-        self.send
-            .send_warning_alert_no_log(desc);
-        Ok(true)
     }
 }
 
@@ -297,6 +198,7 @@ impl Output for CommonState {
                 }
             }
             Event::MessageDecrypter { decrypter, proof } => self
+                .recv
                 .decrypt_state
                 .set_message_decrypter(decrypter, &proof),
             Event::MessageDecrypterWithTrialDecryption {
@@ -304,6 +206,7 @@ impl Output for CommonState {
                 max_length,
                 proof,
             } => self
+                .recv
                 .decrypt_state
                 .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
             Event::MessageEncrypter { encrypter, limit } => self
@@ -322,6 +225,7 @@ impl Output for CommonState {
             Event::ProtocolVersion(ver) => {
                 self.outputs.negotiated_version = Some(ver);
                 self.send.negotiated_version = Some(ver);
+                self.recv.negotiated_version = Some(ver);
             }
             Event::ReceivedTicket => {
                 self.tls13_tickets_received = self
@@ -329,7 +233,10 @@ impl Output for CommonState {
                     .saturating_add(1)
             }
             Event::StartOutgoingTraffic => self.send.start_outgoing_traffic(),
-            Event::StartTraffic => self.start_traffic(),
+            Event::StartTraffic => {
+                self.send.start_outgoing_traffic();
+                self.recv.may_receive_application_data = true;
+            }
 
             Event::ApplicationData(_)
             | Event::EarlyApplicationData(_)
@@ -827,6 +734,118 @@ impl Default for SendPath {
             refresh_traffic_keys_pending: false,
             negotiated_version: None,
         }
+    }
+}
+
+pub(crate) struct ReceivePath {
+    side: Side,
+    pub(crate) decrypt_state: DecryptionState,
+    may_receive_application_data: bool,
+    /// If the peer has signaled end of stream.
+    pub(crate) has_received_close_notify: bool,
+    #[cfg(feature = "std")]
+    pub(crate) has_seen_eof: bool,
+    pub(crate) received_plaintext: ChunkVecBuffer,
+    temper_counters: TemperCounters,
+    negotiated_version: Option<ProtocolVersion>,
+}
+
+impl ReceivePath {
+    fn new(side: Side) -> Self {
+        Self {
+            side,
+            decrypt_state: DecryptionState::new(),
+            may_receive_application_data: false,
+            has_received_close_notify: false,
+            #[cfg(feature = "std")]
+            has_seen_eof: false,
+            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
+            temper_counters: TemperCounters::default(),
+            negotiated_version: None,
+        }
+    }
+
+    fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
+        if self.may_receive_application_data
+            || !matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+        {
+            return Ok(false);
+        }
+
+        if !msg.is_valid_ccs() {
+            // "An implementation which receives any other change_cipher_spec value or
+            //  which receives a protected change_cipher_spec record MUST abort the
+            //  handshake with an "unexpected_message" alert."
+            return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
+        }
+
+        self.temper_counters
+            .received_tls13_change_cipher_spec()?;
+        Ok(true)
+    }
+
+    fn reject_renegotiation_request(
+        &mut self,
+        send: &mut SendPath,
+        msg: &Message<'_>,
+    ) -> Result<bool, Error> {
+        if !self.may_receive_application_data
+            || matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+        {
+            return Ok(false);
+        }
+
+        let reject_ty = match self.side {
+            Side::Client => HandshakeType::HelloRequest,
+            Side::Server => HandshakeType::ClientHello,
+        };
+
+        if msg.handshake_type() != Some(reject_ty) {
+            return Ok(false);
+        }
+        self.temper_counters
+            .received_renegotiation_request()?;
+        let desc = AlertDescription::NoRenegotiation;
+        warn!("sending warning alert {desc:?}");
+        send.send_warning_alert_no_log(desc);
+        Ok(true)
+    }
+
+    pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
+        // Reject unknown AlertLevels.
+        if let AlertLevel::Unknown(level) = alert.level {
+            return Err(PeerMisbehaved::IllegalAlertLevel(level, alert.description).into());
+        }
+
+        // If we get a CloseNotify, make a note to declare EOF to our
+        // caller.  But do not treat unauthenticated alerts like this.
+        if self.may_receive_application_data && alert.description == AlertDescription::CloseNotify {
+            self.has_received_close_notify = true;
+            return Ok(());
+        }
+
+        // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
+        // (except, for no good reason, user_cancelled).
+        let err = Error::AlertReceived(alert.description);
+        if alert.level == AlertLevel::Warning {
+            self.temper_counters
+                .received_warning_alert()?;
+            if matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+                && alert.description != AlertDescription::UserCanceled
+            {
+                return Err(PeerMisbehaved::IllegalWarningAlert(alert.description).into());
+            }
+
+            // Some implementations send pointless `user_canceled` alerts, don't log them
+            // in release mode (https://bugs.openjdk.org/browse/JDK-8323517).
+            if alert.description != AlertDescription::UserCanceled || cfg!(debug_assertions) {
+                warn!("TLS alert warning received: {alert:?}");
+            }
+
+            return Ok(());
+        }
+
+        Err(err)
     }
 }
 

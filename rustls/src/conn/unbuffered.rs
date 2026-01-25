@@ -67,7 +67,12 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                 );
             }
 
-            let deframer_output = if self.core.side.has_received_close_notify {
+            let deframer_output = if self
+                .core
+                .side
+                .recv
+                .has_received_close_notify
+            {
                 None
             } else {
                 match self
@@ -140,10 +145,20 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     buffer.pending_discard(),
                     TransmitTlsData { conn: self }.into(),
                 );
-            } else if self.core.side.has_received_close_notify && !self.emitted_peer_closed_state {
+            } else if self
+                .core
+                .side
+                .recv
+                .has_received_close_notify
+                && !self.emitted_peer_closed_state
+            {
                 self.emitted_peer_closed_state = true;
                 break (buffer.pending_discard(), ConnectionState::PeerClosed);
-            } else if self.core.side.has_received_close_notify
+            } else if self
+                .core
+                .side
+                .recv
+                .has_received_close_notify
                 && self
                     .core
                     .side
