@@ -66,7 +66,7 @@ mod connection {
         ///
         /// See [`ConnectionCommon::write_tls()`] for more information.
         pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-            self.sendable_tls.write_to(wr)
+            self.send.sendable_tls.write_to(wr)
         }
 
         /// Returns an object that allows reading plaintext.
@@ -330,6 +330,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             let len = self
                 .core
                 .side
+                .send
                 .buffer_plaintext(buf.into(), &mut self.sendable_plaintext);
             self.core.maybe_refresh_traffic_keys();
             Ok(len)
@@ -352,6 +353,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             let len = self
                 .core
                 .side
+                .send
                 .buffer_plaintext(payload, &mut self.sendable_plaintext);
             self.core.maybe_refresh_traffic_keys();
             Ok(len)
@@ -555,7 +557,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
     pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
         self.sendable_plaintext.set_limit(limit);
-        self.sendable_tls.set_limit(limit);
+        self.send.sendable_tls.set_limit(limit);
     }
 
     /// Sets a limit on the internal buffers used to buffer decoded plaintext.
@@ -830,7 +832,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// After this function returns, the connection buffer may not yet be fully flushed. The
     /// [`CommonState::wants_write`] function can be used to check if the output buffer is empty.
     pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.sendable_tls.write_to(wr)
+        self.send.sendable_tls.write_to(wr)
     }
 }
 
@@ -941,7 +943,9 @@ impl<Side: SideData> ConnectionCore<Side> {
             let opt_msg = match res {
                 Ok(opt_msg) => opt_msg,
                 Err(e) => {
-                    self.side.maybe_send_fatal_alert(&e);
+                    self.side
+                        .send
+                        .maybe_send_fatal_alert(&e);
                     if let Error::DecryptError = e {
                         state.handle_decrypt_error();
                     }
@@ -965,15 +969,18 @@ impl<Side: SideData> ConnectionCore<Side> {
             ) {
                 Ok(new) => state = new,
                 Err(e) => {
-                    self.side.maybe_send_fatal_alert(&e);
+                    self.side
+                        .send
+                        .maybe_send_fatal_alert(&e);
                     self.state = Err(e.clone());
                     deframer_buffer.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
             }
 
-            if self.side.may_send_application_data && !sendable_plaintext.is_empty() {
+            if self.side.send.may_send_application_data && !sendable_plaintext.is_empty() {
                 self.side
+                    .send
                     .send_buffered_plaintext(sendable_plaintext);
             }
 
@@ -1175,14 +1182,14 @@ impl<Side: SideData> ConnectionCore<Side> {
             return Err(Error::HandshakeNotComplete);
         }
 
-        if !common.sendable_tls.is_empty() {
+        if !common.send.sendable_tls.is_empty() {
             return Err(ApiMisuse::SecretExtractionWithPendingSendableData.into());
         }
 
         let state = self.state?;
 
         let read_seq = common.decrypt_state.read_seq();
-        let write_seq = common.encrypt_state.write_seq();
+        let write_seq = common.send.encrypt_state.write_seq();
 
         let (secrets, state) = state.into_external_state()?;
         let secrets = ExtractedSecrets {
@@ -1212,7 +1219,12 @@ impl<Side: SideData> ConnectionCore<Side> {
 
     /// Trigger a `refresh_traffic_keys` if required by `CommonState`.
     fn maybe_refresh_traffic_keys(&mut self) {
-        if mem::take(&mut self.side.refresh_traffic_keys_pending) {
+        if mem::take(
+            &mut self
+                .side
+                .send
+                .refresh_traffic_keys_pending,
+        ) {
             let _ = self.refresh_traffic_keys();
         }
     }
