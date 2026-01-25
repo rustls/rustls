@@ -322,8 +322,10 @@ mod buffered {
     impl AcceptedAlert {
         pub(super) fn from_error(error: Error, side: ServerConnectionData) -> (Error, Self) {
             let mut common = side.into_common();
-            common.maybe_send_fatal_alert(&error);
-            (error, Self(common.sendable_tls))
+            common
+                .send
+                .maybe_send_fatal_alert(&error);
+            (error, Self(common.send.sendable_tls))
         }
 
         pub(super) fn empty() -> Self {
@@ -526,6 +528,7 @@ impl Accepted {
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
         if let Err(err) = self
             .connection
+            .send
             .set_max_fragment_size(config.max_fragment_size)
         {
             // We have a connection here, but it won't contain an alert since the error
@@ -666,7 +669,9 @@ impl ConnectionCore<ServerConnectionData> {
         protocol: Protocol,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server, protocol);
-        common.set_max_fragment_size(config.max_fragment_size)?;
+        common
+            .send
+            .set_max_fragment_size(config.max_fragment_size)?;
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
