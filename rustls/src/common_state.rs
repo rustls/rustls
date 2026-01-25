@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::Range;
+use core::ops::{Deref, DerefMut, Range};
 
 use pki_types::{DnsName, FipsStatus};
 
@@ -67,16 +67,10 @@ pub(crate) fn process_main_protocol<Data: SideData>(
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
-    pub(crate) negotiated_version: Option<ProtocolVersion>,
-    handshake_kind: Option<HandshakeKind>,
+    pub(crate) outputs: ConnectionOutputs,
     side: Side,
     pub(crate) decrypt_state: DecryptionState,
     pub(crate) encrypt_state: EncryptionState,
-    suite: Option<SupportedCipherSuite>,
-    negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
-    pub(crate) alpn_protocol: Option<ApplicationProtocol<'static>>,
-    pub(crate) exporter: Option<Box<dyn Exporter>>,
-    pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) may_send_application_data: bool,
     may_receive_application_data: bool,
     has_sent_fatal_alert: bool,
@@ -86,7 +80,6 @@ pub struct CommonState {
     pub(crate) has_received_close_notify: bool,
     #[cfg(feature = "std")]
     pub(crate) has_seen_eof: bool,
-    pub(crate) peer_identity: Option<Identity<'static>>,
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
@@ -97,23 +90,15 @@ pub struct CommonState {
     pub(crate) quic: quic::Quic,
     temper_counters: TemperCounters,
     pub(crate) refresh_traffic_keys_pending: bool,
-    pub(crate) fips: FipsStatus,
-    pub(crate) tls13_tickets_received: u32,
 }
 
 impl CommonState {
     pub(crate) fn new(side: Side, protocol: Protocol) -> Self {
         Self {
-            negotiated_version: None,
-            handshake_kind: None,
+            outputs: ConnectionOutputs::default(),
             side,
             decrypt_state: DecryptionState::new(),
             encrypt_state: EncryptionState::new(),
-            suite: None,
-            negotiated_kx_group: None,
-            alpn_protocol: None,
-            exporter: None,
-            early_exporter: None,
             may_send_application_data: false,
             may_receive_application_data: false,
             has_sent_fatal_alert: false,
@@ -121,7 +106,6 @@ impl CommonState {
             has_received_close_notify: false,
             #[cfg(feature = "std")]
             has_seen_eof: false,
-            peer_identity: None,
             message_fragmenter: MessageFragmenter::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
@@ -130,8 +114,6 @@ impl CommonState {
             quic: quic::Quic::default(),
             temper_counters: TemperCounters::default(),
             refresh_traffic_keys_pending: false,
-            fips: FipsStatus::Unvalidated,
-            tls13_tickets_received: 0,
         }
     }
 
@@ -153,79 +135,8 @@ impl CommonState {
         !(self.may_send_application_data && self.may_receive_application_data)
     }
 
-    /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
-    ///
-    /// This is made available for both full and resumed handshakes.
-    ///
-    /// For clients, this is the identity of the server. For servers, this is the identity of the
-    /// client, if client authentication was completed.
-    ///
-    /// The return value is None until this value is available.
-    pub fn peer_identity(&self) -> Option<&Identity<'static>> {
-        self.peer_identity.as_ref()
-    }
-
-    /// Retrieves the protocol agreed with the peer via ALPN.
-    ///
-    /// A return value of `None` after handshake completion
-    /// means no protocol was agreed (because no protocols
-    /// were offered or accepted by the peer).
-    pub fn alpn_protocol(&self) -> Option<&ApplicationProtocol<'static>> {
-        self.alpn_protocol.as_ref()
-    }
-
-    /// Retrieves the cipher suite agreed with the peer.
-    ///
-    /// This returns None until the cipher suite is agreed.
-    pub fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
-        self.suite
-    }
-
-    /// Retrieves the key exchange group agreed with the peer.
-    ///
-    /// This function may return `None` depending on the state of the connection,
-    /// the type of handshake, and the protocol version.
-    ///
-    /// If [`CommonState::is_handshaking()`] is true this function will return `None`.
-    /// Similarly, if the [`CommonState::handshake_kind()`] is [`HandshakeKind::Resumed`]
-    /// and the [`CommonState::protocol_version()`] is TLS 1.2, then no key exchange will have
-    /// occurred and this function will return `None`.
-    pub fn negotiated_key_exchange_group(&self) -> Option<&'static dyn SupportedKxGroup> {
-        self.negotiated_kx_group
-    }
-
-    /// Retrieves the protocol version agreed with the peer.
-    ///
-    /// This returns `None` until the version is agreed.
-    pub fn protocol_version(&self) -> Option<ProtocolVersion> {
-        self.negotiated_version
-    }
-
-    /// Which kind of handshake was performed.
-    ///
-    /// This tells you whether the handshake was a resumption or not.
-    ///
-    /// This will return `None` before it is known which sort of
-    /// handshake occurred.
-    pub fn handshake_kind(&self) -> Option<HandshakeKind> {
-        self.handshake_kind
-    }
-
     fn is_tls13(&self) -> bool {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
-    }
-
-    pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
-        let Self {
-            negotiated_version,
-            suite,
-            ..
-        } = self;
-
-        match (negotiated_version, suite) {
-            (Some(version), Some(suite)) => Some((version, suite)),
-            _ => None,
-        }
     }
 
     pub(crate) fn maybe_send_fatal_alert(&mut self, error: &Error) {
@@ -752,10 +663,128 @@ impl Output for CommonState {
     }
 }
 
+impl Deref for CommonState {
+    type Target = ConnectionOutputs;
+
+    fn deref(&self) -> &Self::Target {
+        &self.outputs
+    }
+}
+
+impl DerefMut for CommonState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.outputs
+    }
+}
+
 impl fmt::Debug for CommonState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CommonState")
             .finish_non_exhaustive()
+    }
+}
+
+/// Facts about the connection learned through the handshake.
+pub struct ConnectionOutputs {
+    pub(crate) negotiated_version: Option<ProtocolVersion>,
+    handshake_kind: Option<HandshakeKind>,
+    suite: Option<SupportedCipherSuite>,
+    negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
+    pub(crate) alpn_protocol: Option<ApplicationProtocol<'static>>,
+    pub(crate) peer_identity: Option<Identity<'static>>,
+    pub(crate) exporter: Option<Box<dyn Exporter>>,
+    pub(crate) early_exporter: Option<Box<dyn Exporter>>,
+    pub(crate) fips: FipsStatus,
+    pub(crate) tls13_tickets_received: u32,
+}
+
+impl ConnectionOutputs {
+    /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
+    ///
+    /// This is made available for both full and resumed handshakes.
+    ///
+    /// For clients, this is the identity of the server. For servers, this is the identity of the
+    /// client, if client authentication was completed.
+    ///
+    /// The return value is None until this value is available.
+    pub fn peer_identity(&self) -> Option<&Identity<'static>> {
+        self.peer_identity.as_ref()
+    }
+
+    /// Retrieves the protocol agreed with the peer via ALPN.
+    ///
+    /// A return value of `None` after handshake completion
+    /// means no protocol was agreed (because no protocols
+    /// were offered or accepted by the peer).
+    pub fn alpn_protocol(&self) -> Option<&ApplicationProtocol<'static>> {
+        self.alpn_protocol.as_ref()
+    }
+
+    /// Retrieves the cipher suite agreed with the peer.
+    ///
+    /// This returns None until the cipher suite is agreed.
+    pub fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
+        self.suite
+    }
+
+    /// Retrieves the key exchange group agreed with the peer.
+    ///
+    /// This function may return `None` depending on the state of the connection,
+    /// the type of handshake, and the protocol version.
+    ///
+    /// If [`CommonState::is_handshaking()`] is true this function will return `None`.
+    /// Similarly, if the [`ConnectionOutputs::handshake_kind()`] is [`HandshakeKind::Resumed`]
+    /// and the [`ConnectionOutputs::protocol_version()`] is TLS 1.2, then no key exchange will have
+    /// occurred and this function will return `None`.
+    pub fn negotiated_key_exchange_group(&self) -> Option<&'static dyn SupportedKxGroup> {
+        self.negotiated_kx_group
+    }
+
+    /// Retrieves the protocol version agreed with the peer.
+    ///
+    /// This returns `None` until the version is agreed.
+    pub fn protocol_version(&self) -> Option<ProtocolVersion> {
+        self.negotiated_version
+    }
+
+    /// Which kind of handshake was performed.
+    ///
+    /// This tells you whether the handshake was a resumption or not.
+    ///
+    /// This will return `None` before it is known which sort of
+    /// handshake occurred.
+    pub fn handshake_kind(&self) -> Option<HandshakeKind> {
+        self.handshake_kind
+    }
+
+    pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
+        let Self {
+            negotiated_version,
+            suite,
+            ..
+        } = self;
+
+        match (negotiated_version, suite) {
+            (Some(version), Some(suite)) => Some((version, suite)),
+            _ => None,
+        }
+    }
+}
+
+impl Default for ConnectionOutputs {
+    fn default() -> Self {
+        Self {
+            negotiated_version: None,
+            handshake_kind: None,
+            suite: None,
+            negotiated_kx_group: None,
+            alpn_protocol: None,
+            peer_identity: None,
+            exporter: None,
+            early_exporter: None,
+            fips: FipsStatus::Unvalidated,
+            tls13_tickets_received: 0,
+        }
     }
 }
 
