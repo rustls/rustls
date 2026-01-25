@@ -50,7 +50,7 @@ pub(crate) fn process_main_protocol<Data: SideData>(
         return Ok(state);
     };
 
-    let mut cx = Context {
+    let mut cx = CaptureAppData {
         data,
         plaintext_locator,
         received_plaintext,
@@ -855,23 +855,23 @@ pub(crate) trait State<Side: SideData>: Send + Sync {
     }
 }
 
-pub(crate) struct Context<'a, Data: SideData> {
-    pub(crate) data: &'a mut Data,
+struct CaptureAppData<'a> {
+    data: &'a mut dyn Output,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
     /// `received_plaintext` for in-place decryption.
-    pub(crate) plaintext_locator: &'a Locator,
+    plaintext_locator: &'a Locator,
     /// Unborrowed received plaintext data
     ///
     /// Set if plaintext data was received.
     ///
     /// Plaintext data may be reborrowed using a [`Delocator`] which was
     /// initialized from the same slice as `plaintext_locator`.
-    pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
+    received_plaintext: &'a mut Option<UnborrowedPayload>,
 }
 
-impl<Data: SideData> Output for Context<'_, Data> {
+impl Output for CaptureAppData<'_> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::ApplicationData(payload) => {

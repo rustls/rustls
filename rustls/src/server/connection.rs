@@ -34,7 +34,7 @@ use crate::log::trace;
 use crate::msgs::ServerExtensionsInput;
 #[cfg(feature = "std")]
 use crate::msgs::{
-    ClientHelloPayload, HandshakePayload, Locator, Message, MessagePayload, ServerNamePayload,
+    ClientHelloPayload, HandshakePayload, Message, MessagePayload, ServerNamePayload,
 };
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -533,8 +533,6 @@ impl Accepted {
         mut self,
         config: Arc<ServerConfig>,
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
-        use crate::common_state::Context;
-
         if let Err(err) = self
             .connection
             .set_max_fragment_size(config.max_fragment_size)
@@ -552,12 +550,6 @@ impl Accepted {
                 return Err(AcceptedAlert::from_error(err, self.connection.core.side));
             }
         };
-        let mut cx = Context {
-            data: &mut self.connection.core.side,
-            // `ExpectClientHello::with_input` won't read borrowed plaintext
-            plaintext_locator: &Locator::new(&[]),
-            received_plaintext: &mut None,
-        };
 
         let input = ClientHelloInput {
             message: &self.input.message,
@@ -566,11 +558,10 @@ impl Accepted {
             proof,
         };
 
-        let new = match state.with_input(input, &mut cx) {
+        let new = match state.with_input(input, &mut self.connection.core.side) {
             Ok(new) => new,
             Err(err) => return Err(AcceptedAlert::from_error(err, self.connection.core.side)),
         };
-        debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
         self.connection.replace_state(new);
         Ok(ServerConnection {
