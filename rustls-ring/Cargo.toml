@@ -19,7 +19,6 @@ pki-types = { workspace = true }
 rustls = { path = "../rustls", default-features = false }
 ring = { workspace = true }
 subtle = { workspace = true }
-webpki = { workspace = true, features = ["ring"] }
 
 [dev-dependencies]
 bencher = { workspace = true }

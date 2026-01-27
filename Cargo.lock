@@ -2517,7 +2517,6 @@ dependencies = [
  "rustls 0.24.0-dev.0",
  "rustls-pki-types",
  "rustls-test",
- "rustls-webpki 0.104.0-alpha.2",
  "serde",
  "serde_json",
  "subtle",
@@ -2684,7 +2683,6 @@ dependencies = [
  "rustls 0.24.0-dev.0",
  "rustls-pki-types",
  "rustls-test",
- "rustls-webpki 0.104.0-alpha.2",
  "subtle",
 ]
 

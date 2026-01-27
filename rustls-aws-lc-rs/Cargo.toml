@@ -11,16 +11,17 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [features]
-default = ["aws-lc-rs/aws-lc-sys", "std"]
-fips = ["aws-lc-rs/fips", "webpki/aws-lc-rs-fips"]
+default = ["aws-lc-sys", "std"]
+aws-lc-sys = ["aws-lc-rs/aws-lc-sys"]
+fips = ["aws-lc-rs/fips"]
 std = ["rustls/std"]
+unstable = ["aws-lc-rs/unstable"]
 
 [dependencies]
 aws-lc-rs = { workspace = true, features = ["prebuilt-nasm"] }
 pki-types = { workspace = true }
 rustls = { path = "../rustls", default-features = false }
 subtle = { workspace = true }
-webpki = { workspace = true, features = ["aws-lc-rs"] }
 zeroize = { workspace = true }
 
 [dev-dependencies]

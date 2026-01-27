@@ -92,7 +92,7 @@ jobs:
         run: |
           cargo build --locked --lib -p rustls $(admin/all-features-except std,brotli rustls)
           cargo build --locked --lib -p rustls-ring --no-default-features
-          cargo build --locked --lib -p rustls-aws-lc-rs --no-default-features
+          cargo build --locked --lib -p rustls-aws-lc-rs --no-default-features --features aws-lc-sys
 
       - name: cargo build (debug; rustls-provider-example)
         run: cargo build --locked -p rustls-provider-example
@@ -173,13 +173,13 @@ jobs:
         run: |
           cargo test --locked -p rustls --no-default-features
           cargo test --locked -p rustls-ring --no-default-features
-          cargo test --locked -p rustls-aws-lc-rs --no-default-features
+          cargo test --locked -p rustls-aws-lc-rs --no-default-features --features aws-lc-sys
 
       - name: cargo test (debug; no default features; std)
         run: |
           cargo test --locked -p rustls --no-default-features --features std
           cargo test --locked -p rustls-ring --no-default-features --features std
-          cargo test --locked -p rustls-aws-lc-rs --no-default-features --features std
+          cargo test --locked -p rustls-aws-lc-rs --no-default-features --features std --features aws-lc-sys
 
       - name: cargo test (debug; no default features; std+fips)
         run: cargo test --locked --no-default-features --features std
