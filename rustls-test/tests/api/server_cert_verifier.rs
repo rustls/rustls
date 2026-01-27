@@ -568,7 +568,7 @@ fn client_check_server_certificate_helper_api() {
                 &correct_roots,
                 &identity.intermediates,
                 UnixTime::now(),
-                webpki::ALL_VERIFICATION_ALGS,
+                provider::ALL_VERIFICATION_ALGS,
             )
             .is_ok()
         );
