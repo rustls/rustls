@@ -7,7 +7,7 @@ use crate::msgs::codec::Reader;
 
 mod buffers;
 pub(crate) use buffers::{
-    BufferProgress, DeframerSliceBuffer, DeframerVecBuffer, Delocator, Locator,
+    BufferProgress, DeframerSliceBuffer, DeframerVecBuffer, Delocator, Locator, ReceivedData,
 };
 
 mod handshake;

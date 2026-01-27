@@ -61,7 +61,7 @@ mod deframer;
 pub use deframer::fuzz_deframer;
 pub(crate) use deframer::{
     BufferProgress, DeframerIter, DeframerSliceBuffer, DeframerVecBuffer, Delocator,
-    HandshakeAlignedProof, HandshakeDeframer, Locator,
+    HandshakeAlignedProof, HandshakeDeframer, Locator, ReceivedData,
 };
 
 mod enums;

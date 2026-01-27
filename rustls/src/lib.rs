@@ -450,10 +450,10 @@ pub mod unbuffered {
 
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
-pub use crate::common_state::{CommonState, HandshakeKind, IoState};
+pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind};
 #[cfg(feature = "std")]
 pub use crate::conn::{Connection, Reader, Writer};
-pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
+pub use crate::conn::{ConnectionCommon, IoState, KeyingMaterialExporter, SideData, kernel};
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
 #[cfg(feature = "std")]
