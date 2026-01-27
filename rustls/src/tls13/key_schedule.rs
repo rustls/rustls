@@ -11,7 +11,6 @@ use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expa
 use crate::crypto::{hash, hmac};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{HandshakeAlignedProof, Message};
-use crate::suites::PartiallyExtractedSecrets;
 use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite, quic};
 
 // We express the state of a contained KeySchedule using these
@@ -643,9 +642,42 @@ pub(crate) struct KeyScheduleTraffic {
 }
 
 impl KeyScheduleTraffic {
+    pub(crate) fn split(self) -> (KeyScheduleTrafficSend, KeyScheduleTrafficReceive) {
+        let (send, receive) = match self.ks.side {
+            Side::Client => (
+                self.current_client_traffic_secret,
+                self.current_server_traffic_secret,
+            ),
+            Side::Server => (
+                self.current_server_traffic_secret,
+                self.current_client_traffic_secret,
+            ),
+        };
+
+        (
+            KeyScheduleTrafficSend {
+                ks: self.ks,
+                current: send,
+            },
+            KeyScheduleTrafficReceive {
+                ks: self.ks,
+                current: receive,
+            },
+        )
+    }
+}
+
+/// KeySchedule during traffic stage for send direction.
+pub(crate) struct KeyScheduleTrafficSend {
+    ks: KeyScheduleSuite,
+    current: OkmBlock,
+}
+
+impl KeyScheduleTrafficSend {
     pub(crate) fn update_encrypter_for_key_update(&mut self, output: &mut dyn Output) {
-        let secret = self.next_application_traffic_secret(self.ks.side);
+        let secret = self.ks.derive_next(&self.current);
         self.ks.set_encrypter(&secret, output);
+        self.current = secret;
     }
 
     pub(crate) fn request_key_update_and_update_encrypter(
@@ -653,39 +685,20 @@ impl KeyScheduleTraffic {
         output: &mut dyn Output,
     ) -> Result<(), Error> {
         output.emit(Event::EncryptMessage(Message::build_key_update_request()));
-        let secret = self.next_application_traffic_secret(self.ks.side);
+        let secret = self.ks.derive_next(&self.current);
         self.ks.set_encrypter(&secret, output);
+        self.current = secret;
         Ok(())
     }
 
-    pub(crate) fn update_decrypter(
-        &mut self,
-        output: &mut dyn Output,
-        proof: &HandshakeAlignedProof,
-    ) {
-        let secret = self.next_application_traffic_secret(self.ks.side.peer());
-        self.ks
-            .set_decrypter(&secret, output, proof);
+    pub(crate) fn refresh_traffic_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
+        self.current = self.ks.derive_next(&self.current);
+        self.extract()
     }
 
-    pub(crate) fn next_application_traffic_secret(&mut self, side: Side) -> OkmBlock {
-        let current = match side {
-            Side::Client => &mut self.current_client_traffic_secret,
-            Side::Server => &mut self.current_server_traffic_secret,
-        };
-
-        let secret = self.ks.derive_next(current);
-        *current = secret.clone();
-        secret
-    }
-
-    pub(crate) fn refresh_traffic_secret(
-        &mut self,
-        side: Side,
-    ) -> Result<ConnectionTrafficSecrets, Error> {
-        let secret = self.next_application_traffic_secret(side);
+    pub(crate) fn extract(&self) -> Result<ConnectionTrafficSecrets, Error> {
         let (key, iv) = expand_secret(
-            &secret,
+            &self.current,
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
             self.ks.suite.aead_alg.iv_len(),
@@ -696,36 +709,43 @@ impl KeyScheduleTraffic {
             .aead_alg
             .extract_keys(key, iv)?)
     }
+}
 
-    pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
-        let (client_key, client_iv) = expand_secret(
-            &self.current_client_traffic_secret,
+/// KeySchedule during traffic stage for receive direction.
+pub(crate) struct KeyScheduleTrafficReceive {
+    ks: KeyScheduleSuite,
+    current: OkmBlock,
+}
+
+impl KeyScheduleTrafficReceive {
+    pub(crate) fn update_decrypter(
+        &mut self,
+        output: &mut dyn Output,
+        proof: &HandshakeAlignedProof,
+    ) {
+        let secret = self.ks.derive_next(&self.current);
+        self.ks
+            .set_decrypter(&secret, output, proof);
+        self.current = secret;
+    }
+
+    pub(crate) fn refresh_traffic_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
+        self.current = self.ks.derive_next(&self.current);
+        self.extract()
+    }
+
+    pub(crate) fn extract(&self) -> Result<ConnectionTrafficSecrets, Error> {
+        let (key, iv) = expand_secret(
+            &self.current,
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
             self.ks.suite.aead_alg.iv_len(),
         );
-        let (server_key, server_iv) = expand_secret(
-            &self.current_server_traffic_secret,
-            self.ks.suite.hkdf_provider,
-            self.ks.suite.aead_alg.key_len(),
-            self.ks.suite.aead_alg.iv_len(),
-        );
-        let client_secrets = self
+        Ok(self
             .ks
             .suite
             .aead_alg
-            .extract_keys(client_key, client_iv)?;
-        let server_secrets = self
-            .ks
-            .suite
-            .aead_alg
-            .extract_keys(server_key, server_iv)?;
-
-        let (tx, rx) = match side {
-            Side::Client => (client_secrets, server_secrets),
-            Side::Server => (server_secrets, client_secrets),
-        };
-        Ok(PartiallyExtractedSecrets { tx, rx })
+            .extract_keys(key, iv)?)
     }
 
     pub(crate) fn protocol(&self) -> Protocol {

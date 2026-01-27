@@ -24,7 +24,7 @@ use crate::msgs::{
     HandshakeMessagePayload, Locator, Message, MessageFragmenter, MessagePayload,
 };
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
-use crate::tls13::key_schedule::KeyScheduleTraffic;
+use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
 use crate::{SideData, quic};
@@ -887,7 +887,7 @@ pub(crate) enum Event<'a> {
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
-    MaybeKeyUpdateRequest(&'a mut KeyScheduleTraffic),
+    MaybeKeyUpdateRequest(&'a mut KeyScheduleTrafficSend),
     MessageDecrypter {
         decrypter: Box<dyn MessageDecrypter>,
         proof: HandshakeAlignedProof,
@@ -977,15 +977,6 @@ pub enum Side {
     Client,
     /// A server waits for a client to connect.
     Server,
-}
-
-impl Side {
-    pub(crate) fn peer(&self) -> Self {
-        match self {
-            Self::Client => Self::Server,
-            Self::Server => Self::Client,
-        }
-    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
