@@ -41,7 +41,7 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
     KeyScheduleEarlyClient, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleResumption,
-    KeyScheduleTraffic,
+    KeyScheduleTrafficReceive, KeyScheduleTrafficSend,
 };
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
@@ -1373,13 +1373,15 @@ impl State<ClientConnectionData> for ExpectFinished {
             .into());
         }
 
-        let protocol = key_schedule.protocol();
+        let (key_schedule_send, key_schedule_recv) = key_schedule.split();
+        let protocol = key_schedule_recv.protocol();
         let st = ExpectTraffic {
             config: st.config.clone(),
             session_storage: st.config.resumption.store.clone(),
             session_key: st.session_key,
             session_input: st.session_input,
-            key_schedule,
+            key_schedule_send,
+            key_schedule_recv,
             resumption,
             counters: TrafficTemperCounters::default(),
             _cert_verified: st.cert_verified,
@@ -1402,7 +1404,8 @@ struct ExpectTraffic {
     session_storage: Arc<dyn ClientSessionStore>,
     session_key: ClientSessionKey<'static>,
     session_input: Tls13ClientSessionInput,
-    key_schedule: KeyScheduleTraffic,
+    key_schedule_send: KeyScheduleTrafficSend,
+    key_schedule_recv: KeyScheduleTrafficReceive,
     resumption: KeyScheduleResumption,
     counters: TrafficTemperCounters,
     _cert_verified: verify::PeerVerified,
@@ -1430,7 +1433,11 @@ impl ExpectTraffic {
                 .unwrap_or_default(),
         );
 
-        if self.key_schedule.protocol().is_quic() {
+        if self
+            .key_schedule_recv
+            .protocol()
+            .is_quic()
+        {
             if let Some(sz) = nst.extensions.max_early_data_size {
                 if sz != 0 && sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
@@ -1459,7 +1466,11 @@ impl ExpectTraffic {
         output: &mut dyn Output,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        if self.key_schedule.protocol().is_quic() {
+        if self
+            .key_schedule_recv
+            .protocol()
+            .is_quic()
+        {
             return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
         }
 
@@ -1472,13 +1483,13 @@ impl ExpectTraffic {
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
             KeyUpdateRequest::UpdateRequested => {
-                output.emit(Event::MaybeKeyUpdateRequest(&mut self.key_schedule))
+                output.emit(Event::MaybeKeyUpdateRequest(&mut self.key_schedule_send))
             }
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
         // Update our read-side keys.
-        self.key_schedule
+        self.key_schedule_recv
             .update_decrypter(output, &proof);
         Ok(())
     }
@@ -1516,7 +1527,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
     }
 
     fn send_key_update_request(&mut self, output: &mut dyn Output) -> Result<(), Error> {
-        self.key_schedule
+        self.key_schedule_send
             .request_key_update_and_update_encrypter(output)
     }
 
@@ -1527,8 +1538,10 @@ impl State<ClientConnectionData> for ExpectTraffic {
             return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
         Ok((
-            self.key_schedule
-                .extract_secrets(Side::Client)?,
+            PartiallyExtractedSecrets {
+                tx: self.key_schedule_send.extract()?,
+                rx: self.key_schedule_recv.extract()?,
+            },
             self,
         ))
     }
@@ -1536,11 +1549,14 @@ impl State<ClientConnectionData> for ExpectTraffic {
 
 impl KernelState for ExpectTraffic {
     fn update_secrets(&mut self, dir: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        self.key_schedule
-            .refresh_traffic_secret(match dir {
-                Direction::Transmit => Side::Client,
-                Direction::Receive => Side::Server,
-            })
+        match dir {
+            Direction::Transmit => self
+                .key_schedule_send
+                .refresh_traffic_secret(),
+            Direction::Receive => self
+                .key_schedule_recv
+                .refresh_traffic_secret(),
+        }
     }
 
     fn handle_new_session_ticket(
@@ -1576,9 +1592,10 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
             return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
         Ok((
-            self.0
-                .key_schedule
-                .extract_secrets(Side::Client)?,
+            PartiallyExtractedSecrets {
+                tx: self.0.key_schedule_send.extract()?,
+                rx: self.0.key_schedule_recv.extract()?,
+            },
             self,
         ))
     }
