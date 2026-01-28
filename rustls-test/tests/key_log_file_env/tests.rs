@@ -31,6 +31,7 @@ use rustls_test::{
     KeyType, do_handshake, make_client_config, make_pair_for_arc_configs, make_server_config,
     transfer,
 };
+use rustls_util::KeyLogFile;
 
 use super::{ALL_VERSIONS, provider, serialized};
 
@@ -43,7 +44,7 @@ fn exercise_key_log_file_for_client() {
 
         for version_provider in ALL_VERSIONS {
             let mut client_config = make_client_config(KeyType::Rsa2048, &version_provider);
-            client_config.key_log = Arc::new(rustls::KeyLogFile::new());
+            client_config.key_log = Arc::new(KeyLogFile::new());
 
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -63,7 +64,7 @@ fn exercise_key_log_file_for_server() {
         let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
         unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
-        server_config.key_log = Arc::new(rustls::KeyLogFile::new());
+        server_config.key_log = Arc::new(KeyLogFile::new());
 
         let server_config = Arc::new(server_config);
 

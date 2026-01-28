@@ -15,6 +15,7 @@ mio = { workspace = true }
 rcgen = { workspace = true }
 rustls = { path = "../rustls", features = ["log"] }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
+rustls-util = { path = "../rustls-util" }
 serde = { workspace = true }
 tokio = { workspace = true }
 webpki-roots = { workspace = true }

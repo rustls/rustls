@@ -1,0 +1,22 @@
+[package]
+name = "rustls-util"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "Utilities for use with rustls"
+homepage = "https://github.com/rustls/rustls"
+repository = "https://github.com/rustls/rustls"
+
+[features]
+default = ["log"]
+log = ["dep:log", "rustls/log"]
+
+[dependencies]
+log = { workspace = true, optional = true }
+rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+env_logger = { workspace = true }
+
+[lints]
+workspace = true

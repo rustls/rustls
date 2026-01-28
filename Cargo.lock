@@ -2579,6 +2579,7 @@ dependencies = [
  "rcgen",
  "rustls 0.24.0-dev.0",
  "rustls-aws-lc-rs",
+ "rustls-util",
  "serde",
  "tokio",
  "webpki-roots 1.0.4",
@@ -2614,6 +2615,7 @@ dependencies = [
  "openssl",
  "rustls 0.24.0-dev.0",
  "rustls-aws-lc-rs",
+ "rustls-util",
 ]
 
 [[package]]
@@ -2657,6 +2659,7 @@ dependencies = [
  "rcgen",
  "rsa",
  "rustls 0.24.0-dev.0",
+ "rustls-util",
  "sha2",
  "signature",
  "subtle",
@@ -2699,8 +2702,18 @@ dependencies = [
  "rustls-aws-lc-rs",
  "rustls-pki-types",
  "rustls-ring",
+ "rustls-util",
  "rustls-webpki 0.104.0-alpha.2",
  "x509-parser",
+]
+
+[[package]]
+name = "rustls-util"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "rustls 0.24.0-dev.0",
 ]
 
 [[package]]

@@ -35,6 +35,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
 use rustls_aws_lc_rs as provider;
+use rustls_util::KeyLogFile;
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
@@ -635,7 +636,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         )
         .expect("bad certificates/private key");
 
-    config.key_log = Arc::new(rustls::KeyLogFile::new());
+    config.key_log = Arc::new(KeyLogFile::new());
 
     if args.no_resumption {
         config.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
