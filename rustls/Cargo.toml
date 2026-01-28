@@ -18,6 +18,7 @@ default = ["log", "std"]
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
 log = ["dep:log"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
+webpki = ["dep:webpki"]
 zlib = ["dep:zlib-rs"]
 
 [dependencies]
@@ -28,7 +29,7 @@ log = { workspace = true, optional = true }
 # only required for no-std
 once_cell = { workspace = true }
 subtle = { workspace = true }
-webpki = { workspace = true }
+webpki = { workspace = true, optional = true }
 pki-types = { workspace = true }
 zeroize = { workspace = true }
 zlib-rs = { workspace = true, optional = true }

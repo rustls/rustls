@@ -27,6 +27,7 @@ use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
+#[cfg(feature = "webpki")]
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{DistinguishedName, DynHasher, KeyLog, compress, verify};
 
@@ -619,6 +620,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// +   .build()?
     /// + )
     /// ```
+    #[cfg(feature = "webpki")]
     pub fn with_root_certificates(
         self,
         root_store: impl Into<Arc<webpki::RootCertStore>>,
@@ -635,6 +637,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     ///
     /// See [`webpki::WebPkiServerVerifier::builder`] and
     /// [`webpki::WebPkiServerVerifier::builder`] for more information.
+    #[cfg(feature = "webpki")]
     pub fn with_webpki_verifier(
         self,
         verifier: Arc<WebPkiServerVerifier>,

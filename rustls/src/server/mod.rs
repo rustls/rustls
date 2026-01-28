@@ -1,4 +1,5 @@
 pub use crate::verify::NoClientAuth;
+#[cfg(feature = "webpki")]
 pub use crate::webpki::{
     ClientVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
 };

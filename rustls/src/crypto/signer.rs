@@ -12,7 +12,9 @@ use crate::crypto::SignatureScheme;
 use crate::enums::CertificateType;
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible};
 use crate::msgs::{Codec, Reader};
-use crate::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
+use crate::server::{ClientHello, ServerCredentialResolver};
+#[cfg(feature = "webpki")]
+use crate::server::ParsedCertificate;
 use crate::sync::Arc;
 use crate::{DynHasher, SignerPublicKey, x509};
 
@@ -128,6 +130,8 @@ impl Credentials {
     /// This constructor should be used with all [`SigningKey`] implementations
     /// that can provide a public key, including those provided by rustls itself.
     pub fn new(identity: Arc<Identity<'static>>, key: Box<dyn SigningKey>) -> Result<Self, Error> {
+        // XXX TBD ??? ???
+        #[cfg(feature = "webpki")]
         if let Identity::X509(CertificateIdentity { end_entity, .. }) = &*identity {
             let parsed = ParsedCertificate::try_from(end_entity)?;
             match (key.public_key(), parsed.subject_public_key_info()) {

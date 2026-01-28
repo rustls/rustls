@@ -11,6 +11,7 @@ use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::ALL_KEY_EXCHANGE_ALGORITHMS;
 use crate::sync::Arc;
+#[cfg(feature = "webpki")]
 pub use crate::webpki::{verify_tls12_signature, verify_tls13_signature};
 #[cfg(doc)]
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};

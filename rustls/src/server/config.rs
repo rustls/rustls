@@ -627,6 +627,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// This function fails if `key_der` is invalid, or if the
     /// `SubjectPublicKeyInfo` from the private key does not match the public
     /// key for the end-entity certificate from the `cert_chain`.
+    #[cfg(feature = "webpki")]
     pub fn with_single_cert(
         self,
         identity: Arc<Identity<'static>>,
@@ -649,6 +650,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// This function fails if `key_der` is invalid, or if the
     /// `SubjectPublicKeyInfo` from the private key does not match the public
     /// key for the end-entity certificate from the `cert_chain`.
+    #[cfg(feature = "webpki")]
     pub fn with_single_cert_with_ocsp(
         self,
         identity: Arc<Identity<'static>>,

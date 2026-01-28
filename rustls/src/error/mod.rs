@@ -8,6 +8,7 @@ use core::fmt;
 use std::time::SystemTimeError;
 
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
+#[cfg(feature = "webpki")]
 use webpki::ExtendedKeyUsage;
 
 use crate::crypto::kx::KeyExchangeAlgorithm;
@@ -1149,7 +1150,9 @@ impl ExtendedKeyPurpose {
     pub(crate) fn for_values(values: impl Iterator<Item = usize>) -> Self {
         let values = values.collect::<Vec<_>>();
         match &*values {
+            #[cfg(feature = "webpki")]
             ExtendedKeyUsage::CLIENT_AUTH_REPR => Self::ClientAuth,
+            #[cfg(feature = "webpki")]
             ExtendedKeyUsage::SERVER_AUTH_REPR => Self::ServerAuth,
             _ => Self::Other(values),
         }
