@@ -2,16 +2,12 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::hash::{Hash, Hasher};
 
-use pki_types::{
-    CertificateDer, FipsStatus, ServerName, SignatureVerificationAlgorithm,
-    SubjectPublicKeyInfoDer, UnixTime,
-};
+use pki_types::{FipsStatus, SignatureVerificationAlgorithm};
 
 // use super::anchors::RootCertStore;
 // use super::pki_error;
 use crate::crypto::SignatureScheme;
-use crate::error::{ApiMisuse, Error, PeerMisbehaved};
-use crate::verify::{HandshakeSignatureValid, SignatureVerificationInput, SignerPublicKey};
+use crate::error::{Error, PeerMisbehaved};
 
 /// Describes which `webpki` signature verification algorithms are supported and
 /// how they map to TLS [`SignatureScheme`]s.

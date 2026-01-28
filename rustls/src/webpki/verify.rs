@@ -1,21 +1,14 @@
-use alloc::vec::Vec;
-use core::fmt;
-use core::hash::{Hash, Hasher};
-
 use pki_types::{
-    CertificateDer, FipsStatus, ServerName, SignatureVerificationAlgorithm,
+    CertificateDer, ServerName, SignatureVerificationAlgorithm,
     SubjectPublicKeyInfoDer, UnixTime,
 };
 use webpki::ExtendedKeyUsage;
 
 use super::anchors::RootCertStore;
 use super::pki_error;
-use crate::crypto::SignatureScheme;
+use crate::crypto::WebPkiSupportedAlgorithms;
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::verify::{HandshakeSignatureValid, SignatureVerificationInput, SignerPublicKey};
-
-// XXX TBD ??? ??? ???:
-pub use crate::crypto::WebPkiSupportedAlgorithms;
 
 /// Verify that the end-entity certificate `end_entity` is a valid server cert
 /// and chains to at least one of the trust anchors in the `roots` [RootCertStore].
