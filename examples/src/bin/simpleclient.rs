@@ -13,6 +13,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::RootCertStore;
+use rustls_util::{KeyLogFile, Stream};
 
 fn main() {
     let root_store = RootCertStore {
@@ -25,12 +26,12 @@ fn main() {
         .unwrap();
 
     // Allow using SSLKEYLOGFILE.
-    config.key_log = Arc::new(rustls::KeyLogFile::new());
+    config.key_log = Arc::new(KeyLogFile::new());
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
     let mut sock = TcpStream::connect("www.rust-lang.org:443").unwrap();
-    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+    let mut tls = Stream::new(&mut conn, &mut sock);
     tls.write_all(
         concat!(
             "GET / HTTP/1.1\r\n",

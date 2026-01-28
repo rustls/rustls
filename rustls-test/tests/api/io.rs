@@ -14,7 +14,7 @@ use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::{ClientConfig, ClientConnection, ServerConfig, ServerConnection, Stream, StreamOwned};
+use rustls::{ClientConfig, ClientConnection, ServerConfig, ServerConnection};
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo,
     check_fill_buf, check_fill_buf_err, check_read, check_read_and_close, check_read_err,
@@ -23,6 +23,7 @@ use rustls_test::{
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_mandatory_client_auth, server_name, transfer, transfer_eof,
 };
+use rustls_util::{Stream, StreamOwned};
 
 use super::{ALL_VERSIONS, provider};
 

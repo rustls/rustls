@@ -34,6 +34,7 @@ use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls_aws_lc_rs as provider;
+use rustls_util::KeyLogFile;
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -489,7 +490,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         }
     };
 
-    config.key_log = Arc::new(rustls::KeyLogFile::new());
+    config.key_log = Arc::new(KeyLogFile::new());
 
     if args.no_tickets {
         config.resumption = config

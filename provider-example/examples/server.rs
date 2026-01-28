@@ -5,6 +5,7 @@ use rustls::ServerConfig;
 use rustls::crypto::Identity;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::Acceptor;
+use rustls_util::KeyLogFile;
 
 fn main() {
     env_logger::init();
@@ -101,7 +102,7 @@ impl TestPki {
             )
             .unwrap();
 
-        server_config.key_log = Arc::new(rustls::KeyLogFile::new());
+        server_config.key_log = Arc::new(KeyLogFile::new());
         server_config.ticketer = provider
             .ticketer_factory
             .ticketer()

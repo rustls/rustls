@@ -1,8 +1,5 @@
 use core::fmt::Debug;
 
-#[cfg(all(doc, feature = "std"))]
-use crate::KeyLogFile;
-
 /// This trait represents the ability to do something useful
 /// with key material, such as logging it to a file for debugging.
 ///
@@ -13,8 +10,8 @@ use crate::KeyLogFile;
 /// You'll likely want some interior mutability in your
 /// implementation to make this useful.
 ///
-/// See [`KeyLogFile`] that implements the standard
-/// `SSLKEYLOGFILE` environment variable behaviour.
+/// For the standard `SSLKEYLOGFILE` environment variable behavior,
+/// see the `KeyLogFile` implementation provided in the rustls-util crate.
 pub trait KeyLog: Debug + Send + Sync {
     /// Log the given `secret`.  `client_random` is provided for
     /// session identification.  `label` describes precisely what

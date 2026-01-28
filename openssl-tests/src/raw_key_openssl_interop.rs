@@ -22,8 +22,9 @@ mod client {
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
-    use rustls::{ClientConfig, ClientConnection, Error, Stream};
+    use rustls::{ClientConfig, ClientConnection, Error};
     use rustls_aws_lc_rs as provider;
+    use rustls_util::Stream;
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
     pub(super) fn make_config(client_private_key: &str, server_pub_key: &str) -> ClientConfig {

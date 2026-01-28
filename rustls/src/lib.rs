@@ -105,7 +105,7 @@
 //! It doesn't make or accept TCP connections, or do DNS, or read or write files.
 //!
 //! Our [examples] directory contains demos that show how to handle I/O using the
-//! [`stream::Stream`] helper, as well as more complex asynchronous I/O using [`mio`].
+//! `rustls_util::Stream` helper, as well as more complex asynchronous I/O using [`mio`].
 //! If you're already using Tokio for an async runtime you may prefer to use [`tokio-rustls`] instead
 //! of interacting with rustls directly.
 //!
@@ -375,8 +375,6 @@ pub mod error;
 mod hash_hs;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod limited_cache;
-#[cfg(feature = "std")]
-mod stream;
 mod tls12;
 mod tls13;
 mod vecbuf;
@@ -390,8 +388,6 @@ mod bs_debug;
 mod builder;
 pub mod enums;
 mod key_log;
-#[cfg(feature = "std")]
-mod key_log_file;
 mod suites;
 mod versions;
 #[cfg(feature = "webpki")]
@@ -456,10 +452,6 @@ pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
-#[cfg(feature = "std")]
-pub use crate::key_log_file::KeyLogFile;
-#[cfg(feature = "std")]
-pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
 };

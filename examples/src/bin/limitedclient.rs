@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
 use rustls_aws_lc_rs as provider;
+use rustls_util::Stream;
 
 fn main() {
     let root_store = rustls::RootCertStore::from_iter(
@@ -25,7 +26,7 @@ fn main() {
     let server_name = "www.rust-lang.org".try_into().unwrap();
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
     let mut sock = TcpStream::connect("www.rust-lang.org:443").unwrap();
-    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+    let mut tls = Stream::new(&mut conn, &mut sock);
     tls.write_all(
         concat!(
             "GET / HTTP/1.1\r\n",

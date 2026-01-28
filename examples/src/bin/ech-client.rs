@@ -47,6 +47,7 @@ use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
+use rustls_util::{KeyLogFile, Stream};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -119,7 +120,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_no_client_auth()?;
 
     // Allow using SSLKEYLOGFILE.
-    config.key_log = Arc::new(rustls::KeyLogFile::new());
+    config.key_log = Arc::new(KeyLogFile::new());
     let config = Arc::new(config);
 
     // The "inner" SNI that we're really trying to reach.
@@ -134,7 +135,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .next()
             .ok_or("cannot resolve hostname")?;
         let mut sock = TcpStream::connect(sock_addr)?;
-        let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+        let mut tls = Stream::new(&mut conn, &mut sock);
 
         let request = format!(
             "GET /{} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
