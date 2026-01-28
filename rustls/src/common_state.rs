@@ -134,7 +134,7 @@ impl CommonState {
         // renegotiation requests.  These can occur any time.
         if self
             .recv
-            .reject_renegotiation_request(&mut self.send, &msg)?
+            .reject_renegotiation_request(&msg, &mut self.send)?
         {
             return Ok(None);
         }
@@ -585,13 +585,12 @@ impl SendPath {
     }
 
     fn send_close_notify(&mut self) {
-        if self.has_sent_fatal_alert {
+        if self.has_sent_close_notify {
             return;
         }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-        self.has_sent_fatal_alert = true;
         self.has_sent_close_notify = true;
-        self.send_warning_alert_no_log(AlertDescription::CloseNotify);
+        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
     }
 
     #[expect(dead_code)]
@@ -604,9 +603,16 @@ impl SendPath {
         Ok(self.write_fragments(outgoing_tls, [].into_iter()))
     }
 
-    fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
-        let m = Message::build_alert(AlertLevel::Warning, desc);
-        self.send_msg(m, self.encrypt_state.is_encrypting());
+    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
+        match level {
+            AlertLevel::Fatal if self.has_sent_fatal_alert => return,
+            AlertLevel::Fatal => self.has_sent_fatal_alert = true,
+            _ => {}
+        };
+        self.send_msg(
+            Message::build_alert(level, desc),
+            self.encrypt_state.is_encrypting(),
+        );
     }
 
     fn check_required_size<'a>(
@@ -676,6 +682,7 @@ impl SendPath {
         true
     }
 }
+
 impl Output for SendPath {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
@@ -690,6 +697,7 @@ impl Output for SendPath {
                 .set_message_encrypter(encrypter, limit),
             Event::PlainMessage(m) => self.send_msg(m, false),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
+            Event::SendAlert(level, desc) => self.send_alert(level, desc),
             Event::StartOutgoingTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
             _ => unreachable!(),
         }
@@ -934,8 +942,8 @@ impl ReceivePath {
 
     fn reject_renegotiation_request(
         &mut self,
-        send: &mut SendPath,
         msg: &Message<'_>,
+        output: &mut dyn Output,
     ) -> Result<bool, Error> {
         if !self.may_receive_application_data
             || matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
@@ -955,7 +963,7 @@ impl ReceivePath {
             .received_renegotiation_request()?;
         let desc = AlertDescription::NoRenegotiation;
         warn!("sending warning alert {desc:?}");
-        send.send_warning_alert_no_log(desc);
+        output.emit(Event::SendAlert(AlertLevel::Warning, desc));
         Ok(true)
     }
 
@@ -1167,6 +1175,7 @@ pub(crate) enum Event<'a> {
     ReceivedServerName(Option<DnsName<'static>>),
     ReceivedTicket,
     ResumptionData(Vec<u8>),
+    SendAlert(AlertLevel, AlertDescription),
     /// Mark the connection as ready to send application data.
     StartOutgoingTraffic,
     /// Mark the connection as ready to send and receive application data.
@@ -1182,6 +1191,7 @@ impl Event<'_> {
             // send-specific events
             Event::MaybeKeyUpdateRequest(_)
             | Event::MessageEncrypter { .. }
+            | Event::SendAlert(..)
             | Event::StartOutgoingTraffic => EventDisposition::SendPath,
 
             // recv-specific events
