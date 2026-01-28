@@ -23,6 +23,7 @@ use rustls::RootCertStore;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
+use rustls_util::{KeyLogFile, Stream};
 
 fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str, port: u16) {
     let server_name = ServerName::try_from(domain_name)
@@ -49,7 +50,7 @@ fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str, port:
         println!("  * 0-RTT request sent");
     }
 
-    let mut stream = rustls::Stream::new(&mut conn, &mut sock);
+    let mut stream = Stream::new(&mut conn, &mut sock);
 
     // Complete handshake.
     stream.flush().unwrap();
@@ -106,7 +107,7 @@ fn main() {
         .unwrap();
 
     // Allow using SSLKEYLOGFILE.
-    config.key_log = Arc::new(rustls::KeyLogFile::new());
+    config.key_log = Arc::new(KeyLogFile::new());
 
     // Enable early data.
     config.enable_early_data = true;

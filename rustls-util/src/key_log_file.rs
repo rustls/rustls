@@ -1,4 +1,3 @@
-use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
 use std::env::var_os;
 use std::ffi::OsString;
@@ -7,8 +6,8 @@ use std::io;
 use std::io::Write;
 use std::sync::Mutex;
 
-use crate::KeyLog;
-use crate::log::warn;
+use log::warn;
+use rustls::KeyLog;
 
 // Internal mutable state for KeyLogFile
 struct KeyLogFileInner {

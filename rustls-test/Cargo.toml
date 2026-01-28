@@ -17,6 +17,7 @@ zlib = ["rustls/zlib"]
 rustls = { path = "../rustls", default-features = false, features = ["std", "webpki"] }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", features = ["std"], optional = true }
 rustls-ring = { path = "../rustls-ring", optional = true }
+rustls-util = { path = "../rustls-util" }
 
 [dev-dependencies]
 env_logger = { workspace = true }

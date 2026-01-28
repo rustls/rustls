@@ -1,0 +1,15 @@
+[package]
+name = "rustls-util"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR ISC OR MIT"
+
+[dependencies]
+log = { workspace = true }
+rustls = { path = "../rustls", default-features = false, features = ["log", "std"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+env_logger = { workspace = true }
+
+[lints]
+workspace = true
