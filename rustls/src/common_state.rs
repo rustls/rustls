@@ -44,7 +44,10 @@ pub(crate) fn process_main_protocol<Data: SideData>(
         return Ok(state);
     }
 
-    let msg = data.parse_and_maybe_drop(&msg)?;
+    let common = data.deref_mut();
+    let msg = common
+        .recv
+        .parse_and_maybe_drop(&msg, &mut common.send)?;
 
     let Some(msg) = msg else {
         // Message is dropped.
@@ -115,31 +118,6 @@ impl CommonState {
     /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
     pub fn is_handshaking(&self) -> bool {
         !(self.send.may_send_application_data && self.recv.may_receive_application_data)
-    }
-
-    fn parse_and_maybe_drop<'a>(
-        &mut self,
-        msg: &'a EncodedMessage<&'a [u8]>,
-    ) -> Result<Option<Message<'a>>, Error> {
-        // Now we can fully parse the message payload.
-        let msg = Message::try_from(msg)?;
-
-        // For alerts, we have separate logic.
-        if let MessagePayload::Alert(alert) = &msg.payload {
-            self.recv.process_alert(alert)?;
-            return Ok(None);
-        }
-
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if self
-            .recv
-            .reject_renegotiation_request(&msg, &mut self.send)?
-        {
-            return Ok(None);
-        }
-
-        Ok(Some(msg))
     }
 }
 
@@ -938,6 +916,29 @@ impl ReceivePath {
         self.temper_counters
             .received_tls13_change_cipher_spec()?;
         Ok(true)
+    }
+
+    fn parse_and_maybe_drop<'a>(
+        &mut self,
+        msg: &'a EncodedMessage<&'a [u8]>,
+        send_path: &mut dyn Output,
+    ) -> Result<Option<Message<'a>>, Error> {
+        // Now we can fully parse the message payload.
+        let msg = Message::try_from(msg)?;
+
+        // For alerts, we have separate logic.
+        if let MessagePayload::Alert(alert) = &msg.payload {
+            self.process_alert(alert)?;
+            return Ok(None);
+        }
+
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotiation requests.  These can occur any time.
+        if self.reject_renegotiation_request(&msg, send_path)? {
+            return Ok(None);
+        }
+
+        Ok(Some(msg))
     }
 
     fn reject_renegotiation_request(
