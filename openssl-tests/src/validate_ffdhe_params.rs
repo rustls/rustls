@@ -57,6 +57,7 @@ fn get_ffdhe_params_from_openssl(ffdhe_group: NamedGroup) -> (Vec<u8>, Vec<u8>) 
 }
 
 /// Parse PEM-encoded DH parameters, returning `(p, g)`
+#[allow(clippy::result_large_err)] // For the closure passed to `asn1::parse()`
 fn parse_dh_params_pem(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let output_str = str::from_utf8(data).unwrap();
     let output_str_lines = output_str.lines().collect::<Vec<_>>();

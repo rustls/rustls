@@ -1,5 +1,5 @@
+use alloc::string::ToString;
 use core::time::Duration;
-use std::prelude::v1::*;
 use std::{println, vec};
 
 use pki_types::ServerName;

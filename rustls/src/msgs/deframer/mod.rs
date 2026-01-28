@@ -103,7 +103,6 @@ pub fn fuzz_deframer(data: &[u8]) {
 #[cfg(test)]
 mod tests {
     use alloc::vec::Vec;
-    use std::prelude::v1::*;
 
     use super::*;
     use crate::enums::ContentType;

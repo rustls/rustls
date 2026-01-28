@@ -119,7 +119,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::*;
+    use alloc::string::String;
 
     type Test = super::LimitedCache<String, usize>;
 

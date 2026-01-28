@@ -16,6 +16,7 @@ extern crate test;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
+#[cfg(feature = "std")]
 use core::time::Duration;
 
 use pki_types::{FipsStatus, PrivateKeyDer};
@@ -37,6 +38,7 @@ pub(crate) mod hash;
 pub(crate) mod hmac;
 pub(crate) mod kx;
 pub(crate) mod quic;
+#[cfg(feature = "std")]
 pub(crate) mod ticketer;
 #[cfg(feature = "std")]
 use ticketer::AeadTicketer;
@@ -278,4 +280,5 @@ pub fn fips() -> FipsStatus {
     FipsStatus::Unvalidated
 }
 
+#[cfg(feature = "std")]
 const SIX_HOURS: Duration = Duration::from_secs(6 * 60 * 60);

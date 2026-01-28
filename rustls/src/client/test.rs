@@ -1,7 +1,8 @@
 use alloc::borrow::Cow;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::hash::Hasher;
 use core::sync::atomic::{AtomicBool, Ordering};
-use std::prelude::v1::*;
 use std::sync::OnceLock;
 use std::vec;
 
