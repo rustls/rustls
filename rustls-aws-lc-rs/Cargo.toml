@@ -20,7 +20,7 @@ unstable = ["aws-lc-rs/unstable"]
 [dependencies]
 aws-lc-rs = { workspace = true, features = ["prebuilt-nasm"] }
 pki-types = { workspace = true }
-rustls = { path = "../rustls", default-features = false }
+rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }
 subtle = { workspace = true }
 zeroize = { workspace = true }
 
