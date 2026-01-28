@@ -481,7 +481,7 @@ impl KeyType {
     }
 
     pub fn client_root_store(&self) -> Arc<RootCertStore> {
-        let mut roots = RootCertStore::empty();
+        let mut roots = RootCertStore::with_capacity(1);
         roots.add(self.ca_cert()).unwrap();
         roots.into()
     }
