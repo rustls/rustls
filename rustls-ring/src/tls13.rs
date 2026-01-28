@@ -331,7 +331,7 @@ impl KeyType for Len {
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::*;
+    use alloc::vec::Vec;
 
     use rustls::crypto::tls13::{HkdfUsingHmac, expand};
 

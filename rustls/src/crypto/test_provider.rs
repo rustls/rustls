@@ -202,7 +202,7 @@ mod hash_impl {
 mod hash_impl {
     use super::*;
 
-    pub(crate) const FAKE_HASH: &dyn hash::Hash = &hash_impl::Hash;
+    pub(crate) const FAKE_HASH: &dyn hash::Hash = &Hash;
 
     pub(super) struct Hash;
 
@@ -244,7 +244,7 @@ mod hash_impl {
 
     const HASH_OUTPUT: &[u8] = b"HashHashHashHashHashHashHashHash";
 
-    pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &hash_impl::Hmac;
+    pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &Hmac;
 
     pub(super) struct Hmac;
 

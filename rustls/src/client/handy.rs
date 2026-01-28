@@ -199,8 +199,8 @@ impl client::ClientCredentialResolver for FailResolveClientCert {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
     use core::time::Duration;
-    use std::prelude::v1::*;
 
     use pki_types::{CertificateDer, ServerName, UnixTime};
 

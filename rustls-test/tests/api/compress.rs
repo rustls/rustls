@@ -5,6 +5,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(feature = "zlib")]
 use std::sync::Arc;
 
+#[cfg(feature = "zlib")]
 use rustls::ClientConfig;
 #[cfg(feature = "zlib")]
 use rustls::client::Resumption;
@@ -15,10 +16,10 @@ use rustls::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls::pki_types::CertificateDer;
 #[cfg(feature = "zlib")]
-use rustls_test::make_pair_for_arc_configs;
+use rustls_test::{ClientConfigExt, make_pair_for_arc_configs};
 use rustls_test::{
-    ClientConfigExt, ErrorFromPeer, KeyType, do_handshake, do_handshake_until_error,
-    make_client_config, make_client_config_with_auth, make_pair_for_configs, make_server_config,
+    ErrorFromPeer, KeyType, do_handshake, do_handshake_until_error, make_client_config,
+    make_client_config_with_auth, make_pair_for_configs, make_server_config,
     make_server_config_with_mandatory_client_auth, transfer,
 };
 

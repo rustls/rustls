@@ -1235,7 +1235,6 @@ impl SecretKind {
 #[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
 mod tests {
     use core::fmt::Debug;
-    use std::prelude::v1::*;
 
     use super::*;
     use crate::crypto::TLS13_TEST_SUITE;

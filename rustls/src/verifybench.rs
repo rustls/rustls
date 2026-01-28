@@ -19,8 +19,8 @@
 
 #![cfg(bench)]
 
+use alloc::vec::Vec;
 use core::time::Duration;
-use std::prelude::v1::*;
 
 use pki_types::{CertificateDer, ServerName, UnixTime};
 use webpki_roots;

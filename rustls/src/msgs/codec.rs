@@ -418,7 +418,6 @@ pub(crate) const CERTIFICATE_MAX_SIZE_LIMIT: usize = 0x1_0000;
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::*;
     use std::vec;
 
     use super::*;

@@ -1035,8 +1035,6 @@ impl Version {
 
 #[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
 mod tests {
-    use std::prelude::v1::*;
-
     use super::*;
     use crate::crypto::TLS13_TEST_SUITE;
     use crate::crypto::tls13::OkmBlock;

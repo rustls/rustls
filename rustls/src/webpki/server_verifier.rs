@@ -281,7 +281,7 @@ impl ServerVerifier for WebPkiServerVerifier {
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::*;
+    use alloc::vec::Vec;
     use std::{println, vec};
 
     use pki_types::pem::PemObject;

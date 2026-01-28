@@ -18,6 +18,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  RUSTFLAGS: --deny warnings
+
 jobs:
   build:
     name: Build+test
@@ -94,6 +97,7 @@ jobs:
           cargo build --locked --lib -p rustls-ring --no-default-features
           cargo build --locked --lib -p rustls-aws-lc-rs --no-default-features --features aws-lc-sys
 
+
       - name: cargo build (debug; rustls-provider-example)
         run: cargo build --locked -p rustls-provider-example
 
@@ -142,8 +146,6 @@ jobs:
           target: x86_64-unknown-none
 
       - name: cargo build (debug; default features)
-        env:
-          RUSTFLAGS: --deny warnings
         run: |
           cargo build --locked -p rustls
           cargo build --locked -p rustls-ring
@@ -154,14 +156,10 @@ jobs:
       - name: cargo build (debug; no default features; no-std)
         run: cargo build --locked --no-default-features --target x86_64-unknown-none
         working-directory: rustls
-        env:
-          RUSTFLAGS: --deny warnings
 
       - name: cargo build (debug; no default features; no-std, hashbrown)
         run: cargo build --locked --no-default-features --features hashbrown --target x86_64-unknown-none
         working-directory: rustls
-        env:
-          RUSTFLAGS: --deny warnings
 
       - name: cargo test (debug; default features)
         run: cargo test --locked
