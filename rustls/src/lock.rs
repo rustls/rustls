@@ -85,5 +85,6 @@ mod no_std_lock {
     pub type MutexGuard<'a, T> = Box<dyn DerefMut<Target = T> + 'a>;
 
     /// A marker type used to indicate `Lock::lock` failed due to a poisoned lock.
+    #[expect(clippy::exhaustive_structs)]
     pub struct Poisoned;
 }

@@ -416,6 +416,7 @@ impl CompressionCache {
     }
 }
 
+#[cfg_attr(not(feature = "std"), expect(clippy::derivable_impls))]
 impl Default for CompressionCache {
     fn default() -> Self {
         #[cfg(feature = "std")]
