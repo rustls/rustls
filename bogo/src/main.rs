@@ -35,7 +35,6 @@ use rustls::enums::{
 use rustls::error::{
     AlertDescription, CertificateError, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::internal::msgs::{Codec, ServerSessionValue};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
@@ -1249,17 +1248,13 @@ fn align_time() {
 }
 
 impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        let mut ssv = ServerSessionValue::read_bytes(&value).unwrap();
-        match &mut ssv {
-            ServerSessionValue::Tls12(tls12) => &mut tls12.common,
-            ServerSessionValue::Tls13(tls13) => &mut tls13.common,
-            _ => todo!(),
-        }
-        .creation_time_sec -= self.delay as u64;
-
-        self.storage
-            .put(key, ssv.get_encoding())
+    fn put(&self, key: Vec<u8>, mut value: Vec<u8>) -> bool {
+        // The creation time should be stored directly after the 2-byte version discriminant.
+        let creation_time_sec = &mut value[2..10];
+        let original = u64::from_be_bytes(creation_time_sec.try_into().unwrap());
+        let delayed = original - self.delay as u64;
+        creation_time_sec.copy_from_slice(&delayed.to_be_bytes());
+        self.storage.put(key, value)
     }
 
     fn get(&self, key: &[u8]) -> Option<Vec<u8>> {

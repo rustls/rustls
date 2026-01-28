@@ -138,8 +138,7 @@ impl Codec<'_> for ServerSessionValue {
 
 #[derive(Debug)]
 pub struct Tls12ServerSessionValue {
-    #[doc(hidden)]
-    pub common: CommonServerSessionValue,
+    pub(crate) common: CommonServerSessionValue,
     pub(crate) master_secret: Zeroizing<[u8; 48]>,
     pub(crate) extended_ms: bool,
 }
@@ -190,8 +189,7 @@ impl From<Tls12ServerSessionValue> for ServerSessionValue {
 
 #[derive(Debug)]
 pub struct Tls13ServerSessionValue {
-    #[doc(hidden)]
-    pub common: CommonServerSessionValue,
+    pub(crate) common: CommonServerSessionValue,
     pub(crate) secret: Zeroizing<SizedPayload<'static, u8>>,
     pub(crate) age_obfuscation_offset: u32,
 
@@ -260,14 +258,13 @@ impl From<Tls13ServerSessionValue> for ServerSessionValue {
 }
 
 #[derive(Debug)]
-pub struct CommonServerSessionValue {
+pub(crate) struct CommonServerSessionValue {
+    pub(crate) creation_time_sec: u64,
     pub(crate) sni: Option<DnsName<'static>>,
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) peer_identity: Option<Identity<'static>>,
     pub(crate) alpn: Option<ApplicationProtocol<'static>>,
     pub(crate) application_data: SizedPayload<'static, u16, MaybeEmpty>,
-    #[doc(hidden)]
-    pub creation_time_sec: u64,
 }
 
 impl CommonServerSessionValue {
@@ -280,12 +277,12 @@ impl CommonServerSessionValue {
         creation_time: UnixTime,
     ) -> Self {
         Self {
+            creation_time_sec: creation_time.as_secs(),
             sni: sni.map(|s| s.to_owned()),
             cipher_suite,
             peer_identity,
             alpn,
             application_data: SizedPayload::from(Payload::new(application_data)),
-            creation_time_sec: creation_time.as_secs(),
         }
     }
 
@@ -306,6 +303,7 @@ impl CommonServerSessionValue {
 
 impl Codec<'_> for CommonServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
+        self.creation_time_sec.encode(bytes);
         if let Some(sni) = &self.sni {
             1u8.encode(bytes);
             let sni_bytes: &str = sni.as_ref();
@@ -328,10 +326,10 @@ impl Codec<'_> for CommonServerSessionValue {
             0u8.encode(bytes);
         }
         self.application_data.encode(bytes);
-        self.creation_time_sec.encode(bytes);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let creation_time_sec = u64::read(r)?;
         let sni = match u8::read(r)? {
             1 => {
                 let dns_name = SizedPayload::<u8, MaybeEmpty>::read(r)?;
@@ -346,6 +344,7 @@ impl Codec<'_> for CommonServerSessionValue {
         };
 
         Ok(Self {
+            creation_time_sec,
             sni,
             cipher_suite: CipherSuite::read(r)?,
             peer_identity: match u8::read(r)? {
@@ -357,7 +356,6 @@ impl Codec<'_> for CommonServerSessionValue {
                 _ => None,
             },
             application_data: SizedPayload::read(r)?.into_owned(),
-            creation_time_sec: u64::read(r)?,
         })
     }
 }
@@ -392,8 +390,8 @@ mod tests {
     #[test]
     fn serversessionvalue_no_sni() {
         let bytes = [
-            0x03, 0x04, 0x00, 0x13, 0x01, 0x00, 0x00, 0x00, 0x03, 0x04, 0x05, 0x06, 0x00, 0x00,
-            0x00, 0x00, 0x68, 0x6e, 0x94, 0x32, 0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
+            0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x69, 0x7a, 0x4a, 0xdf, 0x00, 0x13, 0x01, 0x00,
+            0x00, 0x00, 0x03, 0x04, 0x05, 0x06, 0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
         ];
         let mut rd = Reader::init(&bytes);
         let ssv = ServerSessionValue::read(&mut rd).unwrap();
@@ -423,9 +421,9 @@ mod tests {
         );
 
         let bytes = [
-            0x03, 0x04, 0x00, 0x13, 0x01, 0x01, 0x00, 0x00, 0x00, 0x03, 0x0a, 0x0b, 0x0c, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x68, 0xc1,
-            0x99, 0xac, 0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
+            0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x69, 0x7a, 0x4b, 0x06, 0x00, 0x13, 0x01, 0x01,
+            0x00, 0x00, 0x00, 0x03, 0x0a, 0x0b, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04,
+            0x05, 0x06, 0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
         ];
         let mut rd = Reader::init(&bytes);
         let ssv = ServerSessionValue::read(&mut rd).unwrap();
