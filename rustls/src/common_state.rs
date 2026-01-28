@@ -25,48 +25,43 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeDeframer, HandshakeMessagePayload, Locator, Message,
     MessageFragmenter, MessagePayload,
 };
+use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{SideData, quic};
 
-pub(crate) fn process_main_protocol<Data: SideData>(
-    msg: EncodedMessage<&'_ [u8]>,
+/// Take a TLS message `msg` and map it into an `Input`
+///
+/// `Input` is the input to our state machine.
+///
+/// The message is mapped into `None` if it should be dropped with no further
+/// action.
+///
+/// Otherwise the caller must present the returned `Input` to the state machine to
+/// progress the connection.
+pub(crate) fn receive_message<'a>(
+    msg: EncodedMessage<&'a [u8]>,
     aligned_handshake: Option<HandshakeAlignedProof>,
-    state: Box<dyn State>,
-    plaintext_locator: &Locator,
-    received_plaintext: &mut Option<UnborrowedPayload>,
-    data: &mut Data,
-) -> Result<Box<dyn State>, Error> {
+    recv: &mut ReceivePath,
+    send_path: &mut dyn Output,
+) -> Result<Option<Input<'a>>, Error> {
     // Drop CCS messages during handshake in TLS1.3
-    if msg.typ == ContentType::ChangeCipherSpec && data.recv.drop_tls13_ccs(&msg)? {
+    if msg.typ == ContentType::ChangeCipherSpec && recv.drop_tls13_ccs(&msg)? {
         trace!("Dropping CCS");
-        return Ok(state);
+        return Ok(None);
     }
 
-    let common = data.deref_mut();
-    let msg = common
-        .recv
-        .parse_and_maybe_drop(msg, &mut common.send)?;
+    let msg = recv.parse_and_maybe_drop(msg, send_path)?;
 
     let Some(msg) = msg else {
         // Message is dropped.
-        return Ok(state);
+        return Ok(None);
     };
 
-    let mut cx = CaptureAppData {
-        data,
-        plaintext_locator,
-        received_plaintext,
-    };
-
-    state.handle(
-        Input {
-            message: msg,
-            aligned_handshake,
-        },
-        &mut cx,
-    )
+    Ok(Some(Input {
+        message: msg,
+        aligned_handshake,
+    }))
 }
 
 /// Connection state common to both client and server connections.
@@ -1082,20 +1077,20 @@ pub(crate) trait State: Send + Sync {
     }
 }
 
-struct CaptureAppData<'a> {
-    data: &'a mut dyn Output,
+pub(crate) struct CaptureAppData<'a> {
+    pub(crate) data: &'a mut dyn Output,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
     /// `received_plaintext` for in-place decryption.
-    plaintext_locator: &'a Locator,
+    pub(crate) plaintext_locator: &'a Locator,
     /// Unborrowed received plaintext data
     ///
     /// Set if plaintext data was received.
     ///
     /// Plaintext data may be reborrowed using a [`Delocator`] which was
     /// initialized from the same slice as `plaintext_locator`.
-    received_plaintext: &'a mut Option<UnborrowedPayload>,
+    pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
 }
 
 impl Output for CaptureAppData<'_> {
