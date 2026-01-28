@@ -3,7 +3,9 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 
-use pki_types::{DnsName, FipsStatus, PrivateKeyDer, UnixTime};
+use pki_types::{DnsName, FipsStatus, UnixTime};
+#[cfg(feature = "webpki")]
+use pki_types::PrivateKeyDer;
 
 use super::handy;
 use super::hs::ClientHelloInput;
@@ -11,10 +13,9 @@ use crate::builder::{ConfigBuilder, WantsVerifier};
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::kx::NamedGroup;
-use crate::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme,
-    SingleCredential, TicketProducer,
-};
+use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme, TicketProducer};
+#[cfg(feature = "webpki")]
+use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::ServerNamePayload;

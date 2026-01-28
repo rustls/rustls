@@ -1146,13 +1146,12 @@ pub enum ExtendedKeyPurpose {
     Other(Vec<usize>),
 }
 
+#[cfg(feature = "webpki")]
 impl ExtendedKeyPurpose {
     pub(crate) fn for_values(values: impl Iterator<Item = usize>) -> Self {
         let values = values.collect::<Vec<_>>();
         match &*values {
-            #[cfg(feature = "webpki")]
             ExtendedKeyUsage::CLIENT_AUTH_REPR => Self::ClientAuth,
-            #[cfg(feature = "webpki")]
             ExtendedKeyUsage::SERVER_AUTH_REPR => Self::ServerAuth,
             _ => Self::Other(values),
         }
