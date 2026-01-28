@@ -18,6 +18,8 @@ pub use crate::webpki::{
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};
 use crate::{SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite};
 
+pub mod supported_algorithms;
+
 /// TLS message encryption/decryption interfaces.
 pub mod cipher;
 
