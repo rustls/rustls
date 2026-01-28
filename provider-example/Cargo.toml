@@ -27,6 +27,7 @@ x25519-dalek = { workspace = true }
 [dev-dependencies]
 env_logger = { workspace = true }
 rcgen = { workspace = true }
+rustls-util = { path = "../rustls-util" }
 webpki-roots = { workspace = true }
 
 [features]
