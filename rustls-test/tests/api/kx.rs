@@ -13,7 +13,6 @@ use rustls::crypto::kx::{
 };
 use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
-use rustls::internal::msgs::ExtensionType;
 use rustls::{ClientConfig, HandshakeKind, ServerConfig};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, KeyType, OtherSession, ServerConfigExt,
@@ -329,11 +328,11 @@ fn test_server_rejects_clients_without_any_kx_groups() {
                 encoding::client_hello_with_extensions(vec![
                     encoding::Extension::new_sig_algs(),
                     encoding::Extension {
-                        typ: ExtensionType::EllipticCurves,
+                        typ: encoding::Extension::ELLIPTIC_CURVES,
                         body: encoding::len_u16(vec![]),
                     },
                     encoding::Extension {
-                        typ: ExtensionType::KeyShare,
+                        typ: encoding::Extension::KEY_SHARE,
                         body: encoding::len_u16(vec![]),
                     },
                 ]),
