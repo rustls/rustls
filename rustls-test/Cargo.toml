@@ -14,7 +14,7 @@ ring = ["dep:rustls-ring"]
 zlib = ["rustls/zlib"]
 
 [dependencies]
-rustls = { path = "../rustls", default-features = false, features = ["std"] }
+rustls = { path = "../rustls", default-features = false, features = ["std", "webpki"] }
 rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", features = ["std"], optional = true }
 rustls-ring = { path = "../rustls-ring", optional = true }
 

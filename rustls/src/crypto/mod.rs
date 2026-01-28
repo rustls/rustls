@@ -9,9 +9,12 @@ use core::time::Duration;
 use pki_types::{FipsStatus, PrivateKeyDer, SignatureVerificationAlgorithm};
 
 use crate::enums::ProtocolVersion;
-use crate::error::{ApiMisuse, Error, PeerMisbehaved};
+#[cfg(feature = "webpki")]
+use crate::error::PeerMisbehaved;
+use crate::error::{ApiMisuse, Error};
 use crate::msgs::ALL_KEY_EXCHANGE_ALGORITHMS;
 use crate::sync::Arc;
+#[cfg(feature = "webpki")]
 pub use crate::webpki::{verify_tls12_signature, verify_tls13_signature};
 #[cfg(doc)]
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};
@@ -427,6 +430,7 @@ impl WebPkiSupportedAlgorithms {
     }
 
     /// Return the first item in `mapping` that matches `scheme`.
+    #[cfg(feature = "webpki")]
     pub(crate) fn convert_scheme(
         &self,
         scheme: SignatureScheme,

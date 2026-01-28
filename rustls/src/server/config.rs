@@ -3,7 +3,9 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 
-use pki_types::{DnsName, FipsStatus, PrivateKeyDer, UnixTime};
+#[cfg(feature = "webpki")]
+use pki_types::PrivateKeyDer;
+use pki_types::{DnsName, FipsStatus, UnixTime};
 
 use super::handy;
 use super::hs::ClientHelloInput;
@@ -12,9 +14,10 @@ use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::crypto;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme,
-    SingleCredential, TicketProducer,
+    CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme, TicketProducer,
 };
+#[cfg(feature = "webpki")]
+use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::ServerNamePayload;
@@ -627,6 +630,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// This function fails if `key_der` is invalid, or if the
     /// `SubjectPublicKeyInfo` from the private key does not match the public
     /// key for the end-entity certificate from the `cert_chain`.
+    #[cfg(feature = "webpki")]
     pub fn with_single_cert(
         self,
         identity: Arc<Identity<'static>>,
@@ -649,6 +653,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// This function fails if `key_der` is invalid, or if the
     /// `SubjectPublicKeyInfo` from the private key does not match the public
     /// key for the end-entity certificate from the `cert_chain`.
+    #[cfg(feature = "webpki")]
     pub fn with_single_cert_with_ocsp(
         self,
         identity: Arc<Identity<'static>>,

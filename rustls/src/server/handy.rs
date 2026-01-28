@@ -146,7 +146,7 @@ mod cache {
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use cache::ServerSessionMemoryCache;
 
-#[cfg(any(feature = "std", feature = "hashbrown"))]
+#[cfg(all(any(feature = "std", feature = "hashbrown"), feature = "webpki"))]
 mod sni_resolver {
     use core::fmt::Debug;
 
@@ -270,7 +270,7 @@ mod sni_resolver {
     }
 }
 
-#[cfg(any(feature = "std", feature = "hashbrown"))]
+#[cfg(all(any(feature = "std", feature = "hashbrown"), feature = "webpki"))]
 pub use sni_resolver::ServerNameResolver;
 
 #[cfg(test)]
