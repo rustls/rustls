@@ -40,6 +40,7 @@ default-members = [
   # ---
   "examples",
   "rustls",
+  "rustls-aws-lc-rs",
   "rustls-ring",
   "rustls-test",
 ]
