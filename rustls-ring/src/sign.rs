@@ -8,7 +8,7 @@ use core::fmt::{self, Debug, Formatter};
 use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
-#[cfg(any(test, bench))]
+#[cfg(test)]
 use rustls::crypto::CryptoProvider;
 use rustls::crypto::{SignatureScheme, Signer, SigningKey, public_key_to_spki};
 use rustls::error::Error;
@@ -354,7 +354,7 @@ impl Debug for Ed25519Signer {
     }
 }
 
-#[cfg(any(test, bench))]
+#[cfg(test)] // Also available for benchmarks
 fn load_key(
     provider: &CryptoProvider,
     der: PrivateKeyDer<'static>,
@@ -646,7 +646,7 @@ mod tests {
     }
 }
 
-#[cfg(bench)]
+#[cfg(all(test, bench))]
 mod benchmarks {
     use super::*;
     use crate::DEFAULT_PROVIDER;
