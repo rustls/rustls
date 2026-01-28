@@ -14,7 +14,8 @@ use crate::crypto::SignatureScheme;
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::verify::{HandshakeSignatureValid, SignatureVerificationInput, SignerPublicKey};
 
-pub use crate::crypto::supported_algorithms::WebPkiSupportedAlgorithms;
+// XXX TBD ??? ??? ???:
+pub use crate::crypto::WebPkiSupportedAlgorithms;
 
 /// Verify that the end-entity certificate `end_entity` is a valid server cert
 /// and chains to at least one of the trust anchors in the `roots` [RootCertStore].

@@ -11,20 +11,19 @@ use crate::enums::ProtocolVersion;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::ALL_KEY_EXCHANGE_ALGORITHMS;
 use crate::sync::Arc;
-pub use crate::webpki::{
-    WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
-};
+pub use crate::webpki::{verify_tls12_signature, verify_tls13_signature};
 #[cfg(doc)]
 use crate::{ClientConfig, ConfigBuilder, ServerConfig, client, crypto, server};
 use crate::{SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite};
-
-pub mod supported_algorithms;
 
 /// TLS message encryption/decryption interfaces.
 pub mod cipher;
 
 mod enums;
 pub use enums::{CipherSuite, HashAlgorithm, SignatureAlgorithm, SignatureScheme};
+
+mod supported_algorithms;
+pub use supported_algorithms::WebPkiSupportedAlgorithms;
 
 /// Hashing interfaces.
 pub mod hash;
