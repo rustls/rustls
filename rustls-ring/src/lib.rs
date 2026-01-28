@@ -9,7 +9,7 @@ extern crate alloc;
 extern crate std;
 
 // Import `test` sysroot crate for `Bencher` definitions.
-#[cfg(bench)]
+#[cfg(all(test, bench))]
 #[expect(unused_extern_crates)]
 extern crate test;
 

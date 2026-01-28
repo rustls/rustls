@@ -479,7 +479,7 @@ mod tests {
     }
 }
 
-#[cfg(bench)]
+#[cfg(all(test, bench))]
 mod benchmarks {
     use rustls::crypto::hmac::Hmac;
     use rustls::crypto::tls12::prf;

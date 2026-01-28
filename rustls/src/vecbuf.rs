@@ -276,7 +276,7 @@ mod tests {
     }
 }
 
-#[cfg(bench)]
+#[cfg(all(test, bench))]
 mod benchmarks {
     use alloc::vec;
 
