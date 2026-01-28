@@ -4,7 +4,9 @@ use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 
-use pki_types::{FipsStatus, PrivateKeyDer, ServerName, UnixTime};
+#[cfg(feature = "webpki")]
+use pki_types::PrivateKeyDer;
+use pki_types::{FipsStatus, ServerName, UnixTime};
 
 use super::ech::EchMode;
 #[cfg(feature = "std")]
@@ -15,10 +17,9 @@ use crate::builder::{ConfigBuilder, WantsVerifier};
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::kx::NamedGroup;
-use crate::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme,
-    SingleCredential, hash,
-};
+use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme, hash};
+#[cfg(feature = "webpki")]
+use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
@@ -27,6 +28,7 @@ use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
+#[cfg(feature = "webpki")]
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{DistinguishedName, DynHasher, KeyLog, compress, verify};
 
@@ -619,6 +621,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// +   .build()?
     /// + )
     /// ```
+    #[cfg(feature = "webpki")]
     pub fn with_root_certificates(
         self,
         root_store: impl Into<Arc<webpki::RootCertStore>>,
@@ -635,6 +638,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     ///
     /// See [`webpki::WebPkiServerVerifier::builder`] and
     /// [`webpki::WebPkiServerVerifier::builder`] for more information.
+    #[cfg(feature = "webpki")]
     pub fn with_webpki_verifier(
         self,
         verifier: Arc<WebPkiServerVerifier>,
@@ -692,6 +696,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// all three encodings, but other `CryptoProviders` may not.
     ///
     /// This function fails if `key_der` is invalid.
+    #[cfg(feature = "webpki")]
     pub fn with_client_auth_cert(
         self,
         identity: Arc<Identity<'static>>,

@@ -394,6 +394,7 @@ mod key_log;
 mod key_log_file;
 mod suites;
 mod versions;
+#[cfg(feature = "webpki")]
 mod webpki;
 
 /// Internal classes that are used in integration tests.
@@ -469,6 +470,7 @@ pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::verify::{DigitallySignedStruct, DistinguishedName, SignerPublicKey};
 pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersion};
+#[cfg(feature = "webpki")]
 pub use crate::webpki::RootCertStore;
 
 /// Items for use in a client.

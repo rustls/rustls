@@ -1,4 +1,5 @@
 pub use crate::verify::NoClientAuth;
+#[cfg(feature = "webpki")]
 pub use crate::webpki::{
     ClientVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
 };
@@ -16,7 +17,7 @@ pub use connection::{ServerConnectionData, UnbufferedServerConnection};
 
 pub(crate) mod handy;
 pub use handy::NoServerSessionStorage;
-#[cfg(any(feature = "std", feature = "hashbrown"))]
+#[cfg(all(any(feature = "std", feature = "hashbrown"), feature = "webpki"))]
 pub use handy::ServerNameResolver;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use handy::ServerSessionMemoryCache;
