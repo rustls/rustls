@@ -404,8 +404,7 @@ pub mod internal {
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
         pub use crate::msgs::{
-            AlertLevel, Codec, ExtensionType, Message, MessageFragmenter, MessagePayload, Reader,
-            ServerSessionValue,
+            Codec, Message, MessageFragmenter, MessagePayload, Reader, ServerSessionValue,
         };
     }
 

@@ -2109,7 +2109,6 @@ pub mod encoding {
     use rustls::crypto::{CipherSuite, SignatureScheme};
     use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
     use rustls::error::AlertDescription;
-    use rustls::internal::msgs::{AlertLevel, Codec, ExtensionType};
 
     /// Return a client hello with mandatory extensions added to `extensions`
     ///
@@ -2147,15 +2146,19 @@ pub mod encoding {
     ) -> Vec<u8> {
         let mut out = vec![];
 
-        legacy_version.encode(&mut out);
+        out.extend_from_slice(&legacy_version.to_array());
         out.extend_from_slice(random);
         out.extend_from_slice(session_id);
-        cipher_suites.to_vec().encode(&mut out);
+        out.extend(len_u16(vector_of(
+            cipher_suites
+                .into_iter()
+                .map(|cs| cs.to_array()),
+        )));
         out.extend_from_slice(&[0x01, 0x00]); // only null compression
 
         let mut exts = vec![];
         for e in extensions {
-            e.typ.encode(&mut exts);
+            exts.extend_from_slice(&e.typ.to_be_bytes());
             exts.extend_from_slice(&(e.body.len() as u16).to_be_bytes());
             exts.extend_from_slice(&e.body);
         }
@@ -2183,36 +2186,36 @@ pub mod encoding {
 
     #[derive(Clone)]
     pub struct Extension {
-        pub typ: ExtensionType,
+        pub typ: u16,
         pub body: Vec<u8>,
     }
 
     impl Extension {
         pub fn new_sig_algs() -> Self {
             Self {
-                typ: ExtensionType::SignatureAlgorithms,
+                typ: Self::SIGNATURE_ALGORITHMS,
                 body: len_u16(vector_of(
                     [
                         SignatureScheme::RSA_PKCS1_SHA256,
                         SignatureScheme::ECDSA_NISTP256_SHA256,
                     ]
-                    .into_iter(),
+                    .map(|s| s.to_array()),
                 )),
             }
         }
 
         pub fn new_kx_groups() -> Self {
             Self {
-                typ: ExtensionType::EllipticCurves,
-                body: len_u16(vector_of([NamedGroup::secp256r1].into_iter())),
+                typ: Self::ELLIPTIC_CURVES,
+                body: len_u16(vector_of([NamedGroup::secp256r1.to_array()])),
             }
         }
 
         pub fn new_versions() -> Self {
             Self {
-                typ: ExtensionType::SupportedVersions,
+                typ: Self::SUPPORTED_VERSIONS,
                 body: len_u8(vector_of(
-                    [ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2].into_iter(),
+                    [ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2].map(|v| v.to_array()),
                 )),
             }
         }
@@ -2229,22 +2232,28 @@ pub mod encoding {
             share.splice(0..0, NamedGroup::secp256r1.to_array());
 
             Self {
-                typ: ExtensionType::KeyShare,
+                typ: Self::KEY_SHARE,
                 body: len_u16(share),
             }
         }
 
         pub fn new_quic_transport_params(body: &[u8]) -> Self {
             Self {
-                typ: ExtensionType::TransportParameters,
+                typ: Self::TRANSPORT_PARAMETERS,
                 body: len_u16(body.to_vec()),
             }
         }
+
+        pub const ELLIPTIC_CURVES: u16 = 0x000a;
+        pub const SIGNATURE_ALGORITHMS: u16 = 0x000d;
+        pub const SUPPORTED_VERSIONS: u16 = 0x002b;
+        pub const KEY_SHARE: u16 = 0x0033;
+        pub const TRANSPORT_PARAMETERS: u16 = 0x0039;
     }
 
-    /// Return a full TLS message containing an alert.
+    /// Return a full TLS message containing a fatal alert.
     pub fn alert(desc: AlertDescription, suffix: &[u8]) -> Vec<u8> {
-        let mut body = vec![AlertLevel::Fatal.into(), desc.into()];
+        let mut body = vec![ALERT_LEVEL_FATAL, desc.into()];
         body.extend_from_slice(suffix);
         message_framing(ContentType::Alert, ProtocolVersion::TLSv1_2, body)
     }
@@ -2271,12 +2280,9 @@ pub mod encoding {
     }
 
     /// Encode each of `items`
-    pub fn vector_of<'a, T: Codec<'a>>(items: impl Iterator<Item = T>) -> Vec<u8> {
-        let mut body = Vec::new();
-
-        for i in items {
-            i.encode(&mut body);
-        }
-        body
+    pub fn vector_of<const N: usize>(items: impl IntoIterator<Item = [u8; N]>) -> Vec<u8> {
+        items.into_iter().flatten().collect()
     }
+
+    const ALERT_LEVEL_FATAL: u8 = 2;
 }
