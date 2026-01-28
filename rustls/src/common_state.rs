@@ -47,7 +47,7 @@ pub(crate) fn process_main_protocol<Data: SideData>(
     let common = data.deref_mut();
     let msg = common
         .recv
-        .parse_and_maybe_drop(&msg, &mut common.send)?;
+        .parse_and_maybe_drop(msg, &mut common.send)?;
 
     let Some(msg) = msg else {
         // Message is dropped.
@@ -920,7 +920,7 @@ impl ReceivePath {
 
     fn parse_and_maybe_drop<'a>(
         &mut self,
-        msg: &'a EncodedMessage<&'a [u8]>,
+        msg: EncodedMessage<&'a [u8]>,
         send_path: &mut dyn Output,
     ) -> Result<Option<Message<'a>>, Error> {
         // Now we can fully parse the message payload.

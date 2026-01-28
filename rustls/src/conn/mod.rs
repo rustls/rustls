@@ -631,7 +631,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .side
             .recv
             .deframe(self.deframer_buffer.filled_mut(), &mut buffer_progress)
-            .map(|opt| opt.map(|pm| Message::try_from(&pm.plaintext).map(|m| m.into_owned())));
+            .map(|opt| opt.map(|pm| Message::try_from(pm.plaintext).map(|m| m.into_owned())));
 
         match res? {
             Some(Ok(msg)) => {
