@@ -559,11 +559,13 @@ dependencies = [
 
 [[package]]
 name = "crabgrind"
-version = "0.1.9"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdbd43e4f32a9681a504577db2d4ea7d3f7b1bf2e97955561af98501ab600508"
+checksum = "b3001f5483dec2528e51d83f34944c939f1f80052d8b90f6a485884904bbc367"
 dependencies = [
+ "bindgen",
  "cc",
+ "pkg-config",
 ]
 
 [[package]]
