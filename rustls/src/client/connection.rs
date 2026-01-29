@@ -48,7 +48,7 @@ mod buffered {
     impl fmt::Debug for ClientConnection {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("ClientConnection")
-                .finish()
+                .finish_non_exhaustive()
         }
     }
 

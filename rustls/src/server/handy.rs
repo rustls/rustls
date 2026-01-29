@@ -90,7 +90,7 @@ mod cache {
     impl Debug for ServerSessionMemoryCache {
         fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
             f.debug_struct("ServerSessionMemoryCache")
-                .finish()
+                .finish_non_exhaustive()
         }
     }
 

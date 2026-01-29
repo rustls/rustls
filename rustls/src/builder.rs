@@ -150,7 +150,7 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
 
         f.debug_struct(&format!("ConfigBuilder<{name}, _>",))
             .field("state", &self.state)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
