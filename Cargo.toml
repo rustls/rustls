@@ -57,7 +57,7 @@ brotli-decompressor = "5.0.0"
 byteorder = "1.4.3"
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 clap = { version = "4.3.21", features = ["derive", "env"] }
-crabgrind = "=0.1.9" # compatible with valgrind package on GHA ubuntu-latest
+crabgrind = "0.2"
 criterion = "0.8"
 der = "0.7"
 ecdsa = { version = "0.16.8", features = ["pem"] }
