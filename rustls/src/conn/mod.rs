@@ -8,7 +8,6 @@ use kernel::KernelConnection;
 
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Input, Output, State, UnborrowedPayload,
-    receive_message,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{ApiMisuse, Error};
@@ -809,8 +808,10 @@ impl<Side: SideData> ConnectionCore<Side> {
 
             let hs_aligned = self.side.recv.hs_deframer.aligned();
             let common = self.side.deref_mut();
-            match receive_message(msg, hs_aligned, &mut common.recv, &mut common.send).and_then(
-                |input| match input {
+            match common
+                .recv
+                .receive_message(msg, hs_aligned, &mut common.send)
+                .and_then(|input| match input {
                     Some(input) => state.handle(
                         input,
                         &mut CaptureAppData {
@@ -820,8 +821,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                         },
                     ),
                     None => Ok(state),
-                },
-            ) {
+                }) {
                 Ok(new) => state = new,
                 Err(e) => {
                     self.side
