@@ -8,7 +8,7 @@ use core::{fmt, mem};
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
-use crate::common_state::{CaptureAppData, receive_message};
+use crate::common_state::CaptureAppData;
 use crate::conn::SideData;
 use crate::crypto::cipher::{Decrypted, Payload};
 use crate::error::Error;
@@ -134,8 +134,10 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     .aligned();
                 let common = self.core.side.deref_mut();
 
-                match receive_message(msg, hs_align, &mut common.recv, &mut common.send).and_then(
-                    |input| match input {
+                match common
+                    .recv
+                    .receive_message(msg, hs_align, &mut common.send)
+                    .and_then(|input| match input {
                         Some(input) => state.handle(
                             input,
                             &mut CaptureAppData {
@@ -145,8 +147,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                             },
                         ),
                         None => Ok(state),
-                    },
-                ) {
+                    }) {
                     Ok(new) => {
                         buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Ok(new);
