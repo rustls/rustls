@@ -30,40 +30,6 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
-/// Take a TLS message `msg` and map it into an `Input`
-///
-/// `Input` is the input to our state machine.
-///
-/// The message is mapped into `None` if it should be dropped with no further
-/// action.
-///
-/// Otherwise the caller must present the returned `Input` to the state machine to
-/// progress the connection.
-pub(crate) fn receive_message<'a>(
-    msg: EncodedMessage<&'a [u8]>,
-    aligned_handshake: Option<HandshakeAlignedProof>,
-    recv: &mut ReceivePath,
-    send_path: &mut dyn Output,
-) -> Result<Option<Input<'a>>, Error> {
-    // Drop CCS messages during handshake in TLS1.3
-    if msg.typ == ContentType::ChangeCipherSpec && recv.drop_tls13_ccs(&msg)? {
-        trace!("Dropping CCS");
-        return Ok(None);
-    }
-
-    let msg = recv.parse_and_maybe_drop(msg, send_path)?;
-
-    let Some(msg) = msg else {
-        // Message is dropped.
-        return Ok(None);
-    };
-
-    Ok(Some(Input {
-        message: msg,
-        aligned_handshake,
-    }))
-}
-
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) outputs: ConnectionOutputs,
@@ -892,6 +858,40 @@ impl ReceivePath {
                     }));
             }
         }
+    }
+
+    /// Take a TLS message `msg` and map it into an `Input`
+    ///
+    /// `Input` is the input to our state machine.
+    ///
+    /// The message is mapped into `None` if it should be dropped with no further
+    /// action.
+    ///
+    /// Otherwise the caller must present the returned `Input` to the state machine to
+    /// progress the connection.
+    pub(crate) fn receive_message<'a>(
+        &mut self,
+        msg: EncodedMessage<&'a [u8]>,
+        aligned_handshake: Option<HandshakeAlignedProof>,
+        send_path: &mut dyn Output,
+    ) -> Result<Option<Input<'a>>, Error> {
+        // Drop CCS messages during handshake in TLS1.3
+        if msg.typ == ContentType::ChangeCipherSpec && self.drop_tls13_ccs(&msg)? {
+            trace!("Dropping CCS");
+            return Ok(None);
+        }
+
+        let msg = self.parse_and_maybe_drop(msg, send_path)?;
+
+        let Some(msg) = msg else {
+            // Message is dropped.
+            return Ok(None);
+        };
+
+        Ok(Some(Input {
+            message: msg,
+            aligned_handshake,
+        }))
     }
 
     fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
