@@ -1422,7 +1422,7 @@ impl Debug for ClientCacheWithSpecificKxHints {
         // Note: we omit self.storage here as it may contain sensitive data.
         f.debug_struct("ClientCacheWithoutKxHints")
             .field("delay", &self.delay)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

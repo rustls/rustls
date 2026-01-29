@@ -139,7 +139,7 @@ impl fmt::Debug for Tls12CipherSuite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tls12CipherSuite")
             .field("suite", &self.common.suite)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

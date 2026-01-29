@@ -457,7 +457,8 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeSealer for Sealer<KEY_SIZ
 
 impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Debug for Sealer<KEY_SIZE, KDF_SIZE> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Sealer").finish()
+        f.debug_struct("Sealer")
+            .finish_non_exhaustive()
     }
 }
 
@@ -510,7 +511,8 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeOpener for Opener<KEY_SIZ
 
 impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Debug for Opener<KEY_SIZE, KDF_SIZE> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Opener").finish()
+        f.debug_struct("Opener")
+            .finish_non_exhaustive()
     }
 }
 

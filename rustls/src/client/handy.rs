@@ -174,7 +174,7 @@ mod cache {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             // Note: we omit self.servers as it may contain sensitive data.
             f.debug_struct("ClientSessionMemoryCache")
-                .finish()
+                .finish_non_exhaustive()
         }
     }
 }

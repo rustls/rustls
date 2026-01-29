@@ -67,7 +67,7 @@ impl Debug for KeyLogFileInner {
         f.debug_struct("KeyLogFileInner")
             // Note: we omit self.buf deliberately as it may contain key data.
             .field("file", &self.file)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

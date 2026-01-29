@@ -90,7 +90,8 @@ impl TryFrom<&PrivateKeyDer<'_>> for RsaSigningKey {
 
 impl Debug for RsaSigningKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RsaSigningKey").finish()
+        f.debug_struct("RsaSigningKey")
+            .finish_non_exhaustive()
     }
 }
 
@@ -126,7 +127,7 @@ impl Debug for RsaSigner {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RsaSigner")
             .field("scheme", &self.scheme)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -280,7 +281,7 @@ impl Debug for EcdsaSigner {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("EcdsaSigner")
             .field("scheme", &self.scheme)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -350,7 +351,7 @@ impl Debug for Ed25519Signer {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Ed25519Signer")
             .field("scheme", &self.scheme)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -448,7 +449,7 @@ mod tests {
         let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
         assert_eq!(
             format!("{k:?}"),
-            "EcdsaSigner { scheme: ECDSA_NISTP256_SHA256 }"
+            "EcdsaSigner { scheme: ECDSA_NISTP256_SHA256, .. }"
         );
 
         assert!(
@@ -464,7 +465,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             format!("{s:?}"),
-            "EcdsaSigner { scheme: ECDSA_NISTP256_SHA256 }"
+            "EcdsaSigner { scheme: ECDSA_NISTP256_SHA256, .. }"
         );
         assert_eq!(s.scheme(), SignatureScheme::ECDSA_NISTP256_SHA256);
         // nb. signature is variable length and asn.1-encoded
@@ -504,7 +505,7 @@ mod tests {
         let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
         assert_eq!(
             format!("{k:?}"),
-            "EcdsaSigner { scheme: ECDSA_NISTP384_SHA384 }"
+            "EcdsaSigner { scheme: ECDSA_NISTP384_SHA384, .. }"
         );
 
         assert!(
@@ -520,7 +521,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             format!("{s:?}"),
-            "EcdsaSigner { scheme: ECDSA_NISTP384_SHA384 }"
+            "EcdsaSigner { scheme: ECDSA_NISTP384_SHA384, .. }"
         );
         assert_eq!(s.scheme(), SignatureScheme::ECDSA_NISTP384_SHA384);
         // nb. signature is variable length and asn.1-encoded
@@ -547,7 +548,7 @@ mod tests {
             PrivatePkcs8KeyDer::from(&include_bytes!("../../rustls/src/testdata/eddsakey.der")[..]);
 
         let k = Ed25519Signer::try_from(&key).unwrap();
-        assert_eq!(format!("{k:?}"), "Ed25519Signer { scheme: ED25519 }");
+        assert_eq!(format!("{k:?}"), "Ed25519Signer { scheme: ED25519, .. }");
 
         assert!(
             k.choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
@@ -560,7 +561,7 @@ mod tests {
         let s = k
             .choose_scheme(&[SignatureScheme::ED25519])
             .unwrap();
-        assert_eq!(format!("{s:?}"), "Ed25519Signer { scheme: ED25519 }");
+        assert_eq!(format!("{s:?}"), "Ed25519Signer { scheme: ED25519, .. }");
         assert_eq!(s.scheme(), SignatureScheme::ED25519);
         assert_eq!(s.sign(b"hello").unwrap().len(), 64);
     }
@@ -592,7 +593,7 @@ mod tests {
         ));
 
         let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
-        assert_eq!(format!("{k:?}"), "RsaSigningKey");
+        assert_eq!(format!("{k:?}"), "RsaSigningKey { .. }");
 
         assert!(
             k.choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
@@ -606,7 +607,7 @@ mod tests {
         let s = k
             .choose_scheme(&[SignatureScheme::RSA_PSS_SHA256])
             .unwrap();
-        assert_eq!(format!("{s:?}"), "RsaSigner { scheme: RSA_PSS_SHA256 }");
+        assert_eq!(format!("{s:?}"), "RsaSigner { scheme: RSA_PSS_SHA256, .. }");
         assert_eq!(s.scheme(), SignatureScheme::RSA_PSS_SHA256);
         assert_eq!(s.sign(b"hello").unwrap().len(), 256);
 

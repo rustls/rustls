@@ -174,7 +174,7 @@ mod buffered {
     impl Debug for ServerConnection {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             f.debug_struct("ServerConnection")
-                .finish()
+                .finish_non_exhaustive()
         }
     }
 
@@ -358,7 +358,8 @@ mod buffered {
 
     impl Debug for AcceptedAlert {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            f.debug_struct("AcceptedAlert").finish()
+            f.debug_struct("AcceptedAlert")
+                .finish_non_exhaustive()
         }
     }
 
@@ -591,7 +592,8 @@ impl Accepted {
 #[cfg(feature = "std")]
 impl Debug for Accepted {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Accepted").finish()
+        f.debug_struct("Accepted")
+            .finish_non_exhaustive()
     }
 }
 
