@@ -23,7 +23,6 @@ use rustls::crypto::{
 };
 use rustls::enums::{CertificateType, ContentType, ProtocolVersion};
 use rustls::error::{CertificateError, Error};
-use rustls::internal::msgs::{Codec, Message, Reader};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{
     CertificateDer, CertificateRevocationListDer, DnsName, PrivateKeyDer, PrivatePkcs8KeyDer,
@@ -253,7 +252,7 @@ pub enum Altered {
 
 pub fn transfer_altered<F>(left: &mut Connection, filter: F, right: &mut Connection) -> usize
 where
-    F: Fn(&mut Message<'_>) -> Altered,
+    F: Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
 {
     let mut buf = [0u8; 262144];
     let mut total = 0;
@@ -268,24 +267,37 @@ where
             return total;
         }
 
-        let mut reader = Reader::init(&buf[..sz]);
-        while reader.any_left() {
-            // this is a bit of a falsehood: we don't know whether message
-            // is encrypted.  it is quite unlikely that a genuine encrypted
-            // message can be decoded by `Message::try_from`.
-            let plain = EncodedMessage::<Payload<'_>>::read(&mut reader)
-                .unwrap()
-                .into_owned();
+        let mut offset = 0;
+        while offset < sz {
+            assert!(
+                offset + 5 <= sz,
+                "incomplete TLS record header at offset {offset}"
+            );
 
-            let message_enc = match Message::try_from(&plain) {
-                Ok(mut message) => match filter(&mut message) {
-                    Altered::InPlace => EncodedMessage::<Payload<'static>>::from(message)
-                        .into_unencrypted_opaque()
-                        .encode(),
-                    Altered::Raw(data) => data,
-                },
-                // pass through encrypted/undecodable messages
-                Err(_) => plain.into_unencrypted_opaque().encode(),
+            let typ = ContentType::from(buf[offset]);
+            let version =
+                ProtocolVersion::from(u16::from_be_bytes([buf[offset + 1], buf[offset + 2]]));
+            let payload_len = u16::from_be_bytes([buf[offset + 3], buf[offset + 4]]) as usize;
+
+            assert!(
+                offset + 5 + payload_len <= sz,
+                "incomplete TLS record payload at offset {offset}"
+            );
+
+            let payload = buf[offset + 5..offset + 5 + payload_len].to_vec();
+            offset += 5 + payload_len;
+
+            let mut encoded = EncodedMessage {
+                typ,
+                version,
+                payload,
+            };
+
+            let message_enc = match filter(&mut encoded) {
+                Altered::InPlace => {
+                    encoding::message_framing(encoded.typ, encoded.version, encoded.payload.clone())
+                }
+                Altered::Raw(data) => data,
             };
 
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
@@ -866,8 +878,8 @@ pub fn do_handshake_until_error(
 
 pub fn do_handshake_altered(
     client: ClientConnection,
-    alter_server_message: impl Fn(&mut Message<'_>) -> Altered,
-    alter_client_message: impl Fn(&mut Message<'_>) -> Altered,
+    alter_server_message: impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
+    alter_client_message: impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
     server: ServerConnection,
 ) -> Result<(), ErrorFromPeer> {
     let mut client: Connection = Connection::Client(client);
@@ -1439,18 +1451,19 @@ impl RawTls {
     pub fn receive_and_decrypt(
         &mut self,
         peer: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-        f: impl Fn(Message<'_>),
+        f: impl Fn(EncodedMessage<&[u8]>),
     ) {
         let mut data = vec![];
         peer.write_tls(&mut io::Cursor::new(&mut data))
             .unwrap();
 
-        let mut reader = Reader::init(&data);
-        let typ = ContentType::read(&mut reader).unwrap();
-        let version = ProtocolVersion::read(&mut reader).unwrap();
-        let len = u16::read(&mut reader).unwrap();
+        // Parse TLS record header: 1 byte type, 2 bytes version, 2 bytes length
+        assert!(data.len() >= 5, "incomplete TLS record header");
+        let typ = ContentType::from(data[0]);
+        let version = ProtocolVersion::from(u16::from_be_bytes([data[1], data[2]]));
+        let len = u16::from_be_bytes([data[3], data[4]]) as usize;
         let left = &mut data[5..];
-        assert_eq!(len as usize, left.len());
+        assert_eq!(len, left.len());
 
         let inbound = EncodedMessage {
             typ,
@@ -1458,13 +1471,12 @@ impl RawTls {
             payload: InboundOpaque(left),
         };
 
-        let plain = self
+        let msg = self
             .decrypter
             .decrypt(inbound, self.dec_seq)
             .unwrap();
         self.dec_seq += 1;
 
-        let msg = Message::try_from(&plain).unwrap();
         println!("receive_and_decrypt: {msg:?}");
 
         f(msg);
