@@ -404,9 +404,7 @@ pub mod internal {
         };
     }
 
-    pub mod fuzzing {
-        pub use crate::msgs::fuzz_deframer;
-    }
+    pub use crate::msgs::fuzzing;
 }
 
 /// Unbuffered connection API

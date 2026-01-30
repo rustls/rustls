@@ -58,7 +58,6 @@ pub use codec::{Codec, Reader};
 use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
-pub use deframer::fuzz_deframer;
 pub(crate) use deframer::{
     BufferProgress, DeframerIter, DeframerSliceBuffer, DeframerVecBuffer, Delocator,
     HandshakeAlignedProof, HandshakeDeframer, Locator,
@@ -107,6 +106,10 @@ pub(crate) use server_hello::{
 
 #[cfg(test)]
 mod handshake_test;
+
+pub mod fuzzing {
+    pub use super::deframer::fuzz_deframer;
+}
 
 /// A message with decoded payload
 #[expect(clippy::exhaustive_structs)]
