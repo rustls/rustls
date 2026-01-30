@@ -6,7 +6,7 @@ pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
 pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
 
-pub struct MessageFragmenter {
+pub(crate) struct MessageFragmenter {
     max_frag: usize,
 }
 
@@ -26,7 +26,7 @@ impl MessageFragmenter {
     /// Return an iterator across those messages.
     ///
     /// Payloads are borrowed from `msg`.
-    pub fn fragment_message<'a>(
+    pub(crate) fn fragment_message<'a>(
         &self,
         msg: &'a EncodedMessage<Payload<'_>>,
     ) -> impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>> + 'a {
@@ -61,7 +61,10 @@ impl MessageFragmenter {
     /// A `max_fragment_size` of `None` sets the highest allowable fragment size.
     ///
     /// Returns BadMaxFragmentSize if the size is smaller than 32 or larger than 16389.
-    pub fn set_max_fragment_size(&mut self, max_fragment_size: Option<usize>) -> Result<(), Error> {
+    pub(crate) fn set_max_fragment_size(
+        &mut self,
+        max_fragment_size: Option<usize>,
+    ) -> Result<(), Error> {
         self.max_frag = match max_fragment_size {
             Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
             None => MAX_FRAGMENT_LEN,
