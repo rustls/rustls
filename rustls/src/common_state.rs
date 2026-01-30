@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
+use core::{fmt, mem};
 
 use pki_types::{DnsName, FipsStatus};
 
@@ -296,6 +296,7 @@ pub(crate) struct SendPath {
     queued_key_update_message: Option<Vec<u8>>,
     pub(crate) refresh_traffic_keys_pending: bool,
     negotiated_version: Option<ProtocolVersion>,
+    pub(crate) tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
 }
 
 impl SendPath {
@@ -620,20 +621,43 @@ impl SendPath {
         );
         true
     }
+
+    /// Trigger a `refresh_traffic_keys` if required.
+    pub(crate) fn maybe_refresh_traffic_keys(&mut self) {
+        if mem::take(&mut self.refresh_traffic_keys_pending) {
+            let _ = self.refresh_traffic_keys();
+        }
+    }
+
+    pub(crate) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+        let ks = self.tls13_key_schedule.take();
+
+        let Some(mut ks) = ks else {
+            return Err(Error::HandshakeNotComplete);
+        };
+
+        ks.request_key_update_and_update_encrypter(self);
+        self.tls13_key_schedule = Some(ks);
+        Ok(())
+    }
 }
 
 impl Output for SendPath {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EncryptMessage(m) => self.send_msg(m, true),
-            Event::MaybeKeyUpdateRequest(ks) => {
+            Event::MaybeKeyUpdateRequest => {
                 if self.ensure_key_update_queued() {
-                    ks.update_encrypter_for_key_update(self);
+                    if let Some(mut ks) = self.tls13_key_schedule.take() {
+                        ks.update_encrypter_for_key_update(self);
+                        self.tls13_key_schedule = Some(ks);
+                    }
                 }
             }
             Event::MessageEncrypter { encrypter, limit } => self
                 .encrypt_state
                 .set_message_encrypter(encrypter, limit),
+            Event::OutgoingKeySchedule(klc) => self.tls13_key_schedule = Some(klc),
             Event::PlainMessage(m) => self.send_msg(m, false),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
             Event::SendAlert(level, desc) => self.send_alert(level, desc),
@@ -655,6 +679,7 @@ impl Default for SendPath {
             queued_key_update_message: None,
             refresh_traffic_keys_pending: false,
             negotiated_version: None,
+            tls13_key_schedule: None,
         }
     }
 }
@@ -1060,10 +1085,6 @@ pub(crate) trait State: Send + Sync {
         output: &mut dyn Output,
     ) -> Result<Box<dyn State>, Error>;
 
-    fn send_key_update_request(&mut self, _output: &mut dyn Output) -> Result<(), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
-
     fn handle_decrypt_error(&self) {}
 
     fn set_resumption_data(&mut self, _resumption_data: &[u8]) -> Result<(), Error> {
@@ -1072,6 +1093,7 @@ pub(crate) trait State: Send + Sync {
 
     fn into_external_state(
         self: Box<Self>,
+        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
     }
@@ -1147,7 +1169,7 @@ pub(crate) enum Event<'a> {
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
-    MaybeKeyUpdateRequest(&'a mut KeyScheduleTrafficSend),
+    MaybeKeyUpdateRequest,
     MessageDecrypter {
         decrypter: Box<dyn MessageDecrypter>,
         proof: HandshakeAlignedProof,
@@ -1161,6 +1183,7 @@ pub(crate) enum Event<'a> {
         encrypter: Box<dyn MessageEncrypter>,
         limit: u64,
     },
+    OutgoingKeySchedule(Box<KeyScheduleTrafficSend>),
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
     ProtocolVersion(ProtocolVersion),
@@ -1185,8 +1208,9 @@ impl Event<'_> {
             Event::EncryptMessage(_) | Event::PlainMessage(_) => EventDisposition::MessageOutput,
 
             // send-specific events
-            Event::MaybeKeyUpdateRequest(_)
+            Event::MaybeKeyUpdateRequest
             | Event::MessageEncrypter { .. }
+            | Event::OutgoingKeySchedule(_)
             | Event::SendAlert(..)
             | Event::StartOutgoingTraffic => EventDisposition::SendPath,
 
