@@ -399,7 +399,7 @@ mod webpki;
 pub mod internal {
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
-        pub use crate::msgs::{Codec, Message, MessagePayload, Reader, ServerSessionValue};
+        pub use crate::msgs::{Codec, Reader, ServerSessionValue};
     }
 
     pub use crate::msgs::fuzzing;
