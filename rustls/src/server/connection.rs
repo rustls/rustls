@@ -48,7 +48,7 @@ mod buffered {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use pki_types::{DnsName, FipsStatus};
+    use pki_types::DnsName;
 
     use super::{
         Accepted, Accepting, Protocol, ServerConfig, ServerConnectionData, ServerExtensionsInput,
@@ -153,15 +153,6 @@ mod buffered {
             } else {
                 None
             }
-        }
-
-        /// Return the FIPS validation status of the connection's `ServerConfig`.
-        ///
-        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
-        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
-        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-        pub fn fips(&self) -> FipsStatus {
-            self.inner.core.side.fips
         }
 
         /// Extract secrets, so they can be used when configuring kTLS, for example.
