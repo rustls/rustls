@@ -327,7 +327,10 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
                 .side
                 .send
                 .buffer_plaintext(buf.into(), &mut self.sendable_plaintext);
-            self.core.maybe_refresh_traffic_keys();
+            self.core
+                .side
+                .send
+                .maybe_refresh_traffic_keys();
             Ok(len)
         }
 
@@ -350,7 +353,10 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
                 .side
                 .send
                 .buffer_plaintext(payload, &mut self.sendable_plaintext);
-            self.core.maybe_refresh_traffic_keys();
+            self.core
+                .side
+                .send
+                .maybe_refresh_traffic_keys();
             Ok(len)
         }
 
@@ -635,7 +641,10 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// The main reason to call this manually is to roll keys when it is known
     /// a connection will be idle for a long period.
     pub fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-        self.core.refresh_traffic_keys()
+        self.core
+            .side
+            .send
+            .refresh_traffic_keys()
     }
 
     pub(crate) fn current_io_state(&self) -> IoState {
@@ -994,7 +1003,7 @@ impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn dangerous_into_kernel_connection(
         self,
     ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
-        let common = self.side.into_common();
+        let mut common = self.side.into_common();
 
         if common.is_handshaking() {
             return Err(Error::HandshakeNotComplete);
@@ -1009,12 +1018,14 @@ impl<Side: SideData> ConnectionCore<Side> {
         let read_seq = common.recv.decrypt_state.read_seq();
         let write_seq = common.send.encrypt_state.write_seq();
 
-        let (secrets, state) = state.into_external_state()?;
+        let tls13_key_schedule = common.send.tls13_key_schedule.take();
+
+        let (secrets, state) = state.into_external_state(&tls13_key_schedule)?;
         let secrets = ExtractedSecrets {
             tx: (write_seq, secrets.tx),
             rx: (read_seq, secrets.rx),
         };
-        let external = KernelConnection::new(state, common)?;
+        let external = KernelConnection::new(state, common, tls13_key_schedule)?;
 
         Ok((secrets, external))
     }
@@ -1032,25 +1043,6 @@ impl<Side: SideData> ConnectionCore<Side> {
         match self.side.early_exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
-        }
-    }
-
-    /// Trigger a `refresh_traffic_keys` if required by `CommonState`.
-    fn maybe_refresh_traffic_keys(&mut self) {
-        if mem::take(
-            &mut self
-                .side
-                .send
-                .refresh_traffic_keys_pending,
-        ) {
-            let _ = self.refresh_traffic_keys();
-        }
-    }
-
-    fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-        match &mut self.state {
-            Ok(st) => st.send_key_update_request(&mut self.side),
-            Err(e) => Err(e.clone()),
         }
     }
 }
