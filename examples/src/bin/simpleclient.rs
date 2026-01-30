@@ -12,7 +12,7 @@ use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::RootCertStore;
+use rustls::{ClientConfig, ClientConnection, RootCertStore};
 use rustls_util::{KeyLogFile, Stream};
 
 fn main() {
@@ -20,7 +20,7 @@ fn main() {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let mut config = rustls::ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into())
+    let mut config = ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into())
         .with_root_certificates(root_store)
         .with_no_client_auth()
         .unwrap();
@@ -29,7 +29,7 @@ fn main() {
     config.key_log = Arc::new(KeyLogFile::new());
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
-    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+    let mut conn = ClientConnection::new(Arc::new(config), server_name).unwrap();
     let mut sock = TcpStream::connect("www.rust-lang.org:443").unwrap();
     let mut tls = Stream::new(&mut conn, &mut sock);
     tls.write_all(

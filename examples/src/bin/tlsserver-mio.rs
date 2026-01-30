@@ -28,12 +28,12 @@ use std::{fs, net};
 use clap::{Parser, Subcommand};
 use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
-use rustls::RootCertStore;
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
-use rustls::server::WebPkiClientVerifier;
+use rustls::server::{NoServerSessionStorage, WebPkiClientVerifier};
+use rustls::{RootCertStore, ServerConfig, ServerConnection};
 use rustls_aws_lc_rs as provider;
 use rustls_util::KeyLogFile;
 
@@ -60,12 +60,12 @@ struct TlsServer {
     server: TcpListener,
     connections: HashMap<mio::Token, OpenConnection>,
     next_id: usize,
-    tls_config: Arc<rustls::ServerConfig>,
+    tls_config: Arc<ServerConfig>,
     mode: ServerMode,
 }
 
 impl TlsServer {
-    fn new(server: TcpListener, mode: ServerMode, cfg: Arc<rustls::ServerConfig>) -> Self {
+    fn new(server: TcpListener, mode: ServerMode, cfg: Arc<ServerConfig>) -> Self {
         Self {
             server,
             connections: HashMap::new(),
@@ -81,7 +81,7 @@ impl TlsServer {
                 Ok((socket, addr)) => {
                     debug!("Accepting new connection from {addr:?}");
 
-                    let tls_conn = rustls::ServerConnection::new(self.tls_config.clone()).unwrap();
+                    let tls_conn = ServerConnection::new(self.tls_config.clone()).unwrap();
                     let mode = self.mode.clone();
 
                     let token = mio::Token(self.next_id);
@@ -128,7 +128,7 @@ struct OpenConnection {
     closing: bool,
     closed: bool,
     mode: ServerMode,
-    tls_conn: rustls::ServerConnection,
+    tls_conn: ServerConnection,
     back: Option<TcpStream>,
     sent_http_response: bool,
 }
@@ -165,7 +165,7 @@ impl OpenConnection {
         socket: TcpStream,
         token: mio::Token,
         mode: ServerMode,
-        tls_conn: rustls::ServerConnection,
+        tls_conn: ServerConnection,
     ) -> Self {
         let back = open_back(&mode);
         Self {
@@ -594,7 +594,7 @@ fn load_crls(
         .collect()
 }
 
-fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
+fn make_config(args: &Args) -> Arc<ServerConfig> {
     let (versions, provider) = args.provider();
     let client_auth = if let Some(auth) = &args.auth {
         let roots = load_certs(auth);
@@ -627,7 +627,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let privkey = load_private_key(&args.key);
     let ocsp = load_ocsp(args.ocsp.as_deref());
 
-    let mut config = rustls::ServerConfig::builder(provider.into())
+    let mut config = ServerConfig::builder(provider.into())
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp(
             Arc::new(Identity::from_cert_chain(certs).unwrap()),
@@ -639,7 +639,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     config.key_log = Arc::new(KeyLogFile::new());
 
     if args.no_resumption {
-        config.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
+        config.session_storage = Arc::new(NoServerSessionStorage {});
     }
 
     if args.tickets {

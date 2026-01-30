@@ -4,11 +4,12 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::{fs, str, thread};
 
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
+use openssl::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
+use rustls::client::ClientConnection;
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{ClientConfig, RootCertStore, ServerConfig};
+use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection};
 use rustls_aws_lc_rs as provider;
 
 use crate::ffdhe::{self, FFDHE2048_GROUP};
@@ -35,7 +36,7 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
     let server_thread = thread::spawn(move || {
         let config = Arc::new(server_config_with_ffdhe_kx(provider));
         for _ in 0..iters {
-            let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
+            let mut server = ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
             server
                 .writer()
@@ -48,7 +49,7 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
         }
     });
 
-    let mut connector = openssl::ssl::SslConnector::builder(SslMethod::tls()).unwrap();
+    let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
     connector
         .set_ca_file(CA_PEM_FILE)
         .unwrap();
@@ -122,7 +123,7 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
     // client:
     for _ in 0..iters {
         let mut tcp_stream = TcpStream::connect(("localhost", port)).unwrap();
-        let mut client = rustls::client::ClientConnection::new(
+        let mut client = ClientConnection::new(
             client_config_with_ffdhe_kx().into(),
             "localhost".try_into().unwrap(),
         )

@@ -297,6 +297,7 @@ mod tests {
     use std::sync::mpsc::channel;
     use std::thread;
 
+    use rustls::ServerConfig;
     use rustls::crypto::Identity;
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -373,7 +374,7 @@ mod tests {
             .map(|cert| cert.unwrap())
             .collect();
         let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
-        let config = rustls::ServerConfig::builder(Arc::new(provider::DEFAULT_PROVIDER))
+        let config = ServerConfig::builder(Arc::new(provider::DEFAULT_PROVIDER))
             .with_no_client_auth()
             .with_single_cert(
                 Arc::new(Identity::from_cert_chain(certs).unwrap()),
