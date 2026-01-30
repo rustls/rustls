@@ -13,7 +13,7 @@ use crate::common_state::{
     Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelState};
+use crate::conn::kernel::KernelState;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};
 use crate::enums::{
@@ -1364,21 +1364,21 @@ impl State for ExpectFinished {
         }
         flight.finish(output);
 
+        let (key_schedule_send, key_schedule_recv) = key_schedule_traffic.split();
+
         // Application data may now flow, even if we have client auth enabled.
         if let Some(identity) = self.peer_identity {
             output.emit(Event::PeerIdentity(identity));
         }
         output.emit(Event::Exporter(Box::new(exporter)));
+        output.emit(Event::OutgoingKeySchedule(Box::new(key_schedule_send)));
         output.emit(Event::StartTraffic);
-
-        let (key_schedule_send, key_schedule_recv) = key_schedule_traffic.split();
 
         Ok(match key_schedule_recv.protocol().is_quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
             false => Box::new(ExpectTraffic {
                 config: self.config,
                 counters: TrafficTemperCounters::default(),
-                key_schedule_send,
                 key_schedule_recv,
                 _fin_verified: fin,
             }),
@@ -1389,7 +1389,6 @@ impl State for ExpectFinished {
 // --- Process traffic ---
 struct ExpectTraffic {
     config: Arc<ServerConfig>,
-    key_schedule_send: KeyScheduleTrafficSend,
     key_schedule_recv: KeyScheduleTrafficReceive,
     counters: TrafficTemperCounters,
     _fin_verified: verify::FinishedMessageVerified,
@@ -1417,9 +1416,7 @@ impl ExpectTraffic {
 
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => {
-                output.emit(Event::MaybeKeyUpdateRequest(&mut self.key_schedule_send))
-            }
+            KeyUpdateRequest::UpdateRequested => output.emit(Event::MaybeKeyUpdateRequest),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
@@ -1457,20 +1454,21 @@ impl State for ExpectTraffic {
         Ok(self)
     }
 
-    fn send_key_update_request(&mut self, output: &mut dyn Output) -> Result<(), Error> {
-        self.key_schedule_send
-            .request_key_update_and_update_encrypter(output)
-    }
-
     fn into_external_state(
         self: Box<Self>,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         if !self.config.enable_secret_extraction {
             return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
+        let Some(send_keys) = send_keys else {
+            return Err(Error::Unreachable(
+                "send_keys required for TLS1.3 into_external_state",
+            ));
+        };
         Ok((
             PartiallyExtractedSecrets {
-                tx: self.key_schedule_send.extract()?,
+                tx: send_keys.extract()?,
                 rx: self.key_schedule_recv.extract()?,
             },
             self,
@@ -1479,15 +1477,9 @@ impl State for ExpectTraffic {
 }
 
 impl KernelState for ExpectTraffic {
-    fn update_secrets(&mut self, dir: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        match dir {
-            Direction::Transmit => self
-                .key_schedule_send
-                .refresh_traffic_secret(),
-            Direction::Receive => self
-                .key_schedule_recv
-                .refresh_traffic_secret(),
-        }
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
+        self.key_schedule_recv
+            .refresh_traffic_secret()
     }
 
     fn handle_new_session_ticket(
@@ -1517,7 +1509,7 @@ impl State for ExpectQuicTraffic {
 
 impl KernelState for ExpectQuicTraffic {
     #[cfg_attr(coverage_nightly, coverage(off))]
-    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
         Err(Error::Unreachable(
             "QUIC connections do not support key updates",
         ))

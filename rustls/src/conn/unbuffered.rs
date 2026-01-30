@@ -465,6 +465,8 @@ impl<Side: SideData> WriteTraffic<'_, Side> {
     ) -> Result<usize, EncryptError> {
         self.conn
             .core
+            .side
+            .send
             .maybe_refresh_traffic_keys();
         self.conn
             .core
@@ -497,7 +499,11 @@ impl<Side: SideData> WriteTraffic<'_, Side> {
     ///
     /// [`ConnectionCommon::refresh_traffic_keys()`]: crate::ConnectionCommon::refresh_traffic_keys
     pub fn refresh_traffic_keys(self) -> Result<(), Error> {
-        self.conn.core.refresh_traffic_keys()
+        self.conn
+            .core
+            .side
+            .send
+            .refresh_traffic_keys()
     }
 }
 
