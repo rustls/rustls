@@ -73,8 +73,7 @@ pub(crate) use enums::{
 };
 
 mod fragmenter;
-pub(crate) use fragmenter::MAX_FRAGMENT_LEN;
-pub use fragmenter::MessageFragmenter;
+pub(crate) use fragmenter::{MAX_FRAGMENT_LEN, MessageFragmenter};
 
 #[macro_use]
 mod handshake;
@@ -109,6 +108,30 @@ mod handshake_test;
 
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
+    use super::{EncodedMessage, Message, MessageFragmenter, Payload, Reader};
+
+    pub fn fuzz_fragmenter(data: &[u8]) {
+        let mut rdr = Reader::init(data);
+        let Ok(msg) = EncodedMessage::<Payload<'_>>::read(&mut rdr) else {
+            return;
+        };
+
+        let Ok(msg) = Message::try_from(&msg) else {
+            return;
+        };
+
+        let mut frg = MessageFragmenter::default();
+        frg.set_max_fragment_size(Some(32))
+            .unwrap();
+        for msg in frg.fragment_message(&EncodedMessage::<Payload<'_>>::from(msg)) {
+            Message::try_from(&EncodedMessage {
+                typ: msg.typ,
+                version: msg.version,
+                payload: Payload::Owned(msg.payload.to_vec()),
+            })
+            .ok();
+        }
+    }
 }
 
 /// A message with decoded payload
