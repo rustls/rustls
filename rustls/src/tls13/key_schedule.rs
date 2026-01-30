@@ -680,15 +680,11 @@ impl KeyScheduleTrafficSend {
         self.current = secret;
     }
 
-    pub(crate) fn request_key_update_and_update_encrypter(
-        &mut self,
-        output: &mut dyn Output,
-    ) -> Result<(), Error> {
+    pub(crate) fn request_key_update_and_update_encrypter(&mut self, output: &mut dyn Output) {
         output.emit(Event::EncryptMessage(Message::build_key_update_request()));
         let secret = self.ks.derive_next(&self.current);
         self.ks.set_encrypter(&secret, output);
         self.current = secret;
-        Ok(())
     }
 
     pub(crate) fn refresh_traffic_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {

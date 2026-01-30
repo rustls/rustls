@@ -36,7 +36,9 @@ use core::marker::PhantomData;
 
 use crate::client::ClientConnectionData;
 use crate::enums::ProtocolVersion;
+use crate::error::ApiMisuse;
 use crate::msgs::{Codec, NewSessionTicketPayloadTls13};
+use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::{CommonState, ConnectionTrafficSecrets, Error, SupportedCipherSuite};
 
 /// A kernel connection.
@@ -48,6 +50,7 @@ use crate::{CommonState, ConnectionTrafficSecrets, Error, SupportedCipherSuite};
 /// See the [`crate::kernel`] module docs for more details.
 pub struct KernelConnection<Side> {
     state: Box<dyn KernelState>,
+    tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
 
     negotiated_version: ProtocolVersion,
     suite: SupportedCipherSuite,
@@ -56,13 +59,18 @@ pub struct KernelConnection<Side> {
 }
 
 impl<Side> KernelConnection<Side> {
-    pub(crate) fn new(state: Box<dyn KernelState>, common: CommonState) -> Result<Self, Error> {
+    pub(crate) fn new(
+        state: Box<dyn KernelState>,
+        common: CommonState,
+        tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
+    ) -> Result<Self, Error> {
         let (negotiated_version, suite) = common
             .outputs
             .into_kernel_parts()
             .ok_or(Error::HandshakeNotComplete)?;
         Ok(Self {
             state,
+            tls13_key_schedule,
 
             negotiated_version,
             suite,
@@ -93,10 +101,13 @@ impl<Side> KernelConnection<Side> {
     /// connection. Attempting to do so on a non-TLS 1.3 connection will result
     /// in an error.
     pub fn update_tx_secret(&mut self) -> Result<(u64, ConnectionTrafficSecrets), Error> {
-        // The sequence number always starts at 0 after a key update.
-        self.state
-            .update_secrets(Direction::Transmit)
-            .map(|secret| (0, secret))
+        match &mut self.tls13_key_schedule {
+            // The sequence number always starts at 0 after a key update.
+            Some(ks) => ks
+                .refresh_traffic_secret()
+                .map(|secret| (0, secret)),
+            None => Err(ApiMisuse::KeyUpdateNotAvailableForTls12.into()),
+        }
     }
 
     /// Update the traffic secret used for decrypting messages received from the
@@ -113,7 +124,7 @@ impl<Side> KernelConnection<Side> {
     pub fn update_rx_secret(&mut self) -> Result<(u64, ConnectionTrafficSecrets), Error> {
         // The sequence number always starts at 0 after a key update.
         self.state
-            .update_secrets(Direction::Receive)
+            .update_rx_secret()
             .map(|secret| (0, secret))
     }
 }
@@ -200,7 +211,7 @@ impl KernelConnection<ClientConnectionData> {
 
 pub(crate) trait KernelState: Send + Sync {
     /// Update the traffic secret for the specified direction on the connection.
-    fn update_secrets(&mut self, dir: Direction) -> Result<ConnectionTrafficSecrets, Error>;
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error>;
 
     /// Handle a new session ticket.
     ///
@@ -210,10 +221,4 @@ pub(crate) trait KernelState: Send + Sync {
         &self,
         message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error>;
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(crate) enum Direction {
-    Transmit,
-    Receive,
 }

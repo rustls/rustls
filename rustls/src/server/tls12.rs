@@ -12,7 +12,7 @@ use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelState};
+use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
@@ -30,6 +30,7 @@ use crate::msgs::{
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
+use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::verify::{ClientIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 
@@ -1025,6 +1026,7 @@ impl State for ExpectTraffic {
 
     fn into_external_state(
         mut self: Box<Self>,
+        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         match self.extracted_secrets.take() {
             Some(extracted_secrets) => Ok((extracted_secrets?, self)),
@@ -1034,7 +1036,7 @@ impl State for ExpectTraffic {
 }
 
 impl KernelState for ExpectTraffic {
-    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
         Err(ApiMisuse::KeyUpdateNotAvailableForTls12.into())
     }
 
