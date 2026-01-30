@@ -8,7 +8,7 @@ use openssl::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
 use rustls::client::ClientConnection;
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection};
 use rustls_aws_lc_rs as provider;
 
@@ -121,13 +121,19 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
     });
 
     // client:
+    let config = Arc::new(
+        ClientConfig::builder(
+            // OpenSSL 3 does not support RFC 7919 with TLS 1.2: https://github.com/openssl/openssl/issues/10971
+            FFDHE_TLS13_PROVIDER.into(),
+        )
+        .with_root_certificates(root_ca())
+        .with_no_client_auth()
+        .unwrap(),
+    );
+    let server_name = ServerName::try_from("localhost").unwrap();
     for _ in 0..iters {
         let mut tcp_stream = TcpStream::connect(("localhost", port)).unwrap();
-        let mut client = ClientConnection::new(
-            client_config_with_ffdhe_kx().into(),
-            "localhost".try_into().unwrap(),
-        )
-        .unwrap();
+        let mut client = ClientConnection::new(config.clone(), server_name.clone()).unwrap();
         client
             .writer()
             .write_all(message.as_bytes())
@@ -143,16 +149,6 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
     }
 
     server_thread.join().unwrap();
-}
-
-fn client_config_with_ffdhe_kx() -> ClientConfig {
-    ClientConfig::builder(
-        // OpenSSL 3 does not support RFC 7919 with TLS 1.2: https://github.com/openssl/openssl/issues/10971
-        FFDHE_TLS13_PROVIDER.into(),
-    )
-    .with_root_certificates(root_ca())
-    .with_no_client_auth()
-    .unwrap()
 }
 
 // TLS 1.2 requires stripping leading zeros of the shared secret,
