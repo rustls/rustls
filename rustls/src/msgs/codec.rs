@@ -12,7 +12,7 @@ use crate::error::InvalidMessage;
 /// A new reader for a sub section of the buffer can be created
 /// using the `sub` function or a section of a certain length can
 /// be obtained using the `take` function
-pub struct Reader<'a> {
+pub(crate) struct Reader<'a> {
     /// The underlying buffer storing the readers content
     buffer: &'a [u8],
     /// Stores the current reading position for the buffer
@@ -22,7 +22,7 @@ pub struct Reader<'a> {
 impl<'a> Reader<'a> {
     /// Creates a new Reader of the provided `bytes` slice with
     /// the initial cursor position of zero.
-    pub fn init(bytes: &'a [u8]) -> Self {
+    pub(crate) fn init(bytes: &'a [u8]) -> Self {
         Reader {
             buffer: bytes,
             cursor: 0,
@@ -32,7 +32,7 @@ impl<'a> Reader<'a> {
     /// Attempts to create a new Reader on a sub section of this
     /// readers bytes by taking a slice of the provided `length`
     /// will return None if there is not enough bytes
-    pub fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
+    pub(crate) fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
         match self.take(length) {
             Some(bytes) => Ok(Reader::init(bytes)),
             None => Err(InvalidMessage::MessageTooShort),
@@ -43,7 +43,7 @@ impl<'a> Reader<'a> {
     /// that appear after the cursor position.
     ///
     /// Moves the cursor to the end of the buffer length.
-    pub fn rest(&mut self) -> &'a [u8] {
+    pub(crate) fn rest(&mut self) -> &'a [u8] {
         let rest = &self.buffer[self.cursor..];
         self.cursor = self.buffer.len();
         rest
@@ -53,7 +53,7 @@ impl<'a> Reader<'a> {
     /// cursor position of `length` if there is not enough
     /// bytes remaining after the cursor to take the length
     /// then None is returned instead.
-    pub fn take(&mut self, length: usize) -> Option<&'a [u8]> {
+    pub(crate) fn take(&mut self, length: usize) -> Option<&'a [u8]> {
         if self.left() < length {
             return None;
         }
@@ -64,11 +64,11 @@ impl<'a> Reader<'a> {
 
     /// Used to check whether the reader has any content left
     /// after the cursor (cursor has not reached end of buffer)
-    pub fn any_left(&self) -> bool {
+    pub(crate) fn any_left(&self) -> bool {
         self.cursor < self.buffer.len()
     }
 
-    pub fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
+    pub(crate) fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
         match self.any_left() {
             true => Err(InvalidMessage::TrailingData(name)),
             false => Ok(()),
@@ -77,20 +77,20 @@ impl<'a> Reader<'a> {
 
     /// Returns the cursor position which is also the number
     /// of bytes that have been read from the buffer.
-    pub fn used(&self) -> usize {
+    pub(crate) fn used(&self) -> usize {
         self.cursor
     }
 
     /// Returns the number of bytes that are still able to be
     /// read (The number of remaining takes)
-    pub fn left(&self) -> usize {
+    pub(crate) fn left(&self) -> usize {
         self.buffer.len() - self.cursor
     }
 }
 
 /// Trait for implementing encoding and decoding functionality
 /// on something.
-pub trait Codec<'a>: Debug + Sized {
+pub(crate) trait Codec<'a>: Debug + Sized {
     /// Function for encoding itself by appending itself to
     /// the provided vec of bytes.
     fn encode(&self, bytes: &mut Vec<u8>);

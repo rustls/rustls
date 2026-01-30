@@ -108,7 +108,7 @@ static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
 // --- Server types ---
 #[non_exhaustive]
 #[derive(Debug)]
-pub enum ServerSessionValue {
+pub(crate) enum ServerSessionValue {
     Tls12(Tls12ServerSessionValue),
     Tls13(Tls13ServerSessionValue),
 }
@@ -137,7 +137,7 @@ impl Codec<'_> for ServerSessionValue {
 }
 
 #[derive(Debug)]
-pub struct Tls12ServerSessionValue {
+pub(crate) struct Tls12ServerSessionValue {
     pub(crate) common: CommonServerSessionValue,
     pub(crate) master_secret: Zeroizing<[u8; 48]>,
     pub(crate) extended_ms: bool,
@@ -188,7 +188,7 @@ impl From<Tls12ServerSessionValue> for ServerSessionValue {
 }
 
 #[derive(Debug)]
-pub struct Tls13ServerSessionValue {
+pub(crate) struct Tls13ServerSessionValue {
     pub(crate) common: CommonServerSessionValue,
     pub(crate) secret: Zeroizing<SizedPayload<'static, u8>>,
     pub(crate) age_obfuscation_offset: u32,
