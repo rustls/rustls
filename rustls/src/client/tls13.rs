@@ -17,7 +17,7 @@ use crate::common_state::{
     TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelState};
+use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
@@ -1381,8 +1381,11 @@ impl State for ExpectFinished {
         /* Now move to our application traffic keys. */
         let (key_schedule, exporter, resumption) =
             key_schedule_pre_finished.into_traffic(output, st.transcript.current_hash(), &proof);
+        let (key_schedule_send, key_schedule_recv) = key_schedule.split();
+
         output.emit(Event::PeerIdentity(st.session_input.peer_identity.clone()));
         output.emit(Event::Exporter(Box::new(exporter)));
+        output.emit(Event::OutgoingKeySchedule(Box::new(key_schedule_send)));
         output.emit(Event::StartTraffic);
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
@@ -1395,14 +1398,13 @@ impl State for ExpectFinished {
             .into());
         }
 
-        let (key_schedule_send, key_schedule_recv) = key_schedule.split();
         let protocol = key_schedule_recv.protocol();
+
         let st = ExpectTraffic {
             config: st.config.clone(),
             session_storage: st.config.resumption.store.clone(),
             session_key: st.session_key,
             session_input: st.session_input,
-            key_schedule_send,
             key_schedule_recv,
             resumption,
             counters: TrafficTemperCounters::default(),
@@ -1426,7 +1428,6 @@ struct ExpectTraffic {
     session_storage: Arc<dyn ClientSessionStore>,
     session_key: ClientSessionKey<'static>,
     session_input: Tls13ClientSessionInput,
-    key_schedule_send: KeyScheduleTrafficSend,
     key_schedule_recv: KeyScheduleTrafficReceive,
     resumption: KeyScheduleResumption,
     counters: TrafficTemperCounters,
@@ -1504,9 +1505,7 @@ impl ExpectTraffic {
 
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => {
-                output.emit(Event::MaybeKeyUpdateRequest(&mut self.key_schedule_send))
-            }
+            KeyUpdateRequest::UpdateRequested => output.emit(Event::MaybeKeyUpdateRequest),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
@@ -1548,20 +1547,19 @@ impl State for ExpectTraffic {
         Ok(self)
     }
 
-    fn send_key_update_request(&mut self, output: &mut dyn Output) -> Result<(), Error> {
-        self.key_schedule_send
-            .request_key_update_and_update_encrypter(output)
-    }
-
     fn into_external_state(
         self: Box<Self>,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         if !self.config.enable_secret_extraction {
             return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
+        let Some(send_keys) = send_keys else {
+            return Err(Error::Unreachable("basdsa"));
+        };
         Ok((
             PartiallyExtractedSecrets {
-                tx: self.key_schedule_send.extract()?,
+                tx: send_keys.extract()?,
                 rx: self.key_schedule_recv.extract()?,
             },
             self,
@@ -1570,15 +1568,9 @@ impl State for ExpectTraffic {
 }
 
 impl KernelState for ExpectTraffic {
-    fn update_secrets(&mut self, dir: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        match dir {
-            Direction::Transmit => self
-                .key_schedule_send
-                .refresh_traffic_secret(),
-            Direction::Receive => self
-                .key_schedule_recv
-                .refresh_traffic_secret(),
-        }
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
+        self.key_schedule_recv
+            .refresh_traffic_secret()
     }
 
     fn handle_new_session_ticket(
@@ -1609,13 +1601,17 @@ impl State for ExpectQuicTraffic {
 
     fn into_external_state(
         self: Box<Self>,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         if !self.0.config.enable_secret_extraction {
             return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
+        let Some(send_keys) = send_keys else {
+            return Err(Error::Unreachable("basdsa"));
+        };
         Ok((
             PartiallyExtractedSecrets {
-                tx: self.0.key_schedule_send.extract()?,
+                tx: send_keys.extract()?,
                 rx: self.0.key_schedule_recv.extract()?,
             },
             self,
@@ -1624,7 +1620,7 @@ impl State for ExpectQuicTraffic {
 }
 
 impl KernelState for ExpectQuicTraffic {
-    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
         Err(Error::Unreachable(
             "KeyUpdate is not supported for QUIC connections",
         ))
