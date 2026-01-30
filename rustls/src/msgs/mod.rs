@@ -53,8 +53,9 @@ pub(crate) use client_hello::{
 };
 
 mod codec;
-pub(crate) use codec::{CERTIFICATE_MAX_SIZE_LIMIT, ListLength, TlsListElement, put_u16, put_u64};
-pub use codec::{Codec, Reader};
+pub(crate) use codec::{
+    CERTIFICATE_MAX_SIZE_LIMIT, Codec, ListLength, Reader, TlsListElement, put_u16, put_u64,
+};
 use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
@@ -92,10 +93,9 @@ pub(crate) use handshake::{
 pub(crate) use handshake::{EcParameters, ServerEcdhParams};
 
 mod persist;
-pub use persist::ServerSessionValue;
 pub(crate) use persist::{
-    ClientSessionCommon, CommonServerSessionValue, Retrieved, Tls12ServerSessionValue,
-    Tls13ServerSessionValue,
+    ClientSessionCommon, CommonServerSessionValue, Retrieved, ServerSessionValue,
+    Tls12ServerSessionValue, Tls13ServerSessionValue,
 };
 
 mod server_hello;
@@ -108,7 +108,9 @@ mod handshake_test;
 
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
-    use super::{EncodedMessage, Message, MessageFragmenter, Payload, Reader};
+    use super::{
+        Codec, EncodedMessage, Message, MessageFragmenter, Payload, Reader, ServerSessionValue,
+    };
 
     pub fn fuzz_fragmenter(data: &[u8]) {
         let mut rdr = Reader::init(data);
@@ -149,6 +151,11 @@ pub mod fuzzing {
             .encode();
         //println!("data = {:?}", &data[..rdr.used()]);
         assert_eq!(enc, data[..rdr.used()]);
+    }
+
+    pub fn fuzz_server_session_value(data: &[u8]) {
+        let mut rdr = Reader::init(data);
+        let _ = ServerSessionValue::read(&mut rdr);
     }
 }
 

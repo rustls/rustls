@@ -35,7 +35,7 @@ impl<'a> EncodedMessage<Payload<'a>> {
     ///
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
-    pub fn read(r: &mut Reader<'a>) -> Result<Self, MessageError> {
+    pub(crate) fn read(r: &mut Reader<'a>) -> Result<Self, MessageError> {
         let (typ, version, len) = read_opaque_message_header(r)?;
 
         let content = r
