@@ -132,18 +132,35 @@ pub mod fuzzing {
             .ok();
         }
     }
+
+    pub fn fuzz_message(data: &[u8]) {
+        let mut rdr = Reader::init(data);
+        let Ok(m) = EncodedMessage::<Payload<'_>>::read(&mut rdr) else {
+            return;
+        };
+
+        let Ok(msg) = Message::try_from(&m) else {
+            return;
+        };
+
+        //println!("msg = {:#?}", m);
+        let enc = EncodedMessage::<Payload<'_>>::from(msg)
+            .into_unencrypted_opaque()
+            .encode();
+        //println!("data = {:?}", &data[..rdr.used()]);
+        assert_eq!(enc, data[..rdr.used()]);
+    }
 }
 
 /// A message with decoded payload
-#[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
-pub struct Message<'a> {
+pub(crate) struct Message<'a> {
     pub version: ProtocolVersion,
     pub payload: MessagePayload<'a>,
 }
 
 impl Message<'_> {
-    pub fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
+    pub(crate) fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
         Self {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Alert(AlertMessagePayload {
@@ -153,7 +170,7 @@ impl Message<'_> {
         }
     }
 
-    pub fn build_key_update_notify() -> Self {
+    pub(crate) fn build_key_update_notify() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -162,7 +179,7 @@ impl Message<'_> {
         }
     }
 
-    pub fn build_key_update_request() -> Self {
+    pub(crate) fn build_key_update_request() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -254,7 +271,7 @@ pub(crate) fn read_opaque_message_header(
 
 #[non_exhaustive]
 #[derive(Debug)]
-pub enum MessagePayload<'a> {
+pub(crate) enum MessagePayload<'a> {
     Alert(AlertMessagePayload),
     // one handshake message, parsed
     Handshake {
@@ -353,7 +370,7 @@ impl From<Message<'_>> for EncodedMessage<Payload<'_>> {
 }
 
 #[derive(Debug)]
-pub struct HandshakeMessagePayload<'a>(pub(crate) HandshakePayload<'a>);
+pub(crate) struct HandshakeMessagePayload<'a>(pub(crate) HandshakePayload<'a>);
 
 impl<'a> Codec<'a> for HandshakeMessagePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -641,7 +658,7 @@ impl HandshakePayload<'_> {
 }
 
 #[derive(Debug)]
-pub struct AlertMessagePayload {
+pub(crate) struct AlertMessagePayload {
     pub level: AlertLevel,
     pub description: AlertDescription,
 }
@@ -661,7 +678,7 @@ impl Codec<'_> for AlertMessagePayload {
 }
 
 #[derive(Debug)]
-pub struct ChangeCipherSpecPayload;
+pub(crate) struct ChangeCipherSpecPayload;
 
 impl Codec<'_> for ChangeCipherSpecPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {

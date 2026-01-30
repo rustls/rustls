@@ -3,20 +3,6 @@
 extern crate libfuzzer_sys;
 extern crate rustls;
 
-use rustls::crypto::cipher::{EncodedMessage, Payload};
-use rustls::internal::msgs::{Message, Reader};
+use rustls::internal::fuzzing::fuzz_message;
 
-fuzz_target!(|data: &[u8]| {
-    let mut rdr = Reader::init(data);
-    if let Ok(m) = EncodedMessage::<Payload>::read(&mut rdr) {
-        let Ok(msg) = Message::try_from(&m) else {
-            return;
-        };
-        //println!("msg = {:#?}", m);
-        let enc = EncodedMessage::<Payload>::from(msg)
-            .into_unencrypted_opaque()
-            .encode();
-        //println!("data = {:?}", &data[..rdr.used()]);
-        assert_eq!(enc, data[..rdr.used()]);
-    }
-});
+fuzz_target!(|data: &[u8]| fuzz_message(data));
