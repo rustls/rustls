@@ -18,7 +18,6 @@ use rustls::crypto::{
 };
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
-use rustls::internal::msgs::{Message, MessagePayload};
 use rustls::server::{Acceptor, ClientHello, ParsedCertificate, ServerCredentialResolver};
 use rustls::{
     ClientConfig, ClientConnection, HandshakeKind, KeyingMaterialExporter, ServerConfig,
@@ -1040,9 +1039,9 @@ fn connection_types_are_not_huge() {
 
 #[test]
 fn test_client_rejects_illegal_tls13_ccs() {
-    fn corrupt_ccs(msg: &mut Message<'_>) -> Altered {
-        if let MessagePayload::ChangeCipherSpec(_) = &mut msg.payload {
-            println!("seen CCS {msg:?}");
+    fn corrupt_ccs(msg: &mut EncodedMessage<Vec<u8>>) -> Altered {
+        if msg.typ == ContentType::ChangeCipherSpec {
+            println!("seen CCS {:?}", msg.typ);
             return Altered::Raw(encoding::message_framing(
                 ContentType::ChangeCipherSpec,
                 ProtocolVersion::TLSv1_2,
@@ -1209,8 +1208,8 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
 
 #[test]
 fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message() {
-    fn inject_corrupt_finished_message(msg: &mut Message<'_>) -> Altered {
-        if let MessagePayload::ChangeCipherSpec(_) = msg.payload {
+    fn inject_corrupt_finished_message(msg: &mut EncodedMessage<Vec<u8>>) -> Altered {
+        if msg.typ == ContentType::ChangeCipherSpec {
             // interdict "real" ChangeCipherSpec with its encoding, plus a faulty encrypted Finished.
             let mut raw_change_cipher_spec = encoding::message_framing(
                 ContentType::ChangeCipherSpec,
@@ -1437,8 +1436,9 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     raw_server.encrypt_and_send(&msg, &mut client);
     client.process_new_packets().unwrap();
     raw_server.receive_and_decrypt(&mut client, |m| {
-        assert_eq!(format!("{m:?}"),
-                   "Message { version: TLSv1_2, payload: Alert(AlertMessagePayload { level: Warning, description: NoRenegotiation }) }");
+        assert_eq!(m.version, ProtocolVersion::TLSv1_2);
+        assert_eq!(m.typ, ContentType::Alert);
+        assert_eq!(m.payload, &[0x01, 100]); // Warning=1, NoRenegotiation=100
     });
 
     // second is fatal
@@ -1610,23 +1610,24 @@ fn server_invalid_sni_policy() {
     const SERVER_NAME_BAD: &str = "[XXXxxxXXX]";
     const SERVER_NAME_IPV4: &str = "10.11.12.13";
 
-    fn replace_sni(sni_replacement: &str) -> impl Fn(&mut Message<'_>) -> Altered + '_ {
+    fn replace_sni(sni_replacement: &str) -> impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered + '_ {
         assert_eq!(sni_replacement.len(), SERVER_NAME_GOOD.len());
-        move |m: &mut Message<'_>| match &mut m.payload {
-            MessagePayload::Handshake { parsed: _, encoded } => {
-                let mut payload_bytes = encoded.bytes().to_vec();
-                if let Some(ind) = payload_bytes
-                    .windows(SERVER_NAME_GOOD.len())
-                    .position(|w| w == SERVER_NAME_GOOD.as_bytes())
-                {
-                    payload_bytes[ind..][..SERVER_NAME_GOOD.len()]
-                        .copy_from_slice(sni_replacement.as_bytes());
-                }
-                *encoded = Payload::new(payload_bytes);
-
-                Altered::InPlace
+        move |m: &mut EncodedMessage<Vec<u8>>| {
+            if m.typ != ContentType::Handshake {
+                return Altered::InPlace;
             }
-            _ => Altered::InPlace,
+
+            let Some(start) = m
+                .payload
+                .windows(SERVER_NAME_GOOD.len())
+                .position(|w| w == SERVER_NAME_GOOD.as_bytes())
+            else {
+                return Altered::InPlace;
+            };
+
+            m.payload[start..][..SERVER_NAME_GOOD.len()]
+                .copy_from_slice(sni_replacement.as_bytes());
+            Altered::InPlace
         }
     }
 
