@@ -757,6 +757,22 @@ impl ConnectionOutputs {
         self.handshake_kind
     }
 
+    /// Returns the number of TLS1.3 tickets that have been received.
+    ///
+    /// Only clients receive tickets, so this is zero for servers.
+    pub fn tls13_tickets_received(&self) -> u32 {
+        self.tls13_tickets_received
+    }
+
+    /// Return the FIPS validation status of the connection.
+    ///
+    /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
+    /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+    /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+    pub fn fips(&self) -> FipsStatus {
+        self.fips
+    }
+
     pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
         let Self {
             negotiated_version,
