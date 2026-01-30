@@ -27,7 +27,7 @@ mod buffered {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use pki_types::{FipsStatus, ServerName};
+    use pki_types::ServerName;
 
     use super::{ClientConnectionData, ClientExtensionsInput};
     use crate::KeyingMaterialExporter;
@@ -103,20 +103,6 @@ mod buffered {
         /// Return the connection's Encrypted Client Hello (ECH) status.
         pub fn ech_status(&self) -> EchStatus {
             self.inner.core.side.ech_status
-        }
-
-        /// Returns the number of TLS1.3 tickets that have been received.
-        pub fn tls13_tickets_received(&self) -> u32 {
-            self.inner.tls13_tickets_received
-        }
-
-        /// Return the FIPS validation status of the connection's `ClientConfig`.
-        ///
-        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
-        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
-        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-        pub fn fips(&self) -> FipsStatus {
-            self.inner.core.side.fips
         }
 
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
