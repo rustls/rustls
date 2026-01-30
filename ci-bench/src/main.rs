@@ -689,7 +689,11 @@ impl BenchStepper for ClientSideStepper<'_> {
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
         let server_name = "localhost".try_into().unwrap();
-        let mut client = ClientConnection::new(self.config.clone(), server_name).unwrap();
+        let mut client = self
+            .config
+            .connect(server_name)
+            .build()
+            .unwrap();
         client.set_buffer_limit(None);
 
         loop {

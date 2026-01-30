@@ -54,7 +54,10 @@ impl TlsClient {
             socket: sock,
             closing: false,
             clean_closure: false,
-            tls_conn: ClientConnection::new(cfg, server_name).unwrap(),
+            tls_conn: cfg
+                .connect(server_name)
+                .build()
+                .unwrap(),
         }
     }
 

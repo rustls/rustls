@@ -53,29 +53,6 @@ mod buffered {
     }
 
     impl ClientConnection {
-        /// Make a new ClientConnection.  `config` controls how
-        /// we behave in the TLS protocol, `name` is the
-        /// name of the server we want to talk to.
-        pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
-            Self::new_with_alpn(config.clone(), name, config.alpn_protocols.clone())
-        }
-
-        /// Make a new ClientConnection with custom ALPN protocols.
-        pub fn new_with_alpn(
-            config: Arc<ClientConfig>,
-            name: ServerName<'static>,
-            alpn_protocols: Vec<ApplicationProtocol<'static>>,
-        ) -> Result<Self, Error> {
-            Ok(Self {
-                inner: ConnectionCommon::from(ConnectionCore::for_client(
-                    config,
-                    name,
-                    ClientExtensionsInput::from_alpn(alpn_protocols),
-                    Protocol::Tcp,
-                )?),
-            })
-        }
-
         /// Returns an `io::Write` implementer you can write bytes to
         /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
         ///
@@ -188,6 +165,42 @@ mod buffered {
         }
     }
 
+    /// Builder for [`ClientConnection`] values.
+    ///
+    /// Create one with [`ClientConfig::connect()`].
+    pub struct ClientConnectionBuilder {
+        pub(crate) config: Arc<ClientConfig>,
+        pub(crate) name: ServerName<'static>,
+        pub(crate) alpn_protocols: Option<Vec<ApplicationProtocol<'static>>>,
+    }
+
+    impl ClientConnectionBuilder {
+        /// Specify the ALPN protocols to use for this connection.
+        pub fn with_alpn(mut self, alpn_protocols: Vec<ApplicationProtocol<'static>>) -> Self {
+            self.alpn_protocols = Some(alpn_protocols);
+            self
+        }
+
+        /// Finalize the builder and create the `ClientConnection`.
+        pub fn build(self) -> Result<ClientConnection, Error> {
+            let Self {
+                config,
+                name,
+                alpn_protocols,
+            } = self;
+
+            let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
+            Ok(ClientConnection {
+                inner: ConnectionCommon::from(ConnectionCore::for_client(
+                    config,
+                    name,
+                    ClientExtensionsInput::from_alpn(alpn_protocols),
+                    Protocol::Tcp,
+                )?),
+            })
+        }
+    }
+
     /// Allows writing of early data in resumed TLS 1.3 connections.
     ///
     /// "Early data" is also known as "0-RTT data".
@@ -260,7 +273,7 @@ mod buffered {
 }
 
 #[cfg(feature = "std")]
-pub use buffered::{ClientConnection, WriteEarlyData};
+pub use buffered::{ClientConnection, ClientConnectionBuilder, WriteEarlyData};
 
 impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(

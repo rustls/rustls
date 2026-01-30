@@ -129,19 +129,20 @@ fn connection_level_alpn_protocols() {
     let client_config = Arc::new(client_config);
 
     // Client relies on config-specified `h2`, server agrees
-    let mut client =
-        ClientConnection::new(client_config.clone(), server_name("localhost")).unwrap();
+    let mut client = client_config
+        .connect(server_name("localhost"))
+        .build()
+        .unwrap();
     let mut server = ServerConnection::new(server_config.clone()).unwrap();
     do_handshake_until_error(&mut client, &mut server).unwrap();
     assert_eq!(client.alpn_protocol(), Some(&ApplicationProtocol::Http2));
 
     // Specify `http/1.1` for the connection, server agrees
-    let mut client = ClientConnection::new_with_alpn(
-        client_config,
-        server_name("localhost"),
-        vec![ApplicationProtocol::Http11],
-    )
-    .unwrap();
+    let mut client = client_config
+        .connect(server_name("localhost"))
+        .with_alpn(vec![ApplicationProtocol::Http11])
+        .build()
+        .unwrap();
     let mut server = ServerConnection::new(server_config).unwrap();
     do_handshake_until_error(&mut client, &mut server).unwrap();
     assert_eq!(client.alpn_protocol(), Some(&ApplicationProtocol::Http11));
@@ -579,12 +580,12 @@ fn server_exposes_offered_sni() {
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_PROVIDER;
     for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(kt, &version_provider);
-        let mut client = ClientConnection::new(
-            Arc::new(client_config),
-            server_name("second.testserver.com"),
-        )
-        .unwrap();
+        let client_config = Arc::new(make_client_config(kt, &version_provider));
+        let mut client = client_config
+            .connect(server_name("second.testserver.com"))
+            .build()
+            .unwrap();
+
         let mut server =
             ServerConnection::new(Arc::new(make_server_config(kt, &provider))).unwrap();
 
@@ -603,12 +604,12 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_PROVIDER;
     for version_provider in ALL_VERSIONS {
-        let client_config = make_client_config(kt, &version_provider);
-        let mut client = ClientConnection::new(
-            Arc::new(client_config),
-            server_name("SECOND.TESTServer.com"),
-        )
-        .unwrap();
+        let client_config = Arc::new(make_client_config(kt, &version_provider));
+        let mut client = client_config
+            .connect(server_name("SECOND.TESTServer.com"))
+            .build()
+            .unwrap();
+
         let mut server =
             ServerConnection::new(Arc::new(make_server_config(kt, &provider))).unwrap();
 
@@ -1158,7 +1159,10 @@ fn test_client_construction_fails_if_random_source_fails_in_first_request() {
     .finish(KeyType::Rsa2048);
 
     assert_eq!(
-        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
+        Arc::new(client_config)
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap_err(),
         Error::FailedToGetRandomBytes
     );
 }
@@ -1179,7 +1183,10 @@ fn test_client_construction_fails_if_random_source_fails_in_second_request() {
     .finish(KeyType::Rsa2048);
 
     assert_eq!(
-        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
+        Arc::new(client_config)
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap_err(),
         Error::FailedToGetRandomBytes
     );
 }
@@ -1202,7 +1209,9 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
     )
     .finish(KeyType::Rsa2048);
 
-    ClientConnection::new(Arc::new(client_config), server_name("localhost"))
+    Arc::new(client_config)
+        .connect(server_name("localhost"))
+        .build()
         .expect("check how much random material ClientConnection::new consumes");
 }
 
@@ -1368,12 +1377,15 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
         let (public_key, _) = suite.generate_key_pair().unwrap();
         let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
             .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)));
-        let config = config.finish(KeyType::Rsa2048);
+        let config = Arc::new(config.finish(KeyType::Rsa2048));
         assert_eq!(config.fips(), suite.fips());
 
         // And a connection made from a client config should retain the fips status of the
         // config w.r.t the HPKE suite.
-        let conn = ClientConnection::new(config.into(), server_name("example.org")).unwrap();
+        let conn = config
+            .connect(server_name("example.org"))
+            .build()
+            .unwrap();
         assert_eq!(conn.fips(), suite.fips());
     }
 }
@@ -1519,17 +1531,20 @@ fn tls13_packed_handshake() {
 
     // regression test for https://github.com/rustls/rustls/issues/2040
     // (did not affect the buffered api)
-    let client_config =
+    let client_config = Arc::new(
         ClientConfig::builder(unsafe_plaintext_crypto_provider(provider::DEFAULT_PROVIDER))
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(MockServerVerifier::rejects_certificate(
                 CertificateError::UnknownIssuer.into(),
             )))
             .with_no_client_auth()
-            .unwrap();
+            .unwrap(),
+    );
 
-    let mut client =
-        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+    let mut client = client_config
+        .connect(server_name("localhost"))
+        .build()
+        .unwrap();
 
     let mut hello = Vec::new();
     client
@@ -1666,8 +1681,10 @@ fn server_invalid_sni_policy() {
         });
         server_config.invalid_sni_policy = policy;
 
-        let client =
-            ClientConnection::new(Arc::new(client_config), server_name(SERVER_NAME_GOOD)).unwrap();
+        let client = Arc::new(client_config)
+            .connect(server_name(SERVER_NAME_GOOD))
+            .build()
+            .unwrap();
         let server = ServerConnection::new(Arc::new(server_config)).unwrap();
         let (mut client, mut server) = (client.into(), server.into());
 

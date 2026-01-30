@@ -1324,8 +1324,10 @@ fn test_client_mtu_reduction() {
     for kt in KeyType::all_for_provider(&provider) {
         let mut client_config = make_client_config(*kt, &provider);
         client_config.max_fragment_size = Some(64);
-        let mut client =
-            ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+        let mut client = Arc::new(client_config)
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap();
         let writes = collect_write_lengths(&mut client);
         println!("writes at mtu=64: {writes:?}");
         assert!(writes.iter().all(|x| *x <= 64));
@@ -1388,7 +1390,10 @@ fn check_client_max_fragment_size(size: usize) -> Option<Error> {
     let provider = provider::DEFAULT_PROVIDER;
     let mut client_config = make_client_config(KeyType::Ed25519, &provider);
     client_config.max_fragment_size = Some(size);
-    ClientConnection::new(Arc::new(client_config), server_name("localhost")).err()
+    Arc::new(client_config)
+        .connect(server_name("localhost"))
+        .build()
+        .err()
 }
 
 #[test]
@@ -1452,7 +1457,10 @@ fn test_acceptor() {
 
     let provider = provider::DEFAULT_PROVIDER;
     let client_config = Arc::new(make_client_config(KeyType::Ed25519, &provider));
-    let mut client = ClientConnection::new(client_config, server_name("localhost")).unwrap();
+    let mut client = client_config
+        .connect(server_name("localhost"))
+        .build()
+        .unwrap();
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
 
@@ -1560,7 +1568,10 @@ fn test_acceptor_rejected_handshake() {
 
     let client_config =
         ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into()).finish(KeyType::Ed25519);
-    let mut client = ClientConnection::new(client_config.into(), server_name("localhost")).unwrap();
+    let mut client = Arc::new(client_config)
+        .connect(server_name("localhost"))
+        .build()
+        .unwrap();
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
 

@@ -1,8 +1,9 @@
 use std::fs;
 use std::io::Write;
+use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::{ClientConfig, ClientConnection, ServerConfig, ServerConnection};
+use rustls::{ClientConfig, ServerConfig, ServerConnection};
 
 // These tests exercise rustls_fuzzing_provider and makes sure it can
 // handshake with itself without errors.
@@ -80,13 +81,18 @@ fn test_version(provider: CryptoProvider) -> Transcript {
         .unwrap();
     let mut server = ServerConnection::new(server_config.into()).unwrap();
 
-    let client_config = ClientConfig::builder(provider.into())
-        .dangerous()
-        .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
-        .with_no_client_auth()
-        .unwrap();
+    let client_config = Arc::new(
+        ClientConfig::builder(provider.into())
+            .dangerous()
+            .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
+            .with_no_client_auth()
+            .unwrap(),
+    );
     let hostname = "localhost".try_into().unwrap();
-    let mut client = ClientConnection::new(client_config.into(), hostname).unwrap();
+    let mut client = client_config
+        .connect(hostname)
+        .build()
+        .unwrap();
     server
         .writer()
         .write_all(b"hello from server")

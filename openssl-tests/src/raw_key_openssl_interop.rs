@@ -22,7 +22,7 @@ mod client {
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
-    use rustls::{ClientConfig, ClientConnection, Error};
+    use rustls::{ClientConfig, Error};
     use rustls_aws_lc_rs as provider;
     use rustls_util::Stream;
 
@@ -63,7 +63,10 @@ mod client {
     /// This client reads a message and then writes 'Hello from the client' to the server.
     pub(super) fn run_client(config: ClientConfig, port: u16) -> Result<String, io::Error> {
         let server_name = "0.0.0.0".try_into().unwrap();
-        let mut conn = ClientConnection::new(Arc::new(config), server_name).unwrap();
+        let mut conn = Arc::new(config)
+            .connect(server_name)
+            .build()
+            .unwrap();
         let mut sock = TcpStream::connect(format!("[::]:{port}")).unwrap();
         let mut tls = Stream::new(&mut conn, &mut sock);
 

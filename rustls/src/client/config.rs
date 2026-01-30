@@ -14,6 +14,8 @@ use super::handy::ClientSessionMemoryCache;
 use super::handy::{FailResolveClientCert, NoClientSessionStorage};
 use super::{Tls12ClientSessionValue, Tls13ClientSessionValue};
 use crate::builder::{ConfigBuilder, WantsVerifier};
+#[cfg(feature = "std")]
+use crate::client::connection::ClientConnectionBuilder;
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::kx::NamedGroup;
@@ -94,13 +96,12 @@ pub struct ClientConfig {
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
     ///
     /// rustls enforces an arbitrary minimum of 32 bytes for this field.
-    /// Out of range values are reported as errors from [ClientConnection::new].
+    /// Out of range values are reported as errors when initializing a connection.
     ///
     /// Setting this value to a little less than the TCP MSS may improve latency
     /// for stream-y workloads.
     ///
     /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
-    /// [ClientConnection::new]: crate::client::ClientConnection::new
     pub max_fragment_size: Option<usize>,
 
     /// Whether to send the Server Name Indication (SNI) extension
@@ -205,6 +206,19 @@ impl ClientConfig {
             provider,
             time_provider,
             side: PhantomData,
+        }
+    }
+
+    /// Create a new client connection builder for the given server name.
+    ///
+    /// The `ClientConfig` controls how the client behaves;
+    /// `name` is the name of server we want to talk to.
+    #[cfg(feature = "std")]
+    pub fn connect(self: &Arc<Self>, server_name: ServerName<'static>) -> ClientConnectionBuilder {
+        ClientConnectionBuilder {
+            config: self.clone(),
+            name: server_name,
+            alpn_protocols: None,
         }
     }
 

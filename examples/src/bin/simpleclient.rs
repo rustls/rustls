@@ -12,7 +12,7 @@ use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::{ClientConfig, ClientConnection, RootCertStore};
+use rustls::{ClientConfig, RootCertStore};
 use rustls_util::{KeyLogFile, Stream};
 
 fn main() {
@@ -29,7 +29,10 @@ fn main() {
     config.key_log = Arc::new(KeyLogFile::new());
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
-    let mut conn = ClientConnection::new(Arc::new(config), server_name).unwrap();
+    let mut conn = Arc::new(config)
+        .connect(server_name)
+        .build()
+        .unwrap();
     let mut sock = TcpStream::connect("www.rust-lang.org:443").unwrap();
     let mut tls = Stream::new(&mut conn, &mut sock);
     tls.write_all(

@@ -17,10 +17,7 @@ use rustls::error::{
     AlertDescription, CertificateError, Error, ExtendedKeyPurpose, InvalidMessage, PeerIncompatible,
 };
 use rustls::server::{ClientHello, ParsedCertificate, ServerCredentialResolver};
-use rustls::{
-    ClientConfig, ClientConnection, DistinguishedName, RootCertStore, ServerConfig,
-    ServerConnection,
-};
+use rustls::{ClientConfig, DistinguishedName, RootCertStore, ServerConfig, ServerConnection};
 use rustls_test::{
     ErrorFromPeer, KeyType, MockServerVerifier, certificate_error_expecting_name, do_handshake,
     do_handshake_until_both_error, do_handshake_until_error, make_client_config,
@@ -284,7 +281,10 @@ fn client_checks_server_certificate_with_given_ip_address() {
         server_config: Arc<ServerConfig>,
         name: &'static str,
     ) -> Result<(), ErrorFromPeer> {
-        let mut client = ClientConnection::new(client_config, server_name(name)).unwrap();
+        let mut client = client_config
+            .connect(server_name(name))
+            .build()
+            .unwrap();
         let mut server = ServerConnection::new(server_config).unwrap();
         do_handshake_until_error(&mut client, &mut server)
     }
@@ -334,12 +334,11 @@ fn client_checks_server_certificate_with_given_name() {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
         for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config(*kt, &version_provider);
-            let mut client = ClientConnection::new(
-                Arc::new(client_config),
-                server_name("not-the-right-hostname.com"),
-            )
-            .unwrap();
+            let client_config = Arc::new(make_client_config(*kt, &version_provider));
+            let mut client = client_config
+                .connect(server_name("not-the-right-hostname.com"))
+                .build()
+                .unwrap();
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -368,8 +367,10 @@ fn client_check_server_certificate_ee_revoked() {
         for version_provider in ALL_VERSIONS {
             let client_config =
                 make_client_config_with_verifier(builder.clone(), &version_provider);
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut client = Arc::new(client_config)
+                .connect(server_name("localhost"))
+                .build()
+                .unwrap();
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect the handshake to fail since the server's EE certificate is revoked.
@@ -407,12 +408,14 @@ fn client_check_server_certificate_ee_unknown_revocation() {
                 .allow_unknown_revocation_status();
 
         for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_verifier(
+            let client_config = Arc::new(make_client_config_with_verifier(
                 forbid_unknown_verifier.clone(),
                 &version_provider,
-            );
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            ));
+            let mut client = client_config
+                .connect(server_name("localhost"))
+                .build()
+                .unwrap();
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect if we use the forbid_unknown_verifier that the handshake will fail since the
@@ -428,8 +431,10 @@ fn client_check_server_certificate_ee_unknown_revocation() {
             // We expect if we use the allow_unknown_verifier that the handshake will not fail.
             let client_config =
                 make_client_config_with_verifier(allow_unknown_verifier.clone(), &version_provider);
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut client = Arc::new(client_config)
+                .connect(server_name("localhost"))
+                .build()
+                .unwrap();
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let res = do_handshake_until_error(&mut client, &mut server);
             assert!(res.is_ok());
@@ -460,12 +465,14 @@ fn client_check_server_certificate_intermediate_revoked() {
             .allow_unknown_revocation_status();
 
         for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_verifier(
+            let client_config = Arc::new(make_client_config_with_verifier(
                 full_chain_verifier_builder.clone(),
                 &version_provider,
-            );
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            ));
+            let mut client = client_config
+                .connect(server_name("localhost"))
+                .build()
+                .unwrap();
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect the handshake to fail when using the full chain verifier since the intermediate's
@@ -480,8 +487,10 @@ fn client_check_server_certificate_intermediate_revoked() {
 
             let client_config =
                 make_client_config_with_verifier(ee_verifier_builder.clone(), &version_provider);
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut client = Arc::new(client_config)
+                .connect(server_name("localhost"))
+                .build()
+                .unwrap();
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             // We expect the handshake to succeed when we use the verifier that only checks the EE certificate
             // revocation status. The revoked intermediate status should not be checked.
@@ -513,12 +522,14 @@ fn client_check_server_certificate_ee_crl_expired() {
                 .only_check_end_entity_revocation();
 
         for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_verifier(
+            let client_config = Arc::new(make_client_config_with_verifier(
                 enforce_expiration_builder.clone(),
                 &version_provider,
-            );
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            ));
+            let mut client = client_config
+                .connect(server_name("localhost"))
+                .build()
+                .unwrap();
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect the handshake to fail since the CRL is expired.
@@ -530,12 +541,14 @@ fn client_check_server_certificate_ee_crl_expired() {
                 )))
             ));
 
-            let client_config = make_client_config_with_verifier(
+            let client_config = Arc::new(make_client_config_with_verifier(
                 ignore_expiration_builder.clone(),
                 &version_provider,
-            );
-            let mut client =
-                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            ));
+            let mut client = client_config
+                .connect(server_name("localhost"))
+                .build()
+                .unwrap();
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect the handshake to succeed when CRL expiration is ignored.

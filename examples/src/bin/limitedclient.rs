@@ -8,7 +8,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::{ClientConfig, ClientConnection, RootCertStore};
+use rustls::{ClientConfig, RootCertStore};
 use rustls_aws_lc_rs as provider;
 use rustls_util::Stream;
 
@@ -19,13 +19,18 @@ fn main() {
             .cloned(),
     );
 
-    let config = ClientConfig::builder(PROVIDER.into())
-        .with_root_certificates(root_store)
-        .with_no_client_auth()
-        .unwrap();
+    let config = Arc::new(
+        ClientConfig::builder(PROVIDER.into())
+            .with_root_certificates(root_store)
+            .with_no_client_auth()
+            .unwrap(),
+    );
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
-    let mut conn = ClientConnection::new(Arc::new(config), server_name).unwrap();
+    let mut conn = config
+        .connect(server_name)
+        .build()
+        .unwrap();
     let mut sock = TcpStream::connect("www.rust-lang.org:443").unwrap();
     let mut tls = Stream::new(&mut conn, &mut sock);
     tls.write_all(

@@ -722,7 +722,10 @@ pub fn make_pair_for_arc_configs(
     server_config: &Arc<ServerConfig>,
 ) -> (ClientConnection, ServerConnection) {
     (
-        ClientConnection::new(client_config.clone(), server_name("localhost")).unwrap(),
+        client_config
+            .connect(server_name("localhost"))
+            .build()
+            .unwrap(),
         ServerConnection::new(server_config.clone()).unwrap(),
     )
 }
