@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, RootCertStore};
+use rustls::{ClientConfig, RootCertStore};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::{KeyLogFile, Stream};
 
@@ -29,7 +29,10 @@ fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
     let server_name = ServerName::try_from(domain_name)
         .expect("invalid DNS name")
         .to_owned();
-    let mut conn = ClientConnection::new(config.clone(), server_name).unwrap();
+    let mut conn = config
+        .connect(server_name)
+        .build()
+        .unwrap();
     let mut sock = TcpStream::connect(format!("{domain_name}:{port}")).unwrap();
     sock.set_nodelay(true).unwrap();
     let request = format!(

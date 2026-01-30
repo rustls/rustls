@@ -8,7 +8,7 @@ use std::vec;
 
 use pki_types::{CertificateDer, FipsStatus, ServerName};
 
-use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
+use crate::client::{ClientConfig, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::FakeKeyExchangeGroup;
@@ -93,8 +93,10 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         .with_root_certificates(roots())
         .with_no_client_auth()
         .unwrap();
-    let mut conn =
-        ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap()).unwrap();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build()
+        .unwrap();
     let mut sent = Vec::new();
     conn.write_tls(&mut sent).unwrap();
 
@@ -135,8 +137,10 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
     }
 
     let config = Arc::new(config);
-    let mut conn =
-        ClientConnection::new(config.clone(), ServerName::try_from("localhost").unwrap()).unwrap();
+    let mut conn = config
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build()
+        .unwrap();
     let mut sent = Vec::new();
     conn.write_tls(&mut sent).unwrap();
 
@@ -204,8 +208,10 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         .with_no_client_auth()
         .unwrap();
 
-    let mut conn =
-        ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap()).unwrap();
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build()
+        .unwrap();
     let mut sent = Vec::new();
     conn.write_tls(&mut sent).unwrap();
 
@@ -392,12 +398,20 @@ fn client_requiring_rpk_receives_server_ee(
         tls12_cipher_suites: Cow::default(),
         ..provider
     });
+
     let fake_server_crypto = Arc::new(FakeServerCrypto::new(provider.clone()));
-    let mut conn = ClientConnection::new(
-        Arc::new(client_config_for_rpk(fake_server_crypto.clone(), provider)),
-        ServerName::try_from("localhost").unwrap(),
-    )
-    .unwrap();
+    let credentials = client_credentials(&provider);
+    let mut config = ClientConfig::builder(provider)
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
+        .with_client_credential_resolver(Arc::new(SingleCredential::from(credentials)))
+        .unwrap();
+    config.key_log = fake_server_crypto.clone();
+
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build()
+        .unwrap();
     let mut sent = Vec::new();
     conn.write_tls(&mut sent).unwrap();
 
@@ -439,17 +453,6 @@ fn client_requiring_rpk_receives_server_ee(
         .unwrap();
 
     assert_eq!(conn.process_new_packets().map(|_| ()), expected);
-}
-
-fn client_config_for_rpk(key_log: Arc<dyn KeyLog>, provider: Arc<CryptoProvider>) -> ClientConfig {
-    let credentials = client_credentials(&provider);
-    let mut config = ClientConfig::builder(provider)
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
-        .with_client_credential_resolver(Arc::new(SingleCredential::from(credentials)))
-        .unwrap();
-    config.key_log = key_log;
-    config
 }
 
 fn client_credentials(provider: &CryptoProvider) -> Credentials {
@@ -651,8 +654,9 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
 }
 
 fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPayload, Error> {
-    let mut conn =
-        ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())?;
+    let mut conn = Arc::new(config)
+        .connect(ServerName::try_from("localhost").unwrap())
+        .build()?;
     let mut bytes = Vec::new();
     conn.write_tls(&mut bytes).unwrap();
 

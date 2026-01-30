@@ -30,7 +30,7 @@ pub use config::{
 
 mod connection;
 #[cfg(feature = "std")]
-pub use connection::{ClientConnection, WriteEarlyData};
+pub use connection::{ClientConnection, ClientConnectionBuilder, WriteEarlyData};
 pub use connection::{
     ClientConnectionData, EarlyDataError, MayEncryptEarlyData, UnbufferedClientConnection,
 };

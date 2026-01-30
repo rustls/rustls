@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::{fs, str, thread};
 
 use openssl::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
-use rustls::client::ClientConnection;
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
@@ -133,7 +132,10 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
     let server_name = ServerName::try_from("localhost").unwrap();
     for _ in 0..iters {
         let mut tcp_stream = TcpStream::connect(("localhost", port)).unwrap();
-        let mut client = ClientConnection::new(config.clone(), server_name.clone()).unwrap();
+        let mut client = config
+            .connect(server_name.clone())
+            .build()
+            .unwrap();
         client
             .writer()
             .write_all(message.as_bytes())

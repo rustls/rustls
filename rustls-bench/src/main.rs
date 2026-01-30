@@ -316,7 +316,10 @@ fn bench_handshake_buffered(
 
         let mut client = time(&mut client_time, || {
             let server_name = "localhost".try_into().unwrap();
-            ClientConnection::new(client_config.clone(), server_name).unwrap()
+            client_config
+                .connect(server_name)
+                .build()
+                .unwrap()
         });
         let mut server = time(&mut server_time, || {
             ServerConnection::new(server_config.clone()).unwrap()
@@ -566,7 +569,10 @@ fn bench_bulk_buffered(
     rounds: u64,
 ) -> Timings {
     let server_name = "localhost".try_into().unwrap();
-    let mut client = ClientConnection::new(client_config, server_name).unwrap();
+    let mut client = client_config
+        .connect(server_name)
+        .build()
+        .unwrap();
     client.set_buffer_limit(None);
     let mut server = ServerConnection::new(server_config).unwrap();
     server.set_buffer_limit(None);
@@ -657,7 +663,12 @@ fn bench_memory(
     for _i in 0..conn_count {
         servers.push(ServerConnection::new(server_config.clone()).unwrap());
         let server_name = "localhost".try_into().unwrap();
-        clients.push(ClientConnection::new(client_config.clone(), server_name).unwrap());
+        clients.push(
+            client_config
+                .connect(server_name)
+                .build()
+                .unwrap(),
+        );
     }
 
     for _step in 0..5 {

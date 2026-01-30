@@ -98,7 +98,10 @@ pub fn main() {
                 let server_name = ServerName::try_from(opts.host_name.as_str())
                     .unwrap()
                     .to_owned();
-                let sess = ClientConnection::new(config.clone(), server_name).unwrap();
+                let sess = config
+                    .connect(server_name)
+                    .build()
+                    .unwrap();
                 exec(&opts, Connection::Client(sess), &key_log, i);
             }
             SideConfig::Server(config) => {
