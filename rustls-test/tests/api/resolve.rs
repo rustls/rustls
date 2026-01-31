@@ -44,7 +44,10 @@ fn server_cert_resolve_with_sni() {
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
         let err = do_handshake_until_error(&mut client, &mut server);
-        assert!(err.is_err());
+        assert_eq!(
+            err.err(),
+            Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
+        );
     }
 }
 
@@ -71,7 +74,10 @@ fn server_cert_resolve_with_alpn() {
 
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
         let err = do_handshake_until_error(&mut client, &mut server);
-        assert!(err.is_err());
+        assert_eq!(
+            err.err(),
+            Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
+        );
     }
 }
 
@@ -95,7 +101,10 @@ fn server_cert_resolve_with_named_groups() {
 
         let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
         let err = do_handshake_until_error(&mut client, &mut server);
-        assert!(err.is_err());
+        assert_eq!(
+            err.err(),
+            Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
+        );
     }
 }
 
@@ -118,7 +127,10 @@ fn client_trims_terminating_dot() {
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
         let err = do_handshake_until_error(&mut client, &mut server);
-        assert!(err.is_err());
+        assert_eq!(
+            err.err(),
+            Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
+        );
     }
 }
 
@@ -147,7 +159,10 @@ fn check_sigalgs_reduced_by_ciphersuite(
     let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
     let err = do_handshake_until_error(&mut client, &mut server);
-    assert!(err.is_err());
+    assert_eq!(
+        Some(ErrorFromPeer::Server(Error::NoSuitableCertificate)),
+        err.err()
+    );
 }
 
 fn find_suite(suite: CipherSuite) -> SupportedCipherSuite {
@@ -226,7 +241,10 @@ fn client_with_sni_disabled_does_not_send_sni() {
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let err = do_handshake_until_error(&mut client, &mut server);
             dbg!(&err);
-            assert!(err.is_err());
+            assert_eq!(
+                err.err(),
+                Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
+            );
         }
     }
 }

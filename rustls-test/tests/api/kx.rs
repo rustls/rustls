@@ -15,9 +15,10 @@ use rustls::enums::{ContentType, ProtocolVersion};
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use rustls::{ClientConfig, HandshakeKind, ServerConfig};
 use rustls_test::{
-    ClientConfigExt, ClientStorage, ClientStorageOp, KeyType, OtherSession, ServerConfigExt,
-    do_handshake, do_handshake_until_error, encoding, make_client_config_with_kx_groups, make_pair,
-    make_pair_for_configs, make_server_config, make_server_config_with_kx_groups, transfer,
+    ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, OtherSession,
+    ServerConfigExt, do_handshake, do_handshake_until_error, encoding,
+    make_client_config_with_kx_groups, make_pair, make_pair_for_configs, make_server_config,
+    make_server_config_with_kx_groups, transfer,
 };
 
 use super::{ALL_VERSIONS, provider};
@@ -47,7 +48,12 @@ fn test_client_config_keyshare_mismatch() {
         &provider,
     );
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    assert!(do_handshake_until_error(&mut client, &mut server).is_err());
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server).err(),
+        Some(ErrorFromPeer::Server(
+            PeerIncompatible::NoKxGroupsInCommon.into()
+        ))
+    );
 }
 
 #[test]

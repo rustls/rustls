@@ -282,23 +282,25 @@ fn test_quic_no_tls13_error() {
     client_config.alpn_protocols = vec![b"foo".into()];
     let client_config = Arc::new(client_config);
 
-    assert!(
+    assert_eq!(
         quic::ClientConnection::new(
             client_config,
             quic::Version::V1,
             server_name("localhost"),
             b"client params".to_vec(),
         )
-        .is_err()
+        .err(),
+        Some(ApiMisuse::QuicRequiresTls13Support.into())
     );
 
     let mut server_config = make_server_config(KeyType::Ed25519, &provider);
     server_config.alpn_protocols = vec![b"foo".into()];
     let server_config = Arc::new(server_config);
 
-    assert!(
+    assert_eq!(
         quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec(),)
-            .is_err()
+            .err(),
+        Some(ApiMisuse::QuicRequiresTls13Support.into())
     );
 }
 
