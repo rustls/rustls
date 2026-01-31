@@ -39,7 +39,7 @@ fn client_can_override_certificate_verification() {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
         for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(*kt, &version_provider);
+            let mut client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
@@ -62,7 +62,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
         for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(*kt, &version_provider);
+            let mut client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
@@ -85,7 +85,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
 fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
     let provider = provider::DEFAULT_TLS12_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_config = make_client_config(*kt, &provider);
+        let mut client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
         let verifier = Arc::new(MockServerVerifier::rejects_tls12_signatures(
             CertificateError::ApplicationVerificationFailure.into(),
         ));
@@ -113,7 +113,7 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
 fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_config = make_client_config(*kt, &provider);
+        let mut client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
         let verifier = Arc::new(MockServerVerifier::rejects_tls13_signatures(
             CertificateError::ApplicationVerificationFailure.into(),
         ));
@@ -146,7 +146,7 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
         for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(*kt, &version_provider);
+            let mut client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
@@ -226,7 +226,7 @@ fn client_can_request_certain_trusted_cas() {
             .add(key_type.ca_cert())
             .unwrap();
         let server_verifier = Arc::new(
-            WebPkiServerVerifier::builder(Arc::new(root_store), &provider)
+            WebPkiServerVerifier::builder(Arc::new(root_store), provider::SUPPORTED_SIG_ALGS)
                 .build()
                 .unwrap(),
         );
@@ -294,7 +294,7 @@ fn client_checks_server_certificate_with_given_ip_address() {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
         for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config(*kt, &version_provider));
+            let client_config = Arc::new(make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider));
 
             // positive ipv4 case
             assert_eq!(
@@ -334,7 +334,7 @@ fn client_checks_server_certificate_with_given_name() {
         let server_config = Arc::new(make_server_config(*kt, &provider));
 
         for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config(*kt, &version_provider));
+            let client_config = Arc::new(make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider));
             let mut client = client_config
                 .connect(server_name("not-the-right-hostname.com"))
                 .build()
@@ -360,7 +360,7 @@ fn client_check_server_certificate_ee_revoked() {
 
         // Setup a server verifier that will check the EE certificate's revocation status.
         let crls = vec![kt.end_entity_crl()];
-        let builder = webpki_server_verifier_builder(kt.client_root_store(), &provider)
+        let builder = webpki_server_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
             .with_crls(crls)
             .only_check_end_entity_revocation();
 
@@ -396,13 +396,13 @@ fn client_check_server_certificate_ee_unknown_revocation() {
         // to the EE cert to ensure its status is unknown.
         let unrelated_crls = vec![kt.intermediate_crl()];
         let forbid_unknown_verifier =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
                 .with_crls(unrelated_crls.clone())
                 .only_check_end_entity_revocation();
 
         // Also set up a verifier builder that will allow unknown revocation status.
         let allow_unknown_verifier =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
                 .with_crls(unrelated_crls)
                 .only_check_end_entity_revocation()
                 .allow_unknown_revocation_status();
@@ -453,13 +453,13 @@ fn client_check_server_certificate_intermediate_revoked() {
         // so the EE cert's unknown status doesn't cause an error.
         let crls = vec![kt.intermediate_crl()];
         let full_chain_verifier_builder =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
                 .with_crls(crls.clone())
                 .allow_unknown_revocation_status();
 
         // Also set up a verifier builder that will use the same CRL, but only check the EE certificate
         // revocation status.
-        let ee_verifier_builder = webpki_server_verifier_builder(kt.client_root_store(), &provider)
+        let ee_verifier_builder = webpki_server_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
             .with_crls(crls.clone())
             .only_check_end_entity_revocation()
             .allow_unknown_revocation_status();
@@ -509,7 +509,7 @@ fn client_check_server_certificate_ee_crl_expired() {
         // Setup a server verifier that will check the EE certificate's revocation status, with CRL expiration enforced.
         let crls = vec![kt.end_entity_crl_expired()];
         let enforce_expiration_builder =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
                 .with_crls(crls)
                 .only_check_end_entity_revocation()
                 .enforce_revocation_expiration();
@@ -517,7 +517,7 @@ fn client_check_server_certificate_ee_crl_expired() {
         // Also setup a server verifier without CRL expiration enforced.
         let crls = vec![kt.end_entity_crl_expired()];
         let ignore_expiration_builder =
-            webpki_server_verifier_builder(kt.client_root_store(), &provider)
+            webpki_server_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
                 .with_crls(crls)
                 .only_check_end_entity_revocation();
 

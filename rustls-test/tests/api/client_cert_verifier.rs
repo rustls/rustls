@@ -47,12 +47,12 @@ fn server_config_with_verifier(
 fn client_verifier_works() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
+        let client_verifier = MockClientVerifier::new(ver_ok, *kt, provider::SUPPORTED_SIG_ALGS);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
         for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
+            let client_config = make_client_config_with_auth(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -66,13 +66,13 @@ fn client_verifier_works() {
 fn client_verifier_no_schemes() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let mut client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
+        let mut client_verifier = MockClientVerifier::new(ver_ok, *kt, provider::SUPPORTED_SIG_ALGS);
         client_verifier.offered_schemes = Some(vec![]);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
         for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
+            let client_config = make_client_config_with_auth(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -91,13 +91,13 @@ fn client_verifier_no_schemes() {
 fn client_verifier_no_auth_yes_root() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let client_verifier = MockClientVerifier::new(ver_unreachable, *kt, &provider);
+        let client_verifier = MockClientVerifier::new(ver_unreachable, *kt, provider::SUPPORTED_SIG_ALGS);
 
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
         for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config(*kt, &version_provider));
+            let client_config = Arc::new(make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider));
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let mut client = client_config
                 .connect(server_name("localhost"))
@@ -125,12 +125,12 @@ fn client_verifier_no_auth_yes_root() {
 fn client_verifier_fails_properly() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider).iter() {
-        let client_verifier = MockClientVerifier::new(ver_err, *kt, &provider);
+        let client_verifier = MockClientVerifier::new(ver_err, *kt, provider::SUPPORTED_SIG_ALGS);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
         for version_provider in ALL_VERSIONS {
-            let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
+            let client_config = Arc::new(make_client_config_with_auth(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider));
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let mut client = client_config
                 .connect(server_name("localhost"))
@@ -155,7 +155,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
     let kt = KeyType::Rsa2048;
     for client_cert_chain in [None, Some(kt.client_identity())] {
         let client_auth = Arc::new(
-            webpki_client_verifier_builder(kt.client_root_store(), &provider)
+            webpki_client_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
                 .allow_unauthenticated()
                 .build()
                 .unwrap(),
@@ -169,9 +169,9 @@ fn server_allow_any_anonymous_or_authenticated_client() {
 
         for version_provider in ALL_VERSIONS {
             let client_config = if client_cert_chain.is_some() {
-                make_client_config_with_auth(kt, &version_provider)
+                make_client_config_with_auth(kt, provider::SUPPORTED_SIG_ALGS, &version_provider)
             } else {
-                make_client_config(kt, &version_provider)
+                make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &version_provider)
             };
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -186,11 +186,11 @@ fn client_auth_works() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config_with_mandatory_client_auth(
-            *kt, &provider,
+            *kt, provider::SUPPORTED_SIG_ALGS, &provider,
         ));
 
         for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
+            let client_config = make_client_config_with_auth(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             do_handshake(&mut client, &mut server);
@@ -207,7 +207,7 @@ fn client_mandatory_auth_client_revocation_works() {
         let relevant_crls = vec![kt.client_crl()];
         // Only check the EE certificate status. See client_mandatory_auth_intermediate_revocation_works
         // for testing revocation status of the whole chain.
-        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), &provider)
+        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
             .with_crls(relevant_crls)
             .only_check_end_entity_revocation();
         let revoked_server_config = Arc::new(make_server_config_with_client_verifier(
@@ -219,7 +219,7 @@ fn client_mandatory_auth_client_revocation_works() {
         // Create a server configuration that includes a CRL that doesn't cover the client certificate,
         // and uses the default behaviour of treating unknown revocation status as an error.
         let unrelated_crls = vec![kt.intermediate_crl()];
-        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), &provider)
+        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
             .with_crls(unrelated_crls.clone())
             .only_check_end_entity_revocation();
         let missing_client_crl_server_config = Arc::new(make_server_config_with_client_verifier(
@@ -230,7 +230,7 @@ fn client_mandatory_auth_client_revocation_works() {
 
         // Create a server configuration that includes a CRL that doesn't cover the client certificate,
         // but change the builder to allow unknown revocation status.
-        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), &provider)
+        let ee_verifier_builder = webpki_client_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
             .with_crls(unrelated_crls.clone())
             .only_check_end_entity_revocation()
             .allow_unknown_revocation_status();
@@ -241,7 +241,7 @@ fn client_mandatory_auth_client_revocation_works() {
         for version_provider in ALL_VERSIONS {
             // Connecting to the server with a CRL that indicates the client certificate is revoked
             // should fail with the expected error.
-            let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
+            let client_config = Arc::new(make_client_config_with_auth(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider));
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &revoked_server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -281,7 +281,7 @@ fn client_mandatory_auth_intermediate_revocation_works() {
         // revocation status so the EE's unknown revocation status isn't an error.
         let crls = vec![kt.intermediate_crl()];
         let full_chain_verifier_builder =
-            webpki_client_verifier_builder(kt.client_root_store(), &provider)
+            webpki_client_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
                 .with_crls(crls.clone())
                 .allow_unknown_revocation_status();
         let full_chain_server_config = Arc::new(make_server_config_with_client_verifier(
@@ -293,7 +293,7 @@ fn client_mandatory_auth_intermediate_revocation_works() {
         // Also create a server configuration that uses the same CRL, but that only checks the EE
         // cert revocation status.
         let ee_only_verifier_builder =
-            webpki_client_verifier_builder(kt.client_root_store(), &provider)
+            webpki_client_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
                 .with_crls(crls)
                 .only_check_end_entity_revocation()
                 .allow_unknown_revocation_status();
@@ -305,7 +305,7 @@ fn client_mandatory_auth_intermediate_revocation_works() {
 
         for version_provider in ALL_VERSIONS {
             // When checking the full chain, we expect an error - the intermediate is revoked.
-            let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
+            let client_config = Arc::new(make_client_config_with_auth(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider));
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &full_chain_server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -332,11 +332,11 @@ fn client_optional_auth_client_revocation_works() {
         // is revoked.
         let crls = vec![kt.client_crl()];
         let server_config = Arc::new(make_server_config_with_optional_client_auth(
-            *kt, crls, &provider,
+            *kt, crls, provider::SUPPORTED_SIG_ALGS, &provider,
         ));
 
         for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config_with_auth(*kt, &version_provider);
+            let client_config = make_client_config_with_auth(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             // Because the client certificate is revoked, the handshake should fail.

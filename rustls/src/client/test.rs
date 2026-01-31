@@ -11,7 +11,7 @@ use pki_types::{CertificateDer, FipsStatus, ServerName};
 use crate::client::{ClientConfig, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
-use crate::crypto::test_provider::FakeKeyExchangeGroup;
+use crate::crypto::test_provider::{FakeKeyExchangeGroup, VERIFY_ALGORITHMS};
 use crate::crypto::tls13::OkmBlock;
 use crate::crypto::{
     CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
@@ -41,7 +41,7 @@ use crate::{DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore};
 #[test]
 fn test_no_session_ticket_request_on_tls_1_3() {
     let mut config = ClientConfig::builder(Arc::new(tls13_only(TEST_PROVIDER.clone())))
-        .with_root_certificates(roots())
+        .with_root_certificates(roots(), VERIFY_ALGORITHMS)
         .with_no_client_auth()
         .unwrap();
     config.resumption =
@@ -54,7 +54,7 @@ fn test_no_session_ticket_request_on_tls_1_3() {
 fn test_no_renegotiation_scsv_on_tls_1_3() {
     let ch = client_hello_sent_for_config(
         ClientConfig::builder(Arc::new(tls13_only(TEST_PROVIDER.clone())))
-            .with_root_certificates(roots())
+            .with_root_certificates(roots(), VERIFY_ALGORITHMS)
             .with_no_client_auth()
             .unwrap(),
     )
@@ -72,7 +72,7 @@ fn test_client_does_not_offer_sha1() {
         tls13_only(TEST_PROVIDER.clone()),
     ] {
         let config = ClientConfig::builder(Arc::new(provider))
-            .with_root_certificates(roots())
+            .with_root_certificates(roots(), VERIFY_ALGORITHMS)
             .with_no_client_auth()
             .unwrap();
         let ch = client_hello_sent_for_config(config).unwrap();
@@ -90,7 +90,7 @@ fn test_client_does_not_offer_sha1() {
 #[test]
 fn test_client_rejects_hrr_with_varied_session_id() {
     let config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
-        .with_root_certificates(roots())
+        .with_root_certificates(roots(), VERIFY_ALGORITHMS)
         .with_no_client_auth()
         .unwrap();
     let mut conn = Arc::new(config)
@@ -127,7 +127,7 @@ fn test_client_rejects_hrr_with_varied_session_id() {
 #[test]
 fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
     let mut config = ClientConfig::builder(Arc::new(TEST_PROVIDER.clone()))
-        .with_root_certificates(roots())
+        .with_root_certificates(roots(), VERIFY_ALGORITHMS)
         .with_no_client_auth()
         .unwrap();
     if !matches!(config.provider().fips(), FipsStatus::Unvalidated) {
@@ -614,7 +614,7 @@ impl KeyLog for FakeServerCrypto {
 fn hybrid_kx_component_share_offered_if_supported_separately() {
     let ch = client_hello_sent_for_config(
         ClientConfig::builder(Arc::new(HYBRID_PROVIDER.clone()))
-            .with_root_certificates(roots())
+            .with_root_certificates(roots(), VERIFY_ALGORITHMS)
             .with_no_client_auth()
             .unwrap(),
     )
@@ -638,7 +638,7 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
     };
     let ch = client_hello_sent_for_config(
         ClientConfig::builder(provider.into())
-            .with_root_certificates(roots())
+            .with_root_certificates(roots(), VERIFY_ALGORITHMS)
             .with_no_client_auth()
             .unwrap(),
     )

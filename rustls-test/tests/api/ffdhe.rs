@@ -33,7 +33,7 @@ fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups(
     };
 
     let build_err = ClientConfig::builder(bad_crypto_provider.into())
-        .with_root_certificates(KeyType::EcdsaP256.client_root_store())
+        .with_root_certificates(KeyType::EcdsaP256.client_root_store(), provider::SUPPORTED_SIG_ALGS)
         .with_no_client_auth()
         .unwrap_err()
         .to_string();
@@ -66,7 +66,7 @@ fn ffdhe_ciphersuite() {
             &ffdhe_provider(),
             expected_cipher_suite,
         ));
-        let client_config = ClientConfig::builder(provider.clone()).finish(KeyType::Rsa2048);
+        let client_config = ClientConfig::builder(provider.clone()).finish(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS);
         let server_config = ServerConfig::builder(provider).finish(KeyType::Rsa2048);
         do_suite_and_kx_test(
             client_config,
@@ -92,7 +92,7 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
         }
         .into(),
     )
-    .finish(KeyType::Rsa2048);
+    .finish(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS);
 
     let server_config = ServerConfig::builder(
         CryptoProvider {
@@ -229,7 +229,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
             _ => unreachable!(),
         };
         let client_config = ClientConfig::builder(provider.into())
-            .finish(KeyType::Rsa2048)
+            .finish(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS)
             .into();
 
         let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);

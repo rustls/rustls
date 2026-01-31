@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
 use rustls::{ClientConfig, RootCertStore};
-use rustls_aws_lc_rs as provider;
+use rustls_aws_lc_rs::{self as provider, SUPPORTED_SIG_ALGS};
 use rustls_util::Stream;
 
 fn main() {
@@ -21,7 +21,7 @@ fn main() {
 
     let config = Arc::new(
         ClientConfig::builder(PROVIDER.into())
-            .with_root_certificates(root_store)
+            .with_root_certificates(root_store, SUPPORTED_SIG_ALGS)
             .with_no_client_auth()
             .unwrap(),
     );

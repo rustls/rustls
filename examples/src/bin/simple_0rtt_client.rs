@@ -22,7 +22,7 @@ use std::sync::Arc;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, RootCertStore};
-use rustls_aws_lc_rs::DEFAULT_PROVIDER;
+use rustls_aws_lc_rs::{DEFAULT_PROVIDER, SUPPORTED_SIG_ALGS};
 use rustls_util::{KeyLogFile, Stream};
 
 fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
@@ -105,7 +105,7 @@ fn main() {
     }
 
     let mut config = ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
-        .with_root_certificates(root_store)
+        .with_root_certificates(root_store, SUPPORTED_SIG_ALGS)
         .with_no_client_auth()
         .unwrap();
 

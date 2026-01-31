@@ -27,7 +27,7 @@ fn key_log_for_tls12() {
 
     let provider = provider::DEFAULT_TLS12_PROVIDER;
     let kt = KeyType::Rsa2048;
-    let mut client_config = make_client_config(kt, &provider);
+    let mut client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.key_log = client_key_log.clone();
     let client_config = Arc::new(client_config);
 
@@ -64,7 +64,7 @@ fn key_log_for_tls13() {
 
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let kt = KeyType::Rsa2048;
-    let mut client_config = make_client_config(kt, &provider);
+    let mut client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.key_log = client_key_log.clone();
     let client_config = Arc::new(client_config);
 
@@ -207,7 +207,7 @@ fn test_secret_extraction_enabled() {
         server_config.enable_secret_extraction = true;
         let server_config = Arc::new(server_config);
 
-        let mut client_config = make_client_config(kt, &provider);
+        let mut client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
         client_config.enable_secret_extraction = true;
 
         let (mut client, mut server) =
@@ -263,7 +263,7 @@ fn test_secret_extract_produces_correct_variant() {
         server_config.enable_secret_extraction = true;
         let server_config = Arc::new(server_config);
 
-        let mut client_config = ClientConfig::builder(provider).finish(kt);
+        let mut client_config = ClientConfig::builder(provider).finish(kt, provider::SUPPORTED_SIG_ALGS);
         client_config.enable_secret_extraction = true;
 
         let (mut client, mut server) =
@@ -329,7 +329,7 @@ fn test_secret_extraction_disabled_or_too_early() {
         server_config.enable_secret_extraction = server_enable;
         let server_config = Arc::new(server_config);
 
-        let mut client_config = make_client_config(kt, &provider);
+        let mut client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
         client_config.enable_secret_extraction = client_enable;
 
         let client_config = Arc::new(client_config);
@@ -370,7 +370,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 
 #[test]
 fn test_refresh_traffic_keys_during_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::Ed25519, provider::SUPPORTED_SIG_ALGS, &provider::DEFAULT_PROVIDER);
     assert_eq!(
         client
             .refresh_traffic_keys()
@@ -387,7 +387,7 @@ fn test_refresh_traffic_keys_during_handshake() {
 
 #[test]
 fn test_refresh_traffic_keys() {
-    let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::DEFAULT_PROVIDER);
+    let (mut client, mut server) = make_pair(KeyType::Ed25519, provider::SUPPORTED_SIG_ALGS, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
     fn check_both_directions(client: &mut ClientConnection, server: &mut ServerConnection) {
@@ -432,7 +432,7 @@ fn test_automatic_refresh_traffic_keys() {
     const KEY_UPDATE_SIZE: usize = encrypted_size(5);
     let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::DEFAULT_PROVIDER);
 
-    let client_config = ClientConfig::builder(provider.clone()).finish(KeyType::Ed25519);
+    let client_config = ClientConfig::builder(provider.clone()).finish(KeyType::Ed25519, provider::SUPPORTED_SIG_ALGS);
     let server_config = ServerConfig::builder(provider).finish(KeyType::Ed25519);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -491,7 +491,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
         )))
     });
 
-    let client_config = ClientConfig::builder(provider.clone()).finish(KeyType::Ed25519);
+    let client_config = ClientConfig::builder(provider.clone()).finish(KeyType::Ed25519, provider::SUPPORTED_SIG_ALGS);
     let server_config = ServerConfig::builder(provider).finish(KeyType::Ed25519);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
