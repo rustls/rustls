@@ -135,12 +135,12 @@ impl fmt::Debug for CommonState {
 
 /// Facts about the connection learned through the handshake.
 pub struct ConnectionOutputs {
-    pub(crate) negotiated_version: Option<ProtocolVersion>,
+    negotiated_version: Option<ProtocolVersion>,
     handshake_kind: Option<HandshakeKind>,
     suite: Option<SupportedCipherSuite>,
     negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
-    pub(crate) alpn_protocol: Option<ApplicationProtocol<'static>>,
-    pub(crate) peer_identity: Option<Identity<'static>>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
+    peer_identity: Option<Identity<'static>>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) fips: FipsStatus,
@@ -503,7 +503,7 @@ impl SendPath {
         self.sendable_tls.append(m.encode());
     }
 
-    pub(crate) fn perhaps_write_key_update(&mut self) {
+    fn perhaps_write_key_update(&mut self) {
         if let Some(message) = self.queued_key_update_message.take() {
             self.sendable_tls.append(message);
         }
@@ -609,7 +609,7 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    pub(crate) fn ensure_key_update_queued(&mut self) -> bool {
+    fn ensure_key_update_queued(&mut self) -> bool {
         if self.queued_key_update_message.is_some() {
             return false;
         }
@@ -697,7 +697,7 @@ pub(crate) struct ReceivePath {
 
     /// We limit consecutive empty fragments to avoid a route for the peer to send
     /// us significant but fruitless traffic.
-    pub(crate) seen_consecutive_empty_fragments: u8,
+    seen_consecutive_empty_fragments: u8,
 }
 
 impl ReceivePath {
@@ -988,7 +988,7 @@ impl ReceivePath {
         Ok(true)
     }
 
-    pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
+    fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
         // Reject unknown AlertLevels.
         if let AlertLevel::Unknown(level) = alert.level {
             return Err(PeerMisbehaved::IllegalAlertLevel(level, alert.description).into());
