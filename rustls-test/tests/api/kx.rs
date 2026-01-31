@@ -81,7 +81,7 @@ fn exercise_all_key_exchange_methods() {
                 &version_provider,
             );
             let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-            assert!(do_handshake_until_error(&mut client, &mut server).is_ok());
+            do_handshake_until_error(&mut client, &mut server).unwrap();
             println!("kx_group {:?} is self-consistent", kx_group.name());
         }
     }

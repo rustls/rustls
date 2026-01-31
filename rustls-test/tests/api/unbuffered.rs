@@ -1693,7 +1693,7 @@ fn kernel_key_updates_tls12() {
     // TLS 1.2 does not allow key updates so these should all error
     assert_eq!(
         client.update_tx_secret().err(),
-        Some(Error::ApiMisuse(ApiMisuse::KeyUpdatNotAvailableForTls12)),
+        Some(Error::ApiMisuse(ApiMisuse::KeyUpdateNotAvailableForTls12)),
     );
     assert_eq!(
         client.update_rx_secret().err(),

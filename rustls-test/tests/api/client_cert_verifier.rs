@@ -266,8 +266,7 @@ fn client_mandatory_auth_client_revocation_works() {
             // if the server's verifier allows unknown revocation status.
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &allow_missing_client_crl_server_config);
-            let res = do_handshake_until_error(&mut client, &mut server);
-            assert!(res.is_ok());
+            do_handshake_until_error(&mut client, &mut server).unwrap();
         }
     }
 }
@@ -319,7 +318,7 @@ fn client_mandatory_auth_intermediate_revocation_works() {
             // revocation status should not be checked.
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &ee_server_config);
-            assert!(do_handshake_until_error(&mut client, &mut server).is_ok());
+            do_handshake_until_error(&mut client, &mut server).unwrap();
         }
     }
 }

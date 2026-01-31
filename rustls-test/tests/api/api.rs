@@ -519,10 +519,12 @@ fn client_error_is_sticky() {
     client
         .read_tls(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref())
         .unwrap();
-    let mut err = client.process_new_packets();
-    assert!(err.is_err());
-    err = client.process_new_packets();
-    assert!(err.is_err());
+    client
+        .process_new_packets()
+        .unwrap_err();
+    client
+        .process_new_packets()
+        .unwrap_err();
 }
 
 #[test]
@@ -531,10 +533,12 @@ fn server_error_is_sticky() {
     server
         .read_tls(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref())
         .unwrap();
-    let mut err = server.process_new_packets();
-    assert!(err.is_err());
-    err = server.process_new_packets();
-    assert!(err.is_err());
+    server
+        .process_new_packets()
+        .unwrap_err();
+    server
+        .process_new_packets()
+        .unwrap_err();
 }
 
 #[allow(clippy::unnecessary_operation)]
@@ -625,15 +629,11 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 #[test]
 fn test_keys_match() {
     // Consistent: Both of these should have the same SPKI values
-    let expect_consistent =
-        Credentials::new(KeyType::Rsa2048.identity(), Box::new(SigningKeySomeSpki));
-    assert!(expect_consistent.is_ok());
+    Credentials::new(KeyType::Rsa2048.identity(), Box::new(SigningKeySomeSpki)).unwrap();
 
     // Inconsistent: These should not have the same SPKI values
-    let expect_inconsistent =
-        Credentials::new(KeyType::EcdsaP256.identity(), Box::new(SigningKeySomeSpki));
     assert!(matches!(
-        expect_inconsistent,
+        Credentials::new(KeyType::EcdsaP256.identity(), Box::new(SigningKeySomeSpki)),
         Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
     ));
 
@@ -705,16 +705,12 @@ fn do_exporter_test(
         Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
     );
 
-    assert!(
-        client_exporter
-            .derive(b"label", Some(b"context"), &mut client_secret)
-            .is_ok()
-    );
-    assert!(
-        server_exporter
-            .derive(b"label", Some(b"context"), &mut server_secret)
-            .is_ok()
-    );
+    client_exporter
+        .derive(b"label", Some(b"context"), &mut client_secret)
+        .unwrap();
+    server_exporter
+        .derive(b"label", Some(b"context"), &mut server_secret)
+        .unwrap();
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 
     let mut empty = vec![];
@@ -731,17 +727,13 @@ fn do_exporter_test(
         Some(ApiMisuse::ExporterOutputZeroLength.into())
     );
 
-    assert!(
-        client_exporter
-            .derive(b"label", None, &mut client_secret)
-            .is_ok()
-    );
+    client_exporter
+        .derive(b"label", None, &mut client_secret)
+        .unwrap();
     assert_ne!(client_secret.to_vec(), server_secret.to_vec());
-    assert!(
-        server_exporter
-            .derive(b"label", None, &mut server_secret)
-            .is_ok()
-    );
+    server_exporter
+        .derive(b"label", None, &mut server_secret)
+        .unwrap();
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 
     (client_exporter, server_exporter)

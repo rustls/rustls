@@ -804,16 +804,12 @@ fn test_quic_exporter() {
 
         let mut client_secret = [0u8; 64];
         let mut server_secret = [0u8; 64];
-        assert!(
-            client_exporter
-                .derive(b"label", Some(b"context"), &mut client_secret)
-                .is_ok()
-        );
-        assert!(
-            server_exporter
-                .derive(b"label", Some(b"context"), &mut server_secret)
-                .is_ok()
-        );
+        client_exporter
+            .derive(b"label", Some(b"context"), &mut client_secret)
+            .unwrap();
+        server_exporter
+            .derive(b"label", Some(b"context"), &mut server_secret)
+            .unwrap();
         assert_eq!(client_secret, server_secret);
     }
 }
