@@ -18,7 +18,7 @@ use rustls::RootCertStore;
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
-use rustls_aws_lc_rs::DEFAULT_PROVIDER;
+use rustls_aws_lc_rs::{DEFAULT_PROVIDER, SUPPORTED_SIG_ALGS};
 use rustls_util::KeyLogFile;
 
 fn main() {
@@ -205,7 +205,7 @@ impl TestPki {
 
         // Construct a fresh verifier using the test PKI roots, and the updated CRL.
         let verifier = Arc::new(
-            WebPkiClientVerifier::builder(self.roots.clone(), &self.provider)
+            WebPkiClientVerifier::builder(self.roots.clone(), SUPPORTED_SIG_ALGS)
                 .with_crls([CertificateRevocationListDer::from(crl)])
                 .build()
                 .unwrap(),

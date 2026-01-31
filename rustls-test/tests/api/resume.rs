@@ -30,7 +30,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
 
     let server_config = make_server_config(kt, &provider);
     for version_provider in ALL_VERSIONS {
-        let base_client_config = make_client_config(kt, &version_provider);
+        let base_client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
         let (mut client, mut server) =
             make_pair_for_configs(base_client_config.clone(), server_config.clone());
         do_handshake(&mut client, &mut server);
@@ -51,9 +51,9 @@ fn client_only_attempts_resumption_with_compatible_security() {
 
         // disallowed case: unmatching `client_auth_cert_resolver`
         let client_config = ClientConfig::builder(Arc::new(version_provider.clone()))
-            .add_root_certs(kt)
+            .add_root_certs(kt, provider::SUPPORTED_SIG_ALGS)
             .with_client_credential_resolver(
-                make_client_config_with_auth(KeyType::EcdsaP256, &version_provider)
+                make_client_config_with_auth(KeyType::EcdsaP256, provider::SUPPORTED_SIG_ALGS, &version_provider)
                     .resolver()
                     .clone(),
             )
@@ -68,7 +68,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
         let mut client_config = ClientConfig::builder(Arc::new(version_provider.clone()))
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(
-                webpki_server_verifier_builder(kt.client_root_store(), &version_provider)
+                webpki_server_verifier_builder(kt.client_root_store(), provider::SUPPORTED_SIG_ALGS)
                     .allow_unknown_revocation_status()
                     .build()
                     .unwrap(),
@@ -94,7 +94,7 @@ fn resumption_combinations() {
             (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
         ] {
             let resumption_data = format!("resumption data {kt:?} {version:?}");
-            let client_config = make_client_config(*kt, &version_provider);
+            let client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             server
@@ -178,7 +178,7 @@ fn expected_kx_for_version(version: ProtocolVersion) -> NamedGroup {
 #[test]
 fn test_client_tls12_no_resume_after_server_downgrade() {
     let provider = provider::DEFAULT_PROVIDER;
-    let mut client_config = make_client_config(KeyType::Ed25519, &provider);
+    let mut client_config = make_client_config(KeyType::Ed25519, provider::SUPPORTED_SIG_ALGS, &provider);
     let client_storage = Arc::new(ClientStorage::new());
     client_config.resumption = Resumption::store(client_storage.clone());
     let client_config = Arc::new(client_config);
@@ -239,7 +239,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     let shared_storage = Arc::new(ClientStorage::new());
     let provider = provider::DEFAULT_PROVIDER;
 
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.resumption = Resumption::store(shared_storage.clone());
     let client_config = Arc::new(client_config);
 
@@ -291,7 +291,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
 fn tls13_stateful_resumption() {
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let client_config = make_client_config(kt, &provider);
+    let client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
     let client_config = Arc::new(client_config);
 
     let mut server_config = make_server_config(kt, &provider);
@@ -363,7 +363,7 @@ fn tls13_stateful_resumption() {
 fn tls13_stateless_resumption() {
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let client_config = make_client_config(kt, &provider);
+    let client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
     let client_config = Arc::new(client_config);
 
     let mut server_config = make_server_config(kt, &provider);
@@ -438,14 +438,14 @@ fn tls13_stateless_resumption() {
 
 #[test]
 fn early_data_not_available() {
-    let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (mut client, _) = make_pair(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider::DEFAULT_PROVIDER);
     assert!(client.early_data().is_none());
 }
 
 fn early_data_configs() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_PROVIDER;
-    let mut client_config = make_client_config(kt, &provider);
+    let mut client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.enable_early_data = true;
     client_config.resumption = Resumption::store(Arc::new(ClientStorage::new()));
 

@@ -95,7 +95,7 @@ mod client {
         fn new(trusted_spki: Vec<SubjectPublicKeyInfoDer<'static>>) -> Self {
             Self {
                 trusted_spki,
-                supported_algs: provider::DEFAULT_PROVIDER.signature_verification_algorithms,
+                supported_algs: provider::SUPPORTED_SIG_ALGS,
             }
         }
     }
@@ -247,7 +247,7 @@ mod server {
         pub(crate) fn new(trusted_spki: Vec<SubjectPublicKeyInfoDer<'static>>) -> Self {
             Self {
                 trusted_spki,
-                supported_algs: provider::DEFAULT_PROVIDER.signature_verification_algorithms,
+                supported_algs: provider::SUPPORTED_SIG_ALGS,
             }
         }
     }

@@ -29,7 +29,7 @@ use super::{ALL_VERSIONS, provider, provider_is_aws_lc_rs};
 fn server_cert_resolve_with_sni() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
-        let client_config = Arc::new(make_client_config(*kt, &provider));
+        let client_config = Arc::new(make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &provider));
         let mut server_config = make_server_config(*kt, &provider);
 
         server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
@@ -55,7 +55,7 @@ fn server_cert_resolve_with_sni() {
 fn server_cert_resolve_with_alpn() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
-        let mut client_config = make_client_config(*kt, &provider);
+        let mut client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
         client_config.alpn_protocols = vec![
             ApplicationProtocol::from(b"foo"),
             ApplicationProtocol::from(b"bar"),
@@ -85,7 +85,7 @@ fn server_cert_resolve_with_alpn() {
 fn server_cert_resolve_with_named_groups() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
-        let client_config = make_client_config(*kt, &provider);
+        let client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
 
         let mut server_config = make_server_config(*kt, &provider);
         server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
@@ -112,7 +112,7 @@ fn server_cert_resolve_with_named_groups() {
 fn client_trims_terminating_dot() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
-        let client_config = Arc::new(make_client_config(*kt, &provider));
+        let client_config = Arc::new(make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &provider));
         let mut server_config = make_server_config(*kt, &provider);
 
         server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
@@ -142,7 +142,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
     let client_config = ClientConfig::builder(
         provider_with_one_suite(&provider::DEFAULT_PROVIDER, find_suite(suite)).into(),
     )
-    .finish(kt);
+    .finish(kt, provider::SUPPORTED_SIG_ALGS);
 
     let mut server_config = make_server_config(kt, &provider::DEFAULT_PROVIDER);
 
@@ -230,7 +230,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
         let server_config = Arc::new(server_config);
 
         for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(*kt, &version_provider);
+            let mut client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &version_provider);
             client_config.enable_sni = false;
 
             let mut client = Arc::new(client_config)
@@ -329,7 +329,7 @@ fn test_client_cert_resolve(
         println!("{version:?} {key_type:?}:");
 
         let client_config = ClientConfig::builder(version_provider.clone().into())
-            .add_root_certs(key_type)
+            .add_root_certs(key_type, provider::SUPPORTED_SIG_ALGS)
             .with_client_credential_resolver(Arc::new(ClientCheckCertResolve::new(
                 1,
                 expected_root_hint_subjects.clone(),
@@ -383,7 +383,7 @@ fn client_cert_resolve_default() {
     let provider = provider::DEFAULT_PROVIDER;
     for key_type in KeyType::all_for_provider(&provider) {
         let server_config = Arc::new(make_server_config_with_mandatory_client_auth(
-            *key_type, &provider,
+            *key_type, provider::SUPPORTED_SIG_ALGS, &provider,
         ));
 
         // In a default configuration we expect that the verifier's trust anchors are used
@@ -401,7 +401,7 @@ fn client_cert_resolve_server_no_hints() {
     let provider = provider::DEFAULT_PROVIDER;
     for key_type in KeyType::all_for_provider(&provider) {
         // Build a verifier with no hint subjects.
-        let verifier = webpki_client_verifier_builder(key_type.client_root_store(), &provider)
+        let verifier = webpki_client_verifier_builder(key_type.client_root_store(), provider::SUPPORTED_SIG_ALGS)
             .clear_root_hint_subjects();
         let server_config = make_server_config_with_client_verifier(*key_type, verifier, &provider);
         let expected_root_hint_subjects = Vec::default(); // no hints expected.
@@ -421,7 +421,7 @@ fn client_cert_resolve_server_added_hint() {
         let expected_hint_subjects = vec![key_type.ca_distinguished_name(), extra_name.clone()];
         // Create a verifier that adds the extra_name as a hint subject in addition to the ones
         // from the root cert store.
-        let verifier = webpki_client_verifier_builder(key_type.client_root_store(), &provider)
+        let verifier = webpki_client_verifier_builder(key_type.client_root_store(), provider::SUPPORTED_SIG_ALGS)
             .add_root_hint_subjects([extra_name.clone()].into_iter());
         let server_config = make_server_config_with_client_verifier(*key_type, verifier, &provider);
         test_client_cert_resolve(*key_type, server_config.into(), expected_hint_subjects);
@@ -439,7 +439,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
     let server_config = Arc::new(server_config);
 
     for version_provider in ALL_VERSIONS {
-        let client_config = Arc::new(make_client_config(kt, &version_provider));
+        let client_config = Arc::new(make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &version_provider));
         let mut server = ServerConnection::new(server_config.clone()).unwrap();
         let mut client = client_config
             .connect(server_name("thisdoesNOTexist.com"))
@@ -477,7 +477,7 @@ fn sni_resolver_works() {
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
-    let mut client1 = Arc::new(make_client_config(kt, &provider))
+    let mut client1 = Arc::new(make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider))
         .connect(server_name("localhost"))
         .build()
         .unwrap();
@@ -485,7 +485,7 @@ fn sni_resolver_works() {
     assert_eq!(err, Ok(()));
 
     let mut server2 = ServerConnection::new(server_config).unwrap();
-    let mut client2 = Arc::new(make_client_config(kt, &provider))
+    let mut client2 = Arc::new(make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider))
         .connect(server_name("notlocalhost"))
         .build()
         .unwrap();
@@ -541,7 +541,7 @@ fn sni_resolver_lower_cases_configured_names() {
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config).unwrap();
-    let mut client1 = Arc::new(make_client_config(kt, &provider))
+    let mut client1 = Arc::new(make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider))
         .connect(server_name("localhost"))
         .build()
         .unwrap();
@@ -570,7 +570,7 @@ fn sni_resolver_lower_cases_queried_names() {
     let server_config = Arc::new(server_config);
 
     let mut server1 = ServerConnection::new(server_config).unwrap();
-    let mut client1 = Arc::new(make_client_config(kt, &provider))
+    let mut client1 = Arc::new(make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider))
         .connect(server_name("LOCALHOST"))
         .build()
         .unwrap();

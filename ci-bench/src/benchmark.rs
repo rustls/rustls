@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use rustls::crypto::{CryptoProvider, TicketProducer};
+use rustls::crypto::{CryptoProvider, TicketProducer, WebPkiSupportedAlgorithms};
 use rustls_test::KeyType;
 
 use crate::Side;
@@ -88,6 +88,8 @@ pub(crate) struct BenchmarkParams {
     ///
     /// The choice of cipher suite is baked into this.
     pub provider: Arc<CryptoProvider>,
+    /// Which signature verification algorithms to use.
+    pub verify_algs: WebPkiSupportedAlgorithms,
     /// How to make a suitable [`rustls::crypto::TicketProducer`].
     pub ticketer: &'static fn() -> Arc<dyn TicketProducer>,
     /// Where to get keys for server auth
@@ -102,6 +104,7 @@ impl BenchmarkParams {
     /// Create a new set of benchmark params
     pub(crate) const fn new(
         provider: Arc<CryptoProvider>,
+        verify_algs: WebPkiSupportedAlgorithms,
         ticketer: &'static fn() -> Arc<dyn TicketProducer>,
         auth_key: AuthKeySource,
         label: String,
@@ -109,6 +112,7 @@ impl BenchmarkParams {
     ) -> Self {
         Self {
             provider,
+            verify_algs,
             ticketer,
             auth_key,
             label,

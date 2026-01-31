@@ -62,7 +62,6 @@ pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
     tls12_cipher_suites: Cow::Borrowed(DEFAULT_TLS12_CIPHER_SUITES),
     tls13_cipher_suites: Cow::Borrowed(DEFAULT_TLS13_CIPHER_SUITES),
     kx_groups: Cow::Borrowed(DEFAULT_KX_GROUPS),
-    signature_verification_algorithms: SUPPORTED_SIG_ALGS,
     secure_random: &Ring,
     key_provider: &Ring,
     ticketer_factory: &Ring,
@@ -191,7 +190,7 @@ pub mod cipher_suite {
 
 /// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
 /// compiled against *ring*.
-static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
+pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[
         ECDSA_P256_SHA256,
         ECDSA_P256_SHA384,

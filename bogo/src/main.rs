@@ -27,7 +27,7 @@ use rustls::crypto::hpke::{Hpke, HpkePublicKey};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{
     Credentials, CryptoProvider, Identity, SelectedCredential, SignatureScheme, Signer, SigningKey,
-    SingleCredential,
+    SingleCredential, WebPkiSupportedAlgorithms,
 };
 use rustls::enums::{
     ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
@@ -845,6 +845,13 @@ impl SelectedProvider {
         }
     }
 
+    fn verify_algs(&self) -> WebPkiSupportedAlgorithms {
+        match *self {
+            Self::AwsLcRs | Self::AwsLcRsFips => rustls_aws_lc_rs::SUPPORTED_SIG_ALGS,
+            Self::Ring => rustls_ring::SUPPORTED_SIG_ALGS,
+        }
+    }
+
     fn supports_ech(&self) -> bool {
         match *self {
             Self::AwsLcRs | Self::AwsLcRsFips => true,
@@ -916,7 +923,7 @@ impl DummyClientAuth {
             parent: Arc::new(
                 WebPkiClientVerifier::builder(
                     load_root_certs(trusted_cert_file),
-                    &SelectedProvider::from_env().provider(),
+                    SelectedProvider::from_env().verify_algs(),
                 )
                 .build()
                 .unwrap(),
@@ -975,7 +982,7 @@ impl DummyServerAuth {
             parent: Arc::new(
                 WebPkiServerVerifier::builder(
                     load_root_certs(trusted_cert_file),
-                    &SelectedProvider::from_env().provider(),
+                    SelectedProvider::from_env().verify_algs(),
                 )
                 .build()
                 .unwrap(),

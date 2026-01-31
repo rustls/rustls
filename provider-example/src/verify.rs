@@ -6,7 +6,7 @@ use rustls::pki_types::{
     AlgorithmIdentifier, InvalidSignature, SignatureVerificationAlgorithm, alg_id,
 };
 
-pub(crate) static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
+pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[RSA_PSS_SHA256, RSA_PKCS1_SHA256],
     mapping: &[
         (SignatureScheme::RSA_PSS_SHA256, &[RSA_PSS_SHA256]),

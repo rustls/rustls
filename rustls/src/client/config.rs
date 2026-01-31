@@ -21,7 +21,7 @@ use crate::crypto;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme, hash};
 #[cfg(feature = "webpki")]
-use crate::crypto::{Credentials, Identity, SingleCredential};
+use crate::crypto::{Credentials, Identity, SingleCredential, WebPkiSupportedAlgorithms};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
@@ -639,12 +639,10 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     pub fn with_root_certificates(
         self,
         root_store: impl Into<Arc<webpki::RootCertStore>>,
+        supported: WebPkiSupportedAlgorithms,
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
-        let algorithms = self
-            .provider
-            .signature_verification_algorithms;
         self.with_webpki_verifier(
-            WebPkiServerVerifier::new_without_revocation(root_store, algorithms).into(),
+            WebPkiServerVerifier::new_without_revocation(root_store, supported).into(),
         )
     }
 

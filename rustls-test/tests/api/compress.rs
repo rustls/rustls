@@ -33,7 +33,7 @@ fn test_server_uses_cached_compressed_certificates() {
     let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.cert_compressors = vec![&CountingCompressor];
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.resumption = Resumption::disabled();
 
     let server_config = Arc::new(server_config);
@@ -72,7 +72,7 @@ fn test_server_uses_uncompressed_certificate_if_compression_fails() {
     let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.cert_compressors = vec![&FailingCompressor];
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.cert_decompressors = vec![&NeverDecompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -83,9 +83,9 @@ fn test_server_uses_uncompressed_certificate_if_compression_fails() {
 fn test_client_uses_uncompressed_certificate_if_compression_fails() {
     let provider = provider::DEFAULT_PROVIDER;
     let mut server_config =
-        make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
+        make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     server_config.cert_decompressors = vec![&NeverDecompressor];
-    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.cert_compressors = vec![&FailingCompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -136,7 +136,7 @@ fn test_server_can_opt_out_of_compression_cache() {
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.cert_compressors = vec![&AlwaysInteractiveCompressor];
     server_config.cert_compression_cache = Arc::new(rustls::compress::CompressionCache::Disabled);
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.resumption = Resumption::disabled();
 
     let server_config = Arc::new(server_config);
@@ -176,7 +176,7 @@ fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
     let provider = provider::DEFAULT_PROVIDER;
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.cert_compressors = vec![&IdentityCompressor];
-    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.cert_decompressors = vec![&GarbageDecompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -197,9 +197,9 @@ fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
 fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
     let provider = provider::DEFAULT_PROVIDER;
     let mut server_config =
-        make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
+        make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     server_config.cert_decompressors = vec![&GarbageDecompressor];
-    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.cert_compressors = vec![&IdentityCompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -220,9 +220,9 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
 fn test_cert_decompression_by_server_fails() {
     let provider = provider::DEFAULT_PROVIDER;
     let mut server_config =
-        make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
+        make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     server_config.cert_decompressors = vec![&FailingDecompressor];
-    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, &provider);
+    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.cert_compressors = vec![&IdentityCompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
@@ -243,7 +243,7 @@ fn test_cert_decompression_by_server_fails() {
 #[test]
 fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
     let provider = provider::DEFAULT_PROVIDER;
-    let server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, &provider);
+    let server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider);
 
     let big_cert = CertificateDer::from(vec![0u8; 0xffff]);
     let key = provider::DEFAULT_PROVIDER
@@ -255,7 +255,7 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         key,
     );
     let client_config = ClientConfig::builder(Arc::new(provider))
-        .add_root_certs(KeyType::Rsa2048)
+        .add_root_certs(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS)
         .with_client_credential_resolver(Arc::new(SingleCredential::from(big_cert_and_key)))
         .unwrap();
 

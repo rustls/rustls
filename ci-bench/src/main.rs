@@ -373,15 +373,17 @@ fn all_benchmarks() -> anyhow::Result<Vec<Benchmark>> {
 fn all_benchmarks_params() -> Vec<BenchmarkParams> {
     let mut all = Vec::new();
 
-    for (provider, ticketer, provider_name, warm_up) in [
+    for (provider, verify_algs, ticketer, provider_name, warm_up) in [
         (
             derandomize(rustls_ring::DEFAULT_PROVIDER),
+            rustls_ring::SUPPORTED_SIG_ALGS,
             &(ring_ticketer as fn() -> Arc<dyn TicketProducer>),
             "ring",
             None,
         ),
         (
             derandomize(rustls_aws_lc_rs::DEFAULT_PROVIDER),
+            rustls_aws_lc_rs::SUPPORTED_SIG_ALGS,
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn TicketProducer>),
             "aws_lc_rs",
             Some(warm_up_aws_lc_rs as fn()),
@@ -426,6 +428,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         ] {
             all.push(BenchmarkParams::new(
                 select_suite(provider.clone(), suite_name),
+                verify_algs,
                 ticketer,
                 AuthKeySource::KeyType(key_type),
                 format!("{provider_name}_{name}"),
@@ -439,6 +442,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 
     all.push(BenchmarkParams::new(
         rustls_fuzzing_provider::PROVIDER_TLS13.into(),
+        rustls_fuzzing_provider::VERIFY_ALGORITHMS,
         make_ticketer,
         AuthKeySource::FuzzingProvider,
         "1.3_no_crypto".to_string(),
@@ -447,6 +451,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 
     all.push(BenchmarkParams::new(
         rustls_fuzzing_provider::PROVIDER_TLS12.into(),
+        rustls_fuzzing_provider::VERIFY_ALGORITHMS,
         make_ticketer,
         AuthKeySource::FuzzingProvider,
         "1.2_no_crypto".to_string(),
@@ -661,7 +666,7 @@ impl ClientSideStepper<'_> {
                     .add(key_type.ca_cert())
                     .unwrap();
 
-                cfg.with_root_certificates(root_store)
+                cfg.with_root_certificates(root_store, params.verify_algs)
                     .with_no_client_auth()
                     .unwrap()
             }

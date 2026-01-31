@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::{ClientConfig, RootCertStore};
-use rustls_provider_example::provider;
+use rustls_provider_example::{SUPPORTED_SIG_ALGS, provider};
 use rustls_util::Stream;
 
 fn main() {
@@ -17,7 +17,7 @@ fn main() {
 
     let config = Arc::new(
         ClientConfig::builder(provider().into())
-            .with_root_certificates(root_store)
+            .with_root_certificates(root_store, SUPPORTED_SIG_ALGS)
             .with_no_client_auth()
             .unwrap(),
     );

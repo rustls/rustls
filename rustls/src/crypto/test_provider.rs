@@ -31,7 +31,6 @@ pub const TEST_PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {
     tls12_cipher_suites: Cow::Borrowed(&[TLS_TEST_SUITE]),
     tls13_cipher_suites: Cow::Borrowed(&[TLS13_TEST_SUITE]),
     kx_groups: Cow::Borrowed(&[KEY_EXCHANGE_GROUP]),
-    signature_verification_algorithms: VERIFY_ALGORITHMS,
     secure_random: &Provider,
     key_provider: &Provider,
     ticketer_factory: &Provider,
@@ -504,7 +503,7 @@ const AEAD_MASK: &[u8] = b"AeadMaskPattern";
 const AEAD_TAG: &[u8] = b"AeadTagA";
 const AEAD_OVERHEAD: usize = 16;
 
-static VERIFY_ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
+pub(crate) static VERIFY_ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[VERIFY_ALGORITHM],
     mapping: &[(SIGNATURE_SCHEME, &[VERIFY_ALGORITHM])],
 };

@@ -46,6 +46,7 @@ use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::{ClientConfig, RootCertStore};
+use rustls_aws_lc_rs::SUPPORTED_SIG_ALGS;
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_util::{KeyLogFile, Stream};
 
@@ -116,7 +117,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Construct a rustls client config with a TLS1.3-only provider, and ECH enabled.
     let mut config = ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_TLS13_PROVIDER.into())
         .with_ech(ech_mode)
-        .with_root_certificates(root_store)
+        .with_root_certificates(root_store, SUPPORTED_SIG_ALGS)
         .with_no_client_auth()?;
 
     // Allow using SSLKEYLOGFILE.

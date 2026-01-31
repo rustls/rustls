@@ -15,7 +15,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
-use rustls::crypto::{CipherSuite, CryptoProvider, Identity};
+use rustls::crypto::{CipherSuite, CryptoProvider, Identity, WebPkiSupportedAlgorithms};
 use rustls::enums::ProtocolVersion;
 use rustls::server::{
     NoServerSessionStorage, ServerSessionMemoryCache, UnbufferedServerConnection,
@@ -807,7 +807,7 @@ impl Parameters {
                 }
 
                 Arc::new(
-                    WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
+                    WebPkiClientVerifier::builder(client_auth_roots.into(), self.provider.verify_algs())
                         .build()
                         .unwrap(),
                 )
@@ -852,7 +852,7 @@ impl Parameters {
                 .build_with_cipher_suite(self.proto.ciphersuite)
                 .into(),
         )
-        .with_root_certificates(root_store);
+        .with_root_certificates(root_store, self.provider.verify_algs());
 
         let mut cfg = match self.client_auth {
             ClientAuth::Yes => cfg
@@ -1028,6 +1028,18 @@ impl Provider {
             [] => panic!("no providers available in this build"),
             [one] => one,
             _ => panic!("you must choose provider: available are {available:?}"),
+        }
+    }
+
+    fn verify_algs(&self) -> WebPkiSupportedAlgorithms {
+        match self {
+            #[cfg(feature = "aws-lc-rs")]
+            Self::AwsLcRs | Self::AwsLcRsFips => rustls_aws_lc_rs::SUPPORTED_SIG_ALGS,
+            #[cfg(feature = "graviola")]
+            Self::Graviola => unreachable!(), // graviola does not support webpki
+            #[cfg(feature = "ring")]
+            Self::Ring => rustls_ring::SUPPORTED_SIG_ALGS,
+            Self::_None => unreachable!(),
         }
     }
 }

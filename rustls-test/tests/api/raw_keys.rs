@@ -17,8 +17,8 @@ use super::provider;
 fn successful_raw_key_connection_and_correct_peer_certificates() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
-        let client_config = make_client_config_with_raw_key_support(*kt, &provider);
-        let server_config = make_server_config_with_raw_key_support(*kt, &provider);
+        let client_config = make_client_config_with_raw_key_support(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
+        let server_config = make_server_config_with_raw_key_support(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
 
         let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
         do_handshake(&mut client, &mut server);
@@ -57,8 +57,8 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
 fn correct_certificate_type_extensions_from_client_hello() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
-        let client_config = make_client_config_with_raw_key_support(*kt, &provider);
-        let mut server_config = make_server_config_with_raw_key_support(*kt, &provider);
+        let client_config = make_client_config_with_raw_key_support(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
+        let mut server_config = make_server_config_with_raw_key_support(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
 
         server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
             expected_client_cert_types: Some(vec![CertificateType::RawPublicKey]),
@@ -79,7 +79,7 @@ fn correct_certificate_type_extensions_from_client_hello() {
 fn only_client_supports_raw_keys() {
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
-        let client_config_rpk = make_client_config_with_raw_key_support(*kt, &provider);
+        let client_config_rpk = make_client_config_with_raw_key_support(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
         let server_config = make_server_config(*kt, &provider);
 
         let (mut client_rpk, mut server) = make_pair_for_configs(client_config_rpk, server_config);
@@ -105,8 +105,8 @@ fn only_client_supports_raw_keys() {
 fn only_server_supports_raw_keys() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
-        let client_config = make_client_config(*kt, &provider);
-        let server_config_rpk = make_server_config_with_raw_key_support(*kt, &provider);
+        let client_config = make_client_config(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
+        let server_config_rpk = make_server_config_with_raw_key_support(*kt, provider::SUPPORTED_SIG_ALGS, &provider);
 
         let (mut client, mut server_rpk) = make_pair_for_configs(client_config, server_config_rpk);
 

@@ -43,7 +43,7 @@ fn exercise_key_log_file_for_client() {
         unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
 
         for version_provider in ALL_VERSIONS {
-            let mut client_config = make_client_config(KeyType::Rsa2048, &version_provider);
+            let mut client_config = make_client_config(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &version_provider);
             client_config.key_log = Arc::new(KeyLogFile::new());
 
             let (mut client, mut server) =
@@ -69,7 +69,7 @@ fn exercise_key_log_file_for_server() {
         let server_config = Arc::new(server_config);
 
         for version_provider in ALL_VERSIONS {
-            let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
+            let client_config = make_client_config(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 

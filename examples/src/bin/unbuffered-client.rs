@@ -12,7 +12,7 @@ use rustls::unbuffered::{
     WriteTraffic,
 };
 use rustls::{ClientConfig, RootCertStore};
-use rustls_aws_lc_rs::DEFAULT_PROVIDER;
+use rustls_aws_lc_rs::{DEFAULT_PROVIDER, SUPPORTED_SIG_ALGS};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let root_store = RootCertStore {
@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut config = ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
-        .with_root_certificates(root_store)
+        .with_root_certificates(root_store, SUPPORTED_SIG_ALGS)
         .with_no_client_auth()?;
     config.enable_early_data = SEND_EARLY_DATA;
 

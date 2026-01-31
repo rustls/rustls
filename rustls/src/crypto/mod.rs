@@ -207,15 +207,6 @@ pub struct CryptoProvider {
     /// The `SupportedKxGroup` type carries both configuration and implementation.
     pub kx_groups: Cow<'static, [&'static dyn SupportedKxGroup]>,
 
-    /// List of signature verification algorithms for use with webpki.
-    ///
-    /// These are used for both certificate chain verification and handshake signature verification.
-    ///
-    /// This is called by [`ConfigBuilder::with_root_certificates()`],
-    /// [`server::WebPkiClientVerifier::builder()`] and
-    /// [`client::WebPkiServerVerifier::builder()`].
-    pub signature_verification_algorithms: WebPkiSupportedAlgorithms,
-
     /// Source of cryptographically secure random numbers.
     pub secure_random: &'static dyn SecureRandom,
 
@@ -258,17 +249,15 @@ impl CryptoProvider {
             tls12_cipher_suites,
             tls13_cipher_suites,
             kx_groups,
-            signature_verification_algorithms,
             secure_random,
             key_provider,
             ticketer_factory,
         } = self;
 
         let mut status = Ord::min(
-            signature_verification_algorithms.fips(),
             secure_random.fips(),
+            key_provider.fips(),
         );
-        status = Ord::min(status, key_provider.fips());
         status = Ord::min(status, ticketer_factory.fips());
         for cs in tls12_cipher_suites.iter() {
             status = Ord::min(status, cs.fips());

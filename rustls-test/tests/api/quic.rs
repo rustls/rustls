@@ -70,7 +70,7 @@ fn test_quic_handshake() {
 
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_TLS13_PROVIDER;
-    let mut client_config = make_client_config(kt, &provider);
+    let mut client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.enable_early_data = true;
     let client_config = Arc::new(client_config);
     let mut server_config = make_server_config(kt, &provider);
@@ -246,7 +246,7 @@ fn test_quic_rejects_missing_alpn() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
 
     for &kt in KeyType::all_for_provider(&provider) {
-        let client_config = make_client_config(kt, &provider);
+        let client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
         let client_config = Arc::new(client_config);
 
         let mut server_config = make_server_config(kt, &provider);
@@ -278,7 +278,7 @@ fn test_quic_rejects_missing_alpn() {
 #[test]
 fn test_quic_no_tls13_error() {
     let provider = provider::DEFAULT_TLS12_PROVIDER;
-    let mut client_config = make_client_config(KeyType::Ed25519, &provider);
+    let mut client_config = make_client_config(KeyType::Ed25519, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.alpn_protocols = vec![b"foo".into()];
     let client_config = Arc::new(client_config);
 
@@ -489,7 +489,7 @@ fn test_quic_resumption_data_0rtt() {
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_TLS13_PROVIDER;
 
-    let mut client_config = make_client_config(kt, &provider);
+    let mut client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
     client_config.alpn_protocols = vec![b"foo".into()];
     client_config.enable_early_data = true;
     client_config.resumption = Resumption::store(Arc::new(ClientStorage::new()));
@@ -772,7 +772,7 @@ fn packet_key_api() {
 fn test_quic_exporter() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     for &kt in KeyType::all_for_provider(&provider) {
-        let client_config = make_client_config(kt, &provider);
+        let client_config = make_client_config(kt, provider::SUPPORTED_SIG_ALGS, &provider);
         let server_config = make_server_config(kt, &provider);
 
         let mut server =
@@ -817,7 +817,7 @@ fn test_quic_exporter() {
 #[test]
 fn test_fragmented_append() {
     // Create a QUIC client connection.
-    let client_config = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_TLS13_PROVIDER);
+    let client_config = make_client_config(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider::DEFAULT_TLS13_PROVIDER);
     let client_config = Arc::new(client_config);
     let mut client = quic::ClientConnection::new(
         client_config,

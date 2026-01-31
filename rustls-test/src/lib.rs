@@ -545,22 +545,24 @@ pub fn make_server_config_with_kx_groups(
 pub fn make_server_config_with_mandatory_client_auth_crls(
     kt: KeyType,
     crls: Vec<CertificateRevocationListDer<'static>>,
+    verify_algs: WebPkiSupportedAlgorithms,
     provider: &CryptoProvider,
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
-        webpki_client_verifier_builder(kt.client_root_store(), provider).with_crls(crls),
+        webpki_client_verifier_builder(kt.client_root_store(), verify_algs).with_crls(crls),
         provider,
     )
 }
 
 pub fn make_server_config_with_mandatory_client_auth(
     kt: KeyType,
+    verify_algs: WebPkiSupportedAlgorithms,
     provider: &CryptoProvider,
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
-        webpki_client_verifier_builder(kt.client_root_store(), provider),
+        webpki_client_verifier_builder(kt.client_root_store(), verify_algs),
         provider,
     )
 }
@@ -568,11 +570,12 @@ pub fn make_server_config_with_mandatory_client_auth(
 pub fn make_server_config_with_optional_client_auth(
     kt: KeyType,
     crls: Vec<CertificateRevocationListDer<'static>>,
+    verify_algs: WebPkiSupportedAlgorithms,
     provider: &CryptoProvider,
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
-        webpki_client_verifier_builder(kt.client_root_store(), provider)
+        webpki_client_verifier_builder(kt.client_root_store(), verify_algs)
             .with_crls(crls)
             .allow_unknown_revocation_status()
             .allow_unauthenticated(),
@@ -593,10 +596,11 @@ pub fn make_server_config_with_client_verifier(
 
 pub fn make_server_config_with_raw_key_support(
     kt: KeyType,
+    verify_algs: WebPkiSupportedAlgorithms,
     provider: &CryptoProvider,
 ) -> ServerConfig {
     let mut client_verifier =
-        MockClientVerifier::new(|| Ok(PeerVerified::assertion()), kt, provider);
+        MockClientVerifier::new(|| Ok(PeerVerified::assertion()), kt, verify_algs);
     let server_cert_resolver = Arc::new(SingleCredential::from(
         kt.credentials_with_raw_pub_key(provider)
             .unwrap(),
@@ -611,9 +615,10 @@ pub fn make_server_config_with_raw_key_support(
 
 pub fn make_client_config_with_raw_key_support(
     kt: KeyType,
+    verify_algs: WebPkiSupportedAlgorithms,
     provider: &CryptoProvider,
 ) -> ClientConfig {
-    let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(provider));
+    let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(verify_algs));
     let client_cert_resolver = Arc::new(SingleCredential::from(
         kt.certified_client_key(provider)
             .unwrap(),
@@ -627,41 +632,59 @@ pub fn make_client_config_with_raw_key_support(
 }
 
 pub trait ClientConfigExt {
-    fn finish(self, kt: KeyType) -> ClientConfig;
-    fn finish_with_creds(self, kt: KeyType) -> ClientConfig;
-    fn add_root_certs(self, kt: KeyType) -> ConfigBuilder<ClientConfig, WantsClientCert>;
+    fn finish(self, kt: KeyType, verify_algs: WebPkiSupportedAlgorithms) -> ClientConfig;
+    fn finish_with_creds(self, kt: KeyType, verify_algs: WebPkiSupportedAlgorithms)
+    -> ClientConfig;
+    fn add_root_certs(
+        self,
+        kt: KeyType,
+        verify_algs: WebPkiSupportedAlgorithms,
+    ) -> ConfigBuilder<ClientConfig, WantsClientCert>;
 }
 
 impl ClientConfigExt for ConfigBuilder<ClientConfig, WantsVerifier> {
-    fn finish(self, kt: KeyType) -> ClientConfig {
-        self.add_root_certs(kt)
+    fn finish(self, kt: KeyType, verify_algs: WebPkiSupportedAlgorithms) -> ClientConfig {
+        self.add_root_certs(kt, verify_algs)
             .with_no_client_auth()
             .unwrap()
     }
 
-    fn finish_with_creds(self, kt: KeyType) -> ClientConfig {
-        self.add_root_certs(kt)
+    fn finish_with_creds(
+        self,
+        kt: KeyType,
+        verify_algs: WebPkiSupportedAlgorithms,
+    ) -> ClientConfig {
+        self.add_root_certs(kt, verify_algs)
             .with_client_auth_cert(kt.client_identity(), kt.client_key())
             .unwrap()
     }
 
-    fn add_root_certs(self, kt: KeyType) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+    fn add_root_certs(
+        self,
+        kt: KeyType,
+        verify_algs: WebPkiSupportedAlgorithms,
+    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         let mut root_store = RootCertStore::empty();
         root_store.add_parsable_certificates(
             CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
         );
 
-        self.with_root_certificates(root_store)
+        self.with_root_certificates(root_store, verify_algs)
     }
 }
 
-pub fn make_client_config(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    ClientConfig::builder(provider.clone().into()).finish(kt)
+pub fn make_client_config(
+    kt: KeyType,
+    verify_algs: WebPkiSupportedAlgorithms,
+    provider: &CryptoProvider,
+) -> ClientConfig {
+    ClientConfig::builder(provider.clone().into()).finish(kt, verify_algs)
 }
 
 pub fn make_client_config_with_kx_groups(
     kt: KeyType,
     kx_groups: Vec<&'static dyn SupportedKxGroup>,
+    verify_algs: WebPkiSupportedAlgorithms,
     provider: &CryptoProvider,
 ) -> ClientConfig {
     ClientConfig::builder(
@@ -671,11 +694,15 @@ pub fn make_client_config_with_kx_groups(
         }
         .into(),
     )
-    .finish(kt)
+    .finish(kt, verify_algs)
 }
 
-pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
-    ClientConfig::builder(provider.clone().into()).finish_with_creds(kt)
+pub fn make_client_config_with_auth(
+    kt: KeyType,
+    verify_algs: WebPkiSupportedAlgorithms,
+    provider: &CryptoProvider,
+) -> ClientConfig {
+    ClientConfig::builder(provider.clone().into()).finish_with_creds(kt, verify_algs)
 }
 
 pub fn make_client_config_with_verifier(
@@ -691,21 +718,25 @@ pub fn make_client_config_with_verifier(
 
 pub fn webpki_client_verifier_builder(
     roots: Arc<RootCertStore>,
-    provider: &CryptoProvider,
+    verify_algs: WebPkiSupportedAlgorithms,
 ) -> ClientVerifierBuilder {
-    WebPkiClientVerifier::builder(roots, provider)
+    WebPkiClientVerifier::builder(roots, verify_algs)
 }
 
 pub fn webpki_server_verifier_builder(
     roots: Arc<RootCertStore>,
-    provider: &CryptoProvider,
+    verify_algs: WebPkiSupportedAlgorithms,
 ) -> ServerVerifierBuilder {
-    WebPkiServerVerifier::builder(roots, provider)
+    WebPkiServerVerifier::builder(roots, verify_algs)
 }
 
-pub fn make_pair(kt: KeyType, provider: &CryptoProvider) -> (ClientConnection, ServerConnection) {
+pub fn make_pair(
+    kt: KeyType,
+    verify_algs: WebPkiSupportedAlgorithms,
+    provider: &CryptoProvider,
+) -> (ClientConnection, ServerConnection) {
     make_pair_for_configs(
-        make_client_config(kt, provider),
+        make_client_config(kt, verify_algs, provider),
         make_server_config(kt, provider),
     )
 }
@@ -731,7 +762,10 @@ pub fn make_pair_for_arc_configs(
 }
 
 /// Return a client and server config that don't share a common cipher suite
-pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, ServerConfig) {
+pub fn make_disjoint_suite_configs(
+    verify_algs: WebPkiSupportedAlgorithms,
+    provider: CryptoProvider,
+) -> (ClientConfig, ServerConfig) {
     let kt = KeyType::Rsa2048;
     let client_provider = CryptoProvider {
         tls13_cipher_suites: provider
@@ -753,7 +787,7 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
             .collect(),
         ..provider
     };
-    let client_config = ClientConfig::builder(server_provider.into()).finish(kt);
+    let client_config = ClientConfig::builder(server_provider.into()).finish(kt, verify_algs);
 
     (client_config, server_config)
 }
@@ -1229,10 +1263,10 @@ impl MockServerVerifier {
         }
     }
 
-    pub fn expects_raw_public_keys(provider: &CryptoProvider) -> Self {
+    pub fn expects_raw_public_keys(verify_algs: WebPkiSupportedAlgorithms) -> Self {
         Self {
             requires_raw_public_keys: true,
-            raw_public_key_algorithms: Some(provider.signature_verification_algorithms),
+            raw_public_key_algorithms: Some(verify_algs),
             ..Default::default()
         }
     }
@@ -1274,11 +1308,11 @@ impl MockClientVerifier {
     pub fn new(
         verified: fn() -> Result<PeerVerified, Error>,
         kt: KeyType,
-        provider: &CryptoProvider,
+        verify_algs: WebPkiSupportedAlgorithms,
     ) -> Self {
         Self {
             parent: Arc::new(
-                webpki_client_verifier_builder(kt.client_root_store(), provider)
+                webpki_client_verifier_builder(kt.client_root_store(), verify_algs)
                     .build()
                     .unwrap(),
             ),
@@ -1287,7 +1321,7 @@ impl MockClientVerifier {
             mandatory: true,
             offered_schemes: None,
             expect_raw_public_keys: false,
-            raw_public_key_algorithms: Some(provider.signature_verification_algorithms),
+            raw_public_key_algorithms: Some(verify_algs),
         }
     }
 }

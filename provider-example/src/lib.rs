@@ -42,13 +42,13 @@ mod ticketer;
 #[cfg(feature = "std")]
 use ticketer::AeadTicketer;
 mod verify;
+pub use verify::SUPPORTED_SIG_ALGS;
 
 pub fn provider() -> CryptoProvider {
     CryptoProvider {
         tls12_cipher_suites: Cow::Borrowed(ALL_TLS12_CIPHER_SUITES),
         tls13_cipher_suites: Cow::Borrowed(ALL_TLS13_CIPHER_SUITES),
         kx_groups: Cow::Borrowed(kx::ALL_KX_GROUPS),
-        signature_verification_algorithms: verify::ALGORITHMS,
         secure_random: &Provider,
         key_provider: &Provider,
         ticketer_factory: &Provider,

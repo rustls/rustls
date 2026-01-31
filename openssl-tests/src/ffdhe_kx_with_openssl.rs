@@ -9,7 +9,7 @@ use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection};
-use rustls_aws_lc_rs as provider;
+use rustls_aws_lc_rs::{self as provider, SUPPORTED_SIG_ALGS};
 
 use crate::ffdhe::{self, FFDHE2048_GROUP};
 use crate::utils::verify_openssl3_available;
@@ -125,7 +125,7 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
             // OpenSSL 3 does not support RFC 7919 with TLS 1.2: https://github.com/openssl/openssl/issues/10971
             FFDHE_TLS13_PROVIDER.into(),
         )
-        .with_root_certificates(root_ca())
+        .with_root_certificates(root_ca(), SUPPORTED_SIG_ALGS)
         .with_no_client_auth()
         .unwrap(),
     );
