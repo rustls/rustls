@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
-use core::{fmt, mem};
 
 use pki_types::{DnsName, FipsStatus};
 
@@ -624,7 +624,7 @@ impl SendPath {
 
     /// Trigger a `refresh_traffic_keys` if required.
     pub(crate) fn maybe_refresh_traffic_keys(&mut self) {
-        if mem::take(&mut self.refresh_traffic_keys_pending) {
+        if self.refresh_traffic_keys_pending {
             let _ = self.refresh_traffic_keys();
         }
     }
@@ -637,6 +637,7 @@ impl SendPath {
         };
 
         ks.request_key_update_and_update_encrypter(self);
+        self.refresh_traffic_keys_pending = false;
         self.tls13_key_schedule = Some(ks);
         Ok(())
     }
