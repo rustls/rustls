@@ -71,10 +71,11 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// # Using the per-process default `CryptoProvider`
 ///
-/// There is the concept of an implicit default provider, configured at run-time once in
-/// a given process.
-///
-/// It is used for functions like [`ClientConfig::builder()`] and [`ServerConfig::builder()`].
+/// If it is hard to pass a specific `CryptoProvider` to all callers that need to establish
+/// TLS connections, you can store a per-process `CryptoProvider` default via
+/// [`CryptoProvider::install_default()`]. When initializing a `ClientConfig` or `ServerConfig` via
+/// [`ClientConfig::builder()`] or [`ServerConfig::builder()`], you can obtain the installed
+/// provider via [`CryptoProvider::get_default()`].
 ///
 /// The intention is that an application can specify the [`CryptoProvider`] they wish to use
 /// once, and have that apply to the variety of places where their application does TLS
@@ -92,14 +93,14 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// Supply the provider when constructing your [`ClientConfig`] or [`ServerConfig`]:
 ///
-/// - [`ClientConfig::builder()`]
-/// - [`ServerConfig::builder()`]
+/// - [`ClientConfig::builder()`][crate::ClientConfig::builder()]
+/// - [`ServerConfig::builder()`][crate::ServerConfig::builder()]
 ///
 /// When creating and configuring a webpki-backed client or server certificate verifier, a choice of
 /// provider is also needed to start the configuration process:
 ///
-/// - [`client::WebPkiServerVerifier::builder()`]
-/// - [`server::WebPkiClientVerifier::builder()`]
+/// - [`WebPkiServerVerifier::builder()`][crate::client::WebPkiServerVerifier::builder()]
+/// - [`WebPkiClientVerifier::builder()`][crate::server::WebPkiClientVerifier::builder()]
 ///
 /// # Making a custom `CryptoProvider`
 ///
@@ -231,9 +232,8 @@ impl CryptoProvider {
     ///
     /// This can be called successfully at most once in any process execution.
     ///
-    /// Call this early in your process to configure which provider is used for
-    /// the provider.  The configuration should happen before any use of
-    /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
+    /// After calling this, other callers can obtain a reference to the installed
+    /// default via [`CryptoProvider::get_default()`].
     pub fn install_default(self) -> Result<(), Arc<Self>> {
         static_default::install_default(self)
     }
