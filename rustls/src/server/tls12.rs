@@ -1007,11 +1007,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
 }
 
 impl KernelState for ExpectTraffic {
-    #[cfg_attr(coverage_nightly, coverage(off))]
     fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        Err(Error::Unreachable(
-            "TLS 1.2 connections do not support traffic secret updates",
-        ))
+        Err(ApiMisuse::KeyUpdateNotAvailableForTls12.into())
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
