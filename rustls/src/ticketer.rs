@@ -3,8 +3,7 @@ use alloc::vec::Vec;
 use core::mem;
 use core::time::Duration;
 use std::sync::{RwLock, RwLockReadGuard};
-
-use pki_types::UnixTime;
+use std::time::Instant;
 
 use crate::crypto::TicketProducer;
 use crate::error::Error;
@@ -39,16 +38,14 @@ impl TicketRotator {
             state: RwLock::new(TicketRotatorState {
                 current: Some(Generation {
                     producer: generator()?,
-                    expires_at: UnixTime::now()
-                        .as_secs()
-                        .saturating_add(lifetime.as_secs()),
+                    expires_at: Instant::now() + lifetime,
                 }),
                 previous: None,
             }),
         })
     }
 
-    fn encrypt_at(&self, message: &[u8], now: UnixTime) -> Option<Vec<u8>> {
+    fn encrypt_at(&self, message: &[u8], now: Instant) -> Option<Vec<u8>> {
         let state = self.maybe_roll(now)?;
 
         // If we have a current ticketer, use it. We don't need to check its
@@ -70,7 +67,7 @@ impl TicketRotator {
         prev.producer.encrypt(message)
     }
 
-    fn decrypt_at(&self, ciphertext: &[u8], now: UnixTime) -> Option<Vec<u8>> {
+    fn decrypt_at(&self, ciphertext: &[u8], now: Instant) -> Option<Vec<u8>> {
         let state = self.maybe_roll(now)?;
 
         // If we have a current ticketer, use it. We don't need to check its
@@ -106,10 +103,8 @@ impl TicketRotator {
     /// and returning it for read.
     pub(crate) fn maybe_roll(
         &self,
-        now: UnixTime,
+        now: Instant,
     ) -> Option<RwLockReadGuard<'_, TicketRotatorState>> {
-        let now = now.as_secs();
-
         // Fast, common, & read-only path in case we do not need to switch
         // to the next ticketer yet
         {
@@ -135,7 +130,7 @@ impl TicketRotator {
             .ok()
             .map(|producer| Generation {
                 producer,
-                expires_at: now.saturating_add(self.lifetime.as_secs()),
+                expires_at: now + self.lifetime,
             });
 
         // Now we have:
@@ -154,11 +149,11 @@ impl TicketRotator {
 
 impl TicketProducer for TicketRotator {
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-        self.encrypt_at(message, UnixTime::now())
+        self.encrypt_at(message, Instant::now())
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-        self.decrypt_at(ciphertext, UnixTime::now())
+        self.decrypt_at(ciphertext, Instant::now())
     }
 
     fn lifetime(&self) -> Duration {
@@ -182,14 +177,12 @@ pub(crate) struct TicketRotatorState {
 #[derive(Debug)]
 struct Generation {
     producer: Box<dyn TicketProducer>,
-    expires_at: u64,
+    expires_at: Instant,
 }
 
 impl Generation {
-    fn in_grace_period(&self, now: UnixTime, lifetime: Duration) -> bool {
-        now.as_secs()
-            .saturating_sub(self.expires_at)
-            <= lifetime.as_secs()
+    fn in_grace_period(&self, now: Instant, lifetime: Duration) -> bool {
+        now <= self.expires_at + lifetime
     }
 }
 
@@ -198,30 +191,24 @@ mod tests {
     use core::sync::atomic::{AtomicU8, Ordering};
     use core::time::Duration;
 
-    use pki_types::UnixTime;
-
     use super::*;
 
     #[test]
     fn ticketrotator_switching_test() {
         let t = TicketRotator::new(Duration::from_secs(1), FakeTicketer::new).unwrap();
-        let now = UnixTime::now();
+        let now = Instant::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
         {
             // Trigger new ticketer
-            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
-                now.as_secs() + 10,
-            )));
+            t.maybe_roll(now + Duration::from_secs(10));
         }
         let cipher2 = t.encrypt(b"ticket 2").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
         assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
         {
             // Trigger new ticketer
-            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
-                now.as_secs() + 20,
-            )));
+            t.maybe_roll(now + Duration::from_secs(20));
         }
         let cipher3 = t.encrypt(b"ticket 3").unwrap();
         assert!(t.decrypt(&cipher1).is_none());
@@ -245,26 +232,26 @@ mod tests {
         t.generator = fail_generator;
 
         // Failed new ticketer; this means we still need to rotate.
-        let t1 = UnixTime::since_unix_epoch(Duration::from_secs(expiry));
+        let t1 = expiry;
         drop(t.maybe_roll(t1));
         assert!(t.encrypt_at(b"ticket 2", t1).is_some());
 
         // check post-failure encryption/decryption still works
-        let t2 = UnixTime::since_unix_epoch(Duration::from_secs(expiry + 1));
+        let t2 = expiry + Duration::from_secs(1);
         let cipher3 = t.encrypt_at(b"ticket 3", t2).unwrap();
         assert_eq!(t.decrypt_at(&cipher1, t2).unwrap(), b"ticket 1");
         assert_eq!(t.decrypt_at(&cipher3, t2).unwrap(), b"ticket 3");
 
-        let t3 = UnixTime::since_unix_epoch(Duration::from_secs(expiry + 2));
+        let t3 = expiry + Duration::from_secs(2);
         assert_eq!(t.encrypt_at(b"ticket 4", t3), None);
         assert_eq!(t.decrypt_at(&cipher3, t3), None);
 
         // do the rotation for real
         t.generator = FakeTicketer::new;
-        let t4 = UnixTime::since_unix_epoch(Duration::from_secs(expiry + 3));
+        let t4 = expiry + Duration::from_secs(3);
         drop(t.maybe_roll(t4));
 
-        let t5 = UnixTime::since_unix_epoch(Duration::from_secs(expiry + 4));
+        let t5 = expiry + Duration::from_secs(4);
         let cipher5 = t.encrypt_at(b"ticket 5", t5).unwrap();
         assert!(t.decrypt_at(&cipher1, t5).is_none());
         assert!(t.decrypt_at(&cipher3, t5).is_none());
