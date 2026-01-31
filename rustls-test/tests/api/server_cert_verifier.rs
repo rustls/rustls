@@ -436,8 +436,7 @@ fn client_check_server_certificate_ee_unknown_revocation() {
                 .build()
                 .unwrap();
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
-            let res = do_handshake_until_error(&mut client, &mut server);
-            assert!(res.is_ok());
+            do_handshake_until_error(&mut client, &mut server).unwrap();
         }
     }
 }
@@ -494,8 +493,7 @@ fn client_check_server_certificate_intermediate_revoked() {
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
             // We expect the handshake to succeed when we use the verifier that only checks the EE certificate
             // revocation status. The revoked intermediate status should not be checked.
-            let res = do_handshake_until_error(&mut client, &mut server);
-            assert!(res.is_ok())
+            do_handshake_until_error(&mut client, &mut server).unwrap();
         }
     }
 }
@@ -552,8 +550,7 @@ fn client_check_server_certificate_ee_crl_expired() {
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect the handshake to succeed when CRL expiration is ignored.
-            let res = do_handshake_until_error(&mut client, &mut server);
-            assert!(res.is_ok())
+            do_handshake_until_error(&mut client, &mut server).unwrap();
         }
     }
 }
@@ -575,16 +572,14 @@ fn client_check_server_certificate_helper_api() {
         }
         .client_root_store();
         // Using the correct trust anchors, we should verify without error.
-        assert!(
-            verify_identity_signed_by_trust_anchor(
-                &ParsedCertificate::try_from(&identity.end_entity).unwrap(),
-                &correct_roots,
-                &identity.intermediates,
-                UnixTime::now(),
-                provider::ALL_VERIFICATION_ALGS,
-            )
-            .is_ok()
-        );
+        verify_identity_signed_by_trust_anchor(
+            &ParsedCertificate::try_from(&identity.end_entity).unwrap(),
+            &correct_roots,
+            &identity.intermediates,
+            UnixTime::now(),
+            provider::ALL_VERIFICATION_ALGS,
+        )
+        .unwrap();
         // Using the wrong trust anchors, we should get the expected error.
         assert_eq!(
             verify_identity_signed_by_trust_anchor(
