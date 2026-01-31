@@ -68,7 +68,10 @@ fn correct_certificate_type_extensions_from_client_hello() {
 
         let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
         let err = do_handshake_until_error(&mut client, &mut server);
-        assert!(err.is_err());
+        assert_eq!(
+            err.err(),
+            Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
+        );
     }
 }
 

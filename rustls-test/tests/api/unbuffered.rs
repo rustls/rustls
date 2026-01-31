@@ -1559,15 +1559,21 @@ fn kernel_err_on_secret_extraction_not_enabled() {
 
     do_unbuffered_handshake(&mut client, &mut server);
 
-    assert!(
+    assert_eq!(
         client
             .dangerous_into_kernel_connection()
-            .is_err()
+            .err(),
+        Some(Error::ApiMisuse(
+            ApiMisuse::SecretExtractionRequiresPriorOptIn
+        ))
     );
-    assert!(
+    assert_eq!(
         server
             .dangerous_into_kernel_connection()
-            .is_err()
+            .err(),
+        Some(Error::ApiMisuse(
+            ApiMisuse::SecretExtractionRequiresPriorOptIn
+        ))
     );
 }
 

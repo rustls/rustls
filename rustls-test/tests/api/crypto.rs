@@ -336,16 +336,14 @@ fn test_secret_extraction_disabled_or_too_early() {
 
         let (client, server) = make_pair_for_arc_configs(&client_config, &server_config);
 
-        assert!(
-            client
-                .dangerous_extract_secrets()
-                .is_err(),
+        assert_eq!(
+            client.dangerous_extract_secrets().err(),
+            Some(Error::HandshakeNotComplete),
             "extraction should fail until handshake completes"
         );
-        assert!(
-            server
-                .dangerous_extract_secrets()
-                .is_err(),
+        assert_eq!(
+            server.dangerous_extract_secrets().err(),
+            Some(Error::HandshakeNotComplete),
             "extraction should fail until handshake completes"
         );
 
