@@ -6,7 +6,7 @@ use std::sync::Arc;
 use pki_types::FipsStatus;
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
-use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage};
+use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage};
 use rustls::server::{ServerConnectionData, UnbufferedServerConnection};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, ReadTraffic,
@@ -1685,11 +1685,23 @@ fn kernel_key_updates_tls12() {
         .expect("failed to convert server connection to an KernelConnection");
 
     // TLS 1.2 does not allow key updates so these should all error
-    assert!(client.update_tx_secret().is_err());
-    assert!(client.update_rx_secret().is_err());
+    assert_eq!(
+        client.update_tx_secret().err(),
+        Some(Error::ApiMisuse(ApiMisuse::KeyUpdatNotAvailableForTls12)),
+    );
+    assert_eq!(
+        client.update_rx_secret().err(),
+        Some(Error::ApiMisuse(ApiMisuse::KeyUpdateNotAvailableForTls12)),
+    );
 
-    assert!(server.update_tx_secret().is_err());
-    assert!(server.update_rx_secret().is_err());
+    assert_eq!(
+        server.update_tx_secret().err(),
+        Some(Error::ApiMisuse(ApiMisuse::KeyUpdateNotAvailableForTls12)),
+    );
+    assert_eq!(
+        server.update_rx_secret().err(),
+        Some(Error::ApiMisuse(ApiMisuse::KeyUpdateNotAvailableForTls12)),
+    );
 }
 
 fn assert_secrets_equal(

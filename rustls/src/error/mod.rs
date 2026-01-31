@@ -1483,6 +1483,11 @@ pub enum ApiMisuse {
     ///
     /// [`ServerConnection::set_resumption_data()`]: crate::server::ServerConnection::set_resumption_data()
     ResumptionDataProvidedTooLate,
+
+    /// [`KernelConnection::update_tx_secret()`] and associated are not available for TLS1.2 connections.
+    ///
+    /// [`KernelConnection::update_tx_secret()`]: crate::conn::kernel::KernelConnection::update_tx_secret()
+    KeyUpdateNotAvailableForTls12,
 }
 
 impl fmt::Display for ApiMisuse {
