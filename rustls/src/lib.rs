@@ -42,15 +42,28 @@
 //! From 0.24, users must explicitly provide a crypto provider when constructing `ClientConfig` or
 //! `ServerConfig` instances. See the [`crypto::CryptoProvider`] documentation for more details.
 //!
-//! #### Built-in providers
+//! #### First-party providers
 //!
-//! Rustls ships with two built-in providers controlled by associated crate features:
+//! The Rustls project currently maintains two cryptography providers:
 //!
-//!   * [`aws-lc-rs`] - available with the `aws-lc-rs` crate feature enabled
-//!   * [`ring`] - available with the `ring` crate feature enabled
+//! * [`rustls-aws-lc-rs`] - a provider that uses the [`aws-lc-rs`] crate for cryptography.
+//!   While this provider can be harder to build on some platforms, it provides excellent
+//!   performance and a complete feature set (including post-quantum algorithms).
+//! * [`rustls-ring`] - a provider that uses the [`ring`] crate for cryptography. This
+//!   provider is easier to build on a variety of platforms, but has a more limited feature set
+//!   (for example, it does not support post-quantum algorithms).
 //!
 //! See the documentation for [`crypto::CryptoProvider`] for details on how providers are
 //! selected.
+//!
+//! (For rustls versions prior to 0.24, both of these providers were shipped as part of the rustls
+//! crate, and Cargo features were used to select the preferred provider. The `aws-lc-rs` feature
+//! was enabled by default.)
+//!
+//! [`rustls-aws-lc-rs`]: https://crates.io/crates/rustls-aws-lc-rs
+//! [`aws-lc-rs`]: https://crates.io/crates/aws-lc-rs
+//! [`rustls-ring`]: https://crates.io/crates/rustls-ring
+//! [`ring`]: https://crates.io/crates/ring
 //!
 //! #### Third-party providers
 //!
