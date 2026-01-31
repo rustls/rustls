@@ -12,14 +12,12 @@ use crate::error::Error;
 /// A ticketer that has a 'current' sub-ticketer and a single
 /// 'previous' ticketer.  It creates a new ticketer every so
 /// often, demoting the current ticketer.
-#[cfg(feature = "std")]
 pub struct TicketRotator {
     pub(crate) generator: fn() -> Result<Box<dyn TicketProducer>, Error>,
     lifetime: Duration,
     state: RwLock<TicketRotatorState>,
 }
 
-#[cfg(feature = "std")]
 impl TicketRotator {
     /// Creates a new `TicketRotator`, which rotates through sub-ticketers
     /// based on the passage of time.
