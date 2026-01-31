@@ -7,6 +7,7 @@ use core::fmt::Debug;
 use pki_types::FipsStatus;
 
 pub use crate::common_state::Side;
+use crate::common_state::{Event, Output};
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::Error;
@@ -26,7 +27,7 @@ mod connection {
 
     use super::{DirectionalKeys, KeyChange, Version};
     use crate::client::{ClientConfig, ClientConnectionData};
-    use crate::common_state::{CommonState, DEFAULT_BUFFER_LIMIT, Protocol};
+    use crate::common_state::{CommonState, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
@@ -38,7 +39,6 @@ mod connection {
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
-    use crate::vecbuf::ChunkVecBuffer;
 
     /// A QUIC client or server connection.
     #[expect(clippy::exhaustive_enums)]
@@ -365,7 +365,6 @@ mod connection {
     pub struct ConnectionCommon<Side: SideData> {
         core: ConnectionCore<Side>,
         deframer_buffer: DeframerVecBuffer,
-        sendable_plaintext: ChunkVecBuffer,
         version: Version,
     }
 
@@ -374,7 +373,6 @@ mod connection {
             Self {
                 core,
                 deframer_buffer: DeframerVecBuffer::default(),
-                sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
                 version,
             }
         }
@@ -429,22 +427,28 @@ mod connection {
         pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             let range = self.deframer_buffer.extend(plaintext);
 
-            self.core.hs_deframer.input_message(
-                EncodedMessage {
-                    typ: ContentType::Handshake,
-                    version: ProtocolVersion::TLSv1_3,
-                    payload: &self.deframer_buffer.filled()[range.clone()],
-                },
-                &Locator::new(self.deframer_buffer.filled()),
-                range.end,
-            );
+            self.core
+                .side
+                .recv
+                .hs_deframer
+                .input_message(
+                    EncodedMessage {
+                        typ: ContentType::Handshake,
+                        version: ProtocolVersion::TLSv1_3,
+                        payload: &self.deframer_buffer.filled()[range.clone()],
+                    },
+                    &Locator::new(self.deframer_buffer.filled()),
+                    range.end,
+                );
 
             self.core
+                .side
+                .recv
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
             self.core
-                .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)?;
+                .process_new_packets(&mut self.deframer_buffer)?;
 
             Ok(())
         }
@@ -489,7 +493,7 @@ pub(crate) struct Quic {
 }
 
 impl Quic {
-    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         if let MessagePayload::Alert(_) = m.payload {
             // alerts are sent out-of-band in QUIC mode
             return;
@@ -541,6 +545,20 @@ impl Quic {
         }
 
         None
+    }
+}
+
+impl Output for Quic {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev {
+            Event::EncryptMessage(m) => self.send_msg(m, true),
+            Event::QuicEarlySecret(sec) => self.early_secret = sec,
+            Event::QuicHandshakeSecrets(sec) => self.hs_secrets = Some(sec),
+            Event::QuicTrafficSecrets(sec) => self.traffic_secrets = Some(sec),
+            Event::QuicTransportParameters(params) => self.params = Some(params),
+            Event::PlainMessage(m) => self.send_msg(m, false),
+            _ => {}
+        }
     }
 }
 

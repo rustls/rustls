@@ -7,7 +7,7 @@ use pki_types::ServerName;
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, Context, EarlyDataEvent, Event, Output, Protocol, Side};
+use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -15,7 +15,7 @@ use crate::enums::ApplicationProtocol;
 use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
-use crate::msgs::{ClientExtensionsInput, Locator};
+use crate::msgs::ClientExtensionsInput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
@@ -27,7 +27,7 @@ mod buffered {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use pki_types::{FipsStatus, ServerName};
+    use pki_types::ServerName;
 
     use super::{ClientConnectionData, ClientExtensionsInput};
     use crate::KeyingMaterialExporter;
@@ -105,20 +105,6 @@ mod buffered {
             self.inner.core.side.ech_status
         }
 
-        /// Returns the number of TLS1.3 tickets that have been received.
-        pub fn tls13_tickets_received(&self) -> u32 {
-            self.inner.tls13_tickets_received
-        }
-
-        /// Return the FIPS validation status of the connection's `ClientConfig`.
-        ///
-        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
-        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
-        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-        pub fn fips(&self) -> FipsStatus {
-            self.inner.core.side.fips
-        }
-
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
             self.inner
                 .core
@@ -127,6 +113,7 @@ mod buffered {
                 .check_write(data.len())
                 .map(|sz| {
                     self.inner
+                        .send
                         .send_early_plaintext(&data[..sz])
                 })
         }
@@ -283,20 +270,14 @@ impl ConnectionCore<ClientConnectionData> {
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client, proto);
-        common_state.set_max_fragment_size(config.max_fragment_size)?;
+        common_state
+            .send
+            .set_max_fragment_size(config.max_fragment_size)?;
         common_state.fips = config.fips();
         let mut data = ClientConnectionData::new(common_state);
 
-        let mut cx = Context {
-            data: &mut data,
-            // `start_handshake` won't read plaintext
-            plaintext_locator: &Locator::new(&[]),
-            received_plaintext: &mut None,
-        };
-
-        let input = ClientHelloInput::new(name, &extra_exts, proto, &mut cx, config)?;
-        let state = input.start_handshake(extra_exts, &mut cx)?;
-        debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
+        let input = ClientHelloInput::new(name, &extra_exts, proto, &mut data, config)?;
+        let state = input.start_handshake(extra_exts, &mut data)?;
 
         Ok(Self::new(state, data))
     }
@@ -446,6 +427,7 @@ impl MayEncryptEarlyData<'_> {
         self.conn
             .core
             .side
+            .send
             .write_plaintext(early_data[..allowed].into(), outgoing_tls)
             .map_err(|e| e.into())
     }
@@ -601,7 +583,7 @@ impl Output for ClientConnectionData {
             Event::EarlyData(EarlyDataEvent::Finished) => self.early_data.finished(),
             Event::EarlyData(EarlyDataEvent::Start) => self.early_data.start(),
             Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
-            _ => {}
+            _ => self.common.emit(ev),
         }
     }
 }

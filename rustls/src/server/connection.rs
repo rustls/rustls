@@ -34,7 +34,7 @@ use crate::log::trace;
 use crate::msgs::ServerExtensionsInput;
 #[cfg(feature = "std")]
 use crate::msgs::{
-    ClientHelloPayload, HandshakePayload, Locator, Message, MessagePayload, ServerNamePayload,
+    ClientHelloPayload, HandshakePayload, Message, MessagePayload, ServerNamePayload,
 };
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -48,7 +48,7 @@ mod buffered {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use pki_types::{DnsName, FipsStatus};
+    use pki_types::DnsName;
 
     use super::{
         Accepted, Accepting, Protocol, ServerConfig, ServerConnectionData, ServerExtensionsInput,
@@ -153,15 +153,6 @@ mod buffered {
             } else {
                 None
             }
-        }
-
-        /// Return the FIPS validation status of the connection's `ServerConfig`.
-        ///
-        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
-        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
-        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-        pub fn fips(&self) -> FipsStatus {
-            self.inner.core.side.fips
         }
 
         /// Extract secrets, so they can be used when configuring kTLS, for example.
@@ -331,8 +322,10 @@ mod buffered {
     impl AcceptedAlert {
         pub(super) fn from_error(error: Error, side: ServerConnectionData) -> (Error, Self) {
             let mut common = side.into_common();
-            common.maybe_send_fatal_alert(&error);
-            (error, Self(common.sendable_tls))
+            common
+                .send
+                .maybe_send_fatal_alert(&error);
+            (error, Self(common.send.sendable_tls))
         }
 
         pub(super) fn empty() -> Self {
@@ -533,10 +526,9 @@ impl Accepted {
         mut self,
         config: Arc<ServerConfig>,
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
-        use crate::common_state::Context;
-
         if let Err(err) = self
             .connection
+            .send
             .set_max_fragment_size(config.max_fragment_size)
         {
             // We have a connection here, but it won't contain an alert since the error
@@ -552,12 +544,6 @@ impl Accepted {
                 return Err(AcceptedAlert::from_error(err, self.connection.core.side));
             }
         };
-        let mut cx = Context {
-            data: &mut self.connection.core.side,
-            // `ExpectClientHello::with_input` won't read borrowed plaintext
-            plaintext_locator: &Locator::new(&[]),
-            received_plaintext: &mut None,
-        };
 
         let input = ClientHelloInput {
             message: &self.input.message,
@@ -566,11 +552,10 @@ impl Accepted {
             proof,
         };
 
-        let new = match state.with_input(input, &mut cx) {
+        let new = match state.with_input(input, &mut self.connection.core.side) {
             Ok(new) => new,
             Err(err) => return Err(AcceptedAlert::from_error(err, self.connection.core.side)),
         };
-        debug_assert!(cx.received_plaintext.is_none(), "read plaintext");
 
         self.connection.replace_state(new);
         Ok(ServerConnection {
@@ -601,13 +586,13 @@ impl Debug for Accepted {
 struct Accepting;
 
 #[cfg(feature = "std")]
-impl State<ServerConnectionData> for Accepting {
+impl State for Accepting {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn handle<'m>(
         self: Box<Self>,
         _input: Input<'m>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
+    ) -> Result<Box<dyn State>, Error> {
         Err(Error::Unreachable("unreachable state"))
     }
 }
@@ -684,7 +669,9 @@ impl ConnectionCore<ServerConnectionData> {
         protocol: Protocol,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server, protocol);
-        common.set_max_fragment_size(config.max_fragment_size)?;
+        common
+            .send
+            .set_max_fragment_size(config.max_fragment_size)?;
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
@@ -732,7 +719,7 @@ impl Output for ServerConnectionData {
             Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
             Event::ReceivedServerName(sni) => self.sni = sni,
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
-            _ => {}
+            _ => self.common.emit(ev),
         }
     }
 }

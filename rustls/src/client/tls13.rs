@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 use subtle::ConstantTimeEq;
 
 use super::config::{ClientConfig, ClientSessionKey, ClientSessionStore};
-use super::connection::ClientConnectionData;
 use super::ech::EchStatus;
 use super::hs::{
     self, ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello, GroupAndKeyShare,
@@ -18,7 +17,7 @@ use crate::common_state::{
     TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelState};
+use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
@@ -64,7 +63,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         input: &Input<'_>,
         mut st: ExpectServerHello,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         // Start our handshake hash, and input the server-hello.
         let mut transcript = st
             .transcript_buffer
@@ -466,12 +465,12 @@ struct ExpectEncryptedExtensions {
     in_early_traffic: bool,
 }
 
-impl State<ClientConnectionData> for ExpectEncryptedExtensions {
+impl State for ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let exts = require_handshake_msg!(
             message,
             HandshakeType::EncryptedExtensions,
@@ -658,8 +657,12 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificateOrCompressedCertificateOrCertReq {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -739,8 +742,12 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificateOrCompressedCertificate {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -801,8 +808,12 @@ struct ExpectCertificateOrCertReq {
     negotiated_client_type: Option<CertificateType>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificateOrCertReq {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -869,7 +880,7 @@ struct ExpectCertificateRequest {
 }
 
 impl ExpectCertificateRequest {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         let certreq = &require_handshake_msg!(
             message,
             HandshakeType::CertificateRequest,
@@ -970,7 +981,7 @@ struct ExpectCompressedCertificate {
 }
 
 impl ExpectCompressedCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         self.transcript.add_message(&message);
         let compressed_cert = require_handshake_msg_move!(
             message,
@@ -1037,7 +1048,7 @@ struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
         self.transcript.add_message(&message);
 
         self.handle_cert_payload(require_handshake_msg_move!(
@@ -1047,7 +1058,10 @@ impl ExpectCertificate {
         )?)
     }
 
-    fn handle_cert_payload(self, cert_chain: CertificatePayloadTls13<'_>) -> hs::NextStateOrError {
+    fn handle_cert_payload(
+        self,
+        cert_chain: CertificatePayloadTls13<'_>,
+    ) -> Result<Box<dyn State>, Error> {
         // This is only non-empty for client auth.
         if !cert_chain.context.is_empty() {
             return Err(InvalidMessage::InvalidCertRequest.into());
@@ -1077,8 +1091,12 @@ impl ExpectCertificate {
     }
 }
 
-impl State<ClientConnectionData> for ExpectCertificate {
-    fn handle(self: Box<Self>, input: Input<'_>, _output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCertificate {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        _output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         self.handle_input(input)
     }
 }
@@ -1098,12 +1116,12 @@ struct ExpectCertificateVerify {
     expected_certificate_type: CertificateType,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateVerify {
+impl State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let cert_verify = require_handshake_msg!(
             message,
             HandshakeType::CertificateVerify,
@@ -1259,8 +1277,12 @@ struct ExpectFinished {
     in_early_traffic: bool,
 }
 
-impl State<ClientConnectionData> for ExpectFinished {
-    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectFinished {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         let mut st = *self;
         let finished = require_handshake_msg!(
             input.message,
@@ -1359,8 +1381,11 @@ impl State<ClientConnectionData> for ExpectFinished {
         /* Now move to our application traffic keys. */
         let (key_schedule, exporter, resumption) =
             key_schedule_pre_finished.into_traffic(output, st.transcript.current_hash(), &proof);
+        let (key_schedule_send, key_schedule_recv) = key_schedule.split();
+
         output.emit(Event::PeerIdentity(st.session_input.peer_identity.clone()));
         output.emit(Event::Exporter(Box::new(exporter)));
+        output.emit(Event::OutgoingKeySchedule(Box::new(key_schedule_send)));
         output.emit(Event::StartTraffic);
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
@@ -1373,14 +1398,13 @@ impl State<ClientConnectionData> for ExpectFinished {
             .into());
         }
 
-        let (key_schedule_send, key_schedule_recv) = key_schedule.split();
         let protocol = key_schedule_recv.protocol();
+
         let st = ExpectTraffic {
             config: st.config.clone(),
             session_storage: st.config.resumption.store.clone(),
             session_key: st.session_key,
             session_input: st.session_input,
-            key_schedule_send,
             key_schedule_recv,
             resumption,
             counters: TrafficTemperCounters::default(),
@@ -1404,7 +1428,6 @@ struct ExpectTraffic {
     session_storage: Arc<dyn ClientSessionStore>,
     session_key: ClientSessionKey<'static>,
     session_input: Tls13ClientSessionInput,
-    key_schedule_send: KeyScheduleTrafficSend,
     key_schedule_recv: KeyScheduleTrafficReceive,
     resumption: KeyScheduleResumption,
     counters: TrafficTemperCounters,
@@ -1482,9 +1505,7 @@ impl ExpectTraffic {
 
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => {
-                output.emit(Event::MaybeKeyUpdateRequest(&mut self.key_schedule_send))
-            }
+            KeyUpdateRequest::UpdateRequested => output.emit(Event::MaybeKeyUpdateRequest),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
@@ -1495,12 +1516,12 @@ impl ExpectTraffic {
     }
 }
 
-impl State<ClientConnectionData> for ExpectTraffic {
+impl State for ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
@@ -1526,20 +1547,19 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(self)
     }
 
-    fn send_key_update_request(&mut self, output: &mut dyn Output) -> Result<(), Error> {
-        self.key_schedule_send
-            .request_key_update_and_update_encrypter(output)
-    }
-
     fn into_external_state(
         self: Box<Self>,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         if !self.config.enable_secret_extraction {
             return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
+        let Some(send_keys) = send_keys else {
+            return Err(Error::Unreachable("basdsa"));
+        };
         Ok((
             PartiallyExtractedSecrets {
-                tx: self.key_schedule_send.extract()?,
+                tx: send_keys.extract()?,
                 rx: self.key_schedule_recv.extract()?,
             },
             self,
@@ -1548,15 +1568,9 @@ impl State<ClientConnectionData> for ExpectTraffic {
 }
 
 impl KernelState for ExpectTraffic {
-    fn update_secrets(&mut self, dir: Direction) -> Result<ConnectionTrafficSecrets, Error> {
-        match dir {
-            Direction::Transmit => self
-                .key_schedule_send
-                .refresh_traffic_secret(),
-            Direction::Receive => self
-                .key_schedule_recv
-                .refresh_traffic_secret(),
-        }
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
+        self.key_schedule_recv
+            .refresh_traffic_secret()
     }
 
     fn handle_new_session_ticket(
@@ -1569,12 +1583,12 @@ impl KernelState for ExpectTraffic {
 
 struct ExpectQuicTraffic(ExpectTraffic);
 
-impl State<ClientConnectionData> for ExpectQuicTraffic {
+impl State for ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let nst = require_handshake_msg!(
             message,
             HandshakeType::NewSessionTicket,
@@ -1587,13 +1601,17 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
 
     fn into_external_state(
         self: Box<Self>,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         if !self.0.config.enable_secret_extraction {
             return Err(ApiMisuse::SecretExtractionRequiresPriorOptIn.into());
         }
+        let Some(send_keys) = send_keys else {
+            return Err(Error::Unreachable("basdsa"));
+        };
         Ok((
             PartiallyExtractedSecrets {
-                tx: self.0.key_schedule_send.extract()?,
+                tx: send_keys.extract()?,
                 rx: self.0.key_schedule_recv.extract()?,
             },
             self,
@@ -1602,7 +1620,7 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
 }
 
 impl KernelState for ExpectQuicTraffic {
-    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
         Err(Error::Unreachable(
             "KeyUpdate is not supported for QUIC connections",
         ))
