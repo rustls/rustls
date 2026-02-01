@@ -8,6 +8,7 @@ use kernel::KernelConnection;
 
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Input, Output, State, UnborrowedPayload,
+    maybe_send_fatal_alert,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{ApiMisuse, Error};
@@ -790,9 +791,7 @@ impl<Side: SideData> ConnectionCore<Side> {
             let opt_msg = match res {
                 Ok(opt_msg) => opt_msg,
                 Err(e) => {
-                    self.side
-                        .send
-                        .maybe_send_fatal_alert(&e);
+                    maybe_send_fatal_alert(&mut self.side.send, &e);
                     if let Error::DecryptError = e {
                         state.handle_decrypt_error();
                     }
@@ -833,9 +832,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 }) {
                 Ok(new) => state = new,
                 Err(e) => {
-                    self.side
-                        .send
-                        .maybe_send_fatal_alert(&e);
+                    maybe_send_fatal_alert(&mut self.side.send, &e);
                     self.state = Err(e.clone());
                     input.discard(buffer_progress.take_discard());
                     return Err(e);
