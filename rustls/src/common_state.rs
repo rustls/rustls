@@ -284,6 +284,14 @@ impl Default for ConnectionOutputs {
     }
 }
 
+/// Send an alert via `output` if `error` specifies one.
+pub(crate) fn maybe_send_fatal_alert(output: &mut dyn Output, error: &Error) {
+    let Ok(alert) = AlertDescription::try_from(error) else {
+        return;
+    };
+    output.emit(Event::SendAlert(AlertLevel::Fatal, alert));
+}
+
 /// The data path from us to the peer.
 pub(crate) struct SendPath {
     pub(crate) encrypt_state: EncryptionState,
@@ -300,16 +308,6 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    pub(crate) fn maybe_send_fatal_alert(&mut self, error: &Error) {
-        let Ok(alert) = AlertDescription::try_from(error) else {
-            return;
-        };
-        debug_assert!(!self.has_sent_fatal_alert);
-        let m = Message::build_alert(AlertLevel::Fatal, alert);
-        self.send_msg(m, self.encrypt_state.is_encrypting());
-        self.has_sent_fatal_alert = true;
-    }
-
     #[expect(dead_code)]
     pub(crate) fn write_plaintext(
         &mut self,
