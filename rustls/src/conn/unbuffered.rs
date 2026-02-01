@@ -8,7 +8,7 @@ use core::{fmt, mem};
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
-use crate::common_state::CaptureAppData;
+use crate::common_state::{CaptureAppData, SendPath};
 use crate::conn::SideData;
 use crate::crypto::cipher::{Decrypted, Payload};
 use crate::error::Error;
@@ -87,10 +87,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                     .deframe(buffer.filled_mut(), &mut buffer_progress)
                 {
                     Err(err) => {
-                        self.core
-                            .side
-                            .send
-                            .maybe_send_fatal_alert(&err);
+                        SendPath::maybe_send_fatal_alert(&mut self.core.side.send, &err);
                         buffer.queue_discard(buffer_progress.take_discard());
                         return UnbufferedStatus {
                             discard: buffer.pending_discard(),
@@ -159,10 +156,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                         }
                     }
                     Err(e) => {
-                        self.core
-                            .side
-                            .send
-                            .maybe_send_fatal_alert(&e);
+                        SendPath::maybe_send_fatal_alert(&mut self.core.side.send, &e);
                         buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Err(e.clone());
                         return UnbufferedStatus {

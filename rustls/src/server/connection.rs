@@ -54,7 +54,7 @@ mod buffered {
         Accepted, Accepting, Protocol, ServerConfig, ServerConnectionData, ServerExtensionsInput,
     };
     use crate::KeyingMaterialExporter;
-    use crate::common_state::{CommonState, Side};
+    use crate::common_state::{CommonState, SendPath, Side};
     use crate::conn::private::SideData;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::{ApiMisuse, Error};
@@ -322,9 +322,7 @@ mod buffered {
     impl AcceptedAlert {
         pub(super) fn from_error(error: Error, side: ServerConnectionData) -> (Error, Self) {
             let mut common = side.into_common();
-            common
-                .send
-                .maybe_send_fatal_alert(&error);
+            SendPath::maybe_send_fatal_alert(&mut common.send, &error);
             (error, Self(common.send.sendable_tls))
         }
 

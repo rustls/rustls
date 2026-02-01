@@ -300,14 +300,11 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    pub(crate) fn maybe_send_fatal_alert(&mut self, error: &Error) {
+    pub(crate) fn maybe_send_fatal_alert(output: &mut dyn Output, error: &Error) {
         let Ok(alert) = AlertDescription::try_from(error) else {
             return;
         };
-        debug_assert!(!self.has_sent_fatal_alert);
-        let m = Message::build_alert(AlertLevel::Fatal, alert);
-        self.send_msg(m, self.encrypt_state.is_encrypting());
-        self.has_sent_fatal_alert = true;
+        output.emit(Event::SendAlert(AlertLevel::Fatal, alert));
     }
 
     pub(crate) fn write_plaintext(
