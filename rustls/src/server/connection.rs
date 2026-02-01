@@ -12,7 +12,8 @@ use super::config::{ClientHello, ServerConfig};
 use super::hs;
 use super::hs::ClientHelloInput;
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, Protocol, Side, State,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, Protocol, SendPath, Side,
+    State,
 };
 use crate::conn::private::SideData;
 use crate::conn::{
@@ -344,9 +345,7 @@ pub struct AcceptedAlert(ChunkVecBuffer);
 impl AcceptedAlert {
     pub(super) fn from_error(error: Error, side: ServerConnectionData) -> (Error, Self) {
         let mut common = side.into_common();
-        common
-            .send
-            .maybe_send_fatal_alert(&error);
+        SendPath::maybe_send_fatal_alert(&mut common.send, &error);
         (error, Self(common.send.sendable_tls))
     }
 
