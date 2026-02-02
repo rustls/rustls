@@ -38,7 +38,7 @@ pub struct CommonState {
     pub(crate) quic: quic::Quic,
 
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
-    protocol: Protocol,
+    pub(crate) protocol: Protocol,
 }
 
 impl CommonState {
@@ -1133,6 +1133,63 @@ impl Output for CaptureAppData<'_> {
     }
 }
 
+pub(crate) struct OutputSplitReceivePath<'a> {
+    pub(crate) recv: &'a mut dyn Output,
+    pub(crate) other: &'a mut dyn Output,
+}
+
+impl Output for OutputSplitReceivePath<'_> {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev.disposition() {
+            EventDisposition::ReceivePath => self.recv.emit(ev),
+            EventDisposition::ProtocolVersion(ver) => {
+                self.recv
+                    .emit(Event::ProtocolVersion(ver));
+                self.other
+                    .emit(Event::ProtocolVersion(ver));
+            }
+            EventDisposition::StartTraffic => {
+                self.recv.emit(Event::StartTraffic);
+                self.other.emit(Event::StartTraffic);
+            }
+            _ => self.other.emit(ev),
+        }
+    }
+}
+
+pub(crate) struct OutputSplitNonReceivePath<'a> {
+    pub(crate) protocol: Protocol,
+    pub(crate) outputs: &'a mut dyn Output,
+    pub(crate) quic: &'a mut dyn Output,
+    pub(crate) send: &'a mut dyn Output,
+    pub(crate) side: &'a mut dyn Output,
+}
+
+impl Output for OutputSplitNonReceivePath<'_> {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev.disposition() {
+            EventDisposition::ReceivePath => unreachable!(),
+            EventDisposition::ProtocolVersion(ver) => {
+                self.outputs
+                    .emit(Event::ProtocolVersion(ver));
+                self.quic
+                    .emit(Event::ProtocolVersion(ver));
+                self.send
+                    .emit(Event::ProtocolVersion(ver));
+            }
+            EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
+            EventDisposition::Quic => self.quic.emit(ev),
+            EventDisposition::SendPath => self.send.emit(ev),
+            EventDisposition::MessageOutput => match self.protocol {
+                Protocol::Tcp => self.send.emit(ev),
+                Protocol::Quic(_) => self.quic.emit(ev),
+            },
+            EventDisposition::StartTraffic => self.send.emit(ev),
+            EventDisposition::SideSpecific => self.side.emit(ev),
+        }
+    }
+}
+
 pub(crate) struct Input<'a> {
     pub(crate) message: Message<'a>,
     pub(crate) aligned_handshake: Option<HandshakeAlignedProof>,
@@ -1200,7 +1257,7 @@ pub(crate) enum Event<'a> {
 }
 
 impl Event<'_> {
-    fn disposition(&self) -> EventDisposition {
+    pub(crate) fn disposition(&self) -> EventDisposition {
         match self {
             // message dispatch
             Event::EncryptMessage(_) | Event::PlainMessage(_) => EventDisposition::MessageOutput,
