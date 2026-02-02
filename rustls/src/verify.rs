@@ -119,6 +119,18 @@ pub struct ServerIdentity<'a> {
     pub now: UnixTime,
 }
 
+impl<'a> ServerIdentity<'a> {
+    /// Create a new `ServerIdentity` instance with empty OCSP response.
+    pub fn new(identity: &'a Identity<'a>, server_name: &'a ServerName<'a>, now: UnixTime) -> Self {
+        Self {
+            identity,
+            server_name,
+            ocsp_response: &[],
+            now,
+        }
+    }
+}
+
 /// Something that can verify a client certificate chain
 pub trait ClientVerifier: Debug + Send + Sync {
     /// Verify the client's identity.
