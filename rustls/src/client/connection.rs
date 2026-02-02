@@ -8,7 +8,7 @@ use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
 use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
-use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
+use crate::conn::{ConnectionCore, SideCommonOutput, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
 use crate::enums::ApplicationProtocol;
@@ -274,12 +274,17 @@ impl ConnectionCore<ClientConnectionData> {
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
         common_state.fips = config.fips();
-        let mut data = ClientConnectionData::new(common_state);
+        let mut data = ClientConnectionData::new();
 
-        let input = ClientHelloInput::new(name, &extra_exts, proto, &mut data, config)?;
-        let state = input.start_handshake(extra_exts, &mut data)?;
+        let mut output = SideCommonOutput {
+            side: &mut data,
+            common: &mut common_state,
+        };
 
-        Ok(Self::new(state, data))
+        let input = ClientHelloInput::new(name, &extra_exts, proto, &mut output, config)?;
+        let state = input.start_handshake(extra_exts, &mut output)?;
+
+        Ok(Self::new(state, data, common_state))
     }
 
     #[cfg(feature = "std")]
@@ -426,7 +431,7 @@ impl MayEncryptEarlyData<'_> {
 
         self.conn
             .core
-            .side
+            .common
             .send
             .write_plaintext(early_data[..allowed].into(), outgoing_tls)
             .map_err(|e| e.into())
@@ -551,15 +556,13 @@ impl core::error::Error for EarlyDataError {}
 /// State associated with a client connection.
 #[derive(Debug)]
 pub struct ClientConnectionData {
-    common: CommonState,
     early_data: EarlyData,
     ech_status: EchStatus,
 }
 
 impl ClientConnectionData {
-    fn new(common: CommonState) -> Self {
+    fn new() -> Self {
         Self {
-            common,
             early_data: EarlyData::new(),
             ech_status: EchStatus::default(),
         }
@@ -568,11 +571,7 @@ impl ClientConnectionData {
 
 impl crate::conn::SideData for ClientConnectionData {}
 
-impl crate::conn::private::SideData for ClientConnectionData {
-    fn into_common(self) -> CommonState {
-        self.common
-    }
-}
+impl crate::conn::private::SideData for ClientConnectionData {}
 
 impl Output for ClientConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
@@ -583,21 +582,7 @@ impl Output for ClientConnectionData {
             Event::EarlyData(EarlyDataEvent::Finished) => self.early_data.finished(),
             Event::EarlyData(EarlyDataEvent::Start) => self.early_data.start(),
             Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
-            _ => self.common.emit(ev),
+            _ => unreachable!(),
         }
-    }
-}
-
-impl Deref for ClientConnectionData {
-    type Target = CommonState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.common
-    }
-}
-
-impl DerefMut for ClientConnectionData {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.common
     }
 }
