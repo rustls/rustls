@@ -10,14 +10,17 @@ use kernel::KernelConnection;
 #[cfg(feature = "std")]
 use crate::common_state::Input;
 use crate::common_state::{
-    CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Output, SendPath,
-    State, UnborrowedPayload,
+    CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Output,
+    OutputSplitNonReceivePath, OutputSplitReceivePath, ReceivePath, SendPath, State,
+    UnborrowedPayload,
 };
 use crate::crypto::cipher::Decrypted;
-use crate::error::{ApiMisuse, Error};
+use crate::error::{AlertDescription, ApiMisuse, Error};
 #[cfg(feature = "std")]
 use crate::msgs::Message;
-use crate::msgs::{BufferProgress, DeframerVecBuffer, Delocator, Locator, Random, ReceivedData};
+use crate::msgs::{
+    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Random, ReceivedData,
+};
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -860,6 +863,114 @@ impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
     }
 }
 
+pub(crate) struct ConnectionProcessor<'a> {
+    pub(crate) state: Result<Box<dyn State>, Error>,
+    recv: &'a mut ReceivePath,
+    other: &'a mut dyn Output,
+}
+
+impl ConnectionProcessor<'_> {
+    pub(crate) fn process_new_packets(
+        &mut self,
+        input: &mut dyn ReceivedData,
+    ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
+        let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
+            Ok(state) => state,
+            Err(e) => {
+                self.state = Err(e.clone());
+                return Err(e);
+            }
+        };
+
+        let mut plaintext = None;
+        let mut buffer_progress = self.recv.hs_deframer.progress();
+
+        loop {
+            let buffer = input.slice_mut();
+            let locator = Locator::new(buffer);
+            let res = self
+                .recv
+                .deframe(buffer, &mut buffer_progress);
+
+            let opt_msg = match res {
+                Ok(opt_msg) => opt_msg,
+                Err(e) => {
+                    SendPath::maybe_send_fatal_alert(self.other, &e);
+                    if let Error::DecryptError = e {
+                        state.handle_decrypt_error();
+                    }
+                    self.state = Err(e.clone());
+                    input.discard(buffer_progress.take_discard());
+                    return Err(e);
+                }
+            };
+
+            let Some(msg) = opt_msg else {
+                break;
+            };
+
+            let Decrypted {
+                plaintext: msg,
+                want_close_before_decrypt,
+            } = msg;
+
+            if want_close_before_decrypt {
+                self.other.emit(Event::SendAlert(
+                    AlertLevel::Warning,
+                    AlertDescription::CloseNotify,
+                ));
+            }
+
+            let hs_aligned = self.recv.hs_deframer.aligned();
+            match self
+                .recv
+                .receive_message(msg, hs_aligned, self.other)
+                .and_then(|input| match input {
+                    Some(input) => state.handle(
+                        input,
+                        &mut CaptureAppData {
+                            data: &mut OutputSplitReceivePath {
+                                recv: self.recv,
+                                other: self.other,
+                            },
+                            plaintext_locator: &locator,
+                            received_plaintext: &mut plaintext,
+                        },
+                    ),
+                    None => Ok(state),
+                }) {
+                Ok(new) => state = new,
+                Err(e) => {
+                    SendPath::maybe_send_fatal_alert(self.other, &e);
+                    self.state = Err(e.clone());
+                    input.discard(buffer_progress.take_discard());
+                    return Err(e);
+                }
+            }
+
+            if self.recv.has_received_close_notify {
+                // "Any data received after a closure alert has been received MUST be ignored."
+                // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
+                // This is data that has already been accepted in `read_tls`.
+                let entirety = input.slice_mut().len();
+                input.discard(entirety);
+                break;
+            }
+
+            if let Some(payload) = plaintext.take() {
+                self.state = Ok(state);
+                return Ok(Some((payload, buffer_progress)));
+            }
+
+            input.discard(buffer_progress.take_discard());
+        }
+
+        input.discard(buffer_progress.take_discard());
+        self.state = Ok(state);
+        Ok(None)
+    }
+}
+
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Box<dyn State>, Error>,
     pub(crate) side: Side,
@@ -886,100 +997,20 @@ impl<Side: SideData> ConnectionCore<Side> {
         &mut self,
         input: &mut dyn ReceivedData,
     ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
-        let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
-            Ok(state) => state,
-            Err(e) => {
-                self.state = Err(e.clone());
-                return Err(e);
-            }
+        let mut p = ConnectionProcessor {
+            state: mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)),
+            recv: &mut self.common.recv,
+            other: &mut OutputSplitNonReceivePath {
+                outputs: &mut self.common.outputs,
+                protocol: self.common.protocol,
+                quic: &mut self.common.quic,
+                send: &mut self.common.send,
+                side: &mut self.side,
+            },
         };
-
-        let mut plaintext = None;
-        let mut buffer_progress = self.common.recv.hs_deframer.progress();
-
-        loop {
-            let buffer = input.slice_mut();
-            let locator = Locator::new(buffer);
-            let res = self
-                .common
-                .recv
-                .deframe(buffer, &mut buffer_progress);
-
-            let opt_msg = match res {
-                Ok(opt_msg) => opt_msg,
-                Err(e) => {
-                    SendPath::maybe_send_fatal_alert(&mut self.common.send, &e);
-                    if let Error::DecryptError = e {
-                        state.handle_decrypt_error();
-                    }
-                    self.state = Err(e.clone());
-                    input.discard(buffer_progress.take_discard());
-                    return Err(e);
-                }
-            };
-
-            let Some(msg) = opt_msg else {
-                break;
-            };
-
-            let Decrypted {
-                plaintext: msg,
-                want_close_before_decrypt,
-            } = msg;
-
-            if want_close_before_decrypt {
-                self.common.send_close_notify();
-            }
-
-            let hs_aligned = self.common.recv.hs_deframer.aligned();
-            match self
-                .common
-                .recv
-                .receive_message(msg, hs_aligned, &mut self.common.send)
-                .and_then(|input| match input {
-                    Some(input) => state.handle(
-                        input,
-                        &mut CaptureAppData {
-                            data: &mut self.output(),
-                            plaintext_locator: &locator,
-                            received_plaintext: &mut plaintext,
-                        },
-                    ),
-                    None => Ok(state),
-                }) {
-                Ok(new) => state = new,
-                Err(e) => {
-                    SendPath::maybe_send_fatal_alert(&mut self.common.send, &e);
-                    self.state = Err(e.clone());
-                    input.discard(buffer_progress.take_discard());
-                    return Err(e);
-                }
-            }
-
-            if self
-                .common
-                .recv
-                .has_received_close_notify
-            {
-                // "Any data received after a closure alert has been received MUST be ignored."
-                // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
-                // This is data that has already been accepted in `read_tls`.
-                let entirety = input.slice_mut().len();
-                input.discard(entirety);
-                break;
-            }
-
-            if let Some(payload) = plaintext.take() {
-                self.state = Ok(state);
-                return Ok(Some((payload, buffer_progress)));
-            }
-
-            input.discard(buffer_progress.take_discard());
-        }
-
-        input.discard(buffer_progress.take_discard());
-        self.state = Ok(state);
-        Ok(None)
+        let rc = p.process_new_packets(input);
+        self.state = p.state;
+        rc
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
