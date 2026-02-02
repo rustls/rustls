@@ -12,4 +12,4 @@ pn = "pn"
 Aas = "Aas"
 
 [files]
-extend-exclude = ["*.json", "*.json.in", "*.svg", "macros.html", "test-ca/"]
+extend-exclude = ["*.bin", "*.json", "*.json.in", "*.svg", "macros.html", "test-ca/"]
