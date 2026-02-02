@@ -1203,7 +1203,7 @@ pub(crate) enum Event<'a> {
 }
 
 impl Event<'_> {
-    fn disposition(&self) -> EventDisposition {
+    pub(crate) fn disposition(&self) -> EventDisposition {
         match self {
             // message dispatch
             Event::EncryptMessage(_) | Event::PlainMessage(_) => EventDisposition::MessageOutput,
