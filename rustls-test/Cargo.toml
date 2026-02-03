@@ -22,10 +22,12 @@ rustls-util = { path = "../rustls-util", default-features = false }
 [dev-dependencies]
 env_logger = { workspace = true }
 log = { workspace = true }
+macro_rules_attribute = { workspace = true }
 num-bigint = { workspace = true }
 pki-types = { workspace = true }
 x509-parser = { workspace = true }
 webpki = { workspace = true }
+webpki-roots = { workspace = true }
 
 [lints]
 workspace = true

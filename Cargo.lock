@@ -2495,7 +2495,6 @@ dependencies = [
  "graviola",
  "hashbrown",
  "log",
- "macro_rules_attribute",
  "once_cell",
  "rcgen",
  "rustls-pki-types",
@@ -2696,6 +2695,7 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "log",
+ "macro_rules_attribute",
  "num-bigint",
  "rustls 0.24.0-dev.0",
  "rustls-aws-lc-rs",
@@ -2703,6 +2703,7 @@ dependencies = [
  "rustls-ring",
  "rustls-util",
  "rustls-webpki 0.104.0-alpha.2",
+ "webpki-roots 1.0.6",
  "x509-parser",
 ]
 

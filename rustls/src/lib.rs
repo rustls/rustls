@@ -364,10 +364,6 @@ mod log {
     pub(crate) use {_used, _warn as warn, debug, error, trace};
 }
 
-#[cfg(test)]
-#[macro_use]
-mod test_macros;
-
 /// This internal `sync` module aliases the `Arc` implementation to allow downstream forks
 /// of rustls targeting architectures without atomic pointers to replace the implementation
 /// with another implementation such as `portable_atomic_util::Arc` in one central location.
@@ -392,8 +388,6 @@ mod tls12;
 mod tls13;
 mod vecbuf;
 mod verify;
-#[cfg(test)]
-mod verifybench;
 mod x509;
 #[macro_use]
 mod check;

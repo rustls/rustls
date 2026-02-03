@@ -49,7 +49,7 @@ def collect(hostname):
     return certs
 
 if __name__ == '__main__':
-    certfile = lambda name, i: 'rustls/src/testdata/cert-%s.%d.der' % (name, i)
+    certfile = lambda name, i: 'rustls-test/benches/data/cert-%s.%d.der' % (name, i)
 
     for name, hostname in SITES.items():
         if path.exists(certfile(name, 0)):
@@ -59,4 +59,3 @@ if __name__ == '__main__':
         for i, cert in enumerate(certchain):
             open(certfile(name, i), 'wb').write(cert)
             print('wrote', certfile(name, i))
-
