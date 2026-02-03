@@ -689,7 +689,6 @@ pub(crate) struct ReceivePath {
     may_receive_application_data: bool,
     /// If the peer has signaled end of stream.
     pub(crate) has_received_close_notify: bool,
-    pub(crate) has_seen_eof: bool,
     temper_counters: TemperCounters,
     negotiated_version: Option<ProtocolVersion>,
     pub(crate) hs_deframer: HandshakeDeframer,
@@ -706,7 +705,6 @@ impl ReceivePath {
             decrypt_state: DecryptionState::new(),
             may_receive_application_data: false,
             has_received_close_notify: false,
-            has_seen_eof: false,
             temper_counters: TemperCounters::default(),
             negotiated_version: None,
             hs_deframer: HandshakeDeframer::default(),
