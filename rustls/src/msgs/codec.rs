@@ -163,119 +163,159 @@ impl Cardinality for NonEmpty {
     const MIN: usize = 1;
 }
 
-/// Wrapper over a slice of bytes that allows reading chunks from
-/// with the current position state held using a cursor.
+impl<'a> Codec<'a> for CertificateDer<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let nest = LengthPrefixedBuffer::new(Self::SIZE_LEN, bytes);
+        nest.buf.extend(self.as_ref());
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let len = ListLength::NonZeroU24 {
+            max: CERTIFICATE_MAX_SIZE_LIMIT,
+            empty_error: InvalidMessage::IllegalEmptyList("CertificateDer"),
+            too_many_error: InvalidMessage::CertificatePayloadTooLarge,
+        }
+        .read(r)?;
+
+        let mut sub = r.sub(len)?;
+        let body = sub.rest();
+        Ok(Self::from(body))
+    }
+}
+
+impl TlsListElement for CertificateDer<'_> {
+    const SIZE_LEN: ListLength = ListLength::U24 {
+        max: CERTIFICATE_MAX_SIZE_LIMIT,
+        error: InvalidMessage::CertificatePayloadTooLarge,
+    };
+}
+
+impl<'a> Codec<'a> for SubjectPublicKeyInfoDer<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let nest = LengthPrefixedBuffer::new(Self::SIZE_LEN, bytes);
+        nest.buf.extend(self.as_ref());
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let len = Self::SIZE_LEN.read(r)?;
+        let mut sub = r.sub(len)?;
+        let body = sub.rest();
+        Ok(Self::from(body))
+    }
+}
+
+impl TlsListElement for SubjectPublicKeyInfoDer<'_> {
+    const SIZE_LEN: ListLength = CertificateDer::SIZE_LEN;
+}
+
+/// An iterator over a vector of `TlsListElements`.
 ///
-/// A new reader for a sub section of the buffer can be created
-/// using the `sub` function or a section of a certain length can
-/// be obtained using the `take` function
-pub(crate) struct Reader<'a> {
-    /// The underlying buffer storing the readers content
-    buffer: &'a [u8],
-    /// Stores the current reading position for the buffer
-    cursor: usize,
+/// All uses _MUST_ exhaust the iterator, as errors may be delayed
+/// until the last element.
+pub(crate) struct TlsListIter<'a, T: Codec<'a> + TlsListElement + Debug> {
+    sub: Reader<'a>,
+    _t: PhantomData<T>,
 }
 
-impl<'a> Reader<'a> {
-    /// Creates a new Reader of the provided `bytes` slice with
-    /// the initial cursor position of zero.
-    pub(crate) fn init(bytes: &'a [u8]) -> Self {
-        Reader {
-            buffer: bytes,
-            cursor: 0,
-        }
-    }
-
-    /// Attempts to create a new Reader on a sub section of this
-    /// readers bytes by taking a slice of the provided `length`
-    /// will return None if there is not enough bytes
-    pub(crate) fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
-        match self.take(length) {
-            Some(bytes) => Ok(Reader::init(bytes)),
-            None => Err(InvalidMessage::MessageTooShort),
-        }
-    }
-
-    /// Borrows a slice of all the remaining bytes
-    /// that appear after the cursor position.
-    ///
-    /// Moves the cursor to the end of the buffer length.
-    pub(crate) fn rest(&mut self) -> &'a [u8] {
-        let rest = &self.buffer[self.cursor..];
-        self.cursor = self.buffer.len();
-        rest
-    }
-
-    /// Attempts to borrow a slice of bytes from the current
-    /// cursor position of `length` if there is not enough
-    /// bytes remaining after the cursor to take the length
-    /// then None is returned instead.
-    pub(crate) fn take(&mut self, length: usize) -> Option<&'a [u8]> {
-        if self.left() < length {
-            return None;
-        }
-        let current = self.cursor;
-        self.cursor += length;
-        Some(&self.buffer[current..current + length])
-    }
-
-    /// Used to check whether the reader has any content left
-    /// after the cursor (cursor has not reached end of buffer)
-    pub(crate) fn any_left(&self) -> bool {
-        self.cursor < self.buffer.len()
-    }
-
-    pub(crate) fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
-        match self.any_left() {
-            true => Err(InvalidMessage::TrailingData(name)),
-            false => Ok(()),
-        }
-    }
-
-    /// Returns the cursor position which is also the number
-    /// of bytes that have been read from the buffer.
-    pub(crate) fn used(&self) -> usize {
-        self.cursor
-    }
-
-    /// Returns the number of bytes that are still able to be
-    /// read (The number of remaining takes)
-    pub(crate) fn left(&self) -> usize {
-        self.buffer.len() - self.cursor
-    }
-}
-
-/// Trait for implementing encoding and decoding functionality
-/// on something.
-pub(crate) trait Codec<'a>: Debug + Sized {
-    /// Function for encoding itself by appending itself to
-    /// the provided vec of bytes.
-    fn encode(&self, bytes: &mut Vec<u8>);
-
-    /// Function for decoding itself from the provided reader
-    /// will return Some if the decoding was successful or
-    /// None if it was not.
-    fn read(_: &mut Reader<'a>) -> Result<Self, InvalidMessage>;
-
-    /// Convenience function for encoding the implementation
-    /// into a vec and returning it
-    fn get_encoding(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        self.encode(&mut bytes);
-        bytes
-    }
-
-    /// Function for wrapping a call to the read function in
-    /// a Reader for the slice of bytes provided
-    ///
-    /// Returns `Err(InvalidMessage::ExcessData(_))` if
-    /// `Self::read` does not read the entirety of `bytes`.
-    fn read_bytes(bytes: &'a [u8]) -> Result<Self, InvalidMessage> {
-        let mut reader = Reader::init(bytes);
-        Self::read(&mut reader).and_then(|r| {
-            reader.expect_empty("read_bytes")?;
-            Ok(r)
+impl<'a, T: Codec<'a> + TlsListElement + Debug> TlsListIter<'a, T> {
+    pub(crate) fn new(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let len = T::SIZE_LEN.read(r)?;
+        let sub = r.sub(len)?;
+        Ok(Self {
+            sub,
+            _t: PhantomData,
         })
+    }
+}
+
+impl<'a, T: Codec<'a> + TlsListElement + Debug> Iterator for TlsListIter<'a, T> {
+    type Item = Result<T, InvalidMessage>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.sub.any_left() {
+            true => Some(T::read(&mut self.sub)),
+            false => None,
+        }
+    }
+}
+
+/// Implement `Codec` for lists of elements that implement `TlsListElement`.
+///
+/// `TlsListElement` provides the size of the length prefix for the list.
+impl<'a, T: Codec<'a> + TlsListElement + Debug> Codec<'a> for Vec<T> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let nest = LengthPrefixedBuffer::new(T::SIZE_LEN, bytes);
+
+        for i in self {
+            i.encode(nest.buf);
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let mut ret = Self::new();
+        for item in TlsListIter::<T>::new(r)? {
+            ret.push(item?);
+        }
+
+        Ok(ret)
+    }
+}
+
+/// Tracks encoding a length-delimited structure in a single pass.
+pub(crate) struct LengthPrefixedBuffer<'a> {
+    pub(crate) buf: &'a mut Vec<u8>,
+    len_offset: usize,
+    size_len: ListLength,
+}
+
+impl<'a> LengthPrefixedBuffer<'a> {
+    /// Inserts a dummy length into `buf`, and remembers where it went.
+    ///
+    /// After this, the body of the length-delimited structure should be appended to `LengthPrefixedBuffer::buf`.
+    /// The length header is corrected in `LengthPrefixedBuffer::drop`.
+    pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> Self {
+        let len_offset = buf.len();
+        buf.extend(match size_len {
+            ListLength::NonZeroU8 { .. } => &[0xff][..],
+            ListLength::U16 | ListLength::NonZeroU16 { .. } => &[0xff, 0xff],
+            ListLength::U24 { .. } | ListLength::NonZeroU24 { .. } => &[0xff, 0xff, 0xff],
+        });
+
+        Self {
+            buf,
+            len_offset,
+            size_len,
+        }
+    }
+}
+
+impl Drop for LengthPrefixedBuffer<'_> {
+    /// Goes back and corrects the length previously inserted at the start of the structure.
+    fn drop(&mut self) {
+        match self.size_len {
+            ListLength::NonZeroU8 { .. } => {
+                let len = self.buf.len() - self.len_offset - 1;
+                debug_assert!(len <= 0xff);
+                self.buf[self.len_offset] = len as u8;
+            }
+            ListLength::U16 | ListLength::NonZeroU16 { .. } => {
+                let len = self.buf.len() - self.len_offset - 2;
+                debug_assert!(len <= 0xffff);
+                let out: &mut [u8; 2] = (&mut self.buf[self.len_offset..self.len_offset + 2])
+                    .try_into()
+                    .unwrap();
+                *out = u16::to_be_bytes(len as u16);
+            }
+            ListLength::U24 { .. } | ListLength::NonZeroU24 { .. } => {
+                let len = self.buf.len() - self.len_offset - 3;
+                debug_assert!(len <= 0xff_ffff);
+                let len_bytes = u32::to_be_bytes(len as u32);
+                let out: &mut [u8; 3] = (&mut self.buf[self.len_offset..self.len_offset + 3])
+                    .try_into()
+                    .unwrap();
+                out.copy_from_slice(&len_bytes[1..]);
+            }
+        }
     }
 }
 
@@ -371,59 +411,6 @@ impl Codec<'_> for u64 {
     }
 }
 
-/// Implement `Codec` for lists of elements that implement `TlsListElement`.
-///
-/// `TlsListElement` provides the size of the length prefix for the list.
-impl<'a, T: Codec<'a> + TlsListElement + Debug> Codec<'a> for Vec<T> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        let nest = LengthPrefixedBuffer::new(T::SIZE_LEN, bytes);
-
-        for i in self {
-            i.encode(nest.buf);
-        }
-    }
-
-    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let mut ret = Self::new();
-        for item in TlsListIter::<T>::new(r)? {
-            ret.push(item?);
-        }
-
-        Ok(ret)
-    }
-}
-
-/// An iterator over a vector of `TlsListElements`.
-///
-/// All uses _MUST_ exhaust the iterator, as errors may be delayed
-/// until the last element.
-pub(crate) struct TlsListIter<'a, T: Codec<'a> + TlsListElement + Debug> {
-    sub: Reader<'a>,
-    _t: PhantomData<T>,
-}
-
-impl<'a, T: Codec<'a> + TlsListElement + Debug> TlsListIter<'a, T> {
-    pub(crate) fn new(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let len = T::SIZE_LEN.read(r)?;
-        let sub = r.sub(len)?;
-        Ok(Self {
-            sub,
-            _t: PhantomData,
-        })
-    }
-}
-
-impl<'a, T: Codec<'a> + TlsListElement + Debug> Iterator for TlsListIter<'a, T> {
-    type Item = Result<T, InvalidMessage>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.sub.any_left() {
-            true => Some(T::read(&mut self.sub)),
-            false => None,
-        }
-    }
-}
-
 impl Codec<'_> for () {
     fn encode(&self, _: &mut Vec<u8>) {}
 
@@ -432,49 +419,120 @@ impl Codec<'_> for () {
     }
 }
 
-impl<'a> Codec<'a> for CertificateDer<'a> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        let nest = LengthPrefixedBuffer::new(Self::SIZE_LEN, bytes);
-        nest.buf.extend(self.as_ref());
+/// Trait for implementing encoding and decoding functionality
+/// on something.
+pub(crate) trait Codec<'a>: Debug + Sized {
+    /// Function for encoding itself by appending itself to
+    /// the provided vec of bytes.
+    fn encode(&self, bytes: &mut Vec<u8>);
+
+    /// Function for decoding itself from the provided reader
+    /// will return Some if the decoding was successful or
+    /// None if it was not.
+    fn read(_: &mut Reader<'a>) -> Result<Self, InvalidMessage>;
+
+    /// Convenience function for encoding the implementation
+    /// into a vec and returning it
+    fn get_encoding(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        self.encode(&mut bytes);
+        bytes
     }
 
-    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let len = ListLength::NonZeroU24 {
-            max: CERTIFICATE_MAX_SIZE_LIMIT,
-            empty_error: InvalidMessage::IllegalEmptyList("CertificateDer"),
-            too_many_error: InvalidMessage::CertificatePayloadTooLarge,
+    /// Function for wrapping a call to the read function in
+    /// a Reader for the slice of bytes provided
+    ///
+    /// Returns `Err(InvalidMessage::ExcessData(_))` if
+    /// `Self::read` does not read the entirety of `bytes`.
+    fn read_bytes(bytes: &'a [u8]) -> Result<Self, InvalidMessage> {
+        let mut reader = Reader::init(bytes);
+        Self::read(&mut reader).and_then(|r| {
+            reader.expect_empty("read_bytes")?;
+            Ok(r)
+        })
+    }
+}
+
+/// Wrapper over a slice of bytes that allows reading chunks from
+/// with the current position state held using a cursor.
+///
+/// A new reader for a sub section of the buffer can be created
+/// using the `sub` function or a section of a certain length can
+/// be obtained using the `take` function
+pub(crate) struct Reader<'a> {
+    /// The underlying buffer storing the readers content
+    buffer: &'a [u8],
+    /// Stores the current reading position for the buffer
+    cursor: usize,
+}
+
+impl<'a> Reader<'a> {
+    /// Creates a new Reader of the provided `bytes` slice with
+    /// the initial cursor position of zero.
+    pub(crate) fn init(bytes: &'a [u8]) -> Self {
+        Reader {
+            buffer: bytes,
+            cursor: 0,
         }
-        .read(r)?;
-
-        let mut sub = r.sub(len)?;
-        let body = sub.rest();
-        Ok(Self::from(body))
-    }
-}
-
-impl TlsListElement for CertificateDer<'_> {
-    const SIZE_LEN: ListLength = ListLength::U24 {
-        max: CERTIFICATE_MAX_SIZE_LIMIT,
-        error: InvalidMessage::CertificatePayloadTooLarge,
-    };
-}
-
-impl<'a> Codec<'a> for SubjectPublicKeyInfoDer<'a> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        let nest = LengthPrefixedBuffer::new(Self::SIZE_LEN, bytes);
-        nest.buf.extend(self.as_ref());
     }
 
-    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let len = Self::SIZE_LEN.read(r)?;
-        let mut sub = r.sub(len)?;
-        let body = sub.rest();
-        Ok(Self::from(body))
+    /// Attempts to create a new Reader on a sub section of this
+    /// readers bytes by taking a slice of the provided `length`
+    /// will return None if there is not enough bytes
+    pub(crate) fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
+        match self.take(length) {
+            Some(bytes) => Ok(Reader::init(bytes)),
+            None => Err(InvalidMessage::MessageTooShort),
+        }
     }
-}
 
-impl TlsListElement for SubjectPublicKeyInfoDer<'_> {
-    const SIZE_LEN: ListLength = CertificateDer::SIZE_LEN;
+    /// Borrows a slice of all the remaining bytes
+    /// that appear after the cursor position.
+    ///
+    /// Moves the cursor to the end of the buffer length.
+    pub(crate) fn rest(&mut self) -> &'a [u8] {
+        let rest = &self.buffer[self.cursor..];
+        self.cursor = self.buffer.len();
+        rest
+    }
+
+    /// Attempts to borrow a slice of bytes from the current
+    /// cursor position of `length` if there is not enough
+    /// bytes remaining after the cursor to take the length
+    /// then None is returned instead.
+    pub(crate) fn take(&mut self, length: usize) -> Option<&'a [u8]> {
+        if self.left() < length {
+            return None;
+        }
+        let current = self.cursor;
+        self.cursor += length;
+        Some(&self.buffer[current..current + length])
+    }
+
+    /// Used to check whether the reader has any content left
+    /// after the cursor (cursor has not reached end of buffer)
+    pub(crate) fn any_left(&self) -> bool {
+        self.cursor < self.buffer.len()
+    }
+
+    pub(crate) fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
+        match self.any_left() {
+            true => Err(InvalidMessage::TrailingData(name)),
+            false => Ok(()),
+        }
+    }
+
+    /// Returns the cursor position which is also the number
+    /// of bytes that have been read from the buffer.
+    pub(crate) fn used(&self) -> usize {
+        self.cursor
+    }
+
+    /// Returns the number of bytes that are still able to be
+    /// read (The number of remaining takes)
+    pub(crate) fn left(&self) -> usize {
+        self.buffer.len() - self.cursor
+    }
 }
 
 /// A trait for types that can be encoded and decoded in a list.
@@ -539,64 +597,6 @@ impl ListLength {
                 len => len,
             },
         })
-    }
-}
-
-/// Tracks encoding a length-delimited structure in a single pass.
-pub(crate) struct LengthPrefixedBuffer<'a> {
-    pub(crate) buf: &'a mut Vec<u8>,
-    len_offset: usize,
-    size_len: ListLength,
-}
-
-impl<'a> LengthPrefixedBuffer<'a> {
-    /// Inserts a dummy length into `buf`, and remembers where it went.
-    ///
-    /// After this, the body of the length-delimited structure should be appended to `LengthPrefixedBuffer::buf`.
-    /// The length header is corrected in `LengthPrefixedBuffer::drop`.
-    pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> Self {
-        let len_offset = buf.len();
-        buf.extend(match size_len {
-            ListLength::NonZeroU8 { .. } => &[0xff][..],
-            ListLength::U16 | ListLength::NonZeroU16 { .. } => &[0xff, 0xff],
-            ListLength::U24 { .. } | ListLength::NonZeroU24 { .. } => &[0xff, 0xff, 0xff],
-        });
-
-        Self {
-            buf,
-            len_offset,
-            size_len,
-        }
-    }
-}
-
-impl Drop for LengthPrefixedBuffer<'_> {
-    /// Goes back and corrects the length previously inserted at the start of the structure.
-    fn drop(&mut self) {
-        match self.size_len {
-            ListLength::NonZeroU8 { .. } => {
-                let len = self.buf.len() - self.len_offset - 1;
-                debug_assert!(len <= 0xff);
-                self.buf[self.len_offset] = len as u8;
-            }
-            ListLength::U16 | ListLength::NonZeroU16 { .. } => {
-                let len = self.buf.len() - self.len_offset - 2;
-                debug_assert!(len <= 0xffff);
-                let out: &mut [u8; 2] = (&mut self.buf[self.len_offset..self.len_offset + 2])
-                    .try_into()
-                    .unwrap();
-                *out = u16::to_be_bytes(len as u16);
-            }
-            ListLength::U24 { .. } | ListLength::NonZeroU24 { .. } => {
-                let len = self.buf.len() - self.len_offset - 3;
-                debug_assert!(len <= 0xff_ffff);
-                let len_bytes = u32::to_be_bytes(len as u32);
-                let out: &mut [u8; 3] = (&mut self.buf[self.len_offset..self.len_offset + 3])
-                    .try_into()
-                    .unwrap();
-                out.copy_from_slice(&len_bytes[1..]);
-            }
-        }
     }
 }
 
