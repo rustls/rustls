@@ -346,7 +346,7 @@ use crate::crypto::CryptoProvider;
 
 // Import `test` sysroot crate for `Bencher` definitions.
 #[cfg(bench)]
-#[expect(unused_extern_crates)]
+#[allow(unused_extern_crates)]
 extern crate test;
 
 // log for logging (optional).
