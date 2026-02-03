@@ -1403,17 +1403,16 @@ mod tests {
 }
 
 #[cfg(all(test, bench))]
-#[macro_rules_attribute::apply(bench_for_each_provider)]
 mod benchmarks {
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
         use core::fmt::Debug;
 
-        use super::provider::tls13::TLS13_CHACHA20_POLY1305_SHA256;
         use super::{
             KeySchedule, Protocol, SecretKind, Side, derive_traffic_iv, derive_traffic_key,
         };
         use crate::KeyLog;
+        use crate::crypto::test_provider::TLS13_TEST_SUITE;
 
         fn extract_traffic_secret(ks: &KeySchedule, kind: SecretKind) {
             #[derive(Debug)]
@@ -1425,27 +1424,22 @@ mod benchmarks {
 
             let hash = [0u8; 32];
             let traffic_secret = ks.derive_logged_secret(kind, &hash, &Log, &[0u8; 32]);
-            let traffic_secret_expander = TLS13_CHACHA20_POLY1305_SHA256
+            let traffic_secret_expander = TLS13_TEST_SUITE
                 .hkdf_provider
                 .expander_for_okm(&traffic_secret);
             test::black_box(derive_traffic_key(
                 traffic_secret_expander.as_ref(),
-                TLS13_CHACHA20_POLY1305_SHA256.aead_alg,
+                TLS13_TEST_SUITE.aead_alg,
             ));
             test::black_box(derive_traffic_iv(
                 traffic_secret_expander.as_ref(),
-                TLS13_CHACHA20_POLY1305_SHA256
-                    .aead_alg
-                    .iv_len(),
+                TLS13_TEST_SUITE.aead_alg.iv_len(),
             ));
         }
 
         b.iter(|| {
-            let mut ks = KeySchedule::new_with_empty_secret(
-                Side::Client,
-                Protocol::Tcp,
-                TLS13_CHACHA20_POLY1305_SHA256,
-            );
+            let mut ks =
+                KeySchedule::new_with_empty_secret(Side::Client, Protocol::Tcp, TLS13_TEST_SUITE);
             ks.input_secret(&[0u8; 32]);
 
             extract_traffic_secret(&ks, SecretKind::ClientHandshakeTrafficSecret);
