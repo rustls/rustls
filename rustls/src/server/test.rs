@@ -2,7 +2,13 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use std::vec;
 
+use pki_types::UnixTime;
+
 use super::hs::ClientHelloInput;
+use super::{
+    CommonServerSessionValue, ServerConfig, ServerConnection, ServerSessionValue,
+    Tls13ServerSessionValue,
+};
 use crate::common_state::Input;
 use crate::crypto::cipher::FakeAead;
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
@@ -12,8 +18,8 @@ use crate::crypto::kx::{
 };
 use crate::crypto::test_provider::{FAKE_HASH, FAKE_HMAC};
 use crate::crypto::{
-    CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme, SingleCredential,
-    TEST_PROVIDER, tls12, tls12_only,
+    CertificateIdentity, CipherSuite, Credentials, CryptoProvider, Identity, SignatureScheme,
+    SingleCredential, TEST_PROVIDER, tls12, tls12_only,
 };
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible};
@@ -24,11 +30,73 @@ use crate::msgs::{
 };
 use crate::pki_types::pem::PemObject;
 use crate::pki_types::{CertificateDer, FipsStatus, PrivateKeyDer};
-use crate::server::{ServerConfig, ServerConnection};
 use crate::suites::CipherSuiteCommon;
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::version::TLS12_VERSION;
+
+#[cfg(feature = "std")] // for UnixTime::now
+#[test]
+fn serversessionvalue_is_debug() {
+    use std::{println, vec};
+    let ssv = ServerSessionValue::Tls13(Tls13ServerSessionValue::new(
+        CommonServerSessionValue::new(
+            None,
+            CipherSuite::TLS13_AES_128_GCM_SHA256,
+            None,
+            None,
+            vec![4, 5, 6],
+            UnixTime::now(),
+        ),
+        &[1, 2, 3],
+        0x12345678,
+    ));
+    println!("{ssv:?}");
+    println!("{:#04x?}", ssv.get_encoding());
+}
+
+#[test]
+fn serversessionvalue_no_sni() {
+    let bytes = [
+        0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x69, 0x7a, 0x4a, 0xdf, 0x00, 0x13, 0x01, 0x00, 0x00,
+        0x00, 0x03, 0x04, 0x05, 0x06, 0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ssv = ServerSessionValue::read(&mut rd).unwrap();
+    assert_eq!(ssv.get_encoding(), bytes);
+}
+
+#[test]
+fn serversessionvalue_with_cert() {
+    std::eprintln!(
+        "{:#04x?}",
+        ServerSessionValue::Tls13(Tls13ServerSessionValue::new(
+            CommonServerSessionValue::new(
+                None,
+                CipherSuite::TLS13_AES_128_GCM_SHA256,
+                Some(Identity::X509(CertificateIdentity {
+                    end_entity: CertificateDer::from(&[10, 11, 12][..]),
+                    intermediates: alloc::vec![],
+                })),
+                None,
+                alloc::vec![4, 5, 6],
+                UnixTime::now(),
+            ),
+            &[1, 2, 3],
+            0x12345678,
+        ))
+        .get_encoding()
+    );
+
+    let bytes = [
+        0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x69, 0x7a, 0x4b, 0x06, 0x00, 0x13, 0x01, 0x01, 0x00,
+        0x00, 0x00, 0x03, 0x0a, 0x0b, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x05, 0x06,
+        0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
+    ];
+    let mut rd = Reader::init(&bytes);
+    let ssv = ServerSessionValue::read(&mut rd).unwrap();
+    assert_eq!(ssv.get_encoding(), bytes);
+}
 
 #[test]
 fn null_compression_required() {

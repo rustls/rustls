@@ -7,7 +7,7 @@ use core::fmt;
 use pki_types::DnsName;
 
 use super::connection::ServerConnectionData;
-use super::{ClientHello, ServerConfig};
+use super::{ClientHello, CommonServerSessionValue, ServerConfig};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Input, Output, Protocol, State};
 use crate::conn::ConnectionRandoms;
@@ -19,9 +19,9 @@ use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 use crate::msgs::{
-    ClientHelloPayload, CommonServerSessionValue, Compression, HandshakeAlignedProof,
-    HandshakePayload, Message, MessagePayload, Random, ServerExtensions, ServerExtensionsInput,
-    ServerNamePayload, SessionId, SingleProtocolName, TransportParameters,
+    ClientHelloPayload, Compression, HandshakeAlignedProof, HandshakePayload, Message,
+    MessagePayload, Random, ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId,
+    SingleProtocolName, TransportParameters,
 };
 use crate::sealed::Sealed;
 use crate::suites::Suite;

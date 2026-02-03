@@ -92,11 +92,6 @@ pub(crate) use handshake::{
 #[cfg(test)]
 pub(crate) use handshake::{EcParameters, ServerEcdhParams};
 
-mod persist;
-pub(crate) use persist::{
-    CommonServerSessionValue, ServerSessionValue, Tls12ServerSessionValue, Tls13ServerSessionValue,
-};
-
 mod server_hello;
 pub(crate) use server_hello::{
     EchConfigContents, EchConfigPayload, HpkeKeyConfig, ServerExtensions, ServerHelloPayload,
@@ -107,9 +102,8 @@ mod handshake_test;
 
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
-    use super::{
-        Codec, EncodedMessage, Message, MessageFragmenter, Payload, Reader, ServerSessionValue,
-    };
+    use super::{Codec, EncodedMessage, Message, MessageFragmenter, Payload, Reader};
+    use crate::server::ServerSessionValue;
 
     pub fn fuzz_fragmenter(data: &[u8]) {
         let mut rdr = Reader::init(data);
