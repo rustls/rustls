@@ -515,6 +515,7 @@ pub(crate) struct ConnectionCommon<Side: SideData> {
     deframer_buffer: DeframerVecBuffer,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
+    pub(crate) has_seen_eof: bool,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
@@ -596,14 +597,13 @@ impl<Side: SideData> ConnectionCommon<Side> {
     /// Returns an object that allows reading plaintext.
     pub(crate) fn reader(&mut self) -> Reader<'_> {
         let common = &mut self.core.common;
-        let has_seen_eof = common.recv.has_seen_eof;
         let has_received_close_notify = common.recv.has_received_close_notify;
         Reader {
             received_plaintext: &mut self.received_plaintext,
             // Are we done? i.e., have we processed all received messages, and received a
             // close_notify to indicate that no new messages will arrive?
             has_received_close_notify,
-            has_seen_eof,
+            has_seen_eof: self.has_seen_eof,
         }
     }
 
@@ -657,7 +657,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .deframer_buffer
             .read(rd, self.recv.hs_deframer.is_active());
         if let Ok(0) = res {
-            self.recv.has_seen_eof = true;
+            self.has_seen_eof = true;
         }
         res
     }
@@ -688,6 +688,7 @@ impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
             deframer_buffer: DeframerVecBuffer::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            has_seen_eof: false,
         }
     }
 }
