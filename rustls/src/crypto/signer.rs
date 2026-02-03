@@ -355,6 +355,14 @@ pub struct CertificateIdentity<'a> {
 }
 
 impl<'a> CertificateIdentity<'a> {
+    /// Create a new `CertificateIdentity` from an end-entity certificate and intermediates.
+    pub fn new(end_entity: CertificateDer<'a>, intermediates: Vec<CertificateDer<'a>>) -> Self {
+        Self {
+            end_entity,
+            intermediates,
+        }
+    }
+
     /// Convert this `CertificateIdentity` into an owned version.
     pub fn into_owned(self) -> CertificateIdentity<'static> {
         CertificateIdentity {
