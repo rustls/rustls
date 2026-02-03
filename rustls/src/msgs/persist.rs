@@ -1,103 +1,14 @@
 use alloc::vec::Vec;
-use core::cmp;
-use core::time::Duration;
 
 use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
-use crate::client::Tls13ClientSessionValue;
 use crate::crypto::cipher::Payload;
 use crate::crypto::{CipherSuite, Identity};
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, SizedPayload};
 use crate::msgs::codec::{Codec, Reader};
-use crate::sync::Arc;
-
-pub(crate) struct Retrieved<T> {
-    pub(crate) value: T,
-    retrieved_at: UnixTime,
-}
-
-impl<T> Retrieved<T> {
-    pub(crate) fn new(value: T, retrieved_at: UnixTime) -> Self {
-        Self {
-            value,
-            retrieved_at,
-        }
-    }
-
-    pub(crate) fn map<M>(&self, f: impl FnOnce(&T) -> Option<&M>) -> Option<Retrieved<&M>> {
-        Some(Retrieved {
-            value: f(&self.value)?,
-            retrieved_at: self.retrieved_at,
-        })
-    }
-}
-
-impl Retrieved<&Tls13ClientSessionValue> {
-    pub(crate) fn obfuscated_ticket_age(&self) -> u32 {
-        let age_secs = self
-            .retrieved_at
-            .as_secs()
-            .saturating_sub(self.value.common.epoch);
-        let age_millis = age_secs as u32 * 1000;
-        age_millis.wrapping_add(self.value.age_add)
-    }
-}
-
-impl<T: core::ops::Deref<Target = ClientSessionCommon>> Retrieved<T> {
-    pub(crate) fn has_expired(&self) -> bool {
-        let common = &*self.value;
-        common.lifetime != Duration::ZERO
-            && common
-                .epoch
-                .saturating_add(common.lifetime.as_secs())
-                < self.retrieved_at.as_secs()
-    }
-}
-
-impl<T> core::ops::Deref for Retrieved<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ClientSessionCommon {
-    pub(crate) ticket: Arc<SizedPayload<'static, u16>>,
-    pub(crate) epoch: u64,
-    lifetime: Duration,
-    peer_identity: Arc<Identity<'static>>,
-}
-
-impl ClientSessionCommon {
-    pub(crate) fn new(
-        ticket: Arc<SizedPayload<'static, u16>>,
-        time_now: UnixTime,
-        lifetime: Duration,
-        peer_identity: Identity<'static>,
-    ) -> Self {
-        Self {
-            ticket,
-            epoch: time_now.as_secs(),
-            lifetime: cmp::min(lifetime, MAX_TICKET_LIFETIME),
-            peer_identity: Arc::new(peer_identity),
-        }
-    }
-
-    pub(crate) fn peer_identity(&self) -> &Identity<'static> {
-        &self.peer_identity
-    }
-
-    pub(crate) fn ticket(&self) -> &[u8] {
-        (*self.ticket).bytes()
-    }
-}
-
-static MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// This is the maximum allowed skew between server and client clocks, over
 /// the maximum ticket lifetime period.  This encompasses TCP retransmission

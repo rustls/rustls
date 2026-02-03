@@ -10,8 +10,7 @@ use crate::crypto::{Identity, SelectedCredential, SignatureScheme};
 use crate::enums::{ApplicationProtocol, CertificateType};
 use crate::log::{debug, trace};
 use crate::msgs::{
-    CertificateChain, ClientSessionCommon, ExtensionType, MaybeEmpty, ServerExtensions, SessionId,
-    SizedPayload,
+    CertificateChain, ExtensionType, MaybeEmpty, ServerExtensions, SessionId, SizedPayload,
 };
 use crate::sync::Arc;
 use crate::verify::DistinguishedName;
@@ -62,6 +61,57 @@ pub mod danger {
 
 #[cfg(test)]
 mod test;
+
+pub(crate) struct Retrieved<T> {
+    pub(crate) value: T,
+    retrieved_at: UnixTime,
+}
+
+impl<T> Retrieved<T> {
+    pub(crate) fn new(value: T, retrieved_at: UnixTime) -> Self {
+        Self {
+            value,
+            retrieved_at,
+        }
+    }
+
+    pub(crate) fn map<M>(&self, f: impl FnOnce(&T) -> Option<&M>) -> Option<Retrieved<&M>> {
+        Some(Retrieved {
+            value: f(&self.value)?,
+            retrieved_at: self.retrieved_at,
+        })
+    }
+}
+
+impl Retrieved<&Tls13ClientSessionValue> {
+    pub(crate) fn obfuscated_ticket_age(&self) -> u32 {
+        let age_secs = self
+            .retrieved_at
+            .as_secs()
+            .saturating_sub(self.value.common.epoch);
+        let age_millis = age_secs as u32 * 1000;
+        age_millis.wrapping_add(self.value.age_add)
+    }
+}
+
+impl<T: Deref<Target = ClientSessionCommon>> Retrieved<T> {
+    pub(crate) fn has_expired(&self) -> bool {
+        let common = &*self.value;
+        common.lifetime != Duration::ZERO
+            && common
+                .epoch
+                .saturating_add(common.lifetime.as_secs())
+                < self.retrieved_at.as_secs()
+    }
+}
+
+impl<T> Deref for Retrieved<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
 
 /// A stored TLS 1.3 client session value.
 #[derive(Debug)]
@@ -206,6 +256,39 @@ impl Deref for Tls12ClientSessionValue {
     }
 }
 
+/// Common data for stored client sessions.
+#[derive(Debug, Clone)]
+pub struct ClientSessionCommon {
+    pub(crate) ticket: Arc<SizedPayload<'static, u16>>,
+    pub(crate) epoch: u64,
+    lifetime: Duration,
+    peer_identity: Arc<Identity<'static>>,
+}
+
+impl ClientSessionCommon {
+    pub(crate) fn new(
+        ticket: Arc<SizedPayload<'static, u16>>,
+        time_now: UnixTime,
+        lifetime: Duration,
+        peer_identity: Identity<'static>,
+    ) -> Self {
+        Self {
+            ticket,
+            epoch: time_now.as_secs(),
+            lifetime: Ord::min(lifetime, MAX_TICKET_LIFETIME),
+            peer_identity: Arc::new(peer_identity),
+        }
+    }
+
+    pub(crate) fn peer_identity(&self) -> &Identity<'static> {
+        &self.peer_identity
+    }
+
+    pub(crate) fn ticket(&self) -> &[u8] {
+        (*self.ticket).bytes()
+    }
+}
+
 #[derive(Debug)]
 struct ServerCertDetails {
     cert_chain: CertificateChain<'static>,
@@ -301,3 +384,5 @@ impl ClientAuthDetails {
         Self::Empty { auth_context_tls13 }
     }
 }
+
+static MAX_TICKET_LIFETIME: Duration = Duration::from_secs(7 * 24 * 60 * 60);

@@ -94,8 +94,7 @@ pub(crate) use handshake::{EcParameters, ServerEcdhParams};
 
 mod persist;
 pub(crate) use persist::{
-    ClientSessionCommon, CommonServerSessionValue, Retrieved, ServerSessionValue,
-    Tls12ServerSessionValue, Tls13ServerSessionValue,
+    CommonServerSessionValue, ServerSessionValue, Tls12ServerSessionValue, Tls13ServerSessionValue,
 };
 
 mod server_hello;
