@@ -8,7 +8,7 @@ use subtle::ConstantTimeEq;
 
 use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
-use super::hs::{self};
+use super::{CommonServerSessionValue, ServerSessionValue, Tls12ServerSessionValue, hs};
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
@@ -24,9 +24,8 @@ use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
-    CommonServerSessionValue, HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload,
-    Message, MessagePayload, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
-    ServerSessionValue, SessionId, Tls12ServerSessionValue,
+    HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, SessionId,
 };
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
