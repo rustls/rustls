@@ -5,13 +5,12 @@ use std::{format, println, vec};
 
 use pki_types::{CertificateDer, DnsName};
 
-use super::base::SizedPayload;
 use super::client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
     EncryptedClientHello, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
     PskKeyExchangeModes, ServerNamePayload,
 };
-use super::codec::{Codec, Reader, put_u16};
+use super::codec::{Codec, Reader, SizedPayload, put_u16};
 use super::enums::{
     ClientCertificateType, Compression, ECCurveType, EchVersion, ExtensionType, KeyUpdateRequest,
 };

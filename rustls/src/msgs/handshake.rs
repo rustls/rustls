@@ -18,10 +18,9 @@ use crate::enums::{
 };
 use crate::error::InvalidMessage;
 use crate::log::warn;
-use crate::msgs::base::{MaybeEmpty, NonEmpty, SizedPayload};
 use crate::msgs::codec::{
-    CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement,
-    TlsListIter, U24,
+    CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, MaybeEmpty, NonEmpty,
+    Reader, SizedPayload, TlsListElement, TlsListIter, U24, hex,
 };
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
@@ -35,7 +34,7 @@ pub(crate) struct Random(pub(crate) [u8; 32]);
 
 impl fmt::Debug for Random {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        super::base::hex(f, &self.0)
+        hex(f, &self.0)
     }
 }
 
@@ -83,7 +82,7 @@ pub(crate) struct SessionId {
 
 impl fmt::Debug for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        super::base::hex(f, &self.data[..self.len])
+        hex(f, &self.data[..self.len])
     }
 }
 

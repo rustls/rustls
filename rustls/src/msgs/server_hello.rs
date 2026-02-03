@@ -5,8 +5,10 @@ use core::ops::{Deref, DerefMut};
 
 use pki_types::DnsName;
 
-use super::base::{MaybeEmpty, NonEmpty, SizedPayload};
-use super::codec::{Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
+use super::codec::{
+    Codec, LengthPrefixedBuffer, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
+    TlsListElement,
+};
 use super::enums::{Compression, EchVersion, ExtensionType};
 use super::handshake::{
     DuplicateExtensionChecker, Encoding, KeyShareEntry, Random, SessionId, SingleProtocolName,
