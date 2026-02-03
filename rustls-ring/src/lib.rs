@@ -10,7 +10,7 @@ extern crate std;
 
 // Import `test` sysroot crate for `Bencher` definitions.
 #[cfg(all(test, bench))]
-#[expect(unused_extern_crates)]
+#[allow(unused_extern_crates)]
 extern crate test;
 
 use alloc::borrow::Cow;
