@@ -31,7 +31,6 @@ pub const PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {
     tls12_cipher_suites: Cow::Borrowed(&[TLS_FUZZING_SUITE]),
     tls13_cipher_suites: Cow::Borrowed(&[TLS13_FUZZING_SUITE]),
     kx_groups: Cow::Borrowed(&[KEY_EXCHANGE_GROUP]),
-    signature_verification_algorithms: VERIFY_ALGORITHMS,
     secure_random: &Provider,
     key_provider: &Provider,
     ticketer_factory: &Provider,
@@ -55,7 +54,7 @@ pub fn server_verifier() -> Arc<dyn ServerVerifier> {
     )]);
 
     Arc::new(
-        WebPkiServerVerifier::builder(root_store.into(), &PROVIDER)
+        WebPkiServerVerifier::builder(root_store.into(), VERIFY_ALGORITHMS)
             .build()
             .unwrap(),
     )

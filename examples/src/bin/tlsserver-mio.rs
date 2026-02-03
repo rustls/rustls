@@ -605,18 +605,24 @@ fn make_config(args: &Args) -> Arc<ServerConfig> {
         let crls = load_crls(args.crl.iter());
         if args.require_auth {
             Arc::new(
-                WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
-                    .with_crls(crls)
-                    .build()
-                    .unwrap(),
+                WebPkiClientVerifier::builder(
+                    client_auth_roots.into(),
+                    provider::SUPPORTED_SIG_ALGS,
+                )
+                .with_crls(crls)
+                .build()
+                .unwrap(),
             )
         } else {
             Arc::new(
-                WebPkiClientVerifier::builder(client_auth_roots.into(), &provider)
-                    .with_crls(crls)
-                    .allow_unauthenticated()
-                    .build()
-                    .unwrap(),
+                WebPkiClientVerifier::builder(
+                    client_auth_roots.into(),
+                    provider::SUPPORTED_SIG_ALGS,
+                )
+                .with_crls(crls)
+                .allow_unauthenticated()
+                .build()
+                .unwrap(),
             )
         }
     } else {

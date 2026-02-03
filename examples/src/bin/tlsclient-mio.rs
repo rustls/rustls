@@ -408,17 +408,17 @@ mod danger {
         SignatureVerificationInput,
     };
     use rustls::crypto::{
-        CryptoProvider, SignatureScheme, verify_tls12_signature, verify_tls13_signature,
+        SignatureScheme, WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
     };
     use rustls::enums::CertificateType;
     use rustls::{DistinguishedName, Error};
 
     #[derive(Debug)]
-    pub(super) struct NoCertificateVerification(CryptoProvider);
+    pub(super) struct NoCertificateVerification(WebPkiSupportedAlgorithms);
 
     impl NoCertificateVerification {
-        pub(super) fn new(provider: CryptoProvider) -> Self {
-            Self(provider)
+        pub(super) fn new(verify_algs: WebPkiSupportedAlgorithms) -> Self {
+            Self(verify_algs)
         }
     }
 
@@ -431,20 +431,18 @@ mod danger {
             &self,
             input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
-            verify_tls12_signature(input, &self.0.signature_verification_algorithms)
+            verify_tls12_signature(input, &self.0)
         }
 
         fn verify_tls13_signature(
             &self,
             input: &SignatureVerificationInput<'_>,
         ) -> Result<HandshakeSignatureValid, Error> {
-            verify_tls13_signature(input, &self.0.signature_verification_algorithms)
+            verify_tls13_signature(input, &self.0)
         }
 
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-            self.0
-                .signature_verification_algorithms
-                .supported_schemes()
+            self.0.supported_schemes()
         }
 
         fn request_ocsp_response(&self) -> bool {
@@ -481,7 +479,8 @@ fn make_config(args: &Args) -> Arc<ClientConfig> {
         );
     }
 
-    let config = ClientConfig::builder(args.provider().into()).with_root_certificates(root_store);
+    let config = ClientConfig::builder(args.provider().into())
+        .with_root_certificates(root_store, provider::SUPPORTED_SIG_ALGS);
 
     let mut config = match (&args.auth_key, &args.auth_certs) {
         (Some(key_file), Some(certs_file)) => {
@@ -520,7 +519,7 @@ fn make_config(args: &Args) -> Arc<ClientConfig> {
         config
             .dangerous()
             .set_certificate_verifier(Arc::new(danger::NoCertificateVerification::new(
-                provider::DEFAULT_PROVIDER,
+                provider::SUPPORTED_SIG_ALGS,
             )));
     }
 

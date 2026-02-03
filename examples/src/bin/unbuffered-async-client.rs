@@ -11,7 +11,7 @@ use rustls::unbuffered::{
     WriteTraffic,
 };
 use rustls::{ClientConfig, RootCertStore};
-use rustls_aws_lc_rs::DEFAULT_PROVIDER;
+use rustls_aws_lc_rs::{DEFAULT_PROVIDER, SUPPORTED_SIG_ALGS};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let config = ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
-        .with_root_certificates(root_store)
+        .with_root_certificates(root_store, SUPPORTED_SIG_ALGS)
         .with_no_client_auth()?;
 
     let config = Arc::new(config);

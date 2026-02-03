@@ -28,7 +28,7 @@ fn test_client_config_keyshare() {
     let provider = provider::DEFAULT_PROVIDER;
     let kx_groups = vec![provider::kx_group::SECP384R1];
     let client_config =
-        make_client_config_with_kx_groups(KeyType::Rsa2048, kx_groups.clone(), &provider);
+        make_client_config_with_kx_groups(KeyType::Rsa2048, kx_groups.clone(), provider::SUPPORTED_SIG_ALGS, &provider);
     let server_config = make_server_config_with_kx_groups(KeyType::Rsa2048, kx_groups, &provider);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake_until_error(&mut client, &mut server).unwrap();
@@ -40,6 +40,7 @@ fn test_client_config_keyshare_mismatch() {
     let client_config = make_client_config_with_kx_groups(
         KeyType::Rsa2048,
         vec![provider::kx_group::SECP384R1],
+        provider::SUPPORTED_SIG_ALGS,
         &provider,
     );
     let server_config = make_server_config_with_kx_groups(
@@ -73,6 +74,7 @@ fn exercise_all_key_exchange_methods() {
             let client_config = make_client_config_with_kx_groups(
                 KeyType::Rsa2048,
                 vec![*kx_group],
+                provider::SUPPORTED_SIG_ALGS,
                 &version_provider,
             );
             let server_config = make_server_config_with_kx_groups(
@@ -94,6 +96,7 @@ fn test_client_sends_helloretryrequest() {
     let mut client_config = make_client_config_with_kx_groups(
         KeyType::Rsa2048,
         vec![provider::kx_group::SECP384R1, provider::kx_group::X25519],
+        provider::SUPPORTED_SIG_ALGS,
         &provider,
     );
 
@@ -210,6 +213,7 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     let mut client_config_1 = make_client_config_with_kx_groups(
         KeyType::Rsa2048,
         vec![provider::kx_group::SECP256R1],
+        provider::SUPPORTED_SIG_ALGS,
         &provider,
     );
     client_config_1.resumption = Resumption::store(shared_storage.clone());
@@ -219,6 +223,7 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     let mut client_config_2 = make_client_config_with_kx_groups(
         KeyType::Rsa2048,
         vec![provider::kx_group::SECP384R1],
+        provider::SUPPORTED_SIG_ALGS,
         &provider,
     );
     client_config_2.resumption = Resumption::store(shared_storage.clone());
@@ -269,6 +274,7 @@ fn test_client_sends_share_for_less_preferred_group() {
     let mut client_config_1 = make_client_config_with_kx_groups(
         KeyType::Rsa2048,
         vec![provider::kx_group::SECP384R1],
+        provider::SUPPORTED_SIG_ALGS,
         &provider,
     );
     client_config_1.resumption = Resumption::store(shared_storage.clone());
@@ -278,6 +284,7 @@ fn test_client_sends_share_for_less_preferred_group() {
     let mut client_config_2 = make_client_config_with_kx_groups(
         KeyType::Rsa2048,
         vec![provider::kx_group::X25519, provider::kx_group::SECP384R1],
+        provider::SUPPORTED_SIG_ALGS,
         &provider,
     );
     client_config_2.resumption = Resumption::store(shared_storage.clone());
@@ -325,7 +332,7 @@ fn test_client_sends_share_for_less_preferred_group() {
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_groups() {
-    let (_, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    let (_, mut server) = make_pair(KeyType::Rsa2048, provider::SUPPORTED_SIG_ALGS, &provider::DEFAULT_PROVIDER);
     server
         .read_tls(
             &mut encoding::message_framing(
@@ -361,6 +368,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
             make_client_config_with_kx_groups(
                 KeyType::Rsa2048,
                 vec![provider::kx_group::X25519],
+                provider::SUPPORTED_SIG_ALGS,
                 &version_provider,
             ),
             ServerConfig::builder(
@@ -397,12 +405,12 @@ fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
         }
         .into(),
     )
-    .finish(kt);
+    .finish(kt, provider::SUPPORTED_SIG_ALGS);
     let provider = provider::DEFAULT_PROVIDER;
     let server_config = make_server_config(kt, &provider);
 
     let (mut client_1, mut server) = make_pair_for_configs(client_config, server_config);
-    let (mut client_2, _) = make_pair(kt, &provider);
+    let (mut client_2, _) = make_pair(kt, provider::SUPPORTED_SIG_ALGS, &provider);
 
     // client_2 supplies the ClientHello, client_1 receives the ServerHello
     transfer(&mut client_2, &mut server);
