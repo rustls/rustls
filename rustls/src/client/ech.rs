@@ -6,7 +6,7 @@ use pki_types::{DnsName, EchConfigListBytes, FipsStatus, ServerName};
 use subtle::ConstantTimeEq;
 
 use super::config::ClientConfig;
-use super::{Tls13ClientSessionValue, tls13};
+use super::{Retrieved, Tls13ClientSessionValue, tls13};
 use crate::common_state::Protocol;
 use crate::crypto::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::crypto::SecureRandom;
@@ -24,8 +24,8 @@ use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, EchConfigContents, EchConfigPayload, Encoding,
     EncryptedClientHello, EncryptedClientHelloOuter, ExtensionType, HandshakeAlignedProof,
     HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, HpkeKeyConfig, Message,
-    MessagePayload, PresharedKeyBinder, PresharedKeyOffer, Random, Reader, Retrieved,
-    ServerHelloPayload, ServerNamePayload, SizedPayload,
+    MessagePayload, PresharedKeyBinder, PresharedKeyOffer, Random, Reader, ServerHelloPayload,
+    ServerNamePayload, SizedPayload,
 };
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{

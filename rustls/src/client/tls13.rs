@@ -10,9 +10,11 @@ use super::ech::EchStatus;
 use super::hs::{
     self, ClientHandler, ClientHelloInput, ClientSessionValue, ExpectServerHello, GroupAndKeyShare,
 };
-use super::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
+use super::{
+    ClientAuthDetails, ClientHelloDetails, Retrieved, ServerCertDetails, Tls13ClientSessionInput,
+    Tls13ClientSessionValue,
+};
 use crate::check::inappropriate_handshake_message;
-use crate::client::{Tls13ClientSessionInput, Tls13ClientSessionValue};
 use crate::common_state::{
     EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State,
     TrafficTemperCounters,
@@ -34,7 +36,7 @@ use crate::msgs::{
     Codec, EchConfigPayload, ExtensionType, HandshakeMessagePayload, HandshakePayload,
     KeyShareEntry, KeyUpdateRequest, MaybeEmpty, Message, MessagePayload,
     NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
-    Reader, Retrieved, ServerExtensions, ServerHelloPayload, SizedPayload,
+    Reader, ServerExtensions, ServerHelloPayload, SizedPayload,
 };
 use crate::sealed::Sealed;
 use crate::suites::PartiallyExtractedSecrets;
