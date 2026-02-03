@@ -42,9 +42,6 @@ use crate::verify::DigitallySignedStruct;
 #[macro_use]
 mod macros;
 
-mod base;
-pub(crate) use base::{MaybeEmpty, NonEmpty, SizedPayload, hex};
-
 mod client_hello;
 pub(crate) use client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
@@ -54,7 +51,8 @@ pub(crate) use client_hello::{
 
 mod codec;
 pub(crate) use codec::{
-    CERTIFICATE_MAX_SIZE_LIMIT, Codec, ListLength, Reader, TlsListElement, put_u16, put_u64,
+    CERTIFICATE_MAX_SIZE_LIMIT, Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
+    TlsListElement, hex, put_u16, put_u64,
 };
 use codec::{LengthPrefixedBuffer, U24};
 

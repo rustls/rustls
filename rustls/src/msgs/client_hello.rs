@@ -6,8 +6,10 @@ use core::ops::{Deref, DerefMut};
 
 use pki_types::DnsName;
 
-use super::base::{MaybeEmpty, NonEmpty, SizedPayload};
-use super::codec::{Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement, TlsListIter};
+use super::codec::{
+    Codec, LengthPrefixedBuffer, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
+    TlsListElement, TlsListIter,
+};
 use super::enums::{CertificateStatusType, Compression, ExtensionType, PskKeyExchangeMode};
 use super::handshake::{
     DuplicateExtensionChecker, Encoding, KeyShareEntry, Random, SessionId, SupportedEcPointFormats,
