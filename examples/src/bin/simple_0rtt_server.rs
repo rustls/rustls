@@ -23,6 +23,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ServerConfig, ServerConnection};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
+use rustls_util::complete_io;
 
 fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();
@@ -108,6 +109,6 @@ fn main() -> Result<(), Box<dyn StdError>> {
         conn.writer()
             .write_all(b"Hello from the server")?;
         conn.send_close_notify();
-        conn.complete_io(&mut stream)?;
+        complete_io(&mut stream, &mut conn)?;
     }
 }

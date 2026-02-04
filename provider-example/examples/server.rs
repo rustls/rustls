@@ -5,7 +5,7 @@ use rustls::ServerConfig;
 use rustls::crypto::Identity;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::Acceptor;
-use rustls_util::KeyLogFile;
+use rustls_util::{KeyLogFile, complete_io};
 
 fn main() {
     env_logger::init();
@@ -39,11 +39,11 @@ fn main() {
                 // Note: do not use `unwrap()` on IO in real programs!
                 conn.writer().write_all(msg).unwrap();
                 conn.write_tls(&mut stream).unwrap();
-                conn.complete_io(&mut stream).unwrap();
+                complete_io(&mut stream, &mut conn).unwrap();
 
                 conn.send_close_notify();
                 conn.write_tls(&mut stream).unwrap();
-                conn.complete_io(&mut stream).unwrap();
+                complete_io(&mut stream, &mut conn).unwrap();
             }
             Err((err, _)) => {
                 eprintln!("{err}");

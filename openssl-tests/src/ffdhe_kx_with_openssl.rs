@@ -10,6 +10,7 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection};
 use rustls_aws_lc_rs as provider;
+use rustls_util::complete_io;
 
 use crate::ffdhe::{self, FFDHE2048_GROUP};
 use crate::utils::verify_openssl3_available;
@@ -41,9 +42,8 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
                 .writer()
                 .write_all(message.as_bytes())
                 .unwrap();
-            server
-                .complete_io(&mut tcp_stream)
-                .unwrap();
+
+            complete_io(&mut tcp_stream, &mut server).unwrap();
             tcp_stream.flush().unwrap();
         }
     });
@@ -140,9 +140,8 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
             .writer()
             .write_all(message.as_bytes())
             .unwrap();
-        client
-            .complete_io(&mut tcp_stream)
-            .unwrap();
+
+        complete_io(&mut tcp_stream, &mut client).unwrap();
         client.send_close_notify();
         client
             .write_tls(&mut tcp_stream)

@@ -163,6 +163,7 @@ mod server {
     };
     use rustls::{DistinguishedName, ServerConfig, ServerConnection};
     use rustls_aws_lc_rs as provider;
+    use rustls_util::complete_io;
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
     pub(super) fn make_config(server_private_key: &str, client_pub_key: &str) -> ServerConfig {
@@ -207,11 +208,11 @@ mod server {
         let (mut stream, _) = listener.accept()?;
 
         let mut conn = ServerConnection::new(Arc::new(config)).unwrap();
-        conn.complete_io(&mut stream)?;
+        complete_io(&mut stream, &mut conn)?;
 
         conn.writer()
             .write_all(b"Hello from the server")?;
-        conn.complete_io(&mut stream)?;
+        complete_io(&mut stream, &mut conn)?;
 
         let mut buf = [0; 128];
 
@@ -219,7 +220,7 @@ mod server {
             match conn.reader().read(&mut buf) {
                 Ok(len) => {
                     conn.send_close_notify();
-                    conn.complete_io(&mut stream)?;
+                    complete_io(&mut stream, &mut conn)?;
                     return Ok(String::from_utf8_lossy(&buf[..len]).to_string());
                 }
                 Err(err) if err.kind() == ErrorKind::WouldBlock => {

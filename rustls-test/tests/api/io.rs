@@ -23,7 +23,7 @@ use rustls_test::{
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_mandatory_client_auth, server_name, transfer, transfer_eof,
 };
-use rustls_util::{Stream, StreamOwned};
+use rustls_util::{Stream, StreamOwned, complete_io};
 
 use super::{ALL_VERSIONS, provider};
 
@@ -388,9 +388,7 @@ fn client_complete_io_for_handshake() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     assert!(client.is_handshaking());
-    let (rdlen, wrlen) = client
-        .complete_io(&mut OtherSession::new(&mut server))
-        .unwrap();
+    let (rdlen, wrlen) = complete_io(&mut OtherSession::new(&mut server), &mut client).unwrap();
     assert!(rdlen > 0 && wrlen > 0);
     assert!(!client.is_handshaking());
     assert!(!client.wants_write());
@@ -401,9 +399,8 @@ fn buffered_client_complete_io_for_handshake() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
     assert!(client.is_handshaking());
-    let (rdlen, wrlen) = client
-        .complete_io(&mut OtherSession::new_buffered(&mut server))
-        .unwrap();
+    let (rdlen, wrlen) =
+        complete_io(&mut OtherSession::new_buffered(&mut server), &mut client).unwrap();
     assert!(rdlen > 0 && wrlen > 0);
     assert!(!client.is_handshaking());
     assert!(!client.wants_write());
@@ -415,9 +412,7 @@ fn client_complete_io_for_handshake_eof() {
     let mut input = io::Cursor::new(Vec::new());
 
     assert!(client.is_handshaking());
-    let err = client
-        .complete_io(&mut input)
-        .unwrap_err();
+    let err = complete_io(&mut input, &mut client).unwrap_err();
     assert_eq!(io::ErrorKind::UnexpectedEof, err.kind());
 }
 
@@ -439,7 +434,7 @@ fn client_complete_io_for_write() {
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut server);
-            let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
+            let (rdlen, wrlen) = complete_io(&mut pipe, &mut client).unwrap();
             assert!(rdlen == 0 && wrlen > 0);
             println!("{:?}", pipe.writevs);
             assert_eq!(pipe.writevs, vec![vec![42, 42]]);
@@ -457,8 +452,7 @@ fn client_complete_io_with_nonblocking_io() {
 
     // absolutely no progress writing ClientHello
     assert_eq!(
-        client
-            .complete_io(&mut TestNonBlockIo::default())
+        complete_io(&mut TestNonBlockIo::default(), &mut client)
             .unwrap_err()
             .kind(),
         io::ErrorKind::WouldBlock
@@ -467,34 +461,41 @@ fn client_complete_io_with_nonblocking_io() {
     // a little progress writing ClientHello
     let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert_eq!(
-        client
-            .complete_io(&mut TestNonBlockIo {
+        complete_io(
+            &mut TestNonBlockIo {
                 writes: vec![1],
                 reads: vec![],
-            })
-            .unwrap(),
+            },
+            &mut client
+        )
+        .unwrap(),
         (0, 1)
     );
 
     // complete writing ClientHello
     let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     assert_eq!(
-        client
-            .complete_io(&mut TestNonBlockIo {
+        complete_io(
+            &mut TestNonBlockIo {
                 writes: vec![4096],
                 reads: vec![],
-            })
-            .unwrap_err()
-            .kind(),
+            },
+            &mut client
+        )
+        .unwrap_err()
+        .kind(),
         io::ErrorKind::WouldBlock
     );
 
     // complete writing ClientHello, partial read of ServerHello
     let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-    let (rd, wr) = dbg!(client.complete_io(&mut TestNonBlockIo {
-        writes: vec![4096],
-        reads: vec![vec![ContentType::Handshake.into()]],
-    }))
+    let (rd, wr) = dbg!(complete_io(
+        &mut TestNonBlockIo {
+            writes: vec![4096],
+            reads: vec![vec![ContentType::Handshake.into()]],
+        },
+        &mut client
+    ))
     .unwrap();
     assert_eq!(rd, 1);
     assert!(wr > 1);
@@ -505,12 +506,14 @@ fn client_complete_io_with_nonblocking_io() {
 
     // read
     assert_eq!(
-        client
-            .complete_io(&mut TestNonBlockIo {
+        complete_io(
+            &mut TestNonBlockIo {
                 reads: vec![vec![ContentType::ApplicationData.into()]],
                 writes: vec![],
-            })
-            .unwrap(),
+            },
+            &mut client
+        )
+        .unwrap(),
         (1, 0)
     );
 
@@ -522,24 +525,28 @@ fn client_complete_io_with_nonblocking_io() {
 
     // no progress
     assert_eq!(
-        client
-            .complete_io(&mut TestNonBlockIo {
+        complete_io(
+            &mut TestNonBlockIo {
                 reads: vec![],
                 writes: vec![],
-            })
-            .unwrap_err()
-            .kind(),
+            },
+            &mut client
+        )
+        .unwrap_err()
+        .kind(),
         io::ErrorKind::WouldBlock
     );
 
     // some write progress
     assert_eq!(
-        client
-            .complete_io(&mut TestNonBlockIo {
+        complete_io(
+            &mut TestNonBlockIo {
                 reads: vec![],
                 writes: vec![1],
-            })
-            .unwrap(),
+            },
+            &mut client
+        )
+        .unwrap(),
         (0, 1)
     );
 }
@@ -562,7 +569,7 @@ fn buffered_client_complete_io_for_write() {
             .unwrap();
         {
             let mut pipe = OtherSession::new_buffered(&mut server);
-            let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
+            let (rdlen, wrlen) = complete_io(&mut pipe, &mut client).unwrap();
             assert!(rdlen == 0 && wrlen > 0);
             println!("{:?}", pipe.writevs);
             assert_eq!(pipe.writevs, vec![vec![42, 42]]);
@@ -588,7 +595,7 @@ fn client_complete_io_for_read() {
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut server);
-            let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
+            let (rdlen, wrlen) = complete_io(&mut pipe, &mut client).unwrap();
             assert!(rdlen > 0 && wrlen == 0);
             assert_eq!(pipe.reads, 1);
         }
@@ -603,9 +610,7 @@ fn server_complete_io_for_handshake() {
         let (mut client, mut server) = make_pair(*kt, &provider);
 
         assert!(server.is_handshaking());
-        let (rdlen, wrlen) = server
-            .complete_io(&mut OtherSession::new(&mut client))
-            .unwrap();
+        let (rdlen, wrlen) = complete_io(&mut OtherSession::new(&mut client), &mut server).unwrap();
         assert!(rdlen > 0 && wrlen > 0);
         assert!(!server.is_handshaking());
         assert!(!server.wants_write());
@@ -618,9 +623,7 @@ fn server_complete_io_for_handshake_eof() {
     let mut input = io::Cursor::new(Vec::new());
 
     assert!(server.is_handshaking());
-    let err = server
-        .complete_io(&mut input)
-        .unwrap_err();
+    let err = complete_io(&mut input, &mut server).unwrap_err();
     assert_eq!(io::ErrorKind::UnexpectedEof, err.kind());
 }
 
@@ -642,7 +645,7 @@ fn server_complete_io_for_write() {
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut client);
-            let (rdlen, wrlen) = server.complete_io(&mut pipe).unwrap();
+            let (rdlen, wrlen) = complete_io(&mut pipe, &mut server).unwrap();
             assert!(rdlen == 0 && wrlen > 0);
             assert_eq!(pipe.writevs, vec![vec![42, 42]]);
         }
@@ -671,16 +674,12 @@ fn server_complete_io_for_write_eof() {
             let mut eof_writer = EofWriter::<BYTES_BEFORE_EOF>::default();
 
             // Only BYTES_BEFORE_EOF should be written.
-            let (rdlen, wrlen) = server
-                .complete_io(&mut eof_writer)
-                .unwrap();
+            let (rdlen, wrlen) = complete_io(&mut eof_writer, &mut server).unwrap();
             assert_eq!(rdlen, 0);
             assert_eq!(wrlen, BYTES_BEFORE_EOF);
 
             // Now nothing should be written.
-            let (rdlen, wrlen) = server
-                .complete_io(&mut eof_writer)
-                .unwrap();
+            let (rdlen, wrlen) = complete_io(&mut eof_writer, &mut server).unwrap();
             assert_eq!(rdlen, 0);
             assert_eq!(wrlen, 0);
         }
@@ -724,7 +723,7 @@ fn server_complete_io_for_read() {
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut client);
-            let (rdlen, wrlen) = server.complete_io(&mut pipe).unwrap();
+            let (rdlen, wrlen) = complete_io(&mut pipe, &mut server).unwrap();
             assert!(rdlen > 0 && wrlen == 0);
             assert_eq!(pipe.reads, 1);
         }
@@ -740,7 +739,7 @@ fn server_complete_io_for_handshake_ending_with_alert() {
     assert!(server.is_handshaking());
 
     let mut pipe = OtherSession::new_fails(&mut client);
-    let rc = server.complete_io(&mut pipe);
+    let rc = complete_io(&mut pipe, &mut server);
     assert!(rc.is_err(), "server io failed due to handshake failure");
     assert!(!server.wants_write(), "but server did send its alert");
     assert_eq!(
@@ -1915,8 +1914,7 @@ fn test_complete_io_errors_if_close_notify_received_too_early() {
 
     let mut stream = FakeStream(client_hello_followed_by_close_notify_alert);
     assert_eq!(
-        server
-            .complete_io(&mut stream)
+        complete_io(&mut stream, &mut server)
             .unwrap_err()
             .kind(),
         io::ErrorKind::UnexpectedEof
@@ -1948,15 +1946,11 @@ fn test_complete_io_with_no_io_needed() {
     assert!(!server.wants_write());
     assert!(!server.wants_read());
     assert_eq!(
-        client
-            .complete_io(&mut FakeStream(&[]))
-            .unwrap(),
+        complete_io(&mut FakeStream(&[]), &mut client).unwrap(),
         (0, 0)
     );
     assert_eq!(
-        server
-            .complete_io(&mut FakeStream(&[]))
-            .unwrap(),
+        complete_io(&mut FakeStream(&[]), &mut server).unwrap(),
         (0, 0)
     );
 }
