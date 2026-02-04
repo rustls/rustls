@@ -214,8 +214,6 @@ mod benchmarks {
             &[
                 include_bytes!("data/cert-rustlang.0.der"),
                 include_bytes!("data/cert-rustlang.1.der"),
-                include_bytes!("data/cert-rustlang.2.der"),
-                include_bytes!("data/cert-rustlang.3.der"),
             ],
         );
         b.iter(|| ctx.verify_once());
@@ -257,7 +255,8 @@ impl Context {
                 .copied()
                 .map(|bytes| CertificateDer::from(bytes.to_vec()))
                 .collect(),
-            now: UnixTime::since_unix_epoch(Duration::from_secs(1_746_605_469)),
+            // Feb 4, 2026, around 11:41 UTC
+            now: UnixTime::since_unix_epoch(Duration::from_secs(1_770_205_316)),
             verifier: WebPkiServerVerifier::builder(Arc::new(roots), provider)
                 .build()
                 .unwrap(),
