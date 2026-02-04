@@ -6,9 +6,10 @@ use std::io;
 
 use kernel::KernelConnection;
 
+use crate::ConnectionOutputs;
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Input, JoinOutput,
-    Output, ReceivePath, SplitReceive, UnborrowedPayload, maybe_send_fatal_alert,
+    Output, ReceivePath, SendPath, SplitReceive, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -882,36 +883,35 @@ impl<Side: SideData> ConnectionCore<Side> {
         if self.common.is_handshaking() {
             return Err(Error::HandshakeNotComplete);
         }
+        Self::from_parts_into_kernel_connection(
+            &mut self.common.send,
+            self.common.recv,
+            self.common.outputs,
+            self.state?,
+        )
+    }
 
-        if !self.common.send.sendable_tls.is_empty() {
+    pub(crate) fn from_parts_into_kernel_connection(
+        send: &mut SendPath,
+        recv: ReceivePath,
+        outputs: ConnectionOutputs,
+        state: Side::State,
+    ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
+        if !send.sendable_tls.is_empty() {
             return Err(ApiMisuse::SecretExtractionWithPendingSendableData.into());
         }
 
-        let state = self.state?;
+        let read_seq = recv.decrypt_state.read_seq();
+        let write_seq = send.encrypt_state.write_seq();
 
-        let read_seq = self
-            .common
-            .recv
-            .decrypt_state
-            .read_seq();
-        let write_seq = self
-            .common
-            .send
-            .encrypt_state
-            .write_seq();
-
-        let tls13_key_schedule = self
-            .common
-            .send
-            .tls13_key_schedule
-            .take();
+        let tls13_key_schedule = send.tls13_key_schedule.take();
 
         let (secrets, state) = state.into_external_state(&tls13_key_schedule)?;
         let secrets = ExtractedSecrets {
             tx: (write_seq, secrets.tx),
             rx: (read_seq, secrets.rx),
         };
-        let external = KernelConnection::new(state, self.common, tls13_key_schedule)?;
+        let external = KernelConnection::new(state, outputs, tls13_key_schedule)?;
 
         Ok((secrets, external))
     }

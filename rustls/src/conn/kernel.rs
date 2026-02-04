@@ -39,7 +39,7 @@ use crate::enums::ProtocolVersion;
 use crate::error::ApiMisuse;
 use crate::msgs::{Codec, NewSessionTicketPayloadTls13};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::{CommonState, ConnectionTrafficSecrets, Error, SupportedCipherSuite};
+use crate::{ConnectionOutputs, ConnectionTrafficSecrets, Error, SupportedCipherSuite};
 
 /// A kernel connection.
 ///
@@ -61,11 +61,10 @@ pub struct KernelConnection<Side> {
 impl<Side> KernelConnection<Side> {
     pub(crate) fn new(
         state: Box<dyn KernelState>,
-        common: CommonState,
+        outputs: ConnectionOutputs,
         tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<Self, Error> {
-        let (negotiated_version, suite) = common
-            .outputs
+        let (negotiated_version, suite) = outputs
             .into_kernel_parts()
             .ok_or(Error::HandshakeNotComplete)?;
         Ok(Self {
