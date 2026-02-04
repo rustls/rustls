@@ -3,12 +3,16 @@ use std::io::{BufRead, IoSlice, Read, Result, Write};
 
 use rustls::{ConnectionCommon, SideData};
 
+use crate::complete_io;
+
 /// This type implements `io::Read` and `io::Write`, encapsulating
 /// a Connection `C` and an underlying transport `T`, such as a socket.
 ///
-/// Relies on [`ConnectionCommon::complete_io()`] to perform the necessary I/O.
+/// Relies on [`complete_io()`] to perform the necessary I/O.
 ///
 /// This allows you to use a rustls Connection like a normal stream.
+///
+/// [`complete_io()`]: crate::complete_io()
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
@@ -35,11 +39,11 @@ where
     /// If we have data to write, write it all.
     fn complete_prior_io(&mut self) -> Result<()> {
         if self.conn.is_handshaking() {
-            self.conn.complete_io(self.sock)?;
+            complete_io(self.sock, self.conn)?;
         }
 
         if self.conn.wants_write() {
-            self.conn.complete_io(self.sock)?;
+            complete_io(self.sock, self.conn)?;
         }
 
         Ok(())
@@ -53,7 +57,7 @@ where
         // needed to get more plaintext, which we must do if EOF has not been
         // hit.
         while self.conn.wants_read() {
-            if self.conn.complete_io(self.sock)?.0 == 0 {
+            if complete_io(self.sock, self.conn)?.0 == 0 {
                 break;
             }
         }
@@ -117,7 +121,7 @@ where
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = self.conn.complete_io(self.sock);
+        let _ = complete_io(self.sock, self.conn);
 
         Ok(len)
     }
@@ -133,7 +137,7 @@ where
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = self.conn.complete_io(self.sock);
+        let _ = complete_io(self.sock, self.conn);
 
         Ok(len)
     }
@@ -143,7 +147,7 @@ where
 
         self.conn.writer().flush()?;
         if self.conn.wants_write() {
-            self.conn.complete_io(self.sock)?;
+            complete_io(self.sock, self.conn)?;
         }
         Ok(())
     }
@@ -152,9 +156,11 @@ where
 /// This type implements `io::Read` and `io::Write`, encapsulating
 /// and owning a Connection `C` and an underlying transport `T`, such as a socket.
 ///
-/// Relies on [`ConnectionCommon::complete_io()`] to perform the necessary I/O.
+/// Relies on [`complete_io()`] to perform the necessary I/O.
 ///
 /// This allows you to use a rustls Connection like a normal stream.
+///
+/// [`complete_io()`]: crate::complete_io()
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
