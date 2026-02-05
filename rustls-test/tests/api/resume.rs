@@ -14,7 +14,7 @@ use rustls::crypto::{CertificateIdentity, Identity};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::server::ServerSessionKey;
-use rustls::{ClientConfig, HandshakeKind, ServerConfig, ServerConnection};
+use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt,
     do_handshake, do_handshake_until_error, make_client_config, make_client_config_with_auth,

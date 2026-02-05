@@ -45,7 +45,7 @@ use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
-use rustls::{ClientConfig, RootCertStore};
+use rustls::{ClientConfig, Connection, RootCertStore};
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_util::{KeyLogFile, Stream};
 

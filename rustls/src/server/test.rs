@@ -9,6 +9,7 @@ use super::{
     CommonServerSessionValue, ServerConfig, ServerConnection, ServerSessionValue,
     Tls13ServerSessionValue,
 };
+use crate::Connection;
 use crate::common_state::Input;
 use crate::crypto::cipher::FakeAead;
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};

@@ -1343,11 +1343,11 @@ pub enum ApiMisuse {
 
     /// The [`KeyingMaterialExporter`][] was already consumed.
     ///
-    /// Methods that obtain an exporter (eg, [`ConnectionCommon::exporter()`][]) can only
+    /// Methods that obtain an exporter (eg, [`Connection::exporter()`][]) can only
     /// be used once.  This error is returned on subsequent calls.
     ///
     /// [`KeyingMaterialExporter`]: crate::KeyingMaterialExporter
-    /// [`ConnectionCommon::exporter()`]: crate::ConnectionCommon::exporter()
+    /// [`Connection::exporter()`]: crate::Connection::exporter()
     ExporterAlreadyUsed,
 
     /// The `context` parameter to [`KeyingMaterialExporter::derive()`][] was too long.

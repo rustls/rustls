@@ -8,9 +8,13 @@ use pki_types::ServerName;
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
-use crate::common_state::{CommonState, EarlyDataEvent, Event, Output, Protocol, Side};
+use crate::common_state::{
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, IoState, Output, Protocol, Side,
+};
 use crate::conn::unbuffered::EncryptError;
-use crate::conn::{ConnectionCommon, ConnectionCore, KeyingMaterialExporter};
+use crate::conn::{
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, Writer,
+};
 #[cfg(doc)]
 use crate::crypto;
 use crate::enums::ApplicationProtocol;
@@ -97,10 +101,78 @@ impl ClientConnection {
                     .send_early_plaintext(&data[..sz])
             })
     }
+
+    /// Returns the number of TLS1.3 tickets that have been received.
+    pub fn tls13_tickets_received(&self) -> u32 {
+        self.inner
+            .core
+            .side
+            .outputs
+            .tls13_tickets_received()
+    }
+}
+
+impl Connection for ClientConnection {
+    fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+        self.inner.read_tls(rd)
+    }
+
+    fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+        self.inner.write_tls(wr)
+    }
+
+    fn wants_read(&self) -> bool {
+        self.inner.wants_read()
+    }
+
+    fn wants_write(&self) -> bool {
+        self.inner.wants_write()
+    }
+
+    fn reader(&mut self) -> Reader<'_> {
+        self.inner.reader()
+    }
+
+    fn writer(&mut self) -> Writer<'_> {
+        self.inner.writer()
+    }
+
+    fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        self.inner.process_new_packets()
+    }
+
+    fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.inner.exporter()
+    }
+
+    fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        self.inner.dangerous_extract_secrets()
+    }
+
+    fn set_buffer_limit(&mut self, limit: Option<usize>) {
+        self.inner.set_buffer_limit(limit)
+    }
+
+    fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
+        self.inner
+            .set_plaintext_buffer_limit(limit)
+    }
+
+    fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+        self.inner.refresh_traffic_keys()
+    }
+
+    fn send_close_notify(&mut self) {
+        self.inner.send_close_notify();
+    }
+
+    fn is_handshaking(&self) -> bool {
+        self.inner.is_handshaking()
+    }
 }
 
 impl Deref for ClientConnection {
-    type Target = ConnectionCommon<ClientConnectionData>;
+    type Target = ConnectionOutputs;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -110,25 +182,6 @@ impl Deref for ClientConnection {
 impl DerefMut for ClientConnection {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
-    }
-}
-
-#[doc(hidden)]
-impl<'a> TryFrom<&'a mut crate::Connection> for &'a mut ClientConnection {
-    type Error = ();
-
-    fn try_from(value: &'a mut crate::Connection) -> Result<Self, Self::Error> {
-        use crate::Connection::*;
-        match value {
-            Client(conn) => Ok(conn),
-            Server(_) => Err(()),
-        }
-    }
-}
-
-impl From<ClientConnection> for crate::Connection {
-    fn from(conn: ClientConnection) -> Self {
-        Self::Client(conn)
     }
 }
 
@@ -206,14 +259,14 @@ impl<'a> WriteEarlyData<'a> {
     /// if called more than once per connection.
     ///
     /// If you are looking for the normal exporter, this is available from
-    /// [`ConnectionCommon::exporter()`].
+    /// [`Connection::exporter()`].
     ///
     /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
     /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
     /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
-    /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
+    /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.sess.core.early_exporter()
+        self.sess.inner.core.early_exporter()
     }
 }
 

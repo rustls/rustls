@@ -33,7 +33,7 @@ use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::{NoServerSessionStorage, WebPkiClientVerifier};
-use rustls::{RootCertStore, ServerConfig, ServerConnection};
+use rustls::{Connection, RootCertStore, ServerConfig, ServerConnection};
 use rustls_aws_lc_rs as provider;
 use rustls_util::KeyLogFile;
 

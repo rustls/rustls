@@ -4,7 +4,6 @@
 // etc. because it's unstable at the time of writing.
 
 use core::num::NonZeroUsize;
-use core::ops::{Deref, DerefMut};
 use core::time::Duration;
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -18,8 +17,8 @@ use rustls::crypto::{CipherSuite, CryptoProvider, Identity};
 use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
-    ClientConfig, ClientConnection, ConnectionCommon, HandshakeKind, RootCertStore, ServerConfig,
-    ServerConnection, SideData,
+    ClientConfig, ClientConnection, Connection, HandshakeKind, RootCertStore, ServerConfig,
+    ServerConnection,
 };
 use rustls_test::KeyType;
 
@@ -970,18 +969,12 @@ where
     r
 }
 
-fn transfer<L, R, LS, RS>(
+fn transfer(
     buffers: &mut TempBuffers,
-    left: &mut L,
-    right: &mut R,
+    left: &mut impl Connection,
+    right: &mut impl Connection,
     expect_data: Option<usize>,
-) -> f64
-where
-    L: DerefMut + Deref<Target = ConnectionCommon<LS>>,
-    R: DerefMut + Deref<Target = ConnectionCommon<RS>>,
-    LS: SideData,
-    RS: SideData,
-{
+) -> f64 {
     let mut read_time = 0f64;
     let mut data_left = expect_data;
 
