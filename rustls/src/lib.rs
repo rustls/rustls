@@ -408,9 +408,7 @@ pub mod internal {
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind, IoState};
-pub use crate::conn::{
-    Connection, ConnectionCommon, KeyingMaterialExporter, Reader, SideData, Writer, kernel,
-};
+pub use crate::conn::{Connection, KeyingMaterialExporter, Reader, SideData, Writer, kernel};
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::suites::{

@@ -3,7 +3,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::{ClientConfig, ServerConfig, ServerConnection};
+use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection};
 
 // These tests exercise rustls_fuzzing_provider and makes sure it can
 // handshake with itself without errors.

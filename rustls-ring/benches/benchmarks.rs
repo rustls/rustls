@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bencher::{Bencher, benchmark_group, benchmark_main};
-use rustls::ServerConnection;
+use rustls::{Connection, ServerConnection};
 use rustls_test::{KeyType, TestNonBlockIo, make_server_config};
 
 fn bench_ewouldblock(c: &mut Bencher) {

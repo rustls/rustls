@@ -1,5 +1,4 @@
 use core::hash::Hasher;
-use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 use std::borrow::Cow;
 use std::io;
@@ -32,9 +31,9 @@ use rustls::server::{
     ClientHello, ClientVerifierBuilder, ServerCredentialResolver, WebPkiClientVerifier,
 };
 use rustls::{
-    ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionCommon,
-    ConnectionTrafficSecrets, DistinguishedName, RootCertStore, ServerConfig, ServerConnection,
-    SideData, SupportedCipherSuite, WantsVerifier,
+    ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionTrafficSecrets,
+    DistinguishedName, RootCertStore, ServerConfig, ServerConnection, SupportedCipherSuite,
+    WantsVerifier,
 };
 
 macro_rules! embed_files {
@@ -201,10 +200,7 @@ embed_files! {
     (RSA_4096_INTER_KEY, "rsa-4096", "inter.key");
 }
 
-pub fn transfer(
-    left: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-    right: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-) -> usize {
+pub fn transfer(left: &mut impl Connection, right: &mut impl Connection) -> usize {
     let mut buf = [0u8; 262144];
     let mut total = 0;
 
@@ -231,7 +227,7 @@ pub fn transfer(
     total
 }
 
-pub fn transfer_eof(conn: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>) {
+pub fn transfer_eof(conn: &mut impl Connection) {
     let empty_buf = [0u8; 0];
     let empty_cursor: &mut dyn io::Read = &mut &empty_buf[..];
     let sz = conn.read_tls(empty_cursor).unwrap();
@@ -245,7 +241,11 @@ pub enum Altered {
     Raw(Vec<u8>),
 }
 
-pub fn transfer_altered<F>(left: &mut Connection, filter: F, right: &mut Connection) -> usize
+pub fn transfer_altered<F>(
+    left: &mut impl Connection,
+    filter: F,
+    right: &mut impl Connection,
+) -> usize
 where
     F: Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
 {
@@ -753,10 +753,7 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
     (client_config, server_config)
 }
 
-pub fn do_handshake(
-    client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-    server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-) -> (usize, usize) {
+pub fn do_handshake(client: &mut impl Connection, server: &mut impl Connection) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
         to_server += transfer(client, server);
@@ -792,14 +789,11 @@ pub fn do_handshake_until_error(
 }
 
 pub fn do_handshake_altered(
-    client: ClientConnection,
+    mut client: ClientConnection,
     alter_server_message: impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
     alter_client_message: impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
-    server: ServerConnection,
+    mut server: ServerConnection,
 ) -> Result<(), ErrorFromPeer> {
-    let mut client: Connection = Connection::Client(client);
-    let mut server: Connection = Connection::Server(server);
-
     while server.is_handshaking() || client.is_handshaking() {
         transfer_altered(&mut client, &alter_client_message, &mut server);
 
@@ -1351,7 +1345,7 @@ impl RawTls {
     pub fn encrypt_and_send(
         &mut self,
         msg: &EncodedMessage<Payload<'_>>,
-        peer: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        peer: &mut impl Connection,
     ) {
         let data = self
             .encrypter
@@ -1365,7 +1359,7 @@ impl RawTls {
 
     pub fn receive_and_decrypt(
         &mut self,
-        peer: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        peer: &mut impl Connection,
         f: impl Fn(EncodedMessage<&[u8]>),
     ) {
         let mut data = vec![];
@@ -1563,11 +1557,7 @@ impl ServerCredentialResolver for ServerCheckCertResolve {
     }
 }
 
-pub struct OtherSession<'a, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
+pub struct OtherSession<'a, C: Connection> {
     sess: &'a mut C,
     pub reads: usize,
     pub writevs: Vec<Vec<usize>>,
@@ -1578,11 +1568,7 @@ where
     buffer: Vec<Vec<u8>>,
 }
 
-impl<'a, C, S> OtherSession<'a, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
+impl<'a, C: Connection> OtherSession<'a, C> {
     pub fn new(sess: &'a mut C) -> Self {
         OtherSession {
             sess,
@@ -1644,22 +1630,14 @@ where
     }
 }
 
-impl<C, S> io::Read for OtherSession<'_, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
+impl<C: Connection> io::Read for OtherSession<'_, C> {
     fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
         self.reads += 1;
         self.sess.write_tls(&mut b)
     }
 }
 
-impl<C, S> io::Write for OtherSession<'_, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
+impl<C: Connection> io::Write for OtherSession<'_, C> {
     fn write(&mut self, _: &[u8]) -> io::Result<usize> {
         unreachable!()
     }

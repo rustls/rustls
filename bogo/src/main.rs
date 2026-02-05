@@ -4,6 +4,7 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
+use core::any::Any;
 use core::fmt::{Debug, Formatter};
 use core::hash::Hasher;
 use std::borrow::Cow;
@@ -105,11 +106,11 @@ pub fn main() {
                     .connect(server_name)
                     .build()
                     .unwrap();
-                exec(&opts, Connection::Client(sess), &key_log, i);
+                exec(&opts, sess, &key_log, i);
             }
             SideConfig::Server(config) => {
                 let sess = ServerConnection::new(config.clone()).unwrap();
-                exec(&opts, Connection::Server(sess), &key_log, i);
+                exec(&opts, sess, &key_log, i);
             }
         }
 
@@ -1779,7 +1780,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
     }
 }
 
-fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
+fn flush(sess: &mut impl Connection, conn: &mut net::TcpStream) {
     while sess.wants_write() {
         if let Err(err) = sess.write_tls(conn) {
             println!("IO error: {err:?}");
@@ -1789,20 +1790,19 @@ fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
     conn.flush().unwrap();
 }
 
-fn client(conn: &mut Connection) -> &mut ClientConnection {
-    conn.try_into().unwrap()
+fn client(conn: &mut dyn Any) -> &mut ClientConnection {
+    conn.downcast_mut::<ClientConnection>()
+        .unwrap()
 }
 
-fn server(conn: &mut Connection) -> &mut ServerConnection {
-    match conn {
-        Connection::Server(s) => s,
-        _ => panic!("Connection is not a ServerConnection"),
-    }
+fn server(conn: &mut dyn Any) -> &mut ServerConnection {
+    conn.downcast_mut::<ServerConnection>()
+        .unwrap()
 }
 
 const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
 
-fn after_read(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) {
+fn after_read(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream) {
     if let Err(err) = sess.process_new_packets() {
         flush(sess, conn); /* send any alerts before exiting */
         orderly_close(conn);
@@ -1823,7 +1823,7 @@ fn orderly_close(conn: &mut net::TcpStream) {
     let _ = conn.shutdown(net::Shutdown::Read);
 }
 
-fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream, n: usize) {
+fn read_n_bytes(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream, n: usize) {
     let mut bytes = [0u8; MAX_MESSAGE_SIZE];
     match conn.read(&mut bytes[..n]) {
         Ok(count) => {
@@ -1838,7 +1838,7 @@ fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream
     after_read(opts, sess, conn);
 }
 
-fn read_all_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) {
+fn read_all_bytes(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream) {
     match sess.read_tls(conn) {
         Ok(_) => {}
         Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
@@ -1848,7 +1848,7 @@ fn read_all_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStre
     after_read(opts, sess, conn);
 }
 
-fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize) {
+fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMemo, count: usize) {
     let mut sent_message = false;
 
     let addrs = [

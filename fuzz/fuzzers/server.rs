@@ -7,7 +7,7 @@ use std::io;
 use std::sync::Arc;
 
 use rustls::server::{Accepted, Acceptor};
-use rustls::{ServerConfig, ServerConnection};
+use rustls::{Connection, ServerConfig, ServerConnection};
 
 fuzz_target!(|data: &[u8]| {
     let _ = env_logger::try_init();
