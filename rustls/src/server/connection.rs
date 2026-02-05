@@ -29,6 +29,7 @@ use crate::msgs::{
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::vecbuf::ChunkVecBuffer;
+use crate::{ConnectionOutputs, Reader, Writer};
 
 /// This represents a single TLS server connection.
 ///
@@ -92,7 +93,7 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
         assert!(data.len() < 2usize.pow(15));
-        match &mut self.core.state {
+        match &mut self.inner.core.state {
             Ok(st) => st.set_resumption_data(data),
             Err(e) => Err(e.clone()),
         }
@@ -129,15 +130,67 @@ impl ServerConnection {
     }
 }
 
-impl Debug for ServerConnection {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ServerConnection")
-            .finish_non_exhaustive()
+impl crate::conn::Connection for ServerConnection {
+    fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+        self.inner.read_tls(rd)
+    }
+
+    fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+        self.inner.write_tls(wr)
+    }
+
+    fn wants_read(&self) -> bool {
+        self.inner.wants_read()
+    }
+
+    fn wants_write(&self) -> bool {
+        self.inner.wants_write()
+    }
+
+    fn reader(&mut self) -> Reader<'_> {
+        self.inner.reader()
+    }
+
+    fn writer(&mut self) -> Writer<'_> {
+        self.inner.writer()
+    }
+
+    fn process_new_packets(&mut self) -> Result<crate::IoState, Error> {
+        self.inner.process_new_packets()
+    }
+
+    fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        self.inner.exporter()
+    }
+
+    fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        self.inner.dangerous_extract_secrets()
+    }
+
+    fn set_buffer_limit(&mut self, limit: Option<usize>) {
+        self.inner.set_buffer_limit(limit)
+    }
+
+    fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
+        self.inner
+            .set_plaintext_buffer_limit(limit)
+    }
+
+    fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+        self.inner.refresh_traffic_keys()
+    }
+
+    fn send_close_notify(&mut self) {
+        self.inner.send_close_notify();
+    }
+
+    fn is_handshaking(&self) -> bool {
+        self.inner.is_handshaking()
     }
 }
 
 impl Deref for ServerConnection {
-    type Target = ConnectionCommon<ServerConnectionData>;
+    type Target = ConnectionOutputs;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -150,16 +203,17 @@ impl DerefMut for ServerConnection {
     }
 }
 
-impl From<ServerConnection> for crate::Connection {
-    fn from(conn: ServerConnection) -> Self {
-        Self::Server(conn)
+impl Debug for ServerConnection {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ServerConnection")
+            .finish_non_exhaustive()
     }
 }
 
 /// Handle a server-side connection before configuration is available.
 ///
 /// `Acceptor` allows the caller to choose a [`ServerConfig`] after reading
-/// the [`ClientHello`] of an incoming connection. This is useful for
+/// the [`ClientHello`][super::ClientHello] of an incoming connection. This is useful for
 /// servers that choose different certificates or cipher suites based on the
 /// characteristics of the `ClientHello`. In particular it is useful for
 /// servers that need to do some I/O to load a certificate and its private key

@@ -161,7 +161,7 @@ mod server {
     use rustls::server::danger::{
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
-    use rustls::{DistinguishedName, ServerConfig, ServerConnection};
+    use rustls::{Connection, DistinguishedName, ServerConfig, ServerConnection};
     use rustls_aws_lc_rs as provider;
     use rustls_util::complete_io;
 

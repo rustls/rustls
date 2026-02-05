@@ -34,7 +34,7 @@ use crate::verify::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
     SignatureVerificationInput,
 };
-use crate::{DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore};
+use crate::{Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore};
 
 /// Tests that session_ticket(35) extension
 /// is not sent if the client does not support TLS 1.2.
