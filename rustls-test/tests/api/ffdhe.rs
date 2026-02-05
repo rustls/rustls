@@ -13,7 +13,7 @@ use rustls::crypto::kx::{
 };
 use rustls::crypto::{CipherSuite, CipherSuiteCommon, CryptoProvider};
 use rustls::enums::ProtocolVersion;
-use rustls::{ClientConfig, ServerConfig, SupportedCipherSuite, Tls12CipherSuite};
+use rustls::{ClientConfig, Connection, ServerConfig, SupportedCipherSuite, Tls12CipherSuite};
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, do_handshake, do_suite_and_kx_test,
     make_pair_for_arc_configs, make_pair_for_configs, provider_with_one_suite,

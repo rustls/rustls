@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use rustls::Connection;
 use rustls::crypto::Identity;
 use rustls::enums::CertificateType;
 use rustls::error::{Error, PeerIncompatible};

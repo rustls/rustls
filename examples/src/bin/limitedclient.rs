@@ -8,7 +8,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::{ClientConfig, RootCertStore};
+use rustls::{ClientConfig, Connection, RootCertStore};
 use rustls_aws_lc_rs as provider;
 use rustls_util::Stream;
 

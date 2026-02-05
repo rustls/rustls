@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 
 use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::{
-    ClientConfig, ClientConnection, ConnectionTrafficSecrets, Error, KeyLog, ServerConfig,
-    ServerConnection, SupportedCipherSuite,
+    ClientConfig, ClientConnection, Connection, ConnectionTrafficSecrets, Error, KeyLog,
+    ServerConfig, ServerConnection, SupportedCipherSuite,
 };
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, aes_128_gcm_with_1024_confidentiality_limit,

@@ -27,6 +27,7 @@ use std::env;
 use std::io::Write;
 use std::sync::Arc;
 
+use rustls::Connection;
 use rustls_test::{
     KeyType, do_handshake, make_client_config, make_pair_for_arc_configs, make_server_config,
     transfer,

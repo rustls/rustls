@@ -24,21 +24,22 @@ use crate::unbuffered::{EncryptError, TransmitTlsData};
 mod buffered {
     use alloc::vec::Vec;
     use core::fmt;
-    use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use pki_types::ServerName;
+    use pki_types::{FipsStatus, ServerName};
 
     use super::{ClientConnectionData, ClientExtensionsInput};
-    use crate::KeyingMaterialExporter;
     use crate::client::EchStatus;
     use crate::client::config::ClientConfig;
     use crate::common_state::Protocol;
     use crate::conn::{ConnectionCommon, ConnectionCore};
-    use crate::enums::ApplicationProtocol;
+    use crate::crypto::Identity;
+    use crate::crypto::kx::SupportedKxGroup;
+    use crate::enums::{ApplicationProtocol, ProtocolVersion};
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
+    use crate::{HandshakeKind, KeyingMaterialExporter, SupportedCipherSuite};
 
     /// This represents a single TLS client connection.
     pub struct ClientConnection {
@@ -117,38 +118,102 @@ mod buffered {
                         .send_early_plaintext(&data[..sz])
                 })
         }
-    }
 
-    impl Deref for ClientConnection {
-        type Target = ConnectionCommon<ClientConnectionData>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.inner
+        /// Returns the number of TLS1.3 tickets that have been received.
+        pub fn tls13_tickets_received(&self) -> u32 {
+            self.inner
+                .core
+                .side
+                .outputs
+                .tls13_tickets_received()
         }
     }
 
-    impl DerefMut for ClientConnection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
+    impl crate::Connection for ClientConnection {
+        fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+            self.inner.read_tls(rd)
         }
-    }
 
-    #[doc(hidden)]
-    impl<'a> TryFrom<&'a mut crate::Connection> for &'a mut ClientConnection {
-        type Error = ();
-
-        fn try_from(value: &'a mut crate::Connection) -> Result<Self, Self::Error> {
-            use crate::Connection::*;
-            match value {
-                Client(conn) => Ok(conn),
-                Server(_) => Err(()),
-            }
+        fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+            self.inner.write_tls(wr)
         }
-    }
 
-    impl From<ClientConnection> for crate::Connection {
-        fn from(conn: ClientConnection) -> Self {
-            Self::Client(conn)
+        fn wants_read(&self) -> bool {
+            self.inner.wants_read()
+        }
+
+        fn wants_write(&self) -> bool {
+            self.inner.wants_write()
+        }
+
+        fn reader(&mut self) -> crate::Reader<'_> {
+            self.inner.reader()
+        }
+
+        fn writer(&mut self) -> crate::Writer<'_> {
+            self.inner.writer()
+        }
+
+        fn process_new_packets(&mut self) -> Result<crate::IoState, Error> {
+            self.inner.process_new_packets()
+        }
+
+        fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+            self.inner.exporter()
+        }
+
+        fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+            self.inner.dangerous_extract_secrets()
+        }
+
+        fn set_buffer_limit(&mut self, limit: Option<usize>) {
+            self.inner.set_buffer_limit(limit)
+        }
+
+        fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
+            self.inner
+                .set_plaintext_buffer_limit(limit)
+        }
+
+        fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+            self.inner.refresh_traffic_keys()
+        }
+
+        fn send_close_notify(&mut self) {
+            self.inner.send_close_notify();
+        }
+
+        fn is_handshaking(&self) -> bool {
+            self.inner.is_handshaking()
+        }
+
+        fn peer_identity(&self) -> Option<&Identity<'static>> {
+            self.inner.peer_identity()
+        }
+
+        fn alpn_protocol(&self) -> Option<&ApplicationProtocol<'static>> {
+            self.inner.alpn_protocol()
+        }
+
+        fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
+            self.inner.negotiated_cipher_suite()
+        }
+
+        fn negotiated_key_exchange_group(&self) -> Option<&'static dyn SupportedKxGroup> {
+            self.inner
+                .negotiated_key_exchange_group()
+        }
+
+        fn protocol_version(&self) -> Option<ProtocolVersion> {
+            self.inner.protocol_version()
+        }
+
+        fn handshake_kind(&self) -> Option<HandshakeKind> {
+            self.inner.handshake_kind()
+        }
+
+        fn fips(&self) -> FipsStatus {
+            self.inner.fips()
         }
     }
 
@@ -233,7 +298,7 @@ mod buffered {
         /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
         /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
         pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-            self.sess.core.early_exporter()
+            self.sess.inner.core.early_exporter()
         }
     }
 

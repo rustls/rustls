@@ -45,23 +45,25 @@ mod buffered {
     use alloc::boxed::Box;
     use core::fmt;
     use core::fmt::{Debug, Formatter};
-    use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use pki_types::DnsName;
+    use pki_types::{DnsName, FipsStatus};
 
     use super::{
         Accepted, Accepting, Protocol, ServerConfig, ServerConnectionData, ServerExtensionsInput,
     };
-    use crate::KeyingMaterialExporter;
     use crate::common_state::{CommonState, Side};
     use crate::conn::private::SideData;
     use crate::conn::{ConnectionCommon, ConnectionCore};
+    use crate::crypto::Identity;
+    use crate::crypto::kx::SupportedKxGroup;
+    use crate::enums::{ApplicationProtocol, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
     use crate::server::hs::ClientHelloInput;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
+    use crate::{HandshakeKind, KeyingMaterialExporter, SupportedCipherSuite};
 
     /// This represents a single TLS server connection.
     ///
@@ -125,7 +127,7 @@ mod buffered {
         /// from the client is desired, encrypt the data separately.
         pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
             assert!(data.len() < 2usize.pow(15));
-            match &mut self.core.state {
+            match &mut self.inner.core.state {
                 Ok(st) => st.set_resumption_data(data),
                 Err(e) => Err(e.clone()),
             }
@@ -162,30 +164,98 @@ mod buffered {
         }
     }
 
+    impl crate::Connection for ServerConnection {
+        fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+            self.inner.read_tls(rd)
+        }
+
+        fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+            self.inner.write_tls(wr)
+        }
+
+        fn wants_read(&self) -> bool {
+            self.inner.wants_read()
+        }
+
+        fn wants_write(&self) -> bool {
+            self.inner.wants_write()
+        }
+
+        fn reader(&mut self) -> crate::Reader<'_> {
+            self.inner.reader()
+        }
+
+        fn writer(&mut self) -> crate::Writer<'_> {
+            self.inner.writer()
+        }
+
+        fn process_new_packets(&mut self) -> Result<crate::IoState, Error> {
+            self.inner.process_new_packets()
+        }
+
+        fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+            self.inner.exporter()
+        }
+
+        fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+            self.inner.dangerous_extract_secrets()
+        }
+
+        fn set_buffer_limit(&mut self, limit: Option<usize>) {
+            self.inner.set_buffer_limit(limit)
+        }
+
+        fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
+            self.inner
+                .set_plaintext_buffer_limit(limit)
+        }
+
+        fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+            self.inner.refresh_traffic_keys()
+        }
+
+        fn send_close_notify(&mut self) {
+            self.inner.send_close_notify();
+        }
+
+        fn is_handshaking(&self) -> bool {
+            self.inner.is_handshaking()
+        }
+
+        fn peer_identity(&self) -> Option<&Identity<'static>> {
+            self.inner.peer_identity()
+        }
+
+        fn alpn_protocol(&self) -> Option<&ApplicationProtocol<'static>> {
+            self.inner.alpn_protocol()
+        }
+
+        fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
+            self.inner.negotiated_cipher_suite()
+        }
+
+        fn negotiated_key_exchange_group(&self) -> Option<&'static dyn SupportedKxGroup> {
+            self.inner
+                .negotiated_key_exchange_group()
+        }
+
+        fn protocol_version(&self) -> Option<ProtocolVersion> {
+            self.inner.protocol_version()
+        }
+
+        fn handshake_kind(&self) -> Option<HandshakeKind> {
+            self.inner.handshake_kind()
+        }
+
+        fn fips(&self) -> FipsStatus {
+            self.inner.fips()
+        }
+    }
+
     impl Debug for ServerConnection {
         fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             f.debug_struct("ServerConnection")
                 .finish_non_exhaustive()
-        }
-    }
-
-    impl Deref for ServerConnection {
-        type Target = ConnectionCommon<ServerConnectionData>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.inner
-        }
-    }
-
-    impl DerefMut for ServerConnection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
-        }
-    }
-
-    impl From<ServerConnection> for crate::Connection {
-        fn from(conn: ServerConnection) -> Self {
-            Self::Server(conn)
         }
     }
 

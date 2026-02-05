@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 #[cfg(feature = "zlib")]
 use rustls::ClientConfig;
+use rustls::Connection;
 #[cfg(feature = "zlib")]
 use rustls::client::Resumption;
 #[cfg(feature = "zlib")]

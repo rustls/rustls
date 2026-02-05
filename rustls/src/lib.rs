@@ -447,7 +447,7 @@ pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind, IoState};
 #[cfg(feature = "std")]
 pub use crate::conn::{Connection, Reader, Writer};
-pub use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData, kernel};
+pub use crate::conn::{KeyingMaterialExporter, SideData, kernel};
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::suites::{
