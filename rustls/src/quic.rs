@@ -95,8 +95,8 @@ mod connection {
 
         fn deref(&self) -> &Self::Target {
             match self {
-                Self::Client(conn) => &conn.core.side,
-                Self::Server(conn) => &conn.core.side,
+                Self::Client(conn) => &conn.core.common,
+                Self::Server(conn) => &conn.core.common,
             }
         }
     }
@@ -104,8 +104,8 @@ mod connection {
     impl DerefMut for Connection {
         fn deref_mut(&mut self) -> &mut Self::Target {
             match self {
-                Self::Client(conn) => &mut conn.core.side,
-                Self::Server(conn) => &mut conn.core.side,
+                Self::Client(conn) => &mut conn.core.common,
+                Self::Server(conn) => &mut conn.core.common,
             }
         }
     }
@@ -386,7 +386,7 @@ mod connection {
         /// to fail.
         pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
             self.core
-                .side
+                .common
                 .quic
                 .params
                 .as_ref()
@@ -397,7 +397,7 @@ mod connection {
         pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
             let suite = self
                 .core
-                .side
+                .common
                 .negotiated_cipher_suite()
                 .and_then(|suite| match suite {
                     SupportedCipherSuite::Tls13(suite) => Some(suite),
@@ -408,7 +408,7 @@ mod connection {
                 suite,
                 suite.quic?,
                 self.core
-                    .side
+                    .common
                     .quic
                     .early_secret
                     .as_ref()?,
@@ -427,17 +427,23 @@ mod connection {
         pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             let range = self.deframer_buffer.extend(plaintext);
 
-            self.core.hs_deframer.input_message(
-                EncodedMessage {
-                    typ: ContentType::Handshake,
-                    version: ProtocolVersion::TLSv1_3,
-                    payload: &self.deframer_buffer.filled()[range.clone()],
-                },
-                &Locator::new(self.deframer_buffer.filled()),
-                range.end,
-            );
+            self.core
+                .common
+                .recv
+                .hs_deframer
+                .input_message(
+                    EncodedMessage {
+                        typ: ContentType::Handshake,
+                        version: ProtocolVersion::TLSv1_3,
+                        payload: &self.deframer_buffer.filled()[range.clone()],
+                    },
+                    &Locator::new(self.deframer_buffer.filled()),
+                    range.end,
+                );
 
             self.core
+                .common
+                .recv
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
@@ -451,7 +457,7 @@ mod connection {
         ///
         /// When this returns `Some(_)`, the new keys must be used for future handshake data.
         pub fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
-            self.core.side.quic.write_hs(buf)
+            self.core.common.quic.write_hs(buf)
         }
     }
 
@@ -459,13 +465,13 @@ mod connection {
         type Target = CommonState;
 
         fn deref(&self) -> &Self::Target {
-            &self.core.side
+            &self.core.common
         }
     }
 
     impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
         fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.core.side
+            &mut self.core.common
         }
     }
 }

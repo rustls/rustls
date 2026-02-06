@@ -7,12 +7,11 @@ use pki_types::{DnsName, UnixTime};
 use subtle::ConstantTimeEq;
 
 use super::config::ServerConfig;
-use super::connection::ServerConnectionData;
 use super::{CommonServerSessionValue, ServerSessionValue, Tls12ServerSessionValue, hs};
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::conn::kernel::{Direction, KernelState};
+use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
 use crate::crypto::kx::{ActiveKeyExchange, SupportedKxGroup};
 use crate::crypto::{Identity, TicketProducer};
@@ -30,6 +29,7 @@ use crate::msgs::{
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
+use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::verify::{ClientIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 
@@ -62,7 +62,7 @@ mod client_hello {
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             output: &mut dyn Output,
-        ) -> hs::NextStateOrError {
+        ) -> Result<Box<dyn State>, Error> {
             let mut randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
@@ -267,7 +267,7 @@ mod client_hello {
         config: Arc<ServerConfig>,
         resumedata: Tls12ServerSessionValue,
         proof: HandshakeAlignedProof,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         debug!("Resuming connection");
 
         if resumedata.extended_ms && !using_ems {
@@ -480,12 +480,12 @@ struct ExpectCertificate {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCertificate {
+impl State for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         self.transcript.add_message(&message);
         let cert_chain = require_handshake_msg_move!(
             message,
@@ -554,12 +554,12 @@ struct ExpectClientKx {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectClientKx {
+impl State for ExpectClientKx {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let client_kx = require_handshake_msg!(
             message,
             HandshakeType::ClientKeyExchange,
@@ -634,12 +634,12 @@ struct ExpectCertificateVerify {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateVerify {
+impl State for ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let signature = require_handshake_msg!(
             message,
             HandshakeType::CertificateVerify,
@@ -700,8 +700,12 @@ struct ExpectCcs {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCcs {
-    fn handle(self: Box<Self>, input: Input<'_>, output: &mut dyn Output) -> hs::NextStateOrError {
+impl State for ExpectCcs {
+    fn handle(
+        self: Box<Self>,
+        input: Input<'_>,
+        output: &mut dyn Output,
+    ) -> Result<Box<dyn State>, Error> {
         match input.message.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
@@ -858,12 +862,12 @@ struct ExpectFinished {
     pending_encrypter: Option<Box<dyn MessageEncrypter>>,
 }
 
-impl State<ServerConnectionData> for ExpectFinished {
+impl State for ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         let finished = require_handshake_msg!(
             input.message,
             HandshakeType::Finished,
@@ -975,12 +979,12 @@ struct ExpectTraffic {
 
 impl ExpectTraffic {}
 
-impl State<ServerConnectionData> for ExpectTraffic {
+impl State for ExpectTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> hs::NextStateOrError {
+    ) -> Result<Box<dyn State>, Error> {
         match message.payload {
             MessagePayload::ApplicationData(payload) => {
                 output.emit(Event::ApplicationData(payload))
@@ -997,6 +1001,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
 
     fn into_external_state(
         mut self: Box<Self>,
+        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         match self.extracted_secrets.take() {
             Some(extracted_secrets) => Ok((extracted_secrets?, self)),
@@ -1006,7 +1011,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
 }
 
 impl KernelState for ExpectTraffic {
-    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+    fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error> {
         Err(ApiMisuse::KeyUpdateNotAvailableForTls12.into())
     }
 

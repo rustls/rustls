@@ -8,9 +8,9 @@ use core::{fmt, mem};
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
-use crate::common_state::process_main_protocol;
+use crate::common_state::{CaptureAppData, SendPath};
 use crate::conn::SideData;
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{Decrypted, Payload};
 use crate::error::Error;
 use crate::msgs::{DeframerSliceBuffer, Delocator, Locator};
 use crate::server::ServerConnectionData;
@@ -50,7 +50,12 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
     ) -> UnbufferedStatus<'c, 'i, Side> {
         let plaintext_locator = Locator::new(incoming_tls);
         let mut buffer = DeframerSliceBuffer::new(incoming_tls);
-        let mut buffer_progress = self.core.hs_deframer.progress();
+        let mut buffer_progress = self
+            .core
+            .common
+            .recv
+            .hs_deframer
+            .progress();
 
         let (discard, state) = loop {
             if early_data_available(self) {
@@ -60,7 +65,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                 );
             }
 
-            if let Some(chunk) = self.core.side.send.sendable_tls.pop() {
+            if let Some(chunk) = self.core.common.send.sendable_tls.pop() {
                 break (
                     buffer.pending_discard(),
                     EncodeTlsData::new(self, chunk).into(),
@@ -69,7 +74,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
 
             let deframer_output = if self
                 .core
-                .side
+                .common
                 .recv
                 .has_received_close_notify
             {
@@ -77,13 +82,12 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
             } else {
                 match self
                     .core
+                    .common
+                    .recv
                     .deframe(buffer.filled_mut(), &mut buffer_progress)
                 {
                     Err(err) => {
-                        self.core
-                            .side
-                            .send
-                            .maybe_send_fatal_alert(&err);
+                        SendPath::maybe_send_fatal_alert(&mut self.core.common.send, &err);
                         buffer.queue_discard(buffer_progress.take_discard());
                         return UnbufferedStatus {
                             discard: buffer.pending_discard(),
@@ -108,15 +112,39 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                         }
                     };
 
+                let Decrypted {
+                    plaintext: msg,
+                    want_close_before_decrypt,
+                } = msg;
+
+                if want_close_before_decrypt {
+                    self.core.common.send_close_notify();
+                }
+
                 let mut received_plaintext = None;
-                match process_main_protocol(
-                    msg,
-                    self.core.hs_deframer.aligned(),
-                    state,
-                    &plaintext_locator,
-                    &mut received_plaintext,
-                    &mut self.core.side,
-                ) {
+
+                let hs_align = self
+                    .core
+                    .common
+                    .recv
+                    .hs_deframer
+                    .aligned();
+                let common = &mut self.core.common;
+
+                match common
+                    .recv
+                    .receive_message(msg, hs_align, &mut common.send)
+                    .and_then(|input| match input {
+                        Some(input) => state.handle(
+                            input,
+                            &mut CaptureAppData {
+                                data: &mut self.core.output(),
+                                plaintext_locator: &plaintext_locator,
+                                received_plaintext: &mut received_plaintext,
+                            },
+                        ),
+                        None => Ok(state),
+                    }) {
                     Ok(new) => {
                         buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Ok(new);
@@ -128,10 +156,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                         }
                     }
                     Err(e) => {
-                        self.core
-                            .side
-                            .send
-                            .maybe_send_fatal_alert(&e);
+                        SendPath::maybe_send_fatal_alert(&mut self.core.common.send, &e);
                         buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Err(e.clone());
                         return UnbufferedStatus {
@@ -147,7 +172,7 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                 );
             } else if self
                 .core
-                .side
+                .common
                 .recv
                 .has_received_close_notify
                 && !self.emitted_peer_closed_state
@@ -156,19 +181,19 @@ impl<Side: SideData> UnbufferedConnectionCommon<Side> {
                 break (buffer.pending_discard(), ConnectionState::PeerClosed);
             } else if self
                 .core
-                .side
+                .common
                 .recv
                 .has_received_close_notify
                 && self
                     .core
-                    .side
+                    .common
                     .send
                     .has_sent_close_notify
             {
                 break (buffer.pending_discard(), ConnectionState::Closed);
             } else if self
                 .core
-                .side
+                .common
                 .send
                 .may_send_application_data
             {
@@ -434,10 +459,12 @@ impl<Side: SideData> WriteTraffic<'_, Side> {
     ) -> Result<usize, EncryptError> {
         self.conn
             .core
+            .common
+            .send
             .maybe_refresh_traffic_keys();
         self.conn
             .core
-            .side
+            .common
             .send
             .write_plaintext(application_data.into(), outgoing_tls)
     }
@@ -449,7 +476,7 @@ impl<Side: SideData> WriteTraffic<'_, Side> {
     pub fn queue_close_notify(&mut self, outgoing_tls: &mut [u8]) -> Result<usize, EncryptError> {
         self.conn
             .core
-            .side
+            .common
             .send
             .eager_send_close_notify(outgoing_tls)
     }
@@ -466,7 +493,11 @@ impl<Side: SideData> WriteTraffic<'_, Side> {
     ///
     /// [`ConnectionCommon::refresh_traffic_keys()`]: crate::ConnectionCommon::refresh_traffic_keys
     pub fn refresh_traffic_keys(self) -> Result<(), Error> {
-        self.conn.core.refresh_traffic_keys()
+        self.conn
+            .core
+            .common
+            .send
+            .refresh_traffic_keys()
     }
 }
 
@@ -527,7 +558,7 @@ impl<Side: SideData> TransmitTlsData<'_, Side> {
         if self
             .conn
             .core
-            .side
+            .common
             .send
             .may_send_application_data
         {

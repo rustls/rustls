@@ -10,8 +10,8 @@ use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter, MessageEncrypter,
-    OutboundOpaque, OutboundPlain, Payload, PreEncryptAction,
+    Decrypted, DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter,
+    MessageEncrypter, OutboundOpaque, OutboundPlain, Payload, PreEncryptAction,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
@@ -20,50 +20,15 @@ use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::{
-    AlertLevel, AlertMessagePayload, Codec, Delocator, HandshakeAlignedProof,
-    HandshakeMessagePayload, Locator, Message, MessageFragmenter, MessagePayload,
+    AlertLevel, AlertMessagePayload, BufferProgress, Codec, DeframerIter, Delocator,
+    HandshakeAlignedProof, HandshakeDeframer, HandshakeMessagePayload, Locator, Message,
+    MessageFragmenter, MessagePayload,
 };
+use crate::quic;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{SideData, quic};
-
-pub(crate) fn process_main_protocol<Data: SideData>(
-    msg: EncodedMessage<&'_ [u8]>,
-    aligned_handshake: Option<HandshakeAlignedProof>,
-    state: Box<dyn State<Data>>,
-    plaintext_locator: &Locator,
-    received_plaintext: &mut Option<UnborrowedPayload>,
-    data: &mut Data,
-) -> Result<Box<dyn State<Data>>, Error> {
-    // Drop CCS messages during handshake in TLS1.3
-    if msg.typ == ContentType::ChangeCipherSpec && data.recv.drop_tls13_ccs(&msg)? {
-        trace!("Dropping CCS");
-        return Ok(state);
-    }
-
-    let msg = data.parse_and_maybe_drop(&msg)?;
-
-    let Some(msg) = msg else {
-        // Message is dropped.
-        return Ok(state);
-    };
-
-    let mut cx = CaptureAppData {
-        data,
-        plaintext_locator,
-        received_plaintext,
-    };
-
-    state.handle(
-        Input {
-            message: msg,
-            aligned_handshake,
-        },
-        &mut cx,
-    )
-}
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -73,7 +38,7 @@ pub struct CommonState {
     pub(crate) quic: quic::Quic,
 
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
-    protocol: Protocol,
+    pub(crate) protocol: Protocol,
 }
 
 impl CommonState {
@@ -114,60 +79,6 @@ impl CommonState {
     /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
     pub fn is_handshaking(&self) -> bool {
         !(self.send.may_send_application_data && self.recv.may_receive_application_data)
-    }
-
-    /// Returns true if the caller should call [`Connection::read_tls`] as soon
-    /// as possible.
-    ///
-    /// If there is pending plaintext data to read with [`Connection::reader`],
-    /// this returns false.  If your application respects this mechanism,
-    /// only one full TLS message will be buffered by rustls.
-    ///
-    /// [`Connection::reader`]: crate::Connection::reader
-    /// [`Connection::read_tls`]: crate::Connection::read_tls
-    pub fn wants_read(&self) -> bool {
-        // We want to read more data all the time, except when we have unprocessed plaintext.
-        // This provides back-pressure to the TCP buffers. We also don't want to read more after
-        // the peer has sent us a close notification.
-        //
-        // In the handshake case we don't have readable plaintext before the handshake has
-        // completed, but also don't want to read if we still have sendable tls.
-        self.recv.received_plaintext.is_empty()
-            && !self.recv.has_received_close_notify
-            && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
-    }
-
-    pub(crate) fn current_io_state(&self) -> IoState {
-        IoState {
-            tls_bytes_to_write: self.send.sendable_tls.len(),
-            plaintext_bytes_to_read: self.recv.received_plaintext.len(),
-            peer_has_closed: self.recv.has_received_close_notify,
-        }
-    }
-
-    fn parse_and_maybe_drop<'a>(
-        &mut self,
-        msg: &'a EncodedMessage<&'a [u8]>,
-    ) -> Result<Option<Message<'a>>, Error> {
-        // Now we can fully parse the message payload.
-        let msg = Message::try_from(msg)?;
-
-        // For alerts, we have separate logic.
-        if let MessagePayload::Alert(alert) = &msg.payload {
-            self.recv.process_alert(alert)?;
-            return Ok(None);
-        }
-
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if self
-            .recv
-            .reject_renegotiation_request(&mut self.send, &msg)?
-        {
-            return Ok(None);
-        }
-
-        Ok(Some(msg))
     }
 }
 
@@ -224,12 +135,12 @@ impl fmt::Debug for CommonState {
 
 /// Facts about the connection learned through the handshake.
 pub struct ConnectionOutputs {
-    pub(crate) negotiated_version: Option<ProtocolVersion>,
+    negotiated_version: Option<ProtocolVersion>,
     handshake_kind: Option<HandshakeKind>,
     suite: Option<SupportedCipherSuite>,
     negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
-    pub(crate) alpn_protocol: Option<ApplicationProtocol<'static>>,
-    pub(crate) peer_identity: Option<Identity<'static>>,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
+    peer_identity: Option<Identity<'static>>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) fips: FipsStatus,
@@ -385,17 +296,15 @@ pub(crate) struct SendPath {
     queued_key_update_message: Option<Vec<u8>>,
     pub(crate) refresh_traffic_keys_pending: bool,
     negotiated_version: Option<ProtocolVersion>,
+    pub(crate) tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
 }
 
 impl SendPath {
-    pub(crate) fn maybe_send_fatal_alert(&mut self, error: &Error) {
+    pub(crate) fn maybe_send_fatal_alert(output: &mut dyn Output, error: &Error) {
         let Ok(alert) = AlertDescription::try_from(error) else {
             return;
         };
-        debug_assert!(!self.has_sent_fatal_alert);
-        let m = Message::build_alert(AlertLevel::Fatal, alert);
-        self.send_msg(m, self.encrypt_state.is_encrypting());
-        self.has_sent_fatal_alert = true;
+        output.emit(Event::SendAlert(AlertLevel::Fatal, alert));
     }
 
     pub(crate) fn write_plaintext(
@@ -592,7 +501,7 @@ impl SendPath {
         self.sendable_tls.append(m.encode());
     }
 
-    pub(crate) fn perhaps_write_key_update(&mut self) {
+    fn perhaps_write_key_update(&mut self) {
         if let Some(message) = self.queued_key_update_message.take() {
             self.sendable_tls.append(message);
         }
@@ -614,13 +523,12 @@ impl SendPath {
     }
 
     fn send_close_notify(&mut self) {
-        if self.has_sent_fatal_alert {
+        if self.has_sent_close_notify {
             return;
         }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-        self.has_sent_fatal_alert = true;
         self.has_sent_close_notify = true;
-        self.send_warning_alert_no_log(AlertDescription::CloseNotify);
+        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
     }
 
     pub(crate) fn eager_send_close_notify(
@@ -632,9 +540,16 @@ impl SendPath {
         Ok(self.write_fragments(outgoing_tls, [].into_iter()))
     }
 
-    fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
-        let m = Message::build_alert(AlertLevel::Warning, desc);
-        self.send_msg(m, self.encrypt_state.is_encrypting());
+    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
+        match level {
+            AlertLevel::Fatal if self.has_sent_fatal_alert => return,
+            AlertLevel::Fatal => self.has_sent_fatal_alert = true,
+            _ => {}
+        };
+        self.send_msg(
+            Message::build_alert(level, desc),
+            self.encrypt_state.is_encrypting(),
+        );
     }
 
     fn check_required_size<'a>(
@@ -691,7 +606,7 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    pub(crate) fn ensure_key_update_queued(&mut self) -> bool {
+    fn ensure_key_update_queued(&mut self) -> bool {
         if self.queued_key_update_message.is_some() {
             return false;
         }
@@ -703,21 +618,47 @@ impl SendPath {
         );
         true
     }
+
+    /// Trigger a `refresh_traffic_keys` if required.
+    pub(crate) fn maybe_refresh_traffic_keys(&mut self) {
+        if self.refresh_traffic_keys_pending {
+            let _ = self.refresh_traffic_keys();
+        }
+    }
+
+    pub(crate) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+        let ks = self.tls13_key_schedule.take();
+
+        let Some(mut ks) = ks else {
+            return Err(Error::HandshakeNotComplete);
+        };
+
+        ks.request_key_update_and_update_encrypter(self);
+        self.refresh_traffic_keys_pending = false;
+        self.tls13_key_schedule = Some(ks);
+        Ok(())
+    }
 }
+
 impl Output for SendPath {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EncryptMessage(m) => self.send_msg(m, true),
-            Event::MaybeKeyUpdateRequest(ks) => {
+            Event::MaybeKeyUpdateRequest => {
                 if self.ensure_key_update_queued() {
-                    ks.update_encrypter_for_key_update(self);
+                    if let Some(mut ks) = self.tls13_key_schedule.take() {
+                        ks.update_encrypter_for_key_update(self);
+                        self.tls13_key_schedule = Some(ks);
+                    }
                 }
             }
             Event::MessageEncrypter { encrypter, limit } => self
                 .encrypt_state
                 .set_message_encrypter(encrypter, limit),
+            Event::OutgoingKeySchedule(klc) => self.tls13_key_schedule = Some(klc),
             Event::PlainMessage(m) => self.send_msg(m, false),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
+            Event::SendAlert(level, desc) => self.send_alert(level, desc),
             Event::StartOutgoingTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
             _ => unreachable!(),
         }
@@ -736,6 +677,7 @@ impl Default for SendPath {
             queued_key_update_message: None,
             refresh_traffic_keys_pending: false,
             negotiated_version: None,
+            tls13_key_schedule: None,
         }
     }
 }
@@ -746,11 +688,13 @@ pub(crate) struct ReceivePath {
     may_receive_application_data: bool,
     /// If the peer has signaled end of stream.
     pub(crate) has_received_close_notify: bool,
-    #[cfg(feature = "std")]
-    pub(crate) has_seen_eof: bool,
-    pub(crate) received_plaintext: ChunkVecBuffer,
     temper_counters: TemperCounters,
     negotiated_version: Option<ProtocolVersion>,
+    pub(crate) hs_deframer: HandshakeDeframer,
+
+    /// We limit consecutive empty fragments to avoid a route for the peer to send
+    /// us significant but fruitless traffic.
+    seen_consecutive_empty_fragments: u8,
 }
 
 impl ReceivePath {
@@ -760,12 +704,215 @@ impl ReceivePath {
             decrypt_state: DecryptionState::new(),
             may_receive_application_data: false,
             has_received_close_notify: false,
-            #[cfg(feature = "std")]
-            has_seen_eof: false,
-            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             temper_counters: TemperCounters::default(),
             negotiated_version: None,
+            hs_deframer: HandshakeDeframer::default(),
+            seen_consecutive_empty_fragments: 0,
         }
+    }
+
+    /// Pull a message out of the deframer and send any messages that need to be sent as a result.
+    pub(crate) fn deframe<'b>(
+        &mut self,
+        buffer: &'b mut [u8],
+        buffer_progress: &mut BufferProgress,
+    ) -> Result<Option<Decrypted<'b>>, Error> {
+        // before processing any more of `buffer`, return any extant messages from `hs_deframer`
+        if self.hs_deframer.has_message_ready() {
+            Ok(self.take_handshake_message(buffer, buffer_progress))
+        } else {
+            self.process_more_input(buffer, buffer_progress)
+        }
+    }
+
+    fn take_handshake_message<'b>(
+        &mut self,
+        buffer: &'b [u8],
+        buffer_progress: &mut BufferProgress,
+    ) -> Option<Decrypted<'b>> {
+        self.hs_deframer
+            .iter(buffer)
+            .next()
+            .map(|(message, discard)| {
+                buffer_progress.add_discard(discard);
+                Decrypted {
+                    want_close_before_decrypt: false,
+                    plaintext: message,
+                }
+            })
+    }
+
+    fn process_more_input<'b>(
+        &mut self,
+        buffer: &'b mut [u8],
+        buffer_progress: &mut BufferProgress,
+    ) -> Result<Option<Decrypted<'b>>, Error> {
+        let version_is_tls13 = matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3));
+
+        let locator = Locator::new(buffer);
+
+        loop {
+            let mut iter = DeframerIter::new(&mut buffer[buffer_progress.processed()..]);
+
+            let (message, processed) = loop {
+                let message = match iter.next().transpose() {
+                    Ok(Some(message)) => message,
+                    Ok(None) => return Ok(None),
+                    Err(err) => return Err(err),
+                };
+
+                let allowed_plaintext = match message.typ {
+                    // CCS messages are always plaintext.
+                    ContentType::ChangeCipherSpec => true,
+                    // Alerts are allowed to be plaintext if-and-only-if:
+                    // * The negotiated protocol version is TLS 1.3. - In TLS 1.2 it is unambiguous when
+                    //   keying changes based on the CCS message. Only TLS 1.3 requires these heuristics.
+                    // * We have not yet decrypted any messages from the peer - if we have we don't
+                    //   expect any plaintext.
+                    // * The payload size is indicative of a plaintext alert message.
+                    ContentType::Alert
+                        if version_is_tls13
+                            && !self.decrypt_state.has_decrypted()
+                            && message.payload.len() <= 2 =>
+                    {
+                        true
+                    }
+                    // In other circumstances, we expect all messages to be encrypted.
+                    _ => false,
+                };
+
+                if allowed_plaintext && !self.hs_deframer.is_active() {
+                    break (
+                        Decrypted {
+                            plaintext: message.into_plain_message(),
+                            want_close_before_decrypt: false,
+                        },
+                        iter.bytes_consumed(),
+                    );
+                }
+
+                let message = match self
+                    .decrypt_state
+                    .decrypt_incoming(message)
+                {
+                    // failed decryption during trial decryption is not allowed to be
+                    // interleaved with partial handshake data.
+                    Ok(None) if self.hs_deframer.aligned().is_none() => {
+                        return Err(
+                            PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
+                        );
+                    }
+
+                    // failed decryption during trial decryption.
+                    Ok(None) => continue,
+
+                    Ok(Some(message)) => message,
+
+                    Err(err) => return Err(err),
+                };
+
+                break (message, iter.bytes_consumed());
+            };
+
+            let Decrypted {
+                plaintext: message,
+                want_close_before_decrypt,
+            } = message;
+
+            if self.hs_deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+                // "Handshake messages MUST NOT be interleaved with other record
+                // types.  That is, if a handshake message is split over two or more
+                // records, there MUST NOT be any other records between them."
+                // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
+                return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
+            }
+
+            match message.payload.len() {
+                0 => {
+                    if self.seen_consecutive_empty_fragments
+                        == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
+                    {
+                        return Err(PeerMisbehaved::TooManyEmptyFragments.into());
+                    }
+                    self.seen_consecutive_empty_fragments += 1;
+                }
+                _ => {
+                    self.seen_consecutive_empty_fragments = 0;
+                }
+            };
+
+            buffer_progress.add_processed(processed);
+
+            // do an end-run around the borrow checker, converting `message` (containing
+            // a borrowed slice) to an unborrowed one (containing a `Range` into the
+            // same buffer).  the reborrow happens inside the branch that returns the
+            // message.
+            //
+            // is fixed by -Zpolonius
+            // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
+            let unborrowed = InboundUnborrowedMessage::unborrow(&locator, message);
+
+            if unborrowed.typ != ContentType::Handshake {
+                let message = unborrowed.reborrow(&Delocator::new(buffer));
+                buffer_progress.add_discard(processed);
+                return Ok(Some(Decrypted {
+                    plaintext: message,
+                    want_close_before_decrypt,
+                }));
+            }
+
+            let message = unborrowed.reborrow(&Delocator::new(buffer));
+            self.hs_deframer
+                .input_message(message, &locator, buffer_progress.processed());
+            self.hs_deframer.coalesce(buffer)?;
+
+            if self.hs_deframer.has_message_ready() {
+                // trial decryption finishes with the first handshake message after it started.
+                self.decrypt_state
+                    .finish_trial_decryption();
+
+                return Ok(self
+                    .take_handshake_message(buffer, buffer_progress)
+                    .map(|decrypted| Decrypted {
+                        plaintext: decrypted.plaintext,
+                        want_close_before_decrypt,
+                    }));
+            }
+        }
+    }
+
+    /// Take a TLS message `msg` and map it into an `Input`
+    ///
+    /// `Input` is the input to our state machine.
+    ///
+    /// The message is mapped into `None` if it should be dropped with no further
+    /// action.
+    ///
+    /// Otherwise the caller must present the returned `Input` to the state machine to
+    /// progress the connection.
+    pub(crate) fn receive_message<'a>(
+        &mut self,
+        msg: EncodedMessage<&'a [u8]>,
+        aligned_handshake: Option<HandshakeAlignedProof>,
+        send_path: &mut dyn Output,
+    ) -> Result<Option<Input<'a>>, Error> {
+        // Drop CCS messages during handshake in TLS1.3
+        if msg.typ == ContentType::ChangeCipherSpec && self.drop_tls13_ccs(&msg)? {
+            trace!("Dropping CCS");
+            return Ok(None);
+        }
+
+        let msg = self.parse_and_maybe_drop(msg, send_path)?;
+
+        let Some(msg) = msg else {
+            // Message is dropped.
+            return Ok(None);
+        };
+
+        Ok(Some(Input {
+            message: msg,
+            aligned_handshake,
+        }))
     }
 
     fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
@@ -787,10 +934,33 @@ impl ReceivePath {
         Ok(true)
     }
 
+    fn parse_and_maybe_drop<'a>(
+        &mut self,
+        msg: EncodedMessage<&'a [u8]>,
+        send_path: &mut dyn Output,
+    ) -> Result<Option<Message<'a>>, Error> {
+        // Now we can fully parse the message payload.
+        let msg = Message::try_from(msg)?;
+
+        // For alerts, we have separate logic.
+        if let MessagePayload::Alert(alert) = &msg.payload {
+            self.process_alert(alert)?;
+            return Ok(None);
+        }
+
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotiation requests.  These can occur any time.
+        if self.reject_renegotiation_request(&msg, send_path)? {
+            return Ok(None);
+        }
+
+        Ok(Some(msg))
+    }
+
     fn reject_renegotiation_request(
         &mut self,
-        send: &mut SendPath,
         msg: &Message<'_>,
+        output: &mut dyn Output,
     ) -> Result<bool, Error> {
         if !self.may_receive_application_data
             || matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
@@ -810,11 +980,11 @@ impl ReceivePath {
             .received_renegotiation_request()?;
         let desc = AlertDescription::NoRenegotiation;
         warn!("sending warning alert {desc:?}");
-        send.send_warning_alert_no_log(desc);
+        output.emit(Event::SendAlert(AlertLevel::Warning, desc));
         Ok(true)
     }
 
-    pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
+    fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
         // Reject unknown AlertLevels.
         if let AlertLevel::Unknown(level) = alert.level {
             return Err(PeerMisbehaved::IllegalAlertLevel(level, alert.description).into());
@@ -904,55 +1074,12 @@ pub enum HandshakeKind {
     ResumedWithHelloRetryRequest,
 }
 
-/// Values of this structure are returned from [`Connection::process_new_packets`]
-/// and tell the caller the current I/O state of the TLS connection.
-///
-/// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
-#[derive(Debug, Eq, PartialEq)]
-pub struct IoState {
-    tls_bytes_to_write: usize,
-    plaintext_bytes_to_read: usize,
-    peer_has_closed: bool,
-}
-
-impl IoState {
-    /// How many bytes could be written by [`Connection::write_tls`] if called
-    /// right now.  A non-zero value implies [`CommonState::wants_write`].
-    ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
-    pub fn tls_bytes_to_write(&self) -> usize {
-        self.tls_bytes_to_write
-    }
-
-    /// How many plaintext bytes could be obtained via [`std::io::Read`]
-    /// without further I/O.
-    pub fn plaintext_bytes_to_read(&self) -> usize {
-        self.plaintext_bytes_to_read
-    }
-
-    /// True if the peer has sent us a close_notify alert.  This is
-    /// the TLS mechanism to securely half-close a TLS connection,
-    /// and signifies that the peer will not send any further data
-    /// on this connection.
-    ///
-    /// This is also signalled via returning `Ok(0)` from
-    /// [`std::io::Read`], after all the received bytes have been
-    /// retrieved.
-    pub fn peer_has_closed(&self) -> bool {
-        self.peer_has_closed
-    }
-}
-
-pub(crate) trait State<Side: SideData>: Send + Sync {
+pub(crate) trait State: Send + Sync {
     fn handle<'m>(
         self: Box<Self>,
         input: Input<'m>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State<Side>>, Error>;
-
-    fn send_key_update_request(&mut self, _output: &mut dyn Output) -> Result<(), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
+    ) -> Result<Box<dyn State>, Error>;
 
     fn handle_decrypt_error(&self) {}
 
@@ -963,25 +1090,26 @@ pub(crate) trait State<Side: SideData>: Send + Sync {
 
     fn into_external_state(
         self: Box<Self>,
+        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
         Err(Error::HandshakeNotComplete)
     }
 }
 
-struct CaptureAppData<'a> {
-    data: &'a mut dyn Output,
+pub(crate) struct CaptureAppData<'a> {
+    pub(crate) data: &'a mut dyn Output,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
     /// `received_plaintext` for in-place decryption.
-    plaintext_locator: &'a Locator,
+    pub(crate) plaintext_locator: &'a Locator,
     /// Unborrowed received plaintext data
     ///
     /// Set if plaintext data was received.
     ///
     /// Plaintext data may be reborrowed using a [`Delocator`] which was
     /// initialized from the same slice as `plaintext_locator`.
-    received_plaintext: &'a mut Option<UnborrowedPayload>,
+    pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
 }
 
 impl Output for CaptureAppData<'_> {
@@ -1000,6 +1128,63 @@ impl Output for CaptureAppData<'_> {
                 debug_assert!(previous.is_none(), "overwrote plaintext data");
             }
             _ => self.data.emit(ev),
+        }
+    }
+}
+
+pub(crate) struct OutputSplitReceivePath<'a> {
+    pub(crate) recv: &'a mut dyn Output,
+    pub(crate) other: &'a mut dyn Output,
+}
+
+impl Output for OutputSplitReceivePath<'_> {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev.disposition() {
+            EventDisposition::ReceivePath => self.recv.emit(ev),
+            EventDisposition::ProtocolVersion(ver) => {
+                self.recv
+                    .emit(Event::ProtocolVersion(ver));
+                self.other
+                    .emit(Event::ProtocolVersion(ver));
+            }
+            EventDisposition::StartTraffic => {
+                self.recv.emit(Event::StartTraffic);
+                self.other.emit(Event::StartTraffic);
+            }
+            _ => self.other.emit(ev),
+        }
+    }
+}
+
+pub(crate) struct OutputSplitNonReceivePath<'a> {
+    pub(crate) protocol: Protocol,
+    pub(crate) outputs: &'a mut dyn Output,
+    pub(crate) quic: &'a mut dyn Output,
+    pub(crate) send: &'a mut dyn Output,
+    pub(crate) side: &'a mut dyn Output,
+}
+
+impl Output for OutputSplitNonReceivePath<'_> {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev.disposition() {
+            EventDisposition::ReceivePath => unreachable!(),
+            EventDisposition::ProtocolVersion(ver) => {
+                self.outputs
+                    .emit(Event::ProtocolVersion(ver));
+                self.quic
+                    .emit(Event::ProtocolVersion(ver));
+                self.send
+                    .emit(Event::ProtocolVersion(ver));
+            }
+            EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
+            EventDisposition::Quic => self.quic.emit(ev),
+            EventDisposition::SendPath => self.send.emit(ev),
+            EventDisposition::MessageOutput => match self.protocol {
+                Protocol::Tcp => self.send.emit(ev),
+                Protocol::Quic(_) => self.quic.emit(ev),
+            },
+            EventDisposition::StartTraffic => self.send.emit(ev),
+            EventDisposition::SideSpecific => self.side.emit(ev),
         }
     }
 }
@@ -1038,7 +1223,7 @@ pub(crate) enum Event<'a> {
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
-    MaybeKeyUpdateRequest(&'a mut KeyScheduleTrafficSend),
+    MaybeKeyUpdateRequest,
     MessageDecrypter {
         decrypter: Box<dyn MessageDecrypter>,
         proof: HandshakeAlignedProof,
@@ -1052,6 +1237,7 @@ pub(crate) enum Event<'a> {
         encrypter: Box<dyn MessageEncrypter>,
         limit: u64,
     },
+    OutgoingKeySchedule(Box<KeyScheduleTrafficSend>),
     PeerIdentity(Identity<'static>),
     PlainMessage(Message<'a>),
     ProtocolVersion(ProtocolVersion),
@@ -1062,6 +1248,7 @@ pub(crate) enum Event<'a> {
     ReceivedServerName(Option<DnsName<'static>>),
     ReceivedTicket,
     ResumptionData(Vec<u8>),
+    SendAlert(AlertLevel, AlertDescription),
     /// Mark the connection as ready to send application data.
     StartOutgoingTraffic,
     /// Mark the connection as ready to send and receive application data.
@@ -1069,14 +1256,16 @@ pub(crate) enum Event<'a> {
 }
 
 impl Event<'_> {
-    fn disposition(&self) -> EventDisposition {
+    pub(crate) fn disposition(&self) -> EventDisposition {
         match self {
             // message dispatch
             Event::EncryptMessage(_) | Event::PlainMessage(_) => EventDisposition::MessageOutput,
 
             // send-specific events
-            Event::MaybeKeyUpdateRequest(_)
+            Event::MaybeKeyUpdateRequest
             | Event::MessageEncrypter { .. }
+            | Event::OutgoingKeySchedule(_)
+            | Event::SendAlert(..)
             | Event::StartOutgoingTraffic => EventDisposition::SendPath,
 
             // recv-specific events
@@ -1352,5 +1541,34 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
 pub(crate) type HandshakeFlightTls12<'a> = HandshakeFlight<'a, false>;
 pub(crate) type HandshakeFlightTls13<'a> = HandshakeFlight<'a, true>;
 
-const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
+/// An [`EncodedMessage<Payload<'_>>`] which does not borrow its payload, but
+/// references a range that can later be borrowed.
+struct InboundUnborrowedMessage {
+    typ: ContentType,
+    version: ProtocolVersion,
+    bounds: Range<usize>,
+}
+
+impl InboundUnborrowedMessage {
+    fn unborrow(locator: &Locator, msg: EncodedMessage<&'_ [u8]>) -> Self {
+        Self {
+            typ: msg.typ,
+            version: msg.version,
+            bounds: locator.locate(msg.payload),
+        }
+    }
+
+    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> EncodedMessage<&'b [u8]> {
+        EncodedMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: delocator.slice_from_range(&self.bounds),
+        }
+    }
+}
+
+/// cf. BoringSSL's `kMaxEmptyRecords`
+/// <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls_record.cc#L124-L128>
+const ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX: u8 = 32;
+
 pub(crate) const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
