@@ -4,12 +4,12 @@
 
 use std::sync::Arc;
 
+use rustls::HandshakeKind;
 use rustls::client::Resumption;
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::quic::{self, ConnectionCommon, Side};
-use rustls::{HandshakeKind, SideData};
+use rustls::quic::{self, Connection, Side};
 use rustls_test::{
     ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
 };
@@ -17,9 +17,9 @@ use rustls_test::{
 use super::provider;
 
 // Returns the sender's next secrets to use, or the receiver's error.
-fn step<L: SideData, R: SideData>(
-    send: &mut ConnectionCommon<L>,
-    recv: &mut ConnectionCommon<R>,
+fn step(
+    send: &mut impl Connection,
+    recv: &mut impl Connection,
 ) -> Result<Option<quic::KeyChange>, Error> {
     let mut buf = Vec::new();
     let change = loop {
@@ -411,20 +411,14 @@ fn test_quic_server_no_tls12() {
     );
 }
 
-fn do_quic_handshake<L: SideData, R: SideData>(
-    client: &mut ConnectionCommon<L>,
-    server: &mut ConnectionCommon<R>,
-) {
+fn do_quic_handshake(client: &mut impl Connection, server: &mut impl Connection) {
     while client.is_handshaking() || server.is_handshaking() {
         quic_transfer(client, server);
         quic_transfer(server, client);
     }
 }
 
-fn quic_transfer<L: SideData, R: SideData>(
-    sender: &mut ConnectionCommon<L>,
-    receiver: &mut ConnectionCommon<R>,
-) {
+fn quic_transfer(sender: &mut impl Connection, receiver: &mut impl Connection) {
     let mut buf = Vec::new();
     while let Some(_change) = sender.write_hs(&mut buf) {
         // In a real QUIC implementation, we would handle key changes here
