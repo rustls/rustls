@@ -4,12 +4,12 @@
 
 use std::sync::Arc;
 
+use rustls::HandshakeKind;
 use rustls::client::Resumption;
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::quic::{self, ConnectionCommon, Side};
-use rustls::{HandshakeKind, SideData};
+use rustls::quic::{self, Side};
 use rustls_test::{
     ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
 };
@@ -17,9 +17,9 @@ use rustls_test::{
 use super::provider;
 
 // Returns the sender's next secrets to use, or the receiver's error.
-fn step<L: SideData, R: SideData>(
-    send: &mut ConnectionCommon<L>,
-    recv: &mut ConnectionCommon<R>,
+fn step(
+    mut send: Connection<'_>,
+    mut recv: Connection<'_>,
 ) -> Result<Option<quic::KeyChange>, Error> {
     let mut buf = Vec::new();
     let change = loop {
@@ -95,41 +95,63 @@ fn test_quic_handshake() {
     )
     .unwrap();
 
-    let client_initial = step(&mut client, &mut server).unwrap();
+    let client_initial = step(
+        Connection::Client(&mut client),
+        Connection::Server(&mut server),
+    )
+    .unwrap();
     assert!(client_initial.is_none());
     assert!(client.zero_rtt_keys().is_none());
     assert_eq!(server.quic_transport_parameters(), Some(client_params));
-    let server_hs = step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
+    let server_hs = step(
+        Connection::Server(&mut server),
+        Connection::Client(&mut client),
+    )
+    .unwrap()
+    .unwrap();
     assert!(server.zero_rtt_keys().is_none());
-    let client_hs = step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
+    let client_hs = step(
+        Connection::Client(&mut client),
+        Connection::Server(&mut server),
+    )
+    .unwrap()
+    .unwrap();
     assert!(compatible_keys(&server_hs, &client_hs));
     assert!(client.is_handshaking());
-    let server_1rtt = step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
+    let server_1rtt = step(
+        Connection::Server(&mut server),
+        Connection::Client(&mut client),
+    )
+    .unwrap()
+    .unwrap();
     assert!(!client.is_handshaking());
     assert_eq!(client.quic_transport_parameters(), Some(server_params));
     assert!(server.is_handshaking());
-    let client_1rtt = step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
+    let client_1rtt = step(
+        Connection::Client(&mut client),
+        Connection::Server(&mut server),
+    )
+    .unwrap()
+    .unwrap();
     assert!(!server.is_handshaking());
     assert!(compatible_keys(&server_1rtt, &client_1rtt));
     assert!(!compatible_keys(&server_hs, &server_1rtt));
 
     assert!(
-        step(&mut client, &mut server)
-            .unwrap()
-            .is_none()
+        step(
+            Connection::Client(&mut client),
+            Connection::Server(&mut server)
+        )
+        .unwrap()
+        .is_none()
     );
     assert!(
-        step(&mut server, &mut client)
-            .unwrap()
-            .is_none()
+        step(
+            Connection::Server(&mut server),
+            Connection::Client(&mut client)
+        )
+        .unwrap()
+        .is_none()
     );
     assert_eq!(client.tls13_tickets_received(), 2);
 
@@ -154,7 +176,11 @@ fn test_quic_handshake() {
     )
     .unwrap();
 
-    step(&mut client, &mut server).unwrap();
+    step(
+        Connection::Client(&mut client),
+        Connection::Server(&mut server),
+    )
+    .unwrap();
     assert_eq!(client.quic_transport_parameters(), Some(server_params));
     {
         let client_early = client.zero_rtt_keys().unwrap();
@@ -164,15 +190,24 @@ fn test_quic_handshake() {
             server_early.packet.as_ref()
         ));
     }
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
+    step(
+        Connection::Server(&mut server),
+        Connection::Client(&mut client),
+    )
+    .unwrap()
+    .unwrap();
+    step(
+        Connection::Client(&mut client),
+        Connection::Server(&mut server),
+    )
+    .unwrap()
+    .unwrap();
+    step(
+        Connection::Server(&mut server),
+        Connection::Client(&mut client),
+    )
+    .unwrap()
+    .unwrap();
     assert!(client.is_early_data_accepted());
 
     // failed handshake
@@ -188,13 +223,23 @@ fn test_quic_handshake() {
         quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
             .unwrap();
 
-    step(&mut client, &mut server).unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    let err = step(&mut server, &mut client)
-        .err()
-        .unwrap();
+    step(
+        Connection::Client(&mut client),
+        Connection::Server(&mut server),
+    )
+    .unwrap();
+    step(
+        Connection::Server(&mut server),
+        Connection::Client(&mut client),
+    )
+    .unwrap()
+    .unwrap();
+    let err = step(
+        Connection::Server(&mut server),
+        Connection::Client(&mut client),
+    )
+    .err()
+    .unwrap();
     assert_eq!(
         AlertDescription::try_from(&err).ok(),
         Some(AlertDescription::BadCertificate)
@@ -264,9 +309,12 @@ fn test_quic_rejects_missing_alpn() {
             quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
                 .unwrap();
 
-        let err = step(&mut client, &mut server)
-            .err()
-            .unwrap();
+        let err = step(
+            Connection::Client(&mut client),
+            Connection::Server(&mut server),
+        )
+        .err()
+        .unwrap();
         assert_eq!(err, Error::NoApplicationProtocol);
         assert_eq!(
             AlertDescription::try_from(&err).ok(),
@@ -411,20 +459,14 @@ fn test_quic_server_no_tls12() {
     );
 }
 
-fn do_quic_handshake<L: SideData, R: SideData>(
-    client: &mut ConnectionCommon<L>,
-    server: &mut ConnectionCommon<R>,
-) {
+fn do_quic_handshake(mut client: Connection<'_>, mut server: Connection<'_>) {
     while client.is_handshaking() || server.is_handshaking() {
-        quic_transfer(client, server);
-        quic_transfer(server, client);
+        quic_transfer(&mut client, &mut server);
+        quic_transfer(&mut server, &mut client);
     }
 }
 
-fn quic_transfer<L: SideData, R: SideData>(
-    sender: &mut ConnectionCommon<L>,
-    receiver: &mut ConnectionCommon<R>,
-) {
+fn quic_transfer(sender: &mut Connection<'_>, receiver: &mut Connection<'_>) {
     let mut buf = Vec::new();
     while let Some(_change) = sender.write_hs(&mut buf) {
         // In a real QUIC implementation, we would handle key changes here
@@ -531,7 +573,10 @@ fn test_quic_resumption_data_0rtt() {
     )
     .unwrap();
 
-    do_quic_handshake(&mut client1, &mut server1);
+    do_quic_handshake(
+        Connection::Client(&mut client1),
+        Connection::Server(&mut server1),
+    );
 
     // Verify initial connection
     assert_eq!(client1.handshake_kind(), Some(HandshakeKind::Full));
@@ -559,14 +604,20 @@ fn test_quic_resumption_data_0rtt() {
     );
 
     // Start handshake and check transport parameters early
-    quic_transfer(&mut client2, &mut server2);
+    quic_transfer(
+        &mut Connection::Client(&mut client2),
+        &mut Connection::Server(&mut server2),
+    );
     assert_eq!(
         client2.quic_transport_parameters(),
         Some(server_params.as_slice())
     );
 
     // Complete the handshake (whether 0-RTT or regular resumption)
-    do_quic_handshake(&mut client2, &mut server2);
+    quic_transfer(
+        &mut Connection::Client(&mut client2),
+        &mut Connection::Server(&mut server2),
+    );
 
     // Verify resumption worked and parameters were received
     assert_eq!(client2.handshake_kind(), Some(HandshakeKind::Resumed));
@@ -788,7 +839,10 @@ fn test_quic_exporter() {
         assert_eq!(Some(Error::HandshakeNotComplete), client.exporter().err());
         assert_eq!(Some(Error::HandshakeNotComplete), server.exporter().err());
 
-        do_quic_handshake(&mut client, &mut server);
+        quic_transfer(
+            &mut Connection::Client(&mut client),
+            &mut Connection::Server(&mut server),
+        );
 
         let client_exporter = client.exporter().unwrap();
         let server_exporter = server.exporter().unwrap();
@@ -870,4 +924,32 @@ fn server_rejects_client_hello_with_trailing_fragment() {
         server.read_hs(&hello).unwrap_err(),
         PeerMisbehaved::KeyEpochWithPendingFragment.into()
     );
+}
+
+enum Connection<'a> {
+    Client(&'a mut quic::ClientConnection),
+    Server(&'a mut quic::ServerConnection),
+}
+
+impl<'a> Connection<'a> {
+    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
+        match self {
+            Self::Client(c) => c.write_hs(buf),
+            Self::Server(s) => s.write_hs(buf),
+        }
+    }
+
+    fn read_hs(&mut self, buf: &[u8]) -> Result<(), Error> {
+        match self {
+            Self::Client(c) => c.read_hs(buf),
+            Self::Server(s) => s.read_hs(buf),
+        }
+    }
+
+    fn is_handshaking(&self) -> bool {
+        match self {
+            Self::Client(c) => c.is_handshaking(),
+            Self::Server(s) => s.is_handshaking(),
+        }
+    }
 }

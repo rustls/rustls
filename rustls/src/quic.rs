@@ -23,13 +23,16 @@ mod connection {
     use core::fmt::{self, Debug};
     use core::ops::{Deref, DerefMut};
 
-    use pki_types::{DnsName, ServerName};
+    use pki_types::{DnsName, FipsStatus, ServerName};
 
     use super::{DirectionalKeys, KeyChange, Version};
+    use crate::HandshakeKind;
     use crate::client::{ClientConfig, ClientConnectionData};
     use crate::common_state::{CommonState, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
+    use crate::crypto::Identity;
     use crate::crypto::cipher::{EncodedMessage, Payload};
+    use crate::crypto::kx::SupportedKxGroup;
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
     use crate::msgs::{
@@ -39,76 +42,6 @@ mod connection {
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
-
-    /// A QUIC client or server connection.
-    #[expect(clippy::exhaustive_enums)]
-    #[derive(Debug)]
-    pub enum Connection {
-        /// A client connection
-        Client(ClientConnection),
-        /// A server connection
-        Server(ServerConnection),
-    }
-
-    impl Connection {
-        /// Return the TLS-encoded transport parameters for the session's peer.
-        ///
-        /// See [`ConnectionCommon::quic_transport_parameters()`] for more details.
-        pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
-            match self {
-                Self::Client(conn) => conn.quic_transport_parameters(),
-                Self::Server(conn) => conn.quic_transport_parameters(),
-            }
-        }
-
-        /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
-        pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
-            match self {
-                Self::Client(conn) => conn.zero_rtt_keys(),
-                Self::Server(conn) => conn.zero_rtt_keys(),
-            }
-        }
-
-        /// Consume unencrypted TLS handshake data.
-        ///
-        /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
-        pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-            match self {
-                Self::Client(conn) => conn.read_hs(plaintext),
-                Self::Server(conn) => conn.read_hs(plaintext),
-            }
-        }
-
-        /// Emit unencrypted TLS handshake data.
-        ///
-        /// When this returns `Some(_)`, the new keys must be used for future handshake data.
-        pub fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
-            match self {
-                Self::Client(conn) => conn.write_hs(buf),
-                Self::Server(conn) => conn.write_hs(buf),
-            }
-        }
-    }
-
-    impl Deref for Connection {
-        type Target = CommonState;
-
-        fn deref(&self) -> &Self::Target {
-            match self {
-                Self::Client(conn) => &conn.core.side,
-                Self::Server(conn) => &conn.core.side,
-            }
-        }
-    }
-
-    impl DerefMut for Connection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            match self {
-                Self::Client(conn) => &mut conn.core.side,
-                Self::Server(conn) => &mut conn.core.side,
-            }
-        }
-    }
 
     /// A QUIC client connection.
     pub struct ClientConnection {
@@ -198,21 +131,132 @@ mod connection {
         ///
         /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
         pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-            self.core.exporter()
+            self.inner.core.exporter()
         }
-    }
 
-    impl Deref for ClientConnection {
-        type Target = ConnectionCommon<ClientConnectionData>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.inner
+        /// Return the TLS-encoded transport parameters for the session's peer.
+        ///
+        /// While the transport parameters are technically available prior to the
+        /// completion of the handshake, they cannot be fully trusted until the
+        /// handshake completes, and reliance on them should be minimized.
+        /// However, any tampering with the parameters will cause the handshake
+        /// to fail.
+        pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
+            self.inner.quic_transport_parameters()
         }
-    }
 
-    impl DerefMut for ClientConnection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
+        /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
+        pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
+            self.inner.zero_rtt_keys()
+        }
+
+        /// Consume unencrypted TLS handshake data.
+        ///
+        /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
+        pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+            self.inner.read_hs(plaintext)
+        }
+
+        /// Emit unencrypted TLS handshake data.
+        ///
+        /// When this returns `Some(_)`, the new keys must be used for future handshake data.
+        pub fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
+            self.inner.write_hs(buf)
+        }
+
+        /// Returns true if the caller should call [`Connection::write_hs()`] as soon as possible.
+        pub fn wants_write(&self) -> bool {
+            self.inner.wants_write()
+        }
+
+        /// Queues a `close_notify` warning alert to be sent in the next `write_hs()`
+        /// call.
+        ///
+        /// This informs the peer that the connection is being closed.
+        ///
+        /// Does nothing if any `close_notify` or fatal alert was already sent.
+        ///
+        /// [`Connection::write_tls`]: crate::Connection::write_tls
+        pub fn send_close_notify(&mut self) {
+            self.inner.send_close_notify();
+        }
+
+        /// Returns true if the connection is currently performing the TLS handshake.
+        pub fn is_handshaking(&self) -> bool {
+            self.inner.is_handshaking()
+        }
+
+        /// Returns true if the caller should call [`Connection::read_tls`] as soon
+        /// as possible.
+        pub fn wants_read(&self) -> bool {
+            self.inner.wants_read()
+        }
+
+        /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
+        ///
+        /// This is made available for both full and resumed handshakes.
+        ///
+        /// For clients, this is the identity of the server. For servers, this is the identity of the
+        /// client, if client authentication was completed.
+        ///
+        /// The return value is None until this value is available.
+        pub fn peer_identity(&self) -> Option<&Identity<'static>> {
+            self.inner.peer_identity()
+        }
+
+        /// Retrieves the protocol agreed with the peer via ALPN.
+        ///
+        /// A return value of `None` after handshake completion
+        /// means no protocol was agreed (because no protocols
+        /// were offered or accepted by the peer).
+        pub fn alpn_protocol(&self) -> Option<&ApplicationProtocol<'static>> {
+            self.inner.alpn_protocol()
+        }
+
+        /// Retrieves the cipher suite agreed with the peer.
+        ///
+        /// This returns None until the cipher suite is agreed.
+        pub fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
+            self.inner.negotiated_cipher_suite()
+        }
+
+        /// Retrieves the key exchange group agreed with the peer.
+        ///
+        /// This function may return `None` depending on the state of the connection,
+        /// the type of handshake, and the protocol version.
+        ///
+        /// If [`Connection::is_handshaking()`] is true this function will return `None`.
+        /// Similarly, if the [`Connection::handshake_kind()`] is [`HandshakeKind::Resumed`]
+        /// and the [`Connection::protocol_version()`] is TLS 1.2, then no key exchange will have
+        /// occurred and this function will return `None`.
+        pub fn negotiated_key_exchange_group(&self) -> Option<&'static dyn SupportedKxGroup> {
+            self.inner
+                .negotiated_key_exchange_group()
+        }
+
+        /// Retrieves the protocol version agreed with the peer.
+        ///
+        /// This returns `None` until the version is agreed.
+        pub fn protocol_version(&self) -> Option<ProtocolVersion> {
+            self.inner.protocol_version()
+        }
+
+        /// Which kind of handshake was performed.
+        ///
+        /// This tells you whether the handshake was a resumption or not.
+        ///
+        /// This will return `None` before it is known which sort of handshake occurred.
+        pub fn handshake_kind(&self) -> Option<HandshakeKind> {
+            self.inner.handshake_kind()
+        }
+
+        /// Return the FIPS validation status of the connection.
+        ///
+        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
+        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+        pub fn fips(&self) -> FipsStatus {
+            self.inner.fips()
         }
     }
 
@@ -220,12 +264,6 @@ mod connection {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("quic::ClientConnection")
                 .finish_non_exhaustive()
-        }
-    }
-
-    impl From<ClientConnection> for Connection {
-        fn from(c: ClientConnection) -> Self {
-            Self::Client(c)
         }
     }
 
@@ -330,21 +368,132 @@ mod connection {
         ///
         /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
         pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-            self.core.exporter()
+            self.inner.core.exporter()
         }
-    }
 
-    impl Deref for ServerConnection {
-        type Target = ConnectionCommon<ServerConnectionData>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.inner
+        /// Return the TLS-encoded transport parameters for the session's peer.
+        ///
+        /// While the transport parameters are technically available prior to the
+        /// completion of the handshake, they cannot be fully trusted until the
+        /// handshake completes, and reliance on them should be minimized.
+        /// However, any tampering with the parameters will cause the handshake
+        /// to fail.
+        pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
+            self.inner.quic_transport_parameters()
         }
-    }
 
-    impl DerefMut for ServerConnection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
+        /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
+        pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
+            self.inner.zero_rtt_keys()
+        }
+
+        /// Consume unencrypted TLS handshake data.
+        ///
+        /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
+        pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+            self.inner.read_hs(plaintext)
+        }
+
+        /// Emit unencrypted TLS handshake data.
+        ///
+        /// When this returns `Some(_)`, the new keys must be used for future handshake data.
+        pub fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
+            self.inner.write_hs(buf)
+        }
+
+        /// Returns true if the caller should call [`Connection::write_hs()`] as soon as possible.
+        pub fn wants_write(&self) -> bool {
+            self.inner.wants_write()
+        }
+
+        /// Queues a `close_notify` warning alert to be sent in the next `write_hs()`
+        /// call.
+        ///
+        /// This informs the peer that the connection is being closed.
+        ///
+        /// Does nothing if any `close_notify` or fatal alert was already sent.
+        ///
+        /// [`Connection::write_tls`]: crate::Connection::write_tls
+        pub fn send_close_notify(&mut self) {
+            self.inner.send_close_notify();
+        }
+
+        /// Returns true if the connection is currently performing the TLS handshake.
+        pub fn is_handshaking(&self) -> bool {
+            self.inner.is_handshaking()
+        }
+
+        /// Returns true if the caller should call [`Connection::read_tls`] as soon
+        /// as possible.
+        pub fn wants_read(&self) -> bool {
+            self.inner.wants_read()
+        }
+
+        /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
+        ///
+        /// This is made available for both full and resumed handshakes.
+        ///
+        /// For clients, this is the identity of the server. For servers, this is the identity of the
+        /// client, if client authentication was completed.
+        ///
+        /// The return value is None until this value is available.
+        pub fn peer_identity(&self) -> Option<&Identity<'static>> {
+            self.inner.peer_identity()
+        }
+
+        /// Retrieves the protocol agreed with the peer via ALPN.
+        ///
+        /// A return value of `None` after handshake completion
+        /// means no protocol was agreed (because no protocols
+        /// were offered or accepted by the peer).
+        pub fn alpn_protocol(&self) -> Option<&ApplicationProtocol<'static>> {
+            self.inner.alpn_protocol()
+        }
+
+        /// Retrieves the cipher suite agreed with the peer.
+        ///
+        /// This returns None until the cipher suite is agreed.
+        pub fn negotiated_cipher_suite(&self) -> Option<SupportedCipherSuite> {
+            self.inner.negotiated_cipher_suite()
+        }
+
+        /// Retrieves the key exchange group agreed with the peer.
+        ///
+        /// This function may return `None` depending on the state of the connection,
+        /// the type of handshake, and the protocol version.
+        ///
+        /// If [`Connection::is_handshaking()`] is true this function will return `None`.
+        /// Similarly, if the [`Connection::handshake_kind()`] is [`HandshakeKind::Resumed`]
+        /// and the [`Connection::protocol_version()`] is TLS 1.2, then no key exchange will have
+        /// occurred and this function will return `None`.
+        pub fn negotiated_key_exchange_group(&self) -> Option<&'static dyn SupportedKxGroup> {
+            self.inner
+                .negotiated_key_exchange_group()
+        }
+
+        /// Retrieves the protocol version agreed with the peer.
+        ///
+        /// This returns `None` until the version is agreed.
+        pub fn protocol_version(&self) -> Option<ProtocolVersion> {
+            self.inner.protocol_version()
+        }
+
+        /// Which kind of handshake was performed.
+        ///
+        /// This tells you whether the handshake was a resumption or not.
+        ///
+        /// This will return `None` before it is known which sort of handshake occurred.
+        pub fn handshake_kind(&self) -> Option<HandshakeKind> {
+            self.inner.handshake_kind()
+        }
+
+        /// Return the FIPS validation status of the connection.
+        ///
+        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
+        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+        pub fn fips(&self) -> FipsStatus {
+            self.inner.fips()
         }
     }
 
@@ -355,14 +504,8 @@ mod connection {
         }
     }
 
-    impl From<ServerConnection> for Connection {
-        fn from(c: ServerConnection) -> Self {
-            Self::Server(c)
-        }
-    }
-
     /// A shared interface for QUIC connections.
-    pub struct ConnectionCommon<Side: SideData> {
+    struct ConnectionCommon<Side: SideData> {
         core: ConnectionCore<Side>,
         deframer_buffer: DeframerVecBuffer,
         version: Version,
@@ -377,14 +520,7 @@ mod connection {
             }
         }
 
-        /// Return the TLS-encoded transport parameters for the session's peer.
-        ///
-        /// While the transport parameters are technically available prior to the
-        /// completion of the handshake, they cannot be fully trusted until the
-        /// handshake completes, and reliance on them should be minimized.
-        /// However, any tampering with the parameters will cause the handshake
-        /// to fail.
-        pub fn quic_transport_parameters(&self) -> Option<&[u8]> {
+        fn quic_transport_parameters(&self) -> Option<&[u8]> {
             self.core
                 .side
                 .quic
@@ -393,8 +529,7 @@ mod connection {
                 .map(|v| v.as_ref())
         }
 
-        /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
-        pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
+        fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
             let suite = self
                 .core
                 .side
@@ -416,15 +551,7 @@ mod connection {
             ))
         }
 
-        /// Consume unencrypted TLS handshake data.
-        ///
-        /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
-        ///
-        /// If this fails, obtain the alert to send using [`AlertDescription::try_from(&Error)`][]
-        /// with the returned error.
-        ///
-        /// [`AlertDescription::try_from(&Error)`]: crate::error::AlertDescription::try_from
-        pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+        fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             let range = self.deframer_buffer.extend(plaintext);
 
             self.core.hs_deframer.input_message(
@@ -447,10 +574,7 @@ mod connection {
             Ok(())
         }
 
-        /// Emit unencrypted TLS handshake data.
-        ///
-        /// When this returns `Some(_)`, the new keys must be used for future handshake data.
-        pub fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
+        fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
             self.core.side.quic.write_hs(buf)
         }
     }
@@ -471,7 +595,7 @@ mod connection {
 }
 
 #[cfg(feature = "std")]
-pub use connection::{ClientConnection, Connection, ConnectionCommon, ServerConnection};
+pub use connection::{ClientConnection, ServerConnection};
 
 #[derive(Default)]
 pub(crate) struct Quic {
