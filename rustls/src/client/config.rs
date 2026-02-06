@@ -301,12 +301,10 @@ impl Hasher for HashAdapter<'_> {
     }
 }
 
-/// A trait for the ability to store client session data, so that sessions
-/// can be resumed in future connections.
+/// Client session data store for possible future resumption.
 ///
-/// Generally all data in this interface should be treated as
-/// **highly sensitive**, containing enough key material to break all security
-/// of the corresponding session.
+/// All data in this interface should be treated as **highly sensitive**, containing enough key
+/// material to break all security of the corresponding session.
 ///
 /// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
 /// expressed in the type system to allow implementations freedom in
@@ -315,27 +313,24 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// Remember what `NamedGroup` the given server chose.
     fn set_kx_hint(&self, key: ClientSessionKey<'static>, group: NamedGroup);
 
-    /// This should return the value most recently passed to `set_kx_hint`
-    /// for the given `key`.
+    /// Value most recently passed to `set_kx_hint` for the given `key`.
     ///
-    /// If `None` is returned, the caller chooses the first configured group,
-    /// and an extra round trip might happen if that choice is unsatisfactory
-    /// to the server.
+    /// If `None` is returned, the caller chooses the first configured group, and an extra round
+    /// trip might happen if that choice is unsatisfactory to the server.
     fn kx_hint(&self, key: &ClientSessionKey<'_>) -> Option<NamedGroup>;
 
-    /// Remember a TLS1.2 session.
+    /// Remember a TLS1.2 session, allowing resumption of this connection in the future.
     ///
-    /// At most one of these can be remembered at a time, per `server_name`.
+    /// At most one of these per session key can be remembered at a time.
     fn set_tls12_session(&self, key: ClientSessionKey<'static>, value: Tls12ClientSessionValue);
 
-    /// Get the most recently saved TLS1.2 session for `server_name` provided to `set_tls12_session`.
+    /// Get the most recently saved TLS1.2 session for `key` provided to `set_tls12_session`.
     fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<Tls12ClientSessionValue>;
 
-    /// Remove and forget any saved TLS1.2 session for `server_name`.
+    /// Remove and forget any saved TLS1.2 session for `key`.
     fn remove_tls12_session(&self, key: &ClientSessionKey<'static>);
 
-    /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
-    /// resumption of this session.
+    /// Remember a TLS1.3 ticket, allowing resumption of this connection in the future.
     ///
     /// This can be called multiple times for a given session, allowing multiple independent tickets
     /// to be valid at once.  The number of times this is called is controlled by the server, so
@@ -343,9 +338,9 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// simultaneously.
     fn insert_tls13_ticket(&self, key: ClientSessionKey<'static>, value: Tls13ClientSessionValue);
 
-    /// Return a TLS1.3 ticket previously provided to `add_tls13_ticket`.
+    /// Return a TLS1.3 ticket previously provided to `insert_tls13_ticket()`.
     ///
-    /// Implementations of this trait must return each value provided to `add_tls13_ticket` _at most once_.
+    /// Implementations of this trait must return each value provided to `insert_tls13_ticket()` _at most once_.
     fn take_tls13_ticket(&self, key: &ClientSessionKey<'static>)
     -> Option<Tls13ClientSessionValue>;
 }
