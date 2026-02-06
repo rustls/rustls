@@ -6,7 +6,7 @@ use pki_types::{DnsName, EchConfigListBytes, FipsStatus, ServerName};
 use subtle::ConstantTimeEq;
 
 use super::config::ClientConfig;
-use super::{Retrieved, Tls13ClientSessionValue, tls13};
+use super::{Retrieved, Tls13Session, tls13};
 use crate::common_state::Protocol;
 use crate::crypto::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::crypto::SecureRandom;
@@ -409,7 +409,7 @@ impl EchState {
         &mut self,
         mut outer_hello: ClientHelloPayload,
         retry_req: Option<&HelloRetryRequest>,
-        resuming: Option<&Retrieved<&Tls13ClientSessionValue>>,
+        resuming: Option<&Retrieved<&Tls13Session>>,
     ) -> Result<ClientHelloPayload, Error> {
         trace!(
             "Preparing ECH offer {}",
@@ -587,7 +587,7 @@ impl EchState {
         &mut self,
         outer_hello: &ClientHelloPayload,
         retryreq: Option<&HelloRetryRequest>,
-        resuming: Option<&Retrieved<&Tls13ClientSessionValue>>,
+        resuming: Option<&Retrieved<&Tls13Session>>,
     ) -> Vec<u8> {
         // Start building an inner hello using the outer_hello as a template.
         let mut inner_hello = ClientHelloPayload {

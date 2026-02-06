@@ -21,7 +21,7 @@ use rustls::client::danger::{
 };
 use rustls::client::{
     self, ClientConfig, ClientConnection, ClientSessionKey, CredentialRequest, EchConfig,
-    EchGreaseConfig, EchMode, EchStatus, Resumption, Tls12Resumption, Tls13ClientSessionValue,
+    EchGreaseConfig, EchMode, EchStatus, Resumption, Tls12Resumption, Tls13Session,
     WebPkiServerVerifier,
 };
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
@@ -1385,17 +1385,13 @@ impl client::ClientSessionStore for ClientCacheWithSpecificKxHints {
         self.kx_hint
     }
 
-    fn set_tls12_session(
-        &self,
-        key: ClientSessionKey<'static>,
-        mut value: client::Tls12ClientSessionValue,
-    ) {
+    fn set_tls12_session(&self, key: ClientSessionKey<'static>, mut value: client::Tls12Session) {
         value.rewind_epoch(self.delay);
         self.storage
             .set_tls12_session(key, value);
     }
 
-    fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<client::Tls12ClientSessionValue> {
+    fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<client::Tls12Session> {
         self.storage.tls12_session(key)
     }
 
@@ -1403,20 +1399,13 @@ impl client::ClientSessionStore for ClientCacheWithSpecificKxHints {
         self.storage.remove_tls12_session(key);
     }
 
-    fn insert_tls13_ticket(
-        &self,
-        key: ClientSessionKey<'static>,
-        mut value: Tls13ClientSessionValue,
-    ) {
+    fn insert_tls13_ticket(&self, key: ClientSessionKey<'static>, mut value: Tls13Session) {
         value.rewind_epoch(self.delay);
         self.storage
             .insert_tls13_ticket(key, value)
     }
 
-    fn take_tls13_ticket(
-        &self,
-        key: &ClientSessionKey<'static>,
-    ) -> Option<Tls13ClientSessionValue> {
+    fn take_tls13_ticket(&self, key: &ClientSessionKey<'static>) -> Option<Tls13Session> {
         self.storage.take_tls13_ticket(key)
     }
 }

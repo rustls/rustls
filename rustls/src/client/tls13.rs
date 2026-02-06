@@ -12,7 +12,7 @@ use super::hs::{
 };
 use super::{
     ClientAuthDetails, ClientHelloDetails, Retrieved, ServerCertDetails, Tls13ClientSessionInput,
-    Tls13ClientSessionValue,
+    Tls13Session,
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
@@ -355,7 +355,7 @@ pub(super) fn fill_in_psk_binder(
 pub(super) fn prepare_resumption(
     config: &ClientConfig,
     output: &mut dyn Output,
-    resuming_session: &Retrieved<&Tls13ClientSessionValue>,
+    resuming_session: &Retrieved<&Tls13Session>,
     exts: &mut ClientExtensions<'_>,
     doing_retry: bool,
 ) -> bool {
@@ -456,7 +456,7 @@ fn validate_encrypted_extensions(
 
 struct ExpectEncryptedExtensions {
     config: Arc<ClientConfig>,
-    resuming_session: Option<Tls13ClientSessionValue>,
+    resuming_session: Option<Tls13Session>,
     session_key: ClientSessionKey<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -1422,7 +1422,7 @@ impl ExpectTraffic {
 
         let now = self.config.current_time()?;
 
-        let value = Tls13ClientSessionValue::new(
+        let value = Tls13Session::new(
             self.session_input.clone(),
             nst.ticket.clone(),
             secret.as_ref(),
