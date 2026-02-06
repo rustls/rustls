@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::{self, Debug};
 use core::marker::PhantomData;
+use core::mem;
 
 use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
 use zeroize::Zeroize;
@@ -462,18 +463,12 @@ pub(crate) trait Codec<'a>: Debug + Sized {
 pub(crate) struct Reader<'a> {
     /// The underlying buffer storing the readers content
     buffer: &'a [u8],
-    /// Stores the current reading position for the buffer
-    cursor: usize,
 }
 
 impl<'a> Reader<'a> {
-    /// Creates a new Reader of the provided `bytes` slice with
-    /// the initial cursor position of zero.
+    /// Creates a new Reader of the provided `bytes` slice.
     pub(crate) fn new(buffer: &'a [u8]) -> Self {
-        Self {
-            buffer,
-            cursor: 0,
-        }
+        Self { buffer }
     }
 
     /// Attempts to create a new Reader on a sub section of this
@@ -486,33 +481,25 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Borrows a slice of all the remaining bytes
-    /// that appear after the cursor position.
+    /// Borrows a slice of all the remaining bytes.
     ///
     /// Moves the cursor to the end of the buffer length.
     pub(crate) fn rest(&mut self) -> &'a [u8] {
-        let rest = &self.buffer[self.cursor..];
-        self.cursor = self.buffer.len();
-        rest
+        mem::take(&mut self.buffer)
     }
 
-    /// Attempts to borrow a slice of bytes from the current
-    /// cursor position of `length` if there is not enough
-    /// bytes remaining after the cursor to take the length
-    /// then None is returned instead.
+    /// Borrow a slice of `length` bytes from the buffer.
+    ///
+    /// If there are not enough bytes remaining to take the length `None` is returned instead.
     pub(crate) fn take(&mut self, length: usize) -> Option<&'a [u8]> {
-        if self.left() < length {
-            return None;
-        }
-        let current = self.cursor;
-        self.cursor += length;
-        Some(&self.buffer[current..current + length])
+        let (out, rest) = self.buffer.split_at_checked(length)?;
+        self.buffer = rest;
+        Some(out)
     }
 
-    /// Used to check whether the reader has any content left
-    /// after the cursor (cursor has not reached end of buffer)
+    /// Whether the reader has any content left.
     pub(crate) fn any_left(&self) -> bool {
-        self.cursor < self.buffer.len()
+        !self.buffer.is_empty()
     }
 
     pub(crate) fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
@@ -522,10 +509,9 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Returns the number of bytes that are still able to be
-    /// read (The number of remaining takes)
+    /// Number of bytes that are still able to be read.
     pub(crate) fn left(&self) -> usize {
-        self.buffer.len() - self.cursor
+        self.buffer.len()
     }
 }
 
