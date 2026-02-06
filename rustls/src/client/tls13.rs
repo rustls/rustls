@@ -112,8 +112,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
                 (Some(selected_psk), Some((early_key_schedule, in_early_traffic))) => {
                     match &resuming_session {
                         Some(resuming) => {
-                            let Some(resuming_suite) = suite.can_resume_from(resuming.suite())
-                            else {
+                            let Some(resuming_suite) = suite.can_resume_from(resuming.suite) else {
                                 return Err(
                                     PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite
                                         .into(),
@@ -360,11 +359,11 @@ pub(super) fn prepare_resumption(
     exts: &mut ClientExtensions<'_>,
     doing_retry: bool,
 ) -> bool {
-    let resuming_suite = resuming_session.suite();
+    let resuming_suite = resuming_session.suite;
     output.emit(Event::CipherSuite(resuming_suite.into()));
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
-    let max_early_data_size = resuming_session.max_early_data_size();
+    let max_early_data_size = resuming_session.max_early_data_size;
     let early_data_enabled = if config.enable_early_data && max_early_data_size > 0 && !doing_retry
     {
         output.emit(Event::EarlyData(EarlyDataEvent::Enable(

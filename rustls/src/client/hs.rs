@@ -748,18 +748,18 @@ fn emit_client_hello_for_retry(
         (Some(ech_state), Some(tls13_session)) => ech_state
             .early_data_key_schedule
             .take()
-            .map(|schedule| (tls13_session.suite(), schedule)),
+            .map(|schedule| (tls13_session.suite, schedule)),
 
         // When we're not doing ECH and resuming, then the PSK binder need to be filled in as
         // normal.
         (_, Some(tls13_session)) => {
             let key_schedule = KeyScheduleEarlyClient::new(
                 input.protocol,
-                tls13_session.suite(),
-                tls13_session.secret(),
+                tls13_session.suite,
+                tls13_session.secret.bytes(),
             );
             tls13::fill_in_psk_binder(&key_schedule, &transcript_buffer, &mut chp);
-            Some((tls13_session.suite(), key_schedule))
+            Some((tls13_session.suite, key_schedule))
         }
 
         // No early key schedule in other cases.
@@ -917,7 +917,7 @@ fn prepare_resumption<'a>(
 
     // If the selected cipher suite can't select from the session's, we can't resume.
     if let Some(suite) = suite {
-        suite.can_resume_from(tls13.suite())?;
+        suite.can_resume_from(tls13.suite)?;
     }
 
     let early_data_enabled =
@@ -992,9 +992,9 @@ impl ClientSessionValue {
 
         if let Some(quic_params) = found
             .as_ref()
-            .and_then(|r| r.tls13().map(|v| v.quic_params()))
+            .and_then(|r| r.tls13().map(|v| &v.quic_params))
         {
-            output.emit(Event::QuicTransportParameters(quic_params));
+            output.emit(Event::QuicTransportParameters(quic_params.bytes().to_vec()));
         }
 
         found
