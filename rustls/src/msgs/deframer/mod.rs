@@ -48,7 +48,7 @@ impl<'a> Iterator for DeframerIter<'a> {
     type Item = Result<EncodedMessage<InboundOpaque<'a>>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut reader = Reader::init(self.buf);
+        let mut reader = Reader::new(self.buf);
 
         let (typ, version, len) = match read_opaque_message_header(&mut reader) {
             Ok(header) => header,

@@ -1001,7 +1001,7 @@ impl ExpectCompressedCertificate {
             return Err(PeerMisbehaved::InvalidCertCompression.into());
         }
 
-        let cert_payload = CertificatePayloadTls13::read(&mut Reader::init(&decompress_buffer))?;
+        let cert_payload = CertificatePayloadTls13::read(&mut Reader::new(&decompress_buffer))?;
         trace!(
             "Server certificate decompressed using {:?} ({} bytes -> {})",
             compressed_cert.alg,

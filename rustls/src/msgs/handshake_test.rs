@@ -43,14 +43,14 @@ use crate::verify::{DigitallySignedStruct, DistinguishedName};
 #[test]
 fn rejects_short_random() {
     let bytes = [0x01; 31];
-    let mut rd = Reader::init(&bytes);
+    let mut rd = Reader::new(&bytes);
     assert!(Random::read(&mut rd).is_err());
 }
 
 #[test]
 fn reads_random() {
     let bytes = [0x01; 32];
-    let mut rd = Reader::init(&bytes);
+    let mut rd = Reader::new(&bytes);
     let rnd = Random::read(&mut rd).unwrap();
     println!("{rnd:?}");
 
@@ -68,28 +68,28 @@ fn debug_random() {
 #[test]
 fn rejects_truncated_session_id() {
     let bytes = [32; 32];
-    let mut rd = Reader::init(&bytes);
+    let mut rd = Reader::new(&bytes);
     assert!(SessionId::read(&mut rd).is_err());
 }
 
 #[test]
 fn rejects_session_id_with_bad_length() {
     let bytes = [33; 33];
-    let mut rd = Reader::init(&bytes);
+    let mut rd = Reader::new(&bytes);
     assert!(SessionId::read(&mut rd).is_err());
 }
 
 #[test]
 fn session_id_with_different_lengths_are_unequal() {
-    let a = SessionId::read(&mut Reader::init(&[1u8, 1])).unwrap();
-    let b = SessionId::read(&mut Reader::init(&[2u8, 1, 2])).unwrap();
+    let a = SessionId::read(&mut Reader::new(&[1u8, 1])).unwrap();
+    let b = SessionId::read(&mut Reader::new(&[2u8, 1, 2])).unwrap();
     assert_ne!(a, b);
 }
 
 #[test]
 fn accepts_short_session_id() {
     let bytes = [1; 2];
-    let mut rd = Reader::init(&bytes);
+    let mut rd = Reader::new(&bytes);
     let sess = SessionId::read(&mut rd).unwrap();
     println!("{sess:?}");
 
@@ -101,7 +101,7 @@ fn accepts_short_session_id() {
 #[test]
 fn accepts_empty_session_id() {
     let bytes = [0; 1];
-    let mut rd = Reader::init(&bytes);
+    let mut rd = Reader::new(&bytes);
     let sess = SessionId::read(&mut rd).unwrap();
     println!("{sess:?}");
 
@@ -116,7 +116,7 @@ fn debug_session_id() {
         32, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 1, 1,
     ];
-    let mut rd = Reader::init(&bytes);
+    let mut rd = Reader::new(&bytes);
     let sess = SessionId::read(&mut rd).unwrap();
     assert_eq!(
         "0101010101010101010101010101010101010101010101010101010101010101",
@@ -205,25 +205,25 @@ fn refuses_new_session_ticket_ext_with_duplicate_extension() {
 #[test]
 fn rejects_truncated_sni() {
     let bytes = [0, 1, 0];
-    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
+    assert!(ServerNamePayload::read(&mut Reader::new(&bytes)).is_err());
 
     let bytes = [0, 2, 0, 1];
-    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
+    assert!(ServerNamePayload::read(&mut Reader::new(&bytes)).is_err());
 
     let bytes = [0, 3, 0, 1, 0];
-    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
+    assert!(ServerNamePayload::read(&mut Reader::new(&bytes)).is_err());
 
     let bytes = [0, 4, 0, 2, 0, 0];
-    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
+    assert!(ServerNamePayload::read(&mut Reader::new(&bytes)).is_err());
 
     let bytes = [0, 5, 0, 3, 0, 0, 0];
-    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
+    assert!(ServerNamePayload::read(&mut Reader::new(&bytes)).is_err());
 
     let bytes = [0, 5, 0, 3, 0, 0, 1];
-    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
+    assert!(ServerNamePayload::read(&mut Reader::new(&bytes)).is_err());
 
     let bytes = [0, 6, 0, 4, 0, 0, 2, 0x68];
-    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
+    assert!(ServerNamePayload::read(&mut Reader::new(&bytes)).is_err());
 }
 
 #[test]
@@ -246,13 +246,13 @@ fn rejects_duplicate_names_in_sni_extension() {
 #[test]
 fn can_round_trip_psk_identity() {
     let bytes = [0, 1, 0x99, 0x11, 0x22, 0x33, 0x44];
-    let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes)).unwrap();
+    let psk_id = PresharedKeyIdentity::read(&mut Reader::new(&bytes)).unwrap();
     println!("{psk_id:?}");
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
     assert_eq!(psk_id.get_encoding(), bytes.to_vec());
 
     let bytes = [0, 5, 0x1, 0x2, 0x3, 0x4, 0x5, 0x11, 0x22, 0x33, 0x44];
-    let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes)).unwrap();
+    let psk_id = PresharedKeyIdentity::read(&mut Reader::new(&bytes)).unwrap();
     println!("{psk_id:?}");
     assert_eq!(psk_id.identity.bytes(), &[0x1, 0x2, 0x3, 0x4, 0x5]);
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
@@ -264,7 +264,7 @@ fn can_round_trip_psk_offer() {
     let bytes = [
         0, 7, 0, 1, 0x99, 0x11, 0x22, 0x33, 0x44, 0, 4, 3, 0x01, 0x02, 0x3,
     ];
-    let psko = PresharedKeyOffer::read(&mut Reader::init(&bytes)).unwrap();
+    let psko = PresharedKeyOffer::read(&mut Reader::new(&bytes)).unwrap();
     println!("{psko:?}");
 
     assert_eq!(psko.identities.len(), 1);
@@ -285,7 +285,7 @@ fn can_round_trip_cert_status_req_for_ocsp() {
         0, 5, 0, 3, 0, 1, 1, 0, 1, 2,
     ];
 
-    let csr = CertificateStatusRequest::read(&mut Reader::init(&bytes)).unwrap();
+    let csr = CertificateStatusRequest::read(&mut Reader::new(&bytes)).unwrap();
     println!("{csr:?}");
     assert_eq!(csr.get_encoding(), bytes.to_vec());
 }
@@ -297,7 +297,7 @@ fn can_round_trip_cert_status_req_for_other() {
         1, 2, 3, 4,
     ];
 
-    let csr = CertificateStatusRequest::read(&mut Reader::init(&bytes)).unwrap();
+    let csr = CertificateStatusRequest::read(&mut Reader::new(&bytes)).unwrap();
     println!("{csr:?}");
     assert_eq!(csr.get_encoding(), bytes.to_vec());
 }
@@ -574,7 +574,7 @@ fn can_round_trip_all_tls12_handshake_payloads() {
     for hm in all_tls12_handshake_payloads().iter() {
         println!("{:?}", hm.0.handshake_type());
         let bytes = hm.get_encoding();
-        let mut rd = Reader::init(&bytes);
+        let mut rd = Reader::new(&bytes);
         let other = HandshakeMessagePayload::read(&mut rd).unwrap();
         assert!(!rd.any_left());
         assert_eq!(hm.get_encoding(), other.get_encoding());
@@ -623,7 +623,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
 
             assert!(
                 HandshakeMessagePayload::read_version(
-                    &mut Reader::init(&enc),
+                    &mut Reader::new(&enc),
                     ProtocolVersion::TLSv1_2
                 )
                 .is_err()
@@ -638,7 +638,7 @@ fn can_round_trip_all_tls13_handshake_payloads() {
     for hm in all_tls13_handshake_payloads().iter() {
         println!("{:?}", hm.0.handshake_type());
         let bytes = hm.get_encoding();
-        let mut rd = Reader::init(&bytes);
+        let mut rd = Reader::new(&bytes);
 
         let other =
             HandshakeMessagePayload::read_version(&mut rd, ProtocolVersion::TLSv1_3).unwrap();
@@ -689,7 +689,7 @@ fn can_detect_truncation_of_all_tls13_handshake_payloads() {
 
             assert!(
                 HandshakeMessagePayload::read_version(
-                    &mut Reader::init(&enc),
+                    &mut Reader::new(&enc),
                     ProtocolVersion::TLSv1_3
                 )
                 .is_err()
@@ -744,7 +744,7 @@ fn cannot_decode_huge_certificate() {
 #[test]
 fn can_decode_server_hello_from_api_devicecheck_apple_com() {
     let data = include_bytes!("../testdata/hello-api.devicecheck.apple.com.bin");
-    let mut r = Reader::init(data);
+    let mut r = Reader::new(data);
     let hm = HandshakeMessagePayload::read(&mut r).unwrap();
     println!("msg: {hm:?}");
 }
@@ -1161,7 +1161,7 @@ fn sample_certificate_status() -> CertificateStatus<'static> {
 }
 
 fn get_ech_config(encoded: &[u8]) -> Vec<EchConfigPayload> {
-    Vec::<_>::read(&mut Reader::init(encoded)).unwrap()
+    Vec::<_>::read(&mut Reader::new(encoded)).unwrap()
 }
 
 // One EchConfig, with server-name "localhost".

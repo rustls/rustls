@@ -1052,7 +1052,7 @@ impl Codec<'_> for ServerKeyExchangePayload {
 impl ServerKeyExchangePayload {
     pub(crate) fn unwrap_given_kxa(&self, kxa: KeyExchangeAlgorithm) -> Option<ServerKeyExchange> {
         if let Self::Unknown(unk) = self {
-            let mut rd = Reader::init(unk.bytes());
+            let mut rd = Reader::new(unk.bytes());
 
             let result = ServerKeyExchange {
                 params: ServerKeyExchangeParams::decode(&mut rd, kxa).ok()?,

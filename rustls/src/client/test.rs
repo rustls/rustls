@@ -660,7 +660,7 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
     let mut bytes = Vec::new();
     conn.write_tls(&mut bytes).unwrap();
 
-    let message = EncodedMessage::<Payload<'_>>::read(&mut Reader::init(&bytes))
+    let message = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(&bytes))
         .unwrap()
         .into_owned();
     match Message::try_from(&message).unwrap() {

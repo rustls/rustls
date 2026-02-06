@@ -101,7 +101,7 @@ impl EchConfig {
         ech_config_list: EchConfigListBytes<'_>,
         hpke_suites: &[&'static dyn Hpke],
     ) -> Result<Self, Error> {
-        let ech_configs = Vec::<EchConfigPayload>::read(&mut Reader::init(&ech_config_list))
+        let ech_configs = Vec::<EchConfigPayload>::read(&mut Reader::new(&ech_config_list))
             .map_err(|_| {
                 Error::InvalidEncryptedClientHello(EncryptedClientHelloError::InvalidConfigList)
             })?;
