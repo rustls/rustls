@@ -9,7 +9,8 @@ use rustls::client::danger::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
 use rustls::client::{
-    ClientSessionKey, ServerVerifierBuilder, WantsClientCert, WebPkiServerVerifier,
+    ClientSessionKey, ServerVerifierBuilder, Tls13ClientSessionValue, WantsClientCert,
+    WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
     EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
@@ -1908,7 +1909,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
     fn insert_tls13_ticket(
         &self,
         key: ClientSessionKey<'static>,
-        mut value: rustls::client::Tls13ClientSessionValue,
+        mut value: Tls13ClientSessionValue,
     ) {
         if let Some((expected, desired)) = self.alter_max_early_data_size {
             value._reset_max_early_data_size(expected, desired);
@@ -1925,7 +1926,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
     fn take_tls13_ticket(
         &self,
         key: &ClientSessionKey<'static>,
-    ) -> Option<rustls::client::Tls13ClientSessionValue> {
+    ) -> Option<Tls13ClientSessionValue> {
         let rc = self.storage.take_tls13_ticket(key);
         self.ops
             .lock()

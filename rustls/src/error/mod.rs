@@ -11,7 +11,7 @@ use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 use webpki::ExtendedKeyUsage;
 
 use crate::crypto::kx::KeyExchangeAlgorithm;
-use crate::crypto::{GetRandomFailed, InconsistentKeys};
+use crate::crypto::{CipherSuite, GetRandomFailed, InconsistentKeys};
 use crate::enums::{ContentType, HandshakeType};
 use crate::msgs::{Codec, EchConfigPayload};
 
@@ -1338,6 +1338,9 @@ fn join<T: fmt::Debug>(items: &[T]) -> String {
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApiMisuse {
+    /// Trying to resume a session with an unknown cipher suite.
+    ResumingFromUnknownCipherSuite(CipherSuite),
+
     /// The [`KeyingMaterialExporter`][] was already consumed.
     ///
     /// Methods that obtain an exporter (eg, [`ConnectionCommon::exporter()`][]) can only
