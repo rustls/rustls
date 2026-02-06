@@ -60,7 +60,7 @@ fn serversessionvalue_no_sni() {
         0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x69, 0x7a, 0x4a, 0xdf, 0x00, 0x13, 0x01, 0x00, 0x00,
         0x00, 0x03, 0x04, 0x05, 0x06, 0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
     ];
-    let mut rd = Reader::init(&bytes);
+    let mut rd = Reader::new(&bytes);
     let ssv = ServerSessionValue::read(&mut rd).unwrap();
     assert_eq!(ssv.get_encoding(), bytes);
 }
@@ -92,7 +92,7 @@ fn serversessionvalue_with_cert() {
         0x00, 0x00, 0x03, 0x0a, 0x0b, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x05, 0x06,
         0x03, 0x01, 0x02, 0x03, 0x12, 0x34, 0x56, 0x78,
     ];
-    let mut rd = Reader::init(&bytes);
+    let mut rd = Reader::new(&bytes);
     let ssv = ServerSessionValue::read(&mut rd).unwrap();
     assert_eq!(ssv.get_encoding(), bytes);
 }
@@ -239,7 +239,7 @@ fn server_chooses_ffdhe_group_for_client_hello(
     conn.write_tls(&mut &mut flight)
         .unwrap();
 
-    let mut r = Reader::init(&flight[HEADER_SIZE..]);
+    let mut r = Reader::new(&flight[HEADER_SIZE..]);
     assert!(matches!(
         HandshakeMessagePayload::read(&mut r).unwrap(),
         HandshakeMessagePayload(HandshakePayload::ServerHello(_))

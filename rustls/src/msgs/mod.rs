@@ -104,7 +104,7 @@ pub mod fuzzing {
     use crate::server::ServerSessionValue;
 
     pub fn fuzz_fragmenter(data: &[u8]) {
-        let mut rdr = Reader::init(data);
+        let mut rdr = Reader::new(data);
         let Ok(msg) = EncodedMessage::<Payload<'_>>::read(&mut rdr) else {
             return;
         };
@@ -127,7 +127,7 @@ pub mod fuzzing {
     }
 
     pub fn fuzz_message(data: &[u8]) {
-        let mut rdr = Reader::init(data);
+        let mut rdr = Reader::new(data);
         let Ok(m) = EncodedMessage::<Payload<'_>>::read(&mut rdr) else {
             return;
         };
@@ -145,7 +145,7 @@ pub mod fuzzing {
     }
 
     pub fn fuzz_server_session_value(data: &[u8]) {
-        let mut rdr = Reader::init(data);
+        let mut rdr = Reader::new(data);
         let _ = ServerSessionValue::read(&mut rdr);
     }
 }
@@ -304,7 +304,7 @@ impl<'a> MessagePayload<'a> {
         vers: ProtocolVersion,
         payload: &'a [u8],
     ) -> Result<Self, InvalidMessage> {
-        let mut r = Reader::init(payload);
+        let mut r = Reader::new(payload);
         match typ {
             ContentType::ApplicationData => Ok(Self::ApplicationData(Payload::Borrowed(payload))),
             ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
@@ -728,7 +728,7 @@ mod tests {
             let mut bytes = Vec::new();
             f.read_to_end(&mut bytes).unwrap();
 
-            let mut rd = Reader::init(&bytes);
+            let mut rd = Reader::new(&bytes);
             let msg = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
             println!("{msg:?}");
 
@@ -766,7 +766,7 @@ mod tests {
         \x2d\x31\x34\x08\x73\x70\x64\x79\x2f\x33\x2e\x31\x06\x73\x70\x64\
         \x79\x2f\x33\x08\x68\x74\x74\x70\x2f\x31\x2e\x31\x00\x0b\x00\x02\
         \x01\x00\x00\x0a\x00\x0a\x00\x08\x00\x1d\x00\x17\x00\x18\x00\x19";
-        let mut rd = Reader::init(bytes);
+        let mut rd = Reader::new(bytes);
         let m = EncodedMessage::<Payload<'_>>::read(&mut rd).unwrap();
         println!("m = {m:?}");
         Message::try_from(&m).unwrap();
@@ -788,7 +788,7 @@ mod tests {
             &b"\x18\x03\x04\x00\x04\x11\x22\x33\x44"[..],
         ];
         for &bytes in samples.iter() {
-            let m = EncodedMessage::<Payload<'_>>::read(&mut Reader::init(bytes)).unwrap();
+            let m = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(bytes)).unwrap();
             println!("m = {m:?}");
             let m = Message::try_from(&m);
             println!("m' = {m:?}");
@@ -830,7 +830,7 @@ mod tests {
     #[test]
     fn smoketest() {
         let bytes = include_bytes!("../testdata/handshake-test.1.bin");
-        let mut r = Reader::init(bytes);
+        let mut r = Reader::new(bytes);
 
         while r.any_left() {
             let m = EncodedMessage::<Payload<'_>>::read(&mut r).unwrap();

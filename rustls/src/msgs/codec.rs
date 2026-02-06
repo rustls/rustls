@@ -445,7 +445,7 @@ pub(crate) trait Codec<'a>: Debug + Sized {
     /// Returns `Err(InvalidMessage::ExcessData(_))` if
     /// `Self::read` does not read the entirety of `bytes`.
     fn read_bytes(bytes: &'a [u8]) -> Result<Self, InvalidMessage> {
-        let mut reader = Reader::init(bytes);
+        let mut reader = Reader::new(bytes);
         Self::read(&mut reader).and_then(|r| {
             reader.expect_empty("read_bytes")?;
             Ok(r)
@@ -469,9 +469,9 @@ pub(crate) struct Reader<'a> {
 impl<'a> Reader<'a> {
     /// Creates a new Reader of the provided `bytes` slice with
     /// the initial cursor position of zero.
-    pub(crate) fn init(bytes: &'a [u8]) -> Self {
-        Reader {
-            buffer: bytes,
+    pub(crate) fn new(buffer: &'a [u8]) -> Self {
+        Self {
+            buffer,
             cursor: 0,
         }
     }
@@ -481,7 +481,7 @@ impl<'a> Reader<'a> {
     /// will return None if there is not enough bytes
     pub(crate) fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
         match self.take(length) {
-            Some(bytes) => Ok(Reader::init(bytes)),
+            Some(bytes) => Ok(Reader::new(bytes)),
             None => Err(InvalidMessage::MessageTooShort),
         }
     }
