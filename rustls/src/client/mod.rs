@@ -220,6 +220,29 @@ pub struct Tls12ClientSessionValue {
 }
 
 impl Tls12ClientSessionValue {
+    /// Decode a ticket from the given bytes.
+    pub fn from_slice(bytes: &[u8], provider: &CryptoProvider) -> Result<Self, Error> {
+        let mut reader = Reader::new(bytes);
+        let suite = CipherSuite::read(&mut reader)?;
+        let suite = provider
+            .tls12_cipher_suites
+            .iter()
+            .find(|s| s.common.suite == suite)
+            .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
+
+        Ok(Self {
+            suite: *suite,
+            session_id: SessionId::read(&mut reader)?,
+            master_secret: Zeroizing::new(
+                reader
+                    .take_array("MasterSecret")
+                    .copied()?,
+            ),
+            extended_ms: matches!(u8::read(&mut reader)?, 1),
+            common: ClientSessionCommon::read(&mut reader)?,
+        })
+    }
+
     pub(crate) fn new(
         suite: &'static Tls12CipherSuite,
         session_id: SessionId,
@@ -237,6 +260,15 @@ impl Tls12ClientSessionValue {
             extended_ms,
             common: ClientSessionCommon::new(ticket, time_now, lifetime, peer_identity),
         }
+    }
+
+    /// Encode this ticket into `buf` for persistence.
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        self.suite.common.suite.encode(buf);
+        self.session_id.encode(buf);
+        buf.extend_from_slice(&*self.master_secret);
+        buf.push(self.extended_ms as u8);
+        self.common.encode(buf);
     }
 
     /// Test only: rewind epoch by `delta` seconds.
