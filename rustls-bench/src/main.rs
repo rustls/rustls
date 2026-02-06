@@ -3,7 +3,6 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
-use core::mem;
 use core::num::NonZeroUsize;
 use core::ops::{Deref, DerefMut};
 use core::time::Duration;
@@ -14,14 +13,10 @@ use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
-use rustls::client::{Resumption, UnbufferedClientConnection};
+use rustls::client::Resumption;
 use rustls::crypto::{CipherSuite, CryptoProvider, Identity};
 use rustls::enums::ProtocolVersion;
-use rustls::server::{
-    NoServerSessionStorage, ServerSessionMemoryCache, UnbufferedServerConnection,
-    WebPkiClientVerifier,
-};
-use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
+use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, ConnectionCommon, HandshakeKind, RootCertStore, ServerConfig,
     ServerConnection, SideData,
@@ -211,10 +206,6 @@ impl Api {
     fn use_buffered(&self) -> bool {
         matches!(*self, Self::Both | Self::Buffered)
     }
-
-    fn use_unbuffered(&self) -> bool {
-        matches!(*self, Self::Both | Self::Unbuffered)
-    }
 }
 
 fn all_tests(args: &Args) {
@@ -283,19 +274,6 @@ fn bench_handshake(params: &Parameters) {
 
         report_handshake_result("handshakes", params, rounds, results);
     }
-
-    if params.api.use_unbuffered() {
-        let results = multithreaded(
-            params.threads,
-            &client_config,
-            &server_config,
-            move |client_config, server_config| {
-                bench_handshake_unbuffered(rounds, params.resume, client_config, server_config)
-            },
-        );
-
-        report_handshake_result("handshakes-unbuffered", params, rounds, results);
-    }
 }
 
 fn bench_handshake_buffered(
@@ -348,72 +326,6 @@ fn bench_handshake_buffered(
         {
             client_latency.sample(client_time);
             server_latency.sample(server_time);
-            timings.client += client_time;
-            timings.server += server_time;
-            rounds -= 1;
-        } else {
-            // otherwise, this handshake is ignored against the quota for this thread,
-            // and serves just to refresh the session cache.  that is mainly
-            // necessary for TLS1.3, where tickets are single-use and limited to
-            // 8 per server.
-        }
-    }
-
-    timings
-}
-
-fn bench_handshake_unbuffered(
-    mut rounds: u64,
-    resume: ResumptionParam,
-    client_config: Arc<ClientConfig>,
-    server_config: Arc<ServerConfig>,
-) -> Timings {
-    let mut timings = Timings::default();
-
-    while rounds > 0 {
-        let mut client_time = 0f64;
-        let mut server_time = 0f64;
-
-        let client = time(&mut client_time, || {
-            let server_name = "localhost".try_into().unwrap();
-            UnbufferedClientConnection::new(client_config.clone(), server_name).unwrap()
-        });
-        let server = time(&mut server_time, || {
-            UnbufferedServerConnection::new(server_config.clone()).unwrap()
-        });
-
-        // nb. buffer allocation is outside the library, so is outside the benchmark scope
-        let mut client = Unbuffered::new_client(client);
-        let mut server = Unbuffered::new_server(server);
-
-        let client_wrote = time(&mut client_time, || client.communicate());
-        if client_wrote {
-            client.swap_buffers(&mut server);
-        }
-
-        let server_wrote = time(&mut server_time, || server.communicate());
-        if server_wrote {
-            server.swap_buffers(&mut client);
-        }
-
-        let client_wrote = time(&mut client_time, || client.communicate());
-        if client_wrote {
-            client.swap_buffers(&mut server);
-        }
-
-        let server_wrote = time(&mut server_time, || server.communicate());
-        if server_wrote {
-            server.swap_buffers(&mut client);
-        }
-
-        // check we reached idle
-        assert!(!server.communicate());
-        assert!(!client.communicate());
-
-        // if we achieved the desired handshake shape, count this handshake.
-        if client.conn.handshake_kind() == Some(resume.as_handshake_kind())
-            && server.conn.handshake_kind() == Some(resume.as_handshake_kind())
-        {
             timings.client += client_time;
             timings.server += server_time;
             rounds -= 1;
@@ -547,19 +459,6 @@ fn bench_bulk(params: &Parameters) {
 
         report_bulk_result("bulk", params, results, rounds);
     }
-
-    if params.api.use_unbuffered() {
-        let results = multithreaded(
-            params.threads,
-            &client_config,
-            &server_config,
-            move |client_config, server_config| {
-                bench_bulk_unbuffered(client_config, server_config, params.plaintext_size, rounds)
-            },
-        );
-
-        report_bulk_result("bulk-unbuffered", params, results, rounds);
-    }
 }
 
 fn bench_bulk_buffered(
@@ -588,39 +487,6 @@ fn bench_bulk_buffered(
         });
 
         timings.client += transfer(&mut buffers, &mut server, &mut client, Some(buf.len()));
-    }
-
-    timings
-}
-
-fn bench_bulk_unbuffered(
-    client_config: Arc<ClientConfig>,
-    server_config: Arc<ServerConfig>,
-    plaintext_size: u64,
-    rounds: u64,
-) -> Timings {
-    let server_name = "localhost".try_into().unwrap();
-    let mut client = Unbuffered::new_client(
-        UnbufferedClientConnection::new(client_config, server_name).unwrap(),
-    );
-    let mut server =
-        Unbuffered::new_server(UnbufferedServerConnection::new(server_config).unwrap());
-
-    client.handshake(&mut server);
-
-    let mut timings = Timings::default();
-
-    let buf = vec![0; plaintext_size as usize];
-    for _ in 0..rounds {
-        time(&mut timings.server, || {
-            server.write(&buf);
-        });
-
-        server.swap_buffers(&mut client);
-
-        time(&mut timings.client, || {
-            client.read_and_discard(buf.len());
-        });
     }
 
     timings
@@ -1067,248 +933,6 @@ impl From<RequestedKeyType> for KeyType {
             RequestedKeyType::EcdsaP256 => Self::EcdsaP256,
             RequestedKeyType::EcdsaP384 => Self::EcdsaP384,
             RequestedKeyType::Ed25519 => Self::Ed25519,
-        }
-    }
-}
-
-struct Unbuffered {
-    conn: UnbufferedConnection,
-    input: Vec<u8>,
-    input_used: usize,
-    output: Vec<u8>,
-    output_used: usize,
-}
-
-impl Unbuffered {
-    fn new_client(client: UnbufferedClientConnection) -> Self {
-        Self {
-            conn: UnbufferedConnection::Client(client),
-            input: vec![0u8; Self::BUFFER_LEN],
-            input_used: 0,
-            output: vec![0u8; Self::BUFFER_LEN],
-            output_used: 0,
-        }
-    }
-
-    fn new_server(server: UnbufferedServerConnection) -> Self {
-        Self {
-            conn: UnbufferedConnection::Server(server),
-            input: vec![0u8; Self::BUFFER_LEN],
-            input_used: 0,
-            output: vec![0u8; Self::BUFFER_LEN],
-            output_used: 0,
-        }
-    }
-
-    fn handshake(&mut self, peer: &mut Self) {
-        loop {
-            let mut progress = false;
-
-            if self.communicate() {
-                self.swap_buffers(peer);
-                progress = true;
-            }
-
-            if peer.communicate() {
-                peer.swap_buffers(self);
-                progress = true;
-            }
-
-            if !progress {
-                return;
-            }
-        }
-    }
-
-    fn swap_buffers(&mut self, peer: &mut Self) {
-        // our output becomes peer's input, and peer's input
-        // becomes our output.
-        mem::swap(&mut self.input, &mut peer.output);
-        mem::swap(&mut self.input_used, &mut peer.output_used);
-        mem::swap(&mut self.output, &mut peer.input);
-        mem::swap(&mut self.output_used, &mut peer.input_used);
-    }
-
-    fn communicate(&mut self) -> bool {
-        let (input_used, output_added) = self.conn.communicate(
-            &mut self.input[..self.input_used],
-            &mut self.output[self.output_used..],
-        );
-        assert_eq!(input_used, self.input_used);
-        self.input_used = 0;
-        self.output_used += output_added;
-        self.output_used > 0
-    }
-
-    fn write(&mut self, data: &[u8]) {
-        assert_eq!(self.input_used, 0);
-        let output_added = match self
-            .conn
-            .write(data, &mut self.output[self.output_used..])
-        {
-            Ok(output_added) => output_added,
-            Err(EncryptError::InsufficientSize(InsufficientSizeError {
-                required_size, ..
-            })) => {
-                self.output
-                    .resize(self.output_used + required_size, 0);
-                self.conn
-                    .write(data, &mut self.output[self.output_used..])
-                    .unwrap()
-            }
-            Err(other) => panic!("unexpected write error {other:?}"),
-        };
-        self.output_used += output_added;
-    }
-
-    fn read_and_discard(&mut self, len: usize) {
-        assert!(self.input_used > 0);
-        let input_used = self
-            .conn
-            .read_and_discard(len, &mut self.input[..self.input_used]);
-        assert_eq!(input_used, self.input_used);
-        self.input_used = 0;
-    }
-
-    const BUFFER_LEN: usize = 16_384;
-}
-
-enum UnbufferedConnection {
-    Client(UnbufferedClientConnection),
-    Server(UnbufferedServerConnection),
-}
-
-impl UnbufferedConnection {
-    fn communicate(&mut self, input: &mut [u8], output: &mut [u8]) -> (usize, usize) {
-        let mut input_used = 0;
-        let mut output_added = 0;
-
-        loop {
-            match self {
-                Self::Client(client) => {
-                    match client.process_tls_records(&mut input[input_used..]) {
-                        UnbufferedStatus {
-                            state: Ok(ConnectionState::EncodeTlsData(mut etd)),
-                            discard,
-                            ..
-                        } => {
-                            input_used += discard;
-                            output_added += etd
-                                .encode(&mut output[output_added..])
-                                .unwrap();
-                        }
-                        UnbufferedStatus {
-                            state: Ok(ConnectionState::TransmitTlsData(ttd)),
-                            discard,
-                            ..
-                        } => {
-                            input_used += discard;
-                            ttd.done();
-                            return (input_used, output_added);
-                        }
-                        UnbufferedStatus {
-                            state: Ok(ConnectionState::WriteTraffic(_)),
-                            discard,
-                            ..
-                        } => {
-                            input_used += discard;
-                            return (input_used, output_added);
-                        }
-                        st => {
-                            println!("unexpected client {st:?}");
-                            return (input_used, output_added);
-                        }
-                    }
-                }
-                Self::Server(server) => {
-                    match server.process_tls_records(&mut input[input_used..]) {
-                        UnbufferedStatus {
-                            state: Ok(ConnectionState::EncodeTlsData(mut etd)),
-                            discard,
-                            ..
-                        } => {
-                            input_used += discard;
-                            output_added += etd
-                                .encode(&mut output[output_added..])
-                                .unwrap();
-                        }
-                        UnbufferedStatus {
-                            state: Ok(ConnectionState::TransmitTlsData(ttd)),
-                            discard,
-                            ..
-                        } => {
-                            input_used += discard;
-                            ttd.done();
-                            return (input_used, output_added);
-                        }
-                        UnbufferedStatus {
-                            state: Ok(ConnectionState::WriteTraffic(_)),
-                            discard,
-                            ..
-                        } => {
-                            input_used += discard;
-                            return (input_used, output_added);
-                        }
-                        st => {
-                            println!("unexpected server {st:?}");
-                            return (input_used, output_added);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn write(&mut self, data: &[u8], output: &mut [u8]) -> Result<usize, EncryptError> {
-        match self {
-            Self::Client(client) => match client.process_tls_records(&mut []) {
-                UnbufferedStatus {
-                    state: Ok(ConnectionState::WriteTraffic(mut wt)),
-                    ..
-                } => wt.encrypt(data, output),
-                st => panic!("unexpected write state: {st:?}"),
-            },
-            Self::Server(server) => match server.process_tls_records(&mut []) {
-                UnbufferedStatus {
-                    state: Ok(ConnectionState::WriteTraffic(mut wt)),
-                    ..
-                } => wt.encrypt(data, output),
-                st => panic!("unexpected write state: {st:?}"),
-            },
-        }
-    }
-
-    fn read_and_discard(&mut self, mut expected: usize, input: &mut [u8]) -> usize {
-        let mut input_used = 0;
-
-        let client = match self {
-            Self::Client(client) => client,
-            Self::Server(_) => todo!("server read"),
-        };
-
-        while expected > 0 {
-            match client.process_tls_records(&mut input[input_used..]) {
-                UnbufferedStatus {
-                    state: Ok(ConnectionState::ReadTraffic(rt)),
-                    discard,
-                    ..
-                } => {
-                    input_used += discard;
-                    let record = rt.record();
-                    input_used += record.discard;
-                    expected -= record.payload.len();
-                }
-                st => panic!("unexpected read state: {st:?}"),
-            }
-        }
-
-        input_used
-    }
-
-    fn handshake_kind(&self) -> Option<HandshakeKind> {
-        match self {
-            Self::Client(client) => client.handshake_kind(),
-            Self::Server(server) => server.handshake_kind(),
         }
     }
 }

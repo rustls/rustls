@@ -113,7 +113,6 @@ impl fmt::Display for UnsupportedOperationError {
     }
 }
 
-#[cfg(feature = "std")]
 impl core::error::Error for UnsupportedOperationError {}
 
 /// How a TLS1.2 `key_block` is partitioned.

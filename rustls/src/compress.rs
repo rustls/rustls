@@ -32,11 +32,9 @@
 //! [cc_cd]: crate::ClientConfig::cert_decompressors
 //! [sc_cd]: crate::ServerConfig::cert_decompressors
 
-#[cfg(feature = "std")]
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::fmt::Debug;
-#[cfg(feature = "std")]
 use std::sync::Mutex;
 
 use crate::crypto::cipher::Payload;
@@ -282,14 +280,12 @@ pub enum CompressionCache {
     Disabled,
 
     /// Compressions are stored in an LRU cache.
-    #[cfg(feature = "std")]
     Enabled(CompressionCacheInner),
 }
 
 /// Innards of an enabled CompressionCache.
 ///
 /// You cannot make one of these directly. Use [`CompressionCache::new`].
-#[cfg(feature = "std")]
 #[derive(Debug)]
 pub struct CompressionCacheInner {
     /// Maximum size of underlying storage.
@@ -304,7 +300,6 @@ pub struct CompressionCacheInner {
 impl CompressionCache {
     /// Make a `CompressionCache` that stores up to `size` compressed
     /// certificate messages.
-    #[cfg(feature = "std")]
     pub fn new(size: usize) -> Self {
         if size == 0 {
             return Self::Disabled;
@@ -328,13 +323,10 @@ impl CompressionCache {
     ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
         match self {
             Self::Disabled => Self::uncached_compression(compressor, original),
-
-            #[cfg(feature = "std")]
             Self::Enabled(_) => self.compression_for_impl(compressor, original),
         }
     }
 
-    #[cfg(feature = "std")]
     fn compression_for_impl(
         &self,
         compressor: &dyn CertCompressor,
@@ -416,23 +408,13 @@ impl CompressionCache {
     }
 }
 
-#[cfg_attr(not(feature = "std"), expect(clippy::derivable_impls))]
 impl Default for CompressionCache {
     fn default() -> Self {
-        #[cfg(feature = "std")]
-        {
-            // 4 entries allows 2 certificate chains times 2 compression algorithms
-            Self::new(4)
-        }
-
-        #[cfg(not(feature = "std"))]
-        {
-            Self::Disabled
-        }
+        // 4 entries allows 2 certificate chains times 2 compression algorithms
+        Self::new(4)
     }
 }
 
-#[cfg_attr(not(feature = "std"), expect(dead_code))]
 #[derive(Debug)]
 pub(crate) struct CompressionCacheEntry {
     // cache key is algorithm + original:

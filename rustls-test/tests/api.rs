@@ -33,8 +33,6 @@ mod tests_with_ring {
     mod server_cert_verifier;
     #[path = "api/api.rs"]
     mod tests;
-    #[path = "api/unbuffered.rs"]
-    mod unbuffered;
 }
 
 #[cfg(feature = "aws-lc-rs")]
@@ -68,8 +66,6 @@ mod tests_with_aws_lc_rs {
     mod server_cert_verifier;
     #[path = "api/api.rs"]
     mod tests;
-    #[path = "api/unbuffered.rs"]
-    mod unbuffered;
 }
 
 // this must be outside tests_with_*, as we want

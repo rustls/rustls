@@ -179,7 +179,6 @@ fn crl_error_equality() {
 }
 
 #[test]
-#[cfg(feature = "std")]
 fn other_error_equality() {
     let other_error = OtherError::new(TestError);
     assert_ne!(other_error, other_error);
@@ -303,7 +302,6 @@ fn rand_error_mapping() {
     assert_eq!(err, Error::FailedToGetRandomBytes);
 }
 
-#[cfg(feature = "std")]
 #[test]
 fn time_error_mapping() {
     use std::time::SystemTime;

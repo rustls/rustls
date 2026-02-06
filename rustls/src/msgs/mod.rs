@@ -58,8 +58,8 @@ use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
 pub(crate) use deframer::{
-    BufferProgress, DeframerIter, DeframerSliceBuffer, DeframerVecBuffer, Delocator,
-    HandshakeAlignedProof, HandshakeDeframer, Locator,
+    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeAlignedProof,
+    HandshakeDeframer, Locator,
 };
 
 mod enums;
@@ -186,7 +186,6 @@ impl Message<'_> {
         }
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn into_owned(self) -> Message<'static> {
         let Self { version, payload } = self;
         Message {
@@ -331,7 +330,6 @@ impl<'a> MessagePayload<'a> {
         }
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn into_owned(self) -> MessagePayload<'static> {
         use MessagePayload::*;
         match self {
@@ -532,7 +530,6 @@ impl<'a> HandshakeMessagePayload<'a> {
         Self(HandshakePayload::MessageHash(Payload::new(hash.to_vec())))
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn into_owned(self) -> HandshakeMessagePayload<'static> {
         HandshakeMessagePayload(self.0.into_owned())
     }
@@ -624,7 +621,6 @@ impl HandshakePayload<'_> {
         }
     }
 
-    #[cfg(feature = "std")]
     fn into_owned(self) -> HandshakePayload<'static> {
         use HandshakePayload::*;
 
@@ -702,7 +698,6 @@ pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
 pub(crate) const MAX_PAYLOAD: u16 = 16_384 + 2048;
 
 /// Maximum on-the-wire message size.
-#[cfg(feature = "std")]
 pub(crate) const MAX_WIRE_SIZE: usize = MAX_PAYLOAD as usize + HEADER_SIZE;
 
 #[cfg(test)]

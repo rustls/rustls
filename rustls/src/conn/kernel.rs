@@ -12,28 +12,6 @@
 //!
 //! That's it. Everything else you will need to implement yourself.
 //!
-//! # Entry Point
-//! The entry points into this API are
-//! [`UnbufferedClientConnection::dangerous_into_kernel_connection`][client-into]
-//! and
-//! [`UnbufferedServerConnection::dangerous_into_kernel_connection`][server-into].
-//!
-//! In order to actually create an [`KernelConnection`] all of the following
-//! must be true:
-//! - the connection must have completed its handshake,
-//! - the connection must have no buffered TLS data waiting to be sent, and,
-//! - the config used to create the connection must have `enable_extract_secrets`
-//!   set to true.
-//!
-//! This sounds fairly complicated to achieve at first glance. However, if you
-//! drive an unbuffered connection through the handshake until it returns
-//! [`WriteTraffic`] then it will end up in an appropriate state to convert
-//! into an external connection.
-//!
-//! [client-into]: crate::client::UnbufferedClientConnection::dangerous_into_kernel_connection
-//! [server-into]: crate::server::UnbufferedServerConnection::dangerous_into_kernel_connection
-//! [`WriteTraffic`]: crate::unbuffered::ConnectionState::WriteTraffic
-//!
 //! # Cipher Suite Confidentiality Limits
 //! Some cipher suites (notably AES-GCM) have vulnerabilities where they are no
 //! longer secure once a certain number of messages have been sent. Normally,

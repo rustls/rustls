@@ -21,16 +21,14 @@ pub use config::{
 };
 
 mod connection;
-#[cfg(feature = "std")]
-pub use connection::{Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
-pub use connection::{ServerConnectionData, UnbufferedServerConnection};
+pub use connection::{
+    Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection, ServerConnectionData,
+};
 
 pub(crate) mod handy;
-pub use handy::NoServerSessionStorage;
-#[cfg(all(any(feature = "std", feature = "hashbrown"), feature = "webpki"))]
+#[cfg(feature = "webpki")]
 pub use handy::ServerNameResolver;
-#[cfg(any(feature = "std", feature = "hashbrown"))]
-pub use handy::ServerSessionMemoryCache;
+pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 
 mod hs;
 pub(crate) use hs::ServerHandler;

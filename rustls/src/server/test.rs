@@ -35,7 +35,6 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::version::TLS12_VERSION;
 
-#[cfg(feature = "std")] // for UnixTime::now
 #[test]
 fn serversessionvalue_is_debug() {
     use std::{println, vec};

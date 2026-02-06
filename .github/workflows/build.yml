@@ -151,16 +151,6 @@ jobs:
           cargo build --locked -p rustls-ring
           cargo build --locked -p rustls-aws-lc-rs
 
-        # this target does _not_ include the libstd crate in its sysroot
-        # it will catch unwanted usage of libstd in _dependencies_
-      - name: cargo build (debug; no default features; no-std)
-        run: cargo build --locked --no-default-features --target x86_64-unknown-none
-        working-directory: rustls
-
-      - name: cargo build (debug; no default features; no-std, hashbrown)
-        run: cargo build --locked --no-default-features --features hashbrown --target x86_64-unknown-none
-        working-directory: rustls
-
       - name: cargo test (debug; default features)
         run: cargo test --locked
         working-directory: rustls
@@ -175,13 +165,8 @@ jobs:
 
       - name: cargo test (debug; no default features; std)
         run: |
-          cargo test --locked -p rustls --no-default-features --features std
           cargo test --locked -p rustls-ring --no-default-features --features std
           cargo test --locked -p rustls-aws-lc-rs --no-default-features --features std --features aws-lc-sys
-
-      - name: cargo test (debug; no default features; std+fips)
-        run: cargo test --locked --no-default-features --features std
-        working-directory: rustls
 
       - name: cargo test (release; no run)
         run: cargo test --locked --release --no-run

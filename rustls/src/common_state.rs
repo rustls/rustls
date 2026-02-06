@@ -8,6 +8,7 @@ use pki_types::{DnsName, FipsStatus};
 use crate::client::EchStatus;
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
+use crate::conn::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
     DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter, MessageEncrypter,
@@ -25,7 +26,6 @@ use crate::msgs::{
 };
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
 use crate::{SideData, quic};
 
@@ -398,6 +398,7 @@ impl SendPath {
         self.has_sent_fatal_alert = true;
     }
 
+    #[expect(dead_code)]
     pub(crate) fn write_plaintext(
         &mut self,
         payload: OutboundPlain<'_>,
@@ -455,7 +456,6 @@ impl SendPath {
         Ok(self.write_fragments(outgoing_tls, fragments))
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.encrypt_state.is_encrypting());
 
@@ -548,7 +548,6 @@ impl SendPath {
     ///
     /// If internal buffers are too small, this function will not accept
     /// all the data.
-    #[cfg(feature = "std")]
     pub(crate) fn buffer_plaintext(
         &mut self,
         payload: OutboundPlain<'_>,
@@ -623,6 +622,7 @@ impl SendPath {
         self.send_warning_alert_no_log(AlertDescription::CloseNotify);
     }
 
+    #[expect(dead_code)]
     pub(crate) fn eager_send_close_notify(
         &mut self,
         outgoing_tls: &mut [u8],
@@ -746,7 +746,6 @@ pub(crate) struct ReceivePath {
     may_receive_application_data: bool,
     /// If the peer has signaled end of stream.
     pub(crate) has_received_close_notify: bool,
-    #[cfg(feature = "std")]
     pub(crate) has_seen_eof: bool,
     pub(crate) received_plaintext: ChunkVecBuffer,
     temper_counters: TemperCounters,
@@ -760,7 +759,6 @@ impl ReceivePath {
             decrypt_state: DecryptionState::new(),
             may_receive_application_data: false,
             has_received_close_notify: false,
-            #[cfg(feature = "std")]
             has_seen_eof: false,
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             temper_counters: TemperCounters::default(),
@@ -956,7 +954,6 @@ pub(crate) trait State<Side: SideData>: Send + Sync {
 
     fn handle_decrypt_error(&self) {}
 
-    #[cfg_attr(not(feature = "std"), expect(dead_code))]
     fn set_resumption_data(&mut self, _resumption_data: &[u8]) -> Result<(), Error> {
         Err(ApiMisuse::ResumptionDataProvidedTooLate.into())
     }
@@ -1211,7 +1208,6 @@ pub(crate) enum Protocol {
     /// TCP-TLS, standardized in RFC5246 and RFC8446
     Tcp,
     /// QUIC, standardized in RFC9001
-    #[cfg_attr(not(feature = "std"), expect(dead_code))]
     Quic(quic::Version),
 }
 

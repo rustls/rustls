@@ -9,12 +9,9 @@ use pki_types::PrivateKeyDer;
 use pki_types::{FipsStatus, ServerName, UnixTime};
 
 use super::ech::EchMode;
-#[cfg(feature = "std")]
-use super::handy::ClientSessionMemoryCache;
-use super::handy::{FailResolveClientCert, NoClientSessionStorage};
+use super::handy::{ClientSessionMemoryCache, FailResolveClientCert, NoClientSessionStorage};
 use super::{Tls12ClientSessionValue, Tls13ClientSessionValue};
 use crate::builder::{ConfigBuilder, WantsVerifier};
-#[cfg(feature = "std")]
 use crate::client::connection::ClientConnectionBuilder;
 #[cfg(doc)]
 use crate::crypto;
@@ -27,9 +24,7 @@ use crate::error::{ApiMisuse, Error};
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
-#[cfg(feature = "std")]
-use crate::time_provider::DefaultTimeProvider;
-use crate::time_provider::TimeProvider;
+use crate::time_provider::{DefaultTimeProvider, TimeProvider};
 #[cfg(feature = "webpki")]
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{DistinguishedName, DynHasher, KeyLog, compress, verify};
@@ -181,7 +176,6 @@ impl ClientConfig {
     /// This will use the provider's configured ciphersuites.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    #[cfg(feature = "std")]
     pub fn builder(provider: Arc<CryptoProvider>) -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_details(provider, Arc::new(DefaultTimeProvider))
     }
@@ -213,7 +207,6 @@ impl ClientConfig {
     ///
     /// The `ClientConfig` controls how the client behaves;
     /// `name` is the name of server we want to talk to.
-    #[cfg(feature = "std")]
     pub fn connect(self: &Arc<Self>, server_name: ServerName<'static>) -> ClientConnectionBuilder {
         ClientConnectionBuilder {
             config: self.clone(),
@@ -554,7 +547,6 @@ impl Resumption {
     ///
     /// This is the default `Resumption` choice, and enables resuming a TLS 1.2 session with
     /// a session id or RFC 5077 ticket.
-    #[cfg(feature = "std")]
     pub fn in_memory_sessions(num: usize) -> Self {
         Self {
             store: Arc::new(ClientSessionMemoryCache::new(num)),
@@ -594,13 +586,7 @@ impl Default for Resumption {
     /// Create an in-memory session store resumption with up to 256 server names, allowing
     /// a TLS 1.2 session to resume with a session id or RFC 5077 ticket.
     fn default() -> Self {
-        #[cfg(feature = "std")]
-        let ret = Self::in_memory_sessions(256);
-
-        #[cfg(not(feature = "std"))]
-        let ret = Self::disabled();
-
-        ret
+        Self::in_memory_sessions(256)
     }
 }
 

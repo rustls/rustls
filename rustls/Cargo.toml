@@ -14,10 +14,9 @@ autotests = false
 exclude = ["src/testdata", "tests/**"]
 
 [features]
-default = ["log", "std", "webpki"]
-brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
+default = ["log", "webpki"]
+brotli = ["dep:brotli", "dep:brotli-decompressor"]
 log = ["dep:log"]
-std = ["pki-types/std", "once_cell/std"]
 webpki = ["dep:webpki"]
 zlib = ["dep:zlib-rs"]
 
@@ -27,10 +26,10 @@ brotli-decompressor = { workspace = true, optional = true }
 hashbrown = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 # only required for no-std
-once_cell = { workspace = true }
+once_cell = { workspace = true, features = ["std"] }
 subtle = { workspace = true }
 webpki = { workspace = true, optional = true }
-pki-types = { workspace = true }
+pki-types = { workspace = true, features = ["std"] }
 zeroize = { workspace = true }
 zlib-rs = { workspace = true, optional = true }
 

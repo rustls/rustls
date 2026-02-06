@@ -13,7 +13,7 @@ log = ["dep:log", "rustls/log"]
 
 [dependencies]
 log = { workspace = true, optional = true }
-rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false, features = ["std"] }
+rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }
 
 [dev-dependencies]
 env_logger = { workspace = true }
