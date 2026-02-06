@@ -9,7 +9,7 @@ use std::vec;
 
 use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
-use super::{Tls12ClientSessionValue, Tls13ClientSessionInput, Tls13ClientSessionValue};
+use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
@@ -52,7 +52,7 @@ fn tls12_client_session_value_roundtrip() {
         intermediates: vec![],
     });
 
-    let session = Tls12ClientSessionValue::new(
+    let session = Tls12Session::new(
         TEST_PROVIDER.tls12_cipher_suites[0],
         session_id,
         Arc::new(SizedPayload::from(vec![0xde, 0xad, 0xbe, 0xef])),
@@ -65,7 +65,7 @@ fn tls12_client_session_value_roundtrip() {
 
     let mut encoded = Vec::new();
     session.encode(&mut encoded);
-    let decoded = Tls12ClientSessionValue::from_slice(&encoded, &TEST_PROVIDER).unwrap();
+    let decoded = Tls12Session::from_slice(&encoded, &TEST_PROVIDER).unwrap();
 
     assert_eq!(decoded.suite.common.suite, session.suite.common.suite);
     assert_eq!(decoded.session_id, session_id);
@@ -83,7 +83,7 @@ fn tls13_client_session_value_roundtrip() {
         &b"raw public key"[..],
     ));
 
-    let session = Tls13ClientSessionValue::new(
+    let session = Tls13Session::new(
         Tls13ClientSessionInput {
             suite: TEST_PROVIDER.tls13_cipher_suites[0],
             peer_identity: peer_identity.clone(),
@@ -101,7 +101,7 @@ fn tls13_client_session_value_roundtrip() {
 
     let mut encoded = Vec::new();
     session.encode(&mut encoded);
-    let decoded = Tls13ClientSessionValue::from_slice(&encoded, &TEST_PROVIDER).unwrap();
+    let decoded = Tls13Session::from_slice(&encoded, &TEST_PROVIDER).unwrap();
 
     assert_eq!(decoded.suite.common.suite, session.suite.common.suite);
     assert_eq!(decoded.secret.bytes(), session.secret.bytes());

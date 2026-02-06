@@ -10,7 +10,7 @@ use pki_types::{FipsStatus, ServerName, UnixTime};
 
 use super::ech::EchMode;
 use super::handy::{ClientSessionMemoryCache, FailResolveClientCert, NoClientSessionStorage};
-use super::{Tls12ClientSessionValue, Tls13ClientSessionValue};
+use super::{Tls12Session, Tls13Session};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::connection::ClientConnectionBuilder;
 #[cfg(doc)]
@@ -322,10 +322,10 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// Remember a TLS1.2 session, allowing resumption of this connection in the future.
     ///
     /// At most one of these per session key can be remembered at a time.
-    fn set_tls12_session(&self, key: ClientSessionKey<'static>, value: Tls12ClientSessionValue);
+    fn set_tls12_session(&self, key: ClientSessionKey<'static>, value: Tls12Session);
 
     /// Get the most recently saved TLS1.2 session for `key` provided to `set_tls12_session`.
-    fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<Tls12ClientSessionValue>;
+    fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<Tls12Session>;
 
     /// Remove and forget any saved TLS1.2 session for `key`.
     fn remove_tls12_session(&self, key: &ClientSessionKey<'static>);
@@ -336,13 +336,12 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// to be valid at once.  The number of times this is called is controlled by the server, so
     /// implementations of this trait should apply a reasonable bound of how many items are stored
     /// simultaneously.
-    fn insert_tls13_ticket(&self, key: ClientSessionKey<'static>, value: Tls13ClientSessionValue);
+    fn insert_tls13_ticket(&self, key: ClientSessionKey<'static>, value: Tls13Session);
 
     /// Return a TLS1.3 ticket previously provided to `insert_tls13_ticket()`.
     ///
     /// Implementations of this trait must return each value provided to `insert_tls13_ticket()` _at most once_.
-    fn take_tls13_ticket(&self, key: &ClientSessionKey<'static>)
-    -> Option<Tls13ClientSessionValue>;
+    fn take_tls13_ticket(&self, key: &ClientSessionKey<'static>) -> Option<Tls13Session>;
 }
 
 /// Identifies a security context and server in the [`ClientSessionStore`] interface.

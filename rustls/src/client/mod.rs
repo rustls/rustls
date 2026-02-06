@@ -82,7 +82,7 @@ impl<T> Retrieved<T> {
     }
 }
 
-impl Retrieved<&Tls13ClientSessionValue> {
+impl Retrieved<&Tls13Session> {
     pub(crate) fn obfuscated_ticket_age(&self) -> u32 {
         let age_secs = self
             .retrieved_at
@@ -114,7 +114,7 @@ impl<T> Deref for Retrieved<T> {
 
 /// A stored TLS 1.3 client session value.
 #[derive(Debug)]
-pub struct Tls13ClientSessionValue {
+pub struct Tls13Session {
     suite: &'static Tls13CipherSuite,
     secret: Zeroizing<SizedPayload<'static, u8>>,
     pub(crate) age_add: u32,
@@ -123,7 +123,7 @@ pub struct Tls13ClientSessionValue {
     quic_params: SizedPayload<'static, u16, MaybeEmpty>,
 }
 
-impl Tls13ClientSessionValue {
+impl Tls13Session {
     /// Decode a ticket from the given bytes.
     pub fn from_slice(bytes: &[u8], provider: &CryptoProvider) -> Result<Self, Error> {
         let mut reader = Reader::new(bytes);
@@ -192,7 +192,7 @@ impl Tls13ClientSessionValue {
     }
 }
 
-impl Deref for Tls13ClientSessionValue {
+impl Deref for Tls13Session {
     type Target = ClientSessionCommon;
 
     fn deref(&self) -> &Self::Target {
@@ -210,7 +210,7 @@ pub(crate) struct Tls13ClientSessionInput {
 
 /// A stored TLS 1.2 client session value.
 #[derive(Debug, Clone)]
-pub struct Tls12ClientSessionValue {
+pub struct Tls12Session {
     suite: &'static Tls12CipherSuite,
     pub(crate) session_id: SessionId,
     master_secret: Zeroizing<[u8; 48]>,
@@ -219,7 +219,7 @@ pub struct Tls12ClientSessionValue {
     pub(crate) common: ClientSessionCommon,
 }
 
-impl Tls12ClientSessionValue {
+impl Tls12Session {
     /// Decode a ticket from the given bytes.
     pub fn from_slice(bytes: &[u8], provider: &CryptoProvider) -> Result<Self, Error> {
         let mut reader = Reader::new(bytes);
@@ -278,7 +278,7 @@ impl Tls12ClientSessionValue {
     }
 }
 
-impl Deref for Tls12ClientSessionValue {
+impl Deref for Tls12Session {
     type Target = ClientSessionCommon;
 
     fn deref(&self) -> &Self::Target {

@@ -11,8 +11,7 @@ use super::config::{ClientSessionKey, Tls12Resumption};
 use super::connection::ClientConnectionData;
 use super::ech::{EchMode, EchState, EchStatus};
 use super::{
-    ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12ClientSessionValue,
-    Tls13ClientSessionValue, tls13,
+    ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12Session, Tls13Session, tls13,
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{EarlyDataEvent, Event, Input, Output, Protocol, State};
@@ -881,7 +880,7 @@ fn prepare_resumption<'a>(
     suite: Option<SupportedCipherSuite>,
     output: &mut dyn Output,
     config: &ClientConfig,
-) -> Option<(Retrieved<&'a Tls13ClientSessionValue>, bool)> {
+) -> Option<(Retrieved<&'a Tls13Session>, bool)> {
     // Check whether we're resuming with a non-empty ticket.
     let resuming = match resuming {
         Some(resuming) if !resuming.ticket().is_empty() => resuming,
@@ -953,8 +952,8 @@ pub(super) fn process_alpn_protocol(
 }
 
 pub(super) enum ClientSessionValue {
-    Tls13(Tls13ClientSessionValue),
-    Tls12(Tls12ClientSessionValue),
+    Tls13(Tls13Session),
+    Tls12(Tls12Session),
 }
 
 impl ClientSessionValue {
@@ -1009,7 +1008,7 @@ impl ClientSessionValue {
         }
     }
 
-    fn tls13(&self) -> Option<&Tls13ClientSessionValue> {
+    fn tls13(&self) -> Option<&Tls13Session> {
         match self {
             Self::Tls13(v) => Some(v),
             Self::Tls12(_) => None,

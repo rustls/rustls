@@ -1,9 +1,7 @@
 use core::hash::Hasher;
 
 use super::config::{ClientCredentialResolver, ClientSessionStore};
-use super::{
-    ClientSessionKey, CredentialRequest, Tls12ClientSessionValue, Tls13ClientSessionValue,
-};
+use super::{ClientSessionKey, CredentialRequest, Tls12Session, Tls13Session};
 use crate::crypto::SelectedCredential;
 use crate::crypto::kx::NamedGroup;
 use crate::enums::CertificateType;
@@ -19,17 +17,17 @@ impl ClientSessionStore for NoClientSessionStorage {
         None
     }
 
-    fn set_tls12_session(&self, _: ClientSessionKey<'static>, _: Tls12ClientSessionValue) {}
+    fn set_tls12_session(&self, _: ClientSessionKey<'static>, _: Tls12Session) {}
 
-    fn tls12_session(&self, _: &ClientSessionKey<'_>) -> Option<Tls12ClientSessionValue> {
+    fn tls12_session(&self, _: &ClientSessionKey<'_>) -> Option<Tls12Session> {
         None
     }
 
     fn remove_tls12_session(&self, _: &ClientSessionKey<'_>) {}
 
-    fn insert_tls13_ticket(&self, _: ClientSessionKey<'static>, _: Tls13ClientSessionValue) {}
+    fn insert_tls13_ticket(&self, _: ClientSessionKey<'static>, _: Tls13Session) {}
 
-    fn take_tls13_ticket(&self, _: &ClientSessionKey<'_>) -> Option<Tls13ClientSessionValue> {
+    fn take_tls13_ticket(&self, _: &ClientSessionKey<'_>) -> Option<Tls13Session> {
         None
     }
 }
@@ -39,7 +37,7 @@ mod cache {
     use core::fmt;
 
     use super::*;
-    use crate::client::Tls13ClientSessionValue;
+    use crate::client::Tls13Session;
     use crate::crypto::kx::NamedGroup;
     use crate::limited_cache;
     use crate::lock::Mutex;
@@ -50,10 +48,10 @@ mod cache {
         kx_hint: Option<NamedGroup>,
 
         // Zero or one TLS1.2 sessions.
-        tls12: Option<Tls12ClientSessionValue>,
+        tls12: Option<Tls12Session>,
 
         // Up to MAX_TLS13_TICKETS_PER_SERVER TLS1.3 tickets, oldest first.
-        tls13: VecDeque<Tls13ClientSessionValue>,
+        tls13: VecDeque<Tls13Session>,
     }
 
     impl Default for ServerData {
@@ -102,18 +100,14 @@ mod cache {
                 .and_then(|sd| sd.kx_hint)
         }
 
-        fn set_tls12_session(
-            &self,
-            key: ClientSessionKey<'static>,
-            value: Tls12ClientSessionValue,
-        ) {
+        fn set_tls12_session(&self, key: ClientSessionKey<'static>, value: Tls12Session) {
             self.servers
                 .lock()
                 .unwrap()
                 .get_or_insert_default_and_edit(key.clone(), |data| data.tls12 = Some(value));
         }
 
-        fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<Tls12ClientSessionValue> {
+        fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<Tls12Session> {
             self.servers
                 .lock()
                 .unwrap()
@@ -129,11 +123,7 @@ mod cache {
                 .and_then(|data| data.tls12.take());
         }
 
-        fn insert_tls13_ticket(
-            &self,
-            key: ClientSessionKey<'static>,
-            value: Tls13ClientSessionValue,
-        ) {
+        fn insert_tls13_ticket(&self, key: ClientSessionKey<'static>, value: Tls13Session) {
             self.servers
                 .lock()
                 .unwrap()
@@ -145,10 +135,7 @@ mod cache {
                 });
         }
 
-        fn take_tls13_ticket(
-            &self,
-            key: &ClientSessionKey<'static>,
-        ) -> Option<Tls13ClientSessionValue> {
+        fn take_tls13_ticket(&self, key: &ClientSessionKey<'static>) -> Option<Tls13Session> {
             self.servers
                 .lock()
                 .unwrap()
@@ -192,8 +179,7 @@ mod tests {
 
     use super::NoClientSessionStorage;
     use crate::client::{
-        ClientSessionKey, ClientSessionStore, Tls12ClientSessionValue, Tls13ClientSessionInput,
-        Tls13ClientSessionValue,
+        ClientSessionKey, ClientSessionStore, Tls12Session, Tls13ClientSessionInput, Tls13Session,
     };
     use crate::crypto::kx::NamedGroup;
     use crate::crypto::{
@@ -218,7 +204,7 @@ mod tests {
         {
             c.set_tls12_session(
                 key.clone(),
-                Tls12ClientSessionValue::new(
+                Tls12Session::new(
                     tls12_suite(CipherSuite::Unknown(0xff12), &TEST_PROVIDER),
                     SessionId::empty(),
                     Arc::new(SizedPayload::empty()),
@@ -238,7 +224,7 @@ mod tests {
 
         c.insert_tls13_ticket(
             key.clone(),
-            Tls13ClientSessionValue::new(
+            Tls13Session::new(
                 Tls13ClientSessionInput {
                     suite: tls13_suite(CipherSuite::Unknown(0xff13), &TEST_PROVIDER),
                     peer_identity: Identity::X509(CertificateIdentity {

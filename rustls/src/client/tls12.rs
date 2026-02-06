@@ -10,10 +10,9 @@ use subtle::ConstantTimeEq;
 use super::config::{ClientConfig, ClientSessionKey};
 use super::connection::ClientConnectionData;
 use super::hs::{self};
-use super::{ClientAuthDetails, ServerCertDetails};
+use super::{ClientAuthDetails, ServerCertDetails, Tls12Session};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::client::Tls12ClientSessionValue;
 use crate::common_state::{Event, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
@@ -899,7 +898,7 @@ struct ExpectNewTicket {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     peer_identity: Identity<'static>,
-    resuming: Option<(Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
+    resuming: Option<(Tls12Session, Box<dyn MessageEncrypter>)>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
@@ -945,7 +944,7 @@ struct ExpectCcs {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     peer_identity: Identity<'static>,
-    resuming: Option<(Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
+    resuming: Option<(Tls12Session, Box<dyn MessageEncrypter>)>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
@@ -996,7 +995,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 struct ExpectFinished {
     config: Arc<ClientConfig>,
     peer_identity: Identity<'static>,
-    resuming: Option<(Tls12ClientSessionValue, Box<dyn MessageEncrypter>)>,
+    resuming: Option<(Tls12Session, Box<dyn MessageEncrypter>)>,
     session_id: SessionId,
     session_key: ClientSessionKey<'static>,
     using_ems: bool,
@@ -1036,7 +1035,7 @@ impl ExpectFinished {
             return;
         };
 
-        let session_value = Tls12ClientSessionValue::new(
+        let session_value = Tls12Session::new(
             self.secrets.suite(),
             self.session_id,
             ticket,

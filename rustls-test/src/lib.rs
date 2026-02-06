@@ -9,8 +9,7 @@ use rustls::client::danger::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
 };
 use rustls::client::{
-    ClientSessionKey, ServerVerifierBuilder, Tls13ClientSessionValue, WantsClientCert,
-    WebPkiServerVerifier,
+    ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
     EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
@@ -1873,7 +1872,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
     fn set_tls12_session(
         &self,
         key: ClientSessionKey<'static>,
-        value: rustls::client::Tls12ClientSessionValue,
+        value: rustls::client::Tls12Session,
     ) {
         self.ops
             .lock()
@@ -1883,10 +1882,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
             .set_tls12_session(key, value)
     }
 
-    fn tls12_session(
-        &self,
-        key: &ClientSessionKey<'_>,
-    ) -> Option<rustls::client::Tls12ClientSessionValue> {
+    fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<rustls::client::Tls12Session> {
         let rc = self.storage.tls12_session(key);
         self.ops
             .lock()
@@ -1906,11 +1902,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
         self.storage.remove_tls12_session(key);
     }
 
-    fn insert_tls13_ticket(
-        &self,
-        key: ClientSessionKey<'static>,
-        mut value: Tls13ClientSessionValue,
-    ) {
+    fn insert_tls13_ticket(&self, key: ClientSessionKey<'static>, mut value: Tls13Session) {
         if let Some((expected, desired)) = self.alter_max_early_data_size {
             value._reset_max_early_data_size(expected, desired);
         }
@@ -1923,10 +1915,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
             .insert_tls13_ticket(key, value);
     }
 
-    fn take_tls13_ticket(
-        &self,
-        key: &ClientSessionKey<'static>,
-    ) -> Option<Tls13ClientSessionValue> {
+    fn take_tls13_ticket(&self, key: &ClientSessionKey<'static>) -> Option<Tls13Session> {
         let rc = self.storage.take_tls13_ticket(key);
         self.ops
             .lock()
