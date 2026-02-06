@@ -143,20 +143,6 @@ impl Tls13ClientSessionValue {
         }
     }
 
-    pub(crate) fn secret(&self) -> &[u8] {
-        self.secret.bytes()
-    }
-
-    /// Maximum early data size supported by the server.
-    pub(crate) fn max_early_data_size(&self) -> u32 {
-        self.max_early_data_size
-    }
-
-    /// The TLS 1.3 cipher suite used in this session.
-    pub fn suite(&self) -> &'static Tls13CipherSuite {
-        self.suite
-    }
-
     /// Test only: rewind epoch by `delta` seconds.
     #[doc(hidden)]
     pub fn rewind_epoch(&mut self, delta: u32) {
@@ -171,11 +157,6 @@ impl Tls13ClientSessionValue {
             "max_early_data_size was not expected value"
         );
         self.max_early_data_size = desired;
-    }
-
-    /// QUIC transport parameters provided by the server.
-    pub fn quic_params(&self) -> Vec<u8> {
-        self.quic_params.to_vec()
     }
 }
 
@@ -224,22 +205,6 @@ impl Tls12ClientSessionValue {
             extended_ms,
             common: ClientSessionCommon::new(ticket, time_now, lifetime, peer_identity),
         }
-    }
-
-    pub(crate) fn master_secret(&self) -> &[u8; 48] {
-        &self.master_secret
-    }
-
-    pub(crate) fn ticket(&self) -> Arc<SizedPayload<'static, u16, MaybeEmpty>> {
-        self.common.ticket.clone()
-    }
-
-    pub(crate) fn extended_ms(&self) -> bool {
-        self.extended_ms
-    }
-
-    pub(crate) fn suite(&self) -> &'static Tls12CipherSuite {
-        self.suite
     }
 
     /// Test only: rewind epoch by `delta` seconds.

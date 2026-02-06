@@ -141,17 +141,17 @@ mod server_hello {
                     debug!("Server agreed to resume");
 
                     // Is the server telling lies about the ciphersuite?
-                    if resuming.suite() != suite {
+                    if resuming.suite != suite {
                         return Err(PeerMisbehaved::ResumptionOfferedWithVariedCipherSuite.into());
                     }
 
                     // And about EMS support?
-                    if resuming.extended_ms() != using_ems {
+                    if resuming.extended_ms != using_ems {
                         return Err(PeerMisbehaved::ResumptionOfferedWithVariedEms.into());
                     }
 
                     let secrets =
-                        ConnectionSecrets::new_resume(randoms, suite, resuming.master_secret());
+                        ConnectionSecrets::new_resume(randoms, suite, &resuming.master_secret);
                     config.key_log.log(
                         "CLIENT_RANDOM",
                         &secrets.randoms.client,
@@ -1022,7 +1022,7 @@ impl ExpectFinished {
 
         if ticket.is_empty() {
             if let Some((resuming_session, _)) = &mut self.resuming {
-                ticket = resuming_session.ticket();
+                ticket = resuming_session.ticket.clone();
             }
         }
 
