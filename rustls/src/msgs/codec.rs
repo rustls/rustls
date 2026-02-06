@@ -326,10 +326,7 @@ impl Codec<'_> for u8 {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        match r.take(1) {
-            Some(&[byte]) => Ok(byte),
-            _ => Err(InvalidMessage::MissingData("u8")),
-        }
+        r.take_array("u8").map(|&[byte]| byte)
     }
 }
 
@@ -346,10 +343,8 @@ impl Codec<'_> for u16 {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        match r.take(2) {
-            Some(&[b1, b2]) => Ok(Self::from_be_bytes([b1, b2])),
-            _ => Err(InvalidMessage::MissingData("u16")),
-        }
+        r.take_array("u16")
+            .map(|&[b1, b2]| Self::from_be_bytes([b1, b2]))
     }
 }
 
@@ -372,10 +367,8 @@ impl Codec<'_> for U24 {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        match r.take(3) {
-            Some(&[a, b, c]) => Ok(Self(u32::from_be_bytes([0, a, b, c]))),
-            _ => Err(InvalidMessage::MissingData("u24")),
-        }
+        r.take_array("u24")
+            .map(|&[a, b, c]| Self(u32::from_be_bytes([0, a, b, c])))
     }
 }
 
@@ -385,10 +378,8 @@ impl Codec<'_> for u32 {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        match r.take(4) {
-            Some(&[a, b, c, d]) => Ok(Self::from_be_bytes([a, b, c, d])),
-            _ => Err(InvalidMessage::MissingData("u32")),
-        }
+        r.take_array("u32")
+            .map(|&[a, b, c, d]| Self::from_be_bytes([a, b, c, d]))
     }
 }
 
@@ -405,10 +396,8 @@ impl Codec<'_> for u64 {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        match r.take(8) {
-            Some(&[a, b, c, d, e, f, g, h]) => Ok(Self::from_be_bytes([a, b, c, d, e, f, g, h])),
-            _ => Err(InvalidMessage::MissingData("u64")),
-        }
+        r.take_array("u64")
+            .map(|&[a, b, c, d, e, f, g, h]| Self::from_be_bytes([a, b, c, d, e, f, g, h]))
     }
 }
 
@@ -478,6 +467,22 @@ impl<'a> Reader<'a> {
         match self.take(length) {
             Some(bytes) => Ok(Reader::new(bytes)),
             None => Err(InvalidMessage::MessageTooShort),
+        }
+    }
+
+    /// Borrow an array of `N` bytes from the buffer.
+    ///
+    /// If there are not enough bytes remaining to take the length `None` is returned instead
+    pub(crate) fn take_array<const N: usize>(
+        &mut self,
+        ty: &'static str,
+    ) -> Result<&'a [u8; N], InvalidMessage> {
+        match self.buffer.split_first_chunk() {
+            Some((chunk, rest)) => {
+                self.buffer = rest;
+                Ok(chunk)
+            }
+            _ => Err(InvalidMessage::MissingData(ty)),
         }
     }
 

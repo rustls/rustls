@@ -49,13 +49,8 @@ impl Codec<'_> for Random {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let Some(bytes) = r.take(32) else {
-            return Err(InvalidMessage::MissingData("Random"));
-        };
-
-        let mut opaque = [0; 32];
-        opaque.clone_from_slice(bytes);
-        Ok(Self(opaque))
+        r.take_array("Random")
+            .map(|&bytes| Self(bytes))
     }
 }
 

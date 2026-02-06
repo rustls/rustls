@@ -109,15 +109,7 @@ impl Codec<'_> for Tls12ServerSessionValue {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             common: CommonServerSessionValue::read(r)?,
-            master_secret: Zeroizing::new(
-                match r
-                    .take(48)
-                    .and_then(|slice| slice.try_into().ok())
-                {
-                    Some(array) => array,
-                    None => return Err(InvalidMessage::MessageTooShort),
-                },
-            ),
+            master_secret: Zeroizing::new(r.take_array("MasterSecret").copied()?),
             extended_ms: matches!(u8::read(r)?, 1),
         })
     }
