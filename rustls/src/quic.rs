@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-#[cfg(feature = "std")]
 use core::fmt::Debug;
 
 use pki_types::FipsStatus;
@@ -17,7 +16,6 @@ use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
 
-#[cfg(feature = "std")]
 mod connection {
     use alloc::vec::Vec;
     use core::fmt::{self, Debug};
@@ -470,7 +468,6 @@ mod connection {
     }
 }
 
-#[cfg(feature = "std")]
 pub use connection::{ClientConnection, Connection, ConnectionCommon, ServerConnection};
 
 #[derive(Default)]
@@ -482,7 +479,6 @@ pub(crate) struct Quic {
     pub(crate) hs_secrets: Option<Secrets>,
     pub(crate) traffic_secrets: Option<Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
-    #[cfg(feature = "std")]
     pub(crate) returned_traffic_keys: bool,
 }
 
@@ -507,7 +503,6 @@ impl Quic {
     }
 }
 
-#[cfg(feature = "std")]
 impl Quic {
     pub(crate) fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
         while let Some((_, msg)) = self.hs_queue.pop_front() {

@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-rustls = { path = "../rustls", default-features = false, features = ["log", "std", "webpki"] }
+rustls = { path = "../rustls", default-features = false, features = ["log", "webpki"] }
 
 [dev-dependencies]
 env_logger = { workspace = true }

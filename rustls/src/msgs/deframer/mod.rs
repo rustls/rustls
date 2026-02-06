@@ -6,9 +6,7 @@ use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::Reader;
 
 mod buffers;
-pub(crate) use buffers::{
-    BufferProgress, DeframerSliceBuffer, DeframerVecBuffer, Delocator, Locator,
-};
+pub(crate) use buffers::{BufferProgress, DeframerVecBuffer, Delocator, Locator};
 
 mod handshake;
 pub(crate) use handshake::{HandshakeAlignedProof, HandshakeDeframer};
@@ -99,7 +97,6 @@ pub fn fuzz_deframer(data: &[u8]) {
     assert!(iter.bytes_consumed() <= buf.len());
 }
 
-#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     use alloc::vec::Vec;

@@ -1,12 +1,9 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::mem;
-#[cfg(feature = "std")]
 use std::io;
-#[cfg(feature = "std")]
 use std::io::Read;
 
-#[cfg(feature = "std")]
 use crate::crypto::cipher::OutboundPlain;
 
 /// This is a byte buffer that is built from a deque of byte vectors.
@@ -97,7 +94,6 @@ impl ChunkVecBuffer {
     }
 }
 
-#[cfg(feature = "std")]
 impl ChunkVecBuffer {
     pub(crate) fn is_full(&self) -> bool {
         self.limit
@@ -213,7 +209,7 @@ impl ChunkVecBuffer {
     }
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests {
     use alloc::vec;
     use alloc::vec::Vec;

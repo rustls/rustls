@@ -23,7 +23,6 @@ impl server::StoresServerSessions for NoServerSessionStorage {
     }
 }
 
-#[cfg(any(feature = "std", feature = "hashbrown"))]
 mod cache {
     use alloc::vec::Vec;
     use core::fmt::{Debug, Formatter};
@@ -43,20 +42,9 @@ mod cache {
         /// Make a new ServerSessionMemoryCache.  `size` is the maximum
         /// number of stored sessions, and may be rounded-up for
         /// efficiency.
-        #[cfg(feature = "std")]
         pub fn new(size: usize) -> Arc<Self> {
             Arc::new(Self {
                 cache: Mutex::new(limited_cache::LimitedCache::new(size)),
-            })
-        }
-
-        /// Make a new ServerSessionMemoryCache.  `size` is the maximum
-        /// number of stored sessions, and may be rounded-up for
-        /// efficiency.
-        #[cfg(not(feature = "std"))]
-        pub fn new<M: crate::lock::MakeMutex>(size: usize) -> Arc<Self> {
-            Arc::new(Self {
-                cache: Mutex::new::<M>(limited_cache::LimitedCache::new(size)),
             })
         }
     }
@@ -143,10 +131,9 @@ mod cache {
     }
 }
 
-#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use cache::ServerSessionMemoryCache;
 
-#[cfg(all(any(feature = "std", feature = "hashbrown"), feature = "webpki"))]
+#[cfg(feature = "webpki")]
 mod sni_resolver {
     use core::fmt::Debug;
 
@@ -270,7 +257,7 @@ mod sni_resolver {
     }
 }
 
-#[cfg(all(any(feature = "std", feature = "hashbrown"), feature = "webpki"))]
+#[cfg(feature = "webpki")]
 pub use sni_resolver::ServerNameResolver;
 
 #[cfg(test)]

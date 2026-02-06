@@ -390,7 +390,6 @@ impl ClientExtensionsInput {
 #[derive(Clone)]
 pub(crate) enum TransportParameters {
     /// QUIC transport parameters (RFC9001)
-    #[cfg_attr(not(feature = "std"), expect(dead_code))]
     Quic(Payload<'static>),
 }
 
@@ -686,7 +685,6 @@ impl<'a> CertificateEntry<'a> {
         }
     }
 
-    #[cfg(feature = "std")]
     fn into_owned(self) -> CertificateEntry<'static> {
         CertificateEntry {
             cert: self.cert.into_owned(),
@@ -740,7 +738,6 @@ impl<'a> CertificatePayloadTls13<'a> {
         }
     }
 
-    #[cfg(feature = "std")]
     pub(super) fn into_owned(self) -> CertificatePayloadTls13<'static> {
         CertificatePayloadTls13 {
             context: self.context.into_owned(),
@@ -1370,7 +1367,6 @@ impl<'a> Codec<'a> for CompressedCertificatePayload<'a> {
 }
 
 impl CompressedCertificatePayload<'_> {
-    #[cfg(feature = "std")]
     pub(super) fn into_owned(self) -> CompressedCertificatePayload<'static> {
         CompressedCertificatePayload {
             compressed: self.compressed.into_owned(),

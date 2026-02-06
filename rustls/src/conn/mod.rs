@@ -2,23 +2,19 @@ use alloc::boxed::Box;
 use core::fmt::{self, Debug};
 use core::mem;
 use core::ops::{Deref, DerefMut, Range};
-#[cfg(feature = "std")]
 use std::io;
 
 use kernel::KernelConnection;
 
-#[cfg(feature = "std")]
-use crate::common_state::Input;
 use crate::common_state::{
-    CommonState, DEFAULT_BUFFER_LIMIT, IoState, Output, State, process_main_protocol,
+    CommonState, DEFAULT_BUFFER_LIMIT, Input, IoState, Output, State, process_main_protocol,
 };
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
-#[cfg(feature = "std")]
-use crate::msgs::Message;
 use crate::msgs::{
-    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator, Random,
+    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
+    Message, Random,
 };
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
@@ -27,7 +23,6 @@ use crate::vecbuf::ChunkVecBuffer;
 pub mod kernel;
 pub(crate) mod unbuffered;
 
-#[cfg(feature = "std")]
 mod connection {
     use alloc::vec::Vec;
     use core::fmt::Debug;
@@ -352,7 +347,6 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     }
 }
 
-#[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
 
 /// An object of this type can export keying material.
@@ -606,7 +600,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 }
 
-#[cfg(feature = "std")]
 impl<Side: SideData> ConnectionCommon<Side> {
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader<'_> {
@@ -730,39 +723,6 @@ impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
             deframer_buffer: DeframerVecBuffer::default(),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
         }
-    }
-}
-
-/// Interface shared by unbuffered client and server connections.
-pub struct UnbufferedConnectionCommon<Side: SideData> {
-    pub(crate) core: ConnectionCore<Side>,
-    wants_write: bool,
-    emitted_peer_closed_state: bool,
-}
-
-impl<Side: SideData> From<ConnectionCore<Side>> for UnbufferedConnectionCommon<Side> {
-    fn from(core: ConnectionCore<Side>) -> Self {
-        Self {
-            core,
-            wants_write: false,
-            emitted_peer_closed_state: false,
-        }
-    }
-}
-
-impl<Side: SideData> UnbufferedConnectionCommon<Side> {
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.core.dangerous_extract_secrets()
-    }
-}
-
-impl<Side: SideData> Deref for UnbufferedConnectionCommon<Side> {
-    type Target = CommonState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.core.side
     }
 }
 
@@ -1082,7 +1042,6 @@ impl<Side: SideData> ConnectionCore<Side> {
         }
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self.side.early_exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),

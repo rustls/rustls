@@ -32,7 +32,7 @@ webpki-roots = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["hpke-rs/std", "hpke-rs-crypto/std", "pkcs8/std", "rustls/std"]
+std = ["hpke-rs/std", "hpke-rs-crypto/std", "pkcs8/std"]
 
 [lints]
 workspace = true

@@ -14,7 +14,7 @@ autobenches = false
 default = ["aws-lc-sys", "std"]
 aws-lc-sys = ["aws-lc-rs/aws-lc-sys"]
 fips = ["aws-lc-rs/fips"]
-std = ["rustls/std"]
+std = []
 unstable = ["aws-lc-rs/unstable"]
 
 [dependencies]

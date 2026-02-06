@@ -34,7 +34,6 @@ impl client::ClientSessionStore for NoClientSessionStorage {
     }
 }
 
-#[cfg(any(feature = "std", feature = "hashbrown"))]
 mod cache {
     use alloc::collections::VecDeque;
     use core::fmt;
@@ -78,23 +77,11 @@ mod cache {
     impl ClientSessionMemoryCache {
         /// Make a new ClientSessionMemoryCache.  `size` is the
         /// maximum number of stored sessions.
-        #[cfg(feature = "std")]
         pub fn new(size: usize) -> Self {
             let max_servers = size.saturating_add(MAX_TLS13_TICKETS_PER_SERVER - 1)
                 / MAX_TLS13_TICKETS_PER_SERVER;
             Self {
                 servers: Mutex::new(limited_cache::LimitedCache::new(max_servers)),
-            }
-        }
-
-        /// Make a new ClientSessionMemoryCache.  `size` is the
-        /// maximum number of stored sessions.
-        #[cfg(not(feature = "std"))]
-        pub fn new<M: crate::lock::MakeMutex>(size: usize) -> Self {
-            let max_servers = size.saturating_add(MAX_TLS13_TICKETS_PER_SERVER - 1)
-                / MAX_TLS13_TICKETS_PER_SERVER;
-            Self {
-                servers: Mutex::new::<M>(limited_cache::LimitedCache::new(max_servers)),
             }
         }
     }
@@ -179,7 +166,6 @@ mod cache {
     }
 }
 
-#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use cache::ClientSessionMemoryCache;
 
 #[derive(Debug)]
