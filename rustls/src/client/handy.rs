@@ -1,9 +1,9 @@
 use core::hash::Hasher;
 
+use super::config::{ClientCredentialResolver, ClientSessionStore};
 use super::{
     ClientSessionKey, CredentialRequest, Tls12ClientSessionValue, Tls13ClientSessionValue,
 };
-use crate::client;
 use crate::crypto::SelectedCredential;
 use crate::crypto::kx::NamedGroup;
 use crate::enums::CertificateType;
@@ -12,7 +12,7 @@ use crate::enums::CertificateType;
 #[derive(Debug)]
 pub(super) struct NoClientSessionStorage;
 
-impl client::ClientSessionStore for NoClientSessionStorage {
+impl ClientSessionStore for NoClientSessionStorage {
     fn set_kx_hint(&self, _: ClientSessionKey<'static>, _: NamedGroup) {}
 
     fn kx_hint(&self, _: &ClientSessionKey<'_>) -> Option<NamedGroup> {
@@ -38,8 +38,8 @@ mod cache {
     use alloc::collections::VecDeque;
     use core::fmt;
 
-    use super::ClientSessionKey;
-    use crate::client::{Tls12ClientSessionValue, Tls13ClientSessionValue};
+    use super::*;
+    use crate::client::Tls13ClientSessionValue;
     use crate::crypto::kx::NamedGroup;
     use crate::limited_cache;
     use crate::lock::Mutex;
@@ -86,7 +86,7 @@ mod cache {
         }
     }
 
-    impl super::client::ClientSessionStore for ClientSessionMemoryCache {
+    impl ClientSessionStore for ClientSessionMemoryCache {
         fn set_kx_hint(&self, key: ClientSessionKey<'static>, group: NamedGroup) {
             self.servers
                 .lock()
@@ -171,7 +171,7 @@ pub use cache::ClientSessionMemoryCache;
 #[derive(Debug)]
 pub(super) struct FailResolveClientCert {}
 
-impl client::ClientCredentialResolver for FailResolveClientCert {
+impl ClientCredentialResolver for FailResolveClientCert {
     fn resolve(&self, _: &CredentialRequest<'_>) -> Option<SelectedCredential> {
         None
     }

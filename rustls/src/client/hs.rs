@@ -7,10 +7,12 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-use super::ech::EchState;
+use super::config::{ClientSessionKey, Tls12Resumption};
+use super::connection::ClientConnectionData;
+use super::ech::{EchMode, EchState, EchStatus};
 use super::{
-    ClientConnectionData, ClientHelloDetails, ClientSessionCommon, ClientSessionKey, EchMode,
-    EchStatus, Retrieved, Tls12ClientSessionValue, Tls12Resumption, Tls13ClientSessionValue, tls13,
+    ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12ClientSessionValue,
+    Tls13ClientSessionValue, tls13,
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{EarlyDataEvent, Event, Input, Output, Protocol, State};

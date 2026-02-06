@@ -6,11 +6,13 @@ use pki_types::UnixTime;
 use zeroize::Zeroizing;
 
 use crate::crypto::cipher::Payload;
-use crate::crypto::{Identity, SelectedCredential, SignatureScheme};
+use crate::crypto::{CipherSuite, CryptoProvider, Identity, SelectedCredential, SignatureScheme};
 use crate::enums::{ApplicationProtocol, CertificateType};
+use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::log::{debug, trace};
 use crate::msgs::{
-    CertificateChain, ExtensionType, MaybeEmpty, ServerExtensions, SessionId, SizedPayload,
+    CertificateChain, Codec, ExtensionType, MaybeEmpty, Reader, ServerExtensions, SessionId,
+    SizedPayload,
 };
 use crate::sync::Arc;
 use crate::verify::DistinguishedName;
@@ -122,6 +124,26 @@ pub struct Tls13ClientSessionValue {
 }
 
 impl Tls13ClientSessionValue {
+    /// Decode a ticket from the given bytes.
+    pub fn from_slice(bytes: &[u8], provider: &CryptoProvider) -> Result<Self, Error> {
+        let mut reader = Reader::new(bytes);
+        let suite = CipherSuite::read(&mut reader)?;
+        let suite = provider
+            .tls13_cipher_suites
+            .iter()
+            .find(|s| s.common.suite == suite)
+            .ok_or(ApiMisuse::ResumingFromUnknownCipherSuite(suite))?;
+
+        Ok(Self {
+            suite: *suite,
+            secret: Zeroizing::new(SizedPayload::<u8>::read(&mut reader)?.into_owned()),
+            age_add: u32::read(&mut reader)?,
+            max_early_data_size: u32::read(&mut reader)?,
+            common: ClientSessionCommon::read(&mut reader)?,
+            quic_params: SizedPayload::<u16, MaybeEmpty>::read(&mut reader)?.into_owned(),
+        })
+    }
+
     pub(crate) fn new(
         input: Tls13ClientSessionInput,
         ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
@@ -143,10 +165,14 @@ impl Tls13ClientSessionValue {
         }
     }
 
-    /// Test only: rewind epoch by `delta` seconds.
-    #[doc(hidden)]
-    pub fn rewind_epoch(&mut self, delta: u32) {
-        self.common.epoch -= delta as u64;
+    /// Encode this ticket into `buf` for persistence.
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        self.suite.common.suite.encode(buf);
+        self.secret.encode(buf);
+        buf.extend_from_slice(&self.age_add.to_be_bytes());
+        buf.extend_from_slice(&self.max_early_data_size.to_be_bytes());
+        self.common.encode(buf);
+        self.quic_params.encode(buf);
     }
 
     /// Test only: replace `max_early_data_size` with `new`
@@ -157,6 +183,12 @@ impl Tls13ClientSessionValue {
             "max_early_data_size was not expected value"
         );
         self.max_early_data_size = desired;
+    }
+
+    /// Test only: rewind epoch by `delta` seconds.
+    #[doc(hidden)]
+    pub fn rewind_epoch(&mut self, delta: u32) {
+        self.common.epoch -= delta as u64;
     }
 }
 
@@ -252,6 +284,24 @@ impl ClientSessionCommon {
 
     pub(crate) fn ticket(&self) -> &[u8] {
         (*self.ticket).bytes()
+    }
+}
+
+impl<'a> Codec<'a> for ClientSessionCommon {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.ticket.encode(bytes);
+        bytes.extend_from_slice(&self.epoch.to_be_bytes());
+        bytes.extend_from_slice(&self.lifetime.as_secs().to_be_bytes());
+        self.peer_identity.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            ticket: Arc::new(SizedPayload::read(r)?.into_owned()),
+            epoch: u64::read(r)?,
+            lifetime: Duration::from_secs(u64::read(r)?),
+            peer_identity: Arc::new(Identity::read(r)?.into_owned()),
+        })
     }
 }
 
