@@ -148,7 +148,7 @@ impl Tls13ClientSessionValue {
     }
 
     /// Maximum early data size supported by the server.
-    pub fn max_early_data_size(&self) -> u32 {
+    pub(crate) fn max_early_data_size(&self) -> u32 {
         self.max_early_data_size
     }
 
@@ -165,8 +165,12 @@ impl Tls13ClientSessionValue {
 
     /// Test only: replace `max_early_data_size` with `new`
     #[doc(hidden)]
-    pub fn _private_set_max_early_data_size(&mut self, new: u32) {
-        self.max_early_data_size = new;
+    pub fn _reset_max_early_data_size(&mut self, expected: u32, desired: u32) {
+        assert_eq!(
+            self.max_early_data_size, expected,
+            "max_early_data_size was not expected value"
+        );
+        self.max_early_data_size = desired;
     }
 
     /// QUIC transport parameters provided by the server.
