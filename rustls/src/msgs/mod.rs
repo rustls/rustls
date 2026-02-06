@@ -141,7 +141,7 @@ pub mod fuzzing {
             .into_unencrypted_opaque()
             .encode();
         //println!("data = {:?}", &data[..rdr.used()]);
-        assert_eq!(enc, data[..rdr.used()]);
+        assert_eq!(enc, data[..data.len() - rdr.left()]);
     }
 
     pub fn fuzz_server_session_value(data: &[u8]) {
@@ -740,7 +740,7 @@ mod tests {
                 .into_unencrypted_opaque()
                 .encode();
             assert_eq!(bytes.to_vec(), enc);
-            assert_eq!(bytes[..rd.used()].to_vec(), enc);
+            assert_eq!(bytes[..bytes.len() - rd.left()].to_vec(), enc);
         }
     }
 

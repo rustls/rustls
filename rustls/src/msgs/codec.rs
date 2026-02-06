@@ -522,12 +522,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Returns the cursor position which is also the number
-    /// of bytes that have been read from the buffer.
-    pub(crate) fn used(&self) -> usize {
-        self.cursor
-    }
-
     /// Returns the number of bytes that are still able to be
     /// read (The number of remaining takes)
     pub(crate) fn left(&self) -> usize {
