@@ -1911,8 +1911,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
         mut value: rustls::client::Tls13ClientSessionValue,
     ) {
         if let Some((expected, desired)) = self.alter_max_early_data_size {
-            assert_eq!(value.max_early_data_size(), expected);
-            value._private_set_max_early_data_size(desired);
+            value._reset_max_early_data_size(expected, desired);
         }
 
         self.ops
