@@ -481,13 +481,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Borrows a slice of all the remaining bytes.
-    ///
-    /// Moves the cursor to the end of the buffer length.
-    pub(crate) fn rest(&mut self) -> &'a [u8] {
-        mem::take(&mut self.buffer)
-    }
-
     /// Borrow a slice of `length` bytes from the buffer.
     ///
     /// If there are not enough bytes remaining to take the length `None` is returned instead.
@@ -497,9 +490,11 @@ impl<'a> Reader<'a> {
         Some(out)
     }
 
-    /// Whether the reader has any content left.
-    pub(crate) fn any_left(&self) -> bool {
-        !self.buffer.is_empty()
+    /// Borrows a slice of all the remaining bytes.
+    ///
+    /// Moves the cursor to the end of the buffer length.
+    pub(crate) fn rest(&mut self) -> &'a [u8] {
+        mem::take(&mut self.buffer)
     }
 
     pub(crate) fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
@@ -507,6 +502,11 @@ impl<'a> Reader<'a> {
             true => Err(InvalidMessage::TrailingData(name)),
             false => Ok(()),
         }
+    }
+
+    /// Whether the reader has any content left.
+    pub(crate) fn any_left(&self) -> bool {
+        !self.buffer.is_empty()
     }
 
     /// Number of bytes that are still able to be read.
