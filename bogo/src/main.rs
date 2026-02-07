@@ -41,7 +41,9 @@ use rustls::pki_types::{
     CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
 };
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
-use rustls::server::{self, ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
+use rustls::server::{
+    self, ClientHello, ServerConfig, ServerConnection, ServerSessionKey, WebPkiClientVerifier,
+};
 use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, compress};
 use rustls_aws_lc_rs::hpke;
 
@@ -1252,7 +1254,7 @@ fn align_time() {
 }
 
 impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
-    fn put(&self, key: Vec<u8>, mut value: Vec<u8>) -> bool {
+    fn put(&self, key: ServerSessionKey<'_>, mut value: Vec<u8>) -> bool {
         // The creation time should be stored directly after the 2-byte version discriminant.
         let creation_time_sec = &mut value[2..10];
         let original = u64::from_be_bytes(creation_time_sec.try_into().unwrap());
@@ -1261,11 +1263,11 @@ impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
         self.storage.put(key, value)
     }
 
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+    fn get(&self, key: ServerSessionKey<'_>) -> Option<Vec<u8>> {
         self.storage.get(key)
     }
 
-    fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
+    fn take(&self, key: ServerSessionKey<'_>) -> Option<Vec<u8>> {
         self.storage.take(key)
     }
 

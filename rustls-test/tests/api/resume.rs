@@ -13,6 +13,7 @@ use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{CertificateIdentity, Identity};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
+use rustls::server::ServerSessionKey;
 use rustls::{ClientConfig, HandshakeKind, ServerConfig, ServerConnection};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt,
@@ -742,19 +743,19 @@ impl fmt::Debug for ServerStorage {
 }
 
 impl rustls::server::StoresServerSessions for ServerStorage {
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
+    fn put(&self, key: ServerSessionKey<'_>, value: Vec<u8>) -> bool {
         self.put_count
             .fetch_add(1, Ordering::SeqCst);
         self.storage.put(key, value)
     }
 
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+    fn get(&self, key: ServerSessionKey<'_>) -> Option<Vec<u8>> {
         self.get_count
             .fetch_add(1, Ordering::SeqCst);
         self.storage.get(key)
     }
 
-    fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
+    fn take(&self, key: ServerSessionKey<'_>) -> Option<Vec<u8>> {
         self.take_count
             .fetch_add(1, Ordering::SeqCst);
         self.storage.take(key)

@@ -7,8 +7,8 @@ use core::marker::PhantomData;
 use pki_types::PrivateKeyDer;
 use pki_types::{DnsName, FipsStatus, UnixTime};
 
-use super::handy;
 use super::hs::ClientHelloInput;
+use super::{ServerSessionKey, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 #[cfg(doc)]
 use crate::crypto;
@@ -328,15 +328,15 @@ pub trait StoresServerSessions: Debug + Send + Sync {
     /// Store session secrets encoded in `value` against `key`,
     /// overwrites any existing value against `key`.  Returns `true`
     /// if the value was stored.
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
+    fn put(&self, key: ServerSessionKey<'_>, value: Vec<u8>) -> bool;
 
     /// Find a value with the given `key`.  Return it, or None
     /// if it doesn't exist.
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
+    fn get(&self, key: ServerSessionKey<'_>) -> Option<Vec<u8>>;
 
     /// Find a value with the given `key`.  Return it and delete it;
     /// or None if it doesn't exist.
-    fn take(&self, key: &[u8]) -> Option<Vec<u8>>;
+    fn take(&self, key: ServerSessionKey<'_>) -> Option<Vec<u8>>;
 
     /// Whether the store can cache another session. This is used to indicate to clients
     /// whether their session can be resumed; the implementation is not required to remember

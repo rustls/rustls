@@ -7,7 +7,7 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::{CipherSuite, Identity};
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
 use crate::error::InvalidMessage;
-use crate::msgs::{Codec, MaybeEmpty, Reader, SizedPayload};
+use crate::msgs::{Codec, MaybeEmpty, Reader, SessionId, SizedPayload};
 pub use crate::verify::NoClientAuth;
 #[cfg(feature = "webpki")]
 pub use crate::webpki::{
@@ -291,6 +291,29 @@ impl Codec<'_> for CommonServerSessionValue {
             },
             application_data: SizedPayload::read(r)?.into_owned(),
         })
+    }
+}
+
+/// A key that identifies a server-side resumable session.
+pub struct ServerSessionKey<'a> {
+    inner: &'a [u8],
+}
+
+impl<'a> ServerSessionKey<'a> {
+    pub(crate) fn new(inner: &'a [u8]) -> Self {
+        Self { inner }
+    }
+}
+
+impl<'a> From<&'a SessionId> for ServerSessionKey<'a> {
+    fn from(session_id: &'a SessionId) -> Self {
+        Self::new(session_id.as_ref())
+    }
+}
+
+impl AsRef<[u8]> for ServerSessionKey<'_> {
+    fn as_ref(&self) -> &[u8] {
+        self.inner
     }
 }
 

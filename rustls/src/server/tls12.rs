@@ -8,7 +8,9 @@ use subtle::ConstantTimeEq;
 
 use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
-use super::{CommonServerSessionValue, ServerSessionValue, Tls12ServerSessionValue, hs};
+use super::{
+    CommonServerSessionValue, ServerSessionKey, ServerSessionValue, Tls12ServerSessionValue, hs,
+};
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
@@ -149,7 +151,7 @@ mod client_hello {
 
                     st.config
                         .session_storage
-                        .get(input.client_hello.session_id.as_ref())
+                        .get(ServerSessionKey::from(&input.client_hello.session_id))
                 })
                 .and_then(|x| ServerSessionValue::read_bytes(&x).ok())
                 .and_then(|resumedata| match resumedata {
@@ -899,10 +901,10 @@ impl State<ServerConnectionData> for ExpectFinished {
                 now,
             );
 
-            let worked = self
-                .config
-                .session_storage
-                .put(self.session_id.as_ref().to_vec(), value.get_encoding());
+            let worked = self.config.session_storage.put(
+                ServerSessionKey::from(&self.session_id),
+                value.get_encoding(),
+            );
             if worked {
                 debug!("Session saved");
             } else {
