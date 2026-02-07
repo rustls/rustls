@@ -49,8 +49,37 @@ impl Tls12Extensions {
     ) -> Result<(Tls12Extensions, Box<ServerExtensions<'static>>), Error> {
         let mut ep = ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
         let (_, alpn_protocol) = ep.process_common(output, ocsp_response, resumedata)?;
-        ep.process_tls12(*ocsp_response, using_ems);
-        let out = Tls12Extensions {
+
+        // Renegotiation.
+        // (We don't do reneg at all, but would support the secure version if we did.)
+        if hello.renegotiation_info.is_some()
+            || hello
+                .cipher_suites
+                .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
+        {
+            ep.extensions.renegotiation_info = Some(Vec::new().into());
+        }
+
+        // Tickets:
+        // If we get any SessionTicket extension and have tickets enabled,
+        // we send an ack.
+        if hello.session_ticket.is_some() && config.ticketer.is_some() {
+            ep.send_ticket = true;
+            ep.extensions.session_ticket_ack = Some(());
+        }
+
+        // Confirm use of EMS if offered.
+        if using_ems {
+            ep.extensions.extended_master_secret_ack = Some(());
+        }
+
+        // Send confirmation of OCSP staple request if we will send one.
+        if let Some([_, ..]) = ocsp_response {
+            ep.extensions
+                .certificate_status_request_ack = Some(());
+        }
+
+        let out = Self {
             alpn_protocol,
             send_ticket: ep.send_ticket,
         };
@@ -225,41 +254,6 @@ impl<'a> ExtensionProcessing<'a> {
             },
             chosen_protocol.map(|p| p.to_owned()),
         ))
-    }
-
-    fn process_tls12(&mut self, ocsp_response: Option<&[u8]>, using_ems: bool) {
-        let config = self.config;
-        let hello = self.client_hello;
-
-        // Renegotiation.
-        // (We don't do reneg at all, but would support the secure version if we did.)
-        if hello.renegotiation_info.is_some()
-            || hello
-                .cipher_suites
-                .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
-        {
-            self.extensions.renegotiation_info = Some(Vec::new().into());
-        }
-
-        // Tickets:
-        // If we get any SessionTicket extension and have tickets enabled,
-        // we send an ack.
-        if hello.session_ticket.is_some() && config.ticketer.is_some() {
-            self.send_ticket = true;
-            self.extensions.session_ticket_ack = Some(());
-        }
-
-        // Confirm use of EMS if offered.
-        if using_ems {
-            self.extensions
-                .extended_master_secret_ack = Some(());
-        }
-
-        // Send confirmation of OCSP staple request if we will send one.
-        if let Some([_, ..]) = ocsp_response {
-            self.extensions
-                .certificate_status_request_ack = Some(());
-        }
     }
 
     fn process_cert_type_extension(
