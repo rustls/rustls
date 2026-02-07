@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 pub(crate) use client_hello::TLS12_HANDLER;
 use pki_types::{DnsName, UnixTime};
 use subtle::ConstantTimeEq;
-use zeroize::Zeroizing;
+use zeroize::Zeroize;
 
 use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
@@ -209,7 +209,7 @@ mod client_hello {
         using_ems: bool,
         suite: &'static Tls12CipherSuite,
         config: &ServerConfig,
-    ) -> (bool, Option<Tls12ServerSessionValue>) {
+    ) -> (bool, Option<Tls12ServerSessionValue<'static>>) {
         // First, check for a ticket that decrypts
         let (ticket, encoded) = match hello.session_ticket.as_ref() {
             Some(ClientSessionTicket::Offer(ticket)) => {
@@ -258,7 +258,7 @@ mod client_hello {
         }
 
         match session.extended_ms == using_ems || session.extended_ms && !using_ems {
-            true => (ticket, Some(session)),
+            true => (ticket, Some(session.into_owned())),
             false => (ticket, None),
         }
     }
@@ -274,7 +274,7 @@ mod client_hello {
         randoms: ConnectionRandoms,
         extra_exts: ServerExtensionsInput,
         config: Arc<ServerConfig>,
-        resumedata: Tls12ServerSessionValue,
+        resumedata: Tls12ServerSessionValue<'static>,
         proof: HandshakeAlignedProof,
     ) -> hs::NextStateOrError {
         debug!("Resuming connection");
@@ -314,7 +314,8 @@ mod client_hello {
             send_ticket,
         };
 
-        let secrets = ConnectionSecrets::new_resume(randoms, suite, &resumedata.master_secret);
+        let secrets =
+            ConnectionSecrets::new_resume(randoms, suite, resumedata.master_secret.as_ref());
         hs.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
@@ -377,7 +378,7 @@ mod client_hello {
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&CommonServerSessionValue>,
+        resumedata: Option<&CommonServerSessionValue<'_>>,
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput,
     ) -> Result<Tls12Extensions, Error> {
@@ -708,23 +709,38 @@ impl State<ServerConnectionData> for ExpectCcs {
 }
 
 #[derive(Debug)]
-pub(crate) struct Tls12ServerSessionValue {
-    common: CommonServerSessionValue,
-    master_secret: Zeroizing<[u8; 48]>,
+pub(crate) struct Tls12ServerSessionValue<'a> {
+    common: CommonServerSessionValue<'a>,
+    master_secret: ZeroizingCow<'a, 48>,
     extended_ms: bool,
 }
 
-impl Tls12ServerSessionValue {
-    fn new(common: CommonServerSessionValue, master_secret: &[u8; 48], extended_ms: bool) -> Self {
+impl<'a> Tls12ServerSessionValue<'a> {
+    fn new(
+        common: CommonServerSessionValue<'a>,
+        master_secret: &'a [u8; 48],
+        extended_ms: bool,
+    ) -> Self {
         Self {
             common,
-            master_secret: Zeroizing::new(*master_secret),
+            master_secret: ZeroizingCow::Borrowed(master_secret),
             extended_ms,
+        }
+    }
+
+    fn into_owned(self) -> Tls12ServerSessionValue<'static> {
+        Tls12ServerSessionValue {
+            common: self.common.into_owned(),
+            master_secret: ZeroizingCow::Owned(match self.master_secret {
+                ZeroizingCow::Borrowed(b) => *b,
+                ZeroizingCow::Owned(o) => o,
+            }),
+            extended_ms: self.extended_ms,
         }
     }
 }
 
-impl Codec<'_> for Tls12ServerSessionValue {
+impl Codec<'_> for Tls12ServerSessionValue<'_> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.common.encode(bytes);
         bytes.extend_from_slice(self.master_secret.as_ref());
@@ -734,15 +750,38 @@ impl Codec<'_> for Tls12ServerSessionValue {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             common: CommonServerSessionValue::read(r)?,
-            master_secret: Zeroizing::new(r.take_array("MasterSecret").copied()?),
+            master_secret: ZeroizingCow::Owned(r.take_array("MasterSecret").copied()?),
             extended_ms: matches!(u8::read(r)?, 1),
         })
     }
 }
 
-impl From<Tls12ServerSessionValue> for ServerSessionValue {
-    fn from(value: Tls12ServerSessionValue) -> Self {
+impl<'a> From<Tls12ServerSessionValue<'a>> for ServerSessionValue<'a> {
+    fn from(value: Tls12ServerSessionValue<'a>) -> Self {
         Self::Tls12(value)
+    }
+}
+
+#[derive(Debug)]
+enum ZeroizingCow<'a, const N: usize> {
+    Borrowed(&'a [u8; N]),
+    Owned([u8; N]),
+}
+
+impl<const N: usize> AsRef<[u8; N]> for ZeroizingCow<'_, N> {
+    fn as_ref(&self) -> &[u8; N] {
+        match self {
+            ZeroizingCow::Borrowed(b) => b,
+            ZeroizingCow::Owned(o) => o,
+        }
+    }
+}
+
+impl<const N: usize> Drop for ZeroizingCow<'_, N> {
+    fn drop(&mut self) {
+        if let ZeroizingCow::Owned(o) = self {
+            o.zeroize();
+        }
     }
 }
 

@@ -18,6 +18,7 @@ use crate::common_state::{
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::{Direction, KernelState};
+use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};
 use crate::enums::{
@@ -406,7 +407,7 @@ mod client_hello {
         suite: &'static Tls13CipherSuite,
         protocol: Protocol,
         config: &ServerConfig,
-    ) -> Result<Option<(usize, Tls13ServerSessionValue)>, Error> {
+    ) -> Result<Option<(usize, Tls13ServerSessionValue<'static>)>, Error> {
         let Some(psk_offer) = &input.client_hello.preshared_key_offer else {
             return Ok(None);
         };
@@ -454,7 +455,7 @@ mod client_hello {
                 return Err(PeerMisbehaved::IncorrectBinder.into());
             }
 
-            return Ok(Some((i, session)));
+            return Ok(Some((i, session.into_owned())));
         }
 
         Ok(None)
@@ -489,7 +490,7 @@ mod client_hello {
         output: &mut dyn Output,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
-        resuming: Option<&(usize, Tls13ServerSessionValue)>,
+        resuming: Option<&(usize, Tls13ServerSessionValue<'_>)>,
         proof: &HandshakeAlignedProof,
         config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
@@ -607,7 +608,7 @@ mod client_hello {
     fn decide_if_early_data_allowed(
         output: &mut dyn Output,
         client_hello: &ClientHelloPayload,
-        resumedata: Option<&Tls13ServerSessionValue>,
+        resumedata: Option<&Tls13ServerSessionValue<'_>>,
         chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
         suite: &'static Tls13CipherSuite,
         protocol: Protocol,
@@ -671,7 +672,7 @@ mod client_hello {
         output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&Tls13ServerSessionValue>,
+        resumedata: Option<&Tls13ServerSessionValue<'_>>,
         extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
     ) -> Result<(Tls13Extensions, EarlyDataDecision), Error> {
@@ -1117,17 +1118,20 @@ impl State<ServerConnectionData> for ExpectEarlyData {
 }
 
 #[derive(Debug)]
-pub(crate) struct Tls13ServerSessionValue {
-    common: CommonServerSessionValue,
-    secret: Zeroizing<SizedPayload<'static, u8>>,
+pub(crate) struct Tls13ServerSessionValue<'a> {
+    common: CommonServerSessionValue<'a>,
+    secret: ZeroizingCow<'a>,
     age_obfuscation_offset: u32,
 
     // not encoded vv
     freshness: Option<bool>,
 }
 
-impl Tls13ServerSessionValue {
-    fn from_ticket(id: &PresharedKeyIdentity, config: &ServerConfig) -> Option<Self> {
+impl<'a> Tls13ServerSessionValue<'a> {
+    fn from_ticket(
+        id: &PresharedKeyIdentity,
+        config: &ServerConfig,
+    ) -> Option<Tls13ServerSessionValue<'static>> {
         let plain = match config.ticketer.as_deref() {
             Some(ticketer) => ticketer.decrypt(id.identity.bytes())?,
             None => config
@@ -1135,22 +1139,35 @@ impl Tls13ServerSessionValue {
                 .take(ServerSessionKey::new(id.identity.bytes()))?,
         };
 
-        match ServerSessionValue::read_bytes(&plain).ok()? {
-            ServerSessionValue::Tls13(tls13) => Some(tls13),
-            _ => None,
-        }
+        let Ok(ServerSessionValue::Tls13(tls13)) = ServerSessionValue::read_bytes(&plain) else {
+            return None;
+        };
+
+        Some(tls13.into_owned())
     }
 
     pub(super) fn new(
-        common: CommonServerSessionValue,
-        secret: &[u8],
+        common: CommonServerSessionValue<'a>,
+        secret: &'a [u8],
         age_obfuscation_offset: u32,
     ) -> Self {
         Self {
             common,
-            secret: Zeroizing::new(secret.to_vec().into()),
+            secret: ZeroizingCow::Borrowed(SizedPayload::from(Payload::Borrowed(secret))),
             age_obfuscation_offset,
             freshness: None,
+        }
+    }
+
+    fn into_owned(self) -> Tls13ServerSessionValue<'static> {
+        Tls13ServerSessionValue {
+            common: self.common.into_owned(),
+            secret: ZeroizingCow::Owned(match self.secret {
+                ZeroizingCow::Borrowed(b) => Zeroizing::from(b.into_owned()),
+                ZeroizingCow::Owned(o) => o,
+            }),
+            age_obfuscation_offset: self.age_obfuscation_offset,
+            freshness: self.freshness,
         }
     }
 
@@ -1170,7 +1187,7 @@ impl Tls13ServerSessionValue {
     }
 }
 
-impl Codec<'_> for Tls13ServerSessionValue {
+impl<'a> Codec<'a> for Tls13ServerSessionValue<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.common.encode(bytes);
         self.secret.encode(bytes);
@@ -1178,19 +1195,47 @@ impl Codec<'_> for Tls13ServerSessionValue {
             .encode(bytes);
     }
 
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             common: CommonServerSessionValue::read(r)?,
-            secret: Zeroizing::new(SizedPayload::read(r)?.into_owned()),
+            secret: ZeroizingCow::read(r)?,
             age_obfuscation_offset: u32::read(r)?,
             freshness: None,
         })
     }
 }
 
-impl From<Tls13ServerSessionValue> for ServerSessionValue {
-    fn from(value: Tls13ServerSessionValue) -> Self {
+impl<'a> From<Tls13ServerSessionValue<'a>> for ServerSessionValue<'a> {
+    fn from(value: Tls13ServerSessionValue<'a>) -> Self {
         Self::Tls13(value)
+    }
+}
+
+#[derive(Debug)]
+enum ZeroizingCow<'a> {
+    Borrowed(SizedPayload<'a, u8>),
+    Owned(Zeroizing<SizedPayload<'static, u8>>),
+}
+
+impl<'a> ZeroizingCow<'a> {
+    fn bytes(&self) -> &[u8] {
+        match self {
+            ZeroizingCow::Borrowed(b) => b.bytes(),
+            ZeroizingCow::Owned(o) => o.bytes(),
+        }
+    }
+}
+
+impl<'a> Codec<'a> for ZeroizingCow<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            ZeroizingCow::Borrowed(b) => b.encode(bytes),
+            ZeroizingCow::Owned(o) => o.encode(bytes),
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(ZeroizingCow::Borrowed(SizedPayload::read(r)?))
     }
 }
 

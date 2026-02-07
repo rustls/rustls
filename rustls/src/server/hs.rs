@@ -41,7 +41,7 @@ impl Tls12Extensions {
     pub(super) fn new(
         extra_exts: ServerExtensionsInput,
         ocsp_response: &mut Option<&[u8]>,
-        resumedata: Option<&CommonServerSessionValue>,
+        resumedata: Option<&CommonServerSessionValue<'_>>,
         hello: &ClientHelloPayload,
         output: &mut dyn Output,
         using_ems: bool,
@@ -99,7 +99,7 @@ impl Tls13Extensions {
     pub(super) fn new(
         extra_exts: ServerExtensionsInput,
         ocsp_response: &mut Option<&[u8]>,
-        resumedata: Option<&CommonServerSessionValue>,
+        resumedata: Option<&CommonServerSessionValue<'_>>,
         hello: &ClientHelloPayload,
         output: &mut dyn Output,
         protocol: Protocol,
@@ -169,7 +169,7 @@ impl<'a> ExtensionProcessing<'a> {
         extra_exts: ServerExtensionsInput,
         output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
-        resumedata: Option<&CommonServerSessionValue>,
+        resumedata: Option<&CommonServerSessionValue<'_>>,
     ) -> Result<
         (
             Option<ApplicationProtocol<'static>>,
