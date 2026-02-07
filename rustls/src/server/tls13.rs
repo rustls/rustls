@@ -6,13 +6,12 @@ use core::time::Duration;
 pub(crate) use client_hello::TLS13_HANDLER;
 use pki_types::{DnsName, UnixTime};
 use subtle::ConstantTimeEq;
+use zeroize::Zeroizing;
 
 use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer};
-use super::{
-    CommonServerSessionValue, ServerSessionKey, ServerSessionValue, Tls13ServerSessionValue,
-};
+use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
     Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
@@ -30,7 +29,7 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, HandshakeMessagePayload,
     HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
-    Reader,
+    Reader, SizedPayload,
 };
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
@@ -1228,6 +1227,72 @@ fn get_server_session_value(
     .into()
 }
 
+#[derive(Debug)]
+pub(crate) struct Tls13ServerSessionValue {
+    common: CommonServerSessionValue,
+    secret: Zeroizing<SizedPayload<'static, u8>>,
+    age_obfuscation_offset: u32,
+
+    // not encoded vv
+    freshness: Option<bool>,
+}
+
+impl Tls13ServerSessionValue {
+    pub(super) fn new(
+        common: CommonServerSessionValue,
+        secret: &[u8],
+        age_obfuscation_offset: u32,
+    ) -> Self {
+        Self {
+            common,
+            secret: Zeroizing::new(secret.to_vec().into()),
+            age_obfuscation_offset,
+            freshness: None,
+        }
+    }
+
+    fn set_freshness(mut self, obfuscated_client_age_ms: u32, time_now: UnixTime) -> Self {
+        let client_age_ms = obfuscated_client_age_ms.wrapping_sub(self.age_obfuscation_offset);
+        let server_age_ms = (time_now
+            .as_secs()
+            .saturating_sub(self.common.creation_time_sec) as u32)
+            .saturating_mul(1000);
+
+        let age_difference = server_age_ms.abs_diff(client_age_ms);
+
+        self.freshness = Some(age_difference <= MAX_FRESHNESS_SKEW_MS);
+        self
+    }
+
+    fn is_fresh(&self) -> bool {
+        self.freshness.unwrap_or_default()
+    }
+}
+
+impl Codec<'_> for Tls13ServerSessionValue {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.common.encode(bytes);
+        self.secret.encode(bytes);
+        self.age_obfuscation_offset
+            .encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            common: CommonServerSessionValue::read(r)?,
+            secret: Zeroizing::new(SizedPayload::read(r)?.into_owned()),
+            age_obfuscation_offset: u32::read(r)?,
+            freshness: None,
+        })
+    }
+}
+
+impl From<Tls13ServerSessionValue> for ServerSessionValue {
+    fn from(value: Tls13ServerSessionValue) -> Self {
+        Self::Tls13(value)
+    }
+}
+
 struct ExpectFinished {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
@@ -1526,3 +1591,9 @@ impl KernelState for ExpectQuicTraffic {
         unreachable!("handle_new_session_ticket should not be called for server-side connections")
     }
 }
+
+/// This is the maximum allowed skew between server and client clocks, over
+/// the maximum ticket lifetime period.  This encompasses TCP retransmission
+/// times in case packet loss occurs when the client sends the ClientHello
+/// or receives the NewSessionTicket, _and_ actual clock skew over this period.
+static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
