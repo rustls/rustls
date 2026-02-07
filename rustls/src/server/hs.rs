@@ -32,17 +32,71 @@ use crate::tls13::Tls13CipherSuite;
 pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 
-pub(super) struct ExtensionProcessing<'a> {
-    // extensions to reply with
-    pub(super) extensions: Box<ServerExtensions<'static>>,
-    pub(super) protocol: Protocol,
+pub(super) struct Tls12Extensions {
+    pub(super) alpn_protocol: Option<ApplicationProtocol<'static>>,
     pub(super) send_ticket: bool,
-    pub(super) config: &'a ServerConfig,
-    pub(super) client_hello: &'a ClientHelloPayload,
+}
+
+impl Tls12Extensions {
+    pub(super) fn new(
+        extra_exts: ServerExtensionsInput,
+        ocsp_response: &mut Option<&[u8]>,
+        resumedata: Option<&CommonServerSessionValue>,
+        hello: &ClientHelloPayload,
+        output: &mut dyn Output,
+        using_ems: bool,
+        config: &ServerConfig,
+    ) -> Result<(Tls12Extensions, Box<ServerExtensions<'static>>), Error> {
+        let mut ep = ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
+        let (_, alpn_protocol) = ep.process_common(output, ocsp_response, resumedata)?;
+        ep.process_tls12(*ocsp_response, using_ems);
+        let out = Tls12Extensions {
+            alpn_protocol,
+            send_ticket: ep.send_ticket,
+        };
+
+        Ok((out, ep.extensions))
+    }
+}
+
+pub(super) struct Tls13Extensions {
+    pub(super) certificate_types: CertificateTypes,
+    pub(super) alpn_protocol: Option<ApplicationProtocol<'static>>,
+}
+
+impl Tls13Extensions {
+    pub(super) fn new(
+        extra_exts: ServerExtensionsInput,
+        ocsp_response: &mut Option<&[u8]>,
+        resumedata: Option<&CommonServerSessionValue>,
+        hello: &ClientHelloPayload,
+        output: &mut dyn Output,
+        protocol: Protocol,
+        config: &ServerConfig,
+    ) -> Result<(Tls13Extensions, Box<ServerExtensions<'static>>), Error> {
+        let mut ep = ExtensionProcessing::new(extra_exts, protocol, hello, config);
+        let (certificate_types, alpn_protocol) =
+            ep.process_common(output, ocsp_response, resumedata)?;
+        let out = Tls13Extensions {
+            certificate_types,
+            alpn_protocol,
+        };
+
+        Ok((out, ep.extensions))
+    }
+}
+
+struct ExtensionProcessing<'a> {
+    // extensions to reply with
+    extensions: Box<ServerExtensions<'static>>,
+    protocol: Protocol,
+    send_ticket: bool,
+    config: &'a ServerConfig,
+    client_hello: &'a ClientHelloPayload,
 }
 
 impl<'a> ExtensionProcessing<'a> {
-    pub(super) fn new(
+    fn new(
         extra_exts: ServerExtensionsInput,
         protocol: Protocol,
         client_hello: &'a ClientHelloPayload,
@@ -66,7 +120,7 @@ impl<'a> ExtensionProcessing<'a> {
         }
     }
 
-    pub(super) fn process_common(
+    fn process_common(
         &mut self,
         output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
@@ -173,7 +227,7 @@ impl<'a> ExtensionProcessing<'a> {
         ))
     }
 
-    pub(super) fn process_tls12(&mut self, ocsp_response: Option<&[u8]>, using_ems: bool) {
+    fn process_tls12(&mut self, ocsp_response: Option<&[u8]>, using_ems: bool) {
         let config = self.config;
         let hello = self.client_hello;
 
