@@ -1198,35 +1198,6 @@ impl State<ServerConnectionData> for ExpectEarlyData {
     }
 }
 
-// --- Process client's Finished ---
-fn get_server_session_value(
-    suite: &'static Tls13CipherSuite,
-    resumption: &KeyScheduleResumption,
-    peer_identity: Option<Identity<'static>>,
-    chosen_alpn_protocol: Option<ApplicationProtocol<'static>>,
-    sni: Option<DnsName<'static>>,
-    resumption_data: &[u8],
-    nonce: &[u8],
-    time_now: UnixTime,
-    age_obfuscation_offset: u32,
-) -> ServerSessionValue {
-    let secret = resumption.derive_ticket_psk(nonce);
-
-    Tls13ServerSessionValue::new(
-        CommonServerSessionValue::new(
-            sni.as_ref(),
-            suite.common.suite,
-            peer_identity,
-            chosen_alpn_protocol,
-            resumption_data.to_vec(),
-            time_now,
-        ),
-        secret.as_ref(),
-        age_obfuscation_offset,
-    )
-    .into()
-}
-
 #[derive(Debug)]
 pub(crate) struct Tls13ServerSessionValue {
     common: CommonServerSessionValue,
@@ -1321,18 +1292,19 @@ impl ExpectFinished {
         let age_add = rand::random_u32(secure_random)?;
 
         let now = config.current_time()?;
-
-        let plain = get_server_session_value(
-            suite,
-            resumption,
-            peer_identity,
-            chosen_alpn_protocol,
-            sni,
-            resumption_data,
-            &nonce,
-            now,
+        let secret = resumption.derive_ticket_psk(&nonce);
+        let plain = ServerSessionValue::from(Tls13ServerSessionValue::new(
+            CommonServerSessionValue::new(
+                sni.as_ref(),
+                suite.common.suite,
+                peer_identity,
+                chosen_alpn_protocol,
+                resumption_data.to_vec(),
+                now,
+            ),
+            secret.as_ref(),
             age_add,
-        )
+        ))
         .get_encoding();
 
         let ticketer = config.ticketer.as_deref();
