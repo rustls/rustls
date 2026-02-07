@@ -51,12 +51,12 @@ pub mod danger {
 mod test;
 
 #[derive(Debug)]
-pub(crate) enum ServerSessionValue {
-    Tls12(Tls12ServerSessionValue),
-    Tls13(Tls13ServerSessionValue),
+pub(crate) enum ServerSessionValue<'a> {
+    Tls12(Tls12ServerSessionValue<'a>),
+    Tls13(Tls13ServerSessionValue<'a>),
 }
 
-impl Codec<'_> for ServerSessionValue {
+impl<'a> Codec<'a> for ServerSessionValue<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Self::Tls12(value) => {
@@ -70,7 +70,7 @@ impl Codec<'_> for ServerSessionValue {
         }
     }
 
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         match ProtocolVersion::read(r)? {
             ProtocolVersion::TLSv1_2 => Ok(Self::Tls12(Tls12ServerSessionValue::read(r)?)),
             ProtocolVersion::TLSv1_3 => Ok(Self::Tls13(Tls13ServerSessionValue::read(r)?)),
@@ -80,21 +80,21 @@ impl Codec<'_> for ServerSessionValue {
 }
 
 #[derive(Debug)]
-pub(crate) struct CommonServerSessionValue {
+pub(crate) struct CommonServerSessionValue<'a> {
     pub(crate) creation_time_sec: u64,
-    pub(crate) sni: Option<DnsName<'static>>,
+    pub(crate) sni: Option<DnsName<'a>>,
     pub(crate) cipher_suite: CipherSuite,
-    pub(crate) peer_identity: Option<Identity<'static>>,
-    pub(crate) alpn: Option<ApplicationProtocol<'static>>,
-    pub(crate) application_data: SizedPayload<'static, u16, MaybeEmpty>,
+    pub(crate) peer_identity: Option<Identity<'a>>,
+    pub(crate) alpn: Option<ApplicationProtocol<'a>>,
+    pub(crate) application_data: SizedPayload<'a, u16, MaybeEmpty>,
 }
 
-impl CommonServerSessionValue {
+impl<'a> CommonServerSessionValue<'a> {
     pub(crate) fn new(
-        sni: Option<&DnsName<'_>>,
+        sni: Option<&DnsName<'a>>,
         cipher_suite: CipherSuite,
-        peer_identity: Option<Identity<'static>>,
-        alpn: Option<ApplicationProtocol<'static>>,
+        peer_identity: Option<Identity<'a>>,
+        alpn: Option<ApplicationProtocol<'a>>,
         application_data: Vec<u8>,
         creation_time: UnixTime,
     ) -> Self {
@@ -105,6 +105,19 @@ impl CommonServerSessionValue {
             peer_identity,
             alpn,
             application_data: SizedPayload::from(Payload::new(application_data)),
+        }
+    }
+
+    fn into_owned(self) -> CommonServerSessionValue<'static> {
+        CommonServerSessionValue {
+            creation_time_sec: self.creation_time_sec,
+            sni: self.sni.map(|s| s.to_owned()),
+            cipher_suite: self.cipher_suite,
+            peer_identity: self
+                .peer_identity
+                .map(|i| i.into_owned()),
+            alpn: self.alpn.map(|a| a.to_owned()),
+            application_data: self.application_data.into_owned(),
         }
     }
 
@@ -123,7 +136,7 @@ impl CommonServerSessionValue {
     }
 }
 
-impl Codec<'_> for CommonServerSessionValue {
+impl Codec<'_> for CommonServerSessionValue<'_> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.creation_time_sec.encode(bytes);
         if let Some(sni) = &self.sni {

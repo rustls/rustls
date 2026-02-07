@@ -70,7 +70,7 @@ impl<'a> ExtensionProcessing<'a> {
         &mut self,
         output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
-        resumedata: Option<&CommonServerSessionValue>,
+        resumedata: Option<&CommonServerSessionValue<'_>>,
     ) -> Result<(CertificateTypes, Option<ApplicationProtocol<'static>>), Error> {
         let config = self.config;
         let hello = self.client_hello;
