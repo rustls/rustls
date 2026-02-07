@@ -48,7 +48,7 @@ impl Tls12Extensions {
         config: &ServerConfig,
     ) -> Result<(Tls12Extensions, Box<ServerExtensions<'static>>), Error> {
         let mut ep = ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
-        let (_, alpn_protocol) = ep.process_common(output, ocsp_response, resumedata)?;
+        let alpn_protocol = ep.process_common(output, ocsp_response, resumedata)?;
 
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
@@ -104,10 +104,37 @@ impl Tls13Extensions {
         config: &ServerConfig,
     ) -> Result<(Tls13Extensions, Box<ServerExtensions<'static>>), Error> {
         let mut ep = ExtensionProcessing::new(extra_exts, protocol, hello, config);
-        let (certificate_types, alpn_protocol) =
-            ep.process_common(output, ocsp_response, resumedata)?;
-        let out = Tls13Extensions {
-            certificate_types,
+        let alpn_protocol = ep.process_common(output, ocsp_response, resumedata)?;
+
+        let expected_client_type = select_cert_type(
+            hello
+                .client_certificate_types
+                .as_deref(),
+            config
+                .verifier
+                .supported_certificate_types(),
+        )?;
+
+        let expected_server_type = select_cert_type(
+            hello
+                .server_certificate_types
+                .as_deref(),
+            config
+                .cert_resolver
+                .supported_certificate_types(),
+        )?;
+
+        if hello.client_certificate_types.is_some() && config.verifier.offer_client_auth() {
+            ep.extensions.client_certificate_type = Some(expected_client_type);
+        }
+        if hello.server_certificate_types.is_some() {
+            ep.extensions.server_certificate_type = Some(expected_server_type);
+        }
+
+        let out = Self {
+            certificate_types: CertificateTypes {
+                client: expected_client_type,
+            },
             alpn_protocol,
         };
 
@@ -154,7 +181,7 @@ impl<'a> ExtensionProcessing<'a> {
         output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&CommonServerSessionValue>,
-    ) -> Result<(CertificateTypes, Option<ApplicationProtocol<'static>>), Error> {
+    ) -> Result<Option<ApplicationProtocol<'static>>, Error> {
         let config = self.config;
         let hello = self.client_hello;
 
@@ -224,36 +251,7 @@ impl<'a> ExtensionProcessing<'a> {
             ocsp_response.take();
         }
 
-        let expected_client_type = select_cert_type(
-            hello
-                .client_certificate_types
-                .as_deref(),
-            self.config
-                .verifier
-                .supported_certificate_types(),
-        )?;
-
-        let expected_server_type = select_cert_type(
-            hello
-                .server_certificate_types
-                .as_deref(),
-            self.config
-                .cert_resolver
-                .supported_certificate_types(),
-        )?;
-
-        if hello.client_certificate_types.is_some() && self.config.verifier.offer_client_auth() {
-            self.extensions.client_certificate_type = Some(expected_client_type);
-        }
-        if hello.server_certificate_types.is_some() {
-            self.extensions.server_certificate_type = Some(expected_server_type);
-        }
-        Ok((
-            CertificateTypes {
-                client: expected_client_type,
-            },
-            chosen_protocol.map(|p| p.to_owned()),
-        ))
+        Ok(chosen_protocol.map(|p| p.to_owned()))
     }
 }
 
