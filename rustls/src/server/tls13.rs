@@ -466,12 +466,20 @@ mod client_hello {
                 continue;
             }
 
-            if !check_binder(
-                &transcript,
-                &KeyScheduleEarlyServer::new(protocol, suite, session.secret.bytes()),
-                input.message,
+            let binder_plaintext = match &input.message.payload {
+                MessagePayload::Handshake { parsed, encoded } => {
+                    &encoded.bytes()[..encoded.bytes().len() - parsed.total_binder_length()]
+                }
+                _ => continue,
+            };
+
+            let handshake_hash = transcript.hash_given(binder_plaintext);
+            let real_binder = KeyScheduleEarlyServer::new(protocol, suite, session.secret.bytes())
+                .resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
+            if !bool::from(ConstantTimeEq::ct_eq(
+                real_binder.as_ref(),
                 psk_offer.binders[i].as_ref(),
-            ) {
+            )) {
                 return Err(PeerMisbehaved::IncorrectBinder.into());
             }
 
@@ -479,27 +487,6 @@ mod client_hello {
         }
 
         Ok(None)
-    }
-
-    fn check_binder(
-        transcript: &HandshakeHash,
-        key_schedule: &KeyScheduleEarlyServer,
-        client_hello: &Message<'_>,
-        binder: &[u8],
-    ) -> bool {
-        let binder_plaintext = match &client_hello.payload {
-            MessagePayload::Handshake { parsed, encoded } => {
-                &encoded.bytes()[..encoded.bytes().len() - parsed.total_binder_length()]
-            }
-            _ => unreachable!(),
-        };
-
-        let handshake_hash = transcript.hash_given(binder_plaintext);
-
-        let real_binder =
-            key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
-
-        ConstantTimeEq::ct_eq(real_binder.as_ref(), binder).into()
     }
 
     fn emit_server_hello(
