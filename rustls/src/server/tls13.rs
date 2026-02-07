@@ -320,29 +320,27 @@ mod client_hello {
                 output.emit(Event::StartOutgoingTraffic);
             }
 
+            let hs = HandshakeState {
+                config: st.config,
+                transcript,
+                suite,
+                alpn_protocol,
+                sni: st.sni,
+                resumption_data: st.resumption_data,
+                send_tickets: st.send_tickets,
+            };
+
             if doing_client_auth {
-                if st.config.cert_decompressors.is_empty() {
+                if hs.config.cert_decompressors.is_empty() {
                     Ok(Box::new(ExpectCertificate {
-                        config: st.config,
-                        transcript,
-                        suite,
+                        hs,
                         key_schedule: key_schedule_traffic,
-                        alpn_protocol,
-                        sni: st.sni,
-                        resumption_data: st.resumption_data,
-                        send_tickets: st.send_tickets,
                         expected_certificate_type: cert_types.client,
                     }))
                 } else {
                     Ok(Box::new(ExpectCertificateOrCompressedCertificate {
-                        config: st.config,
-                        transcript,
-                        suite,
+                        hs,
                         key_schedule: key_schedule_traffic,
-                        alpn_protocol,
-                        sni: st.sni,
-                        resumption_data: st.resumption_data,
-                        send_tickets: st.send_tickets,
                         expected_certificate_type: cert_types.client,
                     }))
                 }
@@ -356,28 +354,16 @@ mod client_hello {
                 // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
                 // connection error of type PROTOCOL_VIOLATION.
                 Ok(Box::new(ExpectEarlyData {
-                    config: st.config,
-                    transcript,
-                    suite,
+                    hs,
                     key_schedule: key_schedule_traffic,
-                    alpn_protocol,
-                    sni: st.sni,
-                    peer_identity: resuming.and_then(|(_, r)| r.common.peer_identity),
-                    resumption_data: st.resumption_data,
-                    send_tickets: st.send_tickets,
+                    peer_identity: resuming.and_then(|(_, session)| session.common.peer_identity),
                     remaining_length: max_length as usize,
                 }))
             } else {
                 Ok(Box::new(ExpectFinished {
-                    config: st.config,
-                    transcript,
-                    suite,
+                    hs,
                     key_schedule: key_schedule_traffic,
-                    alpn_protocol,
-                    sni: st.sni,
-                    peer_identity: resuming.and_then(|(_, r)| r.common.peer_identity),
-                    resumption_data: st.resumption_data,
-                    send_tickets: st.send_tickets,
+                    peer_identity: resuming.and_then(|(_, session)| session.common.peer_identity),
                 }))
             }
         }
@@ -864,14 +850,8 @@ impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
 }
 
 struct ExpectCertificateOrCompressedCertificate {
-    config: Arc<ServerConfig>,
-    transcript: HandshakeHash,
-    suite: &'static Tls13CipherSuite,
+    hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ApplicationProtocol<'static>>,
-    sni: Option<DnsName<'static>>,
-    resumption_data: Vec<u8>,
-    send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
 
@@ -882,14 +862,8 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
             } => ExpectCertificate {
-                config: self.config,
-                transcript: self.transcript,
-                suite: self.suite,
+                hs: self.hs,
                 key_schedule: self.key_schedule,
-                alpn_protocol: self.alpn_protocol,
-                sni: self.sni,
-                resumption_data: self.resumption_data,
-                send_tickets: self.send_tickets,
                 expected_certificate_type: self.expected_certificate_type,
             }
             .handle_input(input),
@@ -898,14 +872,8 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
                 parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
                 ..
             } => ExpectCompressedCertificate {
-                config: self.config,
-                transcript: self.transcript,
-                suite: self.suite,
+                hs: self.hs,
                 key_schedule: self.key_schedule,
-                alpn_protocol: self.alpn_protocol,
-                sni: self.sni,
-                resumption_data: self.resumption_data,
-                send_tickets: self.send_tickets,
                 expected_certificate_type: self.expected_certificate_type,
             }
             .handle_input(input),
@@ -923,20 +891,14 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
 }
 
 struct ExpectCompressedCertificate {
-    config: Arc<ServerConfig>,
-    transcript: HandshakeHash,
-    suite: &'static Tls13CipherSuite,
+    hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ApplicationProtocol<'static>>,
-    sni: Option<DnsName<'static>>,
-    resumption_data: Vec<u8>,
-    send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
 
 impl ExpectCompressedCertificate {
     fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
-        self.transcript.add_message(&message);
+        self.hs.transcript.add_message(&message);
         let compressed_cert = require_handshake_msg_move!(
             message,
             HandshakeType::CompressedCertificate,
@@ -944,6 +906,7 @@ impl ExpectCompressedCertificate {
         )?;
 
         let selected_decompressor = self
+            .hs
             .config
             .cert_decompressors
             .iter()
@@ -973,14 +936,8 @@ impl ExpectCompressedCertificate {
         );
 
         ExpectCertificate {
-            config: self.config,
-            transcript: self.transcript,
-            suite: self.suite,
+            hs: self.hs,
             key_schedule: self.key_schedule,
-            alpn_protocol: self.alpn_protocol,
-            sni: self.sni,
-            resumption_data: self.resumption_data,
-            send_tickets: self.send_tickets,
             expected_certificate_type: self.expected_certificate_type,
         }
         .handle_certificate(cert_payload)
@@ -988,20 +945,14 @@ impl ExpectCompressedCertificate {
 }
 
 struct ExpectCertificate {
-    config: Arc<ServerConfig>,
-    transcript: HandshakeHash,
-    suite: &'static Tls13CipherSuite,
+    hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ApplicationProtocol<'static>>,
-    sni: Option<DnsName<'static>>,
-    resumption_data: Vec<u8>,
-    send_tickets: usize,
     expected_certificate_type: CertificateType,
 }
 
 impl ExpectCertificate {
     fn handle_input(mut self, Input { message, .. }: Input<'_>) -> hs::NextStateOrError {
-        self.transcript.add_message(&message);
+        self.hs.transcript.add_message(&message);
         self.handle_certificate(require_handshake_msg_move!(
             message,
             HandshakeType::Certificate,
@@ -1023,6 +974,7 @@ impl ExpectCertificate {
         let client_cert = certp.into_certificate_chain();
 
         let mandatory = self
+            .hs
             .config
             .verifier
             .client_auth_mandatory();
@@ -1032,40 +984,29 @@ impl ExpectCertificate {
         let Some(peer_identity) = peer_identity else {
             if !mandatory {
                 debug!("client auth requested but no certificate supplied");
-                self.transcript.abandon_client_auth();
+                self.hs.transcript.abandon_client_auth();
                 return Ok(Box::new(ExpectFinished {
-                    config: self.config,
-                    transcript: self.transcript,
-                    suite: self.suite,
+                    hs: self.hs,
                     key_schedule: self.key_schedule,
                     peer_identity: None,
-                    sni: self.sni,
-                    alpn_protocol: self.alpn_protocol,
-                    resumption_data: self.resumption_data,
-                    send_tickets: self.send_tickets,
                 }));
             }
 
             return Err(PeerMisbehaved::NoCertificatesPresented.into());
         };
 
-        self.config
+        self.hs
+            .config
             .verifier
             .verify_identity(&ClientIdentity {
                 identity: &peer_identity,
-                now: self.config.current_time()?,
+                now: self.hs.config.current_time()?,
             })?;
 
         Ok(Box::new(ExpectCertificateVerify {
-            config: self.config,
-            transcript: self.transcript,
-            suite: self.suite,
+            hs: self.hs,
             key_schedule: self.key_schedule,
-            alpn_protocol: self.alpn_protocol,
-            sni: self.sni,
             peer_identity: peer_identity.into_owned(),
-            resumption_data: self.resumption_data,
-            send_tickets: self.send_tickets,
         }))
     }
 }
@@ -1077,15 +1018,9 @@ impl State<ServerConnectionData> for ExpectCertificate {
 }
 
 struct ExpectCertificateVerify {
-    config: Arc<ServerConfig>,
-    transcript: HandshakeHash,
-    suite: &'static Tls13CipherSuite,
+    hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ApplicationProtocol<'static>>,
-    sni: Option<DnsName<'static>>,
     peer_identity: Identity<'static>,
-    resumption_data: Vec<u8>,
-    send_tickets: usize,
 }
 
 impl State<ServerConnectionData> for ExpectCertificateVerify {
@@ -1099,10 +1034,11 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             HandshakeType::CertificateVerify,
             HandshakePayload::CertificateVerify
         )?;
-        let handshake_hash = self.transcript.current_hash();
-        self.transcript.abandon_client_auth();
+        let handshake_hash = self.hs.transcript.current_hash();
+        self.hs.transcript.abandon_client_auth();
 
-        self.config
+        self.hs
+            .config
             .verifier
             .verify_tls13_signature(&verify::SignatureVerificationInput {
                 message: construct_client_verify_message(&handshake_hash).as_ref(),
@@ -1112,17 +1048,11 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
 
         trace!("client CertificateVerify OK");
 
-        self.transcript.add_message(&message);
+        self.hs.transcript.add_message(&message);
         Ok(Box::new(ExpectFinished {
-            config: self.config,
-            transcript: self.transcript,
-            suite: self.suite,
+            hs: self.hs,
             key_schedule: self.key_schedule,
-            alpn_protocol: self.alpn_protocol,
-            sni: self.sni,
             peer_identity: Some(self.peer_identity),
-            resumption_data: self.resumption_data,
-            send_tickets: self.send_tickets,
         }))
     }
 }
@@ -1131,15 +1061,9 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
 //     followed by a terminating handshake EndOfEarlyData message ---
 
 struct ExpectEarlyData {
-    config: Arc<ServerConfig>,
-    transcript: HandshakeHash,
-    suite: &'static Tls13CipherSuite,
+    hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ApplicationProtocol<'static>>,
-    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
-    resumption_data: Vec<u8>,
-    send_tickets: usize,
     remaining_length: usize,
 }
 
@@ -1169,18 +1093,13 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 let proof = input.check_aligned_handshake()?;
                 self.key_schedule
                     .update_decrypter(output, &proof);
-                self.transcript
+                self.hs
+                    .transcript
                     .add_message(&input.message);
                 Ok(Box::new(ExpectFinished {
-                    config: self.config,
-                    transcript: self.transcript,
-                    suite: self.suite,
+                    hs: self.hs,
                     key_schedule: self.key_schedule,
-                    alpn_protocol: self.alpn_protocol,
-                    sni: self.sni,
                     peer_identity: self.peer_identity,
-                    resumption_data: self.resumption_data,
-                    send_tickets: self.send_tickets,
                 }))
             }
             payload => Err(inappropriate_handshake_message(
@@ -1271,15 +1190,9 @@ impl From<Tls13ServerSessionValue> for ServerSessionValue {
 }
 
 struct ExpectFinished {
-    config: Arc<ServerConfig>,
-    transcript: HandshakeHash,
-    suite: &'static Tls13CipherSuite,
+    hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    alpn_protocol: Option<ApplicationProtocol<'static>>,
-    sni: Option<DnsName<'static>>,
     peer_identity: Option<Identity<'static>>,
-    resumption_data: Vec<u8>,
-    send_tickets: usize,
 }
 
 impl ExpectFinished {
@@ -1367,7 +1280,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             HandshakePayload::Finished
         )?;
 
-        let handshake_hash = self.transcript.current_hash();
+        let handshake_hash = self.hs.transcript.current_hash();
         let proof = input.check_aligned_handshake()?;
         let (key_schedule_before_finished, expect_verify_data) = self
             .key_schedule
@@ -1381,23 +1294,24 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         // Note: future derivations include Client Finished, but not the
         // main application data keying.
-        self.transcript
+        self.hs
+            .transcript
             .add_message(&input.message);
 
         let (key_schedule_traffic, exporter, resumption) =
-            key_schedule_before_finished.into_traffic(self.transcript.current_hash());
+            key_schedule_before_finished.into_traffic(self.hs.transcript.current_hash());
 
-        let mut flight = HandshakeFlightTls13::new(&mut self.transcript);
-        for _ in 0..self.send_tickets {
+        let mut flight = HandshakeFlightTls13::new(&mut self.hs.transcript);
+        for _ in 0..self.hs.send_tickets {
             Self::emit_ticket(
                 &mut flight,
-                self.suite,
+                self.hs.suite,
                 self.peer_identity.clone(),
-                self.alpn_protocol.clone(),
-                self.sni.clone(),
-                &self.resumption_data,
+                self.hs.alpn_protocol.clone(),
+                self.hs.sni.clone(),
+                &self.hs.resumption_data,
                 &resumption,
-                &self.config,
+                &self.hs.config,
             )?;
         }
         flight.finish(output);
@@ -1414,7 +1328,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         Ok(match key_schedule_recv.protocol().is_quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
             false => Box::new(ExpectTraffic {
-                config: self.config,
+                config: self.hs.config,
                 counters: TrafficTemperCounters::default(),
                 key_schedule_send,
                 key_schedule_recv,
@@ -1422,6 +1336,16 @@ impl State<ServerConnectionData> for ExpectFinished {
             }),
         })
     }
+}
+
+struct HandshakeState {
+    config: Arc<ServerConfig>,
+    transcript: HandshakeHash,
+    suite: &'static Tls13CipherSuite,
+    alpn_protocol: Option<ApplicationProtocol<'static>>,
+    sni: Option<DnsName<'static>>,
+    resumption_data: Vec<u8>,
+    send_tickets: usize,
 }
 
 // --- Process traffic ---
