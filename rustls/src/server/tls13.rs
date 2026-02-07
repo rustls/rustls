@@ -441,8 +441,19 @@ mod client_hello {
 
         let now = config.current_time()?;
         for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-            let Some(mut session) =
-                attempt_tls13_ticket_decryption(psk_id.identity.bytes(), &config)
+            let encoded = match config.ticketer.as_deref() {
+                Some(ticketer) => ticketer.decrypt(psk_id.identity.bytes()),
+                None => config
+                    .session_storage
+                    .take(ServerSessionKey::new(psk_id.identity.bytes())),
+            };
+
+            let Some(encoded) = encoded else {
+                continue;
+            };
+
+            let Ok(ServerSessionValue::Tls13(mut session)) =
+                ServerSessionValue::read_bytes(&encoded)
             else {
                 continue;
             };
@@ -489,23 +500,6 @@ mod client_hello {
             key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
         ConstantTimeEq::ct_eq(real_binder.as_ref(), binder).into()
-    }
-
-    fn attempt_tls13_ticket_decryption(
-        ticket: &[u8],
-        config: &ServerConfig,
-    ) -> Option<Tls13ServerSessionValue> {
-        let plain = match config.ticketer.as_deref() {
-            Some(ticketer) => ticketer.decrypt(ticket)?,
-            None => config
-                .session_storage
-                .take(ServerSessionKey::new(ticket))?,
-        };
-
-        match ServerSessionValue::read_bytes(&plain).ok()? {
-            ServerSessionValue::Tls13(tls13) => Some(tls13),
-            _ => None,
-        }
     }
 
     fn emit_server_hello(
