@@ -46,9 +46,10 @@ impl Tls12Extensions {
         output: &mut dyn Output,
         using_ems: bool,
         config: &ServerConfig,
-    ) -> Result<(Tls12Extensions, Box<ServerExtensions<'static>>), Error> {
-        let mut ep = ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
-        let alpn_protocol = ep.process_common(output, ocsp_response, resumedata)?;
+    ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
+        let ep = ExtensionProcessing::new(Protocol::Tcp, hello, config);
+        let (alpn_protocol, mut extensions) =
+            ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
 
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
@@ -57,14 +58,14 @@ impl Tls12Extensions {
                 .cipher_suites
                 .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
         {
-            ep.extensions.renegotiation_info = Some(Vec::new().into());
+            extensions.renegotiation_info = Some(Vec::new().into());
         }
 
         // Tickets:
         // If we get any SessionTicket extension and have tickets enabled,
         // we send an ack.
         let send_ticket = if hello.session_ticket.is_some() && config.ticketer.is_some() {
-            ep.extensions.session_ticket_ack = Some(());
+            extensions.session_ticket_ack = Some(());
             true
         } else {
             false
@@ -72,13 +73,12 @@ impl Tls12Extensions {
 
         // Confirm use of EMS if offered.
         if using_ems {
-            ep.extensions.extended_master_secret_ack = Some(());
+            extensions.extended_master_secret_ack = Some(());
         }
 
         // Send confirmation of OCSP staple request if we will send one.
         if let Some([_, ..]) = ocsp_response {
-            ep.extensions
-                .certificate_status_request_ack = Some(());
+            extensions.certificate_status_request_ack = Some(());
         }
 
         let out = Self {
@@ -86,7 +86,7 @@ impl Tls12Extensions {
             send_ticket,
         };
 
-        Ok((out, ep.extensions))
+        Ok((out, extensions))
     }
 }
 
@@ -104,9 +104,10 @@ impl Tls13Extensions {
         output: &mut dyn Output,
         protocol: Protocol,
         config: &ServerConfig,
-    ) -> Result<(Tls13Extensions, Box<ServerExtensions<'static>>), Error> {
-        let mut ep = ExtensionProcessing::new(extra_exts, protocol, hello, config);
-        let alpn_protocol = ep.process_common(output, ocsp_response, resumedata)?;
+    ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
+        let ep = ExtensionProcessing::new(protocol, hello, config);
+        let (alpn_protocol, mut extensions) =
+            ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
 
         let expected_client_type = select_cert_type(
             hello
@@ -127,10 +128,10 @@ impl Tls13Extensions {
         )?;
 
         if hello.client_certificate_types.is_some() && config.verifier.offer_client_auth() {
-            ep.extensions.client_certificate_type = Some(expected_client_type);
+            extensions.client_certificate_type = Some(expected_client_type);
         }
         if hello.server_certificate_types.is_some() {
-            ep.extensions.server_certificate_type = Some(expected_server_type);
+            extensions.server_certificate_type = Some(expected_server_type);
         }
 
         let out = Self {
@@ -140,50 +141,55 @@ impl Tls13Extensions {
             alpn_protocol,
         };
 
-        Ok((out, ep.extensions))
+        Ok((out, extensions))
     }
 }
 
 struct ExtensionProcessing<'a> {
-    // extensions to reply with
-    extensions: Box<ServerExtensions<'static>>,
     protocol: Protocol,
     config: &'a ServerConfig,
-    client_hello: &'a ClientHelloPayload,
+    hello: &'a ClientHelloPayload,
 }
 
 impl<'a> ExtensionProcessing<'a> {
     fn new(
-        extra_exts: ServerExtensionsInput,
         protocol: Protocol,
         client_hello: &'a ClientHelloPayload,
         config: &'a ServerConfig,
     ) -> Self {
-        let ServerExtensionsInput {
-            transport_parameters,
-        } = extra_exts;
-
-        let mut extensions = Box::new(ServerExtensions::default());
-        if let Some(TransportParameters::Quic(v)) = transport_parameters {
-            extensions.transport_parameters = Some(v);
-        }
-
         Self {
-            extensions,
             protocol,
             config,
-            client_hello,
+            hello: client_hello,
         }
     }
 
     fn process_common(
-        &mut self,
+        self,
+        extra_exts: ServerExtensionsInput,
         output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&CommonServerSessionValue>,
-    ) -> Result<Option<ApplicationProtocol<'static>>, Error> {
-        let config = self.config;
-        let hello = self.client_hello;
+    ) -> Result<
+        (
+            Option<ApplicationProtocol<'static>>,
+            Box<ServerExtensions<'static>>,
+        ),
+        Error,
+    > {
+        let Self {
+            protocol,
+            config,
+            hello,
+        } = self;
+        let mut extensions = Box::new(ServerExtensions::default());
+
+        let ServerExtensionsInput {
+            transport_parameters,
+        } = extra_exts;
+        if let Some(TransportParameters::Quic(v)) = transport_parameters {
+            extensions.transport_parameters = Some(v);
+        }
 
         // ALPN
         let our_protocols = &config.alpn_protocols;
@@ -207,12 +213,11 @@ impl<'a> ExtensionProcessing<'a> {
 
         // Enact ALPN selection by telling peer and high-level API.
         if let Some(protocol) = &chosen_protocol {
-            self.extensions.selected_protocol =
-                Some(SingleProtocolName::new((*protocol).to_owned()));
+            extensions.selected_protocol = Some(SingleProtocolName::new((*protocol).to_owned()));
             output.emit(Event::ApplicationProtocol((*protocol).to_owned()));
         }
 
-        if self.protocol.is_quic() {
+        if protocol.is_quic() {
             // QUIC has strict ALPN, unlike TLS's more backwards-compatible behavior. RFC 9001
             // says: "The server MUST treat the inability to select a compatible application
             // protocol as a connection error of type 0x0178". We judge that ALPN was desired
@@ -239,7 +244,7 @@ impl<'a> ExtensionProcessing<'a> {
         // SNI
         if let (false, Some(ServerNamePayload::SingleDnsName(_))) = (for_resume, &hello.server_name)
         {
-            self.extensions.server_name_ack = Some(());
+            extensions.server_name_ack = Some(());
         }
 
         // Discard OCSP response if it is not necessary.
@@ -251,7 +256,7 @@ impl<'a> ExtensionProcessing<'a> {
             ocsp_response.take();
         }
 
-        Ok(chosen_protocol.map(|p| p.to_owned()))
+        Ok((chosen_protocol.map(|p| p.to_owned()), extensions))
     }
 }
 
