@@ -224,7 +224,7 @@ impl<'a> ExtensionProcessing<'a> {
             ocsp_response.take();
         }
 
-        let expected_client_type = self.process_cert_type_extension(
+        let expected_client_type = select_cert_type(
             hello
                 .client_certificate_types
                 .as_deref(),
@@ -233,7 +233,7 @@ impl<'a> ExtensionProcessing<'a> {
                 .supported_certificate_types(),
         )?;
 
-        let expected_server_type = self.process_cert_type_extension(
+        let expected_server_type = select_cert_type(
             hello
                 .server_certificate_types
                 .as_deref(),
@@ -255,46 +255,45 @@ impl<'a> ExtensionProcessing<'a> {
             chosen_protocol.map(|p| p.to_owned()),
         ))
     }
+}
 
-    fn process_cert_type_extension(
-        &self,
-        client: Option<&[CertificateType]>,
-        server: &[CertificateType],
-    ) -> Result<CertificateType, Error> {
-        if server.is_empty() {
-            return Err(ApiMisuse::NoSupportedCertificateTypes.into());
-        }
-
-        // https://www.rfc-editor.org/rfc/rfc7250#section-4.1
-        // If the client has no remaining certificate types to send in
-        // the client hello, other than the default X.509 type, it MUST omit the
-        // client_certificate_type extension in the client hello.
-
-        // If the client has no remaining certificate types to send in
-        // the client hello, other than the default X.509 certificate type, it
-        // MUST omit the entire server_certificate_type extension from the
-        // client hello.
-        let client = match client {
-            Some([]) => {
-                return Err(PeerIncompatible::IncorrectCertificateTypeExtension.into());
-            }
-            Some(c) => c,
-            None => {
-                return match server.contains(&CertificateType::X509) {
-                    true => Ok(CertificateType::X509),
-                    false => Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
-                };
-            }
-        };
-
-        for &ct in client {
-            if server.contains(&ct) {
-                return Ok(ct);
-            }
-        }
-
-        Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
+fn select_cert_type(
+    client: Option<&[CertificateType]>,
+    server: &[CertificateType],
+) -> Result<CertificateType, Error> {
+    if server.is_empty() {
+        return Err(ApiMisuse::NoSupportedCertificateTypes.into());
     }
+
+    // https://www.rfc-editor.org/rfc/rfc7250#section-4.1
+    // If the client has no remaining certificate types to send in
+    // the client hello, other than the default X.509 type, it MUST omit the
+    // client_certificate_type extension in the client hello.
+
+    // If the client has no remaining certificate types to send in
+    // the client hello, other than the default X.509 certificate type, it
+    // MUST omit the entire server_certificate_type extension from the
+    // client hello.
+    let client = match client {
+        Some([]) => {
+            return Err(PeerIncompatible::IncorrectCertificateTypeExtension.into());
+        }
+        Some(c) => c,
+        None => {
+            return match server.contains(&CertificateType::X509) {
+                true => Ok(CertificateType::X509),
+                false => Err(PeerIncompatible::IncorrectCertificateTypeExtension.into()),
+            };
+        }
+    };
+
+    for &ct in client {
+        if server.contains(&ct) {
+            return Ok(ct);
+        }
+    }
+
+    Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
 }
 
 pub(super) struct CertificateTypes {
