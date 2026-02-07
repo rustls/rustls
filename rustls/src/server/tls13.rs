@@ -181,62 +181,14 @@ mod client_hello {
                 };
             };
 
-            let mut chosen_psk_index = None;
-            let mut resumedata = None;
-
-            if let Some(psk_offer) = &input.client_hello.preshared_key_offer {
-                // "A client MUST provide a "psk_key_exchange_modes" extension if it
-                //  offers a "pre_shared_key" extension. If clients offer
-                //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
-                //  servers MUST abort the handshake." - RFC8446 4.2.9
-                if input
-                    .client_hello
-                    .preshared_key_modes
-                    .is_none()
-                {
-                    return Err(PeerMisbehaved::MissingPskModesExtension.into());
-                }
-
-                if psk_offer.binders.is_empty() {
-                    return Err(PeerMisbehaved::MissingBinderInPskExtension.into());
-                }
-
-                if psk_offer.binders.len() != psk_offer.identities.len() {
-                    return Err(PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders.into());
-                }
-
-                let now = st.config.current_time()?;
-
-                for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-                    let maybe_resume_data =
-                        attempt_tls13_ticket_decryption(psk_id.identity.bytes(), &st.config)
-                            .map(|resumedata| {
-                                resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
-                            })
-                            .filter(|resumedata| {
-                                resumedata
-                                    .common
-                                    .can_resume(suite.common.suite, st.sni.as_ref())
-                            });
-
-                    let Some(resume) = maybe_resume_data else {
-                        continue;
-                    };
-
-                    if !check_binder(
-                        &transcript,
-                        &KeyScheduleEarlyServer::new(st.protocol, suite, resume.secret.bytes()),
-                        input.message,
-                        psk_offer.binders[i].as_ref(),
-                    ) {
-                        return Err(PeerMisbehaved::IncorrectBinder.into());
-                    }
-
-                    chosen_psk_index = Some(i);
-                    resumedata = Some(resume);
-                    break;
-                }
-            }
+            let mut resuming = handle_psk_offer(
+                &input,
+                &transcript,
+                st.sni.as_ref(),
+                suite,
+                st.protocol,
+                &st.config,
+            )?;
 
             if !input
                 .client_hello
@@ -247,15 +199,14 @@ mod client_hello {
             {
                 debug!("Client unwilling to resume, PSK_DHE_KE not offered");
                 st.send_tickets = 0;
-                chosen_psk_index = None;
-                resumedata = None;
+                resuming = None;
             } else {
                 st.send_tickets = st.config.send_tls13_tickets;
             }
 
-            if let Some(resume) = &resumedata {
+            if let Some((_, session)) = &resuming {
                 output.emit(Event::ResumptionData(
-                    resume
+                    session
                         .common
                         .application_data
                         .bytes()
@@ -263,7 +214,7 @@ mod client_hello {
                 ));
             }
 
-            let full_handshake = resumedata.is_none();
+            let full_handshake = resuming.is_none();
             transcript.add_message(input.message);
             let key_schedule = emit_server_hello(
                 &mut transcript,
@@ -273,10 +224,7 @@ mod client_hello {
                 output,
                 &input.client_hello.session_id,
                 chosen_share_and_kxg,
-                chosen_psk_index,
-                resumedata
-                    .as_ref()
-                    .map(|x| x.secret.bytes()),
+                resuming.as_ref(),
                 &input.proof,
                 &st.config,
             )?;
@@ -302,7 +250,9 @@ mod client_hello {
                 output,
                 &mut ocsp_response,
                 input.client_hello,
-                resumedata.as_ref(),
+                resuming
+                    .as_ref()
+                    .map(|(_, session)| session),
                 st.extra_exts,
                 &st.config,
             )?;
@@ -412,7 +362,7 @@ mod client_hello {
                     key_schedule: key_schedule_traffic,
                     alpn_protocol,
                     sni: st.sni,
-                    peer_identity: resumedata.and_then(|r| r.common.peer_identity),
+                    peer_identity: resuming.and_then(|(_, r)| r.common.peer_identity),
                     resumption_data: st.resumption_data,
                     send_tickets: st.send_tickets,
                     remaining_length: max_length as usize,
@@ -425,7 +375,7 @@ mod client_hello {
                     key_schedule: key_schedule_traffic,
                     alpn_protocol,
                     sni: st.sni,
-                    peer_identity: resumedata.and_then(|r| r.common.peer_identity),
+                    peer_identity: resuming.and_then(|(_, r)| r.common.peer_identity),
                     resumption_data: st.resumption_data,
                     send_tickets: st.send_tickets,
                 }))
@@ -455,6 +405,68 @@ mod client_hello {
             // Use a single maximum-sized message.
             16384
         }
+    }
+
+    fn handle_psk_offer(
+        input: &ClientHelloInput<'_>,
+        transcript: &HandshakeHash,
+        sni: Option<&DnsName<'_>>,
+        suite: &'static Tls13CipherSuite,
+        protocol: Protocol,
+        config: &ServerConfig,
+    ) -> Result<Option<(usize, Tls13ServerSessionValue)>, Error> {
+        let Some(psk_offer) = &input.client_hello.preshared_key_offer else {
+            return Ok(None);
+        };
+
+        // "A client MUST provide a "psk_key_exchange_modes" extension if it
+        //  offers a "pre_shared_key" extension. If clients offer
+        //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
+        //  servers MUST abort the handshake." - RFC8446 4.2.9
+        if input
+            .client_hello
+            .preshared_key_modes
+            .is_none()
+        {
+            return Err(PeerMisbehaved::MissingPskModesExtension.into());
+        }
+
+        if psk_offer.binders.is_empty() {
+            return Err(PeerMisbehaved::MissingBinderInPskExtension.into());
+        }
+
+        if psk_offer.binders.len() != psk_offer.identities.len() {
+            return Err(PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders.into());
+        }
+
+        let now = config.current_time()?;
+        for (i, psk_id) in psk_offer.identities.iter().enumerate() {
+            let maybe_resume_data =
+                attempt_tls13_ticket_decryption(psk_id.identity.bytes(), &config)
+                    .map(|resumedata| resumedata.set_freshness(psk_id.obfuscated_ticket_age, now))
+                    .filter(|resumedata| {
+                        resumedata
+                            .common
+                            .can_resume(suite.common.suite, sni)
+                    });
+
+            let Some(resume) = maybe_resume_data else {
+                continue;
+            };
+
+            if !check_binder(
+                &transcript,
+                &KeyScheduleEarlyServer::new(protocol, suite, resume.secret.bytes()),
+                input.message,
+                psk_offer.binders[i].as_ref(),
+            ) {
+                return Err(PeerMisbehaved::IncorrectBinder.into());
+            }
+
+            return Ok(Some((i, resume)));
+        }
+
+        Ok(None)
     }
 
     fn check_binder(
@@ -503,8 +515,7 @@ mod client_hello {
         output: &mut dyn Output,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
-        chosen_psk_idx: Option<usize>,
-        resuming_psk: Option<&[u8]>,
+        resuming: Option<&(usize, Tls13ServerSessionValue)>,
         proof: &HandshakeAlignedProof,
         config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
@@ -516,7 +527,7 @@ mod client_hello {
 
         let extensions = Box::new(ServerExtensions {
             key_share: Some(KeyShareEntry::new(ckx.group, ckx.pub_key)),
-            preshared_key: chosen_psk_idx.map(|idx| idx as u16),
+            preshared_key: resuming.map(|&(idx, _)| idx as u16),
             selected_version: Some(ProtocolVersion::TLSv1_3),
             ..Default::default()
         });
@@ -542,8 +553,9 @@ mod client_hello {
         output.emit(Event::PlainMessage(sh));
 
         // Start key schedule
-        let key_schedule_pre_handshake = if let Some(psk) = resuming_psk {
-            let early_key_schedule = KeyScheduleEarlyServer::new(protocol, suite, psk);
+        let key_schedule_pre_handshake = if let Some((_, psk)) = resuming {
+            let early_key_schedule =
+                KeyScheduleEarlyServer::new(protocol, suite, psk.secret.bytes());
             early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
