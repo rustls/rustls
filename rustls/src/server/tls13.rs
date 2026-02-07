@@ -29,7 +29,7 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, HandshakeMessagePayload,
     HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
-    Reader, SizedPayload,
+    PresharedKeyIdentity, Reader, SizedPayload,
 };
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
@@ -58,8 +58,8 @@ mod client_hello {
         ServerExtensionsInput, ServerHelloPayload, SessionId, SizedPayload,
     };
     use crate::sealed::Sealed;
+    use crate::server::Tls13ServerSessionValue;
     use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello, ServerHandler};
-    use crate::server::{ServerSessionValue, Tls13ServerSessionValue};
     use crate::tls13::key_schedule::{
         KeyScheduleEarlyServer, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
@@ -441,9 +441,7 @@ mod client_hello {
 
         let now = config.current_time()?;
         for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-            let Some(mut session) =
-                attempt_tls13_ticket_decryption(psk_id.identity.bytes(), &config)
-            else {
+            let Some(mut session) = Tls13ServerSessionValue::from_ticket(psk_id, config) else {
                 continue;
             };
 
@@ -489,23 +487,6 @@ mod client_hello {
             key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
         ConstantTimeEq::ct_eq(real_binder.as_ref(), binder).into()
-    }
-
-    fn attempt_tls13_ticket_decryption(
-        ticket: &[u8],
-        config: &ServerConfig,
-    ) -> Option<Tls13ServerSessionValue> {
-        let plain = match config.ticketer.as_deref() {
-            Some(ticketer) => ticketer.decrypt(ticket)?,
-            None => config
-                .session_storage
-                .take(ServerSessionKey::new(ticket))?,
-        };
-
-        match ServerSessionValue::read_bytes(&plain).ok()? {
-            ServerSessionValue::Tls13(tls13) => Some(tls13),
-            _ => None,
-        }
     }
 
     fn emit_server_hello(
@@ -1222,6 +1203,20 @@ pub(crate) struct Tls13ServerSessionValue {
 }
 
 impl Tls13ServerSessionValue {
+    fn from_ticket(id: &PresharedKeyIdentity, config: &ServerConfig) -> Option<Self> {
+        let plain = match config.ticketer.as_deref() {
+            Some(ticketer) => ticketer.decrypt(id.identity.bytes())?,
+            None => config
+                .session_storage
+                .take(ServerSessionKey::new(id.identity.bytes()))?,
+        };
+
+        match ServerSessionValue::read_bytes(&plain).ok()? {
+            ServerSessionValue::Tls13(tls13) => Some(tls13),
+            _ => None,
+        }
+    }
+
     pub(super) fn new(
         common: CommonServerSessionValue,
         secret: &[u8],
