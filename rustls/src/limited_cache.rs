@@ -13,7 +13,7 @@ use crate::hash_map::{Entry, HashMap};
 /// storage.
 ///
 /// This is inefficient: it stores keys twice.
-pub(crate) struct LimitedCache<K: Clone + Hash + Eq, V> {
+pub(crate) struct LimitedCache<K, V> {
     map: HashMap<K, V>,
 
     // first item is the oldest key
@@ -42,16 +42,9 @@ impl<K: Eq + Hash + Clone + Debug, V: Default> LimitedCache<K, V> {
             }
         }
     }
-
-    pub(crate) fn get_mut<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<&mut V>
-    where
-        K: Borrow<Q>,
-    {
-        self.map.get_mut(k)
-    }
 }
 
-impl<K: Eq + Hash + Clone + Debug, V: Default> LimitedCache<K, V> {
+impl<K: Eq + Hash + Clone + Debug, V> LimitedCache<K, V> {
     /// Create a new LimitedCache with the given rough capacity.
     pub(crate) fn new(capacity_order_of_magnitude: usize) -> Self {
         Self {
@@ -82,6 +75,13 @@ impl<K: Eq + Hash + Clone + Debug, V: Default> LimitedCache<K, V> {
                 self.map.remove(&oldest_key);
             }
         }
+    }
+
+    pub(crate) fn get_mut<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<&mut V>
+    where
+        K: Borrow<Q>,
+    {
+        self.map.get_mut(k)
     }
 
     pub(crate) fn get<Q: Hash + Eq + ?Sized>(&self, k: &Q) -> Option<&V>
