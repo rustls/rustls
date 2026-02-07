@@ -63,10 +63,12 @@ impl Tls12Extensions {
         // Tickets:
         // If we get any SessionTicket extension and have tickets enabled,
         // we send an ack.
-        if hello.session_ticket.is_some() && config.ticketer.is_some() {
-            ep.send_ticket = true;
+        let send_ticket = if hello.session_ticket.is_some() && config.ticketer.is_some() {
             ep.extensions.session_ticket_ack = Some(());
-        }
+            true
+        } else {
+            false
+        };
 
         // Confirm use of EMS if offered.
         if using_ems {
@@ -81,7 +83,7 @@ impl Tls12Extensions {
 
         let out = Self {
             alpn_protocol,
-            send_ticket: ep.send_ticket,
+            send_ticket,
         };
 
         Ok((out, ep.extensions))
@@ -146,7 +148,6 @@ struct ExtensionProcessing<'a> {
     // extensions to reply with
     extensions: Box<ServerExtensions<'static>>,
     protocol: Protocol,
-    send_ticket: bool,
     config: &'a ServerConfig,
     client_hello: &'a ClientHelloPayload,
 }
@@ -170,7 +171,6 @@ impl<'a> ExtensionProcessing<'a> {
         Self {
             extensions,
             protocol,
-            send_ticket: false,
             config,
             client_hello,
         }
