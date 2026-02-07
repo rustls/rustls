@@ -33,7 +33,7 @@ use rustls::crypto::{CryptoProvider, Identity};
 use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, RootCertStore};
+use rustls::{ClientConfig, ClientConnection, Connection, RootCertStore};
 use rustls_aws_lc_rs as provider;
 use rustls_util::KeyLogFile;
 

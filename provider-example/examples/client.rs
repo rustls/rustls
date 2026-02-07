@@ -2,7 +2,7 @@ use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::{ClientConfig, RootCertStore};
+use rustls::{ClientConfig, Connection, RootCertStore};
 use rustls_provider_example::provider;
 use rustls_util::Stream;
 

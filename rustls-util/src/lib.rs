@@ -2,7 +2,7 @@ use std::io;
 
 mod key_log_file;
 pub use key_log_file::KeyLogFile;
-use rustls::{ConnectionCommon, SideData};
+use rustls::Connection;
 
 mod stream;
 pub use crate::stream::{Stream, StreamOwned};
@@ -35,9 +35,9 @@ pub use crate::stream::{Stream, StreamOwned};
 /// [`write_tls()`]: rustls::ConnectionCommon::write_tls
 /// [`read_tls()`]: rustls::ConnectionCommon::read_tls
 /// [`process_new_packets()`]: rustls::ConnectionCommon::process_new_packets
-pub fn complete_io<S: SideData>(
+pub fn complete_io(
     io: &mut (impl io::Read + io::Write),
-    conn: &mut ConnectionCommon<S>,
+    conn: &mut dyn Connection,
 ) -> Result<(usize, usize), io::Error> {
     let mut eof = false;
     let mut wrlen = 0;
