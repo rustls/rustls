@@ -75,24 +75,22 @@ pub(crate) struct SessionId {
     len: usize,
 }
 
-impl fmt::Debug for SessionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.data[..self.len])
+impl SessionId {
+    pub(crate) fn random(secure_random: &dyn SecureRandom) -> Result<Self, GetRandomFailed> {
+        let mut data = [0u8; 32];
+        secure_random.fill(&mut data)?;
+        Ok(Self { data, len: 32 })
     }
-}
 
-impl PartialEq for SessionId {
-    fn eq(&self, other: &Self) -> bool {
-        if self.len != other.len {
-            return false;
+    pub(crate) fn empty() -> Self {
+        Self {
+            data: [0u8; 32],
+            len: 0,
         }
+    }
 
-        let mut diff = 0u8;
-        for i in 0..self.len {
-            diff |= self.data[i] ^ other.data[i];
-        }
-
-        diff == 0u8
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 
@@ -119,28 +117,30 @@ impl Codec<'_> for SessionId {
     }
 }
 
-impl SessionId {
-    pub(crate) fn random(secure_random: &dyn SecureRandom) -> Result<Self, GetRandomFailed> {
-        let mut data = [0u8; 32];
-        secure_random.fill(&mut data)?;
-        Ok(Self { data, len: 32 })
-    }
-
-    pub(crate) fn empty() -> Self {
-        Self {
-            data: [0u8; 32],
-            len: 0,
+impl PartialEq for SessionId {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len != other.len {
+            return false;
         }
-    }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.len == 0
+        let mut diff = 0u8;
+        for i in 0..self.len {
+            diff |= self.data[i] ^ other.data[i];
+        }
+
+        diff == 0u8
     }
 }
 
 impl AsRef<[u8]> for SessionId {
     fn as_ref(&self) -> &[u8] {
         &self.data[..self.len]
+    }
+}
+
+impl fmt::Debug for SessionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        hex(f, &self.data[..self.len])
     }
 }
 
