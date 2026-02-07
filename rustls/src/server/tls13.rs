@@ -59,7 +59,7 @@ mod client_hello {
     };
     use crate::sealed::Sealed;
     use crate::server::Tls13ServerSessionValue;
-    use crate::server::hs::{CertificateTypes, ClientHelloInput, ExpectClientHello, ServerHandler};
+    use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler, Tls13Extensions};
     use crate::tls13::key_schedule::{
         KeyScheduleEarlyServer, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
@@ -243,7 +243,13 @@ mod client_hello {
 
             let mut ocsp_response = signer.ocsp.as_deref();
             let mut flight = HandshakeFlightTls13::new(&mut transcript);
-            let (cert_types, doing_early_data, alpn_protocol) = emit_encrypted_extensions(
+            let (
+                Tls13Extensions {
+                    certificate_types,
+                    alpn_protocol,
+                },
+                doing_early_data,
+            ) = emit_encrypted_extensions(
                 &mut flight,
                 suite,
                 st.protocol,
@@ -335,13 +341,13 @@ mod client_hello {
                     Ok(Box::new(ExpectCertificate {
                         hs,
                         key_schedule: key_schedule_traffic,
-                        expected_certificate_type: cert_types.client,
+                        expected_certificate_type: certificate_types.client,
                     }))
                 } else {
                     Ok(Box::new(ExpectCertificateOrCompressedCertificate {
                         hs,
                         key_schedule: key_schedule_traffic,
-                        expected_certificate_type: cert_types.client,
+                        expected_certificate_type: certificate_types.client,
                     }))
                 }
             } else if matches!(doing_early_data, EarlyDataDecision::Accepted { .. })
@@ -668,36 +674,35 @@ mod client_hello {
         resumedata: Option<&Tls13ServerSessionValue>,
         extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
-    ) -> Result<
-        (
-            CertificateTypes,
-            EarlyDataDecision,
-            Option<ApplicationProtocol<'static>>,
-        ),
-        Error,
-    > {
-        let mut ep = hs::ExtensionProcessing::new(extra_exts, protocol, hello, config);
-        let (cert_types, alpn_protocol) =
-            ep.process_common(output, ocsp_response, resumedata.map(|r| &r.common))?;
+    ) -> Result<(Tls13Extensions, EarlyDataDecision), Error> {
+        let (out, mut extensions) = Tls13Extensions::new(
+            extra_exts,
+            ocsp_response,
+            resumedata.map(|r| &r.common),
+            hello,
+            output,
+            protocol,
+            config,
+        )?;
 
         let early_data = decide_if_early_data_allowed(
             output,
             hello,
             resumedata,
-            alpn_protocol.as_ref(),
+            out.alpn_protocol.as_ref(),
             suite,
             protocol,
             config,
         );
         if let EarlyDataDecision::Accepted { .. } = early_data {
-            ep.extensions.early_data_ack = Some(());
+            extensions.early_data_ack = Some(());
         }
 
-        let ee = HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(ep.extensions));
+        let ee = HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(extensions));
 
         trace!("sending encrypted extensions {ee:?}");
         flight.add(ee);
-        Ok((cert_types, early_data, alpn_protocol))
+        Ok((out, early_data))
     }
 
     fn emit_certificate_req_tls13(

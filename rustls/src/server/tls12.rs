@@ -36,17 +36,15 @@ use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
     use super::*;
-    use crate::common_state::Protocol;
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
-    use crate::enums::ApplicationProtocol;
     use crate::msgs::{
         CertificateRequestPayload, CertificateStatus, ClientCertificateType, ClientHelloPayload,
         ClientSessionTicket, Compression, Random, ServerExtensionsInput, ServerHelloPayload,
         ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
     use crate::sealed::Sealed;
-    use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler};
+    use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler, Tls12Extensions};
     use crate::verify::DigitallySignedStruct;
 
     pub(crate) static TLS12_HANDLER: &dyn ServerHandler<Tls12CipherSuite> = &Handler;
@@ -146,7 +144,10 @@ mod client_hello {
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
-            let (send_ticket, alpn_protocol) = emit_server_hello(
+            let Tls12Extensions {
+                alpn_protocol,
+                send_ticket,
+            } = emit_server_hello(
                 &mut flight,
                 &st.config,
                 output,
@@ -284,7 +285,10 @@ mod client_hello {
 
         let session_id = input.client_hello.session_id;
         let mut flight = HandshakeFlightTls12::new(&mut transcript);
-        let (send_ticket, alpn_protocol) = emit_server_hello(
+        let Tls12Extensions {
+            alpn_protocol,
+            send_ticket,
+        } = emit_server_hello(
             &mut flight,
             &config,
             output,
@@ -293,7 +297,7 @@ mod client_hello {
             using_ems,
             &mut None,
             input.client_hello,
-            Some(&resumedata),
+            Some(&resumedata.common),
             &randoms,
             extra_exts,
         )?;
@@ -373,14 +377,19 @@ mod client_hello {
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&Tls12ServerSessionValue>,
+        resumedata: Option<&CommonServerSessionValue>,
         randoms: &ConnectionRandoms,
         extra_exts: ServerExtensionsInput,
-    ) -> Result<(bool, Option<ApplicationProtocol<'static>>), Error> {
-        let mut ep = hs::ExtensionProcessing::new(extra_exts, Protocol::Tcp, hello, config);
-        let (_, alpn_protocol) =
-            ep.process_common(output, ocsp_response, resumedata.map(|r| &r.common))?;
-        ep.process_tls12(*ocsp_response, using_ems);
+    ) -> Result<Tls12Extensions, Error> {
+        let (out, extensions) = Tls12Extensions::new(
+            extra_exts,
+            ocsp_response,
+            resumedata,
+            hello,
+            output,
+            using_ems,
+            config,
+        )?;
 
         let sh = HandshakeMessagePayload(HandshakePayload::ServerHello(ServerHelloPayload {
             legacy_version: ProtocolVersion::TLSv1_2,
@@ -388,12 +397,12 @@ mod client_hello {
             session_id,
             cipher_suite: suite.common.suite,
             compression_method: Compression::Null,
-            extensions: ep.extensions,
+            extensions,
         }));
+
         trace!("sending server hello {sh:?}");
         flight.add(sh);
-
-        Ok((ep.send_ticket, alpn_protocol))
+        Ok(out)
     }
 
     fn emit_certificate(flight: &mut HandshakeFlightTls12<'_>, credentials: &SelectedCredential) {
