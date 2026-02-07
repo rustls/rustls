@@ -441,29 +441,30 @@ mod client_hello {
 
         let now = config.current_time()?;
         for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-            let maybe_resume_data =
+            let Some(mut session) =
                 attempt_tls13_ticket_decryption(psk_id.identity.bytes(), &config)
-                    .map(|resumedata| resumedata.set_freshness(psk_id.obfuscated_ticket_age, now))
-                    .filter(|resumedata| {
-                        resumedata
-                            .common
-                            .can_resume(suite.common.suite, sni)
-                    });
-
-            let Some(resume) = maybe_resume_data else {
+            else {
                 continue;
             };
 
+            session.set_freshness(psk_id.obfuscated_ticket_age, now);
+            if !session
+                .common
+                .can_resume(suite.common.suite, sni)
+            {
+                continue;
+            }
+
             if !check_binder(
-                &transcript,
-                &KeyScheduleEarlyServer::new(protocol, suite, resume.secret.bytes()),
+                transcript,
+                &KeyScheduleEarlyServer::new(protocol, suite, session.secret.bytes()),
                 input.message,
                 psk_offer.binders[i].as_ref(),
             ) {
                 return Err(PeerMisbehaved::IncorrectBinder.into());
             }
 
-            return Ok(Some((i, resume)));
+            return Ok(Some((i, session)));
         }
 
         Ok(None)
@@ -1234,7 +1235,7 @@ impl Tls13ServerSessionValue {
         }
     }
 
-    fn set_freshness(mut self, obfuscated_client_age_ms: u32, time_now: UnixTime) -> Self {
+    fn set_freshness(&mut self, obfuscated_client_age_ms: u32, time_now: UnixTime) {
         let client_age_ms = obfuscated_client_age_ms.wrapping_sub(self.age_obfuscation_offset);
         let server_age_ms = (time_now
             .as_secs()
@@ -1242,9 +1243,7 @@ impl Tls13ServerSessionValue {
             .saturating_mul(1000);
 
         let age_difference = server_age_ms.abs_diff(client_age_ms);
-
         self.freshness = Some(age_difference <= MAX_FRESHNESS_SKEW_MS);
-        self
     }
 
     fn is_fresh(&self) -> bool {
