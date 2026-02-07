@@ -5,12 +5,11 @@ use alloc::vec::Vec;
 pub(crate) use client_hello::TLS12_HANDLER;
 use pki_types::{DnsName, UnixTime};
 use subtle::ConstantTimeEq;
+use zeroize::Zeroizing;
 
 use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
-use super::{
-    CommonServerSessionValue, ServerSessionKey, ServerSessionValue, Tls12ServerSessionValue, hs,
-};
+use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue, hs};
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
 use crate::conn::ConnectionRandoms;
@@ -21,13 +20,13 @@ use crate::crypto::{Identity, TicketProducer};
 use crate::enums::{
     ApplicationProtocol, CertificateType, ContentType, HandshakeType, ProtocolVersion,
 };
-use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientKeyExchangeParams, Codec,
     HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload, Message, MessagePayload,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, SessionId,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, Reader, SessionId,
 };
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
@@ -770,6 +769,49 @@ fn get_server_connection_value_tls12(
         using_ems,
     )
     .into()
+}
+
+#[derive(Debug)]
+pub(crate) struct Tls12ServerSessionValue {
+    common: CommonServerSessionValue,
+    master_secret: Zeroizing<[u8; 48]>,
+    extended_ms: bool,
+}
+
+impl Tls12ServerSessionValue {
+    fn new(
+        common: CommonServerSessionValue,
+        master_secret: &[u8; 48],
+        extended_ms: bool,
+    ) -> Self {
+        Self {
+            common,
+            master_secret: Zeroizing::new(*master_secret),
+            extended_ms,
+        }
+    }
+}
+
+impl Codec<'_> for Tls12ServerSessionValue {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.common.encode(bytes);
+        bytes.extend_from_slice(self.master_secret.as_ref());
+        (self.extended_ms as u8).encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            common: CommonServerSessionValue::read(r)?,
+            master_secret: Zeroizing::new(r.take_array("MasterSecret").copied()?),
+            extended_ms: matches!(u8::read(r)?, 1),
+        })
+    }
+}
+
+impl From<Tls12ServerSessionValue> for ServerSessionValue {
+    fn from(value: Tls12ServerSessionValue) -> Self {
+        Self::Tls12(value)
+    }
 }
 
 fn emit_ticket(
