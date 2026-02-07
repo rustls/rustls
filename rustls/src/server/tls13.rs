@@ -10,7 +10,9 @@ use subtle::ConstantTimeEq;
 use super::config::ServerConfig;
 use super::connection::ServerConnectionData;
 use super::hs::{self, HandshakeHashOrBuffer};
-use super::{CommonServerSessionValue, ServerSessionValue, Tls13ServerSessionValue};
+use super::{
+    CommonServerSessionValue, ServerSessionKey, ServerSessionValue, Tls13ServerSessionValue,
+};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
     Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
@@ -483,7 +485,9 @@ mod client_hello {
     ) -> Option<Tls13ServerSessionValue> {
         let plain = match config.ticketer.as_deref() {
             Some(ticketer) => ticketer.decrypt(ticket)?,
-            None => config.session_storage.take(ticket)?,
+            None => config
+                .session_storage
+                .take(ServerSessionKey::new(ticket))?,
         };
 
         match ServerSessionValue::read_bytes(&plain).ok()? {
@@ -1273,16 +1277,16 @@ impl ExpectFinished {
             };
             (ticket, ticketer.lifetime())
         } else {
-            let id = rand::random_array::<32>(secure_random)?.to_vec();
+            let id = rand::random_array::<32>(secure_random)?;
             let stored = config
                 .session_storage
-                .put(id.clone(), plain);
+                .put(ServerSessionKey::new(&id), plain);
             if !stored {
                 trace!("resumption not available; not issuing ticket");
                 return Ok(());
             }
             let stateful_lifetime = Duration::from_secs(24 * 60 * 60); // this is a bit of a punt
-            (id, stateful_lifetime)
+            (id.to_vec(), stateful_lifetime)
         };
 
         let mut payload = NewSessionTicketPayloadTls13::new(lifetime, age_add, nonce, ticket);

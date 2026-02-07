@@ -1,21 +1,21 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::server;
+use crate::server::{ServerSessionKey, StoresServerSessions};
 
 /// Something which never stores sessions.
 #[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
 pub struct NoServerSessionStorage {}
 
-impl server::StoresServerSessions for NoServerSessionStorage {
-    fn put(&self, _id: Vec<u8>, _sec: Vec<u8>) -> bool {
+impl StoresServerSessions for NoServerSessionStorage {
+    fn put(&self, _id: ServerSessionKey<'_>, _sec: Vec<u8>) -> bool {
         false
     }
-    fn get(&self, _id: &[u8]) -> Option<Vec<u8>> {
+    fn get(&self, _id: ServerSessionKey<'_>) -> Option<Vec<u8>> {
         None
     }
-    fn take(&self, _id: &[u8]) -> Option<Vec<u8>> {
+    fn take(&self, _id: ServerSessionKey<'_>) -> Option<Vec<u8>> {
         None
     }
     fn can_cache(&self) -> bool {
@@ -24,12 +24,13 @@ impl server::StoresServerSessions for NoServerSessionStorage {
 }
 
 mod cache {
-    use alloc::vec::Vec;
-    use core::fmt::{Debug, Formatter};
+    use core::fmt::Formatter;
 
+    use super::*;
+    use crate::limited_cache;
     use crate::lock::Mutex;
+    use crate::server::StoresServerSessions;
     use crate::sync::Arc;
-    use crate::{limited_cache, server};
 
     /// An implementer of `StoresServerSessions` that stores everything
     /// in memory.  If enforces a limit on the number of stored sessions
@@ -49,25 +50,28 @@ mod cache {
         }
     }
 
-    impl server::StoresServerSessions for ServerSessionMemoryCache {
-        fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
+    impl StoresServerSessions for ServerSessionMemoryCache {
+        fn put(&self, key: ServerSessionKey<'_>, value: Vec<u8>) -> bool {
             self.cache
                 .lock()
                 .unwrap()
-                .insert(key, value);
+                .insert(key.as_ref().to_vec(), value);
             true
         }
 
-        fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        fn get(&self, key: ServerSessionKey<'_>) -> Option<Vec<u8>> {
             self.cache
                 .lock()
                 .unwrap()
-                .get(key)
+                .get(key.as_ref())
                 .cloned()
         }
 
-        fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
-            self.cache.lock().unwrap().remove(key)
+        fn take(&self, key: ServerSessionKey<'_>) -> Option<Vec<u8>> {
+            self.cache
+                .lock()
+                .unwrap()
+                .remove(key.as_ref())
         }
 
         fn can_cache(&self) -> bool {
@@ -92,39 +96,50 @@ mod cache {
         #[test]
         fn test_serversessionmemorycache_accepts_put() {
             let c = ServerSessionMemoryCache::new(4);
-            assert!(c.put(vec![0x01], vec![0x02]));
+            assert!(c.put(ServerSessionKey::new(&[0x01]), vec![0x02]));
         }
 
         #[test]
         fn test_serversessionmemorycache_persists_put() {
             let c = ServerSessionMemoryCache::new(4);
-            assert!(c.put(vec![0x01], vec![0x02]));
-            assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
-            assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
+            assert!(c.put(ServerSessionKey::new(&[0x01]), vec![0x02]));
+            assert_eq!(c.get(ServerSessionKey::new(&[0x01])), Some(vec![0x02]));
+            assert_eq!(c.get(ServerSessionKey::new(&[0x01])), Some(vec![0x02]));
         }
 
         #[test]
         fn test_serversessionmemorycache_overwrites_put() {
             let c = ServerSessionMemoryCache::new(4);
-            assert!(c.put(vec![0x01], vec![0x02]));
-            assert!(c.put(vec![0x01], vec![0x04]));
-            assert_eq!(c.get(&[0x01]), Some(vec![0x04]));
+            assert!(c.put(ServerSessionKey::new(&[0x01]), vec![0x02]));
+            assert!(c.put(ServerSessionKey::new(&[0x01]), vec![0x04]));
+            assert_eq!(c.get(ServerSessionKey::new(&[0x01])), Some(vec![0x04]));
         }
 
         #[test]
         fn test_serversessionmemorycache_drops_to_maintain_size_invariant() {
             let c = ServerSessionMemoryCache::new(2);
-            assert!(c.put(vec![0x01], vec![0x02]));
-            assert!(c.put(vec![0x03], vec![0x04]));
-            assert!(c.put(vec![0x05], vec![0x06]));
-            assert!(c.put(vec![0x07], vec![0x08]));
-            assert!(c.put(vec![0x09], vec![0x0a]));
+            assert!(c.put(ServerSessionKey::new(&[0x01]), vec![0x02]));
+            assert!(c.put(ServerSessionKey::new(&[0x03]), vec![0x04]));
+            assert!(c.put(ServerSessionKey::new(&[0x05]), vec![0x06]));
+            assert!(c.put(ServerSessionKey::new(&[0x07]), vec![0x08]));
+            assert!(c.put(ServerSessionKey::new(&[0x09]), vec![0x0a]));
 
-            let count = c.get(&[0x01]).iter().count()
-                + c.get(&[0x03]).iter().count()
-                + c.get(&[0x05]).iter().count()
-                + c.get(&[0x07]).iter().count()
-                + c.get(&[0x09]).iter().count();
+            let count = c
+                .get(ServerSessionKey::new(&[0x01]))
+                .iter()
+                .count()
+                + c.get(ServerSessionKey::new(&[0x03]))
+                    .iter()
+                    .count()
+                + c.get(ServerSessionKey::new(&[0x05]))
+                    .iter()
+                    .count()
+                + c.get(ServerSessionKey::new(&[0x07]))
+                    .iter()
+                    .count()
+                + c.get(ServerSessionKey::new(&[0x09]))
+                    .iter()
+                    .count();
 
             assert!(count < 5);
         }
@@ -270,23 +285,23 @@ mod tests {
     #[test]
     fn test_noserversessionstorage_drops_put() {
         let c = NoServerSessionStorage {};
-        assert!(!c.put(vec![0x01], vec![0x02]));
+        assert!(!c.put(ServerSessionKey::new(&[0x01]), vec![0x02]));
     }
 
     #[test]
     fn test_noserversessionstorage_denies_gets() {
         let c = NoServerSessionStorage {};
-        c.put(vec![0x01], vec![0x02]);
-        assert_eq!(c.get(&[]), None);
-        assert_eq!(c.get(&[0x01]), None);
-        assert_eq!(c.get(&[0x02]), None);
+        c.put(ServerSessionKey::new(&[0x01]), vec![0x02]);
+        assert_eq!(c.get(ServerSessionKey::new(&[])), None);
+        assert_eq!(c.get(ServerSessionKey::new(&[0x01])), None);
+        assert_eq!(c.get(ServerSessionKey::new(&[0x02])), None);
     }
 
     #[test]
     fn test_noserversessionstorage_denies_takes() {
         let c = NoServerSessionStorage {};
-        assert_eq!(c.take(&[]), None);
-        assert_eq!(c.take(&[0x01]), None);
-        assert_eq!(c.take(&[0x02]), None);
+        assert_eq!(c.take(ServerSessionKey::new(&[])), None);
+        assert_eq!(c.take(ServerSessionKey::new(&[0x01])), None);
+        assert_eq!(c.take(ServerSessionKey::new(&[0x02])), None);
     }
 }
