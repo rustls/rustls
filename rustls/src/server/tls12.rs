@@ -746,31 +746,6 @@ impl State<ServerConnectionData> for ExpectCcs {
     }
 }
 
-// --- Process client's Finished ---
-fn get_server_connection_value_tls12(
-    secrets: &ConnectionSecrets,
-    using_ems: bool,
-    peer_identity: Option<&Identity<'static>>,
-    alpn_protocol: Option<&ApplicationProtocol<'_>>,
-    sni: Option<&DnsName<'static>>,
-    resumption_data: &[u8],
-    time_now: UnixTime,
-) -> ServerSessionValue {
-    Tls12ServerSessionValue::new(
-        CommonServerSessionValue::new(
-            sni,
-            secrets.suite().common.suite,
-            peer_identity.cloned(),
-            alpn_protocol.map(|p| p.to_owned()),
-            resumption_data.to_vec(),
-            time_now,
-        ),
-        secrets.master_secret(),
-        using_ems,
-    )
-    .into()
-}
-
 #[derive(Debug)]
 pub(crate) struct Tls12ServerSessionValue {
     common: CommonServerSessionValue,
@@ -779,11 +754,7 @@ pub(crate) struct Tls12ServerSessionValue {
 }
 
 impl Tls12ServerSessionValue {
-    fn new(
-        common: CommonServerSessionValue,
-        master_secret: &[u8; 48],
-        extended_ms: bool,
-    ) -> Self {
+    fn new(common: CommonServerSessionValue, master_secret: &[u8; 48], extended_ms: bool) -> Self {
         Self {
             common,
             master_secret: Zeroizing::new(*master_secret),
@@ -826,15 +797,18 @@ fn emit_ticket(
     ticketer: &dyn TicketProducer,
     now: UnixTime,
 ) -> Result<(), Error> {
-    let plain = get_server_connection_value_tls12(
-        secrets,
+    let plain = ServerSessionValue::from(Tls12ServerSessionValue::new(
+        CommonServerSessionValue::new(
+            sni,
+            secrets.suite().common.suite,
+            peer_identity.cloned(),
+            alpn_protocol.map(|p| p.to_owned()),
+            resumption_data.to_vec(),
+            now,
+        ),
+        secrets.master_secret(),
         using_ems,
-        peer_identity,
-        alpn_protocol,
-        sni,
-        resumption_data,
-        now,
-    )
+    ))
     .get_encoding();
 
     // If we can't produce a ticket for some reason, we can't
@@ -931,17 +905,18 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         // Save connection, perhaps
         if !self.resuming && !self.session_id.is_empty() {
-            let now = self.config.current_time()?;
-
-            let value = get_server_connection_value_tls12(
-                &self.secrets,
+            let value = ServerSessionValue::from(Tls12ServerSessionValue::new(
+                CommonServerSessionValue::new(
+                    self.sni.as_ref(),
+                    self.secrets.suite().common.suite,
+                    self.peer_identity.clone(),
+                    self.alpn_protocol.clone(),
+                    self.resumption_data.to_vec(),
+                    self.config.current_time()?,
+                ),
+                self.secrets.master_secret(),
                 self.using_ems,
-                self.peer_identity.as_ref(),
-                self.alpn_protocol.as_ref(),
-                self.sni.as_ref(),
-                &self.resumption_data,
-                now,
-            );
+            ));
 
             let worked = self.config.session_storage.put(
                 ServerSessionKey::from(&self.session_id),
