@@ -408,6 +408,8 @@ impl SendPath {
             return Ok(0);
         }
 
+        self.perhaps_write_key_update();
+
         let fragments = self
             .message_fragmenter
             .fragment_payload(
@@ -416,34 +418,8 @@ impl SendPath {
                 payload.clone(),
             );
 
-        for f in 0..fragments.len() {
-            match self
-                .encrypt_state
-                .pre_encrypt_action(f as u64)
-            {
-                PreEncryptAction::Nothing => {}
-                PreEncryptAction::RefreshOrClose => match self.negotiated_version {
-                    Some(ProtocolVersion::TLSv1_3) => {
-                        // driven by caller, as we don't have the `State` here
-                        self.refresh_traffic_keys_pending = true;
-                    }
-                    _ => {
-                        error!(
-                            "traffic keys exhausted, closing connection to prevent security failure"
-                        );
-                        self.send_close_notify();
-                        return Err(EncryptError::EncryptExhausted);
-                    }
-                },
-                PreEncryptAction::Refuse => {
-                    return Err(EncryptError::EncryptExhausted);
-                }
-            }
-        }
-
-        self.perhaps_write_key_update();
-
         self.check_required_size(outgoing_tls, fragments)?;
+        let mut written = self.write_buffered_fragments(outgoing_tls);
 
         let fragments = self
             .message_fragmenter
@@ -453,7 +429,17 @@ impl SendPath {
                 payload,
             );
 
-        Ok(self.write_fragments(outgoing_tls, fragments))
+        for m in fragments {
+            let em = self
+                .encrypt_outgoing_fragment(m)?
+                .encode();
+
+            let len = em.len();
+            outgoing_tls[written..written + len].copy_from_slice(&em);
+            written += len;
+        }
+
+        Ok(written)
     }
 
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
@@ -479,7 +465,13 @@ impl SendPath {
             .message_fragmenter
             .fragment_message(&m);
         for m in iter {
-            self.send_single_fragment(m);
+            if m.typ == ContentType::Alert {
+                // Alerts are always sendable -- never quashed by a PreEncryptAction.
+                let em = self.encrypt_state.encrypt_outgoing(m);
+                self.queue_tls_message(em);
+            } else if let Ok(m) = self.encrypt_outgoing_fragment(m) {
+                self.queue_tls_message(m);
+            }
         }
     }
 
@@ -494,32 +486,29 @@ impl SendPath {
                 payload,
             );
         for m in iter {
-            self.send_single_fragment(m);
+            if let Ok(m) = self.encrypt_outgoing_fragment(m) {
+                self.queue_tls_message(m);
+            }
         }
 
         len
     }
 
-    fn send_single_fragment(&mut self, m: EncodedMessage<OutboundPlain<'_>>) {
-        if m.typ == ContentType::Alert {
-            // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            let em = self.encrypt_state.encrypt_outgoing(m);
-            self.queue_tls_message(em);
-            return;
-        }
-
+    fn encrypt_outgoing_fragment(
+        &mut self,
+        m: EncodedMessage<OutboundPlain<'_>>,
+    ) -> Result<EncodedMessage<OutboundOpaque>, EncryptError> {
         match self
             .encrypt_state
             .next_pre_encrypt_action()
         {
             PreEncryptAction::Nothing => {}
 
-            // Close connection once we start to run out of
-            // sequence space.
+            // Close connection once we start to run out of sequence space.
             PreEncryptAction::RefreshOrClose => {
                 match self.negotiated_version {
                     Some(ProtocolVersion::TLSv1_3) => {
-                        // driven by caller, as we don't have the `State` here
+                        // Driven by caller, as we don't have the `State` here.
                         self.refresh_traffic_keys_pending = true;
                     }
                     _ => {
@@ -527,20 +516,17 @@ impl SendPath {
                             "traffic keys exhausted, closing connection to prevent security failure"
                         );
                         self.send_close_notify();
-                        return;
+                        return Err(EncryptError::EncryptExhausted);
                     }
                 }
             }
 
-            // Refuse to wrap counter at all costs.  This
+            // Refuse to wrap counter at all costs. This
             // is basically untestable unfortunately.
-            PreEncryptAction::Refuse => {
-                return;
-            }
+            PreEncryptAction::Refuse => return Err(EncryptError::EncryptExhausted),
         };
 
-        let em = self.encrypt_state.encrypt_outgoing(m);
-        self.queue_tls_message(em);
+        Ok(self.encrypt_state.encrypt_outgoing(m))
     }
 
     /// Send plaintext application data, fragmenting and
@@ -629,7 +615,7 @@ impl SendPath {
     ) -> Result<usize, EncryptError> {
         self.send_close_notify();
         self.check_required_size(outgoing_tls, [].into_iter())?;
-        Ok(self.write_fragments(outgoing_tls, [].into_iter()))
+        Ok(self.write_buffered_fragments(outgoing_tls))
     }
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
@@ -657,11 +643,7 @@ impl SendPath {
         Ok(())
     }
 
-    fn write_fragments<'a>(
-        &mut self,
-        outgoing_tls: &mut [u8],
-        fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
-    ) -> usize {
+    fn write_buffered_fragments(&mut self, outgoing_tls: &mut [u8]) -> usize {
         let mut written = 0;
 
         // Any pre-existing encrypted messages in `sendable_tls` must
@@ -669,17 +651,6 @@ impl SendPath {
         while let Some(message) = self.sendable_tls.pop() {
             let len = message.len();
             outgoing_tls[written..written + len].copy_from_slice(&message);
-            written += len;
-        }
-
-        for m in fragments {
-            let em = self
-                .encrypt_state
-                .encrypt_outgoing(m)
-                .encode();
-
-            let len = em.len();
-            outgoing_tls[written..written + len].copy_from_slice(&em);
             written += len;
         }
 
