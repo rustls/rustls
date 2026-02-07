@@ -38,6 +38,7 @@ pub(crate) use tls12::TLS12_HANDLER;
 
 mod tls13;
 pub(crate) use tls13::TLS13_HANDLER;
+use tls13::Tls13ServerSessionValue;
 
 /// Dangerous configuration that should be audited and used with extreme care.
 pub mod danger {
@@ -118,76 +119,6 @@ impl Codec<'_> for Tls12ServerSessionValue {
 impl From<Tls12ServerSessionValue> for ServerSessionValue {
     fn from(value: Tls12ServerSessionValue) -> Self {
         Self::Tls12(value)
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct Tls13ServerSessionValue {
-    pub(crate) common: CommonServerSessionValue,
-    pub(crate) secret: Zeroizing<SizedPayload<'static, u8>>,
-    pub(crate) age_obfuscation_offset: u32,
-
-    // not encoded vv
-    freshness: Option<bool>,
-}
-
-impl Tls13ServerSessionValue {
-    pub(crate) fn new(
-        common: CommonServerSessionValue,
-        secret: &[u8],
-        age_obfuscation_offset: u32,
-    ) -> Self {
-        Self {
-            common,
-            secret: Zeroizing::new(secret.to_vec().into()),
-            age_obfuscation_offset,
-            freshness: None,
-        }
-    }
-
-    pub(crate) fn set_freshness(
-        mut self,
-        obfuscated_client_age_ms: u32,
-        time_now: UnixTime,
-    ) -> Self {
-        let client_age_ms = obfuscated_client_age_ms.wrapping_sub(self.age_obfuscation_offset);
-        let server_age_ms = (time_now
-            .as_secs()
-            .saturating_sub(self.common.creation_time_sec) as u32)
-            .saturating_mul(1000);
-
-        let age_difference = server_age_ms.abs_diff(client_age_ms);
-
-        self.freshness = Some(age_difference <= MAX_FRESHNESS_SKEW_MS);
-        self
-    }
-
-    pub(crate) fn is_fresh(&self) -> bool {
-        self.freshness.unwrap_or_default()
-    }
-}
-
-impl Codec<'_> for Tls13ServerSessionValue {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.common.encode(bytes);
-        self.secret.encode(bytes);
-        self.age_obfuscation_offset
-            .encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        Ok(Self {
-            common: CommonServerSessionValue::read(r)?,
-            secret: Zeroizing::new(SizedPayload::read(r)?.into_owned()),
-            age_obfuscation_offset: u32::read(r)?,
-            freshness: None,
-        })
-    }
-}
-
-impl From<Tls13ServerSessionValue> for ServerSessionValue {
-    fn from(value: Tls13ServerSessionValue) -> Self {
-        Self::Tls13(value)
     }
 }
 
@@ -316,9 +247,3 @@ impl AsRef<[u8]> for ServerSessionKey<'_> {
         self.inner
     }
 }
-
-/// This is the maximum allowed skew between server and client clocks, over
-/// the maximum ticket lifetime period.  This encompasses TCP retransmission
-/// times in case packet loss occurs when the client sends the ClientHello
-/// or receives the NewSessionTicket, _and_ actual clock skew over this period.
-static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
