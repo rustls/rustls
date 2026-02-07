@@ -107,63 +107,13 @@ mod client_hello {
                 randoms.server[24..].copy_from_slice(&tls12::DOWNGRADE_SENTINEL);
             }
 
-            // -- Check for resumption --
-            // We can do this either by (in order of preference):
-            // 1. receiving a ticket that decrypts
-            // 2. receiving a sessionid that is in our cache
-            //
-            // If we receive a ticket, the sessionid won't be in our
-            // cache, so don't check.
-            //
-            // If either works, we end up with a ServerConnectionValue
-            // which is passed to start_resumption and concludes
-            // our handling of the ClientHello.
-            //
-            let mut ticket_received = false;
-            let resume_data = input
-                .client_hello
-                .session_ticket
-                .as_ref()
-                .and_then(|ticket_ext| match ticket_ext {
-                    ClientSessionTicket::Offer(ticket) => Some(ticket),
-                    _ => None,
-                })
-                .and_then(|ticket| {
-                    ticket_received = true;
-                    debug!("Ticket received");
-                    let data = st
-                        .config
-                        .ticketer
-                        .as_ref()
-                        .and_then(|ticketer| ticketer.decrypt(ticket.bytes()));
-                    if data.is_none() {
-                        debug!("Ticket didn't decrypt");
-                    }
-                    data
-                })
-                .or_else(|| {
-                    // Perhaps resume?  If we received a ticket, the sessionid
-                    // does not correspond to a real session.
-                    if input.client_hello.session_id.is_empty() || ticket_received {
-                        return None;
-                    }
-
-                    st.config
-                        .session_storage
-                        .get(ServerSessionKey::from(&input.client_hello.session_id))
-                })
-                .and_then(|x| ServerSessionValue::read_bytes(&x).ok())
-                .and_then(|resumedata| match resumedata {
-                    ServerSessionValue::Tls12(tls12) => Some(tls12),
-                    _ => None,
-                })
-                .filter(|resumedata| {
-                    resumedata
-                        .common
-                        .can_resume(suite.common.suite, st.sni.as_ref())
-                        && (resumedata.extended_ms == st.using_ems
-                            || (resumedata.extended_ms && !st.using_ems))
-                });
+            let (ticket_received, resume_data) = check_session(
+                input.client_hello,
+                st.sni.as_ref(),
+                st.using_ems,
+                suite,
+                &st.config,
+            );
 
             if let Some(data) = resume_data {
                 let proof = input.proof;
@@ -254,6 +204,67 @@ mod client_hello {
     }
 
     impl Sealed for Handler {}
+
+    /// Check for resumption
+    fn check_session(
+        hello: &ClientHelloPayload,
+        sni: Option<&DnsName<'_>>,
+        using_ems: bool,
+        suite: &'static Tls12CipherSuite,
+        config: &ServerConfig,
+    ) -> (bool, Option<Tls12ServerSessionValue>) {
+        // First, check for a ticket that decrypts
+        let (ticket, encoded) = match hello.session_ticket.as_ref() {
+            Some(ClientSessionTicket::Offer(ticket)) => {
+                debug!("Ticket received");
+                let data = config
+                    .ticketer
+                    .as_ref()
+                    .and_then(|ticketer| ticketer.decrypt(ticket.bytes()));
+                match data {
+                    Some(data) => (true, Some(data)),
+                    None => {
+                        debug!("Ticket didn't decrypt");
+                        (true, None)
+                    }
+                }
+            }
+            Some(_) | None => (false, None),
+        };
+
+        let (ticket, encoded) = match (ticket, encoded) {
+            (_, Some(data)) => (true, data),
+            // If we've received a ticket, the session ID won't be in our cache, so skip checking
+            (false, None) if !hello.session_id.is_empty() => {
+                // Check for a session ID in our cache
+                let store = &config.session_storage;
+                match store.get(ServerSessionKey::from(&hello.session_id)) {
+                    Some(data) => (false, data),
+                    None => return (false, None),
+                }
+            }
+            (ticket, None) => return (ticket, None),
+        };
+
+        // Try to parse the encoded session value
+        let Ok(ServerSessionValue::Tls12(session)) = ServerSessionValue::read_bytes(&encoded)
+        else {
+            return (ticket, None);
+        };
+
+        // Check that the session is compatible with the current connection
+        if !session
+            .common
+            .can_resume(suite.common.suite, sni)
+        {
+            return (ticket, None);
+        }
+
+        match session.extended_ms == using_ems || session.extended_ms && !using_ems {
+            true => (ticket, Some(session)),
+            false => (ticket, None),
+        }
+    }
 
     fn start_resumption(
         suite: &'static Tls12CipherSuite,
