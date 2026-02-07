@@ -1,7 +1,6 @@
 use alloc::vec::Vec;
 
 use pki_types::{DnsName, UnixTime};
-use zeroize::Zeroizing;
 
 use crate::crypto::cipher::Payload;
 use crate::crypto::{CipherSuite, Identity};
@@ -35,6 +34,7 @@ pub(crate) use hs::ServerHandler;
 
 mod tls12;
 pub(crate) use tls12::TLS12_HANDLER;
+use tls12::Tls12ServerSessionValue;
 
 mod tls13;
 pub(crate) use tls13::TLS13_HANDLER;
@@ -76,49 +76,6 @@ impl Codec<'_> for ServerSessionValue {
             ProtocolVersion::TLSv1_3 => Ok(Self::Tls13(Tls13ServerSessionValue::read(r)?)),
             _ => Err(InvalidMessage::UnknownProtocolVersion),
         }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct Tls12ServerSessionValue {
-    pub(crate) common: CommonServerSessionValue,
-    pub(crate) master_secret: Zeroizing<[u8; 48]>,
-    pub(crate) extended_ms: bool,
-}
-
-impl Tls12ServerSessionValue {
-    pub(crate) fn new(
-        common: CommonServerSessionValue,
-        master_secret: &[u8; 48],
-        extended_ms: bool,
-    ) -> Self {
-        Self {
-            common,
-            master_secret: Zeroizing::new(*master_secret),
-            extended_ms,
-        }
-    }
-}
-
-impl Codec<'_> for Tls12ServerSessionValue {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.common.encode(bytes);
-        bytes.extend_from_slice(self.master_secret.as_ref());
-        (self.extended_ms as u8).encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        Ok(Self {
-            common: CommonServerSessionValue::read(r)?,
-            master_secret: Zeroizing::new(r.take_array("MasterSecret").copied()?),
-            extended_ms: matches!(u8::read(r)?, 1),
-        })
-    }
-}
-
-impl From<Tls12ServerSessionValue> for ServerSessionValue {
-    fn from(value: Tls12ServerSessionValue) -> Self {
-        Self::Tls12(value)
     }
 }
 
