@@ -21,7 +21,7 @@ pub use config::{
 
 mod connection;
 pub use connection::{
-    Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection, ServerConnectionData,
+    Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection, ServerSide,
 };
 
 pub(crate) mod handy;
