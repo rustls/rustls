@@ -27,7 +27,7 @@ use crate::sync::Arc;
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
-    inner: ConnectionCommon<ClientConnectionData>,
+    inner: ConnectionCommon<ClientSide>,
 }
 
 impl fmt::Debug for ClientConnection {
@@ -281,7 +281,7 @@ impl io::Write for WriteEarlyData<'_> {
     }
 }
 
-impl ConnectionCore<ClientConnectionData> {
+impl ConnectionCore<ClientSide> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
@@ -293,7 +293,7 @@ impl ConnectionCore<ClientConnectionData> {
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
         common_state.fips = config.fips();
-        let mut data = ClientConnectionData::new();
+        let mut data = ClientSide::new();
 
         let mut output = SideCommonOutput {
             side: &mut data,
@@ -435,12 +435,12 @@ impl core::error::Error for EarlyDataError {}
 
 /// State associated with a client connection.
 #[derive(Debug)]
-pub struct ClientConnectionData {
+pub struct ClientSide {
     early_data: EarlyData,
     ech_status: EchStatus,
 }
 
-impl ClientConnectionData {
+impl ClientSide {
     fn new() -> Self {
         Self {
             early_data: EarlyData::new(),
@@ -449,11 +449,11 @@ impl ClientConnectionData {
     }
 }
 
-impl crate::conn::SideData for ClientConnectionData {}
+impl crate::conn::SideData for ClientSide {}
 
-impl crate::conn::private::SideData for ClientConnectionData {}
+impl crate::conn::private::SideData for ClientSide {}
 
-impl Output for ClientConnectionData {
+impl Output for ClientSide {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
