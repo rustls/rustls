@@ -1,3 +1,4 @@
+use core::fmt;
 use core::ops::{Deref, DerefMut};
 use std::vec::Vec;
 
@@ -7,10 +8,10 @@ use crate::client::{ClientSide, EchStatus, hs, tls12, tls13};
 use crate::common_state::Protocol;
 use crate::conn::ConnectionCore;
 use crate::enums::ApplicationProtocol;
-use crate::error::ApiMisuse;
+use crate::error::{ApiMisuse, ErrorWithAlert};
 use crate::kernel::KernelConnection;
 use crate::lock::Mutex;
-use crate::msgs::{ClientExtensionsInput, ReceivedData};
+use crate::msgs::{ClientExtensionsInput, TlsInputBuffer};
 use crate::state::{ReceiveTraffic, SendTraffic};
 use crate::sync::Arc;
 use crate::{
@@ -103,6 +104,31 @@ impl DerefMut for ClientState {
     }
 }
 
+impl fmt::Debug for ClientState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SendClientFlight(_) => f
+                .debug_tuple("SendClientFlight")
+                .finish_non_exhaustive(),
+            Self::SendEarlyData(_) => f
+                .debug_tuple("SendEarlyData")
+                .finish_non_exhaustive(),
+            Self::AwaitServerFlight(_) => f
+                .debug_tuple("AwaitServerFlight")
+                .finish_non_exhaustive(),
+            Self::VerifyServerIdentity(_) => f
+                .debug_tuple("VerifyServerIdentity")
+                .finish_non_exhaustive(),
+            Self::ProvideCredential(_) => f
+                .debug_tuple("ProvideCredential")
+                .finish_non_exhaustive(),
+            Self::Traffic(_) => f
+                .debug_tuple("Traffic")
+                .finish_non_exhaustive(),
+        }
+    }
+}
+
 /// A handshake state where we are required to send data to the peer.
 pub struct SendClientFlight {
     inner: ConnectionCore<ClientSide>,
@@ -149,8 +175,13 @@ impl AwaitServerFlight {
     ///
     /// Return the next state if reached, the current state if not, and an error if things are permenantly
     /// broken.  If an error occurs here is is fatal to the connection.
-    pub fn input_data(mut self, input: &mut dyn ReceivedData) -> Result<ClientState, Error> {
-        self.inner.process_new_packets(input)?;
+    pub fn input_data(
+        mut self,
+        input: &mut dyn TlsInputBuffer,
+    ) -> Result<ClientState, ErrorWithAlert> {
+        self.inner
+            .process_new_packets(input, 1)
+            .map_err(|err| ErrorWithAlert::new(err, &mut self.inner.common.send))?;
 
         if !self
             .inner
@@ -283,6 +314,7 @@ impl From<ConnectionCore<ClientSide>> for ClientTraffic {
                 state: inner.state.unwrap(), // TODO
                 recv,
                 send: send_mutex,
+                pending_wake_sender: false,
             }),
             outputs,
             early_data_was_accepted,

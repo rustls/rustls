@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use rustls::client::ClientState;
 use rustls::server::ServerState;
-use rustls::state::{ReceivedData, ReceivedTrafficState, SliceInput};
+use rustls::state::{ReceivedTrafficState, SliceInput, TlsInputBuffer};
 use rustls::{ClientConnection, Connection, ServerConnection};
 use rustls_test::{KeyType, make_client_config, make_server_config};
 

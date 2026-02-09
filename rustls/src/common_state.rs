@@ -800,6 +800,12 @@ impl ReceivePath {
                     );
                 }
 
+                std::println!(
+                    "decrypt_incoming(t={:?} v={:?} {:?})",
+                    message.typ,
+                    message.version,
+                    message.payload.0
+                );
                 let message = match self
                     .decrypt_state
                     .decrypt_incoming(message)
@@ -925,9 +931,15 @@ impl ReceivePath {
     }
 
     fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
+        std::println!(
+            "drop_tls13_ccs? (v={:?}, recv={:?})",
+            self.negotiated_version,
+            self.may_receive_application_data
+        );
         if self.may_receive_application_data
             || !matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
         {
+            std::println!("  nope");
             return Ok(false);
         }
 
@@ -938,6 +950,7 @@ impl ReceivePath {
             return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
         }
 
+        std::println!("  yes");
         self.temper_counters
             .received_tls13_change_cipher_spec()?;
         Ok(true)

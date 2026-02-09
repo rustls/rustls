@@ -5,7 +5,7 @@ use crate::common_state::Protocol;
 use crate::conn::ConnectionCore;
 use crate::error::ApiMisuse;
 use crate::lock::Mutex;
-use crate::msgs::{ReceivedData, ServerExtensionsInput};
+use crate::msgs::{ServerExtensionsInput, TlsInputBuffer};
 use crate::server::{ServerSide, hs, tls12, tls13};
 use crate::state::{ReceiveTraffic, SendTraffic};
 use crate::sync::Arc;
@@ -107,8 +107,9 @@ impl AwaitClientFlight {
     ///
     /// Return the next state if reached, the current state if not, and an error if things are permenantly
     /// broken.  If an error occurs here is is fatal to the connection.
-    pub fn input_data(mut self, input: &mut dyn ReceivedData) -> Result<ServerState, Error> {
-        self.inner.process_new_packets(input)?;
+    pub fn input_data(mut self, input: &mut dyn TlsInputBuffer) -> Result<ServerState, Error> {
+        self.inner
+            .process_new_packets(input, 1)?;
 
         if !self
             .inner
@@ -203,6 +204,7 @@ impl From<ConnectionCore<ServerSide>> for ServerTraffic {
                 state: inner.state.unwrap(), // TODO
                 recv,
                 send: send_mutex,
+                pending_wake_sender: false,
             }),
             outputs,
         }

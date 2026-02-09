@@ -10,7 +10,7 @@ use crate::error::ErrorWithAlert;
 use crate::lock::Mutex;
 use crate::msgs::Delocator;
 pub use crate::msgs::{
-    DeframerSliceBuffer as SliceInput, DeframerVecBuffer as BufferedInput, ReceivedData,
+    DeframerSliceBuffer as SliceInput, DeframerVecBuffer as BufferedInput, TlsInputBuffer,
 };
 use crate::sync::Arc;
 use crate::{Error, SideData};
@@ -53,6 +53,18 @@ impl SendTraffic {
         };
         buffer.truncate(len);
         Ok(buffer)
+    }
+
+    /// Obtain any pending data to write to the peer.
+    ///
+    /// The TLS data to send to the peer is returned.  This data should then
+    /// be communicated to the peer.
+    pub fn take_data(&mut self) -> Option<Vec<u8>> {
+        self.0
+            .lock()
+            .unwrap()
+            .sendable_tls
+            .pop()
     }
 
     /// Conclude sending traffic by sending a `close_notify` alert.
@@ -102,6 +114,7 @@ pub struct ReceiveTraffic<Side: SideData> {
     pub(crate) state: Side::StateMachine,
     pub(crate) recv: ReceivePath,
     pub(crate) send: Arc<Mutex<SendPath>>,
+    pub(crate) pending_wake_sender: bool,
 }
 
 impl<Side: SideData> ReceiveTraffic<Side> {
@@ -125,7 +138,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
     /// closed by the application.
     pub fn read<'a>(
         mut self,
-        received_tls: &'a mut impl ReceivedData,
+        received_tls: &'a mut impl TlsInputBuffer,
     ) -> Result<ReceivedTrafficState<'a, Side>, ErrorWithAlert> {
         let mut send = SendAdapter::Unlocked(&self.send.as_ref());
         let mut proc = ConnectionProcessor::<Side> {
@@ -133,9 +146,11 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             recv: &mut self.recv,
             other: &mut send,
         };
-        let received_plain = match proc.process_new_packets(received_tls) {
+        let received_plain = match proc.process_new_packets(received_tls, usize::MAX) {
             Ok(received_plain) => received_plain,
-            Err(err) => return Err(ErrorWithAlert::new(err, send.into_guard().deref_mut())),
+            Err(err) => {
+                return Err(ErrorWithAlert::new(err, send.into_guard().deref_mut()));
+            }
         };
         self.state = proc.state?;
 
@@ -154,17 +169,29 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             }));
         }
 
-        drop(send);
-        let closed = self.recv.has_received_close_notify;
+        // If we locked the sender during that, it is still locked and we can provide
+        // a hint to the caller they should pump the send side.
+        if let SendAdapter::Locked(_) = send {
+            self.pending_wake_sender = true;
+        }
 
-        Ok(match closed {
-            true => ReceivedTrafficState::CloseNotify,
-            false => ReceivedTrafficState::Await(self),
-        })
+        drop(send);
+        Ok(self.into_next_state())
     }
 
     pub fn tls13_tickets_received(&self) -> u32 {
         self.recv.tls13_tickets_received
+    }
+
+    fn into_next_state(mut self) -> ReceivedTrafficState<'static, Side> {
+        if core::mem::take(&mut self.pending_wake_sender) {
+            return ReceivedTrafficState::WakeSender(WakeSender { rt: self });
+        }
+
+        match self.recv.has_received_close_notify {
+            true => ReceivedTrafficState::CloseNotify,
+            false => ReceivedTrafficState::Await(self),
+        }
     }
 }
 
@@ -209,6 +236,9 @@ pub enum ReceivedTrafficState<'a, Side: SideData> {
     /// Collect it into your input buffer, and then call [`ReceiveTraffic::read()`] again.
     Await(ReceiveTraffic<Side>),
 
+    /// The sender may have new data to send.
+    WakeSender(WakeSender<Side>),
+
     /// Some application data has been received.
     Available(ReceivedApplicationData<'a, Side>),
 
@@ -243,5 +273,21 @@ impl<Side: SideData> ReceivedApplicationData<'_, Side> {
     /// buffer, and the next `ReceiveTraffic` state.
     pub fn into_next(self) -> (usize, ReceiveTraffic<Side>) {
         (self.pending_discard, self.rt)
+    }
+}
+
+/// Notification that receiving data may have changed the state of the associated [`SendTraffic`]
+///
+/// The caller may wish to check whether there is any IO necessary on the send side.  If it does
+/// not, and ignores this state, any pending new data to send will be included in the next
+/// attempt to send data.
+pub struct WakeSender<Side: SideData> {
+    rt: ReceiveTraffic<Side>,
+}
+
+impl<Side: SideData> WakeSender<Side> {
+    /// Continue receiving more data.
+    pub fn into_next(self) -> ReceiveTraffic<Side> {
+        self.rt
     }
 }
