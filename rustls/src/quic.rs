@@ -63,25 +63,8 @@ mod connection {
         /// When this returns `Some(_)`, the new keys must be used for future handshake data.
         fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange>;
 
-        /// Returns true if the caller should call [`Connection::write_hs()`] as soon as possible.
-        fn wants_write(&self) -> bool;
-
-        /// Queues a `close_notify` warning alert to be sent in the next `write_hs()`
-        /// call.
-        ///
-        /// This informs the peer that the connection is being closed.
-        ///
-        /// Does nothing if any `close_notify` or fatal alert was already sent.
-        ///
-        /// [`Connection::write_tls`]: crate::Connection::write_tls
-        fn send_close_notify(&mut self);
-
         /// Returns true if the connection is currently performing the TLS handshake.
         fn is_handshaking(&self) -> bool;
-
-        /// Returns true if the caller should call [`Connection::read_hs()`] as soon
-        /// as possible.
-        fn wants_read(&self) -> bool;
     }
 
     /// A QUIC client connection.
@@ -193,20 +176,8 @@ mod connection {
             self.inner.write_hs(buf)
         }
 
-        fn wants_write(&self) -> bool {
-            self.inner.wants_write()
-        }
-
-        fn send_close_notify(&mut self) {
-            self.inner.send_close_notify();
-        }
-
         fn is_handshaking(&self) -> bool {
             self.inner.is_handshaking()
-        }
-
-        fn wants_read(&self) -> bool {
-            self.inner.wants_read()
         }
     }
 
@@ -353,20 +324,8 @@ mod connection {
             self.inner.write_hs(buf)
         }
 
-        fn wants_write(&self) -> bool {
-            self.inner.wants_write()
-        }
-
-        fn send_close_notify(&mut self) {
-            self.inner.send_close_notify();
-        }
-
         fn is_handshaking(&self) -> bool {
             self.inner.is_handshaking()
-        }
-
-        fn wants_read(&self) -> bool {
-            self.inner.wants_read()
         }
     }
 
