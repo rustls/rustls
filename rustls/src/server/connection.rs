@@ -37,7 +37,7 @@ use crate::vecbuf::ChunkVecBuffer;
 /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
 /// Read data from the peer using the `io::Read` trait implementation.
 pub struct ServerConnection {
-    pub(super) inner: ConnectionCommon<ServerConnectionData>,
+    pub(super) inner: ConnectionCommon<ServerSide>,
 }
 
 impl ServerConnection {
@@ -258,7 +258,7 @@ impl Debug for ServerConnection {
 /// # }
 /// ```
 pub struct Acceptor {
-    inner: Option<ConnectionCommon<ServerConnectionData>>,
+    inner: Option<ConnectionCommon<ServerSide>>,
 }
 
 impl Default for Acceptor {
@@ -382,11 +382,11 @@ impl Debug for AcceptedAlert {
 ///
 /// This type implements [`io::Read`].
 pub struct ReadEarlyData<'a> {
-    common: &'a mut ConnectionCommon<ServerConnectionData>,
+    common: &'a mut ConnectionCommon<ServerSide>,
 }
 
 impl<'a> ReadEarlyData<'a> {
-    fn new(common: &'a mut ConnectionCommon<ServerConnectionData>) -> Self {
+    fn new(common: &'a mut ConnectionCommon<ServerSide>) -> Self {
         ReadEarlyData { common }
     }
 
@@ -428,7 +428,7 @@ impl io::Read for ReadEarlyData<'_> {
 ///
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
 pub struct Accepted {
-    connection: ConnectionCommon<ServerConnectionData>,
+    connection: ConnectionCommon<ServerSide>,
     input: Input<'static>,
     sig_schemes: Vec<SignatureScheme>,
 }
@@ -613,7 +613,7 @@ impl Debug for EarlyDataState {
     }
 }
 
-impl ConnectionCore<ServerConnectionData> {
+impl ConnectionCore<ServerSide> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput,
@@ -634,7 +634,7 @@ impl ConnectionCore<ServerConnectionData> {
 
 /// State associated with a server connection.
 #[derive(Debug, Default)]
-pub struct ServerConnectionData {
+pub(crate) struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
     early_data: EarlyDataState,
@@ -664,9 +664,16 @@ impl Output for ServerConnectionData {
     }
 }
 
-impl crate::conn::SideData for ServerConnectionData {}
+/// State associated with a server connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ServerSide;
 
-impl crate::conn::private::SideData for ServerConnectionData {}
+impl crate::conn::SideData for ServerSide {}
+
+impl crate::conn::private::Side for ServerSide {
+    type Data = ServerConnectionData;
+}
 
 #[cfg(test)]
 mod tests {

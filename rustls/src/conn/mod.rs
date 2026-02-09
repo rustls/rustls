@@ -848,12 +848,12 @@ pub(crate) fn process_new_packets(
 
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Box<dyn State>, Error>,
-    pub(crate) side: Side,
+    pub(crate) side: Side::Data,
     pub(crate) common: CommonState,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State>, side: Side, common: CommonState) -> Self {
+    pub(crate) fn new(state: Box<dyn State>, side: Side::Data, common: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -946,12 +946,15 @@ impl Output for SideCommonOutput<'_> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: private::SideData {}
+pub trait SideData: private::Side {}
 
 pub(crate) mod private {
     use super::*;
 
-    pub(crate) trait SideData: Output + Debug {}
+    pub(crate) trait Side: Debug {
+        /// Data storage type.
+        type Data: Debug + Output;
+    }
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
