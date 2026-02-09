@@ -27,7 +27,7 @@ use crate::sync::Arc;
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
-    inner: ConnectionCommon<ClientConnectionData>,
+    inner: ConnectionCommon<ClientSide>,
 }
 
 impl fmt::Debug for ClientConnection {
@@ -281,7 +281,7 @@ impl io::Write for WriteEarlyData<'_> {
     }
 }
 
-impl ConnectionCore<ClientConnectionData> {
+impl ConnectionCore<ClientSide> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
@@ -433,9 +433,8 @@ impl fmt::Display for EarlyDataError {
 
 impl core::error::Error for EarlyDataError {}
 
-/// State associated with a client connection.
 #[derive(Debug)]
-pub struct ClientConnectionData {
+pub(crate) struct ClientConnectionData {
     early_data: EarlyData,
     ech_status: EchStatus,
 }
@@ -449,10 +448,6 @@ impl ClientConnectionData {
     }
 }
 
-impl crate::conn::SideData for ClientConnectionData {}
-
-impl crate::conn::private::SideData for ClientConnectionData {}
-
 impl Output for ClientConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
@@ -465,4 +460,15 @@ impl Output for ClientConnectionData {
             _ => unreachable!(),
         }
     }
+}
+
+/// State associated with a client connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ClientSide;
+
+impl crate::conn::SideData for ClientSide {}
+
+impl crate::conn::private::Side for ClientSide {
+    type Data = ClientConnectionData;
 }
