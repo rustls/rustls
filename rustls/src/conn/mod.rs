@@ -799,7 +799,7 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
         let mut plaintext = None;
         let mut buffer_progress = self.recv.hs_deframer.progress();
 
-        for _ in 0..max_messages {
+        for i in 0..max_messages {
             let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
             let res = self
@@ -820,6 +820,7 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
             };
 
             let Some(msg) = opt_msg else {
+                std::println!("break");
                 break;
             };
 
@@ -827,6 +828,9 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
                 plaintext: msg,
                 want_close_before_decrypt,
             } = msg;
+
+            std::println!("we have a message {msg:x?}");
+            std::println!("we have progress {buffer_progress:?}");
 
             if want_close_before_decrypt {
                 self.other.emit(Event::SendAlert(
@@ -872,11 +876,12 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
             }
 
             if let Some(payload) = plaintext.take() {
+                std::println!("got plaintext");
                 self.state = Ok(state);
                 return Ok(Some((payload, buffer_progress)));
             }
 
-            input.discard(buffer_progress.take_discard());
+            input.discard(std::dbg!(buffer_progress.take_discard()));
         }
 
         input.discard(buffer_progress.take_discard());

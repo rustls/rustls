@@ -140,7 +140,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
         mut self,
         received_tls: &'a mut impl TlsInputBuffer,
     ) -> Result<ReceivedTrafficState<'a, Side>, ErrorWithAlert> {
-        let mut send = SendAdapter::Unlocked(&self.send.as_ref());
+        let mut send = SendAdapter::Unlocked(&self.send);
         let mut proc = ConnectionProcessor::<Side> {
             state: Ok(self.state),
             recv: &mut self.recv,
@@ -289,5 +289,36 @@ impl<Side: SideData> WakeSender<Side> {
     /// Continue receiving more data.
     pub fn into_next(self) -> ReceiveTraffic<Side> {
         self.rt
+    }
+}
+
+pub(crate) struct CountingReceivedData<'a> {
+    parent: &'a mut dyn TlsInputBuffer,
+    count: usize,
+}
+
+impl<'a> CountingReceivedData<'a> {
+    pub(crate) fn new(parent: &'a mut dyn TlsInputBuffer) -> Self {
+        Self { parent, count: 0 }
+    }
+
+    pub(crate) fn into_count(self) -> usize {
+        self.count
+    }
+}
+
+impl TlsInputBuffer for CountingReceivedData<'_> {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        self.parent.slice_mut()
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        std::println!(
+            "Counting discard {} + {num_bytes} = {}",
+            self.count,
+            self.count + num_bytes
+        );
+        self.count += num_bytes;
+        self.parent.discard(num_bytes);
     }
 }

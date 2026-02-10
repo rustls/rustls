@@ -12,7 +12,7 @@ use crate::error::{ApiMisuse, ErrorWithAlert};
 use crate::kernel::KernelConnection;
 use crate::lock::Mutex;
 use crate::msgs::{ClientExtensionsInput, TlsInputBuffer};
-use crate::state::{ReceiveTraffic, SendTraffic};
+use crate::state::{CountingReceivedData, ReceiveTraffic, SendTraffic};
 use crate::sync::Arc;
 use crate::{
     ClientConfig, CommonState, ConnectionOutputs, Error, ExtractedSecrets, KeyingMaterialExporter,
@@ -173,15 +173,27 @@ pub struct AwaitServerFlight {
 impl AwaitServerFlight {
     /// Receive some data.
     ///
+    /// On success, the return value is the number of bytes consumed from `input` (which is
+    /// already communicated to the object via `discard()`) and the next state.
+    ///
     /// Return the next state if reached, the current state if not, and an error if things are permenantly
     /// broken.  If an error occurs here is is fatal to the connection.
     pub fn input_data(
         mut self,
         input: &mut dyn TlsInputBuffer,
-    ) -> Result<ClientState, ErrorWithAlert> {
-        self.inner
-            .process_new_packets(input, 1)
+    ) -> Result<(usize, ClientState), ErrorWithAlert> {
+        std::println!("await input_data buf={:?}", input.slice_mut());
+        let mut counter = CountingReceivedData::new(input);
+        let plaintext = self
+            .inner
+            .process_new_packets(&mut counter, 1)
             .map_err(|err| ErrorWithAlert::new(err, &mut self.inner.common.send))?;
+        let count = counter.into_count();
+        std::println!("await input_data used={count:?}");
+
+        if plaintext.is_some() {
+            std::println!("we have plaintext");
+        }
 
         if !self
             .inner
@@ -190,13 +202,16 @@ impl AwaitServerFlight {
             .sendable_tls
             .is_empty()
         {
-            return Ok(ClientState::SendClientFlight(SendClientFlight {
-                inner: self.inner,
-                next: next_state,
-            }));
+            return Ok((
+                count,
+                ClientState::SendClientFlight(SendClientFlight {
+                    inner: self.inner,
+                    next: next_state,
+                }),
+            ));
         }
 
-        Ok(next_state(self.inner))
+        Ok((count, next_state(self.inner)))
     }
 }
 

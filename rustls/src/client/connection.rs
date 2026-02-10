@@ -232,7 +232,9 @@ impl Connection for ClientConnection {
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        std::println!("process_new_packets()");
         loop {
+            std::println!("process_new_packets() loop");
             let state = match mem::replace(
                 &mut self.state,
                 Err(ApiMisuse::PreviousConnectionError.into()),
@@ -259,7 +261,9 @@ impl Connection for ClientConnection {
                     }
                     std::println!("await server flight");
                     match asf.input_data(&mut self.buffers.deframer_buffer) {
-                        Ok(state) => self.state = Ok(state),
+                        Ok((count, state)) => {
+                            self.state = Ok(state);
+                        }
                         Err(mut err) => {
                             std::println!("awaitServerflight err={err:?}");
                             while let Some(chunk) = err.take_tls_data() {
@@ -303,6 +307,7 @@ impl Connection for ClientConnection {
                                     .received_plaintext
                                     .append(received.data.to_vec());
                                 let (used, next) = received.into_next();
+                                std::println!("used {used:?}");
                                 self.buffers
                                     .deframer_buffer
                                     .discard(used);

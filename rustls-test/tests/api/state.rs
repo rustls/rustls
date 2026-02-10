@@ -32,7 +32,7 @@ fn test_client_smoke() {
         client = match client {
             ClientState::AwaitServerFlight(asf) => {
                 let mut slice_input = SliceInput::new(&mut server_to_client);
-                let next = asf
+                let (_used, next) = asf
                     .input_data(&mut slice_input)
                     .unwrap();
                 let used = slice_input.into_used();
