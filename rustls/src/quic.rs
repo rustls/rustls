@@ -138,7 +138,11 @@ mod connection {
 
         /// Returns the number of TLS1.3 tickets that have been received.
         pub fn tls13_tickets_received(&self) -> u32 {
-            self.inner.tls13_tickets_received
+            self.inner
+                .core
+                .common
+                .recv
+                .tls13_tickets_received
         }
 
         /// Returns an object that can derive key material from the agreed connection secrets.
