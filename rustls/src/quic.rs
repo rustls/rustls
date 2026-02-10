@@ -425,7 +425,7 @@ mod connection {
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
             self.core
-                .process_new_packets(&mut self.deframer_buffer, usize::MAX)?;
+                .process_new_packets(&mut self.deframer_buffer)?;
 
             Ok(())
         }

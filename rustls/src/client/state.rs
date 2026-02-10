@@ -173,7 +173,9 @@ pub struct AwaitServerFlight {
 impl AwaitServerFlight {
     /// Receive some data.
     ///
-    /// On success, the return value is the number of bytes consumed from `input` (which is
+    /// On success, the return value says whether any progress was made, and the next state.
+    /// Not all the data is necessarily
+    ///  is the number of bytes consumed from `input` (which is
     /// already communicated to the object via `discard()`) and the next state.
     ///
     /// Return the next state if reached, the current state if not, and an error if things are permenantly
@@ -181,12 +183,12 @@ impl AwaitServerFlight {
     pub fn input_data(
         mut self,
         input: &mut dyn TlsInputBuffer,
-    ) -> Result<(usize, ClientState), ErrorWithAlert> {
-        std::println!("await input_data buf={:?}", input.slice_mut());
+    ) -> Result<ClientState, ErrorWithAlert> {
+        std::println!("await input_data buf={:?}", input.slice_mut().len());
         let mut counter = CountingReceivedData::new(input);
         let plaintext = self
             .inner
-            .process_new_packets(&mut counter, 1)
+            .process_new_packets(&mut counter)
             .map_err(|err| ErrorWithAlert::new(err, &mut self.inner.common.send))?;
         let count = counter.into_count();
         std::println!("await input_data used={count:?}");
@@ -202,16 +204,13 @@ impl AwaitServerFlight {
             .sendable_tls
             .is_empty()
         {
-            return Ok((
-                count,
-                ClientState::SendClientFlight(SendClientFlight {
-                    inner: self.inner,
-                    next: next_state,
-                }),
-            ));
+            return Ok(ClientState::SendClientFlight(SendClientFlight {
+                inner: self.inner,
+                next: next_state,
+            }));
         }
 
-        Ok((count, next_state(self.inner)))
+        Ok(next_state(self.inner))
     }
 }
 

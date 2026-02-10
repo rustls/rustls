@@ -261,7 +261,7 @@ impl Connection for ClientConnection {
                     }
                     std::println!("await server flight");
                     match asf.input_data(&mut self.buffers.deframer_buffer) {
-                        Ok((count, state)) => {
+                        Ok(state) => {
                             self.state = Ok(state);
                         }
                         Err(mut err) => {
@@ -380,17 +380,21 @@ impl Connection for ClientConnection {
 
     fn send_close_notify(&mut self) {
         let Ok(ClientState::Traffic(traffic)) = &mut self.state else {
+            std::println!("send_close_notify: not in traffic");
             return;
         };
 
         let Some(send) = traffic.send.take() else {
+            std::println!("send_close_notify: no send");
             return;
         };
 
         let Ok(data) = send.close() else {
+            std::println!("send_close_notify: send.close fail");
             return;
         };
 
+        std::println!("send_close_notify ok {data:x?}");
         self.buffers.sendable_tls.append(data);
     }
 

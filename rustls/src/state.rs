@@ -74,7 +74,7 @@ impl SendTraffic {
         let mut inner = self.0.lock().unwrap();
         inner.send_close_notify();
         drop(inner);
-        self.write_into_vec(OutboundPlain::Single(&[]))
+        Ok(self.take_data().unwrap_or_default())
     }
 
     /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
@@ -146,7 +146,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             recv: &mut self.recv,
             other: &mut send,
         };
-        let received_plain = match proc.process_new_packets(received_tls, usize::MAX) {
+        let received_plain = match proc.process_new_packets(received_tls) {
             Ok(received_plain) => received_plain,
             Err(err) => {
                 return Err(ErrorWithAlert::new(err, send.into_guard().deref_mut()));

@@ -108,8 +108,7 @@ impl AwaitClientFlight {
     /// Return the next state if reached, the current state if not, and an error if things are permenantly
     /// broken.  If an error occurs here is is fatal to the connection.
     pub fn input_data(mut self, input: &mut dyn TlsInputBuffer) -> Result<ServerState, Error> {
-        self.inner
-            .process_new_packets(input, 1)?;
+        self.inner.process_new_packets(input)?;
 
         if !self
             .inner
