@@ -108,8 +108,8 @@ impl ClientConnection {
         self.inner
             .core
             .common
-            .outputs
-            .tls13_tickets_received()
+            .recv
+            .tls13_tickets_received
     }
 }
 
