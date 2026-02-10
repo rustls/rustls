@@ -144,7 +144,6 @@ pub struct ConnectionOutputs {
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) fips: FipsStatus,
-    pub(crate) tls13_tickets_received: u32,
 }
 
 impl ConnectionOutputs {
@@ -206,13 +205,6 @@ impl ConnectionOutputs {
         self.handshake_kind
     }
 
-    /// Returns the number of TLS1.3 tickets that have been received.
-    ///
-    /// Only clients receive tickets, so this is zero for servers.
-    pub fn tls13_tickets_received(&self) -> u32 {
-        self.tls13_tickets_received
-    }
-
     /// Return the FIPS validation status of the connection.
     ///
     /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
@@ -257,11 +249,6 @@ impl Output for ConnectionOutputs {
             Event::ProtocolVersion(ver) => {
                 self.negotiated_version = Some(ver);
             }
-            Event::ReceivedTicket => {
-                self.tls13_tickets_received = self
-                    .tls13_tickets_received
-                    .saturating_add(1)
-            }
             _ => unreachable!(),
         }
     }
@@ -279,7 +266,6 @@ impl Default for ConnectionOutputs {
             exporter: None,
             early_exporter: None,
             fips: FipsStatus::Unvalidated,
-            tls13_tickets_received: 0,
         }
     }
 }
@@ -696,6 +682,8 @@ pub(crate) struct ReceivePath {
     /// We limit consecutive empty fragments to avoid a route for the peer to send
     /// us significant but fruitless traffic.
     seen_consecutive_empty_fragments: u8,
+
+    pub(crate) tls13_tickets_received: u32,
 }
 
 impl ReceivePath {
@@ -709,6 +697,7 @@ impl ReceivePath {
             negotiated_version: None,
             hs_deframer: HandshakeDeframer::default(),
             seen_consecutive_empty_fragments: 0,
+            tls13_tickets_received: 0,
         }
     }
 
@@ -1022,6 +1011,11 @@ impl Output for ReceivePath {
                 .decrypt_state
                 .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
+            Event::ReceivedTicket => {
+                self.tls13_tickets_received = self
+                    .tls13_tickets_received
+                    .saturating_add(1)
+            }
             Event::StartTraffic => self.may_receive_application_data = true,
             _ => unreachable!(),
         }
@@ -1254,9 +1248,9 @@ impl Event<'_> {
             | Event::StartOutgoingTraffic => EventDisposition::SendPath,
 
             // recv-specific events
-            Event::MessageDecrypter { .. } | Event::MessageDecrypterWithTrialDecryption { .. } => {
-                EventDisposition::ReceivePath
-            }
+            Event::MessageDecrypter { .. }
+            | Event::MessageDecrypterWithTrialDecryption { .. }
+            | Event::ReceivedTicket => EventDisposition::ReceivePath,
 
             // presentation API events
             Event::ApplicationProtocol(_)
@@ -1265,8 +1259,7 @@ impl Event<'_> {
             | Event::Exporter(_)
             | Event::HandshakeKind(_)
             | Event::KeyExchangeGroup(_)
-            | Event::PeerIdentity(_)
-            | Event::ReceivedTicket => EventDisposition::ConnectionOutputs,
+            | Event::PeerIdentity(_) => EventDisposition::ConnectionOutputs,
 
             // quic-specific events
             Event::QuicEarlySecret(_)
