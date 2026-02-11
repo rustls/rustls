@@ -184,19 +184,7 @@ impl DeframerVecBuffer {
     pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
         &mut self.buf[..self.used]
     }
-}
 
-impl TlsInputBuffer for DeframerVecBuffer {
-    fn slice_mut(&mut self) -> &mut [u8] {
-        self.filled_mut()
-    }
-
-    fn discard(&mut self, num_bytes: usize) {
-        self.discard(num_bytes)
-    }
-}
-
-impl DeframerVecBuffer {
     /// Read some bytes from `rd`, and add them to the buffer.
     pub(crate) fn read(&mut self, rd: &mut dyn io::Read, in_handshake: bool) -> io::Result<usize> {
         if let Err(err) = self.prepare_read(in_handshake) {
@@ -270,6 +258,16 @@ impl DeframerVecBuffer {
 
     pub(crate) fn filled(&self) -> &[u8] {
         &self.buf[..self.used]
+    }
+}
+
+impl TlsInputBuffer for DeframerVecBuffer {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        self.filled_mut()
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.discard(num_bytes)
     }
 }
 
