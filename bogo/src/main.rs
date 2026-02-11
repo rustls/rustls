@@ -403,6 +403,72 @@ enum SideConfig {
     Server(Arc<ServerConfig>),
 }
 
+fn client(conn: &mut dyn Any) -> &mut ClientConnection {
+    conn.downcast_mut::<ClientConnection>()
+        .unwrap()
+}
+
+fn server(conn: &mut dyn Any) -> &mut ServerConnection {
+    conn.downcast_mut::<ServerConnection>()
+        .unwrap()
+}
+
+fn read_n_bytes(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream, n: usize) {
+    let mut bytes = [0u8; MAX_MESSAGE_SIZE];
+    match conn.read(&mut bytes[..n]) {
+        Ok(count) => {
+            println!("read {count:?} bytes");
+            sess.read_tls(&mut io::Cursor::new(&mut bytes[..count]))
+                .expect("read_tls not expected to fail reading from buffer");
+        }
+        Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
+        Err(err) => panic!("invalid read: {err}"),
+    };
+
+    after_read(opts, sess, conn);
+}
+
+fn read_all_bytes(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream) {
+    match sess.read_tls(conn) {
+        Ok(_) => {}
+        Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
+        Err(err) => panic!("invalid read: {err}"),
+    };
+
+    after_read(opts, sess, conn);
+}
+
+fn after_read(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream) {
+    if let Err(err) = sess.process_new_packets() {
+        flush(sess, conn); /* send any alerts before exiting */
+        orderly_close(conn);
+        handle_err(opts, err);
+    }
+}
+
+fn flush(sess: &mut impl Connection, conn: &mut net::TcpStream) {
+    while sess.wants_write() {
+        if let Err(err) = sess.write_tls(conn) {
+            println!("IO error: {err:?}");
+            process::exit(0);
+        }
+    }
+    conn.flush().unwrap();
+}
+
+fn orderly_close(conn: &mut net::TcpStream) {
+    // assuming we just flush()'d, we will write no more.
+    let _ = conn.shutdown(net::Shutdown::Write);
+
+    // wait for EOF
+    let mut buf = [0u8; 32];
+    while let Ok(p @ 1..) = conn.peek(&mut buf) {
+        let _ = conn.read(&mut buf[..p]).unwrap();
+    }
+
+    let _ = conn.shutdown(net::Shutdown::Read);
+}
+
 #[derive(Debug)]
 struct Options {
     port: u16,
@@ -2046,74 +2112,6 @@ fn handle_err(opts: &Options, err: Error) -> ! {
     }
 }
 
-fn flush(sess: &mut impl Connection, conn: &mut net::TcpStream) {
-    while sess.wants_write() {
-        if let Err(err) = sess.write_tls(conn) {
-            println!("IO error: {err:?}");
-            process::exit(0);
-        }
-    }
-    conn.flush().unwrap();
-}
-
-fn client(conn: &mut dyn Any) -> &mut ClientConnection {
-    conn.downcast_mut::<ClientConnection>()
-        .unwrap()
-}
-
-fn server(conn: &mut dyn Any) -> &mut ServerConnection {
-    conn.downcast_mut::<ServerConnection>()
-        .unwrap()
-}
-
-const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
-
-fn after_read(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream) {
-    if let Err(err) = sess.process_new_packets() {
-        flush(sess, conn); /* send any alerts before exiting */
-        orderly_close(conn);
-        handle_err(opts, err);
-    }
-}
-
-fn orderly_close(conn: &mut net::TcpStream) {
-    // assuming we just flush()'d, we will write no more.
-    let _ = conn.shutdown(net::Shutdown::Write);
-
-    // wait for EOF
-    let mut buf = [0u8; 32];
-    while let Ok(p @ 1..) = conn.peek(&mut buf) {
-        let _ = conn.read(&mut buf[..p]).unwrap();
-    }
-
-    let _ = conn.shutdown(net::Shutdown::Read);
-}
-
-fn read_n_bytes(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream, n: usize) {
-    let mut bytes = [0u8; MAX_MESSAGE_SIZE];
-    match conn.read(&mut bytes[..n]) {
-        Ok(count) => {
-            println!("read {count:?} bytes");
-            sess.read_tls(&mut io::Cursor::new(&mut bytes[..count]))
-                .expect("read_tls not expected to fail reading from buffer");
-        }
-        Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
-        Err(err) => panic!("invalid read: {err}"),
-    };
-
-    after_read(opts, sess, conn);
-}
-
-fn read_all_bytes(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream) {
-    match sess.read_tls(conn) {
-        Ok(_) => {}
-        Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
-        Err(err) => panic!("invalid read: {err}"),
-    };
-
-    after_read(opts, sess, conn);
-}
-
 #[derive(Debug, Default)]
 struct KeyLogMemo(Mutex<KeyLogMemoInner>);
 
@@ -2321,3 +2319,5 @@ static ALL_HPKE_SUITES: &[&dyn Hpke] = &[
 ];
 
 static BOGO_NACK: i32 = 89;
+
+const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
