@@ -21,7 +21,7 @@ use std::{env, io};
 use rustls::crypto::Identity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{Connection, ServerConfig, ServerConnection};
+use rustls::{Connection, ServerConfig, ServerConnection, VecBuffer};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::complete_io;
 
@@ -56,6 +56,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
 
         let mut conn = ServerConnection::new(Arc::new(config.clone()))?;
 
+        let mut input = VecBuffer::default();
         let mut buf = Vec::new();
         let mut did_early_data = false;
         'handshake: while conn.is_handshaking() {
@@ -69,7 +70,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
             stream.flush()?;
 
             while conn.wants_read() {
-                match conn.read_tls(&mut stream) {
+                match input.read(&mut stream) {
                     Ok(0) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into()),
                     Ok(_) => break,
                     Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
@@ -77,7 +78,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
                 };
             }
 
-            if let Err(e) = conn.process_new_packets() {
+            if let Err(e) = conn.process_new_packets(&mut input) {
                 let _ignored = conn.write_tls(&mut stream);
                 stream.flush()?;
 
@@ -109,6 +110,6 @@ fn main() -> Result<(), Box<dyn StdError>> {
         conn.writer()
             .write_all(b"Hello from the server")?;
         conn.send_close_notify();
-        complete_io(&mut stream, &mut conn)?;
+        complete_io(&mut stream, &mut input, &mut conn)?;
     }
 }
