@@ -9,13 +9,13 @@ use pki_types::{DnsName, FipsStatus, ServerName};
 use crate::client::{ClientConfig, ClientConnectionData};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Event, Output, Protocol};
-use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
+use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData, TlsInputBuffer};
 use crate::crypto::cipher::{AeadKey, EncodedMessage, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{
-    ClientExtensionsInput, Locator, Message, MessagePayload, ServerExtensionsInput, TlsInputBuffer,
+    ClientExtensionsInput, Locator, Message, MessagePayload, ServerExtensionsInput,
     TransportParameters,
 };
 use crate::server::{ServerConfig, ServerConnectionData};
