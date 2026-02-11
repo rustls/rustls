@@ -262,32 +262,3 @@ impl DeframerVecBuffer {
         Range { start, end }
     }
 }
-
-/// A borrowed version of [`DeframerVecBuffer`] that tracks discard operations
-#[derive(Debug)]
-pub(crate) struct DeframerSliceBuffer<'a> {
-    // a fully initialized buffer that will be deframed
-    buf: &'a mut [u8],
-    // number of bytes to discard from the front of `buf` at a later time
-    discard: usize,
-}
-
-#[expect(dead_code)]
-impl<'a> DeframerSliceBuffer<'a> {
-    pub(crate) fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, discard: 0 }
-    }
-
-    /// Tracks a pending discard operation of `num_bytes`
-    pub(crate) fn queue_discard(&mut self, num_bytes: usize) {
-        self.discard += num_bytes;
-    }
-
-    pub(crate) fn pending_discard(&self) -> usize {
-        self.discard
-    }
-
-    pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[self.discard..]
-    }
-}
