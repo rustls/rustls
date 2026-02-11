@@ -38,17 +38,29 @@ pub(crate) fn process_main_protocol<Data: SideData>(
     data: &mut Data,
 ) -> Result<Box<dyn State<Data>>, Error> {
     // Drop CCS messages during handshake in TLS1.3
-    if msg.typ == ContentType::ChangeCipherSpec && data.recv.drop_tls13_ccs(&msg)? {
+    let common = data.deref_mut();
+    if msg.typ == ContentType::ChangeCipherSpec && common.recv.drop_tls13_ccs(&msg)? {
         trace!("Dropping CCS");
         return Ok(state);
     }
 
-    let msg = data.parse_and_maybe_drop(&msg)?;
+    // Now we can fully parse the message payload.
+    let msg = Message::try_from(&msg)?;
 
-    let Some(msg) = msg else {
-        // Message is dropped.
+    // For alerts, we have separate logic.
+    if let MessagePayload::Alert(alert) = &msg.payload {
+        common.recv.process_alert(alert)?;
         return Ok(state);
-    };
+    }
+
+    // For TLS1.2, outside of the handshake, send rejection alerts for
+    // renegotiation requests.  These can occur any time.
+    if common
+        .recv
+        .reject_renegotiation_request(&mut common.send, &msg)?
+    {
+        return Ok(state);
+    }
 
     let mut cx = CaptureAppData {
         data,
@@ -143,31 +155,6 @@ impl CommonState {
             plaintext_bytes_to_read: self.recv.received_plaintext.len(),
             peer_has_closed: self.recv.has_received_close_notify,
         }
-    }
-
-    fn parse_and_maybe_drop<'a>(
-        &mut self,
-        msg: &'a EncodedMessage<&'a [u8]>,
-    ) -> Result<Option<Message<'a>>, Error> {
-        // Now we can fully parse the message payload.
-        let msg = Message::try_from(msg)?;
-
-        // For alerts, we have separate logic.
-        if let MessagePayload::Alert(alert) = &msg.payload {
-            self.recv.process_alert(alert)?;
-            return Ok(None);
-        }
-
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if self
-            .recv
-            .reject_renegotiation_request(&mut self.send, &msg)?
-        {
-            return Ok(None);
-        }
-
-        Ok(Some(msg))
     }
 }
 
