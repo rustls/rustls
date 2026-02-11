@@ -16,10 +16,9 @@ use rustls::error::{
 };
 use rustls::{ClientConfig, ClientConnection, Connection, ServerConfig, ServerConnection};
 use rustls_test::{
-    ClientConfigExt, ErrorFromPeer, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo,
-    check_fill_buf, check_fill_buf_err, check_read, check_read_and_close, check_read_err,
-    do_handshake, do_handshake_until_error, encoding, make_client_config,
-    make_client_config_with_auth, make_disjoint_suite_configs, make_pair,
+    ClientConfigExt, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo, check_fill_buf,
+    check_fill_buf_err, check_read, check_read_and_close, check_read_err, do_handshake, encoding,
+    make_client_config, make_client_config_with_auth, make_disjoint_suite_configs, make_pair,
     make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
     make_server_config_with_mandatory_client_auth, server_name, transfer, transfer_eof,
 };
@@ -2032,13 +2031,28 @@ fn test_data_after_close_notify_is_ignored() {
 
 #[test]
 fn test_close_notify_sent_prior_to_handshake_complete() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-    client.send_close_notify();
+    let mut server = ServerConnection::new(Arc::new(make_server_config(
+        KeyType::EcdsaP256,
+        &provider::DEFAULT_PROVIDER,
+    )))
+    .unwrap();
+
+    server
+        .read_tls(
+            &mut encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                encoding::basic_client_hello(vec![]),
+            )
+            .as_slice(),
+        )
+        .unwrap();
+    server
+        .read_tls(&mut encoding::warning_alert(AlertDescription::CloseNotify).as_slice())
+        .unwrap();
     assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
-        Err(ErrorFromPeer::Server(
-            PeerMisbehaved::IllegalWarningAlert(AlertDescription::CloseNotify).into()
-        ))
+        server.process_new_packets().err(),
+        Some(PeerMisbehaved::IllegalWarningAlert(AlertDescription::CloseNotify).into())
     );
 }
 
