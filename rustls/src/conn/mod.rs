@@ -686,11 +686,8 @@ impl<Side: SideData> ConnectionCore<Side> {
         };
 
         // Should `EncodedMessage<Payload>` resolve to plaintext application
-        // data it will be allocated within `plaintext` and written to
-        // `CommonState.received_plaintext` buffer.
-        //
-        // TODO `CommonState.received_plaintext` should be hoisted into
-        // `ConnectionCommon`
+        // data it will be allocated within `plaintext` and written to the
+        // `ReadPath::received_plaintext` buffer.
         let mut plaintext = None;
         let mut buffer_progress = self.hs_deframer.progress();
 
