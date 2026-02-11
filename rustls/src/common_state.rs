@@ -906,15 +906,23 @@ impl ReceivePath {
             return Ok(None);
         }
 
-        let msg = self.parse_and_maybe_drop(msg, send_path)?;
+        // Now we can fully parse the message payload.
+        let message = Message::try_from(msg)?;
 
-        let Some(msg) = msg else {
-            // Message is dropped.
+        // For alerts, we have separate logic.
+        if let MessagePayload::Alert(alert) = &message.payload {
+            self.process_alert(alert)?;
             return Ok(None);
-        };
+        }
+
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotiation requests.  These can occur any time.
+        if self.reject_renegotiation_request(&message, send_path)? {
+            return Ok(None);
+        }
 
         Ok(Some(Input {
-            message: msg,
+            message,
             aligned_handshake,
         }))
     }
@@ -936,29 +944,6 @@ impl ReceivePath {
         self.temper_counters
             .received_tls13_change_cipher_spec()?;
         Ok(true)
-    }
-
-    fn parse_and_maybe_drop<'a>(
-        &mut self,
-        msg: EncodedMessage<&'a [u8]>,
-        send_path: &mut dyn Output,
-    ) -> Result<Option<Message<'a>>, Error> {
-        // Now we can fully parse the message payload.
-        let msg = Message::try_from(msg)?;
-
-        // For alerts, we have separate logic.
-        if let MessagePayload::Alert(alert) = &msg.payload {
-            self.process_alert(alert)?;
-            return Ok(None);
-        }
-
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if self.reject_renegotiation_request(&msg, send_path)? {
-            return Ok(None);
-        }
-
-        Ok(Some(msg))
     }
 
     fn reject_renegotiation_request(
