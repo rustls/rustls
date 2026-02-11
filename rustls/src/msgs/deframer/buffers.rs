@@ -9,11 +9,20 @@ pub struct SliceInput<'a> {
     buf: &'a mut [u8],
     // number of bytes to discard from the front of `buf` at a later time
     discard: usize,
+    /// Whether we've seen a 0-byte read.
+    has_seen_eof: bool,
+    /// Whether a CloseNotify alert has been seen.
+    received_close_notify: bool,
 }
 
 impl<'a> SliceInput<'a> {
     pub fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, discard: 0 }
+        Self {
+            buf,
+            discard: 0,
+            has_seen_eof: false,
+            received_close_notify: false,
+        }
     }
 
     /// Returns how many bytes were consumed at the start of the original buffer.
@@ -29,6 +38,14 @@ impl TlsInputBuffer for SliceInput<'_> {
 
     fn discard(&mut self, num_bytes: usize) {
         self.discard += num_bytes;
+    }
+
+    fn received_close_notify(&mut self) {
+        self.received_close_notify = true;
+    }
+
+    fn has_seen_eof(&self) -> bool {
+        self.has_seen_eof
     }
 }
 

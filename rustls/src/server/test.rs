@@ -35,6 +35,7 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::version::TLS12_VERSION;
+use crate::{Connection, VecInput};
 
 #[test]
 fn serversessionvalue_is_debug() {
@@ -167,8 +168,10 @@ fn select_cipher_suite(
             client_hello,
         ))),
     };
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())?;
-    conn.process_new_packets()?;
+
+    let mut buf = VecInput::default();
+    buf.read(&mut ch.into_wire_bytes().as_slice());
+    conn.process_new_packets(&mut buf)?;
 
     let mut flight = vec![];
     conn.write_tls(&mut &mut flight)
@@ -196,6 +199,7 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
         config.require_ems = true;
     }
     let mut conn = ServerConnection::new(config.into()).unwrap();
+    let mut buf = VecInput::default();
 
     let mut ch = minimal_client_hello();
     ch.extensions
@@ -207,11 +211,11 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             ch,
         ))),
     };
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+    buf.read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
 
     assert_eq!(
-        conn.process_new_packets(),
+        conn.process_new_packets(&mut buf),
         Err(Error::PeerIncompatible(
             PeerIncompatible::ExtendedMasterSecretExtensionRequired
         ))
@@ -284,15 +288,17 @@ fn server_chooses_ffdhe_group_for_client_hello(
     mut conn: ServerConnection,
     client_hello: ClientHelloPayload,
 ) {
+    let mut buf = VecInput::default();
     let ch = Message {
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
             client_hello,
         ))),
     };
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+    buf.read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets().unwrap();
+    conn.process_new_packets(&mut buf)
+        .unwrap();
 
     let mut flight = vec![];
     conn.write_tls(&mut &mut flight)
@@ -334,10 +340,12 @@ fn test_server_requiring_rpk_client_rejects_x509_client() {
     };
 
     let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+    let mut buf = VecInput::default();
+    buf.read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
     assert_eq!(
-        conn.process_new_packets().unwrap_err(),
+        conn.process_new_packets(&mut buf)
+            .unwrap_err(),
         PeerIncompatible::IncorrectCertificateTypeExtension.into(),
     );
 }
@@ -358,11 +366,13 @@ fn test_rpk_only_server_rejects_x509_only_client() {
     };
 
     let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+    let mut buf = VecInput::default();
+    buf.read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
 
     assert_eq!(
-        conn.process_new_packets().unwrap_err(),
+        conn.process_new_packets(&mut buf)
+            .unwrap_err(),
         PeerIncompatible::IncorrectCertificateTypeExtension.into(),
     );
 }
