@@ -119,11 +119,21 @@ impl ClientConnection {
             Ok(ClientState::Traffic(ClientTraffic { send: Some(s), .. })) => {
                 std::println!("writing {data:x?}");
                 let len = data.len();
-                if let Ok(chunk) = s.write_into_vec(data) {
+
+                let len = self
+                    .buffers
+                    .sendable_tls
+                    .apply_limit(len);
+                if len == 0 {
+                    // Don't send empty fragments.
+                    return Ok(0);
+                }
+
+                if let Ok(chunk) = s.write_into_vec(data.split_at(len).0) {
                     std::println!("written -> {chunk:x?}");
                     self.buffers.sendable_tls.append(chunk);
                 }
-                if let Some(chunk) = s.take_data() {
+                while let Some(chunk) = s.take_data() {
                     std::println!("evoked -> {chunk:x?}");
                     self.buffers.sendable_tls.append(chunk);
                 }

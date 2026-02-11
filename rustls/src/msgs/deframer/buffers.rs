@@ -213,7 +213,6 @@ impl DeframerVecBuffer {
         // the next layer up, which is fine.
         let new_bytes = rd.read(&mut self.buf[self.used..])?;
         self.used += new_bytes;
-        std::println!("deframer read {:x?}", &self.buf[..self.used]);
         Ok(new_bytes)
     }
 
