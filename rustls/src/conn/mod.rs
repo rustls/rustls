@@ -543,10 +543,10 @@ pub(crate) struct ConnectionCommon<Side: SideData> {
 impl<Side: SideData> ConnectionCommon<Side> {
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        while let Some((payload, mut buffer_progress)) = self
-            .core
-            .process_new_packets(&mut self.buffers.deframer_buffer)?
-        {
+        while let Some((payload, mut buffer_progress)) = self.core.process_new_packets(
+            &mut self.buffers.deframer_buffer,
+            ProcessFinishCondition::AppData,
+        )? {
             let payload =
                 payload.reborrow(&Delocator::new(self.buffers.deframer_buffer.slice_mut()));
             self.buffers
@@ -786,6 +786,7 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
     pub(crate) fn process_new_packets(
         &mut self,
         input: &mut dyn TlsInputBuffer,
+        finish: ProcessFinishCondition,
     ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
@@ -799,7 +800,9 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
         let mut buffer_progress = self.recv.hs_deframer.progress();
         let can_receive_plaintext = self.recv.may_receive_application_data;
 
-        while can_receive_plaintext == self.recv.may_receive_application_data {
+        while matches!(finish, ProcessFinishCondition::AppData)
+            || can_receive_plaintext == self.recv.may_receive_application_data
+        {
             let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
             let res = self
@@ -889,6 +892,11 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
     }
 }
 
+pub(crate) enum ProcessFinishCondition {
+    AppData,
+    Handshake,
+}
+
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Side::StateMachine, Error>,
     pub(crate) side: Side::Data,
@@ -914,6 +922,7 @@ impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn process_new_packets(
         &mut self,
         input: &mut dyn TlsInputBuffer,
+        finish: ProcessFinishCondition,
     ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
         let mut p = ConnectionProcessor::<Side> {
             state: mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)),
@@ -926,7 +935,7 @@ impl<Side: SideData> ConnectionCore<Side> {
                 side: &mut self.side,
             },
         };
-        let rc = p.process_new_packets(input);
+        let rc = p.process_new_packets(input, finish);
         self.state = p.state;
         rc
     }

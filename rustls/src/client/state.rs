@@ -6,7 +6,7 @@ use pki_types::ServerName;
 
 use crate::client::{ClientSide, EchStatus, hs, tls12, tls13};
 use crate::common_state::Protocol;
-use crate::conn::ConnectionCore;
+use crate::conn::{ConnectionCore, ProcessFinishCondition};
 use crate::enums::ApplicationProtocol;
 use crate::error::{ApiMisuse, ErrorWithAlert};
 use crate::kernel::KernelConnection;
@@ -188,7 +188,7 @@ impl AwaitServerFlight {
         let mut counter = CountingReceivedData::new(input);
         let plaintext = self
             .inner
-            .process_new_packets(&mut counter)
+            .process_new_packets(&mut counter, ProcessFinishCondition::Handshake)
             .map_err(|err| ErrorWithAlert::new(err, &mut self.inner.common.send))?;
         let count = counter.into_count();
         std::println!("await input_data used={count:?}");

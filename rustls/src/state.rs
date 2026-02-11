@@ -3,8 +3,8 @@ use core::ops::DerefMut;
 use std::sync::MutexGuard;
 
 use crate::common_state::{Output, ReceivePath, SendPath};
-use crate::conn::ConnectionProcessor;
 use crate::conn::unbuffered::{EncryptError, InsufficientSizeError};
+use crate::conn::{ConnectionProcessor, ProcessFinishCondition};
 use crate::crypto::cipher::{OutboundPlain, Payload};
 use crate::error::ErrorWithAlert;
 use crate::lock::Mutex;
@@ -145,12 +145,13 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             recv: &mut self.recv,
             other: &mut send,
         };
-        let received_plain = match proc.process_new_packets(received_tls) {
-            Ok(received_plain) => received_plain,
-            Err(err) => {
-                return Err(ErrorWithAlert::new(err, send.into_guard().deref_mut()));
-            }
-        };
+        let received_plain =
+            match proc.process_new_packets(received_tls, ProcessFinishCondition::AppData) {
+                Ok(received_plain) => received_plain,
+                Err(err) => {
+                    return Err(ErrorWithAlert::new(err, send.into_guard().deref_mut()));
+                }
+            };
         self.state = proc.state?;
 
         if let Some((unborrowed, mut progress)) = received_plain {

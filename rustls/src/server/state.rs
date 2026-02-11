@@ -2,7 +2,7 @@ use core::ops::Deref;
 use std::vec::Vec;
 
 use crate::common_state::Protocol;
-use crate::conn::ConnectionCore;
+use crate::conn::{ConnectionCore, ProcessFinishCondition};
 use crate::error::ApiMisuse;
 use crate::lock::Mutex;
 use crate::msgs::{ServerExtensionsInput, TlsInputBuffer};
@@ -108,7 +108,8 @@ impl AwaitClientFlight {
     /// Return the next state if reached, the current state if not, and an error if things are permenantly
     /// broken.  If an error occurs here is is fatal to the connection.
     pub fn input_data(mut self, input: &mut dyn TlsInputBuffer) -> Result<ServerState, Error> {
-        self.inner.process_new_packets(input)?;
+        self.inner
+            .process_new_packets(input, ProcessFinishCondition::Handshake)?;
 
         if !self
             .inner
