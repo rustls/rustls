@@ -14,10 +14,10 @@ use std::{fs, thread};
 
 use clap::Parser;
 use rcgen::{Issuer, KeyPair, SerialNumber};
-use rustls::RootCertStore;
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
+use rustls::{RootCertStore, VecBuffer};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::{KeyLogFile, complete_io};
 
@@ -78,13 +78,13 @@ fn main() {
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
         let mut acceptor = Acceptor::default();
+        let mut buf = VecBuffer::default();
 
         // Read TLS packets until we've consumed a full client hello and are ready to accept a
         // connection.
         let accepted = loop {
-            acceptor.read_tls(&mut stream).unwrap();
-
-            match acceptor.accept() {
+            buf.read(&mut stream).unwrap();
+            match acceptor.accept(&mut buf) {
                 Ok(Some(accepted)) => break accepted,
                 Ok(None) => continue,
                 Err((e, mut alert)) => {
@@ -107,7 +107,7 @@ fn main() {
 
         // Proceed with handling the ServerConnection
         // Important: We do no error handling here, but you should!
-        _ = complete_io(&mut stream, &mut conn);
+        _ = complete_io(&mut stream, &mut buf, &mut conn);
     }
 }
 

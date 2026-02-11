@@ -8,7 +8,7 @@ use openssl::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ClientConfig, Connection, RootCertStore, ServerConfig, ServerConnection};
+use rustls::{ClientConfig, Connection, RootCertStore, ServerConfig, ServerConnection, VecBuffer};
 use rustls_aws_lc_rs as provider;
 use rustls_util::complete_io;
 
@@ -38,12 +38,13 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
         for _ in 0..iters {
             let mut server = ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
+            let mut input = VecBuffer::default();
             server
                 .writer()
                 .write_all(message.as_bytes())
                 .unwrap();
 
-            complete_io(&mut tcp_stream, &mut server).unwrap();
+            complete_io(&mut tcp_stream, &mut input, &mut server).unwrap();
             tcp_stream.flush().unwrap();
         }
     });
@@ -136,12 +137,14 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
             .connect(server_name.clone())
             .build()
             .unwrap();
+        let mut input = VecBuffer::default();
+
         client
             .writer()
             .write_all(message.as_bytes())
             .unwrap();
 
-        complete_io(&mut tcp_stream, &mut client).unwrap();
+        complete_io(&mut tcp_stream, &mut input, &mut client).unwrap();
         client.send_close_notify();
         client
             .write_tls(&mut tcp_stream)

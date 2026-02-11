@@ -22,7 +22,7 @@ mod client {
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
     use rustls::server::danger::SignatureVerificationInput;
-    use rustls::{ClientConfig, Error};
+    use rustls::{ClientConfig, Error, VecBuffer};
     use rustls_aws_lc_rs as provider;
     use rustls_util::Stream;
 
@@ -68,7 +68,8 @@ mod client {
             .build()
             .unwrap();
         let mut sock = TcpStream::connect(format!("[::]:{port}")).unwrap();
-        let mut tls = Stream::new(&mut conn, &mut sock);
+        let mut buf = VecBuffer::default();
+        let mut tls = Stream::new(&mut buf, &mut conn, &mut sock);
 
         let mut buf = vec![0; 128];
         let len = tls.read(&mut buf).unwrap();
@@ -161,7 +162,7 @@ mod server {
     use rustls::server::danger::{
         ClientIdentity, ClientVerifier, PeerVerified, SignatureVerificationInput,
     };
-    use rustls::{Connection, DistinguishedName, ServerConfig, ServerConnection};
+    use rustls::{Connection, DistinguishedName, ServerConfig, ServerConnection, VecBuffer};
     use rustls_aws_lc_rs as provider;
     use rustls_util::complete_io;
 
@@ -208,11 +209,12 @@ mod server {
         let (mut stream, _) = listener.accept()?;
 
         let mut conn = ServerConnection::new(Arc::new(config)).unwrap();
-        complete_io(&mut stream, &mut conn)?;
+        let mut input = VecBuffer::default();
+        complete_io(&mut stream, &mut input, &mut conn)?;
 
         conn.writer()
             .write_all(b"Hello from the server")?;
-        complete_io(&mut stream, &mut conn)?;
+        complete_io(&mut stream, &mut input, &mut conn)?;
 
         let mut buf = [0; 128];
 
@@ -220,12 +222,13 @@ mod server {
             match conn.reader().read(&mut buf) {
                 Ok(len) => {
                     conn.send_close_notify();
-                    complete_io(&mut stream, &mut conn)?;
+                    complete_io(&mut stream, &mut input, &mut conn)?;
                     return Ok(String::from_utf8_lossy(&buf[..len]).to_string());
                 }
                 Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                    conn.read_tls(&mut stream)?;
-                    conn.process_new_packets().unwrap();
+                    input.read(&mut stream)?;
+                    conn.process_new_packets(&mut input)
+                        .unwrap();
                 }
                 Err(err) => {
                     return Err(err);
