@@ -137,6 +137,272 @@ pub fn main() {
     }
 }
 
+fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMemo, count: usize) {
+    let mut sent_message = false;
+
+    let addrs = [
+        net::SocketAddr::from((net::Ipv6Addr::LOCALHOST, opts.port)),
+        net::SocketAddr::from((net::Ipv4Addr::LOCALHOST, opts.port)),
+    ];
+    let mut conn = net::TcpStream::connect(&addrs[..]).expect("cannot connect");
+    let mut sent_shutdown = false;
+    let mut sent_exporter = false;
+    let mut sent_key_update = false;
+    let mut quench_writes = false;
+
+    conn.write_all(&opts.shim_id.to_le_bytes())
+        .unwrap();
+
+    loop {
+        if !sent_message && (opts.queue_data || (opts.queue_data_on_resume && count > 0)) {
+            if !opts
+                .queue_early_data_after_received_messages
+                .is_empty()
+            {
+                flush(&mut sess, &mut conn);
+                for message_size_estimate in &opts.queue_early_data_after_received_messages {
+                    read_n_bytes(opts, &mut sess, &mut conn, *message_size_estimate);
+                }
+                println!("now ready for early data");
+            }
+
+            if count > 0 && opts.enable_early_data {
+                let len = client(&mut sess)
+                    .early_data()
+                    .expect("0rtt not available")
+                    .write(b"hello")
+                    .expect("0rtt write failed");
+                sess.writer()
+                    .write_all(&b"hello"[len..])
+                    .unwrap();
+                sent_message = true;
+            } else if !opts.only_write_one_byte_after_handshake {
+                let _ = sess.writer().write_all(b"hello");
+                sent_message = true;
+            }
+        }
+
+        if !quench_writes {
+            flush(&mut sess, &mut conn);
+        }
+
+        if sess.wants_read() {
+            read_all_bytes(opts, &mut sess, &mut conn);
+        }
+
+        if opts.side == Side::Server && opts.enable_early_data {
+            if let Some(ed) = &mut server(&mut sess).early_data() {
+                let mut data = Vec::new();
+                let data_len = ed
+                    .read_to_end(&mut data)
+                    .expect("cannot read early_data");
+
+                for b in data.iter_mut() {
+                    *b ^= 0xff;
+                }
+
+                sess.writer()
+                    .write_all(&data[..data_len])
+                    .expect("cannot echo early_data in 1rtt data");
+            }
+        }
+
+        if !sess.is_handshaking() && opts.export_keying_material > 0 && !sent_exporter {
+            let mut export = vec![0; opts.export_keying_material];
+            sess.exporter()
+                .unwrap()
+                .derive(
+                    opts.export_keying_material_label
+                        .as_bytes(),
+                    if opts.export_keying_material_context_used {
+                        Some(
+                            opts.export_keying_material_context
+                                .as_bytes(),
+                        )
+                    } else {
+                        None
+                    },
+                    &mut export,
+                )
+                .unwrap();
+            sess.writer()
+                .write_all(&export)
+                .unwrap();
+            sent_exporter = true;
+        }
+
+        if !sess.is_handshaking() && opts.export_traffic_secrets && !sent_exporter {
+            let secrets = key_log.clone_inner();
+            assert_eq!(
+                secrets.client_traffic_secret.len(),
+                secrets.server_traffic_secret.len()
+            );
+            sess.writer()
+                .write_all(&(secrets.client_traffic_secret.len() as u16).to_le_bytes())
+                .unwrap();
+            sess.writer()
+                .write_all(&secrets.server_traffic_secret)
+                .unwrap();
+            sess.writer()
+                .write_all(&secrets.client_traffic_secret)
+                .unwrap();
+            sent_exporter = true;
+        }
+
+        if opts.send_key_update && !sent_key_update && !sess.is_handshaking() {
+            sess.refresh_traffic_keys().unwrap();
+            sent_key_update = true;
+        }
+
+        if !sess.is_handshaking() && opts.only_write_one_byte_after_handshake && !sent_message {
+            println!("writing message and then only one byte of its tls frame");
+            flush(&mut sess, &mut conn);
+
+            sess.writer()
+                .write_all(b"hello")
+                .unwrap();
+            sent_message = true;
+
+            let mut one_byte = [0u8];
+            let mut cursor = io::Cursor::new(&mut one_byte[..]);
+            sess.write_tls(&mut cursor).unwrap();
+            conn.write_all(&one_byte)
+                .expect("IO error");
+
+            quench_writes = true;
+        }
+
+        if opts.enable_early_data
+            && opts.side == Side::Client
+            && !sess.is_handshaking()
+            && count > 0
+        {
+            if opts.expect_accept_early_data && !client(&mut sess).is_early_data_accepted() {
+                quit_err("Early data was not accepted, but we expect the opposite");
+            } else if opts.expect_reject_early_data && client(&mut sess).is_early_data_accepted() {
+                quit_err("Early data was accepted, but we expect the opposite");
+            }
+            if opts.expect_version == 0x0304 {
+                match sess.protocol_version() {
+                    Some(ProtocolVersion::TLSv1_3) | Some(ProtocolVersion::Unknown(0x7f17)) => {}
+                    _ => quit_err("wrong protocol version"),
+                }
+            }
+        }
+
+        if let (Some(expected_options), false) =
+            (opts.expect_handshake_kind.as_ref(), sess.is_handshaking())
+        {
+            let actual = sess.handshake_kind().unwrap();
+            assert!(
+                expected_options.contains(&actual),
+                "wanted to see {expected_options:?} but got {actual:?}"
+            );
+        }
+
+        if let Some(curve_id) = &opts.expect_curve_id {
+            // unlike openssl/boringssl's API, `negotiated_key_exchange_group`
+            // works for the connection, not session.  this means TLS1.2
+            // resumptions never have a value for `negotiated_key_exchange_group`
+            let tls12_resumed = sess.protocol_version() == Some(ProtocolVersion::TLSv1_2)
+                && sess.handshake_kind() == Some(HandshakeKind::Resumed);
+            let negotiated_key_exchange_group_ready = !(sess.is_handshaking() || tls12_resumed);
+
+            if negotiated_key_exchange_group_ready {
+                let actual = sess
+                    .negotiated_key_exchange_group()
+                    .expect("no kx with -expect-curve-id");
+                assert_eq!(curve_id, &actual.name());
+            }
+        }
+
+        if let Some(curve_id) = &opts.on_initial_expect_curve_id {
+            if !sess.is_handshaking() && count == 0 {
+                assert_eq!(sess.handshake_kind().unwrap(), HandshakeKind::Full);
+                assert_eq!(
+                    sess.negotiated_key_exchange_group()
+                        .expect("no kx with -on-initial-expect-curve-id")
+                        .name(),
+                    *curve_id
+                );
+            }
+        }
+
+        if let Some(curve_id) = &opts.on_resume_expect_curve_id {
+            if !sess.is_handshaking() && count > 0 {
+                assert!(matches!(
+                    sess.handshake_kind().unwrap(),
+                    HandshakeKind::Resumed | HandshakeKind::ResumedWithHelloRetryRequest
+                ));
+                assert_eq!(
+                    sess.negotiated_key_exchange_group()
+                        .expect("no kx with -on-resume-expect-curve-id")
+                        .name(),
+                    *curve_id
+                );
+            }
+        }
+
+        {
+            let ech_accept_required =
+                (count == 0 && opts.on_initial_expect_ech_accept) || opts.expect_ech_accept;
+            if ech_accept_required
+                && !sess.is_handshaking()
+                && client(&mut sess).ech_status() != EchStatus::Accepted
+            {
+                quit_err("ECH was not accepted, but we expect the opposite");
+            }
+        }
+
+        let mut buf = [0u8; 1024];
+        let len = match sess
+            .reader()
+            .read(&mut buf[..opts.read_size])
+        {
+            Ok(0) => {
+                if opts.check_close_notify {
+                    println!("close notify ok");
+                }
+                println!("EOF (tls)");
+                return;
+            }
+            Ok(len) => len,
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => 0,
+            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                if opts.check_close_notify {
+                    quit_err(":CLOSE_WITHOUT_CLOSE_NOTIFY:");
+                }
+                println!("EOF (tcp)");
+                return;
+            }
+            Err(err) => panic!("unhandled read error {err:?}"),
+        };
+
+        if opts.shut_down_after_handshake && !sent_shutdown && !sess.is_handshaking() {
+            sess.send_close_notify();
+            sent_shutdown = true;
+        }
+
+        if quench_writes && len > 0 {
+            println!("unquenching writes after {len:?}");
+            quench_writes = false;
+        }
+
+        for b in buf.iter_mut() {
+            *b ^= 0xff;
+        }
+
+        sess.writer()
+            .write_all(&buf[..len])
+            .unwrap();
+    }
+}
+
+enum SideConfig {
+    Client(Arc<ClientConfig>),
+    Server(Arc<ServerConfig>),
+}
+
 #[derive(Debug)]
 struct Options {
     port: u16,
@@ -1846,272 +2112,6 @@ fn read_all_bytes(opts: &Options, sess: &mut impl Connection, conn: &mut net::Tc
     };
 
     after_read(opts, sess, conn);
-}
-
-fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMemo, count: usize) {
-    let mut sent_message = false;
-
-    let addrs = [
-        net::SocketAddr::from((net::Ipv6Addr::LOCALHOST, opts.port)),
-        net::SocketAddr::from((net::Ipv4Addr::LOCALHOST, opts.port)),
-    ];
-    let mut conn = net::TcpStream::connect(&addrs[..]).expect("cannot connect");
-    let mut sent_shutdown = false;
-    let mut sent_exporter = false;
-    let mut sent_key_update = false;
-    let mut quench_writes = false;
-
-    conn.write_all(&opts.shim_id.to_le_bytes())
-        .unwrap();
-
-    loop {
-        if !sent_message && (opts.queue_data || (opts.queue_data_on_resume && count > 0)) {
-            if !opts
-                .queue_early_data_after_received_messages
-                .is_empty()
-            {
-                flush(&mut sess, &mut conn);
-                for message_size_estimate in &opts.queue_early_data_after_received_messages {
-                    read_n_bytes(opts, &mut sess, &mut conn, *message_size_estimate);
-                }
-                println!("now ready for early data");
-            }
-
-            if count > 0 && opts.enable_early_data {
-                let len = client(&mut sess)
-                    .early_data()
-                    .expect("0rtt not available")
-                    .write(b"hello")
-                    .expect("0rtt write failed");
-                sess.writer()
-                    .write_all(&b"hello"[len..])
-                    .unwrap();
-                sent_message = true;
-            } else if !opts.only_write_one_byte_after_handshake {
-                let _ = sess.writer().write_all(b"hello");
-                sent_message = true;
-            }
-        }
-
-        if !quench_writes {
-            flush(&mut sess, &mut conn);
-        }
-
-        if sess.wants_read() {
-            read_all_bytes(opts, &mut sess, &mut conn);
-        }
-
-        if opts.side == Side::Server && opts.enable_early_data {
-            if let Some(ed) = &mut server(&mut sess).early_data() {
-                let mut data = Vec::new();
-                let data_len = ed
-                    .read_to_end(&mut data)
-                    .expect("cannot read early_data");
-
-                for b in data.iter_mut() {
-                    *b ^= 0xff;
-                }
-
-                sess.writer()
-                    .write_all(&data[..data_len])
-                    .expect("cannot echo early_data in 1rtt data");
-            }
-        }
-
-        if !sess.is_handshaking() && opts.export_keying_material > 0 && !sent_exporter {
-            let mut export = vec![0; opts.export_keying_material];
-            sess.exporter()
-                .unwrap()
-                .derive(
-                    opts.export_keying_material_label
-                        .as_bytes(),
-                    if opts.export_keying_material_context_used {
-                        Some(
-                            opts.export_keying_material_context
-                                .as_bytes(),
-                        )
-                    } else {
-                        None
-                    },
-                    &mut export,
-                )
-                .unwrap();
-            sess.writer()
-                .write_all(&export)
-                .unwrap();
-            sent_exporter = true;
-        }
-
-        if !sess.is_handshaking() && opts.export_traffic_secrets && !sent_exporter {
-            let secrets = key_log.clone_inner();
-            assert_eq!(
-                secrets.client_traffic_secret.len(),
-                secrets.server_traffic_secret.len()
-            );
-            sess.writer()
-                .write_all(&(secrets.client_traffic_secret.len() as u16).to_le_bytes())
-                .unwrap();
-            sess.writer()
-                .write_all(&secrets.server_traffic_secret)
-                .unwrap();
-            sess.writer()
-                .write_all(&secrets.client_traffic_secret)
-                .unwrap();
-            sent_exporter = true;
-        }
-
-        if opts.send_key_update && !sent_key_update && !sess.is_handshaking() {
-            sess.refresh_traffic_keys().unwrap();
-            sent_key_update = true;
-        }
-
-        if !sess.is_handshaking() && opts.only_write_one_byte_after_handshake && !sent_message {
-            println!("writing message and then only one byte of its tls frame");
-            flush(&mut sess, &mut conn);
-
-            sess.writer()
-                .write_all(b"hello")
-                .unwrap();
-            sent_message = true;
-
-            let mut one_byte = [0u8];
-            let mut cursor = io::Cursor::new(&mut one_byte[..]);
-            sess.write_tls(&mut cursor).unwrap();
-            conn.write_all(&one_byte)
-                .expect("IO error");
-
-            quench_writes = true;
-        }
-
-        if opts.enable_early_data
-            && opts.side == Side::Client
-            && !sess.is_handshaking()
-            && count > 0
-        {
-            if opts.expect_accept_early_data && !client(&mut sess).is_early_data_accepted() {
-                quit_err("Early data was not accepted, but we expect the opposite");
-            } else if opts.expect_reject_early_data && client(&mut sess).is_early_data_accepted() {
-                quit_err("Early data was accepted, but we expect the opposite");
-            }
-            if opts.expect_version == 0x0304 {
-                match sess.protocol_version() {
-                    Some(ProtocolVersion::TLSv1_3) | Some(ProtocolVersion::Unknown(0x7f17)) => {}
-                    _ => quit_err("wrong protocol version"),
-                }
-            }
-        }
-
-        if let (Some(expected_options), false) =
-            (opts.expect_handshake_kind.as_ref(), sess.is_handshaking())
-        {
-            let actual = sess.handshake_kind().unwrap();
-            assert!(
-                expected_options.contains(&actual),
-                "wanted to see {expected_options:?} but got {actual:?}"
-            );
-        }
-
-        if let Some(curve_id) = &opts.expect_curve_id {
-            // unlike openssl/boringssl's API, `negotiated_key_exchange_group`
-            // works for the connection, not session.  this means TLS1.2
-            // resumptions never have a value for `negotiated_key_exchange_group`
-            let tls12_resumed = sess.protocol_version() == Some(ProtocolVersion::TLSv1_2)
-                && sess.handshake_kind() == Some(HandshakeKind::Resumed);
-            let negotiated_key_exchange_group_ready = !(sess.is_handshaking() || tls12_resumed);
-
-            if negotiated_key_exchange_group_ready {
-                let actual = sess
-                    .negotiated_key_exchange_group()
-                    .expect("no kx with -expect-curve-id");
-                assert_eq!(curve_id, &actual.name());
-            }
-        }
-
-        if let Some(curve_id) = &opts.on_initial_expect_curve_id {
-            if !sess.is_handshaking() && count == 0 {
-                assert_eq!(sess.handshake_kind().unwrap(), HandshakeKind::Full);
-                assert_eq!(
-                    sess.negotiated_key_exchange_group()
-                        .expect("no kx with -on-initial-expect-curve-id")
-                        .name(),
-                    *curve_id
-                );
-            }
-        }
-
-        if let Some(curve_id) = &opts.on_resume_expect_curve_id {
-            if !sess.is_handshaking() && count > 0 {
-                assert!(matches!(
-                    sess.handshake_kind().unwrap(),
-                    HandshakeKind::Resumed | HandshakeKind::ResumedWithHelloRetryRequest
-                ));
-                assert_eq!(
-                    sess.negotiated_key_exchange_group()
-                        .expect("no kx with -on-resume-expect-curve-id")
-                        .name(),
-                    *curve_id
-                );
-            }
-        }
-
-        {
-            let ech_accept_required =
-                (count == 0 && opts.on_initial_expect_ech_accept) || opts.expect_ech_accept;
-            if ech_accept_required
-                && !sess.is_handshaking()
-                && client(&mut sess).ech_status() != EchStatus::Accepted
-            {
-                quit_err("ECH was not accepted, but we expect the opposite");
-            }
-        }
-
-        let mut buf = [0u8; 1024];
-        let len = match sess
-            .reader()
-            .read(&mut buf[..opts.read_size])
-        {
-            Ok(0) => {
-                if opts.check_close_notify {
-                    println!("close notify ok");
-                }
-                println!("EOF (tls)");
-                return;
-            }
-            Ok(len) => len,
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => 0,
-            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
-                if opts.check_close_notify {
-                    quit_err(":CLOSE_WITHOUT_CLOSE_NOTIFY:");
-                }
-                println!("EOF (tcp)");
-                return;
-            }
-            Err(err) => panic!("unhandled read error {err:?}"),
-        };
-
-        if opts.shut_down_after_handshake && !sent_shutdown && !sess.is_handshaking() {
-            sess.send_close_notify();
-            sent_shutdown = true;
-        }
-
-        if quench_writes && len > 0 {
-            println!("unquenching writes after {len:?}");
-            quench_writes = false;
-        }
-
-        for b in buf.iter_mut() {
-            *b ^= 0xff;
-        }
-
-        sess.writer()
-            .write_all(&buf[..len])
-            .unwrap();
-    }
-}
-
-enum SideConfig {
-    Client(Arc<ClientConfig>),
-    Server(Arc<ServerConfig>),
 }
 
 #[derive(Debug, Default)]
