@@ -2152,6 +2152,15 @@ pub mod encoding {
         message_framing(ContentType::Alert, ProtocolVersion::TLSv1_2, body)
     }
 
+    /// Return a full TLS message containing a warning alert.
+    pub fn warning_alert(desc: AlertDescription) -> Vec<u8> {
+        message_framing(
+            ContentType::Alert,
+            ProtocolVersion::TLSv1_2,
+            vec![ALERT_LEVEL_WARNING, desc.into()],
+        )
+    }
+
     /// Prefix with u8 length
     pub fn len_u8(mut body: Vec<u8>) -> Vec<u8> {
         body.splice(0..0, [body.len() as u8]);
@@ -2178,5 +2187,6 @@ pub mod encoding {
         items.into_iter().flatten().collect()
     }
 
+    const ALERT_LEVEL_WARNING: u8 = 1;
     const ALERT_LEVEL_FATAL: u8 = 2;
 }
