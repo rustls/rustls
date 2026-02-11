@@ -883,7 +883,7 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
                 return Ok(Some((payload, buffer_progress)));
             }
 
-            input.discard(std::dbg!(buffer_progress.take_discard()));
+            input.discard(buffer_progress.take_discard());
         }
 
         input.discard(buffer_progress.take_discard());

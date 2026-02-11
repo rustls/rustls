@@ -6,7 +6,9 @@ use pki_types::ServerName;
 
 use crate::client::{ClientSide, EchStatus, hs, tls12, tls13};
 use crate::common_state::Protocol;
+use crate::conn::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::conn::{ConnectionCore, ProcessFinishCondition};
+use crate::crypto::cipher::OutboundPlain;
 use crate::enums::ApplicationProtocol;
 use crate::error::{ApiMisuse, ErrorWithAlert};
 use crate::kernel::KernelConnection;
@@ -220,20 +222,29 @@ pub struct SendEarlyData {
 }
 
 impl SendEarlyData {
-    /// Write `data` as early data.
+    /// Write early data to the peer.
     ///
-    /// The number of written bytes is returned.
-    pub fn write(&mut self, data: &[u8]) -> usize {
+    /// The return value is the number of plaintext bytes written, and the TLS
+    /// data. This data should then be communicated to the peer.
+    pub fn write_into_vec(&mut self, data: &[u8]) -> Option<(usize, Vec<u8>)> {
         let early_data = &mut self.inner.side.early_data;
-        early_data
-            .check_write(data.len())
-            .map(|sz| {
-                self.inner
-                    .common
-                    .send
-                    .send_early_plaintext(&data[..sz])
-            })
-            .unwrap_or_default()
+        let Ok(plain_len @ 1..) = early_data.check_write(data.len()) else {
+            return None;
+        };
+        let send = &mut self.inner.common.send;
+        let application_data = OutboundPlain::from(&data[..plain_len]);
+        let mut buffer = Vec::with_capacity(send.predict_required_len(application_data.clone()));
+        let enc_len = match send.write_plaintext(application_data.clone(), &mut buffer) {
+            Ok(len) => len,
+            Err(EncryptError::InsufficientSize(InsufficientSizeError { required_size })) => {
+                buffer.resize(required_size, 0);
+                send.write_plaintext(application_data, &mut buffer)
+                    .unwrap_or_default()
+            }
+            Err(_) => return None,
+        };
+        buffer.truncate(enc_len);
+        Some((plain_len, buffer))
     }
 
     /// How many bytes may be sent as early data.
@@ -241,6 +252,25 @@ impl SendEarlyData {
         self.inner.side.early_data.bytes_left()
     }
 
+    /// Returns the "early" exporter that can derive key material for use in early data
+    ///
+    /// See [RFC5705][] for general details on what exporters are, and [RFC8446 S7.5][] for
+    /// specific details on the "early" exporter.
+    ///
+    /// **Beware** that the early exporter requires care, as it is subject to the same
+    /// potential for replay as early data itself.  See [RFC8446 appendix E.5.1][] for
+    /// more detail.
+    ///
+    /// This function can be called at most once per connection. This function will error:
+    /// if called more than once per connection.
+    ///
+    /// If you are looking for the normal exporter, this is available from
+    /// [`ConnectionOutputs::exporter()`].
+    ///
+    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
+    /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
+    /// [`ConnectionOutputs::exporter()`]: crate::conn::ConnectionOutputs::exporter()
     pub fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self
             .inner
@@ -256,7 +286,7 @@ impl SendEarlyData {
 
     /// Move to the next state, concluding writing of Early Data.
     pub fn into_next(self) -> ClientState {
-        ClientState::AwaitServerFlight(AwaitServerFlight { inner: self.inner })
+        next_state(self.inner)
     }
 }
 
@@ -343,6 +373,18 @@ fn next_state(inner: ConnectionCore<ClientSide>) -> ClientState {
             hs::StateMachine::Tls12(tls12::StateMachine::ExpectTraffic(_))
             | hs::StateMachine::Tls13(tls13::StateMachine::ExpectTraffic(_)),
         ) => ClientState::Traffic(inner.into()),
+        Ok(_)
+            if !inner
+                .common
+                .send
+                .sendable_tls
+                .is_empty() =>
+        {
+            ClientState::SendClientFlight(SendClientFlight {
+                inner,
+                next: next_state,
+            })
+        }
         Ok(_) => ClientState::AwaitServerFlight(AwaitServerFlight { inner }),
         Err(_) => panic!("TODO: withdraw error fusing in core.state"),
     }

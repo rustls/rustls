@@ -8,8 +8,8 @@ use pki_types::ServerName;
 use super::ClientState;
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
+use crate::client::EchStatus;
 use crate::client::state::ClientTraffic;
-use crate::client::{EchStatus, state};
 use crate::common_state::{
     CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, Side,
 };
@@ -71,7 +71,7 @@ impl ClientConnection {
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
         match &mut self.state {
-            Ok(ClientState::SendEarlyData(sed)) => Some(WriteEarlyData::new(sed)),
+            Ok(ClientState::SendEarlyData(_)) => Some(WriteEarlyData::new(self)),
             _ => None,
         }
     }
@@ -85,17 +85,6 @@ impl ClientConnection {
         match &self.state {
             Ok(ClientState::Traffic(traffic)) => traffic.is_early_data_accepted(),
             _ => false,
-        }
-    }
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        match self.state {
-            Ok(ClientState::Traffic(traffic)) => Ok(traffic
-                .dangerous_into_kernel_connection()?
-                .0),
-            _ => Err(Error::HandshakeNotComplete),
         }
     }
 
@@ -140,11 +129,10 @@ impl ClientConnection {
                 }
                 len
             }
-            _ => std::dbg!(
-                self.buffers
-                    .sendable_plaintext
-                    .append_limited_copy(std::dbg!(data))
-            ),
+            _ => self
+                .buffers
+                .sendable_plaintext
+                .append_limited_copy(data),
         })
     }
 
@@ -269,6 +257,9 @@ impl Connection for ClientConnection {
                     match asf.input_data(&mut self.buffers.deframer_buffer) {
                         Ok(state) => {
                             self.state = Ok(self.post_handshake_state(state));
+                            if matches!(self.state, Ok(ClientState::AwaitServerFlight(_))) {
+                                break;
+                            }
                         }
                         Err(mut err) => {
                             std::println!("awaitServerflight err={err:?}");
@@ -349,7 +340,12 @@ impl Connection for ClientConnection {
     }
 
     fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        todo!()
+        match self.state {
+            Ok(ClientState::Traffic(traffic)) => Ok(traffic
+                .dangerous_into_kernel_connection()?
+                .0),
+            _ => Err(Error::HandshakeNotComplete),
+        }
     }
 
     fn set_buffer_limit(&mut self, limit: Option<usize>) {
@@ -497,18 +493,21 @@ impl ClientConnectionBuilder {
 ///
 /// This type implements [`io::Write`].
 pub struct WriteEarlyData<'a> {
-    st: &'a mut state::SendEarlyData,
+    conn: &'a mut ClientConnection,
 }
 
 impl<'a> WriteEarlyData<'a> {
-    fn new(st: &'a mut state::SendEarlyData) -> Self {
-        WriteEarlyData { st }
+    fn new(conn: &'a mut ClientConnection) -> Self {
+        WriteEarlyData { conn }
     }
 
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
-        self.st.bytes_left()
+        match &self.conn.state {
+            Ok(ClientState::SendEarlyData(ed)) => ed.bytes_left(),
+            _ => 0,
+        }
     }
 
     /// Returns the "early" exporter that can derive key material for use in early data
@@ -531,13 +530,27 @@ impl<'a> WriteEarlyData<'a> {
     /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
     /// [`ConnectionCommon::exporter()`]: crate::conn::ConnectionCommon::exporter()
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.st.early_exporter()
+        match &mut self.conn.state {
+            Ok(ClientState::SendEarlyData(ed)) => ed.early_exporter(),
+            _ => Err(Error::HandshakeNotComplete),
+        }
     }
 }
 
 impl io::Write for WriteEarlyData<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Ok(self.st.write(buf))
+        let Ok(ClientState::SendEarlyData(ed)) = &mut self.conn.state else {
+            return Err(io::ErrorKind::BrokenPipe.into());
+        };
+
+        let Some((used, out)) = ed.write_into_vec(buf) else {
+            return Ok(0);
+        };
+        self.conn
+            .buffers
+            .sendable_tls
+            .append(out);
+        Ok(used)
     }
 
     fn flush(&mut self) -> io::Result<()> {
