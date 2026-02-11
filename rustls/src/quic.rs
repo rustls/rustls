@@ -15,8 +15,8 @@ use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{
-    ClientExtensionsInput, DeframerVecBuffer, Locator, Message, MessagePayload,
-    ServerExtensionsInput, TransportParameters,
+    ClientExtensionsInput, Locator, Message, MessagePayload, ServerExtensionsInput, TlsInputBuffer,
+    TransportParameters,
 };
 use crate::server::{ServerConfig, ServerConnectionData};
 use crate::suites::SupportedCipherSuite;
@@ -339,7 +339,7 @@ impl Debug for ServerConnection {
 /// A shared interface for QUIC connections.
 struct ConnectionCommon<Side: SideData> {
     core: ConnectionCore<Side>,
-    deframer_buffer: DeframerVecBuffer,
+    deframer_buffer: TlsInputBuffer,
     version: Version,
 }
 
@@ -347,7 +347,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     fn new(core: ConnectionCore<Side>, version: Version) -> Self {
         Self {
             core,
-            deframer_buffer: DeframerVecBuffer::default(),
+            deframer_buffer: TlsInputBuffer::default(),
             version,
         }
     }

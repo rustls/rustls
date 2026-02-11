@@ -6,7 +6,7 @@ use std::io;
 use crate::msgs::MAX_WIRE_SIZE;
 
 #[derive(Default, Debug)]
-pub(crate) struct DeframerVecBuffer {
+pub(crate) struct TlsInputBuffer {
     /// Buffer of data read from the socket, in the process of being parsed into messages.
     ///
     /// For buffer size management, checkout out the [`DeframerVecBuffer::prepare_read()`] method.
@@ -16,7 +16,7 @@ pub(crate) struct DeframerVecBuffer {
     used: usize,
 }
 
-impl DeframerVecBuffer {
+impl TlsInputBuffer {
     /// Read some bytes from `rd`, and add them to the buffer.
     pub(crate) fn read(&mut self, rd: &mut dyn io::Read, in_handshake: bool) -> io::Result<usize> {
         if let Err(err) = self.prepare_read(in_handshake) {

@@ -15,8 +15,8 @@ use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::{
-    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
-    Message, Random,
+    BufferProgress, DeframerIter, Delocator, HandshakeDeframer, Locator, Message, Random,
+    TlsInputBuffer,
 };
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
@@ -500,7 +500,7 @@ impl ConnectionRandoms {
 /// [`SideData`]. This is used to store side-specific data.
 pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
-    deframer_buffer: DeframerVecBuffer,
+    deframer_buffer: TlsInputBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
 }
 
@@ -647,7 +647,7 @@ impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
     fn from(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
-            deframer_buffer: DeframerVecBuffer::default(),
+            deframer_buffer: TlsInputBuffer::default(),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
         }
     }
@@ -675,7 +675,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
     pub(crate) fn process_new_packets(
         &mut self,
-        deframer_buffer: &mut DeframerVecBuffer,
+        deframer_buffer: &mut TlsInputBuffer,
     ) -> Result<IoState, Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
