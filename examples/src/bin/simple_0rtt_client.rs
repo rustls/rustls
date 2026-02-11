@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName};
-use rustls::{ClientConfig, RootCertStore};
+use rustls::{ClientConfig, RootCertStore, VecBuffer};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use rustls_util::{KeyLogFile, Stream};
 
@@ -53,7 +53,8 @@ fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
         println!("  * 0-RTT request sent");
     }
 
-    let mut stream = Stream::new(&mut conn, &mut sock);
+    let mut buf = VecBuffer::default();
+    let mut stream = Stream::new(&mut buf, &mut conn, &mut sock);
 
     // Complete handshake.
     stream.flush().unwrap();

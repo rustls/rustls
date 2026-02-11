@@ -7,6 +7,7 @@ use pki_types::ServerName;
 
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
+use crate::TlsInputBuffer;
 use crate::client::EchStatus;
 use crate::common_state::{
     CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, Side,
@@ -113,10 +114,6 @@ impl ClientConnection {
 }
 
 impl Connection for ClientConnection {
-    fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        self.inner.read_tls(rd)
-    }
-
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
         self.inner.write_tls(wr)
     }
@@ -137,8 +134,8 @@ impl Connection for ClientConnection {
         self.inner.writer()
     }
 
-    fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        self.inner.process_new_packets()
+    fn process_new_packets(&mut self, buf: &mut dyn TlsInputBuffer) -> Result<IoState, Error> {
+        self.inner.process_new_packets(buf)
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {

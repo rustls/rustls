@@ -33,7 +33,7 @@ use rustls::server::{
 use rustls::{
     ClientConfig, ClientConnection, ConfigBuilder, Connection, ConnectionTrafficSecrets,
     DistinguishedName, RootCertStore, ServerConfig, ServerConnection, SupportedCipherSuite,
-    WantsVerifier,
+    VecBuffer, WantsVerifier,
 };
 
 macro_rules! embed_files {
@@ -200,7 +200,7 @@ embed_files! {
     (RSA_4096_INTER_KEY, "rsa-4096", "inter.key");
 }
 
-pub fn transfer(left: &mut impl Connection, right: &mut impl Connection) -> usize {
+pub fn transfer(left: &mut impl Connection, right_buf: &mut VecBuffer) -> usize {
     let mut buf = [0u8; 262144];
     let mut total = 0;
 
@@ -217,7 +217,7 @@ pub fn transfer(left: &mut impl Connection, right: &mut impl Connection) -> usiz
         let mut offs = 0;
         loop {
             let from_buf: &mut dyn io::Read = &mut &buf[offs..sz];
-            offs += right.read_tls(from_buf).unwrap();
+            offs += right_buf.read(from_buf).unwrap();
             if sz == offs {
                 break;
             }
@@ -227,10 +227,10 @@ pub fn transfer(left: &mut impl Connection, right: &mut impl Connection) -> usiz
     total
 }
 
-pub fn transfer_eof(conn: &mut impl Connection) {
+pub fn transfer_eof(buf: &mut VecBuffer) {
     let empty_buf = [0u8; 0];
     let empty_cursor: &mut dyn io::Read = &mut &empty_buf[..];
-    let sz = conn.read_tls(empty_cursor).unwrap();
+    let sz = buf.read(empty_cursor).unwrap();
     assert_eq!(sz, 0);
 }
 
@@ -244,7 +244,7 @@ pub enum Altered {
 pub fn transfer_altered<F>(
     left: &mut impl Connection,
     filter: F,
-    right: &mut impl Connection,
+    right_buf: &mut VecBuffer,
 ) -> usize
 where
     F: Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
@@ -296,8 +296,8 @@ where
             };
 
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
-            let len = right
-                .read_tls(message_enc_reader)
+            let len = right_buf
+                .read(message_enc_reader)
                 .unwrap();
             assert_eq!(len, message_enc.len());
         }
@@ -753,13 +753,22 @@ pub fn make_disjoint_suite_configs(provider: CryptoProvider) -> (ClientConfig, S
     (client_config, server_config)
 }
 
-pub fn do_handshake(client: &mut impl Connection, server: &mut impl Connection) -> (usize, usize) {
+pub fn do_handshake(
+    client_buf: &mut VecBuffer,
+    client: &mut impl Connection,
+    server_buf: &mut VecBuffer,
+    server: &mut impl Connection,
+) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
-        to_server += transfer(client, server);
-        server.process_new_packets().unwrap();
-        to_client += transfer(server, client);
-        client.process_new_packets().unwrap();
+        to_server += transfer(client, server_buf);
+        server
+            .process_new_packets(server_buf)
+            .unwrap();
+        to_client += transfer(server, client_buf);
+        client
+            .process_new_packets(client_buf)
+            .unwrap();
     }
     (to_server, to_client)
 }
@@ -771,17 +780,19 @@ pub enum ErrorFromPeer {
 }
 
 pub fn do_handshake_until_error(
+    client_buf: &mut VecBuffer,
     client: &mut ClientConnection,
+    server_buf: &mut VecBuffer,
     server: &mut ServerConnection,
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
-        transfer(client, server);
+        transfer(client, server_buf);
         server
-            .process_new_packets()
+            .process_new_packets(server_buf)
             .map_err(ErrorFromPeer::Server)?;
-        transfer(server, client);
+        transfer(server, client_buf);
         client
-            .process_new_packets()
+            .process_new_packets(client_buf)
             .map_err(ErrorFromPeer::Client)?;
     }
 
@@ -794,17 +805,19 @@ pub fn do_handshake_altered(
     alter_client_message: impl Fn(&mut EncodedMessage<Vec<u8>>) -> Altered,
     mut server: ServerConnection,
 ) -> Result<(), ErrorFromPeer> {
+    let mut client_buf = VecBuffer::default();
+    let mut server_buf = VecBuffer::default();
     while server.is_handshaking() || client.is_handshaking() {
-        transfer_altered(&mut client, &alter_client_message, &mut server);
+        transfer_altered(&mut client, &alter_client_message, &mut server_buf);
 
         server
-            .process_new_packets()
+            .process_new_packets(&mut server_buf)
             .map_err(ErrorFromPeer::Server)?;
 
-        transfer_altered(&mut server, &alter_server_message, &mut client);
+        transfer_altered(&mut server, &alter_server_message, &mut client_buf);
 
         client
-            .process_new_packets()
+            .process_new_packets(&mut client_buf)
             .map_err(ErrorFromPeer::Client)?;
     }
 
@@ -812,15 +825,17 @@ pub fn do_handshake_altered(
 }
 
 pub fn do_handshake_until_both_error(
+    client_buf: &mut VecBuffer,
     client: &mut ClientConnection,
+    server_buf: &mut VecBuffer,
     server: &mut ServerConnection,
 ) -> Result<(), Vec<ErrorFromPeer>> {
-    match do_handshake_until_error(client, server) {
+    match do_handshake_until_error(client_buf, client, server_buf, server) {
         Err(server_err @ ErrorFromPeer::Server(_)) => {
             let mut errors = vec![server_err];
-            transfer(server, client);
+            transfer(server, client_buf);
             let client_err = client
-                .process_new_packets()
+                .process_new_packets(client_buf)
                 .map_err(ErrorFromPeer::Client)
                 .expect_err("client didn't produce error after server error");
             errors.push(client_err);
@@ -829,9 +844,9 @@ pub fn do_handshake_until_both_error(
 
         Err(client_err @ ErrorFromPeer::Client(_)) => {
             let mut errors = vec![client_err];
-            transfer(client, server);
+            transfer(client, server_buf);
             let server_err = server
-                .process_new_packets()
+                .process_new_packets(server_buf)
                 .map_err(ErrorFromPeer::Server)
                 .expect_err("server didn't produce error after client error");
             errors.push(server_err);
@@ -920,6 +935,8 @@ pub fn do_suite_and_kx_test(
         expect_suite.suite()
     );
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_buf = VecBuffer::default();
+    let mut server_buf = VecBuffer::default();
 
     assert_eq!(None, client.negotiated_cipher_suite());
     assert_eq!(None, server.negotiated_cipher_suite());
@@ -938,8 +955,10 @@ pub fn do_suite_and_kx_test(
     assert!(client.is_handshaking());
     assert!(server.is_handshaking());
 
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
+    transfer(&mut client, &mut server_buf);
+    server
+        .process_new_packets(&mut server_buf)
+        .unwrap();
 
     assert!(client.is_handshaking());
     assert!(server.is_handshaking());
@@ -968,8 +987,10 @@ pub fn do_suite_and_kx_test(
         );
     }
 
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
+    transfer(&mut server, &mut client_buf);
+    client
+        .process_new_packets(&mut client_buf)
+        .unwrap();
 
     assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
     assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
@@ -996,10 +1017,14 @@ pub fn do_suite_and_kx_test(
         );
     }
 
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
+    transfer(&mut client, &mut server_buf);
+    server
+        .process_new_packets(&mut server_buf)
+        .unwrap();
+    transfer(&mut server, &mut client_buf);
+    client
+        .process_new_packets(&mut client_buf)
+        .unwrap();
 
     assert!(!client.is_handshaking());
     assert!(!server.is_handshaking());
@@ -1345,7 +1370,7 @@ impl RawTls {
     pub fn encrypt_and_send(
         &mut self,
         msg: &EncodedMessage<Payload<'_>>,
-        peer: &mut impl Connection,
+        peer_buf: &mut VecBuffer,
     ) {
         let data = self
             .encrypter
@@ -1353,7 +1378,8 @@ impl RawTls {
             .unwrap()
             .encode();
         self.enc_seq += 1;
-        peer.read_tls(&mut io::Cursor::new(data))
+        peer_buf
+            .read(&mut io::Cursor::new(data))
             .unwrap();
     }
 
@@ -1559,6 +1585,7 @@ impl ServerCredentialResolver for ServerCheckCertResolve {
 
 pub struct OtherSession<'a, C: Connection> {
     sess: &'a mut C,
+    buf: &'a mut VecBuffer,
     pub reads: usize,
     /// Writevs(Chunks(Bytes))
     pub writevs: Vec<Vec<Vec<u8>>>,
@@ -1570,9 +1597,10 @@ pub struct OtherSession<'a, C: Connection> {
 }
 
 impl<'a, C: Connection> OtherSession<'a, C> {
-    pub fn new(sess: &'a mut C) -> Self {
+    pub fn new(buf: &'a mut VecBuffer, sess: &'a mut C) -> Self {
         OtherSession {
             sess,
+            buf,
             reads: 0,
             writevs: vec![],
             fail_ok: false,
@@ -1583,14 +1611,14 @@ impl<'a, C: Connection> OtherSession<'a, C> {
         }
     }
 
-    pub fn new_buffered(sess: &'a mut C) -> Self {
-        let mut os = OtherSession::new(sess);
+    pub fn new_buffered(buf: &'a mut VecBuffer, sess: &'a mut C) -> Self {
+        let mut os = OtherSession::new(buf, sess);
         os.buffered = true;
         os
     }
 
-    pub fn new_fails(sess: &'a mut C) -> Self {
-        let mut os = OtherSession::new(sess);
+    pub fn new_fails(buf: &'a mut VecBuffer, sess: &'a mut C) -> Self {
+        let mut os = OtherSession::new(buf, sess);
         os.fail_ok = true;
         os
     }
@@ -1610,8 +1638,8 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             };
 
             let l = self
-                .sess
-                .read_tls(&mut io::Cursor::new(&bytes[..write_len]))?;
+                .buf
+                .read(&mut io::Cursor::new(&bytes[..write_len]))?;
             chunks.push(bytes[..write_len].to_vec());
             total += l;
             if bytes.len() != l {
@@ -1619,7 +1647,7 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             }
         }
 
-        let rc = self.sess.process_new_packets();
+        let rc = self.sess.process_new_packets(self.buf);
         if !self.fail_ok {
             rc.unwrap();
         } else if rc.is_err() {

@@ -18,7 +18,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, Connection, HandshakeKind, RootCertStore, ServerConfig,
-    ServerConnection,
+    ServerConnection, VecBuffer,
 };
 use rustls_test::KeyType;
 
@@ -298,21 +298,47 @@ fn bench_handshake_buffered(
                 .build()
                 .unwrap()
         });
+        let mut client_buf = VecBuffer::default();
         let mut server = time(&mut server_time, || {
             ServerConnection::new(server_config.clone()).unwrap()
         });
+        let mut server_buf = VecBuffer::default();
 
         time(&mut server_time, || {
-            transfer(&mut buffers, &mut client, &mut server, None);
+            transfer(
+                &mut buffers,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+                None,
+            );
         });
         time(&mut client_time, || {
-            transfer(&mut buffers, &mut server, &mut client, None);
+            transfer(
+                &mut buffers,
+                &mut server,
+                &mut client_buf,
+                &mut client,
+                None,
+            );
         });
         time(&mut server_time, || {
-            transfer(&mut buffers, &mut client, &mut server, None);
+            transfer(
+                &mut buffers,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+                None,
+            );
         });
         time(&mut client_time, || {
-            transfer(&mut buffers, &mut server, &mut client, None);
+            transfer(
+                &mut buffers,
+                &mut server,
+                &mut client_buf,
+                &mut client,
+                None,
+            );
         });
 
         // check we reached idle
@@ -472,12 +498,20 @@ fn bench_bulk_buffered(
         .build()
         .unwrap();
     client.set_buffer_limit(None);
+    let mut client_buf = VecBuffer::default();
     let mut server = ServerConnection::new(server_config).unwrap();
     server.set_buffer_limit(None);
+    let mut server_buf = VecBuffer::default();
 
     let mut timings = Timings::default();
     let mut buffers = TempBuffers::new();
-    do_handshake(&mut buffers, &mut client, &mut server);
+    do_handshake(
+        &mut buffers,
+        &mut client_buf,
+        &mut client,
+        &mut server_buf,
+        &mut server,
+    );
 
     let buf = vec![0; plaintext_size as usize];
     for _ in 0..rounds {
@@ -485,7 +519,13 @@ fn bench_bulk_buffered(
             server.writer().write_all(&buf).unwrap();
         });
 
-        timings.client += transfer(&mut buffers, &mut server, &mut client, Some(buf.len()));
+        timings.client += transfer(
+            &mut buffers,
+            &mut server,
+            &mut client_buf,
+            &mut client,
+            Some(buf.len()),
+        );
     }
 
     timings
@@ -526,14 +566,18 @@ fn bench_memory(
     let mut buffers = TempBuffers::new();
 
     for _i in 0..conn_count {
-        servers.push(ServerConnection::new(server_config.clone()).unwrap());
+        servers.push((
+            VecBuffer::default(),
+            ServerConnection::new(server_config.clone()).unwrap(),
+        ));
         let server_name = "localhost".try_into().unwrap();
-        clients.push(
+        clients.push((
+            VecBuffer::default(),
             client_config
                 .connect(server_name)
                 .build()
                 .unwrap(),
-        );
+        ));
     }
 
     for _step in 0..5 {
@@ -541,12 +585,19 @@ fn bench_memory(
             .iter_mut()
             .zip(servers.iter_mut())
         {
-            do_handshake_step(&mut buffers, client, server);
+            do_handshake_step(
+                &mut buffers,
+                &mut client.0,
+                &mut client.1,
+                &mut server.0,
+                &mut server.1,
+            );
         }
     }
 
     for client in clients.iter_mut() {
         client
+            .1
             .writer()
             .write_all(&[0u8; 1024])
             .unwrap();
@@ -556,7 +607,13 @@ fn bench_memory(
         .iter_mut()
         .zip(servers.iter_mut())
     {
-        transfer(&mut buffers, client, server, Some(1024));
+        transfer(
+            &mut buffers,
+            &mut client.1,
+            &mut server.0,
+            &mut server.1,
+            Some(1024),
+        );
     }
 }
 
@@ -938,12 +995,14 @@ impl From<RequestedKeyType> for KeyType {
 
 fn do_handshake_step(
     buffers: &mut TempBuffers,
+    client_buf: &mut VecBuffer,
     client: &mut ClientConnection,
+    server_buf: &mut VecBuffer,
     server: &mut ServerConnection,
 ) -> bool {
     if server.is_handshaking() || client.is_handshaking() {
-        transfer(buffers, client, server, None);
-        transfer(buffers, server, client, None);
+        transfer(buffers, client, server_buf, server, None);
+        transfer(buffers, server, client_buf, client, None);
         true
     } else {
         false
@@ -952,10 +1011,12 @@ fn do_handshake_step(
 
 fn do_handshake(
     buffers: &mut TempBuffers,
+    client_buf: &mut VecBuffer,
     client: &mut ClientConnection,
+    server_buf: &mut VecBuffer,
     server: &mut ServerConnection,
 ) {
-    while do_handshake_step(buffers, client, server) {}
+    while do_handshake_step(buffers, client_buf, client, server_buf, server) {}
 }
 
 fn time<F, T>(time_out: &mut f64, mut f: F) -> T
@@ -972,6 +1033,7 @@ where
 fn transfer(
     buffers: &mut TempBuffers,
     left: &mut impl Connection,
+    right_buf: &mut VecBuffer,
     right: &mut impl Connection,
     expect_data: Option<usize>,
 ) -> f64 {
@@ -999,9 +1061,11 @@ fn transfer(
         let mut offs = 0;
         loop {
             let start = Instant::now();
-            match right.read_tls(&mut buffers.tls[offs..sz].as_ref()) {
+            match right_buf.read(&mut buffers.tls[offs..sz].as_ref()) {
                 Ok(read) => {
-                    right.process_new_packets().unwrap();
+                    right
+                        .process_new_packets(right_buf)
+                        .unwrap();
                     offs += read;
                 }
                 Err(err) => {
