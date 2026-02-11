@@ -1,13 +1,15 @@
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::fmt::{self, Debug};
 use core::mem;
 use core::ops::{Deref, DerefMut, Range};
-use std::io;
+use std::io::{self, BufRead, Read};
 
 use kernel::KernelConnection;
 
 use crate::common_state::{
-    CommonState, DEFAULT_BUFFER_LIMIT, Input, IoState, Output, State, process_main_protocol,
+    CommonState, ConnectionOutputs, DEFAULT_BUFFER_LIMIT, Input, IoState, Output, State,
+    process_main_protocol,
 };
 use crate::crypto::cipher::{Decrypted, EncodedMessage};
 use crate::enums::{ContentType, ProtocolVersion};
@@ -23,402 +25,388 @@ use crate::vecbuf::ChunkVecBuffer;
 pub mod kernel;
 pub(crate) mod unbuffered;
 
-mod connection {
-    use alloc::vec::Vec;
-    use core::fmt::Debug;
-    use core::ops::{Deref, DerefMut};
-    use std::io::{self, BufRead, Read};
+use crate::crypto::cipher::OutboundPlain;
 
-    use crate::common_state::{ConnectionOutputs, IoState};
-    use crate::conn::{ConnectionCommon, KeyingMaterialExporter, SideData};
-    use crate::crypto::cipher::OutboundPlain;
-    use crate::error::Error;
-    use crate::suites::ExtractedSecrets;
-    use crate::vecbuf::ChunkVecBuffer;
-
-    /// A trait generalizing over buffered client or server connections.
-    pub trait Connection: Debug + Deref<Target = ConnectionOutputs> + DerefMut {
-        /// Read TLS content from `rd` into the internal buffer.
-        ///
-        /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
-        /// a socket or pipe might).
-        ///
-        /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
-        /// to empty the incoming TLS data buffer.
-        ///
-        /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
-        /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
-        /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
-        ///
-        /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
-        ///   each time a call to this function succeeds.
-        /// * In order to empty the incoming plaintext data buffer, you should empty it through
-        ///   the [`reader()`] after the call to [`process_new_packets()`].
-        ///
-        /// This function also returns `Ok(0)` once a `close_notify` alert has been successfully
-        /// received.  No additional data is ever read in this state.
-        ///
-        /// [`process_new_packets()`]: Connection::process_new_packets
-        /// [`reader()`]: Connection::reader
-        fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error>;
-
-        /// Writes TLS messages to `wr`.
-        ///
-        /// On success, this function returns `Ok(n)` where `n` is a number of bytes written to `wr`
-        /// (after encoding and encryption).
-        ///
-        /// After this function returns, the connection buffer may not yet be fully flushed. The
-        /// [`Connection::wants_write()`] function can be used to check if the output buffer is
-        /// empty.
-        fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error>;
-
-        /// Returns true if the caller should call [`Connection::read_tls`] as soon
-        /// as possible.
-        ///
-        /// If there is pending plaintext data to read with [`Connection::reader`],
-        /// this returns false.  If your application respects this mechanism,
-        /// only one full TLS message will be buffered by rustls.
-        ///
-        /// [`Connection::reader`]: crate::Connection::reader
-        /// [`Connection::read_tls`]: crate::Connection::read_tls
-        fn wants_read(&self) -> bool;
-
-        /// Returns true if the caller should call [`Connection::write_tls`] as soon as possible.
-        ///
-        /// [`Connection::write_tls`]: crate::Connection::write_tls
-        fn wants_write(&self) -> bool;
-
-        /// Returns an object that allows reading plaintext.
-        fn reader(&mut self) -> Reader<'_>;
-
-        /// Returns an object that allows writing plaintext.
-        fn writer(&mut self) -> Writer<'_>;
-
-        /// Processes any new packets read by a previous call to
-        /// [`Connection::read_tls`].
-        ///
-        /// Errors from this function relate to TLS protocol errors, and
-        /// are fatal to the connection.  Future calls after an error will do
-        /// no new work and will return the same error. After an error is
-        /// received from [`process_new_packets()`], you should not call [`read_tls()`]
-        /// any more (it will fill up buffers to no purpose). However, you
-        /// may call the other methods on the connection, including `write`,
-        /// `send_close_notify`, and `write_tls`. Most likely you will want to
-        /// call `write_tls` to send any alerts queued by the error and then
-        /// close the underlying connection.
-        ///
-        /// Success from this function comes with some sundry state data
-        /// about the connection.
-        ///
-        /// [`process_new_packets()`]: Connection::process_new_packets
-        /// [`read_tls()`]: Connection::read_tls
-        fn process_new_packets(&mut self) -> Result<IoState, Error>;
-
-        /// Returns an object that can derive key material from the agreed connection secrets.
-        ///
-        /// See [RFC5705][] for more details on what this is for.
-        ///
-        /// This function can be called at most once per connection.
-        ///
-        /// This function will error:
-        ///
-        /// - if called prior to the handshake completing; (check with
-        ///   [`Connection::is_handshaking()`] first).
-        /// - if called more than once per connection.
-        ///
-        /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
-        fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error>;
-
-        /// Extract secrets, so they can be used when configuring kTLS, for example.
-        ///
-        /// Should be used with care as it exposes secret key material.
-        fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error>;
-
-        /// Sets a limit on the internal buffers used to buffer
-        /// unsent plaintext (prior to completing the TLS handshake)
-        /// and unsent TLS records.  This limit acts only on application
-        /// data written through [`Connection::writer`].
-        ///
-        /// By default the limit is 64KB.  The limit can be set
-        /// at any time, even if the current buffer use is higher.
-        ///
-        /// [`None`] means no limit applies, and will mean that written
-        /// data is buffered without bound -- it is up to the application
-        /// to appropriately schedule its plaintext and TLS writes to bound
-        /// memory usage.
-        ///
-        /// For illustration: `Some(1)` means a limit of one byte applies:
-        /// [`Connection::writer`] will accept only one byte, encrypt it and
-        /// add a TLS header.  Once this is sent via [`Connection::write_tls`],
-        /// another byte may be sent.
-        ///
-        /// # Internal write-direction buffering
-        /// rustls has two buffers whose size are bounded by this setting:
-        ///
-        /// ## Buffering of unsent plaintext data prior to handshake completion
-        ///
-        /// Calls to [`Connection::writer`] before or during the handshake
-        /// are buffered (up to the limit specified here).  Once the
-        /// handshake completes this data is encrypted and the resulting
-        /// TLS records are added to the outgoing buffer.
-        ///
-        /// ## Buffering of outgoing TLS records
-        ///
-        /// This buffer is used to store TLS records that rustls needs to
-        /// send to the peer.  It is used in these two circumstances:
-        ///
-        /// - by [`Connection::process_new_packets`] when a handshake or alert
-        ///   TLS record needs to be sent.
-        /// - by [`Connection::writer`] post-handshake: the plaintext is
-        ///   encrypted and the resulting TLS record is buffered.
-        ///
-        /// This buffer is emptied by [`Connection::write_tls`].
-        ///
-        /// [`Connection::writer`]: crate::Connection::writer
-        /// [`Connection::write_tls`]: crate::Connection::write_tls
-        /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
-        fn set_buffer_limit(&mut self, limit: Option<usize>);
-
-        /// Sets a limit on the internal buffers used to buffer decoded plaintext.
-        ///
-        /// See [`Self::set_buffer_limit`] for more information on how limits are applied.
-        fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>);
-
-        /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
-        ///
-        /// This call refreshes our encryption keys. Once the peer receives the message,
-        /// it refreshes _its_ encryption and decryption keys and sends a response.
-        /// Once we receive that response, we refresh our decryption keys to match.
-        /// At the end of this process, keys in both directions have been refreshed.
-        ///
-        /// Note that this process does not happen synchronously: this call just
-        /// arranges that the `key_update` message will be included in the next
-        /// `write_tls` output.
-        ///
-        /// This fails with `Error::HandshakeNotComplete` if called before the initial
-        /// handshake is complete, or if a version prior to TLS1.3 is negotiated.
-        ///
-        /// # Usage advice
-        /// Note that other implementations (including rustls) may enforce limits on
-        /// the number of `key_update` messages allowed on a given connection to prevent
-        /// denial of service.  Therefore, this should be called sparingly.
-        ///
-        /// rustls implicitly and automatically refreshes traffic keys when needed
-        /// according to the selected cipher suite's cryptographic constraints.  There
-        /// is therefore no need to call this manually to avoid cryptographic keys
-        /// "wearing out".
-        ///
-        /// The main reason to call this manually is to roll keys when it is known
-        /// a connection will be idle for a long period.
-        fn refresh_traffic_keys(&mut self) -> Result<(), Error>;
-
-        /// Queues a `close_notify` warning alert to be sent in the next
-        /// [`Connection::write_tls`] call.  This informs the peer that the
-        /// connection is being closed.
-        ///
-        /// Does nothing if any `close_notify` or fatal alert was already sent.
-        ///
-        /// [`Connection::write_tls`]: crate::Connection::write_tls
-        fn send_close_notify(&mut self);
-
-        /// Returns true if the connection is currently performing the TLS handshake.
-        ///
-        /// During this time plaintext written to the connection is buffered in memory. After
-        /// [`Connection::process_new_packets()`] has been called, this might start to return `false`
-        /// while the final handshake packets still need to be extracted from the connection's buffers.
-        ///
-        /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
-        fn is_handshaking(&self) -> bool;
-    }
-
-    /// A structure that implements [`std::io::Read`] for reading plaintext.
-    pub struct Reader<'a> {
-        pub(super) received_plaintext: &'a mut ChunkVecBuffer,
-        pub(super) has_received_close_notify: bool,
-        pub(super) has_seen_eof: bool,
-    }
-
-    impl<'a> Reader<'a> {
-        /// Check the connection's state if no bytes are available for reading.
-        fn check_no_bytes_state(&self) -> io::Result<()> {
-            match (self.has_received_close_notify, self.has_seen_eof) {
-                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-                (true, _) => Ok(()),
-                // unclean closure
-                (false, true) => Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    UNEXPECTED_EOF_MESSAGE,
-                )),
-                // connection still going, but needs more data: signal `WouldBlock` so that
-                // the caller knows this
-                (false, false) => Err(io::ErrorKind::WouldBlock.into()),
-            }
-        }
-
-        /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
-        ///
-        /// This method consumes `self` so that it can return a slice whose lifetime is bounded by
-        /// the [`Connection`] that created this [`Reader`].
-        pub fn into_first_chunk(self) -> io::Result<&'a [u8]> {
-            match self.received_plaintext.chunk() {
-                Some(chunk) => Ok(chunk),
-                None => {
-                    self.check_no_bytes_state()?;
-                    Ok(&[])
-                }
-            }
-        }
-    }
-
-    impl Read for Reader<'_> {
-        /// Obtain plaintext data received from the peer over this TLS connection.
-        ///
-        /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
-        /// the pending data has been read. No further data can be received on that
-        /// connection, so the underlying TCP connection should be half-closed too.
-        ///
-        /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
-        /// `close_notify` alert) this function returns a `std::io::Error` of type
-        /// `ErrorKind::UnexpectedEof` once any pending data has been read.
-        ///
-        /// Note that support for `close_notify` varies in peer TLS libraries: many do not
-        /// support it and uncleanly close the TCP connection (this might be
-        /// vulnerable to truncation attacks depending on the application protocol).
-        /// This means applications using rustls must both handle EOF
-        /// from this function, *and* unexpected EOF of the underlying TCP connection.
-        ///
-        /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
-        ///
-        /// You may learn the number of bytes available at any time by inspecting
-        /// the return of [`Connection::process_new_packets`].
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            let len = self.received_plaintext.read(buf)?;
-            if len > 0 || buf.is_empty() {
-                return Ok(len);
-            }
-
-            self.check_no_bytes_state()
-                .map(|()| len)
-        }
-    }
-
-    impl BufRead for Reader<'_> {
-        /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
-        /// This reads the same data as [`Reader::read()`], but returns a reference instead of
-        /// copying the data.
-        ///
-        /// The caller should call [`Reader::consume()`] afterward to advance the buffer.
-        ///
-        /// See [`Reader::into_first_chunk()`] for a version of this function that returns a
-        /// buffer with a longer lifetime.
-        fn fill_buf(&mut self) -> io::Result<&[u8]> {
-            Reader {
-                // reborrow
-                received_plaintext: self.received_plaintext,
-                ..*self
-            }
-            .into_first_chunk()
-        }
-
-        fn consume(&mut self, amt: usize) {
-            self.received_plaintext
-                .consume_first_chunk(amt)
-        }
-    }
-
-    const UNEXPECTED_EOF_MESSAGE: &str = "peer closed connection without sending TLS close_notify: \
-https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof";
-
-    /// A structure that implements [`std::io::Write`] for writing plaintext.
-    pub struct Writer<'a> {
-        sink: &'a mut dyn PlaintextSink,
-    }
-
-    impl<'a> Writer<'a> {
-        /// Create a new Writer.
-        ///
-        /// This is not an external interface.  Get one of these objects
-        /// from [`Connection::writer`].
-        pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Self {
-            Writer { sink }
-        }
-    }
-
-    impl io::Write for Writer<'_> {
-        /// Send the plaintext `buf` to the peer, encrypting
-        /// and authenticating it.  Once this function succeeds
-        /// you should call [`Connection::write_tls`] which will output the
-        /// corresponding TLS records.
-        ///
-        /// This function buffers plaintext sent before the
-        /// TLS handshake completes, and sends it as soon
-        /// as it can.  See [`Connection::set_buffer_limit()`] to control
-        /// the size of this buffer.
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.sink.write(buf)
-        }
-
-        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-            self.sink.write_vectored(bufs)
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            self.sink.flush()
-        }
-    }
-
-    /// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
-    /// allowing them to be the subject of a [`Writer`].
+/// A trait generalizing over buffered client or server connections.
+pub trait Connection: Debug + Deref<Target = ConnectionOutputs> + DerefMut {
+    /// Read TLS content from `rd` into the internal buffer.
     ///
-    /// [`ServerConnection`]: crate::ServerConnection
-    /// [`ClientConnection`]: crate::ClientConnection
-    pub(crate) trait PlaintextSink {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
-        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
-        fn flush(&mut self) -> io::Result<()>;
+    /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
+    /// a socket or pipe might).
+    ///
+    /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
+    /// to empty the incoming TLS data buffer.
+    ///
+    /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
+    /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
+    /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
+    ///
+    /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
+    ///   each time a call to this function succeeds.
+    /// * In order to empty the incoming plaintext data buffer, you should empty it through
+    ///   the [`reader()`] after the call to [`process_new_packets()`].
+    ///
+    /// This function also returns `Ok(0)` once a `close_notify` alert has been successfully
+    /// received.  No additional data is ever read in this state.
+    ///
+    /// [`process_new_packets()`]: Connection::process_new_packets
+    /// [`reader()`]: Connection::reader
+    fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error>;
+
+    /// Writes TLS messages to `wr`.
+    ///
+    /// On success, this function returns `Ok(n)` where `n` is a number of bytes written to `wr`
+    /// (after encoding and encryption).
+    ///
+    /// After this function returns, the connection buffer may not yet be fully flushed. The
+    /// [`Connection::wants_write()`] function can be used to check if the output buffer is
+    /// empty.
+    fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error>;
+
+    /// Returns true if the caller should call [`Connection::read_tls`] as soon
+    /// as possible.
+    ///
+    /// If there is pending plaintext data to read with [`Connection::reader`],
+    /// this returns false.  If your application respects this mechanism,
+    /// only one full TLS message will be buffered by rustls.
+    ///
+    /// [`Connection::reader`]: crate::Connection::reader
+    /// [`Connection::read_tls`]: crate::Connection::read_tls
+    fn wants_read(&self) -> bool;
+
+    /// Returns true if the caller should call [`Connection::write_tls`] as soon as possible.
+    ///
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    fn wants_write(&self) -> bool;
+
+    /// Returns an object that allows reading plaintext.
+    fn reader(&mut self) -> Reader<'_>;
+
+    /// Returns an object that allows writing plaintext.
+    fn writer(&mut self) -> Writer<'_>;
+
+    /// Processes any new packets read by a previous call to
+    /// [`Connection::read_tls`].
+    ///
+    /// Errors from this function relate to TLS protocol errors, and
+    /// are fatal to the connection.  Future calls after an error will do
+    /// no new work and will return the same error. After an error is
+    /// received from [`process_new_packets()`], you should not call [`read_tls()`]
+    /// any more (it will fill up buffers to no purpose). However, you
+    /// may call the other methods on the connection, including `write`,
+    /// `send_close_notify`, and `write_tls`. Most likely you will want to
+    /// call `write_tls` to send any alerts queued by the error and then
+    /// close the underlying connection.
+    ///
+    /// Success from this function comes with some sundry state data
+    /// about the connection.
+    ///
+    /// [`process_new_packets()`]: Connection::process_new_packets
+    /// [`read_tls()`]: Connection::read_tls
+    fn process_new_packets(&mut self) -> Result<IoState, Error>;
+
+    /// Returns an object that can derive key material from the agreed connection secrets.
+    ///
+    /// See [RFC5705][] for more details on what this is for.
+    ///
+    /// This function can be called at most once per connection.
+    ///
+    /// This function will error:
+    ///
+    /// - if called prior to the handshake completing; (check with
+    ///   [`Connection::is_handshaking()`] first).
+    /// - if called more than once per connection.
+    ///
+    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
+    fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error>;
+
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    ///
+    /// Should be used with care as it exposes secret key material.
+    fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error>;
+
+    /// Sets a limit on the internal buffers used to buffer
+    /// unsent plaintext (prior to completing the TLS handshake)
+    /// and unsent TLS records.  This limit acts only on application
+    /// data written through [`Connection::writer`].
+    ///
+    /// By default the limit is 64KB.  The limit can be set
+    /// at any time, even if the current buffer use is higher.
+    ///
+    /// [`None`] means no limit applies, and will mean that written
+    /// data is buffered without bound -- it is up to the application
+    /// to appropriately schedule its plaintext and TLS writes to bound
+    /// memory usage.
+    ///
+    /// For illustration: `Some(1)` means a limit of one byte applies:
+    /// [`Connection::writer`] will accept only one byte, encrypt it and
+    /// add a TLS header.  Once this is sent via [`Connection::write_tls`],
+    /// another byte may be sent.
+    ///
+    /// # Internal write-direction buffering
+    /// rustls has two buffers whose size are bounded by this setting:
+    ///
+    /// ## Buffering of unsent plaintext data prior to handshake completion
+    ///
+    /// Calls to [`Connection::writer`] before or during the handshake
+    /// are buffered (up to the limit specified here).  Once the
+    /// handshake completes this data is encrypted and the resulting
+    /// TLS records are added to the outgoing buffer.
+    ///
+    /// ## Buffering of outgoing TLS records
+    ///
+    /// This buffer is used to store TLS records that rustls needs to
+    /// send to the peer.  It is used in these two circumstances:
+    ///
+    /// - by [`Connection::process_new_packets`] when a handshake or alert
+    ///   TLS record needs to be sent.
+    /// - by [`Connection::writer`] post-handshake: the plaintext is
+    ///   encrypted and the resulting TLS record is buffered.
+    ///
+    /// This buffer is emptied by [`Connection::write_tls`].
+    ///
+    /// [`Connection::writer`]: crate::Connection::writer
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
+    fn set_buffer_limit(&mut self, limit: Option<usize>);
+
+    /// Sets a limit on the internal buffers used to buffer decoded plaintext.
+    ///
+    /// See [`Self::set_buffer_limit`] for more information on how limits are applied.
+    fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>);
+
+    /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
+    ///
+    /// This call refreshes our encryption keys. Once the peer receives the message,
+    /// it refreshes _its_ encryption and decryption keys and sends a response.
+    /// Once we receive that response, we refresh our decryption keys to match.
+    /// At the end of this process, keys in both directions have been refreshed.
+    ///
+    /// Note that this process does not happen synchronously: this call just
+    /// arranges that the `key_update` message will be included in the next
+    /// `write_tls` output.
+    ///
+    /// This fails with `Error::HandshakeNotComplete` if called before the initial
+    /// handshake is complete, or if a version prior to TLS1.3 is negotiated.
+    ///
+    /// # Usage advice
+    /// Note that other implementations (including rustls) may enforce limits on
+    /// the number of `key_update` messages allowed on a given connection to prevent
+    /// denial of service.  Therefore, this should be called sparingly.
+    ///
+    /// rustls implicitly and automatically refreshes traffic keys when needed
+    /// according to the selected cipher suite's cryptographic constraints.  There
+    /// is therefore no need to call this manually to avoid cryptographic keys
+    /// "wearing out".
+    ///
+    /// The main reason to call this manually is to roll keys when it is known
+    /// a connection will be idle for a long period.
+    fn refresh_traffic_keys(&mut self) -> Result<(), Error>;
+
+    /// Queues a `close_notify` warning alert to be sent in the next
+    /// [`Connection::write_tls`] call.  This informs the peer that the
+    /// connection is being closed.
+    ///
+    /// Does nothing if any `close_notify` or fatal alert was already sent.
+    ///
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    fn send_close_notify(&mut self);
+
+    /// Returns true if the connection is currently performing the TLS handshake.
+    ///
+    /// During this time plaintext written to the connection is buffered in memory. After
+    /// [`Connection::process_new_packets()`] has been called, this might start to return `false`
+    /// while the final handshake packets still need to be extracted from the connection's buffers.
+    ///
+    /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
+    fn is_handshaking(&self) -> bool;
+}
+
+/// A structure that implements [`std::io::Read`] for reading plaintext.
+pub struct Reader<'a> {
+    pub(super) received_plaintext: &'a mut ChunkVecBuffer,
+    pub(super) has_received_close_notify: bool,
+    pub(super) has_seen_eof: bool,
+}
+
+impl<'a> Reader<'a> {
+    /// Check the connection's state if no bytes are available for reading.
+    fn check_no_bytes_state(&self) -> io::Result<()> {
+        match (self.has_received_close_notify, self.has_seen_eof) {
+            // cleanly closed; don't care about TCP EOF: express this as Ok(0)
+            (true, _) => Ok(()),
+            // unclean closure
+            (false, true) => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                UNEXPECTED_EOF_MESSAGE,
+            )),
+            // connection still going, but needs more data: signal `WouldBlock` so that
+            // the caller knows this
+            (false, false) => Err(io::ErrorKind::WouldBlock.into()),
+        }
     }
 
-    impl<Side: SideData> PlaintextSink for ConnectionCommon<Side> {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            let len = self
-                .core
-                .side
-                .send
-                .buffer_plaintext(buf.into(), &mut self.sendable_plaintext);
-            self.core.maybe_refresh_traffic_keys();
-            Ok(len)
-        }
-
-        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-            let payload_owner: Vec<&[u8]>;
-            let payload = match bufs.len() {
-                0 => return Ok(0),
-                1 => OutboundPlain::Single(bufs[0].deref()),
-                _ => {
-                    payload_owner = bufs
-                        .iter()
-                        .map(|io_slice| io_slice.deref())
-                        .collect();
-
-                    OutboundPlain::new(&payload_owner)
-                }
-            };
-            let len = self
-                .core
-                .side
-                .send
-                .buffer_plaintext(payload, &mut self.sendable_plaintext);
-            self.core.maybe_refresh_traffic_keys();
-            Ok(len)
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
+    /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
+    ///
+    /// This method consumes `self` so that it can return a slice whose lifetime is bounded by
+    /// the [`Connection`] that created this [`Reader`].
+    pub fn into_first_chunk(self) -> io::Result<&'a [u8]> {
+        match self.received_plaintext.chunk() {
+            Some(chunk) => Ok(chunk),
+            None => {
+                self.check_no_bytes_state()?;
+                Ok(&[])
+            }
         }
     }
 }
 
-pub use connection::{Connection, Reader, Writer};
+impl Read for Reader<'_> {
+    /// Obtain plaintext data received from the peer over this TLS connection.
+    ///
+    /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
+    /// the pending data has been read. No further data can be received on that
+    /// connection, so the underlying TCP connection should be half-closed too.
+    ///
+    /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
+    /// `close_notify` alert) this function returns a `std::io::Error` of type
+    /// `ErrorKind::UnexpectedEof` once any pending data has been read.
+    ///
+    /// Note that support for `close_notify` varies in peer TLS libraries: many do not
+    /// support it and uncleanly close the TCP connection (this might be
+    /// vulnerable to truncation attacks depending on the application protocol).
+    /// This means applications using rustls must both handle EOF
+    /// from this function, *and* unexpected EOF of the underlying TCP connection.
+    ///
+    /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
+    ///
+    /// You may learn the number of bytes available at any time by inspecting
+    /// the return of [`Connection::process_new_packets`].
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let len = self.received_plaintext.read(buf)?;
+        if len > 0 || buf.is_empty() {
+            return Ok(len);
+        }
+
+        self.check_no_bytes_state()
+            .map(|()| len)
+    }
+}
+
+impl BufRead for Reader<'_> {
+    /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
+    /// This reads the same data as [`Reader::read()`], but returns a reference instead of
+    /// copying the data.
+    ///
+    /// The caller should call [`Reader::consume()`] afterward to advance the buffer.
+    ///
+    /// See [`Reader::into_first_chunk()`] for a version of this function that returns a
+    /// buffer with a longer lifetime.
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        Reader {
+            // reborrow
+            received_plaintext: self.received_plaintext,
+            ..*self
+        }
+        .into_first_chunk()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.received_plaintext
+            .consume_first_chunk(amt)
+    }
+}
+
+const UNEXPECTED_EOF_MESSAGE: &str = "peer closed connection without sending TLS close_notify: \
+https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof";
+
+/// A structure that implements [`std::io::Write`] for writing plaintext.
+pub struct Writer<'a> {
+    sink: &'a mut dyn PlaintextSink,
+}
+
+impl<'a> Writer<'a> {
+    /// Create a new Writer.
+    ///
+    /// This is not an external interface.  Get one of these objects
+    /// from [`Connection::writer`].
+    pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Self {
+        Writer { sink }
+    }
+}
+
+impl io::Write for Writer<'_> {
+    /// Send the plaintext `buf` to the peer, encrypting
+    /// and authenticating it.  Once this function succeeds
+    /// you should call [`Connection::write_tls`] which will output the
+    /// corresponding TLS records.
+    ///
+    /// This function buffers plaintext sent before the
+    /// TLS handshake completes, and sends it as soon
+    /// as it can.  See [`Connection::set_buffer_limit()`] to control
+    /// the size of this buffer.
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.sink.write(buf)
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        self.sink.write_vectored(bufs)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.sink.flush()
+    }
+}
+
+/// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
+/// allowing them to be the subject of a [`Writer`].
+///
+/// [`ServerConnection`]: crate::ServerConnection
+/// [`ClientConnection`]: crate::ClientConnection
+pub(crate) trait PlaintextSink {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
+    fn flush(&mut self) -> io::Result<()>;
+}
+
+impl<Side: SideData> PlaintextSink for ConnectionCommon<Side> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let len = self
+            .core
+            .side
+            .send
+            .buffer_plaintext(buf.into(), &mut self.sendable_plaintext);
+        self.core.maybe_refresh_traffic_keys();
+        Ok(len)
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        let payload_owner: Vec<&[u8]>;
+        let payload = match bufs.len() {
+            0 => return Ok(0),
+            1 => OutboundPlain::Single(bufs[0].deref()),
+            _ => {
+                payload_owner = bufs
+                    .iter()
+                    .map(|io_slice| io_slice.deref())
+                    .collect();
+
+                OutboundPlain::new(&payload_owner)
+            }
+        };
+        let len = self
+            .core
+            .side
+            .send
+            .buffer_plaintext(payload, &mut self.sendable_plaintext);
+        self.core.maybe_refresh_traffic_keys();
+        Ok(len)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 /// An object of this type can export keying material.
 pub struct KeyingMaterialExporter {
@@ -618,7 +606,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         self.core.state = Ok(new);
     }
 
-    pub(crate) fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+    pub(crate) fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error> {
         if self.recv.received_plaintext.is_full() {
             return Err(io::Error::other("received plaintext buffer full"));
         }
