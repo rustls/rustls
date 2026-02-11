@@ -42,6 +42,7 @@ impl SendTraffic {
         application_data: OutboundPlain<'_>,
     ) -> Result<Vec<u8>, EncryptError> {
         let mut inner = self.0.lock().unwrap();
+        inner.maybe_refresh_traffic_keys();
         let mut buffer = Vec::with_capacity(inner.predict_required_len(application_data.clone()));
         let len = match inner.write_plaintext(application_data.clone(), &mut buffer) {
             Ok(len) => len,
@@ -60,11 +61,9 @@ impl SendTraffic {
     /// The TLS data to send to the peer is returned.  This data should then
     /// be communicated to the peer.
     pub fn take_data(&mut self) -> Option<Vec<u8>> {
-        self.0
-            .lock()
-            .unwrap()
-            .sendable_tls
-            .pop()
+        let mut inner = self.0.lock().unwrap();
+        inner.maybe_refresh_traffic_keys();
+        inner.sendable_tls.pop()
     }
 
     /// Conclude sending traffic by sending a `close_notify` alert.

@@ -99,25 +99,6 @@ impl ClientConnection {
         }
     }
 
-    /// Returns an object that can derive key material from the agreed connection secrets.
-    ///
-    /// See [RFC5705][] for more details on what this is for.
-    ///
-    /// This function can be called at most once per connection.
-    ///
-    /// This function will error:
-    ///
-    /// - if called prior to the handshake completing;
-    /// - if called more than once per connection.
-    ///
-    /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
-    pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match &mut self.state {
-            Ok(ClientState::Traffic(traffic)) => traffic.outputs.take_exporter(),
-            _ => Err(Error::HandshakeNotComplete),
-        }
-    }
-
     /// Return the connection's Encrypted Client Hello (ECH) status.
     pub fn ech_status(&self) -> EchStatus {
         self.state
@@ -159,11 +140,36 @@ impl ClientConnection {
                 }
                 len
             }
-            _ => self
-                .buffers
-                .sendable_plaintext
-                .append_limited_copy(data),
+            _ => std::dbg!(
+                self.buffers
+                    .sendable_plaintext
+                    .append_limited_copy(std::dbg!(data))
+            ),
         })
+    }
+
+    /// And a potential state transition from a handshake-related state to
+    /// `new`.
+    fn post_handshake_state(&mut self, mut new: ClientState) -> ClientState {
+        if let ClientState::Traffic(traffic) = &mut new {
+            std::println!(
+                "release unset buffered plaintext {:?}",
+                self.buffers.sendable_plaintext.len()
+            );
+            // Release unsent buffered plaintext.
+            while let Some(chunk) = self.buffers.sendable_plaintext.pop() {
+                let Some(send) = traffic.send.as_mut() else {
+                    continue;
+                };
+                let Ok(chunk) = send.write_into_vec(chunk.as_slice().into()) else {
+                    continue;
+                };
+                std::println!("send {:?}", chunk.len());
+                self.buffers.sendable_tls.append(chunk);
+            }
+        }
+
+        new
     }
 }
 
@@ -251,7 +257,7 @@ impl Connection for ClientConnection {
                     while let Some(chunk) = scf.take_data() {
                         self.buffers.sendable_tls.append(chunk);
                     }
-                    self.state = Ok(scf.into_next());
+                    self.state = Ok(self.post_handshake_state(scf.into_next()));
                 }
                 ClientState::SendEarlyData(sed) => self.state = Ok(sed.into_next()),
                 ClientState::AwaitServerFlight(asf) => {
@@ -262,7 +268,7 @@ impl Connection for ClientConnection {
                     std::println!("await server flight");
                     match asf.input_data(&mut self.buffers.deframer_buffer) {
                         Ok(state) => {
-                            self.state = Ok(state);
+                            self.state = Ok(self.post_handshake_state(state));
                         }
                         Err(mut err) => {
                             std::println!("awaitServerflight err={err:?}");
@@ -280,17 +286,6 @@ impl Connection for ClientConnection {
                 ClientState::ProvideCredential(_) => todo!(),
                 ClientState::Traffic(mut traffic) => {
                     let mut progress = false;
-                    // Release unsent buffered plaintext.
-                    while let Some(chunk) = self.buffers.sendable_plaintext.pop() {
-                        let Some(send) = traffic.send.as_mut() else {
-                            continue;
-                        };
-                        self.buffers.sendable_tls.append(
-                            send.write_into_vec(chunk.as_slice().into())
-                                .map_err(|_| Error::EncryptError)?,
-                        );
-                        progress = true;
-                    }
 
                     // Processed received data.
                     if !self.buffers.deframer_buffer.is_empty() {
@@ -347,7 +342,10 @@ impl Connection for ClientConnection {
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        todo!()
+        match &mut self.state {
+            Ok(ClientState::Traffic(traffic)) => traffic.outputs.take_exporter(),
+            _ => Err(Error::HandshakeNotComplete),
+        }
     }
 
     fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {

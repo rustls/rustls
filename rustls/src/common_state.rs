@@ -800,12 +800,6 @@ impl ReceivePath {
                     );
                 }
 
-                std::println!(
-                    "decrypt_incoming(t={:?} v={:?} {:?})",
-                    message.typ,
-                    message.version,
-                    message.payload.0
-                );
                 let message = match self
                     .decrypt_state
                     .decrypt_incoming(message)
