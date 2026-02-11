@@ -45,7 +45,7 @@ use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
-use rustls::{ClientConfig, Connection, RootCertStore};
+use rustls::{ClientConfig, Connection, RootCertStore, TlsInputBuffer};
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_util::{KeyLogFile, Stream};
 
@@ -137,7 +137,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .next()
             .ok_or("cannot resolve hostname")?;
         let mut sock = TcpStream::connect(sock_addr)?;
-        let mut tls = Stream::new(&mut conn, &mut sock);
+        let mut buf = TlsInputBuffer::default();
+        let mut tls = Stream::new(&mut buf, &mut conn, &mut sock);
 
         let request = format!(
             "GET /{} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",

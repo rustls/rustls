@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use rustls::error::{AlertDescription, CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use rustls::server::danger::PeerVerified;
-use rustls::{ServerConfig, ServerConnection};
+use rustls::{ServerConfig, ServerConnection, TlsInputBuffer};
 use rustls_test::{
     ErrorFromPeer, KeyType, MockClientVerifier, do_handshake, do_handshake_until_both_error,
     do_handshake_until_error, make_client_config, make_client_config_with_auth,
@@ -55,7 +55,14 @@ fn client_verifier_works() {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
-            let err = do_handshake_until_error(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            let err = do_handshake_until_error(
+                &mut client_buf,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+            );
             assert_eq!(err, Ok(()));
         }
     }
@@ -75,7 +82,14 @@ fn client_verifier_no_schemes() {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
-            let err = do_handshake_until_error(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            let err = do_handshake_until_error(
+                &mut client_buf,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+            );
             assert_eq!(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidMessage(
@@ -104,7 +118,14 @@ fn client_verifier_no_auth_yes_root() {
                 .build()
                 .unwrap();
 
-            let errs = do_handshake_until_both_error(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            let errs = do_handshake_until_both_error(
+                &mut client_buf,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+            );
             assert_eq!(
                 errs,
                 Err(vec![
@@ -136,7 +157,14 @@ fn client_verifier_fails_properly() {
                 .connect(server_name("localhost"))
                 .build()
                 .unwrap();
-            let err = do_handshake_until_error(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            let err = do_handshake_until_error(
+                &mut client_buf,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+            );
             assert_eq!(
                 err,
                 Err(ErrorFromPeer::Server(Error::General("test err".into())))
@@ -175,7 +203,9 @@ fn server_allow_any_anonymous_or_authenticated_client() {
             };
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            do_handshake(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
             assert_eq!(server.peer_identity(), client_cert_chain.as_deref());
         }
     }
@@ -193,7 +223,9 @@ fn client_auth_works() {
             let client_config = make_client_config_with_auth(*kt, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            do_handshake(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
         }
     }
 }
@@ -244,7 +276,14 @@ fn client_mandatory_auth_client_revocation_works() {
             let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &revoked_server_config);
-            let err = do_handshake_until_error(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            let err = do_handshake_until_error(
+                &mut client_buf,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+            );
             assert_eq!(
                 err,
                 Err(ErrorFromPeer::Server(Error::InvalidCertificate(
@@ -255,7 +294,14 @@ fn client_mandatory_auth_client_revocation_works() {
             // fail with the expected unknown revocation status error.
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &missing_client_crl_server_config);
-            let res = do_handshake_until_error(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            let res = do_handshake_until_error(
+                &mut client_buf,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+            );
             assert_eq!(
                 res,
                 Err(ErrorFromPeer::Server(Error::InvalidCertificate(
@@ -266,7 +312,10 @@ fn client_mandatory_auth_client_revocation_works() {
             // if the server's verifier allows unknown revocation status.
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &allow_missing_client_crl_server_config);
-            do_handshake_until_error(&mut client, &mut server).unwrap();
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            do_handshake_until_error(&mut client_buf, &mut client, &mut server_buf, &mut server)
+                .unwrap();
         }
     }
 }
@@ -307,7 +356,14 @@ fn client_mandatory_auth_intermediate_revocation_works() {
             let client_config = Arc::new(make_client_config_with_auth(*kt, &version_provider));
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &full_chain_server_config);
-            let err = do_handshake_until_error(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            let err = do_handshake_until_error(
+                &mut client_buf,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+            );
             assert_eq!(
                 err,
                 Err(ErrorFromPeer::Server(Error::InvalidCertificate(
@@ -318,7 +374,10 @@ fn client_mandatory_auth_intermediate_revocation_works() {
             // revocation status should not be checked.
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &ee_server_config);
-            do_handshake_until_error(&mut client, &mut server).unwrap();
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            do_handshake_until_error(&mut client_buf, &mut client, &mut server_buf, &mut server)
+                .unwrap();
         }
     }
 }
@@ -339,7 +398,14 @@ fn client_optional_auth_client_revocation_works() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             // Because the client certificate is revoked, the handshake should fail.
-            let err = do_handshake_until_error(&mut client, &mut server);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
+            let err = do_handshake_until_error(
+                &mut client_buf,
+                &mut client,
+                &mut server_buf,
+                &mut server,
+            );
             assert_eq!(
                 err,
                 Err(ErrorFromPeer::Server(Error::InvalidCertificate(

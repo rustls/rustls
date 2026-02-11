@@ -2,7 +2,7 @@ use std::io;
 
 mod key_log_file;
 pub use key_log_file::KeyLogFile;
-use rustls::Connection;
+use rustls::{Connection, TlsInputBuffer};
 
 mod stream;
 pub use crate::stream::{Stream, StreamOwned};
@@ -37,6 +37,7 @@ pub use crate::stream::{Stream, StreamOwned};
 /// [`process_new_packets()`]: rustls::ConnectionCommon::process_new_packets
 pub fn complete_io(
     io: &mut (impl io::Read + io::Write),
+    buf: &mut TlsInputBuffer,
     conn: &mut dyn Connection,
 ) -> Result<(usize, usize), io::Error> {
     let mut eof = false;
@@ -83,7 +84,7 @@ pub fn complete_io(
         }
 
         while !eof && conn.wants_read() {
-            let read_size = match conn.read_tls(io) {
+            let read_size = match buf.read(io, conn.is_handshaking()) {
                 Ok(0) => {
                     eof = true;
                     Some(0)
@@ -104,7 +105,7 @@ pub fn complete_io(
             }
         }
 
-        if let Err(e) = conn.process_new_packets() {
+        if let Err(e) = conn.process_new_packets(buf) {
             // In case we have an alert to send describing this error, try a last-gasp
             // write -- but don't predate the primary error.
             let _ignored = conn.write_tls(io);

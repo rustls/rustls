@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use rustls::crypto::{Credentials, CryptoProvider};
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionTrafficSecrets, Error, KeyLog,
-    ServerConfig, ServerConnection, SupportedCipherSuite,
+    ServerConfig, ServerConnection, SupportedCipherSuite, TlsInputBuffer,
 };
 use rustls_test::{
     ClientConfigExt, KeyType, ServerConfigExt, aes_128_gcm_with_1024_confidentiality_limit,
@@ -35,9 +35,12 @@ fn key_log_for_tls12() {
     server_config.key_log = server_key_log.clone();
     let server_config = Arc::new(server_config);
 
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+
     // full handshake
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server);
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     let client_full_log = client_key_log.take();
     let server_full_log = server_key_log.take();
@@ -47,7 +50,7 @@ fn key_log_for_tls12() {
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server);
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     let client_resume_log = client_key_log.take();
     let server_resume_log = server_key_log.take();
@@ -72,9 +75,12 @@ fn key_log_for_tls13() {
     server_config.key_log = server_key_log.clone();
     let server_config = Arc::new(server_config);
 
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+
     // full handshake
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server);
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     let client_full_log = client_key_log.take();
     let server_full_log = server_key_log.take();
@@ -94,7 +100,7 @@ fn key_log_for_tls13() {
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server);
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     let client_resume_log = client_key_log.take();
     let server_resume_log = server_key_log.take();
@@ -185,6 +191,8 @@ fn test_secret_extraction_enabled() {
     // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
     let kt = KeyType::Rsa2048;
     let provider = provider::DEFAULT_PROVIDER;
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
     for suite in [
         SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_128_GCM_SHA256),
         SupportedCipherSuite::Tls13(cipher_suite::TLS13_AES_256_GCM_SHA384),
@@ -213,7 +221,7 @@ fn test_secret_extraction_enabled() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        do_handshake(&mut client, &mut server);
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
         // The handshake is finished, we're now able to extract traffic secrets
         let client_secrets = client
@@ -254,6 +262,8 @@ fn test_secret_extraction_enabled() {
 fn test_secret_extract_produces_correct_variant() {
     fn check(suite: SupportedCipherSuite, f: impl Fn(ConnectionTrafficSecrets) -> bool) {
         let kt = KeyType::Rsa2048;
+        let mut client_buf = TlsInputBuffer::default();
+        let mut server_buf = TlsInputBuffer::default();
 
         let provider: Arc<CryptoProvider> =
             provider_with_one_suite(&provider::DEFAULT_PROVIDER, suite).into();
@@ -269,7 +279,7 @@ fn test_secret_extract_produces_correct_variant() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        do_handshake(&mut client, &mut server);
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
         let client_secrets = client
             .dangerous_extract_secrets()
@@ -316,6 +326,8 @@ fn test_secret_extract_produces_correct_variant() {
 #[test]
 fn test_secret_extraction_disabled_or_too_early() {
     let kt = KeyType::Rsa2048;
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
     let provider = Arc::new(CryptoProvider {
         tls13_cipher_suites: Cow::Owned(vec![cipher_suite::TLS13_AES_128_GCM_SHA256]),
         ..provider::DEFAULT_PROVIDER
@@ -349,7 +361,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 
         let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
 
-        do_handshake(&mut client, &mut server);
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
         assert_eq!(
             server_enable,
@@ -386,9 +398,16 @@ fn test_refresh_traffic_keys_during_handshake() {
 #[test]
 fn test_refresh_traffic_keys() {
     let (mut client, mut server) = make_pair(KeyType::Ed25519, &provider::DEFAULT_PROVIDER);
-    do_handshake(&mut client, &mut server);
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
-    fn check_both_directions(client: &mut ClientConnection, server: &mut ServerConnection) {
+    fn check_both_directions(
+        client_buf: &mut TlsInputBuffer,
+        client: &mut ClientConnection,
+        server_buf: &mut TlsInputBuffer,
+        server: &mut ServerConnection,
+    ) {
         client
             .writer()
             .write_all(b"to-server-1")
@@ -397,11 +416,15 @@ fn test_refresh_traffic_keys() {
             .writer()
             .write_all(b"to-client-1")
             .unwrap();
-        transfer(client, server);
-        server.process_new_packets().unwrap();
+        transfer(client, server_buf, server);
+        server
+            .process_new_packets(server_buf)
+            .unwrap();
 
-        transfer(server, client);
-        client.process_new_packets().unwrap();
+        transfer(server, client_buf, client);
+        client
+            .process_new_packets(client_buf)
+            .unwrap();
 
         let mut buf = [0u8; 16];
         let len = server.reader().read(&mut buf).unwrap();
@@ -411,11 +434,11 @@ fn test_refresh_traffic_keys() {
         assert_eq!(&buf[..len], b"to-client-1");
     }
 
-    check_both_directions(&mut client, &mut server);
+    check_both_directions(&mut client_buf, &mut client, &mut server_buf, &mut server);
     client.refresh_traffic_keys().unwrap();
-    check_both_directions(&mut client, &mut server);
+    check_both_directions(&mut client_buf, &mut client, &mut server_buf, &mut server);
     server.refresh_traffic_keys().unwrap();
-    check_both_directions(&mut client, &mut server);
+    check_both_directions(&mut client_buf, &mut client, &mut server_buf, &mut server);
 }
 
 #[test]
@@ -434,7 +457,9 @@ fn test_automatic_refresh_traffic_keys() {
     let server_config = ServerConfig::builder(provider).finish(KeyType::Ed25519);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    do_handshake(&mut client, &mut server);
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     for i in 0..(CONFIDENTIALITY_LIMIT + 16) {
         let message = format!("{i:08}");
@@ -442,12 +467,14 @@ fn test_automatic_refresh_traffic_keys() {
             .writer()
             .write_all(message.as_bytes())
             .unwrap();
-        let transferred = transfer(&mut client, &mut server);
+        let transferred = transfer(&mut client, &mut server_buf, &mut server);
         println!(
             "{}: {} -> {:?}",
             i,
             transferred,
-            server.process_new_packets().unwrap()
+            server
+                .process_new_packets(&mut server_buf)
+                .unwrap()
         );
 
         // at CONFIDENTIALITY_LIMIT messages, we also have a key_update message sent
@@ -470,12 +497,14 @@ fn test_automatic_refresh_traffic_keys() {
         .writer()
         .write_all(message)
         .unwrap();
-    let transferred = transfer(&mut server, &mut client);
+    let transferred = transfer(&mut server, &mut client_buf, &mut client);
 
     println!(
         "F: {} -> {:?}",
         transferred,
-        client.process_new_packets().unwrap()
+        client
+            .process_new_packets(&mut client_buf)
+            .unwrap()
     );
     assert_eq!(transferred, KEY_UPDATE_SIZE + encrypted_size(message.len()));
 }
@@ -493,7 +522,9 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
     let server_config = ServerConfig::builder(provider).finish(KeyType::Ed25519);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    do_handshake(&mut client, &mut server);
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     for i in 0..CONFIDENTIALITY_LIMIT {
         let message = format!("{i:08}");
@@ -501,12 +532,14 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
             .writer()
             .write_all(message.as_bytes())
             .unwrap();
-        let transferred = transfer(&mut client, &mut server);
+        let transferred = transfer(&mut client, &mut server_buf, &mut server);
         println!(
             "{}: {} -> {:?}",
             i,
             transferred,
-            server.process_new_packets().unwrap()
+            server
+                .process_new_packets(&mut server_buf)
+                .unwrap()
         );
 
         let mut buf = [0u8; 32];

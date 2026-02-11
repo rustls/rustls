@@ -33,7 +33,7 @@ use rustls::crypto::{CryptoProvider, Identity};
 use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, Connection, RootCertStore};
+use rustls::{ClientConfig, ClientConnection, Connection, RootCertStore, TlsInputBuffer};
 use rustls_aws_lc_rs as provider;
 use rustls_util::KeyLogFile;
 
@@ -46,6 +46,7 @@ struct TlsClient {
     closing: bool,
     clean_closure: bool,
     tls_conn: ClientConnection,
+    buf: TlsInputBuffer,
 }
 
 impl TlsClient {
@@ -58,6 +59,7 @@ impl TlsClient {
                 .connect(server_name)
                 .build()
                 .unwrap(),
+            buf: TlsInputBuffer::default(),
         }
     }
 
@@ -93,7 +95,7 @@ impl TlsClient {
     fn do_read(&mut self) {
         // Read TLS data.  This fails if the underlying TCP connection
         // is broken.
-        match self.tls_conn.read_tls(&mut self.socket) {
+        match self.buf.read(&mut self.socket, self.tls_conn.is_handshaking()) {
             Err(error) => {
                 if error.kind() == io::ErrorKind::WouldBlock {
                     return;
@@ -117,7 +119,7 @@ impl TlsClient {
         // Reading some TLS data might have yielded new TLS
         // messages to process.  Errors from this indicate
         // TLS protocol problems and are fatal.
-        let io_state = match self.tls_conn.process_new_packets() {
+        let io_state = match self.tls_conn.process_new_packets(&mut self.buf) {
             Ok(io_state) => io_state,
             Err(err) => {
                 println!("TLS error: {err}");

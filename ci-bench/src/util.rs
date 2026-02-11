@@ -365,7 +365,7 @@ pub(crate) mod transport {
     use std::io::{Cursor, Read, Write};
 
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-    use rustls::{ClientConnection, Connection, ServerConnection};
+    use rustls::{ClientConnection, Connection, ServerConnection, TlsInputBuffer};
 
     use super::async_io::{AsyncRead, AsyncWrite};
 
@@ -415,6 +415,7 @@ pub(crate) mod transport {
     /// Used in combination with [`send_handshake_message`] (see that function's documentation for
     /// more details).
     pub(crate) async fn read_handshake_message(
+        input: &mut TlsInputBuffer,
         conn: &mut impl Connection,
         reader: &mut dyn AsyncRead,
         buf: &mut [u8],
@@ -440,8 +441,8 @@ pub(crate) mod transport {
 
         // Feed the data to rustls
         let in_memory_reader = &mut &buf[..length];
-        while conn.read_tls(in_memory_reader)? != 0 {
-            conn.process_new_packets()?;
+        while input.read(in_memory_reader, conn.is_handshaking())? != 0 {
+            conn.process_new_packets(input)?;
         }
 
         Ok(length)
@@ -451,6 +452,7 @@ pub(crate) mod transport {
     ///
     /// Returns the amount of plaintext bytes received.
     pub(crate) async fn read_plaintext_to_end_bounded(
+        input: &mut TlsInputBuffer,
         client: &mut ClientConnection,
         reader: &mut dyn AsyncRead,
     ) -> anyhow::Result<usize> {
@@ -481,11 +483,14 @@ pub(crate) mod transport {
             // Load the buffer's bytes into rustls
             let mut chunk_buf_offset = 0;
             while chunk_buf_offset < chunk_buf_end {
-                let read = client.read_tls(&mut &chunk_buf[chunk_buf_offset..chunk_buf_end])?;
+                let read = input.read(
+                    &mut &chunk_buf[chunk_buf_offset..chunk_buf_end],
+                    client.is_handshaking(),
+                )?;
                 chunk_buf_offset += read;
 
                 // Process packets to free space in the message buffer
-                let state = client.process_new_packets()?;
+                let state = client.process_new_packets(input)?;
                 let available_plaintext_bytes = state.plaintext_bytes_to_read();
                 let mut plaintext_bytes_read = 0;
                 while plaintext_bytes_read < available_plaintext_bytes {

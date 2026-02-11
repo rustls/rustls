@@ -7,7 +7,7 @@ use openssl::ssl::{SslConnector, SslMethod, SslSession, SslStream};
 use rustls::crypto::Identity;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::{Connection, ServerConfig};
+use rustls::{Connection, ServerConfig, TlsInputBuffer};
 use rustls_aws_lc_rs as provider;
 use rustls_util::complete_io;
 
@@ -37,12 +37,15 @@ fn test_early_exporter() {
         for _ in 0..ITERS {
             let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
+            let mut input = TlsInputBuffer::default();
 
             // read clienthello and then inspect early_data status
-            server
-                .read_tls(&mut tcp_stream)
+            input
+                .read(&mut tcp_stream, server.is_handshaking())
                 .unwrap();
-            server.process_new_packets().unwrap();
+            server
+                .process_new_packets(&mut input)
+                .unwrap();
 
             let message = if let Some(mut early) = server.early_data() {
                 let secret = early
@@ -68,7 +71,7 @@ fn test_early_exporter() {
                 .write_all(&message)
                 .unwrap();
 
-            complete_io(&mut tcp_stream, &mut server).unwrap();
+            complete_io(&mut tcp_stream, &mut input, &mut server).unwrap();
 
             tcp_stream.flush().unwrap();
         }

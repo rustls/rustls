@@ -21,7 +21,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, Connection, HandshakeKind, RootCertStore, ServerConfig,
-    ServerConnection,
+    ServerConnection, TlsInputBuffer,
 };
 use rustls_test::KeyType;
 
@@ -230,6 +230,7 @@ fn main() -> anyhow::Result<()> {
                                     &bench.params,
                                     resumption_kind,
                                 ),
+                                buf: TlsInputBuffer::default(),
                             },
                             bench.kind,
                             resumed_reps,
@@ -245,6 +246,7 @@ fn main() -> anyhow::Result<()> {
                                     &bench.params,
                                     resumption_kind,
                                 ),
+                                buf: TlsInputBuffer::default(),
                             },
                             bench.kind,
                             resumed_reps,
@@ -289,6 +291,7 @@ fn main() -> anyhow::Result<()> {
                                     handshake_buf,
                                 },
                                 config: ServerSideStepper::make_config(params, resumption_kind),
+                                buf: TlsInputBuffer::default(),
                             },
                             bench.kind,
                             RESUMED_HANDSHAKE_RUNS,
@@ -307,6 +310,7 @@ fn main() -> anyhow::Result<()> {
                                 },
                                 resumption_kind,
                                 config: ClientSideStepper::make_config(params, resumption_kind),
+                                buf: TlsInputBuffer::default(),
                             },
                             bench.kind,
                             RESUMED_HANDSHAKE_RUNS,
@@ -649,6 +653,7 @@ struct ClientSideStepper<'a> {
     io: StepperIo<'a>,
     resumption_kind: ResumptionKind,
     config: Arc<ClientConfig>,
+    buf: TlsInputBuffer,
 }
 
 impl ClientSideStepper<'_> {
@@ -702,7 +707,13 @@ impl BenchStepper for ClientSideStepper<'_> {
             if !client.is_handshaking() && !client.wants_write() {
                 break;
             }
-            read_handshake_message(&mut client, self.io.reader, self.io.handshake_buf).await?;
+            read_handshake_message(
+                &mut self.buf,
+                &mut client,
+                self.io.reader,
+                self.io.handshake_buf,
+            )
+            .await?;
         }
 
         // Session ids and tickets are no longer part of the handshake in TLS 1.3, so we need to
@@ -710,7 +721,13 @@ impl BenchStepper for ClientSideStepper<'_> {
         if self.resumption_kind != ResumptionKind::No
             && client.protocol_version().unwrap() == ProtocolVersion::TLSv1_3
         {
-            read_handshake_message(&mut client, self.io.reader, self.io.handshake_buf).await?;
+            read_handshake_message(
+                &mut self.buf,
+                &mut client,
+                self.io.reader,
+                self.io.handshake_buf,
+            )
+            .await?;
         }
 
         Ok(client)
@@ -726,7 +743,8 @@ impl BenchStepper for ClientSideStepper<'_> {
     }
 
     async fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()> {
-        let total_plaintext_read = read_plaintext_to_end_bounded(endpoint, self.io.reader).await?;
+        let total_plaintext_read =
+            read_plaintext_to_end_bounded(&mut self.buf, endpoint, self.io.reader).await?;
         assert_eq!(total_plaintext_read, TRANSFER_PLAINTEXT_SIZE);
         Ok(())
     }
@@ -740,6 +758,7 @@ impl BenchStepper for ClientSideStepper<'_> {
 struct ServerSideStepper<'a> {
     io: StepperIo<'a>,
     config: Arc<ServerConfig>,
+    buf: TlsInputBuffer,
 }
 
 impl ServerSideStepper<'_> {
@@ -779,7 +798,13 @@ impl BenchStepper for ServerSideStepper<'_> {
         server.set_buffer_limit(None);
 
         while server.is_handshaking() {
-            read_handshake_message(&mut server, self.io.reader, self.io.handshake_buf).await?;
+            read_handshake_message(
+                &mut self.buf,
+                &mut server,
+                self.io.reader,
+                self.io.handshake_buf,
+            )
+            .await?;
             send_handshake_message(&mut server, self.io.writer, self.io.handshake_buf).await?;
         }
 

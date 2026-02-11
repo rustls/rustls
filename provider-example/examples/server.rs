@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rustls::crypto::Identity;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::Acceptor;
-use rustls::{Connection, ServerConfig};
+use rustls::{Connection, ServerConfig, TlsInputBuffer};
 use rustls_util::{KeyLogFile, complete_io};
 
 fn main() {
@@ -17,10 +17,11 @@ fn main() {
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
         let mut acceptor = Acceptor::default();
+        let mut buf = TlsInputBuffer::default();
 
         let accepted = loop {
-            acceptor.read_tls(&mut stream).unwrap();
-            if let Some(accepted) = acceptor.accept().unwrap() {
+            buf.read(&mut stream, true).unwrap();
+            if let Some(accepted) = acceptor.accept(&mut buf).unwrap() {
                 break accepted;
             }
         };
@@ -39,11 +40,11 @@ fn main() {
                 // Note: do not use `unwrap()` on IO in real programs!
                 conn.writer().write_all(msg).unwrap();
                 conn.write_tls(&mut stream).unwrap();
-                complete_io(&mut stream, &mut conn).unwrap();
+                complete_io(&mut stream, &mut buf, &mut conn).unwrap();
 
                 conn.send_close_notify();
                 conn.write_tls(&mut stream).unwrap();
-                complete_io(&mut stream, &mut conn).unwrap();
+                complete_io(&mut stream, &mut buf, &mut conn).unwrap();
             }
             Err((err, _)) => {
                 eprintln!("{err}");

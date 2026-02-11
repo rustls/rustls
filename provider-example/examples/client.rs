@@ -2,7 +2,7 @@ use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::{ClientConfig, RootCertStore};
+use rustls::{ClientConfig, RootCertStore, TlsInputBuffer};
 use rustls_provider_example::provider;
 use rustls_util::Stream;
 
@@ -28,7 +28,8 @@ fn main() {
         .unwrap();
 
     let mut sock = TcpStream::connect("www.rust-lang.org:443").unwrap();
-    let mut tls = Stream::new(&mut conn, &mut sock);
+    let mut buf = TlsInputBuffer::default();
+    let mut tls = Stream::new(&mut buf, &mut conn, &mut sock);
     tls.write_all(
         concat!(
             "GET / HTTP/1.1\r\n",

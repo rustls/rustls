@@ -14,7 +14,9 @@ use rustls::crypto::{CertificateIdentity, Identity};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
 use rustls::server::ServerSessionKey;
-use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection};
+use rustls::{
+    ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, TlsInputBuffer,
+};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt,
     do_handshake, do_handshake_until_error, make_client_config, make_client_config_with_auth,
@@ -31,23 +33,25 @@ fn client_only_attempts_resumption_with_compatible_security() {
 
     let server_config = make_server_config(kt, &provider);
     for version_provider in ALL_VERSIONS {
+        let mut client_buf = TlsInputBuffer::default();
+        let mut server_buf = TlsInputBuffer::default();
         let base_client_config = make_client_config(kt, &version_provider);
         let (mut client, mut server) =
             make_pair_for_configs(base_client_config.clone(), server_config.clone());
-        do_handshake(&mut client, &mut server);
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 
         // base case
         let (mut client, mut server) =
             make_pair_for_configs(base_client_config.clone(), server_config.clone());
-        do_handshake(&mut client, &mut server);
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
 
         // allowed case, using `clone`
         let client_config = ClientConfig::clone(&base_client_config);
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());
-        do_handshake(&mut client, &mut server);
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
 
         // disallowed case: unmatching `client_auth_cert_resolver`
@@ -62,7 +66,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
 
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());
-        do_handshake(&mut client, &mut server);
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 
         // disallowed case: unmatching `verifier`
@@ -80,7 +84,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
 
         let (mut client, mut server) =
             make_pair_for_configs(client_config.clone(), server_config.clone());
-        do_handshake(&mut client, &mut server);
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
     }
 }
@@ -94,6 +98,8 @@ fn resumption_combinations() {
             (ProtocolVersion::TLSv1_2, provider::DEFAULT_TLS12_PROVIDER),
             (ProtocolVersion::TLSv1_3, provider::DEFAULT_TLS13_PROVIDER),
         ] {
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
             let resumption_data = format!("resumption data {kt:?} {version:?}");
             let client_config = make_client_config(*kt, &version_provider);
             let (mut client, mut server) =
@@ -101,7 +107,7 @@ fn resumption_combinations() {
             server
                 .set_resumption_data(resumption_data.as_bytes())
                 .unwrap();
-            do_handshake(&mut client, &mut server);
+            do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
             let expected_kx = expected_kx_for_version(version);
 
@@ -124,7 +130,7 @@ fn resumption_combinations() {
 
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
-            do_handshake(&mut client, &mut server);
+            do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
             assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
@@ -192,13 +198,21 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
         ServerConfig::builder(provider::DEFAULT_TLS12_PROVIDER.into()).finish(KeyType::Ed25519);
     server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
 
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+
     dbg!("handshake 1");
     let mut client_1 = client_config
         .connect("localhost".try_into().unwrap())
         .build()
         .unwrap();
     let mut server_1 = ServerConnection::new(server_config_1).unwrap();
-    do_handshake(&mut client_1, &mut server_1);
+    do_handshake(
+        &mut client_buf,
+        &mut client_1,
+        &mut server_buf,
+        &mut server_1,
+    );
 
     assert_eq!(client_storage.ops().len(), 7);
     println!("hs1 storage ops: {:#?}", client_storage.ops());
@@ -221,7 +235,12 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
         .build()
         .unwrap();
     let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
-    do_handshake(&mut client_2, &mut server_2);
+    do_handshake(
+        &mut client_buf,
+        &mut client_2,
+        &mut server_buf,
+        &mut server_2,
+    );
     println!("hs2 storage ops: {:#?}", client_storage.ops());
     assert_eq!(client_storage.ops().len(), 9);
 
@@ -248,9 +267,12 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     server_config.send_tls13_tickets = 5;
     let server_config = Arc::new(server_config);
 
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+
     // first handshake: client obtains 5 tickets from server.
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake_until_error(&mut client, &mut server).unwrap();
+    do_handshake_until_error(&mut client_buf, &mut client, &mut server_buf, &mut server).unwrap();
 
     let ops = shared_storage.ops_and_reset();
     println!("storage {ops:#?}");
@@ -271,8 +293,10 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     // connectivity uncertainty.
     for _ in 0..5 {
         let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-        transfer(&mut client, &mut server);
-        server.process_new_packets().unwrap();
+        transfer(&mut client, &mut server_buf, &mut server);
+        server
+            .process_new_packets(&mut server_buf)
+            .unwrap();
 
         let ops = shared_storage.ops_and_reset();
         assert!(matches!(ops[0], ClientStorageOp::TakeTls13Ticket(_, true)));
@@ -280,8 +304,10 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
 
     // 6th subsequent handshake: cannot be resumed; we ran out of tickets
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
+    transfer(&mut client, &mut server_buf, &mut server);
+    server
+        .process_new_packets(&mut server_buf)
+        .unwrap();
 
     let ops = shared_storage.ops_and_reset();
     println!("last {ops:?}");
@@ -300,9 +326,13 @@ fn tls13_stateful_resumption() {
     server_config.session_storage = storage.clone();
     let server_config = Arc::new(server_config);
 
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+
     // full handshake
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    let (full_c2s, full_s2c) = do_handshake(&mut client, &mut server);
+    let (full_c2s, full_s2c) =
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
     assert_eq!(client.tls13_tickets_received(), 2);
     assert_eq!(storage.puts(), 2);
     assert_eq!(storage.gets(), 0);
@@ -321,7 +351,8 @@ fn tls13_stateful_resumption() {
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    let (resume_c2s, resume_s2c) = do_handshake(&mut client, &mut server);
+    let (resume_c2s, resume_s2c) =
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
     assert!(resume_c2s > full_c2s);
     assert!(resume_s2c < full_s2c);
     assert_eq!(storage.puts(), 4);
@@ -341,7 +372,8 @@ fn tls13_stateful_resumption() {
 
     // resumed again
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    let (resume2_c2s, resume2_s2c) = do_handshake(&mut client, &mut server);
+    let (resume2_c2s, resume2_s2c) =
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
     assert_eq!(resume_s2c, resume2_s2c);
     assert_eq!(resume_c2s, resume2_c2s);
     assert_eq!(storage.puts(), 6);
@@ -378,9 +410,13 @@ fn tls13_stateless_resumption() {
     server_config.session_storage = storage.clone();
     let server_config = Arc::new(server_config);
 
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+
     // full handshake
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    let (full_c2s, full_s2c) = do_handshake(&mut client, &mut server);
+    let (full_c2s, full_s2c) =
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
     assert_eq!(storage.puts(), 0);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 0);
@@ -398,7 +434,8 @@ fn tls13_stateless_resumption() {
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    let (resume_c2s, resume_s2c) = do_handshake(&mut client, &mut server);
+    let (resume_c2s, resume_s2c) =
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
     assert!(resume_c2s > full_c2s);
     assert!(resume_s2c < full_s2c);
     assert_eq!(storage.puts(), 0);
@@ -418,7 +455,8 @@ fn tls13_stateless_resumption() {
 
     // resumed again
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    let (resume2_c2s, resume2_s2c) = do_handshake(&mut client, &mut server);
+    let (resume2_c2s, resume2_s2c) =
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
     assert_eq!(resume_s2c, resume2_s2c);
     assert_eq!(resume_c2s, resume2_c2s);
     assert_eq!(storage.puts(), 0);
@@ -458,9 +496,11 @@ fn early_data_configs() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
 #[test]
 fn early_data_is_available_on_resumption() {
     let (client_config, server_config) = early_data_configs();
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
 
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server);
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     assert!(client.early_data().is_some());
@@ -505,7 +545,7 @@ fn early_data_is_available_on_resumption() {
             .err(),
         Some(Error::ApiMisuse(ApiMisuse::ExporterAlreadyUsed)),
     );
-    do_handshake(&mut client, &mut server);
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     let mut received_early_data = [0u8; 5];
     assert_eq!(
@@ -554,10 +594,12 @@ fn early_data_not_available_on_server_before_client_hello() {
 #[test]
 fn early_data_is_limited_on_client() {
     let (client_config, server_config) = early_data_configs();
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
 
     // warm up
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server);
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     assert!(client.early_data().is_some());
@@ -581,7 +623,7 @@ fn early_data_is_limited_on_client() {
             .unwrap(),
         1234
     );
-    do_handshake(&mut client, &mut server);
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
     let mut received_early_data = [0u8; 1234];
     assert_eq!(
@@ -607,14 +649,18 @@ fn early_data_configs_allowing_client_to_send_excess_data() -> (Arc<ClientConfig
     let client_config = Arc::new(client_config);
 
     // warm up
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server);
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
     (client_config, server_config)
 }
 
 #[test]
 fn server_detects_excess_early_data() {
     let (client_config, server_config) = early_data_configs_allowing_client_to_send_excess_data();
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
 
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     assert!(client.early_data().is_some());
@@ -639,7 +685,7 @@ fn server_detects_excess_early_data() {
         2024
     );
     assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
+        do_handshake_until_error(&mut client_buf, &mut client, &mut server_buf, &mut server),
         Err(ErrorFromPeer::Server(Error::PeerMisbehaved(
             PeerMisbehaved::TooMuchEarlyDataReceived
         ))),
@@ -650,6 +696,7 @@ fn server_detects_excess_early_data() {
 #[test]
 fn server_detects_excess_streamed_early_data() {
     let (client_config, server_config) = early_data_configs_allowing_client_to_send_excess_data();
+    let mut server_buf = TlsInputBuffer::default();
 
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     assert!(client.early_data().is_some());
@@ -673,8 +720,10 @@ fn server_detects_excess_streamed_early_data() {
             .unwrap(),
         1024
     );
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
+    transfer(&mut client, &mut server_buf, &mut server);
+    server
+        .process_new_packets(&mut server_buf)
+        .unwrap();
 
     let mut received_early_data = [0u8; 1024];
     assert_eq!(
@@ -695,9 +744,9 @@ fn server_detects_excess_streamed_early_data() {
             .unwrap(),
         1000
     );
-    transfer(&mut client, &mut server);
+    transfer(&mut client, &mut server_buf, &mut server);
     assert_eq!(
-        server.process_new_packets(),
+        server.process_new_packets(&mut server_buf),
         Err(Error::PeerMisbehaved(
             PeerMisbehaved::TooMuchEarlyDataReceived
         ))

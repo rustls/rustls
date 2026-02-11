@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 #[cfg(feature = "zlib")]
 use rustls::ClientConfig;
-use rustls::Connection;
 #[cfg(feature = "zlib")]
 use rustls::client::Resumption;
 #[cfg(feature = "zlib")]
@@ -16,6 +15,7 @@ use rustls::enums::CertificateCompressionAlgorithm;
 use rustls::error::{AlertDescription, Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "zlib")]
 use rustls::pki_types::CertificateDer;
+use rustls::{Connection, TlsInputBuffer};
 #[cfg(feature = "zlib")]
 use rustls_test::{ClientConfigExt, make_pair_for_arc_configs};
 use rustls_test::{
@@ -43,7 +43,9 @@ fn test_server_uses_cached_compressed_certificates() {
     for _i in 0..10 {
         dbg!(_i);
         let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-        do_handshake(&mut client, &mut server);
+        let mut client_buf = TlsInputBuffer::default();
+        let mut server_buf = TlsInputBuffer::default();
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
         dbg!(client.handshake_kind());
     }
 
@@ -77,7 +79,9 @@ fn test_server_uses_uncompressed_certificate_if_compression_fails() {
     client_config.cert_decompressors = vec![&NeverDecompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    do_handshake(&mut client, &mut server);
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 }
 
 #[test]
@@ -90,7 +94,9 @@ fn test_client_uses_uncompressed_certificate_if_compression_fails() {
     client_config.cert_compressors = vec![&FailingCompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    do_handshake(&mut client, &mut server);
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
+    do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 }
 
 #[derive(Debug)]
@@ -146,7 +152,9 @@ fn test_server_can_opt_out_of_compression_cache() {
     for _i in 0..10 {
         dbg!(_i);
         let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-        do_handshake(&mut client, &mut server);
+        let mut client_buf = TlsInputBuffer::default();
+        let mut server_buf = TlsInputBuffer::default();
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
         dbg!(client.handshake_kind());
     }
 
@@ -181,15 +189,17 @@ fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
     client_config.cert_decompressors = vec![&GarbageDecompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
     assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
+        do_handshake_until_error(&mut client_buf, &mut client, &mut server_buf, &mut server),
         Err(ErrorFromPeer::Client(Error::InvalidMessage(
             InvalidMessage::CertificatePayloadTooLarge
         )))
     );
-    transfer(&mut client, &mut server);
+    transfer(&mut client, &mut server_buf, &mut server);
     assert_eq!(
-        server.process_new_packets(),
+        server.process_new_packets(&mut server_buf),
         Err(Error::AlertReceived(AlertDescription::BadCertificate))
     );
 }
@@ -204,15 +214,17 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
     client_config.cert_compressors = vec![&IdentityCompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
     assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
+        do_handshake_until_error(&mut client_buf, &mut client, &mut server_buf, &mut server),
         Err(ErrorFromPeer::Server(Error::InvalidMessage(
             InvalidMessage::CertificatePayloadTooLarge
         )))
     );
-    transfer(&mut server, &mut client);
+    transfer(&mut server, &mut client_buf, &mut client);
     assert_eq!(
-        client.process_new_packets(),
+        client.process_new_packets(&mut client_buf),
         Err(Error::AlertReceived(AlertDescription::BadCertificate))
     );
 }
@@ -227,15 +239,17 @@ fn test_cert_decompression_by_server_fails() {
     client_config.cert_compressors = vec![&IdentityCompressor];
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
     assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
+        do_handshake_until_error(&mut client_buf, &mut client, &mut server_buf, &mut server),
         Err(ErrorFromPeer::Server(Error::PeerMisbehaved(
             PeerMisbehaved::InvalidCertCompression
         )))
     );
-    transfer(&mut server, &mut client);
+    transfer(&mut server, &mut client_buf, &mut client);
     assert_eq!(
-        client.process_new_packets(),
+        client.process_new_packets(&mut client_buf),
         Err(Error::AlertReceived(AlertDescription::BadCertificate))
     );
 }
@@ -261,15 +275,17 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .unwrap();
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    let mut client_buf = TlsInputBuffer::default();
+    let mut server_buf = TlsInputBuffer::default();
     assert_eq!(
-        do_handshake_until_error(&mut client, &mut server),
+        do_handshake_until_error(&mut client_buf, &mut client, &mut server_buf, &mut server),
         Err(ErrorFromPeer::Server(Error::InvalidMessage(
             InvalidMessage::CertificatePayloadTooLarge
         )))
     );
-    transfer(&mut server, &mut client);
+    transfer(&mut server, &mut client_buf, &mut client);
     assert_eq!(
-        client.process_new_packets(),
+        client.process_new_packets(&mut client_buf),
         Err(Error::AlertReceived(AlertDescription::BadCertificate))
     );
 }

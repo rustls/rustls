@@ -27,7 +27,7 @@ use std::env;
 use std::io::Write;
 use std::sync::Arc;
 
-use rustls::Connection;
+use rustls::{Connection, TlsInputBuffer};
 use rustls_test::{
     KeyType, do_handshake, make_client_config, make_pair_for_arc_configs, make_server_config,
     transfer,
@@ -49,12 +49,16 @@ fn exercise_key_log_file_for_client() {
 
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
 
             assert_eq!(5, client.writer().write(b"hello").unwrap());
 
-            do_handshake(&mut client, &mut server);
-            transfer(&mut client, &mut server);
-            server.process_new_packets().unwrap();
+            do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
+            transfer(&mut client, &mut server_buf, &mut server);
+            server
+                .process_new_packets(&mut server_buf)
+                .unwrap();
         }
     })
 }
@@ -73,12 +77,16 @@ fn exercise_key_log_file_for_server() {
             let client_config = make_client_config(KeyType::Rsa2048, &version_provider);
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+            let mut client_buf = TlsInputBuffer::default();
+            let mut server_buf = TlsInputBuffer::default();
 
             assert_eq!(5, client.writer().write(b"hello").unwrap());
 
-            do_handshake(&mut client, &mut server);
-            transfer(&mut client, &mut server);
-            server.process_new_packets().unwrap();
+            do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
+            transfer(&mut client, &mut server_buf, &mut server);
+            server
+                .process_new_packets(&mut server_buf)
+                .unwrap();
         }
     })
 }
