@@ -384,7 +384,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        let range = self.deframer_buffer.extend(plaintext);
+        let range = self
+            .deframer_buffer
+            .extend_hs(plaintext);
 
         self.core.hs_deframer.input_message(
             EncodedMessage {

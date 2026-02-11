@@ -1043,7 +1043,7 @@ impl TlsInputBuffer {
     /// Append `bytes` to the end of this buffer.
     ///
     /// Return a `Range` saying where it went.
-    pub(crate) fn extend(&mut self, bytes: &[u8]) -> Range<usize> {
+    pub(crate) fn extend_hs(&mut self, bytes: &[u8]) -> Range<usize> {
         let len = bytes.len();
         let start = self.used;
         let end = start + len;
