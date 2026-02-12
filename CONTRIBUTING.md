@@ -70,23 +70,12 @@ are unlikely to be accepted.
 
 Generally any test that relies on a `CryptoProvider` anywhere, should
 be run against all `CryptoProvider`s, such that
-`cargo test --all-features` runs the test several times.  To achieve that
-we have two methods:
+`cargo test --all-features` runs the test several times.
 
-- For unit tests, see `rustls/src/test_macros.rs` which provides the
-  `test_for_each_provider!` macro.  This can be placed around normal
-  tests and instantiates the tests once per provider.
-
-  Note that rustfmt does not format code inside a macro invocation:
-  when developing test code, sed `test_for_each_provider! {` to `mod tests {`,
-  format the code, then sed it back.
-
-- For integration tests -- where the amount of test code is more significant,
-  and lack of rustfmt support is more painful -- we instantiate the tests
-  by importing them multiple times, and then the tests resolve the provider
-  module to use via `super::provider`.
-  For example, see `rustls/tests/runners/unbuffered.rs` and
-  `rustls/tests/unbuffered.rs`.
+For integration tests -- where the amount of test code is more significant,
+we instantiate the tests by importing them multiple times, and then the tests
+resolve the provider module to use via `super::provider`.  For example, see
+`rustls-test/tests/api.rs` and `rustls-test/tests/api/kx.rs`.
 
 ## Style guide
 
