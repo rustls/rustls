@@ -117,7 +117,6 @@ impl ClientConnection {
     fn write_or_buffer_appdata(&mut self, data: OutboundPlain<'_>) -> io::Result<usize> {
         Ok(match &mut self.state {
             Ok(ClientState::Traffic(ClientTraffic { send: Some(s), .. })) => {
-                std::println!("writing {data:x?}");
                 let len = data.len();
 
                 let len = self
@@ -130,11 +129,9 @@ impl ClientConnection {
                 }
 
                 if let Ok(chunk) = s.write_into_vec(data.split_at(len).0) {
-                    std::println!("written -> {chunk:x?}");
                     self.buffers.sendable_tls.append(chunk);
                 }
                 while let Some(chunk) = s.take_data() {
-                    std::println!("evoked -> {chunk:x?}");
                     self.buffers.sendable_tls.append(chunk);
                 }
                 len
@@ -146,14 +143,9 @@ impl ClientConnection {
         })
     }
 
-    /// And a potential state transition from a handshake-related state to
-    /// `new`.
+    /// Act on a potential state transition from a handshake-related state to `new`.
     fn post_handshake_state(&mut self, mut new: ClientState) -> ClientState {
         if let ClientState::Traffic(traffic) = &mut new {
-            std::println!(
-                "release unset buffered plaintext {:?}",
-                self.buffers.sendable_plaintext.len()
-            );
             // Release unsent buffered plaintext.
             while let Some(chunk) = self.buffers.sendable_plaintext.pop() {
                 let Some(send) = traffic.send.as_mut() else {
@@ -162,7 +154,6 @@ impl ClientConnection {
                 let Ok(chunk) = send.write_into_vec(chunk.as_slice().into()) else {
                     continue;
                 };
-                std::println!("send {:?}", chunk.len());
                 self.buffers.sendable_tls.append(chunk);
             }
         }
@@ -173,7 +164,6 @@ impl ClientConnection {
 
 impl Connection for ClientConnection {
     fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        std::println!("read_tls");
         if self
             .buffers
             .received_plaintext
@@ -186,13 +176,17 @@ impl Connection for ClientConnection {
             return Ok(0);
         }
 
-        let res = self
-            .buffers
-            .deframer_buffer
-            .read(rd, self.is_handshaking());
+        let res = self.buffers.deframer_buffer.read(
+            rd,
+            self.state
+                .as_ref()
+                .map(|st| st.joining_handshake_fragments())
+                .unwrap_or_default(),
+        );
         if let Ok(0) = res {
             self.buffers.has_seen_eof = true;
         }
+
         res
     }
 
@@ -236,9 +230,7 @@ impl Connection for ClientConnection {
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        std::println!("process_new_packets()");
         loop {
-            std::println!("process_new_packets() loop");
             let state = match mem::replace(
                 &mut self.state,
                 Err(ApiMisuse::PreviousConnectionError.into()),
@@ -263,7 +255,6 @@ impl Connection for ClientConnection {
                         self.state = Ok(ClientState::AwaitServerFlight(asf));
                         break;
                     }
-                    std::println!("await server flight");
                     match asf.input_data(&mut self.buffers.deframer_buffer) {
                         Ok(state) => {
                             self.state = Ok(self.post_handshake_state(state));
@@ -272,7 +263,6 @@ impl Connection for ClientConnection {
                             }
                         }
                         Err(mut err) => {
-                            std::println!("awaitServerflight err={err:?}");
                             while let Some(chunk) = err.take_tls_data() {
                                 self.buffers.sendable_tls.append(chunk);
                             }
@@ -281,60 +271,57 @@ impl Connection for ClientConnection {
                             return Err(err.error);
                         }
                     };
-                    std::println!("done");
                 }
                 ClientState::VerifyServerIdentity(_) => todo!(),
                 ClientState::ProvideCredential(_) => todo!(),
                 ClientState::Traffic(mut traffic) => {
-                    let mut progress = false;
+                    let mut progress = true;
 
-                    // Processed received data.
-                    if !self.buffers.deframer_buffer.is_empty() {
-                        let Some(recv) = traffic.receive.take() else {
-                            std::println!("receive gone");
-                            break;
-                        };
-                        std::println!("recv.read");
-                        match recv.read(&mut self.buffers.deframer_buffer) {
-                            Ok(ReceivedTrafficState::Available(received)) => {
-                                std::println!("recv.read avail");
-                                progress = true;
-                                self.buffers
-                                    .received_plaintext
-                                    .append(received.data.to_vec());
-                                let (used, next) = received.into_next();
-                                std::println!("used {used:?}");
-                                self.buffers
-                                    .deframer_buffer
-                                    .discard(used);
-                                traffic.receive = Some(next);
-                            }
-                            Ok(ReceivedTrafficState::WakeSender(state)) => {
-                                std::println!("recv.read wake");
-                                if let Some(send) = &mut traffic.send {
-                                    while let Some(chunk) = send.take_data() {
+                    while progress {
+                        progress = false;
+
+                        // Processed received data.
+                        if !self.buffers.deframer_buffer.is_empty() {
+                            let Some(recv) = traffic.receive.take() else {
+                                break;
+                            };
+                            match recv.read(&mut self.buffers.deframer_buffer) {
+                                Ok(ReceivedTrafficState::Available(received)) => {
+                                    progress = true;
+                                    self.buffers
+                                        .received_plaintext
+                                        .append(received.data.to_vec());
+                                    let (used, next) = received.into_next();
+                                    self.buffers
+                                        .deframer_buffer
+                                        .discard(used);
+                                    traffic.receive = Some(next);
+                                }
+                                Ok(ReceivedTrafficState::WakeSender(state)) => {
+                                    if let Some(send) = &mut traffic.send {
+                                        while let Some(chunk) = send.take_data() {
+                                            self.buffers.sendable_tls.append(chunk);
+                                        }
+                                    }
+                                    traffic.receive = Some(state.into_next());
+                                }
+                                Ok(ReceivedTrafficState::Await(state)) => {
+                                    traffic.receive = Some(state)
+                                }
+                                Ok(ReceivedTrafficState::CloseNotify) => traffic.receive = None,
+                                Err(mut e) => {
+                                    while let Some(chunk) = e.take_tls_data() {
                                         self.buffers.sendable_tls.append(chunk);
                                     }
+                                    self.state = Err(e.error.clone());
+                                    return Err(e.error);
                                 }
-                                traffic.receive = Some(state.into_next());
-                            }
-                            Ok(ReceivedTrafficState::Await(state)) => traffic.receive = Some(state),
-                            Ok(ReceivedTrafficState::CloseNotify) => traffic.receive = None,
-                            Err(mut e) => {
-                                std::println!("recv.read err {e:?}");
-                                while let Some(chunk) = e.take_tls_data() {
-                                    self.buffers.sendable_tls.append(chunk);
-                                }
-                                self.state = Err(e.error.clone());
-                                return Err(e.error);
                             }
                         }
                     }
 
                     self.state = Ok(ClientState::Traffic(traffic));
-                    if !progress {
-                        break;
-                    }
+                    break;
                 }
             }
         }
@@ -384,21 +371,17 @@ impl Connection for ClientConnection {
 
     fn send_close_notify(&mut self) {
         let Ok(ClientState::Traffic(traffic)) = &mut self.state else {
-            std::println!("send_close_notify: not in traffic");
             return;
         };
 
         let Some(send) = traffic.send.take() else {
-            std::println!("send_close_notify: no send");
             return;
         };
 
         let Ok(data) = send.close() else {
-            std::println!("send_close_notify: send.close fail");
             return;
         };
 
-        std::println!("send_close_notify ok {data:x?}");
         self.buffers.sendable_tls.append(data);
     }
 

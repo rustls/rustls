@@ -1408,7 +1408,6 @@ impl ExpectFinished {
         }
 
         let protocol = key_schedule_recv.protocol();
-
         let st = ExpectTraffic {
             config: st.hs.config.clone(),
             session_storage: st.hs.config.resumption.store.clone(),

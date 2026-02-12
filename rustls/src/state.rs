@@ -291,34 +291,3 @@ impl<Side: SideData> WakeSender<Side> {
         self.rt
     }
 }
-
-pub(crate) struct CountingReceivedData<'a> {
-    parent: &'a mut dyn TlsInputBuffer,
-    count: usize,
-}
-
-impl<'a> CountingReceivedData<'a> {
-    pub(crate) fn new(parent: &'a mut dyn TlsInputBuffer) -> Self {
-        Self { parent, count: 0 }
-    }
-
-    pub(crate) fn into_count(self) -> usize {
-        self.count
-    }
-}
-
-impl TlsInputBuffer for CountingReceivedData<'_> {
-    fn slice_mut(&mut self) -> &mut [u8] {
-        self.parent.slice_mut()
-    }
-
-    fn discard(&mut self, num_bytes: usize) {
-        std::println!(
-            "Counting discard {} + {num_bytes} = {}",
-            self.count,
-            self.count + num_bytes
-        );
-        self.count += num_bytes;
-        self.parent.discard(num_bytes);
-    }
-}

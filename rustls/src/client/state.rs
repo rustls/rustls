@@ -14,7 +14,7 @@ use crate::error::{ApiMisuse, ErrorWithAlert};
 use crate::kernel::KernelConnection;
 use crate::lock::Mutex;
 use crate::msgs::{ClientExtensionsInput, TlsInputBuffer};
-use crate::state::{CountingReceivedData, ReceiveTraffic, SendTraffic};
+use crate::state::{ReceiveTraffic, SendTraffic};
 use crate::sync::Arc;
 use crate::{
     ClientConfig, CommonState, ConnectionOutputs, Error, ExtractedSecrets, KeyingMaterialExporter,
@@ -74,6 +74,30 @@ impl ClientState {
             Self::VerifyServerIdentity(_) => todo!(),
             Self::ProvideCredential(_) => todo!(),
             Self::Traffic(traffic) => traffic.ech_status,
+        }
+    }
+
+    /// Returns true if the connection is currently reassembling a handshake message.
+    ///
+    /// This can be used to alter the caller's buffering strategy, as a larger
+    /// buffer is required to reassemble a handshake message.
+    pub fn joining_handshake_fragments(&self) -> bool {
+        match self {
+            Self::SendClientFlight(_) => false,
+            Self::SendEarlyData(_) => false,
+            Self::AwaitServerFlight(st) => st
+                .inner
+                .common
+                .recv
+                .hs_deframer
+                .is_active(),
+            Self::VerifyServerIdentity(_) => todo!(),
+            Self::ProvideCredential(_) => todo!(),
+            Self::Traffic(st) => st
+                .receive
+                .as_ref()
+                .map(|st| st.recv.hs_deframer.is_active())
+                .unwrap_or_default(),
         }
     }
 }
@@ -186,18 +210,9 @@ impl AwaitServerFlight {
         mut self,
         input: &mut dyn TlsInputBuffer,
     ) -> Result<ClientState, ErrorWithAlert> {
-        std::println!("await input_data buf={:?}", input.slice_mut().len());
-        let mut counter = CountingReceivedData::new(input);
-        let plaintext = self
-            .inner
-            .process_new_packets(&mut counter, ProcessFinishCondition::Handshake)
+        self.inner
+            .process_new_packets(input, ProcessFinishCondition::Handshake)
             .map_err(|err| ErrorWithAlert::new(err, &mut self.inner.common.send))?;
-        let count = counter.into_count();
-        std::println!("await input_data used={count:?}");
-
-        if plaintext.is_some() {
-            std::println!("we have plaintext");
-        }
 
         if !self
             .inner
@@ -373,6 +388,7 @@ fn next_state(inner: ConnectionCore<ClientSide>) -> ClientState {
             hs::StateMachine::Tls12(tls12::StateMachine::ExpectTraffic(_))
             | hs::StateMachine::Tls13(tls13::StateMachine::ExpectTraffic(_)),
         ) => ClientState::Traffic(inner.into()),
+
         Ok(_)
             if !inner
                 .common

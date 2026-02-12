@@ -831,9 +831,6 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
                 want_close_before_decrypt,
             } = msg;
 
-            std::println!("we have a message {msg:x?}");
-            std::println!("we have progress {buffer_progress:?}");
-
             if want_close_before_decrypt {
                 self.other.emit(Event::SendAlert(
                     AlertLevel::Warning,
@@ -878,7 +875,6 @@ impl<Side: SideData> ConnectionProcessor<'_, Side> {
             }
 
             if let Some(payload) = plaintext.take() {
-                std::println!("got plaintext");
                 self.state = Ok(state);
                 return Ok(Some((payload, buffer_progress)));
             }

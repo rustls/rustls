@@ -299,7 +299,6 @@ impl SendPath {
         output.emit(Event::SendAlert(AlertLevel::Fatal, alert));
     }
 
-    #[expect(dead_code)]
     pub(crate) fn write_plaintext(
         &mut self,
         payload: OutboundPlain<'_>,
@@ -357,6 +356,7 @@ impl SendPath {
         Ok(self.write_fragments(outgoing_tls, fragments))
     }
 
+    #[expect(dead_code)]
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.encrypt_state.is_encrypting());
 
@@ -925,15 +925,9 @@ impl ReceivePath {
     }
 
     fn drop_tls13_ccs(&mut self, msg: &EncodedMessage<&'_ [u8]>) -> Result<bool, Error> {
-        std::println!(
-            "drop_tls13_ccs? (v={:?}, recv={:?})",
-            self.negotiated_version,
-            self.may_receive_application_data
-        );
         if self.may_receive_application_data
             || !matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
         {
-            std::println!("  nope");
             return Ok(false);
         }
 
@@ -944,7 +938,6 @@ impl ReceivePath {
             return Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into());
         }
 
-        std::println!("  yes");
         self.temper_counters
             .received_tls13_change_cipher_spec()?;
         Ok(true)
