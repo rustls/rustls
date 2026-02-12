@@ -8,7 +8,7 @@ use std::sync::Arc;
 use rustls::client::ClientState;
 use rustls::server::ServerState;
 use rustls::state::{ReceivedTrafficState, SliceInput, TlsInputBuffer};
-use rustls::{ClientConnection, Connection, ServerConnection};
+use rustls::{Connection, ServerConnection};
 use rustls_test::{KeyType, make_client_config, make_server_config};
 
 use super::provider;
@@ -157,7 +157,7 @@ fn test_server_smoke() {
                 if !client_to_server.is_empty() {
                     let mut slice_input = SliceInput::new(&mut client_to_server);
 
-                    let mut receive = traffic.receive.take().unwrap();
+                    let receive = traffic.receive.take().unwrap();
 
                     let ReceivedTrafficState::Available(avail) =
                         receive.read(&mut slice_input).unwrap()
