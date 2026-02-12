@@ -14,7 +14,7 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerMisbehaved};
 use crate::msgs::{
     BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeDeframer, Locator,
-    Message, Random, ReceivedData,
+    Message, Random, TlsInputBuffer,
 };
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
@@ -687,7 +687,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
     pub(crate) fn process_new_packets(
         &mut self,
-        input: &mut dyn ReceivedData,
+        input: &mut dyn TlsInputBuffer,
     ) -> Result<IoState, Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,

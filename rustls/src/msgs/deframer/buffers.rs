@@ -186,7 +186,7 @@ impl DeframerVecBuffer {
     }
 }
 
-impl ReceivedData for DeframerVecBuffer {
+impl TlsInputBuffer for DeframerVecBuffer {
     fn slice_mut(&mut self) -> &mut [u8] {
         self.filled_mut()
     }
@@ -302,7 +302,7 @@ impl<'a> DeframerSliceBuffer<'a> {
     }
 }
 
-impl ReceivedData for DeframerSliceBuffer<'_> {
+impl TlsInputBuffer for DeframerSliceBuffer<'_> {
     fn slice_mut(&mut self) -> &mut [u8] {
         self.filled_mut()
     }
@@ -313,7 +313,7 @@ impl ReceivedData for DeframerSliceBuffer<'_> {
 }
 
 /// An abstraction over received data buffers (either owned or borrowed)
-pub(crate) trait ReceivedData {
+pub(crate) trait TlsInputBuffer {
     /// Return the buffer which contains the received data.
     ///
     /// If no data is available, return the empty slice.
