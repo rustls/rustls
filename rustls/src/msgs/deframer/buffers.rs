@@ -119,6 +119,10 @@ impl VecInput {
     pub(crate) fn filled(&self) -> &[u8] {
         &self.buf[..self.used]
     }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.used == 0
+    }
 }
 
 impl TlsInputBuffer for VecInput {

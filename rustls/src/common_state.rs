@@ -16,7 +16,7 @@ use crate::crypto::cipher::{
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::{
@@ -24,10 +24,10 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeDeframer, HandshakeMessagePayload, Locator, Message,
     MessageFragmenter, MessagePayload,
 };
-use crate::quic;
 use crate::suites::SupportedCipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
+use crate::{KeyingMaterialExporter, quic};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -204,6 +204,13 @@ impl ConnectionOutputs {
         self.handshake_kind
     }
 
+    pub(crate) fn take_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
+        }
+    }
+
     pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
         let Self {
             negotiated_version,
@@ -323,6 +330,7 @@ impl SendPath {
         Ok(self.write_fragments(fragments))
     }
 
+    #[expect(dead_code)]
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.encrypt_state.is_encrypting());
 

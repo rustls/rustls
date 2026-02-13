@@ -8,8 +8,7 @@ use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
 use super::config::ServerConfig;
-use super::hs;
-use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
+use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue, hs};
 use crate::check::inappropriate_message;
 use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side};
 use crate::conn::ConnectionRandoms;
