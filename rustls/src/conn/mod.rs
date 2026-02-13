@@ -249,9 +249,9 @@ mod connection {
 
     /// A structure that implements [`std::io::Read`] for reading plaintext.
     pub struct Reader<'a> {
-        pub(super) received_plaintext: &'a mut ChunkVecBuffer,
-        pub(super) has_received_close_notify: bool,
-        pub(super) has_seen_eof: bool,
+        pub(crate) received_plaintext: &'a mut ChunkVecBuffer,
+        pub(crate) has_received_close_notify: bool,
+        pub(crate) has_seen_eof: bool,
     }
 
     impl<'a> Reader<'a> {
@@ -434,6 +434,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     }
 }
 
+pub(crate) use connection::PlaintextSink;
 pub use connection::{Connection, Reader, Writer};
 
 /// An object of this type can export keying material.
@@ -697,18 +698,20 @@ impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
 
 /// Common items for buffered, std::io-using connections.
 pub(crate) struct Buffers {
-    deframer_buffer: VecInput,
+    pub(crate) deframer_buffer: VecInput,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
+    pub(crate) sendable_tls: ChunkVecBuffer,
     pub(crate) has_seen_eof: bool,
 }
 
 impl Buffers {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             deframer_buffer: VecInput::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            sendable_tls: ChunkVecBuffer::new(None),
             has_seen_eof: false,
         }
     }
@@ -720,9 +723,9 @@ impl Buffers {
 /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
 #[derive(Debug, Eq, PartialEq)]
 pub struct IoState {
-    tls_bytes_to_write: usize,
-    plaintext_bytes_to_read: usize,
-    peer_has_closed: bool,
+    pub(crate) tls_bytes_to_write: usize,
+    pub(crate) plaintext_bytes_to_read: usize,
+    pub(crate) peer_has_closed: bool,
 }
 
 impl IoState {
@@ -947,4 +950,4 @@ pub(crate) trait StateMachine: Sized {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
 
-const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
+pub(crate) const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

@@ -1979,7 +1979,7 @@ fn test_junk_after_close_notify_received() {
 }
 
 #[test]
-fn test_data_after_close_notify_is_ignored() {
+fn test_data_after_close_notify_is_refused() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
@@ -1988,10 +1988,7 @@ fn test_data_after_close_notify_is_ignored() {
         .write_all(b"before")
         .unwrap();
     client.send_close_notify();
-    client
-        .writer()
-        .write_all(b"after")
-        .unwrap();
+    assert_eq!(client.writer().write(b"after").unwrap(), 0);
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
 
