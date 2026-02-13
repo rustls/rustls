@@ -1491,6 +1491,9 @@ pub enum ApiMisuse {
 
     /// The send side of a connection was already closed.
     SendSideAlreadyClosed,
+
+    /// An unrecoverable error previously happened on this connection.
+    PreviousConnectionError,
 }
 
 impl fmt::Display for ApiMisuse {
