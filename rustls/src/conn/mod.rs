@@ -551,19 +551,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         loop {
-            let mut output = JoinOutput {
-                outputs: &mut self.core.common.outputs,
-                quic: None,
-                send: &mut self.core.common.send,
-                side: &mut self.core.side,
-            };
-
-            let Some((payload, mut buffer_progress)) = process_new_packets::<Side>(
-                &mut self.deframer_buffer,
-                &mut self.core.state,
-                &mut self.core.common.recv,
-                &mut output,
-            )?
+            let Some((payload, mut buffer_progress)) = self
+                .core
+                .process_new_packets(&mut self.deframer_buffer, ProcessFinishCondition::AppData)?
             else {
                 break;
             };
@@ -732,6 +722,7 @@ impl IoState {
 pub(crate) fn process_new_packets<'a, Side: SideData>(
     input: &mut dyn TlsInputBuffer,
     state: &mut Result<Side::State, Error>,
+    finish: ProcessFinishCondition,
     recv: &mut ReceivePath,
     output: &mut JoinOutput<'a>,
 ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
@@ -745,8 +736,12 @@ pub(crate) fn process_new_packets<'a, Side: SideData>(
 
     let mut plaintext = None;
     let mut buffer_progress = recv.hs_deframer.progress();
+    let can_receive_plaintext = recv.may_receive_application_data;
 
-    while st.wants_input() {
+    while st.wants_input()
+        && (matches!(finish, ProcessFinishCondition::AppData)
+            || can_receive_plaintext == recv.may_receive_application_data)
+    {
         let buffer = input.slice_mut();
         let locator = Locator::new(buffer);
         let res = recv.deframe(buffer, &mut buffer_progress);
@@ -829,6 +824,16 @@ pub(crate) fn process_new_packets<'a, Side: SideData>(
     Ok(None)
 }
 
+pub(crate) enum ProcessFinishCondition {
+    /// [`process_new_packets`] runs until it receives application data.
+    AppData,
+    /// [`process_new_packets`] runs until the handshake completes.
+    ///
+    /// (Equivalent to [`ProcessFinishCondition::AppData`] after handshake.)
+    #[expect(dead_code)]
+    Handshake,
+}
+
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Side::State, Error>,
     pub(crate) side: Side::Data,
@@ -842,6 +847,25 @@ impl<Side: SideData> ConnectionCore<Side> {
             side,
             common,
         }
+    }
+
+    pub(crate) fn process_new_packets(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        finish: ProcessFinishCondition,
+    ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
+        process_new_packets::<Side>(
+            input,
+            &mut self.state,
+            finish,
+            &mut self.common.recv,
+            &mut JoinOutput {
+                outputs: &mut self.common.outputs,
+                quic: None,
+                send: &mut self.common.send,
+                side: &mut self.side,
+            },
+        )
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
