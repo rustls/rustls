@@ -464,6 +464,7 @@ pub(crate) struct Buffers {
     pub(crate) deframer_buffer: VecInput,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
+    pub(crate) sendable_tls: ChunkVecBuffer,
     pub(crate) has_seen_eof: bool,
 }
 
@@ -473,6 +474,7 @@ impl Buffers {
             deframer_buffer: VecInput::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            sendable_tls: ChunkVecBuffer::new(None),
             has_seen_eof: false,
         }
     }
@@ -711,4 +713,4 @@ pub(crate) trait StateMachine: Sized {
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
 
-const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
+pub(crate) const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

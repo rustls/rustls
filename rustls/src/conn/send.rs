@@ -83,22 +83,6 @@ impl SendPath {
         Ok(self.write_fragments(fragments))
     }
 
-    pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
-        debug_assert!(self.encrypt_state.is_encrypting());
-
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(data.len());
-        if len == 0 {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        self.send_appdata_encrypt(data[..len].into())
-    }
-
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     fn send_msg_encrypt(&mut self, m: EncodedMessage<Payload<'_>>) {
