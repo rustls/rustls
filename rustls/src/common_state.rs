@@ -671,7 +671,7 @@ impl Default for SendPath {
 pub(crate) struct ReceivePath {
     side: Side,
     pub(crate) decrypt_state: DecryptionState,
-    may_receive_application_data: bool,
+    pub(crate) may_receive_application_data: bool,
     /// If the peer has signaled end of stream.
     pub(crate) has_received_close_notify: bool,
     temper_counters: TemperCounters,

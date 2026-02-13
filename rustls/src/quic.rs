@@ -27,7 +27,7 @@ mod connection {
     use crate::ConnectionOutputs;
     use crate::client::{ClientConfig, ClientSide};
     use crate::common_state::{CommonState, Protocol};
-    use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
+    use crate::conn::{ConnectionCore, KeyingMaterialExporter, ProcessFinishCondition, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
@@ -425,7 +425,7 @@ mod connection {
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
             self.core
-                .process_new_packets(&mut self.deframer_buffer)?;
+                .process_new_packets(&mut self.deframer_buffer, ProcessFinishCondition::AppData)?;
 
             Ok(())
         }

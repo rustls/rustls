@@ -526,7 +526,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         while let Some((payload, mut buffer_progress)) = self
             .core
-            .process_new_packets(&mut self.deframer_buffer)?
+            .process_new_packets(&mut self.deframer_buffer, ProcessFinishCondition::AppData)?
         {
             let payload = payload.reborrow(&Delocator::new(self.deframer_buffer.slice_mut()));
             self.received_plaintext
@@ -737,6 +737,7 @@ impl IoState {
 
 pub(crate) fn process_new_packets<Side: SideData>(
     input: &mut dyn TlsInputBuffer,
+    finish: ProcessFinishCondition,
     state: &mut Result<Side::StateMachine, Error>,
     recv: &mut ReceivePath,
     output: &mut dyn Output,
@@ -751,8 +752,11 @@ pub(crate) fn process_new_packets<Side: SideData>(
 
     let mut plaintext = None;
     let mut buffer_progress = recv.hs_deframer.progress();
+    let can_receive_plaintext = recv.may_receive_application_data;
 
-    loop {
+    while matches!(finish, ProcessFinishCondition::AppData)
+        || can_receive_plaintext == recv.may_receive_application_data
+    {
         let buffer = input.slice_mut();
         let locator = Locator::new(buffer);
         let res = recv.deframe(buffer, &mut buffer_progress);
@@ -834,6 +838,15 @@ pub(crate) fn process_new_packets<Side: SideData>(
     Ok(None)
 }
 
+pub(crate) enum ProcessFinishCondition {
+    /// [`ConnectionProcessor::process_new_packets`] runs until it receives application data.
+    AppData,
+    /// [`ConnectionProcessor::process_new_packets`] runs until the handshake completes.
+    ///
+    /// (Equivalent to [`ProcessFinishCondition::AppData`] after handshake.)
+    Handshake,
+}
+
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Side::StateMachine, Error>,
     pub(crate) side: Side::Data,
@@ -859,9 +872,11 @@ impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn process_new_packets(
         &mut self,
         input: &mut dyn TlsInputBuffer,
+        finish: ProcessFinishCondition,
     ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
         process_new_packets::<Side>(
             input,
+            finish,
             &mut self.state,
             &mut self.common.recv,
             &mut JoinOutput {
