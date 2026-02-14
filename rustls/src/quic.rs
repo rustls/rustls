@@ -138,7 +138,11 @@ mod connection {
 
         /// Returns the number of TLS1.3 tickets that have been received.
         pub fn tls13_tickets_received(&self) -> u32 {
-            self.inner.tls13_tickets_received
+            self.inner
+                .core
+                .common
+                .recv
+                .tls13_tickets_received
         }
 
         /// Returns an object that can derive key material from the agreed connection secrets.
@@ -368,7 +372,7 @@ mod connection {
 
         fn quic_transport_parameters(&self) -> Option<&[u8]> {
             self.core
-                .side
+                .common
                 .quic
                 .params
                 .as_ref()
@@ -378,7 +382,7 @@ mod connection {
         fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
             let suite = self
                 .core
-                .side
+                .common
                 .negotiated_cipher_suite()
                 .and_then(|suite| match suite {
                     SupportedCipherSuite::Tls13(suite) => Some(suite),
@@ -389,7 +393,7 @@ mod connection {
                 suite,
                 suite.quic?,
                 self.core
-                    .side
+                    .common
                     .quic
                     .early_secret
                     .as_ref()?,
@@ -401,7 +405,7 @@ mod connection {
             let range = self.deframer_buffer.extend(plaintext);
 
             self.core
-                .side
+                .common
                 .recv
                 .hs_deframer
                 .input_message(
@@ -415,7 +419,7 @@ mod connection {
                 );
 
             self.core
-                .side
+                .common
                 .recv
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
@@ -427,7 +431,7 @@ mod connection {
         }
 
         fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
-            self.core.side.quic.write_hs(buf)
+            self.core.common.quic.write_hs(buf)
         }
     }
 
@@ -435,13 +439,13 @@ mod connection {
         type Target = CommonState;
 
         fn deref(&self) -> &Self::Target {
-            &self.core.side
+            &self.core.common
         }
     }
 
     impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
         fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.core.side
+            &mut self.core.common
         }
     }
 }
