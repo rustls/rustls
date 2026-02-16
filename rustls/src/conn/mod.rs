@@ -16,8 +16,7 @@ use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{
-    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
-    TlsInputBuffer,
+    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Random, TlsInputBuffer,
 };
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -636,44 +635,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
         Writer::new(self)
     }
 
-    /// Extract the first handshake message.
-    ///
-    /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
-    /// `process_handshake_messages()` path, specialized for the first handshake message.
-    pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Input<'static>>, Error> {
-        let mut buffer_progress = self.recv.hs_deframer.progress();
-
-        let res = self
-            .core
-            .common
-            .recv
-            .deframe(
-                self.buffers
-                    .deframer_buffer
-                    .filled_mut(),
-                &mut buffer_progress,
-            )
-            .map(|opt| opt.map(|pm| Message::try_from(pm.plaintext).map(|m| m.into_owned())));
-
-        match res? {
-            Some(Ok(msg)) => {
-                self.buffers
-                    .deframer_buffer
-                    .discard(buffer_progress.take_discard());
-                Ok(Some(Input {
-                    message: msg,
-                    aligned_handshake: self.recv.hs_deframer.aligned(),
-                }))
-            }
-            Some(Err(err)) => Err(err.into()),
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) fn replace_state(&mut self, new: Side::StateMachine) {
-        self.core.state = Ok(new);
-    }
-
     pub(crate) fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
         if self
             .buffers
@@ -802,8 +763,9 @@ pub(crate) fn process_new_packets<Side: SideData>(
     let mut buffer_progress = recv.hs_deframer.progress();
     let can_receive_plaintext = recv.may_receive_application_data;
 
-    while matches!(finish, ProcessFinishCondition::AppData)
-        || can_receive_plaintext == recv.may_receive_application_data
+    while st.wants_input()
+        && (matches!(finish, ProcessFinishCondition::AppData)
+            || can_receive_plaintext == recv.may_receive_application_data)
     {
         let buffer = input.slice_mut();
         let locator = Locator::new(buffer);
@@ -1029,6 +991,7 @@ pub(crate) mod private {
 
 pub(crate) trait StateMachine: Sized {
     fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error>;
+    fn wants_input(&self) -> bool;
     fn handle_decrypt_error(&mut self);
     fn into_external_state(
         self,

@@ -10,23 +10,18 @@ use pki_types::{DnsName, FipsStatus};
 
 use super::config::{ClientHello, ServerConfig};
 use super::hs;
-use super::hs::ClientHelloInput;
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, Protocol, SendPath, Side,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, SendPath, Side,
 };
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::SignatureScheme;
 use crate::crypto::cipher::Payload;
 use crate::error::{ApiMisuse, Error, ErrorWithAlert};
 use crate::log::trace;
-use crate::msgs::{
-    ClientHelloPayload, HandshakePayload, Message, MessagePayload, ServerExtensionsInput,
-    ServerNamePayload,
-};
+use crate::msgs::{ServerExtensionsInput, ServerNamePayload};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::vecbuf::ChunkVecBuffer;
@@ -269,14 +264,7 @@ impl Default for Acceptor {
     /// Return an empty Acceptor, ready to receive bytes from a new client connection.
     fn default() -> Self {
         Self {
-            inner: Some(
-                ConnectionCore::new(
-                    hs::StateMachine::Accepting(Accepting),
-                    ServerConnectionData::default(),
-                    CommonState::new(Side::Server, Protocol::Tcp),
-                )
-                .into(),
-            ),
+            inner: Some(ConnectionCore::for_server_acceptor(Protocol::Tcp).into()),
         }
     }
 }
@@ -316,27 +304,16 @@ impl Acceptor {
             ));
         };
 
-        let input = match connection.first_handshake_message() {
-            Ok(Some(msg)) => msg,
-            Ok(None) => {
-                self.inner = Some(connection);
-                return Ok(None);
-            }
-            Err(err) => return Err(AcceptedAlert::from_error(err, connection.core.common.send)),
+        if let Err(e) = connection.process_new_packets() {
+            return Err(AcceptedAlert::from_error(e, connection.core.common.send));
+        }
+
+        let Ok(hs::StateMachine::ChooseConfig(_)) = connection.core.state else {
+            self.inner = Some(connection);
+            return Ok(None);
         };
 
-        let sig_schemes = match ClientHelloInput::from_input(&input) {
-            Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
-            Err(err) => {
-                return Err(AcceptedAlert::from_error(err, connection.core.common.send));
-            }
-        };
-
-        Ok(Some(Accepted {
-            connection,
-            input,
-            sig_schemes,
-        }))
+        Ok(Some(Accepted { connection }))
     }
 }
 
@@ -434,35 +411,41 @@ impl io::Read for ReadEarlyData<'_> {
 ///
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
 pub struct Accepted {
+    // invariant: `connection.core.state` is `Ok(hs::StateMachine::ChooseConfig)`
     connection: ConnectionCommon<ServerSide>,
-    input: Input<'static>,
-    sig_schemes: Vec<SignatureScheme>,
 }
 
 impl Accepted {
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
-        let payload = Self::client_hello_payload(&self.input.message);
-        let server_name = payload
+        let Ok(hs::StateMachine::ChooseConfig(choose_config)) = &self.connection.core.state else {
+            unreachable!(); // invariant
+        };
+
+        let client_hello = choose_config.client_hello();
+        let server_name = client_hello
             .server_name
             .as_ref()
             .and_then(ServerNamePayload::to_dns_name_normalized)
             .map(Cow::Owned);
         let ch = ClientHello {
             server_name,
-            signature_schemes: &self.sig_schemes,
-            alpn: payload.protocols.as_ref(),
-            server_cert_types: payload
+            signature_schemes: client_hello
+                .signature_schemes
+                .as_deref()
+                .unwrap_or_default(),
+            alpn: client_hello.protocols.as_ref(),
+            server_cert_types: client_hello
                 .server_certificate_types
                 .as_deref(),
-            client_cert_types: payload
+            client_cert_types: client_hello
                 .client_certificate_types
                 .as_deref(),
-            cipher_suites: &payload.cipher_suites,
-            certificate_authorities: payload
+            cipher_suites: &client_hello.cipher_suites,
+            certificate_authorities: client_hello
                 .certificate_authority_names
                 .as_deref(),
-            named_groups: payload.named_groups.as_deref(),
+            named_groups: client_hello.named_groups.as_deref(),
         };
 
         trace!("Accepted::client_hello(): {ch:#?}");
@@ -489,10 +472,21 @@ impl Accepted {
         }
         self.connection.fips = config.fips();
 
-        let state =
-            hs::ExpectClientHello::new(config, ServerExtensionsInput::default(), Protocol::Tcp);
-        let proof = match self.input.check_aligned_handshake() {
-            Ok(proof) => proof,
+        let state = core::mem::replace(
+            &mut self.connection.core.state,
+            Err(Error::HandshakeNotComplete),
+        );
+
+        let Ok(hs::StateMachine::ChooseConfig(choose_config)) = state else {
+            unreachable!(); // invariant
+        };
+
+        let state = match choose_config.use_config(
+            config,
+            ServerExtensionsInput::default(),
+            &mut self.connection.core.output(),
+        ) {
+            Ok(state) => state,
             Err(err) => {
                 return Err(AcceptedAlert::from_error(
                     err,
@@ -500,38 +494,11 @@ impl Accepted {
                 ));
             }
         };
+        self.connection.core.state = Ok(state);
 
-        let input = ClientHelloInput {
-            message: &self.input.message,
-            client_hello: Self::client_hello_payload(&self.input.message),
-            sig_schemes: self.sig_schemes,
-            proof,
-        };
-
-        let new = match state.with_input(input, &mut self.connection.core.output()) {
-            Ok(new) => new,
-            Err(err) => {
-                return Err(AcceptedAlert::from_error(
-                    err,
-                    self.connection.core.common.send,
-                ));
-            }
-        };
-
-        self.connection.replace_state(new);
         Ok(ServerConnection {
             inner: self.connection,
         })
-    }
-
-    fn client_hello_payload<'a>(message: &'a Message<'_>) -> &'a ClientHelloPayload {
-        match &message.payload {
-            MessagePayload::Handshake { parsed, .. } => match &parsed.0 {
-                HandshakePayload::ClientHello(ch) => ch,
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
-        }
     }
 }
 
@@ -541,8 +508,6 @@ impl Debug for Accepted {
             .finish_non_exhaustive()
     }
 }
-
-pub(crate) struct Accepting;
 
 #[derive(Default)]
 pub(super) enum EarlyDataState {
@@ -620,10 +585,24 @@ impl ConnectionCore<ServerSide> {
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
         Ok(Self::new(
-            Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)).into(),
+            Box::new(hs::ExpectClientHello::new(
+                config,
+                extra_exts,
+                Vec::new(),
+                protocol,
+            ))
+            .into(),
             ServerConnectionData::default(),
             common,
         ))
+    }
+
+    pub(crate) fn for_server_acceptor(protocol: Protocol) -> Self {
+        Self::new(
+            hs::ReadClientHello::new(protocol).into(),
+            ServerConnectionData::default(),
+            CommonState::new(Side::Server, protocol),
+        )
     }
 }
 

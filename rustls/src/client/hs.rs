@@ -60,6 +60,10 @@ impl crate::conn::StateMachine for StateMachine {
         }
     }
 
+    fn wants_input(&self) -> bool {
+        true
+    }
+
     fn handle_decrypt_error(&mut self) {
         if let Self::Tls12(tls12::StateMachine::ExpectFinished(e)) = self {
             e.handle_decrypt_error();
