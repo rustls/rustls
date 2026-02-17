@@ -394,6 +394,16 @@ impl ClientConnectionBuilder {
             fips,
         })
     }
+
+    /// Finalize the builder and create a [`ClientHandshake`].
+    pub fn start_handshake(self) -> Result<ClientHandshake, Error> {
+        let Self {
+            config,
+            name,
+            alpn_protocols,
+        } = self;
+        ClientHandshake::new(config, name, alpn_protocols)
+    }
 }
 
 /// Allows writing of early data in resumed TLS 1.3 connections.
@@ -505,7 +515,7 @@ impl EarlyData {
         )
     }
 
-    fn is_accepted(&self) -> bool {
+    pub(super) fn is_accepted(&self) -> bool {
         matches!(
             self.state,
             EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
@@ -542,7 +552,7 @@ impl EarlyData {
         }
     }
 
-    fn check_write(&mut self, sz: usize) -> io::Result<usize> {
+    pub(super) fn check_write(&mut self, sz: usize) -> io::Result<usize> {
         self.check_write_opt(sz)
             .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
     }
@@ -564,7 +574,7 @@ impl EarlyData {
         }
     }
 
-    fn bytes_left(&self) -> usize {
+    pub(super) fn bytes_left(&self) -> usize {
         self.left
     }
 }
@@ -580,7 +590,7 @@ enum EarlyDataState {
 }
 
 pub(crate) struct ClientConnectionData {
-    early_data: EarlyData,
+    pub(super) early_data: EarlyData,
     ech_status: EchStatus,
 }
 
@@ -590,6 +600,14 @@ impl ClientConnectionData {
             early_data: EarlyData::new(),
             ech_status: EchStatus::default(),
         }
+    }
+
+    pub(crate) fn early_data_is_enabled(&self) -> bool {
+        self.early_data.is_enabled()
+    }
+
+    pub(crate) fn ech_status(&self) -> EchStatus {
+        self.ech_status
     }
 }
 
