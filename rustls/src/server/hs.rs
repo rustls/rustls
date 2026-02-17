@@ -424,6 +424,13 @@ impl ChooseConfig {
             _ => unreachable!(),
         }
     }
+
+    pub(crate) fn client_hello_bytes(&self) -> &[u8] {
+        match &self.client_hello.message.payload {
+            MessagePayload::Handshake { encoded, .. } => &encoded.bytes()[1 + 3..],
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl From<ChooseConfig> for StateMachine {

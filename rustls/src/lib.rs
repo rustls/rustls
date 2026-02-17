@@ -424,6 +424,9 @@ pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersi
 #[cfg(feature = "webpki")]
 pub use crate::webpki::RootCertStore;
 
+/// Types supporting the state-based API.
+pub mod state;
+
 /// Items for use in a client.
 pub mod client;
 pub use client::{ClientConfig, ClientConnection};

@@ -269,14 +269,12 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    #[expect(dead_code)]
     pub(crate) fn write_plaintext(
         &mut self,
         payload: OutboundPlain<'_>,
-        outgoing_tls: &mut [u8],
-    ) -> Result<usize, EncryptError> {
+    ) -> Result<Vec<Vec<u8>>, Error> {
         if payload.is_empty() {
-            return Ok(0);
+            return Ok(self.sendable_tls.take());
         }
 
         let fragments = self
@@ -303,18 +301,16 @@ impl SendPath {
                             "traffic keys exhausted, closing connection to prevent security failure"
                         );
                         self.send_close_notify();
-                        return Err(EncryptError::EncryptExhausted);
+                        return Err(Error::EncryptError);
                     }
                 },
                 PreEncryptAction::Refuse => {
-                    return Err(EncryptError::EncryptExhausted);
+                    return Err(Error::EncryptError);
                 }
             }
         }
 
         self.perhaps_write_key_update();
-
-        self.check_required_size(outgoing_tls, fragments)?;
 
         let fragments = self
             .message_fragmenter
@@ -324,7 +320,7 @@ impl SendPath {
                 payload,
             );
 
-        Ok(self.write_fragments(outgoing_tls, fragments))
+        Ok(self.write_fragments(fragments))
     }
 
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
@@ -478,23 +474,13 @@ impl SendPath {
         }
     }
 
-    fn send_close_notify(&mut self) {
+    pub(crate) fn send_close_notify(&mut self) {
         if self.has_sent_close_notify {
             return;
         }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
         self.has_sent_close_notify = true;
         self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
-    }
-
-    #[expect(dead_code)]
-    pub(crate) fn eager_send_close_notify(
-        &mut self,
-        outgoing_tls: &mut [u8],
-    ) -> Result<usize, EncryptError> {
-        self.send_close_notify();
-        self.check_required_size(outgoing_tls, [].into_iter())?;
-        Ok(self.write_fragments(outgoing_tls, [].into_iter()))
     }
 
     fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
@@ -509,16 +495,27 @@ impl SendPath {
         );
     }
 
+    /// Accurately predicts the buffer requriement for sending `appdata`.
+    pub(crate) fn predict_required_len(&self, appdata: OutboundPlain<'_>) -> usize {
+        self.message_fragmenter
+            .fragment_payload(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                appdata,
+            )
+            .fold(0usize, |sum, item| {
+                sum + item.encoded_len(&self.encrypt_state)
+            })
+    }
+
     fn check_required_size<'a>(
         &self,
         outgoing_tls: &[u8],
         fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
     ) -> Result<(), EncryptError> {
-        let mut required_size = self.sendable_tls.len();
-
-        for m in fragments {
-            required_size += m.encoded_len(&self.encrypt_state);
-        }
+        let required_size = fragments.fold(0usize, |sum, item| {
+            sum + item.encoded_len(&self.encrypt_state)
+        });
 
         if required_size > outgoing_tls.len() {
             return Err(EncryptError::InsufficientSize(InsufficientSizeError {
@@ -531,31 +528,18 @@ impl SendPath {
 
     fn write_fragments<'a>(
         &mut self,
-        outgoing_tls: &mut [u8],
         fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
-    ) -> usize {
-        let mut written = 0;
-
-        // Any pre-existing encrypted messages in `sendable_tls` must
-        // be output before encrypting any of the `fragments`.
-        while let Some(message) = self.sendable_tls.pop() {
-            let len = message.len();
-            outgoing_tls[written..written + len].copy_from_slice(&message);
-            written += len;
-        }
-
+    ) -> Vec<Vec<u8>> {
         for m in fragments {
             let em = self
                 .encrypt_state
                 .encrypt_outgoing(m)
                 .encode();
 
-            let len = em.len();
-            outgoing_tls[written..written + len].copy_from_slice(&em);
-            written += len;
+            self.sendable_tls.append(em);
         }
 
-        written
+        self.sendable_tls.take()
     }
 
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {

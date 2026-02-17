@@ -6,7 +6,8 @@ use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::Reader;
 
 mod buffers;
-pub(crate) use buffers::{BufferProgress, Delocator, Locator, TlsInputBuffer, VecInput};
+pub(crate) use buffers::{BufferProgress, Delocator, Locator};
+pub use buffers::{SliceInput, TlsInputBuffer, VecInput};
 
 mod handshake;
 pub(crate) use handshake::{HandshakeAlignedProof, HandshakeDeframer};
