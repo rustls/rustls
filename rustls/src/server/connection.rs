@@ -526,6 +526,7 @@ pub(super) enum EarlyDataState {
     Accepted {
         received: ChunkVecBuffer,
     },
+    Retired,
 }
 
 impl EarlyDataState {
@@ -539,20 +540,22 @@ impl EarlyDataState {
         matches!(self, Self::Accepted { .. })
     }
 
-    #[expect(dead_code)]
-    fn peek(&self) -> Option<&[u8]> {
+    pub(super) fn peek(&self) -> Option<&[u8]> {
         match self {
             Self::Accepted { received, .. } => received.peek(),
             _ => None,
         }
     }
 
-    #[expect(dead_code)]
-    fn pop(&mut self) -> Option<Vec<u8>> {
+    pub(super) fn pop(&mut self) -> Option<Vec<u8>> {
         match self {
             Self::Accepted { received, .. } => received.pop(),
             _ => None,
         }
+    }
+
+    pub(super) fn retire(&mut self) {
+        *self = Self::Retired;
     }
 
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -580,6 +583,7 @@ impl Debug for EarlyDataState {
                 "EarlyDataState::Accepted {{ received: {} }}",
                 received.len(),
             ),
+            Self::Retired => write!(f, "EarlyDataState::Retired"),
         }
     }
 }
@@ -621,7 +625,7 @@ impl ConnectionCore<ServerSide> {
 pub(crate) struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
-    early_data: EarlyDataState,
+    pub(super) early_data: EarlyDataState,
 }
 
 impl ServerConnectionData {
@@ -631,6 +635,10 @@ impl ServerConnectionData {
 
     pub(crate) fn server_name(&self) -> Option<&DnsName<'static>> {
         self.sni.as_ref()
+    }
+
+    pub(crate) fn into_parts(self) -> (Option<DnsName<'static>>, Option<Vec<u8>>) {
+        (self.sni, self.received_resumption_data)
     }
 }
 

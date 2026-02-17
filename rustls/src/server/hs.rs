@@ -415,6 +415,13 @@ impl ChooseConfig {
         }
     }
 
+    pub(crate) fn client_hello_bytes(&self) -> &[u8] {
+        match &self.client_hello.message.payload {
+            MessagePayload::Handshake { encoded, .. } => &encoded.bytes()[1 + 3..],
+            _ => unreachable!(),
+        }
+    }
+
     fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
         self.resumption_data = resumption_data.to_vec();
         Ok(())

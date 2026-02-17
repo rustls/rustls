@@ -29,7 +29,6 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    #[expect(dead_code)]
     pub(crate) fn write_plaintext(
         &mut self,
         payload: OutboundPlain<'_>,
