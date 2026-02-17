@@ -154,6 +154,7 @@ impl EncodedMessage<OutboundPlain<'_>> {
         }
     }
 
+    #[expect(dead_code)]
     pub(crate) fn encoded_len(&self, record_layer: &EncryptionState) -> usize {
         HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
     }

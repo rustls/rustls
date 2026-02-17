@@ -861,7 +861,6 @@ pub(crate) enum ProcessFinishCondition {
     /// [`process_new_packets`] runs until the handshake completes.
     ///
     /// (Equivalent to [`ProcessFinishCondition::AppData`] after handshake.)
-    #[expect(dead_code)]
     Handshake,
 }
 
