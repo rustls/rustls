@@ -21,8 +21,8 @@ use crate::vecbuf::ChunkVecBuffer;
 pub mod kernel;
 
 mod receive;
-use receive::{FinishHandshake, FinishOnAppData, JoinOutput};
-pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
+pub(crate) use receive::{CaptureAppData, Input, JoinOutput, ReceivePath, TrafficTemperCounters};
+use receive::{FinishHandshake, FinishOnAppData};
 
 mod send;
 use send::DEFAULT_BUFFER_LIMIT;
@@ -550,7 +550,6 @@ impl<Side: SideData> ConnectionCore<Side> {
             .process_new_packets::<Side, FinishOnAppData>(buffer, &mut self.state, &mut output)
     }
 
-    #[expect(dead_code)]
     #[inline]
     pub(crate) fn process_handshake<'a>(
         &'a mut self,

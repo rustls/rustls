@@ -9,8 +9,8 @@ use crate::msgs::codec::{Codec, Reader, U24};
 use crate::msgs::{HEADER_SIZE, read_opaque_message_header};
 
 mod buffers;
-use buffers::Coalescer;
-pub(crate) use buffers::{Delocator, Locator, TlsInputBuffer, VecInput};
+pub(crate) use buffers::{Coalescer, Delocator, Locator};
+pub use buffers::{SliceInput, TlsInputBuffer, VecInput};
 
 pub fn fuzz_deframer(data: &[u8]) {
     let mut buf = data.to_vec();

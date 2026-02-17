@@ -31,6 +31,8 @@ mod tests_with_ring {
     mod resume;
     #[path = "api/server_cert_verifier.rs"]
     mod server_cert_verifier;
+    #[path = "api/state.rs"]
+    mod state;
     #[path = "api/api.rs"]
     mod tests;
 }
@@ -64,6 +66,8 @@ mod tests_with_aws_lc_rs {
     mod resume;
     #[path = "api/server_cert_verifier.rs"]
     mod server_cert_verifier;
+    #[path = "api/state.rs"]
+    mod state;
     #[path = "api/api.rs"]
     mod tests;
 }

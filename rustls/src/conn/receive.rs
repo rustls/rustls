@@ -5,8 +5,7 @@ use core::ops::Range;
 use super::SendOutput;
 use crate::SideData;
 use crate::common_state::{
-    ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, Side, UnborrowedPayload,
-    maybe_send_fatal_alert,
+    ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::conn::StateMachine;
 use crate::conn::private::SideOutput;
@@ -50,6 +49,24 @@ impl ReceivePath {
             seen_consecutive_empty_fragments: 0,
             tls13_tickets_received: 0,
         }
+    }
+
+    pub(crate) fn process_recv_traffic<Side: SideData>(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        state: &mut Result<Side::State, Error>,
+        send: &mut dyn SendOutput,
+    ) -> Result<Option<UnborrowedPayload>, Error> {
+        self.process_new_packets::<Side, FinishOnAppData>(
+            input,
+            state,
+            &mut JoinOutput {
+                outputs: &mut Discard,
+                quic: None,
+                send,
+                side: &mut Discard,
+            },
+        )
     }
 
     pub(super) fn process_new_packets<'a, 'm, Side: SideData, Finish: FinishCondition>(
@@ -435,22 +452,22 @@ impl FinishCondition for FinishHandshake {
     }
 }
 
-struct CaptureAppData<'a, 'j, 'm> {
-    recv: &'a mut ReceivePath,
-    other: &'a mut JoinOutput<'j>,
+pub(crate) struct CaptureAppData<'a, 'j, 'm> {
+    pub(crate) recv: &'a mut ReceivePath,
+    pub(crate) other: &'a mut JoinOutput<'j>,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
     /// `received_plaintext` for in-place decryption.
-    plaintext_locator: &'a Locator,
+    pub(crate) plaintext_locator: &'a Locator,
     /// Unborrowed received plaintext data
     ///
     /// Set if plaintext data was received.
     ///
     /// Plaintext data may be reborrowed using a [`Delocator`] which was
     /// initialized from the same slice as `plaintext_locator`.
-    received_plaintext: &'a mut Option<UnborrowedPayload>,
-    _message_lifetime: PhantomData<&'m ()>,
+    pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
+    pub(crate) _message_lifetime: PhantomData<&'m ()>,
 }
 
 impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
@@ -510,11 +527,21 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
     }
 }
 
-pub(super) struct JoinOutput<'a> {
-    pub(super) outputs: &'a mut ConnectionOutputs,
-    pub(super) quic: Option<&'a mut dyn QuicOutput>,
-    pub(super) send: &'a mut dyn SendOutput,
-    pub(super) side: &'a mut dyn SideOutput,
+pub(crate) struct JoinOutput<'a> {
+    pub(crate) outputs: &'a mut dyn ConnectionOutput,
+    pub(crate) quic: Option<&'a mut dyn QuicOutput>,
+    pub(crate) send: &'a mut dyn SendOutput,
+    pub(crate) side: &'a mut dyn SideOutput,
+}
+
+struct Discard;
+
+impl ConnectionOutput for Discard {
+    fn handle(&mut self, _ev: OutputEvent<'_>) {}
+}
+
+impl SideOutput for Discard {
+    fn emit(&mut self, _ev: Event<'_>) {}
 }
 
 /// Tracking technically-allowed protocol actions
