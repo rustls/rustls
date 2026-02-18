@@ -20,6 +20,7 @@ concurrency:
 
 env:
   RUSTFLAGS: --deny warnings
+  AWS_LC_SYS_NO_JITTER_ENTROPY: 1
 
 jobs:
   build:
