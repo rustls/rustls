@@ -12,6 +12,7 @@ case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
       ;;
   aws-lc-rs)
       cpp -P -DAWS_LC_RS config.json.in > config.json
+      export AWS_LC_SYS_NO_JITTER_ENTROPY=1
       cargo run -- -print-rustls-provider
       ;;
   aws-lc-rs-fips)
