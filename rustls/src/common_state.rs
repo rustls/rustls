@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
-use core::{fmt, mem};
 
 use pki_types::{DnsName, FipsStatus};
 
@@ -38,7 +38,7 @@ pub struct CommonState {
     pub(crate) quic: quic::Quic,
 
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
-    protocol: Protocol,
+    pub(crate) protocol: Protocol,
 }
 
 impl CommonState {
@@ -144,7 +144,6 @@ pub struct ConnectionOutputs {
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
     pub(crate) fips: FipsStatus,
-    pub(crate) tls13_tickets_received: u32,
 }
 
 impl ConnectionOutputs {
@@ -206,13 +205,6 @@ impl ConnectionOutputs {
         self.handshake_kind
     }
 
-    /// Returns the number of TLS1.3 tickets that have been received.
-    ///
-    /// Only clients receive tickets, so this is zero for servers.
-    pub fn tls13_tickets_received(&self) -> u32 {
-        self.tls13_tickets_received
-    }
-
     /// Return the FIPS validation status of the connection.
     ///
     /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
@@ -257,11 +249,6 @@ impl Output for ConnectionOutputs {
             Event::ProtocolVersion(ver) => {
                 self.negotiated_version = Some(ver);
             }
-            Event::ReceivedTicket => {
-                self.tls13_tickets_received = self
-                    .tls13_tickets_received
-                    .saturating_add(1)
-            }
             _ => unreachable!(),
         }
     }
@@ -279,7 +266,6 @@ impl Default for ConnectionOutputs {
             exporter: None,
             early_exporter: None,
             fips: FipsStatus::Unvalidated,
-            tls13_tickets_received: 0,
         }
     }
 }
@@ -300,14 +286,11 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    pub(crate) fn maybe_send_fatal_alert(&mut self, error: &Error) {
+    pub(crate) fn maybe_send_fatal_alert(output: &mut dyn Output, error: &Error) {
         let Ok(alert) = AlertDescription::try_from(error) else {
             return;
         };
-        debug_assert!(!self.has_sent_fatal_alert);
-        let m = Message::build_alert(AlertLevel::Fatal, alert);
-        self.send_msg(m, self.encrypt_state.is_encrypting());
-        self.has_sent_fatal_alert = true;
+        output.emit(Event::SendAlert(AlertLevel::Fatal, alert));
     }
 
     #[expect(dead_code)]
@@ -624,7 +607,7 @@ impl SendPath {
 
     /// Trigger a `refresh_traffic_keys` if required.
     pub(crate) fn maybe_refresh_traffic_keys(&mut self) {
-        if mem::take(&mut self.refresh_traffic_keys_pending) {
+        if self.refresh_traffic_keys_pending {
             let _ = self.refresh_traffic_keys();
         }
     }
@@ -637,6 +620,7 @@ impl SendPath {
         };
 
         ks.request_key_update_and_update_encrypter(self);
+        self.refresh_traffic_keys_pending = false;
         self.tls13_key_schedule = Some(ks);
         Ok(())
     }
@@ -690,7 +674,6 @@ pub(crate) struct ReceivePath {
     may_receive_application_data: bool,
     /// If the peer has signaled end of stream.
     pub(crate) has_received_close_notify: bool,
-    pub(crate) has_seen_eof: bool,
     temper_counters: TemperCounters,
     negotiated_version: Option<ProtocolVersion>,
     pub(crate) hs_deframer: HandshakeDeframer,
@@ -698,6 +681,8 @@ pub(crate) struct ReceivePath {
     /// We limit consecutive empty fragments to avoid a route for the peer to send
     /// us significant but fruitless traffic.
     seen_consecutive_empty_fragments: u8,
+
+    pub(crate) tls13_tickets_received: u32,
 }
 
 impl ReceivePath {
@@ -707,11 +692,11 @@ impl ReceivePath {
             decrypt_state: DecryptionState::new(),
             may_receive_application_data: false,
             has_received_close_notify: false,
-            has_seen_eof: false,
             temper_counters: TemperCounters::default(),
             negotiated_version: None,
             hs_deframer: HandshakeDeframer::default(),
             seen_consecutive_empty_fragments: 0,
+            tls13_tickets_received: 0,
         }
     }
 
@@ -1040,6 +1025,11 @@ impl Output for ReceivePath {
                 .decrypt_state
                 .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
+            Event::ReceivedTicket => {
+                self.tls13_tickets_received = self
+                    .tls13_tickets_received
+                    .saturating_add(1)
+            }
             Event::StartTraffic => self.may_receive_application_data = true,
             _ => unreachable!(),
         }
@@ -1135,6 +1125,63 @@ impl Output for CaptureAppData<'_> {
     }
 }
 
+pub(crate) struct OutputSplitReceivePath<'a> {
+    pub(crate) recv: &'a mut dyn Output,
+    pub(crate) other: &'a mut dyn Output,
+}
+
+impl Output for OutputSplitReceivePath<'_> {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev.disposition() {
+            EventDisposition::ReceivePath => self.recv.emit(ev),
+            EventDisposition::ProtocolVersion(ver) => {
+                self.recv
+                    .emit(Event::ProtocolVersion(ver));
+                self.other
+                    .emit(Event::ProtocolVersion(ver));
+            }
+            EventDisposition::StartTraffic => {
+                self.recv.emit(Event::StartTraffic);
+                self.other.emit(Event::StartTraffic);
+            }
+            _ => self.other.emit(ev),
+        }
+    }
+}
+
+pub(crate) struct OutputSplitNonReceivePath<'a> {
+    pub(crate) protocol: Protocol,
+    pub(crate) outputs: &'a mut dyn Output,
+    pub(crate) quic: &'a mut dyn Output,
+    pub(crate) send: &'a mut dyn Output,
+    pub(crate) side: &'a mut dyn Output,
+}
+
+impl Output for OutputSplitNonReceivePath<'_> {
+    fn emit(&mut self, ev: Event<'_>) {
+        match ev.disposition() {
+            EventDisposition::ReceivePath => unreachable!(),
+            EventDisposition::ProtocolVersion(ver) => {
+                self.outputs
+                    .emit(Event::ProtocolVersion(ver));
+                self.quic
+                    .emit(Event::ProtocolVersion(ver));
+                self.send
+                    .emit(Event::ProtocolVersion(ver));
+            }
+            EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
+            EventDisposition::Quic => self.quic.emit(ev),
+            EventDisposition::SendPath => self.send.emit(ev),
+            EventDisposition::MessageOutput => match self.protocol {
+                Protocol::Tcp => self.send.emit(ev),
+                Protocol::Quic(_) => self.quic.emit(ev),
+            },
+            EventDisposition::StartTraffic => self.send.emit(ev),
+            EventDisposition::SideSpecific => self.side.emit(ev),
+        }
+    }
+}
+
 pub(crate) struct Input<'a> {
     pub(crate) message: Message<'a>,
     pub(crate) aligned_handshake: Option<HandshakeAlignedProof>,
@@ -1202,7 +1249,7 @@ pub(crate) enum Event<'a> {
 }
 
 impl Event<'_> {
-    fn disposition(&self) -> EventDisposition {
+    pub(crate) fn disposition(&self) -> EventDisposition {
         match self {
             // message dispatch
             Event::EncryptMessage(_) | Event::PlainMessage(_) => EventDisposition::MessageOutput,
@@ -1215,9 +1262,9 @@ impl Event<'_> {
             | Event::StartOutgoingTraffic => EventDisposition::SendPath,
 
             // recv-specific events
-            Event::MessageDecrypter { .. } | Event::MessageDecrypterWithTrialDecryption { .. } => {
-                EventDisposition::ReceivePath
-            }
+            Event::MessageDecrypter { .. }
+            | Event::MessageDecrypterWithTrialDecryption { .. }
+            | Event::ReceivedTicket => EventDisposition::ReceivePath,
 
             // presentation API events
             Event::ApplicationProtocol(_)
@@ -1226,8 +1273,7 @@ impl Event<'_> {
             | Event::Exporter(_)
             | Event::HandshakeKind(_)
             | Event::KeyExchangeGroup(_)
-            | Event::PeerIdentity(_)
-            | Event::ReceivedTicket => EventDisposition::ConnectionOutputs,
+            | Event::PeerIdentity(_) => EventDisposition::ConnectionOutputs,
 
             // quic-specific events
             Event::QuicEarlySecret(_)
