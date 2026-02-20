@@ -280,6 +280,7 @@ pub(crate) fn maybe_send_fatal_alert(output: &mut dyn Output, error: &Error) {
 /// The data path from us to the peer.
 pub(crate) struct SendPath {
     pub(crate) encrypt_state: EncryptionState,
+    pub(crate) may_send_half_rtt_data: bool,
     pub(crate) may_send_application_data: bool,
     has_sent_fatal_alert: bool,
     /// If we signaled end of stream.
@@ -475,11 +476,6 @@ impl SendPath {
         }
     }
 
-    fn start_outgoing_traffic(&mut self) {
-        self.may_send_application_data = true;
-        debug_assert!(self.encrypt_state.is_encrypting());
-    }
-
     // Put m into sendable_tls for writing.
     fn queue_tls_message(&mut self, m: EncodedMessage<OutboundOpaque>) {
         self.perhaps_write_key_update();
@@ -645,7 +641,14 @@ impl Output for SendPath {
             Event::PlainMessage(m) => self.send_msg(m, false),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
             Event::SendAlert(level, desc) => self.send_alert(level, desc),
-            Event::StartOutgoingTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
+            Event::StartHalfRttTraffic => {
+                self.may_send_half_rtt_data = true;
+                debug_assert!(self.encrypt_state.is_encrypting());
+            }
+            Event::StartTraffic => {
+                self.may_send_application_data = true;
+                debug_assert!(self.encrypt_state.is_encrypting());
+            }
             _ => unreachable!(),
         }
     }
@@ -655,6 +658,7 @@ impl Default for SendPath {
     fn default() -> Self {
         Self {
             encrypt_state: EncryptionState::new(),
+            may_send_half_rtt_data: false,
             may_send_application_data: false,
             has_sent_fatal_alert: false,
             has_sent_close_notify: false,
@@ -1206,8 +1210,8 @@ pub(crate) enum Event<'a> {
     ReceivedTicket,
     ResumptionData(Vec<u8>),
     SendAlert(AlertLevel, AlertDescription),
-    /// Mark the connection as ready to send application data.
-    StartOutgoingTraffic,
+    /// Mark the connection as ready to send half-RTT traffic (server only)
+    StartHalfRttTraffic,
     /// Mark the connection as ready to send and receive application data.
     StartTraffic,
 }
@@ -1223,7 +1227,7 @@ impl Event<'_> {
             | Event::MessageEncrypter { .. }
             | Event::OutgoingKeySchedule(_)
             | Event::SendAlert(..)
-            | Event::StartOutgoingTraffic => EventDisposition::SendPath,
+            | Event::StartHalfRttTraffic => EventDisposition::SendPath,
 
             // recv-specific events
             Event::MessageDecrypter { .. }
