@@ -645,7 +645,7 @@ impl Output for SendPath {
             Event::PlainMessage(m) => self.send_msg(m, false),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
             Event::SendAlert(level, desc) => self.send_alert(level, desc),
-            Event::StartOutgoingTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
+            Event::StartHalfRttTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
             _ => unreachable!(),
         }
     }
@@ -1206,8 +1206,8 @@ pub(crate) enum Event<'a> {
     ReceivedTicket,
     ResumptionData(Vec<u8>),
     SendAlert(AlertLevel, AlertDescription),
-    /// Mark the connection as ready to send application data.
-    StartOutgoingTraffic,
+    /// Mark the connection as ready to send half-RTT traffic (server only)
+    StartHalfRttTraffic,
     /// Mark the connection as ready to send and receive application data.
     StartTraffic,
 }
@@ -1223,7 +1223,7 @@ impl Event<'_> {
             | Event::MessageEncrypter { .. }
             | Event::OutgoingKeySchedule(_)
             | Event::SendAlert(..)
-            | Event::StartOutgoingTraffic => EventDisposition::SendPath,
+            | Event::StartHalfRttTraffic => EventDisposition::SendPath,
 
             // recv-specific events
             Event::MessageDecrypter { .. }
