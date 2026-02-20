@@ -356,7 +356,7 @@ mod client_hello {
                 // Application data can be sent immediately after Finished, in one
                 // flight.  However, if client auth is enabled, we don't want to send
                 // application data to an unauthenticated peer.
-                output.emit(Event::StartOutgoingTraffic);
+                output.emit(Event::StartHalfRttTraffic);
             }
 
             let hs = HandshakeState {
