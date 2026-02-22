@@ -42,17 +42,31 @@ pub static SECP256R1MLKEM768: &dyn SupportedKxGroup = &Hybrid {
     },
 };
 
-/// This is the [MLKEM] key exchange.
+/// This is the [MLKEM] key encapsulation mechanism in NIST with security category 3.
 ///
-/// [MLKEM]: https://datatracker.ietf.org/doc/draft-connolly-tls-mlkem-key-agreement
-pub static MLKEM768: &dyn SupportedKxGroup = &MlKem768;
+/// [MLKEM]: https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem
+pub static MLKEM768: &dyn SupportedKxGroup = &MlKem {
+    alg: &kem::ML_KEM_768,
+    group: NamedGroup::MLKEM768,
+};
+
+/// This is the [MLKEM] key encapsulation mechanism in NIST with security category 5.
+///
+/// [MLKEM]: https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem
+pub static MLKEM1024: &dyn SupportedKxGroup = &MlKem {
+    alg: &kem::ML_KEM_1024,
+    group: NamedGroup::MLKEM1024,
+};
 
 #[derive(Debug)]
-pub(crate) struct MlKem768;
+pub(crate) struct MlKem {
+    alg: &'static kem::Algorithm<kem::AlgorithmId>,
+    group: NamedGroup,
+}
 
-impl SupportedKxGroup for MlKem768 {
+impl SupportedKxGroup for MlKem {
     fn start(&self) -> Result<StartedKeyExchange, Error> {
-        let decaps_key = kem::DecapsulationKey::generate(&kem::ML_KEM_768)
+        let decaps_key = kem::DecapsulationKey::generate(self.alg)
             .map_err(|_| Error::General("key generation failed".into()))?;
 
         let pub_key_bytes = decaps_key
@@ -61,13 +75,14 @@ impl SupportedKxGroup for MlKem768 {
             .map_err(|_| Error::General("encaps failed".into()))?;
 
         Ok(StartedKeyExchange::Single(Box::new(Active {
+            group: self.group,
             decaps_key: Box::new(decaps_key),
             encaps_key_bytes: Vec::from(pub_key_bytes.as_ref()),
         })))
     }
 
     fn start_and_complete(&self, client_share: &[u8]) -> Result<CompletedKeyExchange, Error> {
-        let encaps_key = kem::EncapsulationKey::new(&kem::ML_KEM_768, client_share)
+        let encaps_key = kem::EncapsulationKey::new(self.alg, client_share)
             .map_err(|_| PeerMisbehaved::InvalidKeyShare)?;
 
         let (ciphertext, shared_secret) = encaps_key
@@ -82,7 +97,7 @@ impl SupportedKxGroup for MlKem768 {
     }
 
     fn name(&self) -> NamedGroup {
-        NamedGroup::MLKEM768
+        self.group
     }
 
     fn fips(&self) -> FipsStatus {
@@ -103,6 +118,7 @@ impl SupportedKxGroup for MlKem768 {
 }
 
 struct Active {
+    group: NamedGroup,
     decaps_key: Box<kem::DecapsulationKey<kem::AlgorithmId>>,
     encaps_key_bytes: Vec<u8>,
 }
@@ -125,7 +141,7 @@ impl ActiveKeyExchange for Active {
     }
 
     fn group(&self) -> NamedGroup {
-        NamedGroup::MLKEM768
+        self.group
     }
 }
 
