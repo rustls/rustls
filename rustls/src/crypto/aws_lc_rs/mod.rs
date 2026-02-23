@@ -237,7 +237,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
 /// [`DEFAULT_KX_GROUPS`] is provided as an array of this provider's defaults.
 pub mod kx_group {
     pub use super::kx::{SECP256R1, SECP384R1, X25519};
-    pub use super::pq::{MLKEM768, SECP256R1MLKEM768, X25519MLKEM768};
+    pub use super::pq::{MLKEM768, MLKEM1024, SECP256R1MLKEM768, X25519MLKEM768};
 }
 
 /// A list of the default key exchange groups supported by this provider.
@@ -268,6 +268,7 @@ pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
     #[cfg(not(feature = "prefer-post-quantum"))]
     kx_group::SECP256R1MLKEM768,
     kx_group::MLKEM768,
+    kx_group::MLKEM1024,
 ];
 
 #[cfg(feature = "std")]

@@ -4,4 +4,4 @@
 //! using post-quantum algorithms instead of using this crate.
 
 pub use rustls::crypto::aws_lc_rs::default_provider as provider;
-pub use rustls::crypto::aws_lc_rs::kx_group::{MLKEM768, X25519MLKEM768};
+pub use rustls::crypto::aws_lc_rs::kx_group::{MLKEM768, MLKEM1024, X25519MLKEM768};
