@@ -435,8 +435,8 @@ fn client_complete_io_for_write() {
             let mut pipe = OtherSession::new(&mut server);
             let (rdlen, wrlen) = complete_io(&mut pipe, &mut client).unwrap();
             assert!(rdlen == 0 && wrlen > 0);
-            println!("{:?}", pipe.writevs);
-            assert_eq!(pipe.writevs, vec![vec![42, 42]]);
+            println!("{:?}", pipe.writev_lengths());
+            assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
         }
         check_read(
             &mut server.reader(),
@@ -570,8 +570,8 @@ fn buffered_client_complete_io_for_write() {
             let mut pipe = OtherSession::new_buffered(&mut server);
             let (rdlen, wrlen) = complete_io(&mut pipe, &mut client).unwrap();
             assert!(rdlen == 0 && wrlen > 0);
-            println!("{:?}", pipe.writevs);
-            assert_eq!(pipe.writevs, vec![vec![42, 42]]);
+            println!("{:?}", pipe.writev_lengths());
+            assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
         }
         check_read(
             &mut server.reader(),
@@ -646,7 +646,7 @@ fn server_complete_io_for_write() {
             let mut pipe = OtherSession::new(&mut client);
             let (rdlen, wrlen) = complete_io(&mut pipe, &mut server).unwrap();
             assert!(rdlen == 0 && wrlen > 0);
-            assert_eq!(pipe.writevs, vec![vec![42, 42]]);
+            assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
         }
         check_read(
             &mut client.reader(),
@@ -1075,7 +1075,7 @@ fn vectored_write_for_server_appdata() {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
         assert_eq!(84, wrlen);
-        assert_eq!(pipe.writevs, vec![vec![42, 42]]);
+        assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
     }
     check_read(
         &mut client.reader(),
@@ -1100,7 +1100,7 @@ fn vectored_write_for_client_appdata() {
         let mut pipe = OtherSession::new(&mut server);
         let wrlen = client.write_tls(&mut pipe).unwrap();
         assert_eq!(84, wrlen);
-        assert_eq!(pipe.writevs, vec![vec![42, 42]]);
+        assert_eq!(pipe.writev_lengths(), vec![vec![42, 42]]);
     }
     check_read(
         &mut server.reader(),
@@ -1134,8 +1134,8 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
         let wrlen = server.write_tls(&mut pipe).unwrap();
         // don't assert exact sizes here, to avoid a brittle test
         assert!(wrlen > 2400); // its pretty big (contains cert chain)
-        assert_eq!(pipe.writevs.len(), 1); // only one writev
-        assert_eq!(pipe.writevs[0].len(), 5); // at least a server hello/ccs/cert/serverkx/0.5rtt data
+        assert_eq!(pipe.writev_lengths().len(), 1); // only one writev
+        assert_eq!(pipe.writev_lengths()[0].len(), 5); // at least a server hello/ccs/cert/serverkx/0.5rtt data
     }
 
     client.process_new_packets().unwrap();
@@ -1146,7 +1146,7 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
         let wrlen = server.write_tls(&mut pipe).unwrap();
         // 2 tickets (in one flight)
         assert_eq!(wrlen, 184);
-        assert_eq!(pipe.writevs, vec![vec![184]]);
+        assert_eq!(pipe.writev_lengths(), vec![vec![184]]);
     }
 
     assert!(!server.is_handshaking());
@@ -1176,8 +1176,8 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
         let wrlen = server.write_tls(&mut pipe).unwrap();
         // don't assert exact sizes here, to avoid a brittle test
         assert!(wrlen > 2400); // its pretty big (contains cert chain)
-        assert_eq!(pipe.writevs.len(), 1); // only one writev
-        assert_eq!(pipe.writevs[0].len(), 3); // at least a server hello/ccs/cert/serverkx data, in one message
+        assert_eq!(pipe.writev_lengths().len(), 1); // only one writev
+        assert_eq!(pipe.writev_lengths()[0].len(), 3); // at least a server hello/ccs/cert/serverkx data, in one message
     }
 
     // client second flight
@@ -1192,7 +1192,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
         assert_eq!(wrlen, 258);
-        assert_eq!(pipe.writevs, vec![vec![184, 42, 32]]);
+        assert_eq!(pipe.writev_lengths(), vec![vec![184, 42, 32]]);
     }
 
     assert!(!server.is_handshaking());
@@ -1234,8 +1234,8 @@ fn vectored_write_for_client_handshake() {
         let wrlen = client.write_tls(&mut pipe).unwrap();
         // don't assert exact sizes here, to avoid a brittle test
         assert!(wrlen > 200); // just the client hello
-        assert_eq!(pipe.writevs.len(), 1); // only one writev
-        assert!(pipe.writevs[0].len() == 1); // only a client hello
+        assert_eq!(pipe.writev_lengths().len(), 1); // only one writev
+        assert!(pipe.writev_lengths()[0].len() == 1); // only a client hello
     }
 
     transfer(&mut server, &mut client);
@@ -1246,7 +1246,7 @@ fn vectored_write_for_client_handshake() {
         let wrlen = client.write_tls(&mut pipe).unwrap();
         assert_eq!(wrlen, 138);
         // CCS, finished, then two application data records
-        assert_eq!(pipe.writevs, vec![vec![6, 58, 42, 32]]);
+        assert_eq!(pipe.writev_lengths(), vec![vec![6, 58, 42, 32]]);
     }
 
     assert!(!server.is_handshaking());
@@ -1277,7 +1277,7 @@ fn vectored_write_with_slow_client() {
             + server.write_tls(&mut pipe).unwrap();
         assert_eq!(42, wrlen);
         assert_eq!(
-            pipe.writevs,
+            pipe.writev_lengths(),
             vec![vec![21], vec![10], vec![5], vec![3], vec![3]]
         );
     }
@@ -1358,9 +1358,9 @@ fn test_server_mtu_reduction() {
         let mut pipe = OtherSession::new(&mut client);
         server.write_tls(&mut pipe).unwrap();
 
-        assert_eq!(pipe.writevs.len(), 1);
+        assert_eq!(pipe.writev_lengths().len(), 1);
         assert!(
-            pipe.writevs[0]
+            pipe.writev_lengths()[0]
                 .iter()
                 .all(|x| *x <= 64 + encryption_overhead)
         );
@@ -1372,9 +1372,11 @@ fn test_server_mtu_reduction() {
     {
         let mut pipe = OtherSession::new(&mut client);
         server.write_tls(&mut pipe).unwrap();
-        assert_eq!(pipe.writevs.len(), 1);
+        let writevs = pipe.writev_lengths();
+        println!("writevs {writevs:?}");
+        assert_eq!(writevs.len(), 1);
         assert!(
-            pipe.writevs[0]
+            writevs[0]
                 .iter()
                 .all(|x| *x <= 64 + encryption_overhead)
         );

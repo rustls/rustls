@@ -1560,7 +1560,8 @@ impl ServerCredentialResolver for ServerCheckCertResolve {
 pub struct OtherSession<'a, C: Connection> {
     sess: &'a mut C,
     pub reads: usize,
-    pub writevs: Vec<Vec<usize>>,
+    /// Writevs(Chunks(Bytes))
+    pub writevs: Vec<Vec<Vec<u8>>>,
     fail_ok: bool,
     pub short_writes: bool,
     pub last_error: Option<Error>,
@@ -1596,7 +1597,7 @@ impl<'a, C: Connection> OtherSession<'a, C> {
 
     fn flush_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
         let mut total = 0;
-        let mut lengths = vec![];
+        let mut chunks = vec![];
         for bytes in b {
             let write_len = if self.short_writes {
                 if bytes.len() > 5 {
@@ -1611,7 +1612,7 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             let l = self
                 .sess
                 .read_tls(&mut io::Cursor::new(&bytes[..write_len]))?;
-            lengths.push(l);
+            chunks.push(bytes[..write_len].to_vec());
             total += l;
             if bytes.len() != l {
                 break;
@@ -1625,8 +1626,20 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             self.last_error = rc.err();
         }
 
-        self.writevs.push(lengths);
+        self.writevs.push(chunks);
         Ok(total)
+    }
+
+    pub fn writev_lengths(&self) -> Vec<Vec<usize>> {
+        self.writevs
+            .iter()
+            .map(|write| {
+                write
+                    .iter()
+                    .map(|chunk| chunk.len())
+                    .collect()
+            })
+            .collect()
     }
 }
 
