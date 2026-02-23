@@ -1641,6 +1641,32 @@ impl<'a, C: Connection> OtherSession<'a, C> {
             })
             .collect()
     }
+
+    pub fn message_lengths(&self) -> Vec<usize> {
+        let mut buffer = vec![];
+        for writev in &self.writevs {
+            for chunk in writev {
+                buffer.append(&mut chunk.clone());
+            }
+        }
+
+        let mut lengths = vec![];
+        let mut offset = 0;
+        while offset < buffer.len() {
+            let header = &buffer[offset..offset + 5];
+            println!(
+                "message header: ty={:x?} ver={:x?} len={:x?}",
+                header[0],
+                &header[1..3],
+                &header[3..5]
+            );
+            let len = u16::from_be_bytes(header[3..5].try_into().unwrap()) as usize;
+            lengths.push(header.len() + len);
+            offset += header.len() + len;
+        }
+
+        lengths
+    }
 }
 
 impl<C: Connection> io::Read for OtherSession<'_, C> {
