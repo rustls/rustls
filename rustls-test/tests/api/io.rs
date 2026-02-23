@@ -14,7 +14,7 @@ use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::{ClientConfig, ClientConnection, Connection, ServerConfig, ServerConnection};
+use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection};
 use rustls_test::{
     ClientConfigExt, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo, check_fill_buf,
     check_fill_buf_err, check_read, check_read_and_close, check_read_err, do_handshake, encoding,
@@ -1286,50 +1286,25 @@ fn vectored_write_with_slow_client() {
 
 #[test]
 fn test_client_mtu_reduction() {
-    struct CollectWrites {
-        writevs: Vec<Vec<usize>>,
-    }
-
-    impl Write for CollectWrites {
-        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-            panic!()
-        }
-        fn flush(&mut self) -> io::Result<()> {
-            panic!()
-        }
-        fn write_vectored(&mut self, b: &[IoSlice<'_>]) -> io::Result<usize> {
-            let writes = b
-                .iter()
-                .map(|slice| slice.len())
-                .collect::<Vec<usize>>();
-            let len = writes.iter().sum();
-            self.writevs.push(writes);
-            Ok(len)
-        }
-    }
-
-    fn collect_write_lengths(client: &mut ClientConnection) -> Vec<usize> {
-        let mut collector = CollectWrites { writevs: vec![] };
-
-        client
-            .write_tls(&mut collector)
-            .unwrap();
-        assert_eq!(collector.writevs.len(), 1);
-        collector.writevs[0].clone()
-    }
-
     let provider = provider::DEFAULT_PROVIDER;
     for kt in KeyType::all_for_provider(&provider) {
         let mut client_config = make_client_config(*kt, &provider);
         client_config.max_fragment_size = Some(64);
-        let mut client = Arc::new(client_config)
-            .connect(server_name("localhost"))
-            .build()
-            .unwrap();
-        let writes = collect_write_lengths(&mut client);
-        println!("writes at mtu=64: {writes:?}");
-        assert!(writes.iter().all(|x| *x <= 64));
-        assert!(writes.len() > 1);
+        let (mut client, mut server) = make_pair_for_configs(
+            client_config,
+            make_server_config(KeyType::Rsa2048, &provider),
+        );
+
+        {
+            let mut pipe = OtherSession::new(&mut server);
+            client.write_tls(&mut pipe).unwrap();
+
+            assert!(
+                pipe.message_lengths()
+                    .iter()
+                    .all(|x| *x <= 64)
+            );
+        }
     }
 }
 
