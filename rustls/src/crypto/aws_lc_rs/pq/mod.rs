@@ -1,5 +1,8 @@
+use aws_lc_rs::kem;
+
 use crate::crypto::SupportedKxGroup;
 use crate::crypto::aws_lc_rs::kx_group;
+use crate::crypto::aws_lc_rs::pq::mlkem::MlKem;
 use crate::{Error, NamedGroup, PeerMisbehaved};
 
 mod hybrid;
@@ -35,10 +38,21 @@ pub static SECP256R1MLKEM768: &dyn SupportedKxGroup = &hybrid::Hybrid {
     },
 };
 
-/// This is the [MLKEM] key exchange.
+/// This is the [MLKEM] key encapsulation mechanism in NIST with security category 3.
 ///
-/// [MLKEM]: https://datatracker.ietf.org/doc/draft-connolly-tls-mlkem-key-agreement
-pub static MLKEM768: &dyn SupportedKxGroup = &mlkem::MlKem768;
+/// [MLKEM]: https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem
+pub static MLKEM768: &dyn SupportedKxGroup = &MlKem {
+    alg: &kem::ML_KEM_768,
+    group: NamedGroup::MLKEM768,
+};
+
+/// This is the [MLKEM] key encapsulation mechanism in NIST with security category 5.
+///
+/// [MLKEM]: https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem
+pub static MLKEM1024: &dyn SupportedKxGroup = &MlKem {
+    alg: &kem::ML_KEM_1024,
+    group: NamedGroup::MLKEM1024,
+};
 
 const INVALID_KEY_SHARE: Error = Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare);
 

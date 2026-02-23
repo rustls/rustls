@@ -52,7 +52,9 @@
     "NoCommonSignatureAlgorithms-TLS12-Fallback": "requires TLS_RSA_WITH_AES_128_GCM_SHA256",
 #if defined(POST_QUANTUM)
     "MLKEMKeyShareIncludedSecond": "we only include a share for the first configured group",
+    "MLKEMKeyShareIncludedSecond-MLKEM1024": "we only include a share for the first configured group",
     "MLKEMKeyShareIncludedThird": "we only include a share for the first configured group",
+    "MLKEMKeyShareIncludedThird-MLKEM1024": "we only include a share for the first configured group",
 #else
     "*MLKEM*": "not implemented",
 #endif
