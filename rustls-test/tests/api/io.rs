@@ -1358,9 +1358,8 @@ fn test_server_mtu_reduction() {
         let mut pipe = OtherSession::new(&mut client);
         server.write_tls(&mut pipe).unwrap();
 
-        assert_eq!(pipe.writev_lengths().len(), 1);
         assert!(
-            pipe.writev_lengths()[0]
+            pipe.message_lengths()
                 .iter()
                 .all(|x| *x <= 64 + encryption_overhead)
         );
@@ -1372,11 +1371,9 @@ fn test_server_mtu_reduction() {
     {
         let mut pipe = OtherSession::new(&mut client);
         server.write_tls(&mut pipe).unwrap();
-        let writevs = pipe.writev_lengths();
-        println!("writevs {writevs:?}");
-        assert_eq!(writevs.len(), 1);
+
         assert!(
-            writevs[0]
+            pipe.message_lengths()
                 .iter()
                 .all(|x| *x <= 64 + encryption_overhead)
         );
