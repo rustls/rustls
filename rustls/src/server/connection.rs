@@ -12,10 +12,9 @@ use super::config::{ClientHello, ServerConfig};
 use super::hs;
 use super::hs::ClientHelloInput;
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, Protocol, Side, State,
-    maybe_send_fatal_alert,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, Protocol, SendPath, Side,
+    State, maybe_send_fatal_alert,
 };
-use crate::conn::private::SideData;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, Writer,
 };
@@ -269,7 +268,8 @@ impl Default for Acceptor {
             inner: Some(
                 ConnectionCore::new(
                     Box::new(Accepting),
-                    ServerConnectionData::new(CommonState::new(Side::Server, Protocol::Tcp)),
+                    ServerConnectionData::default(),
+                    CommonState::new(Side::Server, Protocol::Tcp),
                 )
                 .into(),
             ),
@@ -318,13 +318,13 @@ impl Acceptor {
                 self.inner = Some(connection);
                 return Ok(None);
             }
-            Err(err) => return Err(AcceptedAlert::from_error(err, connection.core.side)),
+            Err(err) => return Err(AcceptedAlert::from_error(err, connection.core.common.send)),
         };
 
         let sig_schemes = match ClientHelloInput::from_input(&input) {
             Ok(ClientHelloInput { sig_schemes, .. }) => sig_schemes,
             Err(err) => {
-                return Err(AcceptedAlert::from_error(err, connection.core.side));
+                return Err(AcceptedAlert::from_error(err, connection.core.common.send));
             }
         };
 
@@ -343,10 +343,9 @@ impl Acceptor {
 pub struct AcceptedAlert(ChunkVecBuffer);
 
 impl AcceptedAlert {
-    pub(super) fn from_error(error: Error, side: ServerConnectionData) -> (Error, Self) {
-        let mut common = side.into_common();
-        maybe_send_fatal_alert(&mut common.send, &error);
-        (error, Self(common.send.sendable_tls))
+    pub(super) fn from_error(error: Error, mut send: SendPath) -> (Error, Self) {
+        maybe_send_fatal_alert(&mut send, &error);
+        (error, Self(send.sendable_tls))
     }
 
     pub(super) fn empty() -> Self {
@@ -488,7 +487,10 @@ impl Accepted {
         let proof = match self.input.check_aligned_handshake() {
             Ok(proof) => proof,
             Err(err) => {
-                return Err(AcceptedAlert::from_error(err, self.connection.core.side));
+                return Err(AcceptedAlert::from_error(
+                    err,
+                    self.connection.core.common.send,
+                ));
             }
         };
 
@@ -499,9 +501,14 @@ impl Accepted {
             proof,
         };
 
-        let new = match state.with_input(input, &mut self.connection.core.side) {
+        let new = match state.with_input(input, &mut self.connection.core.output()) {
             Ok(new) => new,
-            Err(err) => return Err(AcceptedAlert::from_error(err, self.connection.core.side)),
+            Err(err) => {
+                return Err(AcceptedAlert::from_error(
+                    err,
+                    self.connection.core.common.send,
+                ));
+            }
         };
 
         self.connection.replace_state(new);
@@ -619,30 +626,21 @@ impl ConnectionCore<ServerConnectionData> {
         common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)),
-            ServerConnectionData::new(common),
+            ServerConnectionData::default(),
+            common,
         ))
     }
 }
 
 /// State associated with a server connection.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ServerConnectionData {
-    common: CommonState,
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
     early_data: EarlyDataState,
 }
 
 impl ServerConnectionData {
-    pub(crate) fn new(common: CommonState) -> Self {
-        Self {
-            common,
-            sni: None,
-            received_resumption_data: None,
-            early_data: EarlyDataState::default(),
-        }
-    }
-
     pub(crate) fn received_resumption_data(&self) -> Option<&[u8]> {
         self.received_resumption_data.as_deref()
     }
@@ -661,32 +659,14 @@ impl Output for ServerConnectionData {
             Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
             Event::ReceivedServerName(sni) => self.sni = sni,
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
-            _ => self.common.emit(ev),
+            _ => unreachable!(),
         }
     }
 }
 
 impl crate::conn::SideData for ServerConnectionData {}
 
-impl SideData for ServerConnectionData {
-    fn into_common(self) -> CommonState {
-        self.common
-    }
-}
-
-impl Deref for ServerConnectionData {
-    type Target = CommonState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.common
-    }
-}
-
-impl DerefMut for ServerConnectionData {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.common
-    }
-}
+impl crate::conn::private::SideData for ServerConnectionData {}
 
 #[cfg(test)]
 mod tests {
