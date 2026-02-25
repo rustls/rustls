@@ -28,7 +28,7 @@ mod connection {
     use crate::client::{ClientConfig, ClientConnectionData};
     use crate::common_state::{CommonState, JoinOutput, Protocol};
     use crate::conn::{
-        ConnectionCore, DeframerVecBuffer, KeyingMaterialExporter, SideData, process_new_packets,
+        ConnectionCore, KeyingMaterialExporter, SideData, VecBuffer, process_new_packets,
     };
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
@@ -356,7 +356,7 @@ mod connection {
     /// A shared interface for QUIC connections.
     struct ConnectionCommon<Side: SideData> {
         core: ConnectionCore<Side>,
-        deframer_buffer: DeframerVecBuffer,
+        deframer_buffer: VecBuffer,
         version: Version,
     }
 
@@ -364,7 +364,7 @@ mod connection {
         fn new(core: ConnectionCore<Side>, version: Version) -> Self {
             Self {
                 core,
-                deframer_buffer: DeframerVecBuffer::default(),
+                deframer_buffer: VecBuffer::default(),
                 version,
             }
         }
