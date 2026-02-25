@@ -385,7 +385,8 @@ pub mod internal {
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind};
 pub use crate::conn::{
-    Connection, IoState, KeyingMaterialExporter, Reader, SideData, TlsInputBuffer, Writer, kernel,
+    Connection, IoState, KeyingMaterialExporter, Reader, SideData, TlsInputBuffer, VecInput,
+    Writer, kernel,
 };
 /// Types related to "split" mode.
 ///
@@ -398,7 +399,7 @@ pub mod split {
 }
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
-pub use crate::msgs::{SliceInput, VecInput};
+pub use crate::msgs::SliceInput;
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
 };
