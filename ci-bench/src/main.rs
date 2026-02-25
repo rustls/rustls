@@ -158,26 +158,7 @@ fn main() -> anyhow::Result<()> {
         Command::RunAll { output_dir } => {
             let executable = std::env::args().next().unwrap();
             let results = run_all(executable, output_dir.clone(), &benchmarks)?;
-
-            // Output results in CSV (note: not using a library here to avoid extra dependencies)
-            let mut csv_file = File::create(output_dir.join(ICOUNTS_FILENAME))
-                .context("cannot create output csv file")?;
-            for (name, combined) in &results {
-                writeln!(csv_file, "{name},{}", combined.instructions)?;
-            }
-
-            let mut csv_file = File::create(output_dir.join(MEMORY_FILENAME))
-                .context("cannot create output csv file")?;
-            for (name, combined) in results {
-                writeln!(
-                    csv_file,
-                    "{name},{},{},{},{}",
-                    combined.memory.heap_total_bytes,
-                    combined.memory.heap_total_blocks,
-                    combined.memory.heap_peak_bytes,
-                    combined.memory.heap_peak_blocks,
-                )?;
-            }
+            output_csv(results, output_dir)?;
         }
         Command::RunPipe {
             index,
@@ -354,6 +335,33 @@ fn main() -> anyhow::Result<()> {
 
             print_memory_report(&compare_memory_results(&baseline, &candidate, comparator)?);
         }
+    }
+
+    Ok(())
+}
+
+fn output_csv(
+    results: Vec<(String, CombinedMeasurement)>,
+    output_dir: PathBuf,
+) -> anyhow::Result<()> {
+    // Output results in CSV (note: not using a library here to avoid extra dependencies)
+    let mut csv_file =
+        File::create(output_dir.join(ICOUNTS_FILENAME)).context("cannot create output csv file")?;
+    for (name, combined) in &results {
+        writeln!(csv_file, "{name},{}", combined.instructions)?;
+    }
+
+    let mut csv_file =
+        File::create(output_dir.join(MEMORY_FILENAME)).context("cannot create output csv file")?;
+    for (name, combined) in results {
+        writeln!(
+            csv_file,
+            "{name},{},{},{},{}",
+            combined.memory.heap_total_bytes,
+            combined.memory.heap_total_blocks,
+            combined.memory.heap_peak_bytes,
+            combined.memory.heap_peak_blocks,
+        )?;
     }
 
     Ok(())
