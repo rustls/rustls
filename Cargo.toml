@@ -113,10 +113,6 @@ zlib-rs = "0.6"
 [profile.release]
 lto = true
 
-[profile.bench]
-codegen-units = 1
-lto = true
-
 [workspace.lints.clippy]
 alloc_instead_of_core = "warn"
 cloned_instead_of_copied = "warn"

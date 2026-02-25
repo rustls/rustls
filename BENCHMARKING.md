@@ -27,11 +27,9 @@ benchmarks](https://github.com/ctz/openssl-bench), which produce similar measure
 #### Building
 
 The benchmarks are implemented in `rustls-bench/src/main.rs`.
-Use `cargo build --profile=bench -p rustls-bench --features aws-lc-rs` to obtain the corresponding
+Use `cargo build --release -p rustls-bench --features aws-lc-rs` to obtain the corresponding
 binary (you can toggle conditionally compiled code with the `--no-default-features` and `--features`
 flags) or simply run below, which will build and run the benchmark.
-
-Note: The usage of `--release` instead of `--profile=bench` also works, but it is less performant.
 
 #### Running
 

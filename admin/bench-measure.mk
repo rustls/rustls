@@ -69,6 +69,6 @@ clean:
 	cargo clean
 
 $(BENCH): .FORCE
-	cargo build --profile=bench -p rustls-bench --features $(PROVIDER)
+	cargo build --release -p rustls-bench --features $(PROVIDER)
 
 .FORCE:
