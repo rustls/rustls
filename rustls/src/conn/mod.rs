@@ -525,7 +525,7 @@ impl ConnectionRandoms {
 /// [`SideData`]. This is used to store side-specific data.
 pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
-    deframer_buffer: DeframerVecBuffer,
+    deframer_buffer: VecBuffer,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
     pub(crate) has_seen_eof: bool,
@@ -536,7 +536,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub(crate) fn new(core: ConnectionCore<Side>, fips: FipsStatus) -> Self {
         Self {
             core,
-            deframer_buffer: DeframerVecBuffer::default(),
+            deframer_buffer: VecBuffer::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             has_seen_eof: false,
@@ -911,17 +911,17 @@ impl<Side: SideData> ConnectionCore<Side> {
 }
 
 #[derive(Default, Debug)]
-pub(crate) struct DeframerVecBuffer {
+pub(crate) struct VecBuffer {
     /// Buffer of data read from the socket, in the process of being parsed into messages.
     ///
-    /// For buffer size management, checkout out the [`DeframerVecBuffer::prepare_read()`] method.
+    /// For buffer size management, checkout out the [`VecBuffer::prepare_read()`] method.
     buf: Vec<u8>,
 
     /// What size prefix of `buf` is used.
     used: usize,
 }
 
-impl DeframerVecBuffer {
+impl VecBuffer {
     /// Discard `taken` bytes from the start of our buffer.
     pub(crate) fn discard(&mut self, taken: usize) {
         if taken < self.used {
@@ -1026,7 +1026,7 @@ impl DeframerVecBuffer {
     }
 }
 
-impl TlsInputBuffer for DeframerVecBuffer {
+impl TlsInputBuffer for VecBuffer {
     fn slice_mut(&mut self) -> &mut [u8] {
         self.filled_mut()
     }
