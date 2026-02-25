@@ -5,6 +5,7 @@ use core::ops::{Deref, DerefMut};
 use std::io;
 
 use kernel::KernelConnection;
+use pki_types::FipsStatus;
 
 use crate::ConnectionOutputs;
 use crate::common_state::{
@@ -31,6 +32,8 @@ mod connection {
     use core::fmt::Debug;
     use core::ops::{Deref, DerefMut};
     use std::io::{self, BufRead, Read};
+
+    use pki_types::FipsStatus;
 
     use crate::common_state::ConnectionOutputs;
     use crate::conn::{ConnectionCommon, IoState, KeyingMaterialExporter, SideData};
@@ -232,6 +235,13 @@ mod connection {
         ///
         /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
         fn is_handshaking(&self) -> bool;
+
+        /// Return the FIPS validation status of the connection.
+        ///
+        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
+        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+        fn fips(&self) -> FipsStatus;
     }
 
     /// A structure that implements [`std::io::Read`] for reading plaintext.
@@ -519,9 +529,21 @@ pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
     pub(crate) has_seen_eof: bool,
+    pub(crate) fips: FipsStatus,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
+    pub(crate) fn new(core: ConnectionCore<Side>, fips: FipsStatus) -> Self {
+        Self {
+            core,
+            deframer_buffer: DeframerVecBuffer::default(),
+            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
+            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            has_seen_eof: false,
+            fips,
+        }
+    }
+
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         loop {
@@ -696,18 +718,6 @@ impl<Side: SideData> Deref for ConnectionCommon<Side> {
 impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.core.common
-    }
-}
-
-impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
-    fn from(core: ConnectionCore<Side>) -> Self {
-        Self {
-            core,
-            deframer_buffer: DeframerVecBuffer::default(),
-            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
-            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
-            has_seen_eof: false,
-        }
     }
 }
 

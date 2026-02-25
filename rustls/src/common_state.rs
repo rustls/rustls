@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
 
-use pki_types::{DnsName, FipsStatus};
+use pki_types::DnsName;
 
 use crate::client::EchStatus;
 use crate::conn::Exporter;
@@ -133,6 +133,7 @@ impl fmt::Debug for CommonState {
 }
 
 /// Facts about the connection learned through the handshake.
+#[derive(Default)]
 pub struct ConnectionOutputs {
     negotiated_version: Option<ProtocolVersion>,
     handshake_kind: Option<HandshakeKind>,
@@ -142,7 +143,6 @@ pub struct ConnectionOutputs {
     peer_identity: Option<Identity<'static>>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
-    pub(crate) fips: FipsStatus,
 }
 
 impl ConnectionOutputs {
@@ -204,15 +204,6 @@ impl ConnectionOutputs {
         self.handshake_kind
     }
 
-    /// Return the FIPS validation status of the connection.
-    ///
-    /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
-    /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
-    /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-    pub fn fips(&self) -> FipsStatus {
-        self.fips
-    }
-
     pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
         let Self {
             negotiated_version,
@@ -249,22 +240,6 @@ impl Output for ConnectionOutputs {
                 self.negotiated_version = Some(ver);
             }
             _ => unreachable!(),
-        }
-    }
-}
-
-impl Default for ConnectionOutputs {
-    fn default() -> Self {
-        Self {
-            negotiated_version: None,
-            handshake_kind: None,
-            suite: None,
-            negotiated_kx_group: None,
-            alpn_protocol: None,
-            peer_identity: None,
-            exporter: None,
-            early_exporter: None,
-            fips: FipsStatus::Unvalidated,
         }
     }
 }
