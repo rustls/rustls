@@ -100,7 +100,7 @@ impl CallgrindRunner {
             // The file where the instruction counts will be stored
             .arg(format!("--callgrind-out-file={}", output_file.display()))
             .arg(executable)
-            .arg("run-single")
+            .arg("run-pipe")
             .arg(benchmark_index.to_string())
             .arg(side.as_str())
             .arg("instruction")
@@ -202,7 +202,7 @@ impl DhatRunner {
             // Also save the detailed JSON
             .arg(format!("--dhat-out-file={}", output_file.display()))
             .arg(executable)
-            .arg("run-single")
+            .arg("run-pipe")
             .arg(benchmark_index.to_string())
             .arg(side.as_str())
             .arg("memory")

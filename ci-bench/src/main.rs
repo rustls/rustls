@@ -81,7 +81,7 @@ pub enum Command {
         output_dir: PathBuf,
     },
     /// Run a single benchmark at the provided index (used by the bench runner to start each benchmark in its own process)
-    RunSingle {
+    RunPipe {
         index: u32,
         side: Side,
         measurement_mode: Mode,
@@ -179,7 +179,7 @@ fn main() -> anyhow::Result<()> {
                 )?;
             }
         }
-        Command::RunSingle {
+        Command::RunPipe {
             index,
             side,
             measurement_mode,
