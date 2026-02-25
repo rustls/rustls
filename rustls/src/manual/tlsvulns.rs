@@ -66,7 +66,7 @@ rustls does not support these ciphersuites.
 
 ## CRIME
 
-In 2002 [John Kelsey](https://www.iacr.org/cryptodb/archive/2002/FSE/3091/3091.pdf) discussed the length side channel
+In 2002 [John Kelsey](https://web.archive.org/web/20190701134313/www.iacr.org/cryptodb/archive/2002/FSE/3091/3091.pdf) discussed the length side channel
 as applied to compression of combined secret and attacker-chosen strings.
 
 Compression continued to be an option in TLSv1.1 (2006) and in TLSv1.2 (2008).  Support in libraries was widespread.
