@@ -696,9 +696,6 @@ pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
 /// That's 2^14 payload bytes and a 2KB allowance for ciphertext overheads.
 pub(crate) const MAX_PAYLOAD: u16 = 16_384 + 2048;
 
-/// Maximum on-the-wire message size.
-pub(crate) const MAX_WIRE_SIZE: usize = MAX_PAYLOAD as usize + HEADER_SIZE;
-
 #[cfg(test)]
 mod tests {
     use alloc::vec;
