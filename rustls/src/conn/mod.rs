@@ -1,7 +1,8 @@
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::fmt::{self, Debug};
 use core::mem;
-use core::ops::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut, Range};
 use std::io;
 
 use kernel::KernelConnection;
@@ -11,7 +12,7 @@ use crate::common_state::{
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::{BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random};
+use crate::msgs::{BufferProgress, Delocator, Locator, MAX_WIRE_SIZE, Message, Random};
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -911,6 +912,132 @@ impl<Side: SideData> ConnectionCore<Side> {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
+    }
+}
+
+#[derive(Default, Debug)]
+pub(crate) struct DeframerVecBuffer {
+    /// Buffer of data read from the socket, in the process of being parsed into messages.
+    ///
+    /// For buffer size management, checkout out the [`DeframerVecBuffer::prepare_read()`] method.
+    buf: Vec<u8>,
+
+    /// What size prefix of `buf` is used.
+    used: usize,
+}
+
+impl DeframerVecBuffer {
+    /// Discard `taken` bytes from the start of our buffer.
+    pub(crate) fn discard(&mut self, taken: usize) {
+        if taken < self.used {
+            /* Before:
+             * +----------+----------+----------+
+             * | taken    | pending  |xxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ taken    ^ self.used
+             *
+             * After:
+             * +----------+----------+----------+
+             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ self.used
+             */
+
+            self.buf
+                .copy_within(taken..self.used, 0);
+            self.used -= taken;
+        } else if taken >= self.used {
+            self.used = 0;
+        }
+    }
+
+    pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[..self.used]
+    }
+
+    /// Read some bytes from `rd`, and add them to the buffer.
+    pub(crate) fn read(&mut self, rd: &mut dyn io::Read, in_handshake: bool) -> io::Result<usize> {
+        if let Err(err) = self.prepare_read(in_handshake) {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, err));
+        }
+
+        // Try to do the largest reads possible. Note that if
+        // we get a message with a length field out of range here,
+        // we do a zero length read.  That looks like an EOF to
+        // the next layer up, which is fine.
+        let new_bytes = rd.read(&mut self.buf[self.used..])?;
+        self.used += new_bytes;
+        Ok(new_bytes)
+    }
+
+    /// Resize the internal `buf` if necessary for reading more bytes.
+    fn prepare_read(&mut self, is_joining_hs: bool) -> Result<(), &'static str> {
+        /// TLS allows for handshake messages of up to 16MB.  We
+        /// restrict that to 64KB to limit potential for denial-of-
+        /// service.
+        const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
+
+        const READ_SIZE: usize = 4096;
+
+        // We allow a maximum of 64k of buffered data for handshake messages only. Enforce this
+        // by varying the maximum allowed buffer size here based on whether a prefix of a
+        // handshake payload is currently being buffered. Given that the first read of such a
+        // payload will only ever be 4k bytes, the next time we come around here we allow a
+        // larger buffer size. Once the large message and any following handshake messages in
+        // the same flight have been consumed, `pop()` will call `discard()` to reset `used`.
+        // At this point, the buffer resizing logic below should reduce the buffer size.
+        let allow_max = match is_joining_hs {
+            true => MAX_HANDSHAKE_SIZE as usize,
+            false => MAX_WIRE_SIZE,
+        };
+
+        if self.used >= allow_max {
+            return Err("message buffer full");
+        }
+
+        // If we can and need to increase the buffer size to allow a 4k read, do so. After
+        // dealing with a large handshake message (exceeding `MAX_WIRE_SIZE`),
+        // make sure to reduce the buffer size again (large messages should be rare).
+        // Also, reduce the buffer size if there are neither full nor partial messages in it,
+        // which usually means that the other side suspended sending data.
+        let need_capacity = Ord::min(allow_max, self.used + READ_SIZE);
+        if need_capacity > self.buf.len() {
+            self.buf.resize(need_capacity, 0);
+        } else if self.used == 0 || self.buf.len() > allow_max {
+            self.buf.resize(need_capacity, 0);
+            self.buf.shrink_to(need_capacity);
+        }
+
+        Ok(())
+    }
+
+    /// Append `bytes` to the end of this buffer.
+    ///
+    /// Return a `Range` saying where it went.
+    pub(crate) fn extend(&mut self, bytes: &[u8]) -> Range<usize> {
+        let len = bytes.len();
+        let start = self.used;
+        let end = start + len;
+        if self.buf.len() < end {
+            self.buf.resize(end, 0);
+        }
+        self.buf[start..end].copy_from_slice(bytes);
+        self.used += len;
+        Range { start, end }
+    }
+
+    pub(crate) fn filled(&self) -> &[u8] {
+        &self.buf[..self.used]
+    }
+}
+
+impl TlsInputBuffer for DeframerVecBuffer {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        self.filled_mut()
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.discard(num_bytes)
     }
 }
 

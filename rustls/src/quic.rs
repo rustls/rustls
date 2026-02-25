@@ -27,14 +27,11 @@ mod connection {
     use crate::ConnectionOutputs;
     use crate::client::{ClientConfig, ClientConnectionData};
     use crate::common_state::{CommonState, Protocol};
-    use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
+    use crate::conn::{ConnectionCore, DeframerVecBuffer, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
-    use crate::msgs::{
-        ClientExtensionsInput, DeframerVecBuffer, Locator, ServerExtensionsInput,
-        TransportParameters,
-    };
+    use crate::msgs::{ClientExtensionsInput, Locator, ServerExtensionsInput, TransportParameters};
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::suites::SupportedCipherSuite;
     use crate::sync::Arc;
