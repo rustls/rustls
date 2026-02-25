@@ -80,6 +80,13 @@ pub enum Command {
         #[arg(short, long, default_value = "target/ci-bench")]
         output_dir: PathBuf,
     },
+    /// Run a named benchmark and print the measured CPU instruction counts in CSV format
+    RunSingle {
+        /// The name of the benchmark.
+        bench: String,
+        #[arg(short, long, default_value = "target/ci-bench")]
+        output_dir: PathBuf,
+    },
     /// Run a single benchmark at the provided index (used by the bench runner to start each benchmark in its own process)
     RunPipe {
         index: u32,
@@ -158,6 +165,26 @@ fn main() -> anyhow::Result<()> {
         Command::RunAll { output_dir } => {
             let executable = std::env::args().next().unwrap();
             let results = run_all(executable, output_dir.clone(), &benchmarks)?;
+            output_csv(results, output_dir)?;
+        }
+        Command::RunSingle { bench, output_dir } => {
+            let executable = std::env::args().next().unwrap();
+            let Some(benchmark) = benchmarks
+                .into_iter()
+                .find(|b| b.name() == bench)
+            else {
+                let mut output = String::new();
+                let mut all = all_benchmarks()?;
+                all.sort_by(|a, b| a.name().cmp(b.name()));
+                for bench in all {
+                    output.push_str(&format!(" - {:?}\n", bench.name(),));
+                }
+
+                return Err(anyhow::anyhow!(
+                    "Benchmark {bench:?} not found\n\nAvailable are:\n{output}"
+                ));
+            };
+            let results = run_all(executable, output_dir.clone(), &[benchmark])?;
             output_csv(results, output_dir)?;
         }
         Command::RunPipe {
