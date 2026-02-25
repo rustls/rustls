@@ -12,7 +12,7 @@ use crate::common_state::{
 };
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput, VecInput};
+use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput};
 use crate::quic::QuicOutput;
 use crate::server::{ChooseConfig, ServerConfig, ServerSide};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
@@ -25,8 +25,8 @@ pub mod kernel;
 
 mod receive;
 use receive::JoinOutput;
-pub use receive::TlsInputBuffer;
 pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
+pub use receive::{TlsInputBuffer, VecInput};
 
 mod send;
 use send::DEFAULT_BUFFER_LIMIT;
