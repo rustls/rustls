@@ -7,15 +7,14 @@ use std::io::{self, BufRead, Read};
 use kernel::KernelConnection;
 use pki_types::FipsStatus;
 
-use crate::ServerConfig;
 use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, UnborrowedPayload,
 };
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput, TlsInputBuffer, VecInput};
+use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput, VecInput};
 use crate::quic::QuicOutput;
-use crate::server::{ChooseConfig, ServerSide};
+use crate::server::{ChooseConfig, ServerConfig, ServerSide};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -26,6 +25,7 @@ pub mod kernel;
 
 mod receive;
 use receive::JoinOutput;
+pub use receive::TlsInputBuffer;
 pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
 
 mod send;
