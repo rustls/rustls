@@ -35,17 +35,13 @@ impl CallgrindRunner {
     }
 
     /// Runs the benchmark at the specified index and returns the instruction counts for each side
-    pub(crate) fn run_bench(
-        &self,
-        benchmark_index: u32,
-        bench: &Benchmark,
-    ) -> anyhow::Result<InstructionCounts> {
+    pub(crate) fn run_bench(&self, bench: &Benchmark) -> anyhow::Result<InstructionCounts> {
         // The server and client are started as child processes, and communicate with each other
         // through stdio.
 
         let mut server = Self::run_bench_side(
             &self.executable,
-            benchmark_index,
+            bench.name(),
             Side::Server,
             &bench.name_with_side(Side::Server),
             Stdio::piped(),
@@ -56,7 +52,7 @@ impl CallgrindRunner {
 
         let client = Self::run_bench_side(
             &self.executable,
-            benchmark_index,
+            bench.name(),
             Side::Client,
             &bench.name_with_side(Side::Client),
             Stdio::from(server.process.stdout.take().unwrap()),
@@ -74,15 +70,15 @@ impl CallgrindRunner {
     /// See docs for [`Self::run_bench`]
     fn run_bench_side(
         executable: &str,
-        benchmark_index: u32,
+        bench_name: &str,
         side: Side,
-        name: &str,
+        output_name: &str,
         stdin: Stdio,
         stdout: Stdio,
         output_dir: &Path,
     ) -> anyhow::Result<BenchSubprocess> {
-        let output_file = output_dir.join(name);
-        let log_file = output_dir.join(format!("{name}.log"));
+        let output_file = output_dir.join(output_name);
+        let log_file = output_dir.join(format!("{output_name}.log"));
 
         // Run under setarch to disable ASLR, to reduce noise
         let mut cmd = Command::new("setarch");
@@ -101,7 +97,7 @@ impl CallgrindRunner {
             .arg(format!("--callgrind-out-file={}", output_file.display()))
             .arg(executable)
             .arg("run-pipe")
-            .arg(benchmark_index.to_string())
+            .arg(bench_name)
             .arg(side.as_str())
             .arg("instruction")
             .stdin(stdin)
@@ -142,17 +138,13 @@ impl DhatRunner {
     }
 
     /// Runs the benchmark at the specified index and returns the memory usage for each side
-    pub(crate) fn run_bench(
-        &self,
-        benchmark_index: u32,
-        bench: &Benchmark,
-    ) -> anyhow::Result<MemoryProfile> {
+    pub(crate) fn run_bench(&self, bench: &Benchmark) -> anyhow::Result<MemoryProfile> {
         // The server and client are started as child processes, and communicate with each other
         // through stdio.
 
         let mut server = Self::run_bench_side(
             &self.executable,
-            benchmark_index,
+            bench.name(),
             Side::Server,
             &bench.name_with_side(Side::Server),
             Stdio::piped(),
@@ -163,7 +155,7 @@ impl DhatRunner {
 
         let client = Self::run_bench_side(
             &self.executable,
-            benchmark_index,
+            bench.name(),
             Side::Client,
             &bench.name_with_side(Side::Client),
             Stdio::from(server.process.stdout.take().unwrap()),
@@ -181,15 +173,15 @@ impl DhatRunner {
     /// See docs for [`Self::run_bench`]
     fn run_bench_side(
         executable: &str,
-        benchmark_index: u32,
+        bench_name: &str,
         side: Side,
-        name: &str,
+        output_name: &str,
         stdin: Stdio,
         stdout: Stdio,
         output_dir: &Path,
     ) -> anyhow::Result<BenchSubprocess> {
-        let output_file = output_dir.join(name);
-        let log_file = output_dir.join(format!("{name}.log"));
+        let output_file = output_dir.join(output_name);
+        let log_file = output_dir.join(format!("{output_name}.log"));
 
         // Run under setarch to disable ASLR, to reduce noise
         let mut cmd = Command::new("setarch");
@@ -203,7 +195,7 @@ impl DhatRunner {
             .arg(format!("--dhat-out-file={}", output_file.display()))
             .arg(executable)
             .arg("run-pipe")
-            .arg(benchmark_index.to_string())
+            .arg(bench_name)
             .arg(side.as_str())
             .arg("memory")
             .stdin(stdin)
