@@ -12,7 +12,7 @@ use crate::common_state::{
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{ApiMisuse, Error};
-use crate::msgs::{BufferProgress, Delocator, Locator, MAX_WIRE_SIZE, Message, Random};
+use crate::msgs::{BufferProgress, Delocator, Locator, Message, Random};
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -672,9 +672,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             return Ok(0);
         }
 
-        let res = self
-            .deframer_buffer
-            .read(rd, self.recv.hs_deframer.is_active());
+        let res = self.deframer_buffer.read(rd);
         if let Ok(0) = res {
             self.recv.has_seen_eof = true;
         }
@@ -956,8 +954,8 @@ impl VecBuffer {
     }
 
     /// Read some bytes from `rd`, and add them to the buffer.
-    pub(crate) fn read(&mut self, rd: &mut dyn io::Read, in_handshake: bool) -> io::Result<usize> {
-        if let Err(err) = self.prepare_read(in_handshake) {
+    pub(crate) fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
+        if let Err(err) = self.prepare_read() {
             return Err(io::Error::new(io::ErrorKind::InvalidData, err));
         }
 
@@ -971,27 +969,20 @@ impl VecBuffer {
     }
 
     /// Resize the internal `buf` if necessary for reading more bytes.
-    fn prepare_read(&mut self, is_joining_hs: bool) -> Result<(), &'static str> {
+    fn prepare_read(&mut self) -> Result<(), &'static str> {
         /// TLS allows for handshake messages of up to 16MB.  We
         /// restrict that to 64KB to limit potential for denial-of-
         /// service.
-        const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
+        const MAX_HANDSHAKE_SIZE: usize = 0xffff;
 
         const READ_SIZE: usize = 4096;
 
-        // We allow a maximum of 64k of buffered data for handshake messages only. Enforce this
-        // by varying the maximum allowed buffer size here based on whether a prefix of a
-        // handshake payload is currently being buffered. Given that the first read of such a
+        // We allow a maximum of 64k of buffered data. Given that the first read of such a
         // payload will only ever be 4k bytes, the next time we come around here we allow a
         // larger buffer size. Once the large message and any following handshake messages in
         // the same flight have been consumed, `pop()` will call `discard()` to reset `used`.
         // At this point, the buffer resizing logic below should reduce the buffer size.
-        let allow_max = match is_joining_hs {
-            true => MAX_HANDSHAKE_SIZE as usize,
-            false => MAX_WIRE_SIZE,
-        };
-
-        if self.used >= allow_max {
+        if self.used >= MAX_HANDSHAKE_SIZE {
             return Err("message buffer full");
         }
 
@@ -1000,10 +991,10 @@ impl VecBuffer {
         // make sure to reduce the buffer size again (large messages should be rare).
         // Also, reduce the buffer size if there are neither full nor partial messages in it,
         // which usually means that the other side suspended sending data.
-        let need_capacity = Ord::min(allow_max, self.used + READ_SIZE);
+        let need_capacity = Ord::min(MAX_HANDSHAKE_SIZE, self.used + READ_SIZE);
         if need_capacity > self.buf.len() {
             self.buf.resize(need_capacity, 0);
-        } else if self.used == 0 || self.buf.len() > allow_max {
+        } else if self.used == 0 || self.buf.len() > MAX_HANDSHAKE_SIZE {
             self.buf.resize(need_capacity, 0);
             self.buf.shrink_to(need_capacity);
         }
