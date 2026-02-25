@@ -1,34 +1,13 @@
+use core::borrow::Borrow;
+use core::cmp;
 use std::sync::Arc;
 
-use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use rustls::crypto::{CryptoProvider, TicketProducer};
 use rustls_test::KeyType;
 
 use crate::Side;
 use crate::valgrind::InstructionCounts;
-
-/// Validates a benchmark collection, returning an error if the provided benchmarks are invalid
-///
-/// Benchmarks can be invalid because of the following reasons:
-///
-/// - Re-using an already defined benchmark name.
-pub(crate) fn validate_benchmarks(benchmarks: &[Benchmark]) -> anyhow::Result<()> {
-    // Detect duplicate definitions
-    let duplicate_names: Vec<_> = benchmarks
-        .iter()
-        .map(|b| b.name.as_str())
-        .duplicates()
-        .collect();
-    if !duplicate_names.is_empty() {
-        anyhow::bail!(
-            "The following benchmarks are defined multiple times: {}",
-            duplicate_names.join(", ")
-        );
-    }
-
-    Ok(())
-}
 
 /// Get the reported instruction counts for the provided benchmark
 pub(crate) fn get_reported_instr_count(
@@ -147,5 +126,31 @@ impl Benchmark {
     /// Returns the benchmark's unique name with the side appended to it
     pub(crate) fn name_with_side(&self, side: Side) -> String {
         format!("{}_{}", self.name, side.as_str())
+    }
+}
+
+impl Borrow<str> for Benchmark {
+    fn borrow(&self) -> &str {
+        &self.name
+    }
+}
+
+impl PartialEq for Benchmark {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Benchmark {}
+
+impl PartialOrd for Benchmark {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Benchmark {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.name.cmp(&other.name)
     }
 }
