@@ -3,7 +3,7 @@ use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 use std::io;
 
-use pki_types::ServerName;
+use pki_types::{FipsStatus, ServerName};
 
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
@@ -170,6 +170,10 @@ impl Connection for ClientConnection {
     fn is_handshaking(&self) -> bool {
         self.inner.is_handshaking()
     }
+
+    fn fips(&self) -> FipsStatus {
+        self.inner.fips
+    }
 }
 
 impl Deref for ClientConnection {
@@ -211,14 +215,15 @@ impl ClientConnectionBuilder {
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
-        Ok(ClientConnection {
-            inner: ConnectionCommon::from(ConnectionCore::for_client(
-                config,
-                name,
-                ClientExtensionsInput::from_alpn(alpn_protocols),
-                Protocol::Tcp,
-            )?),
-        })
+        let fips = config.fips();
+        let mut inner = ConnectionCommon::from(ConnectionCore::for_client(
+            config,
+            name,
+            ClientExtensionsInput::from_alpn(alpn_protocols),
+            Protocol::Tcp,
+        )?);
+        inner.fips = fips;
+        Ok(ClientConnection { inner })
     }
 }
 
@@ -292,7 +297,6 @@ impl ConnectionCore<ClientSide> {
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        common_state.fips = config.fips();
         let mut data = ClientConnectionData::new();
 
         let mut output = SideCommonOutput {

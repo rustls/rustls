@@ -6,7 +6,7 @@ use core::fmt::{Debug, Formatter};
 use core::ops::{Deref, DerefMut};
 use std::io;
 
-use pki_types::DnsName;
+use pki_types::{DnsName, FipsStatus};
 
 use super::config::{ClientHello, ServerConfig};
 use super::hs;
@@ -43,13 +43,14 @@ impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
-        Ok(Self {
-            inner: ConnectionCommon::from(ConnectionCore::for_server(
-                config,
-                ServerExtensionsInput::default(),
-                Protocol::Tcp,
-            )?),
-        })
+        let fips = config.fips();
+        let mut inner = ConnectionCommon::from(ConnectionCore::for_server(
+            config,
+            ServerExtensionsInput::default(),
+            Protocol::Tcp,
+        )?);
+        inner.fips = fips;
+        Ok(Self { inner })
     }
 
     /// Retrieves the server name, if any, used to select the certificate and
@@ -186,6 +187,10 @@ impl Connection for ServerConnection {
 
     fn is_handshaking(&self) -> bool {
         self.inner.is_handshaking()
+    }
+
+    fn fips(&self) -> FipsStatus {
+        self.inner.fips
     }
 }
 
@@ -482,6 +487,7 @@ impl Accepted {
             // is with the fragment size configured in the `ServerConfig`.
             return Err((err, AcceptedAlert::empty()));
         }
+        self.connection.fips = config.fips();
 
         let state =
             hs::ExpectClientHello::new(config, ServerExtensionsInput::default(), Protocol::Tcp);
@@ -613,7 +619,6 @@ impl ConnectionCore<ServerSide> {
         common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)).into(),
             ServerConnectionData::default(),

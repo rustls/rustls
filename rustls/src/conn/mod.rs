@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use core::fmt::{self, Debug};
 use core::mem;
 use core::ops::{Deref, DerefMut};
+use pki_types::FipsStatus;
 use std::io;
 
 use kernel::KernelConnection;
@@ -30,6 +31,7 @@ mod connection {
     use alloc::vec::Vec;
     use core::fmt::Debug;
     use core::ops::{Deref, DerefMut};
+    use pki_types::FipsStatus;
     use std::io::{self, BufRead, Read};
 
     use crate::common_state::ConnectionOutputs;
@@ -232,6 +234,13 @@ mod connection {
         ///
         /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
         fn is_handshaking(&self) -> bool;
+
+        /// Return the FIPS validation status of the connection.
+        ///
+        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
+        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+        fn fips(&self) -> FipsStatus;
     }
 
     /// A structure that implements [`std::io::Read`] for reading plaintext.
@@ -519,6 +528,7 @@ pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
     pub(crate) has_seen_eof: bool,
+    pub(crate) fips: FipsStatus,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
@@ -692,6 +702,7 @@ impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             has_seen_eof: false,
+            fips: FipsStatus::Unvalidated,
         }
     }
 }
