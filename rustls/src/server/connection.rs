@@ -6,7 +6,7 @@ use core::fmt::{Debug, Formatter};
 use core::ops::{Deref, DerefMut};
 use std::io;
 
-use pki_types::DnsName;
+use pki_types::{DnsName, FipsStatus};
 
 use super::config::{ClientHello, ServerConfig};
 use super::hs;
@@ -43,12 +43,16 @@ impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
+        let fips = config.fips();
         Ok(Self {
-            inner: ConnectionCommon::from(ConnectionCore::for_server(
-                config,
-                ServerExtensionsInput::default(),
-                Protocol::Tcp,
-            )?),
+            inner: ConnectionCommon::new(
+                ConnectionCore::for_server(
+                    config,
+                    ServerExtensionsInput::default(),
+                    Protocol::Tcp,
+                )?,
+                fips,
+            ),
         })
     }
 
@@ -187,6 +191,10 @@ impl Connection for ServerConnection {
     fn is_handshaking(&self) -> bool {
         self.inner.is_handshaking()
     }
+
+    fn fips(&self) -> FipsStatus {
+        self.inner.fips
+    }
 }
 
 impl Deref for ServerConnection {
@@ -264,14 +272,14 @@ impl Default for Acceptor {
     /// Return an empty Acceptor, ready to receive bytes from a new client connection.
     fn default() -> Self {
         Self {
-            inner: Some(
+            inner: Some(ConnectionCommon::new(
                 ConnectionCore::new(
                     hs::ServerState::Accepting(Accepting),
                     ServerConnectionData::default(),
                     CommonState::new(Side::Server, Protocol::Tcp),
-                )
-                .into(),
-            ),
+                ),
+                FipsStatus::Unvalidated,
+            )),
         }
     }
 }
@@ -482,6 +490,7 @@ impl Accepted {
             // is with the fragment size configured in the `ServerConfig`.
             return Err((err, AcceptedAlert::empty()));
         }
+        self.connection.fips = config.fips();
 
         let state =
             hs::ExpectClientHello::new(config, ServerExtensionsInput::default(), Protocol::Tcp);
@@ -613,7 +622,6 @@ impl ConnectionCore<ServerSide> {
         common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts, protocol)).into(),
             ServerConnectionData::default(),
