@@ -175,7 +175,7 @@ fn rustls_server_with_ffdhe_tls12_repeated() {
 }
 
 fn root_ca() -> RootCertStore {
-    let mut res = RootCertStore::empty();
+    let mut res = RootCertStore::with_capacity(1);
     res.add_parsable_certificates([CertificateDer::from(fs::read(CA_FILE).unwrap())]);
     res
 }

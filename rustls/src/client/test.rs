@@ -822,7 +822,7 @@ const KX_PEER_SHARE: &[u8] = b"KxPeerShareKxPeerShareKxPeerShare";
 const KX_SHARED_SECRET: &[u8] = b"KxSharedSecretKxSharedSecret";
 
 fn roots() -> RootCertStore {
-    let mut r = RootCertStore::empty();
+    let mut r = RootCertStore::with_capacity(1);
     r.add(CertificateDer::from_slice(include_bytes!(
         "../../../test-ca/rsa-2048/ca.der"
     )))
