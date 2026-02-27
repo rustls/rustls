@@ -1011,9 +1011,7 @@ impl State for ExpectTraffic {
         output: &mut dyn Output,
     ) -> Result<Box<dyn State>, Error> {
         match message.payload {
-            MessagePayload::ApplicationData(payload) => {
-                output.emit(Event::ApplicationData(payload))
-            }
+            MessagePayload::ApplicationData(payload) => output.received_plaintext(payload),
             payload => {
                 return Err(inappropriate_message(
                     &payload,

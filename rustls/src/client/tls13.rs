@@ -1461,7 +1461,7 @@ impl State for ExpectTraffic {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
-                output.emit(Event::ApplicationData(payload));
+                output.received_plaintext(payload);
             }
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
