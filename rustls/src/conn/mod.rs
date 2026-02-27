@@ -743,8 +743,17 @@ impl<Side: SideData> ConnectionCore<Side> {
                 .recv
                 .deframe(buffer, &mut buffer_progress);
 
-            let opt_msg = match res {
-                Ok(opt_msg) => opt_msg,
+            let msg = match res {
+                Ok(Some(Decrypted {
+                    plaintext,
+                    want_close_before_decrypt,
+                })) => {
+                    if want_close_before_decrypt {
+                        self.side.send_close_notify();
+                    }
+                    plaintext
+                }
+                Ok(None) => break,
                 Err(e) => {
                     self.side
                         .send
@@ -757,19 +766,6 @@ impl<Side: SideData> ConnectionCore<Side> {
                     return Err(e);
                 }
             };
-
-            let Some(msg) = opt_msg else {
-                break;
-            };
-
-            let Decrypted {
-                plaintext: msg,
-                want_close_before_decrypt,
-            } = msg;
-
-            if want_close_before_decrypt {
-                self.side.send_close_notify();
-            }
 
             let hs_aligned = self.side.recv.hs_deframer.aligned();
             let common = self.side.deref_mut();
@@ -892,34 +888,6 @@ pub struct VecBuffer {
 }
 
 impl VecBuffer {
-    /// Discard `taken` bytes from the start of our buffer.
-    pub(crate) fn discard(&mut self, taken: usize) {
-        if taken < self.used {
-            /* Before:
-             * +----------+----------+----------+
-             * | taken    | pending  |xxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ taken    ^ self.used
-             *
-             * After:
-             * +----------+----------+----------+
-             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ self.used
-             */
-
-            self.buf
-                .copy_within(taken..self.used, 0);
-            self.used -= taken;
-        } else if taken >= self.used {
-            self.used = 0;
-        }
-    }
-
-    pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[..self.used]
-    }
-
     /// Read some bytes from `rd`, and add them to the buffer.
     pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         if let Err(err) = self.prepare_read() {
@@ -975,6 +943,30 @@ impl VecBuffer {
         Ok(())
     }
 
+    /// Discard `taken` bytes from the start of our buffer.
+    pub(crate) fn discard(&mut self, taken: usize) {
+        if taken < self.used {
+            /* Before:
+             * +----------+----------+----------+
+             * | taken    | pending  |xxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ taken    ^ self.used
+             *
+             * After:
+             * +----------+----------+----------+
+             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ self.used
+             */
+
+            self.buf
+                .copy_within(taken..self.used, 0);
+            self.used -= taken;
+        } else if taken >= self.used {
+            self.used = 0;
+        }
+    }
+
     /// Append `bytes` to the end of this buffer.
     ///
     /// Return a `Range` saying where it went.
@@ -988,6 +980,10 @@ impl VecBuffer {
         self.buf[start..end].copy_from_slice(bytes);
         self.used += len;
         Range { start, end }
+    }
+
+    pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[..self.used]
     }
 
     pub(crate) fn filled(&self) -> &[u8] {
