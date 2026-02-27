@@ -1093,21 +1093,20 @@ pub(crate) struct CaptureAppData<'a> {
 
 impl Output for CaptureAppData<'_> {
     fn emit(&mut self, ev: Event<'_>) {
-        match ev {
-            Event::ApplicationData(payload) => {
-                // Receive plaintext data [`Payload<'_>`].
-                //
-                // Since [`Context`] does not hold a lifetime to the receive buffer the
-                // passed [`Payload`] will have it's lifetime erased by storing an index
-                // into the receive buffer as an [`UnborrowedPayload`]. This enables the
-                // data to be later reborrowed after it has been decrypted in-place.
-                let previous = self
-                    .received_plaintext
-                    .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
-                debug_assert!(previous.is_none(), "overwrote plaintext data");
-            }
-            _ => self.data.emit(ev),
-        }
+        self.data.emit(ev)
+    }
+
+    fn received_plaintext(&mut self, payload: Payload<'_>) {
+        // Receive plaintext data [`Payload<'_>`].
+        //
+        // Since [`Context`] does not hold a lifetime to the receive buffer the
+        // passed [`Payload`] will have it's lifetime erased by storing an index
+        // into the receive buffer as an [`UnborrowedPayload`]. This enables the
+        // data to be later reborrowed after it has been decrypted in-place.
+        let previous = self
+            .received_plaintext
+            .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
+        debug_assert!(previous.is_none(), "overwrote plaintext data");
     }
 }
 
@@ -1187,11 +1186,12 @@ impl Input<'_> {
 /// The route for handshake state machine to surface determinations about the connection.
 pub(crate) trait Output {
     fn emit(&mut self, ev: Event<'_>);
+
+    fn received_plaintext(&mut self, _payload: Payload<'_>) {}
 }
 
 /// The set of events output by the low-level handshake state machine.
 pub(crate) enum Event<'a> {
-    ApplicationData(Payload<'a>),
     ApplicationProtocol(ApplicationProtocol<'a>),
     CipherSuite(SupportedCipherSuite),
     EarlyApplicationData(Payload<'a>),
@@ -1273,8 +1273,7 @@ impl Event<'_> {
             Event::StartTraffic => EventDisposition::StartTraffic,
 
             // higher levels
-            Event::ApplicationData(_)
-            | Event::EarlyApplicationData(_)
+            Event::EarlyApplicationData(_)
             | Event::EarlyData(_)
             | Event::EchStatus(_)
             | Event::ReceivedServerName(_)
