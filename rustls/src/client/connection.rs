@@ -11,9 +11,7 @@ use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::state::ClientOutputs;
 use crate::client::{EchStatus, SendEarlyData};
-use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, Side,
-};
+use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::unbuffered::EncryptError;
 use crate::conn::{
