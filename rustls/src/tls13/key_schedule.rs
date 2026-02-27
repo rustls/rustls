@@ -11,7 +11,7 @@ use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expa
 use crate::crypto::{hash, hmac};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{HandshakeAlignedProof, Message};
-use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite, quic};
+use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite};
 
 // We express the state of a contained KeySchedule using these
 // typestates.  This means we can write code that cannot accidentally
@@ -134,12 +134,10 @@ impl KeyScheduleEarly {
             client_random,
         );
 
-        if self.ks.protocol.is_quic() {
+        if let Some(quic) = output.quic() {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
             // before the application can see.
-            output.emit(Event::QuicEarlySecret(Some(
-                client_early_traffic_secret.clone(),
-            )));
+            quic.early_secret(Some(client_early_traffic_secret.clone()));
         }
 
         client_early_traffic_secret
@@ -344,15 +342,14 @@ impl KeyScheduleHandshakeStart {
             client_random,
         );
 
-        if let Protocol::Quic(quic_version) = self.ks.protocol {
-            output.emit(Event::QuicHandshakeSecrets(quic::Secrets::new(
+        if let Some(quic) = output.quic() {
+            quic.handshake_secrets(
                 client_secret.clone(),
                 server_secret.clone(),
                 self.ks.suite,
                 self.ks.suite.quic.unwrap(),
                 self.ks.side,
-                quic_version,
-            )));
+            );
         }
 
         KeyScheduleHandshake {
@@ -427,15 +424,14 @@ impl KeyScheduleHandshake {
             .ks
             .set_encrypter(server_secret, output);
 
-        if let Protocol::Quic(quic_version) = before_finished.ks.protocol {
-            output.emit(Event::QuicTrafficSecrets(quic::Secrets::new(
+        if let Some(quic) = output.quic() {
+            quic.traffic_secrets(
                 client_secret.clone(),
                 server_secret.clone(),
                 before_finished.ks.suite,
                 before_finished.ks.suite.quic.unwrap(),
                 before_finished.ks.side,
-                quic_version,
-            )));
+            );
         }
 
         KeyScheduleTrafficWithClientFinishedPending {
@@ -577,15 +573,14 @@ impl KeyScheduleClientBeforeFinished {
         next.ks
             .set_encrypter(client_secret, output);
 
-        if let Protocol::Quic(quic_version) = next.ks.protocol {
-            output.emit(Event::QuicTrafficSecrets(quic::Secrets::new(
+        if let Some(quic) = output.quic() {
+            quic.traffic_secrets(
                 client_secret.clone(),
                 server_secret.clone(),
                 next.ks.suite,
                 next.ks.suite.quic.unwrap(),
                 next.ks.side,
-                quic_version,
-            )));
+            );
         }
 
         next.into_traffic(hs_hash)

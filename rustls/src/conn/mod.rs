@@ -19,6 +19,7 @@ use crate::msgs::{
     AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
     TlsInputBuffer,
 };
+use crate::quic::QuicOutput;
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
@@ -551,8 +552,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         loop {
             let mut output = JoinOutput {
                 outputs: &mut self.core.common.outputs,
-                protocol: self.core.common.protocol,
-                quic: &mut self.core.common.quic,
+                quic: None,
                 send: &mut self.core.common.send,
                 side: &mut self.core.side,
             };
@@ -844,13 +844,6 @@ impl<Side: SideData> ConnectionCore<Side> {
         }
     }
 
-    pub(crate) fn output(&mut self) -> SideCommonOutput<'_> {
-        SideCommonOutput {
-            side: &mut self.side,
-            common: &mut self.common,
-        }
-    }
-
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         Ok(self
             .dangerous_into_kernel_connection()?
@@ -912,12 +905,13 @@ impl<Side: SideData> ConnectionCore<Side> {
     }
 }
 
-pub(crate) struct SideCommonOutput<'a> {
+pub(crate) struct SideCommonOutput<'a, 'q> {
     pub(crate) side: &'a mut dyn Output,
+    pub(crate) quic: Option<&'q mut dyn QuicOutput>,
     pub(crate) common: &'a mut dyn Output,
 }
 
-impl Output for SideCommonOutput<'_> {
+impl<'q> Output for SideCommonOutput<'_, 'q> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev.disposition() {
             EventDisposition::SideSpecific => self.side.emit(ev),
@@ -926,7 +920,17 @@ impl Output for SideCommonOutput<'_> {
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        self.common.send_msg(m, must_encrypt);
+        match self.quic() {
+            Some(quic) => quic.send_msg(m, must_encrypt),
+            None => self.common.send_msg(m, must_encrypt),
+        }
+    }
+
+    fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
+        match self.quic.as_mut() {
+            Some(q) => Some(&mut **q),
+            None => None,
+        }
     }
 }
 
