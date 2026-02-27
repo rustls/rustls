@@ -13,7 +13,8 @@ use crate::common_state::{
     CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, SendPath, Side,
 };
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, Writer,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SideCommonOutput,
+    Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -485,10 +486,16 @@ impl Accepted {
         }
         self.connection.fips = config.fips();
 
+        let mut output = SideCommonOutput {
+            side: &mut self.connection.core.side,
+            quic: None,
+            common: &mut self.connection.core.common,
+        };
+
         let state = match self.choose_config.use_config(
             config,
             ServerExtensionsInput::default(),
-            &mut self.connection.core.output(),
+            &mut output,
         ) {
             Ok(state) => state,
             Err(err) => {
@@ -584,7 +591,7 @@ impl ConnectionCore<ServerSide> {
         extra_exts: ServerExtensionsInput,
         protocol: Protocol,
     ) -> Result<Self, Error> {
-        let mut common = CommonState::new(Side::Server, protocol);
+        let mut common = CommonState::new(Side::Server);
         common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
@@ -605,7 +612,7 @@ impl ConnectionCore<ServerSide> {
         Self::new(
             ReadClientHello::new(protocol).into(),
             ServerConnectionData::default(),
-            CommonState::new(Side::Server, protocol),
+            CommonState::new(Side::Server),
         )
     }
 }

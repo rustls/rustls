@@ -22,6 +22,7 @@ use crate::enums::ApplicationProtocol;
 use crate::error::Error;
 use crate::log::trace;
 use crate::msgs::{ClientExtensionsInput, Message};
+use crate::quic::QuicOutput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 
@@ -222,6 +223,7 @@ impl ClientConnectionBuilder {
                     config,
                     name,
                     ClientExtensionsInput::from_alpn(alpn_protocols),
+                    None,
                     Protocol::Tcp,
                 )?,
                 fips,
@@ -294,9 +296,10 @@ impl ConnectionCore<ClientSide> {
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
         extra_exts: ClientExtensionsInput,
-        proto: Protocol,
+        quic: Option<&mut dyn QuicOutput>,
+        protocol: Protocol,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client, proto);
+        let mut common_state = CommonState::new(Side::Client);
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
@@ -304,10 +307,11 @@ impl ConnectionCore<ClientSide> {
 
         let mut output = SideCommonOutput {
             side: &mut data,
+            quic,
             common: &mut common_state,
         };
 
-        let input = ClientHelloInput::new(name, &extra_exts, proto, &mut output, config)?;
+        let input = ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config)?;
         let state = input.start_handshake(extra_exts, &mut output)?;
 
         Ok(Self::new(state, data, common_state))
