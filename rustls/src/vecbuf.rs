@@ -106,6 +106,13 @@ impl ChunkVecBuffer {
             }
         }
     }
+
+    pub(crate) fn take(&mut self) -> Vec<Vec<u8>> {
+        if self.chunks.is_empty() {
+            return Vec::new();
+        }
+        mem::take(&mut self.chunks).into()
+    }
 }
 
 impl ChunkVecBuffer {

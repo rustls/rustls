@@ -34,7 +34,8 @@ pub(crate) use hs::ServerHandler;
 
 mod state;
 pub use state::{
-    AwaitClientFlight, ChooseConfig, ReceiveEarlyData, SendServerFlight, ServerState, ServerTraffic,
+    AwaitClientFlight, ChooseConfig, ReceiveEarlyData, SendHalfRttTraffic, SendServerFlight,
+    ServerOutputs, ServerState, ServerTraffic,
 };
 
 mod tls12;

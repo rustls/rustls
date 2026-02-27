@@ -1,27 +1,29 @@
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt;
 use core::fmt::{Debug, Formatter};
 use core::ops::{Deref, DerefMut};
+use core::{fmt, mem};
 use std::io;
 
 use pki_types::{DnsName, FipsStatus};
 
 use super::config::{ClientHello, ServerConfig};
 use super::hs;
+use crate::IoState;
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, SendPath, Side,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, Side,
 };
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, Writer,
+    Connection, ConnectionBuffers, ConnectionCore, KeyingMaterialExporter, PlaintextSink, Reader,
+    Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::cipher::Payload;
-use crate::error::{ApiMisuse, Error, ErrorWithAlert};
-use crate::log::trace;
-use crate::msgs::{ServerExtensionsInput, ServerNamePayload};
+use crate::crypto::cipher::{OutboundPlain, Payload};
+use crate::error::{ApiMisuse, Error};
+use crate::msgs::ServerExtensionsInput;
+use crate::server::{ServerOutputs, ServerState};
+use crate::state::ReceiveTrafficState;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 use crate::vecbuf::ChunkVecBuffer;
@@ -31,7 +33,15 @@ use crate::vecbuf::ChunkVecBuffer;
 /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
 /// Read data from the peer using the `io::Read` trait implementation.
 pub struct ServerConnection {
-    pub(super) inner: ConnectionCommon<ServerSide>,
+    state: Result<ServerState, Error>,
+    buffers: ConnectionBuffers,
+    config: Option<Arc<ServerConfig>>, // pending ServerState::ChooseConfig
+
+    fips: FipsStatus,
+    err_outputs: Option<Box<ServerOutputs>>,
+    early_data_received: bool,
+    received_early_data: ChunkVecBuffer,
+    early_exporter: Option<KeyingMaterialExporter>,
 }
 
 impl ServerConnection {
@@ -39,13 +49,16 @@ impl ServerConnection {
     /// we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
         let fips = config.fips();
-        let mut inner = ConnectionCommon::from(ConnectionCore::for_server(
-            config,
-            ServerExtensionsInput::default(),
-            Protocol::Tcp,
-        )?);
-        inner.fips = fips;
-        Ok(Self { inner })
+        Ok(Self {
+            state: Ok(ServerState::new()),
+            buffers: ConnectionBuffers::new(),
+            config: Some(config),
+            err_outputs: None,
+            early_data_received: false,
+            received_early_data: ChunkVecBuffer::default(),
+            early_exporter: None,
+            fips,
+        })
     }
 
     /// Retrieves the server name, if any, used to select the certificate and
@@ -64,7 +77,14 @@ impl ServerConnection {
     ///
     /// The server name is also used to match sessions during session resumption.
     pub fn server_name(&self) -> Option<&DnsName<'_>> {
-        self.inner.core.side.server_name()
+        match &self.state {
+            Ok(st) => st.server_name(),
+            Err(_) => self
+                .err_outputs
+                .as_ref()
+                .unwrap()
+                .server_name(),
+        }
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -73,10 +93,14 @@ impl ServerConnection {
     ///
     /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
     pub fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.inner
-            .core
-            .side
-            .received_resumption_data()
+        match &self.state {
+            Ok(st) => st.received_resumption_data(),
+            Err(_) => self
+                .err_outputs
+                .as_ref()
+                .unwrap()
+                .received_resumption_data(),
+        }
     }
 
     /// Set the resumption data to embed in future resumption tickets supplied to the client.
@@ -89,7 +113,7 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) -> Result<(), Error> {
         assert!(data.len() < 2usize.pow(15));
-        match &mut self.inner.core.state {
+        match &mut self.state {
             Ok(st) => st.set_resumption_data(data),
             Err(e) => Err(e.clone()),
         }
@@ -106,86 +130,396 @@ impl ServerConnection {
     /// - The connection doesn't resume an existing session.
     /// - The client hasn't sent a full ClientHello yet.
     pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
-        if self
-            .inner
-            .core
-            .side
-            .early_data
-            .was_accepted()
-        {
-            Some(ReadEarlyData::new(&mut self.inner))
+        if self.early_data_received {
+            Some(ReadEarlyData::new(self))
         } else {
             None
         }
     }
 
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
+    pub(crate) fn current_io_state(&self) -> IoState {
+        IoState {
+            tls_bytes_to_write: self.buffers.sendable_tls.len(),
+            plaintext_bytes_to_read: self.buffers.received_plaintext.len(),
+            peer_has_closed: self.has_received_close_notify(),
+        }
+    }
+
+    fn has_received_close_notify(&self) -> bool {
+        match &self.state {
+            Ok(ServerState::Traffic(traffic)) => traffic.receive.is_none(),
+            _ => false,
+        }
+    }
+
+    fn write_or_buffer_appdata(&mut self, data: OutboundPlain<'_>) -> io::Result<usize> {
+        Ok(match &mut self.state {
+            Ok(ServerState::Traffic(st)) => {
+                let Some(send) = &mut st.send else {
+                    return Ok(0);
+                };
+                let len = data.len();
+
+                let len = self
+                    .buffers
+                    .sendable_tls
+                    .apply_limit(len);
+                if len == 0 {
+                    // Don't send empty fragments.
+                    return Ok(0);
+                }
+
+                if let Ok(chunks) = send.write(data.split_at(len).0) {
+                    for c in chunks {
+                        self.buffers.sendable_tls.append(c);
+                    }
+                }
+                while let Some(chunk) = send.take_data() {
+                    self.buffers.sendable_tls.append(chunk);
+                }
+                len
+            }
+            Ok(ServerState::AwaitClientFlight(acf)) => {
+                if let Some(mut half) = acf.try_send_half_rtt() {
+                    let len = data.len();
+                    if let Ok(chunks) = half.write(data) {
+                        for c in chunks {
+                            self.buffers.sendable_tls.append(c);
+                        }
+                    }
+                    len
+                } else {
+                    self.buffers
+                        .sendable_plaintext
+                        .append_limited_copy(data)
+                }
+            }
+            _ => self
+                .buffers
+                .sendable_plaintext
+                .append_limited_copy(data),
+        })
+    }
+
+    /// Act on a potential state transition from a handshake-related state to `new`.
+    fn post_handshake_state(&mut self, mut new: ServerState) -> ServerState {
+        if let ServerState::Traffic(traffic) = &mut new {
+            // Release unsent buffered plaintext.
+            while let Some(chunk) = self.buffers.sendable_plaintext.pop() {
+                let Some(send) = traffic.send.as_mut() else {
+                    continue;
+                };
+                let Ok(chunks) = send.write(chunk.as_slice().into()) else {
+                    continue;
+                };
+                for c in chunks {
+                    self.buffers.sendable_tls.append(c);
+                }
+            }
+        }
+
+        new
     }
 }
 
 impl Connection for ServerConnection {
     fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        self.inner.read_tls(rd)
+        if self
+            .buffers
+            .received_plaintext
+            .is_full()
+        {
+            return Err(io::Error::other("received plaintext buffer full"));
+        }
+
+        if self.has_received_close_notify() {
+            return Ok(0);
+        }
+
+        let res = self.buffers.deframer_buffer.read(
+            rd,
+            self.state
+                .as_ref()
+                .map(|st| st.joining_handshake_fragments())
+                .unwrap_or_default(),
+        );
+        if let Ok(0) = res {
+            self.buffers.has_seen_eof = true;
+        }
+
+        res
     }
 
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.inner.write_tls(wr)
+        self.buffers.sendable_tls.write_to(wr)
     }
 
     fn wants_read(&self) -> bool {
-        self.inner.wants_read()
+        // We want to read more data all the time, except when we have unprocessed plaintext.
+        // This provides back-pressure to the TCP buffers. We also don't want to read more after
+        // the peer has sent us a close notification.
+        //
+        // In the handshake case we don't have readable plaintext before the handshake has
+        // completed, but also don't want to read if we still have sendable tls.
+        self.buffers
+            .received_plaintext
+            .is_empty()
+            && !self
+                .current_io_state()
+                .peer_has_closed()
+            && (!self.is_handshaking() || self.buffers.sendable_tls.is_empty())
     }
 
     fn wants_write(&self) -> bool {
-        self.inner.wants_write()
+        !self.buffers.sendable_tls.is_empty()
     }
 
     fn reader(&mut self) -> Reader<'_> {
-        self.inner.reader()
+        let has_received_close_notify = self.has_received_close_notify();
+        Reader {
+            received_plaintext: &mut self.buffers.received_plaintext,
+            // Are we done? i.e., have we processed all received messages, and received a
+            // close_notify to indicate that no new messages will arrive?
+            has_received_close_notify,
+            has_seen_eof: self.buffers.has_seen_eof,
+        }
     }
 
     fn writer(&mut self) -> Writer<'_> {
-        self.inner.writer()
+        Writer::new(self)
     }
 
-    fn process_new_packets(&mut self) -> Result<crate::IoState, Error> {
-        self.inner.process_new_packets()
+    fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        loop {
+            let state = match mem::replace(
+                &mut self.state,
+                Err(ApiMisuse::PreviousConnectionError.into()),
+            ) {
+                Ok(state) => state,
+                Err(e) => {
+                    self.state = Err(e.clone());
+                    return Err(e);
+                }
+            };
+
+            match state {
+                ServerState::SendServerFlight(mut scf) => {
+                    while let Some(chunk) = scf.take_data() {
+                        self.buffers.sendable_tls.append(chunk);
+                    }
+                    self.state = Ok(self.post_handshake_state(scf.into_next()));
+                }
+                ServerState::ChooseConfig(cc) if self.config.is_some() => {
+                    match cc.with_config(self.config.take().unwrap()) {
+                        Ok(state) => self.state = Ok(self.post_handshake_state(state)),
+                        Err((mut err, outputs)) => {
+                            while let Some(chunk) = err.take_tls_data() {
+                                self.buffers.sendable_tls.append(chunk);
+                            }
+
+                            self.err_outputs = Some(outputs);
+                            self.state = Err(err.error.clone());
+                            return Err(err.error);
+                        }
+                    }
+                }
+                ServerState::ChooseConfig(ch) => {
+                    self.state = Ok(ServerState::ChooseConfig(ch));
+                    break;
+                }
+                ServerState::ReceiveEarlyData(mut sed) => {
+                    self.early_data_received = true;
+                    while let Some(chunk) = sed.take_data() {
+                        self.received_early_data.append(chunk);
+                    }
+                    self.early_exporter = sed.early_exporter().ok();
+                    self.state = Ok(sed.into_next());
+                }
+                ServerState::AwaitClientFlight(mut asf) => {
+                    // try half-rtt if required
+                    if !self
+                        .buffers
+                        .sendable_plaintext
+                        .is_empty()
+                    {
+                        if let Some(mut send) = asf.try_send_half_rtt() {
+                            // Release unsent buffered plaintext.
+                            while let Some(chunk) = self.buffers.sendable_plaintext.pop() {
+                                let Ok(chunks) = send.write(chunk.as_slice().into()) else {
+                                    continue;
+                                };
+                                for c in chunks {
+                                    self.buffers.sendable_tls.append(c);
+                                }
+                            }
+                        }
+                    }
+
+                    if self.buffers.deframer_buffer.is_empty() {
+                        self.state = Ok(ServerState::AwaitClientFlight(asf));
+                        break;
+                    }
+                    match asf.input_data(&mut self.buffers.deframer_buffer) {
+                        Ok(state) => {
+                            self.state = Ok(self.post_handshake_state(state));
+                            if matches!(self.state, Ok(ServerState::AwaitClientFlight(_))) {
+                                break;
+                            }
+                        }
+                        Err((mut err, outputs)) => {
+                            while let Some(chunk) = err.take_tls_data() {
+                                self.buffers.sendable_tls.append(chunk);
+                            }
+
+                            self.err_outputs = Some(outputs);
+                            self.state = Err(err.error.clone());
+                            return Err(err.error);
+                        }
+                    };
+                }
+                ServerState::Traffic(mut traffic) => {
+                    let mut progress = true;
+
+                    while progress {
+                        progress = false;
+
+                        // Processed received data.
+                        if !self.buffers.deframer_buffer.is_empty() {
+                            let Some(recv) = traffic.receive.take() else {
+                                break;
+                            };
+                            match recv.read(&mut self.buffers.deframer_buffer) {
+                                Ok(ReceiveTrafficState::Available(received)) => {
+                                    progress = true;
+                                    self.buffers
+                                        .received_plaintext
+                                        .append(received.data.to_vec());
+                                    let (used, next) = received.into_next();
+                                    self.buffers
+                                        .deframer_buffer
+                                        .discard(used);
+                                    traffic.receive = Some(next);
+                                }
+                                Ok(ReceiveTrafficState::WakeSender(state)) => {
+                                    if let Some(send) = &mut traffic.send {
+                                        while let Some(chunk) = send.take_data() {
+                                            self.buffers.sendable_tls.append(chunk);
+                                        }
+                                    }
+                                    traffic.receive = Some(state.into_next());
+                                }
+                                Ok(ReceiveTrafficState::Await(state)) => {
+                                    traffic.receive = Some(state)
+                                }
+                                Ok(ReceiveTrafficState::CloseNotify) => traffic.receive = None,
+                                Err(mut e) => {
+                                    while let Some(chunk) = e.take_tls_data() {
+                                        self.buffers.sendable_tls.append(chunk);
+                                    }
+                                    self.state = Err(e.error.clone());
+                                    return Err(e.error);
+                                }
+                            }
+                        }
+                    }
+
+                    self.state = Ok(ServerState::Traffic(traffic));
+                    break;
+                }
+            }
+        }
+
+        Ok(self.current_io_state())
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.exporter()
+        match &mut self.state {
+            Ok(ServerState::Traffic(traffic)) => traffic.outputs.take_exporter(),
+            _ => Err(Error::HandshakeNotComplete),
+        }
     }
 
     fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
+        match self.state {
+            Ok(ServerState::Traffic(traffic)) => Ok(traffic
+                .dangerous_into_kernel_connection()?
+                .0),
+            _ => Err(Error::HandshakeNotComplete),
+        }
     }
 
     fn set_buffer_limit(&mut self, limit: Option<usize>) {
-        self.inner.set_buffer_limit(limit)
+        self.buffers
+            .sendable_plaintext
+            .set_limit(limit);
+        self.buffers
+            .sendable_tls
+            .set_limit(limit);
     }
 
     fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
-        self.inner
-            .set_plaintext_buffer_limit(limit)
+        self.buffers
+            .received_plaintext
+            .set_limit(limit);
     }
 
     fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-        self.inner.refresh_traffic_keys()
+        match &mut self.state {
+            Ok(ServerState::Traffic(st)) => match &mut st.send {
+                Some(send) => send.refresh_traffic_keys(),
+                None => Err(ApiMisuse::ReceiveSideAlreadyClosed.into()),
+            },
+            _ => Err(Error::HandshakeNotComplete),
+        }
     }
 
     fn send_close_notify(&mut self) {
-        self.inner.send_close_notify();
+        let Ok(ServerState::Traffic(traffic)) = &mut self.state else {
+            return;
+        };
+
+        let Some(send) = traffic.send.take() else {
+            return;
+        };
+
+        self.buffers
+            .sendable_tls
+            .append(send.close());
     }
 
     fn is_handshaking(&self) -> bool {
-        self.inner.is_handshaking()
+        !matches!(self.state, Ok(ServerState::Traffic(_)))
     }
 
     fn fips(&self) -> FipsStatus {
-        self.inner.fips
+        self.fips
+    }
+}
+
+impl PlaintextSink for ServerConnection {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.write_or_buffer_appdata(buf.into())
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        let payload_owner: Vec<&[u8]>;
+        let payload = match bufs.len() {
+            0 => return Ok(0),
+            1 => OutboundPlain::Single(bufs[0].deref()),
+            _ => {
+                payload_owner = bufs
+                    .iter()
+                    .map(|io_slice| io_slice.deref())
+                    .collect();
+
+                OutboundPlain::new(&payload_owner)
+            }
+        };
+        self.write_or_buffer_appdata(payload)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -193,13 +527,19 @@ impl Deref for ServerConnection {
     type Target = ConnectionOutputs;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        match &self.state {
+            Ok(st) => st,
+            Err(_) => self.err_outputs.as_ref().unwrap(),
+        }
     }
 }
 
 impl DerefMut for ServerConnection {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
+        match &mut self.state {
+            Ok(st) => st,
+            Err(_) => self.err_outputs.as_mut().unwrap(),
+        }
     }
 }
 
@@ -257,14 +597,23 @@ impl Debug for ServerConnection {
 /// # }
 /// ```
 pub struct Acceptor {
-    inner: Option<ConnectionCommon<ServerSide>>,
+    inner: Option<ServerConnection>,
 }
 
 impl Default for Acceptor {
     /// Return an empty Acceptor, ready to receive bytes from a new client connection.
     fn default() -> Self {
         Self {
-            inner: Some(ConnectionCore::for_server_acceptor(Protocol::Tcp).into()),
+            inner: Some(ServerConnection {
+                state: Ok(ServerState::new()),
+                buffers: ConnectionBuffers::new(),
+                config: None,
+                err_outputs: None,
+                early_data_received: false,
+                received_early_data: ChunkVecBuffer::default(),
+                early_exporter: None,
+                fips: FipsStatus::Unvalidated,
+            }),
         }
     }
 }
@@ -305,10 +654,10 @@ impl Acceptor {
         };
 
         if let Err(e) = connection.process_new_packets() {
-            return Err(AcceptedAlert::from_error(e, connection.core.common.send));
+            return Err((e, AcceptedAlert(connection.buffers.sendable_tls)));
         }
 
-        let Ok(hs::StateMachine::ChooseConfig(_)) = connection.core.state else {
+        let Ok(ServerState::ChooseConfig(_)) = connection.state else {
             self.inner = Some(connection);
             return Ok(None);
         };
@@ -324,13 +673,6 @@ impl Acceptor {
 pub struct AcceptedAlert(ChunkVecBuffer);
 
 impl AcceptedAlert {
-    pub(super) fn from_error(error: Error, mut send: SendPath) -> (Error, Self) {
-        let ErrorWithAlert { error, data } = ErrorWithAlert::new(error, &mut send);
-        let mut output = ChunkVecBuffer::new(None);
-        output.append(data);
-        (error, Self(output))
-    }
-
     pub(super) fn empty() -> Self {
         Self(ChunkVecBuffer::new(None))
     }
@@ -365,12 +707,12 @@ impl Debug for AcceptedAlert {
 ///
 /// This type implements [`io::Read`].
 pub struct ReadEarlyData<'a> {
-    common: &'a mut ConnectionCommon<ServerSide>,
+    conn: &'a mut ServerConnection,
 }
 
 impl<'a> ReadEarlyData<'a> {
-    fn new(common: &'a mut ConnectionCommon<ServerSide>) -> Self {
-        ReadEarlyData { common }
+    fn new(conn: &'a mut ServerConnection) -> Self {
+        ReadEarlyData { conn }
     }
 
     /// Returns the "early" exporter that can derive key material for use in early data
@@ -393,17 +735,16 @@ impl<'a> ReadEarlyData<'a> {
     /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
     /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.common.core.early_exporter()
+        match self.conn.early_exporter.take() {
+            Some(exporter) => Ok(exporter),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
+        }
     }
 }
 
 impl io::Read for ReadEarlyData<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.common
-            .core
-            .side
-            .early_data
-            .read(buf)
+        self.conn.received_early_data.read(buf)
     }
 }
 
@@ -412,44 +753,16 @@ impl io::Read for ReadEarlyData<'_> {
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
 pub struct Accepted {
     // invariant: `connection.core.state` is `Ok(hs::StateMachine::ChooseConfig)`
-    connection: ConnectionCommon<ServerSide>,
+    connection: ServerConnection,
 }
 
 impl Accepted {
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
-        let Ok(hs::StateMachine::ChooseConfig(choose_config)) = &self.connection.core.state else {
+        let Ok(ServerState::ChooseConfig(choose_config)) = &self.connection.state else {
             unreachable!(); // invariant
         };
-
-        let client_hello = choose_config.client_hello();
-        let server_name = client_hello
-            .server_name
-            .as_ref()
-            .and_then(ServerNamePayload::to_dns_name_normalized)
-            .map(Cow::Owned);
-        let ch = ClientHello {
-            server_name,
-            signature_schemes: client_hello
-                .signature_schemes
-                .as_deref()
-                .unwrap_or_default(),
-            alpn: client_hello.protocols.as_ref(),
-            server_cert_types: client_hello
-                .server_certificate_types
-                .as_deref(),
-            client_cert_types: client_hello
-                .client_certificate_types
-                .as_deref(),
-            cipher_suites: &client_hello.cipher_suites,
-            certificate_authorities: client_hello
-                .certificate_authority_names
-                .as_deref(),
-            named_groups: client_hello.named_groups.as_deref(),
-        };
-
-        trace!("Accepted::client_hello(): {ch:#?}");
-        ch
+        choose_config.client_hello()
     }
 
     /// Convert the [`Accepted`] into a [`ServerConnection`].
@@ -461,44 +774,12 @@ impl Accepted {
         mut self,
         config: Arc<ServerConfig>,
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
-        if let Err(err) = self
-            .connection
-            .send
-            .set_max_fragment_size(config.max_fragment_size)
-        {
-            // We have a connection here, but it won't contain an alert since the error
-            // is with the fragment size configured in the `ServerConfig`.
-            return Err((err, AcceptedAlert::empty()));
-        }
         self.connection.fips = config.fips();
-
-        let state = core::mem::replace(
-            &mut self.connection.core.state,
-            Err(Error::HandshakeNotComplete),
-        );
-
-        let Ok(hs::StateMachine::ChooseConfig(choose_config)) = state else {
-            unreachable!(); // invariant
-        };
-
-        let state = match choose_config.use_config(
-            config,
-            ServerExtensionsInput::default(),
-            &mut self.connection.core.output(),
-        ) {
-            Ok(state) => state,
-            Err(err) => {
-                return Err(AcceptedAlert::from_error(
-                    err,
-                    self.connection.core.common.send,
-                ));
-            }
-        };
-        self.connection.core.state = Ok(state);
-
-        Ok(ServerConnection {
-            inner: self.connection,
-        })
+        self.connection.config = Some(config);
+        match self.connection.process_new_packets() {
+            Ok(_) => Ok(self.connection),
+            Err(err) => Err((err, AcceptedAlert(self.connection.buffers.sendable_tls))),
+        }
     }
 }
 
@@ -625,6 +906,10 @@ impl ServerConnectionData {
 
     pub(crate) fn server_name(&self) -> Option<&DnsName<'static>> {
         self.sni.as_ref()
+    }
+
+    pub(crate) fn into_parts(self) -> (Option<DnsName<'static>>, Option<Vec<u8>>) {
+        (self.sni, self.received_resumption_data)
     }
 }
 
