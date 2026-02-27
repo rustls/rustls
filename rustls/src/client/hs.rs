@@ -275,14 +275,14 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // If we offered ECH, we need to confirm that the server accepted it.
         match (self.next.ech_state.as_ref(), cs) {
-            (Some(ech_state), SupportedCipherSuite::Tls13(tls13_cs)) => {
-                if !ech_state.confirm_hrr_acceptance(hrr, tls13_cs)? {
-                    // If the server did not confirm, then note the new ECH status but
-                    // continue the handshake. We will abort with an ECH required error
-                    // at the end.
-                    self.next.ech_status = EchStatus::Rejected;
-                    output.emit(Event::EchStatus(EchStatus::Rejected));
-                }
+            (Some(ech_state), SupportedCipherSuite::Tls13(tls13_cs))
+                if !ech_state.confirm_hrr_acceptance(hrr, tls13_cs)? =>
+            {
+                // If the server did not confirm, then note the new ECH status but
+                // continue the handshake. We will abort with an ECH required error
+                // at the end.
+                self.next.ech_status = EchStatus::Rejected;
+                output.emit(Event::EchStatus(EchStatus::Rejected));
             }
             (Some(_), SupportedCipherSuite::Tls12(_)) => {
                 unreachable!("ECH state should only be set when TLS 1.3 was negotiated")
