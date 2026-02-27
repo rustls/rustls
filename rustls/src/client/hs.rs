@@ -376,7 +376,6 @@ impl ClientHelloInput {
     pub(super) fn new(
         server_name: ServerName<'static>,
         extra_exts: &ClientExtensionsInput,
-        protocol: Protocol,
         output: &mut dyn Output,
         config: Arc<ClientConfig>,
     ) -> Result<Self, Error> {
@@ -411,7 +410,7 @@ impl ClientHelloInput {
         // https://tools.ietf.org/html/rfc9001#section-8.4
         let session_id = match session_id {
             Some(session_id) => session_id,
-            None if protocol.is_quic() => SessionId::empty(),
+            None if output.quic().is_some() => SessionId::empty(),
             None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
             None => SessionId::random(config.provider().secure_random)?,
         };
@@ -431,7 +430,10 @@ impl ClientHelloInput {
             random,
             sent_tls13_fake_ccs: false,
             hello,
-            protocol,
+            protocol: match output.quic() {
+                Some(quic) => Protocol::Quic(quic.version),
+                None => Protocol::Tcp,
+            },
             session_id,
             session_key,
             prev_ech_ext: None,
@@ -995,11 +997,13 @@ impl ClientSessionValue {
                 None
             });
 
-        if let Some(quic_params) = found
-            .as_ref()
-            .and_then(|r| r.tls13().map(|v| &v.quic_params))
-        {
-            output.emit(Event::QuicTransportParameters(quic_params.bytes().to_vec()));
+        if let Some(quic) = output.quic() {
+            if let Some(quic_params) = found
+                .as_ref()
+                .and_then(|r| r.tls13().map(|v| &v.quic_params))
+            {
+                quic.params = Some(quic_params.bytes().to_vec());
+            }
         }
 
         found

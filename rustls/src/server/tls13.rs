@@ -252,7 +252,6 @@ mod client_hello {
             ) = emit_encrypted_extensions(
                 &mut flight,
                 suite,
-                st.protocol,
                 output,
                 &mut ocsp_response,
                 input.client_hello,
@@ -610,7 +609,6 @@ mod client_hello {
         resumedata: Option<&Tls13ServerSessionValue<'_>>,
         chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
         suite: &'static Tls13CipherSuite,
-        protocol: Protocol,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
         let early_data_requested = client_hello
@@ -656,8 +654,8 @@ mod client_hello {
                 max_length: config.max_early_data_size,
             }
         } else {
-            if protocol.is_quic() {
-                output.emit(Event::QuicEarlySecret(None));
+            if let Some(quic) = output.quic() {
+                quic.early_secret = None;
             }
 
             rejected_or_disabled
@@ -667,7 +665,6 @@ mod client_hello {
     fn emit_encrypted_extensions(
         flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
-        protocol: Protocol,
         output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -681,7 +678,6 @@ mod client_hello {
             resumedata.map(|r| &r.common),
             hello,
             output,
-            protocol,
             config,
         )?;
 
@@ -691,7 +687,6 @@ mod client_hello {
             resumedata,
             out.alpn_protocol.as_ref(),
             suite,
-            protocol,
             config,
         );
         if let EarlyDataDecision::Accepted { .. } = early_data {

@@ -16,7 +16,8 @@ use crate::common_state::{
     State, maybe_send_fatal_alert,
 };
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, Writer,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SideCommonOutput,
+    Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -269,7 +270,7 @@ impl Default for Acceptor {
                 ConnectionCore::new(
                     Box::new(Accepting),
                     ServerConnectionData::default(),
-                    CommonState::new(Side::Server, Protocol::Tcp),
+                    CommonState::new(Side::Server),
                 )
                 .into(),
             ),
@@ -501,7 +502,13 @@ impl Accepted {
             proof,
         };
 
-        let new = match state.with_input(input, &mut self.connection.core.output()) {
+        let mut output = SideCommonOutput {
+            side: &mut self.connection.core.side,
+            quic: None,
+            common: &mut self.connection.core.common,
+        };
+
+        let new = match state.with_input(input, &mut output) {
             Ok(new) => new,
             Err(err) => {
                 return Err(AcceptedAlert::from_error(
@@ -619,7 +626,7 @@ impl ConnectionCore<ServerConnectionData> {
         extra_exts: ServerExtensionsInput,
         protocol: Protocol,
     ) -> Result<Self, Error> {
-        let mut common = CommonState::new(Side::Server, protocol);
+        let mut common = CommonState::new(Side::Server);
         common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;

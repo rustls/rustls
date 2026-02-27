@@ -15,7 +15,6 @@ use crate::crypto::cipher::{
     MessageEncrypter, OutboundOpaque, OutboundPlain, Payload, PreEncryptAction,
 };
 use crate::crypto::kx::SupportedKxGroup;
-use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -25,7 +24,7 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeDeframer, HandshakeMessagePayload, Locator, Message,
     MessageFragmenter, MessagePayload,
 };
-use crate::quic;
+use crate::quic::{self, Quic};
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
@@ -35,20 +34,14 @@ pub struct CommonState {
     pub(crate) outputs: ConnectionOutputs,
     pub(crate) send: SendPath,
     pub(crate) recv: ReceivePath,
-    pub(crate) quic: quic::Quic,
-
-    /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
-    pub(crate) protocol: Protocol,
 }
 
 impl CommonState {
-    pub(crate) fn new(side: Side, protocol: Protocol) -> Self {
+    pub(crate) fn new(side: Side) -> Self {
         Self {
             outputs: ConnectionOutputs::default(),
             send: SendPath::default(),
             recv: ReceivePath::new(side),
-            quic: quic::Quic::default(),
-            protocol,
         }
     }
 
@@ -88,7 +81,6 @@ impl Output for CommonState {
             EventDisposition::SendPath => self.send.emit(ev),
             EventDisposition::ReceivePath => self.recv.emit(ev),
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
-            EventDisposition::Quic => self.quic.emit(ev),
             EventDisposition::SideSpecific => unreachable!(),
 
             EventDisposition::ProtocolVersion(ver) => {
@@ -107,10 +99,7 @@ impl Output for CommonState {
     }
 
     fn send_msg(&mut self, msg: Message<'_>, must_encrypt: bool) {
-        match self.protocol {
-            Protocol::Tcp => self.send.send_msg(msg, must_encrypt),
-            Protocol::Quic(_) => self.quic.send_msg(msg, must_encrypt),
-        }
+        self.send.send_msg(msg, must_encrypt);
     }
 }
 
@@ -1108,6 +1097,10 @@ impl Output for CaptureAppData<'_> {
         self.data.send_msg(m, must_encrypt);
     }
 
+    fn quic(&mut self) -> Option<&mut Quic> {
+        self.data.quic()
+    }
+
     fn received_plaintext(&mut self, payload: Payload<'_>) {
         // Receive plaintext data [`Payload<'_>`].
         //
@@ -1148,12 +1141,15 @@ impl Output for SplitReceive<'_> {
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         self.other.send_msg(m, must_encrypt);
     }
+
+    fn quic(&mut self) -> Option<&mut Quic> {
+        self.other.quic()
+    }
 }
 
 pub(crate) struct JoinOutput<'a> {
-    pub(crate) protocol: Protocol,
     pub(crate) outputs: &'a mut dyn Output,
-    pub(crate) quic: &'a mut dyn Output,
+    pub(crate) quic: Option<&'a mut Quic>,
     pub(crate) send: &'a mut dyn Output,
     pub(crate) side: &'a mut dyn Output,
 }
@@ -1165,13 +1161,10 @@ impl Output for JoinOutput<'_> {
             EventDisposition::ProtocolVersion(ver) => {
                 self.outputs
                     .emit(Event::ProtocolVersion(ver));
-                self.quic
-                    .emit(Event::ProtocolVersion(ver));
                 self.send
                     .emit(Event::ProtocolVersion(ver));
             }
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
-            EventDisposition::Quic => self.quic.emit(ev),
             EventDisposition::SendPath => self.send.emit(ev),
             EventDisposition::StartTraffic => self.send.emit(ev),
             EventDisposition::SideSpecific => self.side.emit(ev),
@@ -1179,10 +1172,14 @@ impl Output for JoinOutput<'_> {
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        match self.protocol {
-            Protocol::Tcp => self.send.send_msg(m, must_encrypt),
-            Protocol::Quic(_) => self.quic.send_msg(m, must_encrypt),
+        match self.quic() {
+            Some(quic) => quic.send_msg(m, must_encrypt),
+            None => self.send.send_msg(m, must_encrypt),
         }
+    }
+
+    fn quic(&mut self) -> Option<&mut Quic> {
+        self.quic.as_deref_mut()
     }
 }
 
@@ -1207,6 +1204,10 @@ pub(crate) trait Output {
     fn emit(&mut self, ev: Event<'_>);
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+
+    fn quic(&mut self) -> Option<&mut Quic> {
+        None
+    }
 
     fn received_plaintext(&mut self, _payload: Payload<'_>) {}
 }
@@ -1239,10 +1240,6 @@ pub(crate) enum Event<'a> {
     OutgoingKeySchedule(Box<KeyScheduleTrafficSend>),
     PeerIdentity(Identity<'static>),
     ProtocolVersion(ProtocolVersion),
-    QuicEarlySecret(Option<OkmBlock>),
-    QuicHandshakeSecrets(quic::Secrets),
-    QuicTrafficSecrets(quic::Secrets),
-    QuicTransportParameters(Vec<u8>),
     ReceivedServerName(Option<DnsName<'static>>),
     ReceivedTicket,
     ResumptionData(Vec<u8>),
@@ -1277,12 +1274,6 @@ impl Event<'_> {
             | Event::KeyExchangeGroup(_)
             | Event::PeerIdentity(_) => EventDisposition::ConnectionOutputs,
 
-            // quic-specific events
-            Event::QuicEarlySecret(_)
-            | Event::QuicHandshakeSecrets(_)
-            | Event::QuicTrafficSecrets(_)
-            | Event::QuicTransportParameters(_) => EventDisposition::Quic,
-
             // broadcast events
             Event::ProtocolVersion(ver) => EventDisposition::ProtocolVersion(*ver),
 
@@ -1309,9 +1300,6 @@ pub(crate) enum EventDisposition {
 
     /// Events destined for `ConnectionOutputs`
     ConnectionOutputs,
-
-    /// Events related only to QUIC
-    Quic,
 
     /// Event broadcast into `SendPath`, `ReceivePath`, and `ConnectionOutputs`
     ProtocolVersion(ProtocolVersion),

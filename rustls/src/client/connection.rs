@@ -8,9 +8,7 @@ use pki_types::ServerName;
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
-use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, Side,
-};
+use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Side};
 use crate::conn::unbuffered::EncryptError;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader,
@@ -22,6 +20,7 @@ use crate::enums::ApplicationProtocol;
 use crate::error::Error;
 use crate::log::trace;
 use crate::msgs::{ClientExtensionsInput, Message};
+use crate::quic::Quic;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 
@@ -216,7 +215,7 @@ impl ClientConnectionBuilder {
                 config,
                 name,
                 ClientExtensionsInput::from_alpn(alpn_protocols),
-                Protocol::Tcp,
+                None,
             )?),
         })
     }
@@ -286,9 +285,9 @@ impl ConnectionCore<ClientConnectionData> {
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
         extra_exts: ClientExtensionsInput,
-        proto: Protocol,
+        quic: Option<&mut Quic>,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client, proto);
+        let mut common_state = CommonState::new(Side::Client);
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
@@ -297,10 +296,11 @@ impl ConnectionCore<ClientConnectionData> {
 
         let mut output = SideCommonOutput {
             side: &mut data,
+            quic,
             common: &mut common_state,
         };
 
-        let input = ClientHelloInput::new(name, &extra_exts, proto, &mut output, config)?;
+        let input = ClientHelloInput::new(name, &extra_exts, &mut output, config)?;
         let state = input.start_handshake(extra_exts, &mut output)?;
 
         Ok(Self::new(state, data, common_state))

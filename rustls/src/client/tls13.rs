@@ -543,19 +543,12 @@ impl State for ExpectEncryptedExtensions {
         };
 
         // QUIC transport parameters
-        let quic_params = if self
-            .hs
-            .key_schedule
-            .protocol()
-            .is_quic()
-        {
+        let quic_params = if let Some(quic) = output.quic() {
             let Some(quic_params) = exts.transport_parameters.as_ref() else {
                 return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
             };
 
-            output.emit(Event::QuicTransportParameters(
-                quic_params.clone().into_vec(),
-            ));
+            quic.params = Some(quic_params.clone().into_vec());
             Some(SizedPayload::from(Payload::new(
                 quic_params.clone().into_vec(),
             )))

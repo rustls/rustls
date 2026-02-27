@@ -43,7 +43,7 @@ impl Tls12Extensions {
         using_ems: bool,
         config: &ServerConfig,
     ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
-        let ep = ExtensionProcessing::new(Protocol::Tcp, hello, config);
+        let ep = ExtensionProcessing::new(hello, config);
         let (alpn_protocol, mut extensions) =
             ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
 
@@ -98,10 +98,9 @@ impl Tls13Extensions {
         resumedata: Option<&CommonServerSessionValue<'_>>,
         hello: &ClientHelloPayload,
         output: &mut dyn Output,
-        protocol: Protocol,
         config: &ServerConfig,
     ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
-        let ep = ExtensionProcessing::new(protocol, hello, config);
+        let ep = ExtensionProcessing::new(hello, config);
         let (alpn_protocol, mut extensions) =
             ep.process_common(extra_exts, output, ocsp_response, resumedata)?;
 
@@ -142,19 +141,13 @@ impl Tls13Extensions {
 }
 
 struct ExtensionProcessing<'a> {
-    protocol: Protocol,
     config: &'a ServerConfig,
     hello: &'a ClientHelloPayload,
 }
 
 impl<'a> ExtensionProcessing<'a> {
-    fn new(
-        protocol: Protocol,
-        client_hello: &'a ClientHelloPayload,
-        config: &'a ServerConfig,
-    ) -> Self {
+    fn new(client_hello: &'a ClientHelloPayload, config: &'a ServerConfig) -> Self {
         Self {
-            protocol,
             config,
             hello: client_hello,
         }
@@ -173,11 +166,7 @@ impl<'a> ExtensionProcessing<'a> {
         ),
         Error,
     > {
-        let Self {
-            protocol,
-            config,
-            hello,
-        } = self;
+        let Self { config, hello } = self;
         let mut extensions = Box::new(ServerExtensions::default());
 
         let ServerExtensionsInput {
@@ -213,7 +202,7 @@ impl<'a> ExtensionProcessing<'a> {
             output.emit(Event::ApplicationProtocol((*protocol).to_owned()));
         }
 
-        if protocol.is_quic() {
+        if let Some(quic) = output.quic() {
             // QUIC has strict ALPN, unlike TLS's more backwards-compatible behavior. RFC 9001
             // says: "The server MUST treat the inability to select a compatible application
             // protocol as a connection error of type 0x0178". We judge that ALPN was desired
@@ -227,9 +216,7 @@ impl<'a> ExtensionProcessing<'a> {
             }
 
             match hello.transport_parameters.as_ref() {
-                Some(params) => {
-                    output.emit(Event::QuicTransportParameters(params.to_owned().into_vec()))
-                }
+                Some(params) => quic.params = Some(params.to_owned().into_vec()),
                 None => {
                     return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
                 }
