@@ -17,8 +17,7 @@ use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{
-    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
-    TlsInputBuffer,
+    AlertLevel, BufferProgress, Delocator, Locator, Message, Random, TlsInputBuffer, VecInput,
 };
 use crate::quic::QuicOutput;
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
@@ -694,7 +693,7 @@ impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
 }
 
 pub(crate) struct ConnectionBuffers {
-    deframer_buffer: DeframerVecBuffer,
+    deframer_buffer: VecInput,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
     pub(crate) has_seen_eof: bool,
@@ -703,7 +702,7 @@ pub(crate) struct ConnectionBuffers {
 impl ConnectionBuffers {
     fn new() -> Self {
         Self {
-            deframer_buffer: DeframerVecBuffer::default(),
+            deframer_buffer: VecInput::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             has_seen_eof: false,

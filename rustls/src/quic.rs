@@ -34,8 +34,7 @@ mod connection {
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
     use crate::msgs::{
-        ClientExtensionsInput, DeframerVecBuffer, Locator, ServerExtensionsInput,
-        TransportParameters,
+        ClientExtensionsInput, Locator, ServerExtensionsInput, TransportParameters, VecInput,
     };
     use crate::server::{ServerConfig, ServerSide};
     use crate::suites::SupportedCipherSuite;
@@ -376,7 +375,7 @@ mod connection {
     /// A shared interface for QUIC connections.
     struct ConnectionCommon<Side: SideData> {
         core: ConnectionCore<Side>,
-        deframer_buffer: DeframerVecBuffer,
+        deframer_buffer: VecInput,
         quic: Quic,
     }
 
@@ -384,7 +383,7 @@ mod connection {
         fn new(core: ConnectionCore<Side>, quic: Quic) -> Self {
             Self {
                 core,
-                deframer_buffer: DeframerVecBuffer::default(),
+                deframer_buffer: VecInput::default(),
                 quic,
             }
         }
