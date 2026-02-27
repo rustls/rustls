@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
 
-use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_opaque_message_header};
@@ -152,11 +151,6 @@ impl EncodedMessage<OutboundPlain<'_>> {
             version: self.version,
             payload,
         }
-    }
-
-    #[expect(dead_code)]
-    pub(crate) fn encoded_len(&self, record_layer: &EncryptionState) -> usize {
-        HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
     }
 }
 

@@ -74,13 +74,6 @@ impl EncryptionState {
         }
     }
 
-    pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
-        self.message_encrypter
-            .as_ref()
-            .map(|enc| enc.encrypted_payload_len(payload_len))
-            .unwrap_or_default()
-    }
-
     pub(crate) fn is_encrypting(&self) -> bool {
         self.message_encrypter.is_some()
     }
