@@ -521,10 +521,25 @@ pub(crate) struct ConnectionCommon<Side: SideData> {
 impl<Side: SideData> ConnectionCommon<Side> {
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        while let Some((payload, mut buffer_progress)) = self
-            .core
-            .process_new_packets(&mut self.deframer_buffer)?
-        {
+        loop {
+            let mut output = JoinOutput {
+                outputs: &mut self.core.common.outputs,
+                protocol: self.core.common.protocol,
+                quic: &mut self.core.common.quic,
+                send: &mut self.core.common.send,
+                side: &mut self.core.side,
+            };
+
+            let Some((payload, mut buffer_progress)) = process_new_packets(
+                &mut self.deframer_buffer,
+                &mut self.core.state,
+                &mut self.core.common.recv,
+                &mut output,
+            )?
+            else {
+                break;
+            };
+
             let payload = payload.reborrow(&Delocator::new(self.deframer_buffer.slice_mut()));
             self.received_plaintext
                 .append(payload.into_vec());
@@ -851,24 +866,6 @@ impl<Side: SideData> ConnectionCore<Side> {
             side: &mut self.side,
             common: &mut self.common,
         }
-    }
-
-    pub(crate) fn process_new_packets(
-        &mut self,
-        input: &mut dyn TlsInputBuffer,
-    ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
-        process_new_packets(
-            input,
-            &mut self.state,
-            &mut self.common.recv,
-            &mut JoinOutput {
-                outputs: &mut self.common.outputs,
-                protocol: self.common.protocol,
-                quic: &mut self.common.quic,
-                send: &mut self.common.send,
-                side: &mut self.side,
-            },
-        )
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
