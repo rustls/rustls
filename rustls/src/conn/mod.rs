@@ -1,10 +1,6 @@
 use alloc::boxed::Box;
 use core::fmt::{self, Debug};
 use core::mem;
-use core::ops::{Deref, DerefMut};
-use pki_types::FipsStatus;
-use std::io;
-
 use kernel::KernelConnection;
 
 use crate::ConnectionOutputs;
@@ -15,27 +11,22 @@ use crate::common_state::{
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{
-    AlertLevel, BufferProgress, Delocator, Locator, Random, TlsInputBuffer, VecInput,
-};
+use crate::msgs::{AlertLevel, BufferProgress, Locator, Random, TlsInputBuffer, VecInput};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
 // pub so that it can be re-exported from the crate root
 pub mod kernel;
-pub(crate) mod unbuffered;
 
 mod connection {
-    use alloc::vec::Vec;
     use core::fmt::Debug;
     use core::ops::{Deref, DerefMut};
     use pki_types::FipsStatus;
     use std::io::{self, BufRead, Read};
 
     use crate::common_state::ConnectionOutputs;
-    use crate::conn::{ConnectionCommon, IoState, KeyingMaterialExporter, SideData};
-    use crate::crypto::cipher::OutboundPlain;
+    use crate::conn::{IoState, KeyingMaterialExporter};
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
@@ -388,45 +379,6 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
         fn flush(&mut self) -> io::Result<()>;
     }
-
-    impl<Side: SideData> PlaintextSink for ConnectionCommon<Side> {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            let len = self
-                .core
-                .common
-                .send
-                .buffer_plaintext(buf.into(), &mut self.buffers.sendable_plaintext);
-            self.send.maybe_refresh_traffic_keys();
-            Ok(len)
-        }
-
-        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-            let payload_owner: Vec<&[u8]>;
-            let payload = match bufs.len() {
-                0 => return Ok(0),
-                1 => OutboundPlain::Single(bufs[0].deref()),
-                _ => {
-                    payload_owner = bufs
-                        .iter()
-                        .map(|io_slice| io_slice.deref())
-                        .collect();
-
-                    OutboundPlain::new(&payload_owner)
-                }
-            };
-            let len = self
-                .core
-                .common
-                .send
-                .buffer_plaintext(payload, &mut self.buffers.sendable_plaintext);
-            self.send.maybe_refresh_traffic_keys();
-            Ok(len)
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
 }
 
 pub(crate) use connection::PlaintextSink;
@@ -508,182 +460,6 @@ impl ConnectionRandoms {
         Self {
             client: client.0,
             server: server.0,
-        }
-    }
-}
-
-/// TLS connection state with side-specific data (`Side`).
-///
-/// This is one of the core abstractions of the rustls API. It represents a single connection
-/// to a peer, and holds all the state associated with that connection. Note that it does
-/// not hold any IO objects: the application is responsible for reading and writing TLS records.
-/// If you want an object that does hold IO objects, see `rustls_util::Stream` and
-/// `rustls_util::StreamOwned`.
-///
-/// This object is generic over the `Side` type parameter, which must implement the marker trait
-/// [`SideData`]. This is used to store side-specific data.
-pub(crate) struct ConnectionCommon<Side: SideData> {
-    pub(crate) core: ConnectionCore<Side>,
-    pub(crate) fips: FipsStatus,
-    buffers: ConnectionBuffers,
-}
-
-impl<Side: SideData> ConnectionCommon<Side> {
-    #[inline]
-    pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        while let Some((payload, mut buffer_progress)) = self.core.process_new_packets(
-            &mut self.buffers.deframer_buffer,
-            ProcessFinishCondition::AppData,
-        )? {
-            let payload =
-                payload.reborrow(&Delocator::new(self.buffers.deframer_buffer.slice_mut()));
-            self.buffers
-                .received_plaintext
-                .append(payload.into_vec());
-            self.buffers
-                .deframer_buffer
-                .discard(buffer_progress.take_discard());
-        }
-
-        // Release unsent buffered plaintext.
-        if self.send.may_send_application_data
-            && !self
-                .buffers
-                .sendable_plaintext
-                .is_empty()
-        {
-            self.core
-                .common
-                .send
-                .send_buffered_plaintext(&mut self.buffers.sendable_plaintext);
-        }
-
-        Ok(self.current_io_state())
-    }
-
-    pub(crate) fn wants_read(&self) -> bool {
-        // We want to read more data all the time, except when we have unprocessed plaintext.
-        // This provides back-pressure to the TCP buffers. We also don't want to read more after
-        // the peer has sent us a close notification.
-        //
-        // In the handshake case we don't have readable plaintext before the handshake has
-        // completed, but also don't want to read if we still have sendable tls.
-        self.buffers
-            .received_plaintext
-            .is_empty()
-            && !self.recv.has_received_close_notify
-            && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
-    }
-
-    pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.core.exporter()
-    }
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.core.dangerous_extract_secrets()
-    }
-
-    pub(crate) fn set_buffer_limit(&mut self, limit: Option<usize>) {
-        self.buffers
-            .sendable_plaintext
-            .set_limit(limit);
-        self.send.sendable_tls.set_limit(limit);
-    }
-
-    pub(crate) fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
-        self.buffers
-            .received_plaintext
-            .set_limit(limit);
-    }
-
-    pub(crate) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-        self.core
-            .common
-            .send
-            .refresh_traffic_keys()
-    }
-
-    pub(crate) fn current_io_state(&self) -> IoState {
-        let common_state = &self.core.common;
-        IoState {
-            tls_bytes_to_write: common_state.send.sendable_tls.len(),
-            plaintext_bytes_to_read: self.buffers.received_plaintext.len(),
-            peer_has_closed: common_state
-                .recv
-                .has_received_close_notify,
-        }
-    }
-}
-
-impl<Side: SideData> ConnectionCommon<Side> {
-    /// Returns an object that allows reading plaintext.
-    pub(crate) fn reader(&mut self) -> Reader<'_> {
-        let common = &mut self.core.common;
-        let has_received_close_notify = common.recv.has_received_close_notify;
-        Reader {
-            received_plaintext: &mut self.buffers.received_plaintext,
-            // Are we done? i.e., have we processed all received messages, and received a
-            // close_notify to indicate that no new messages will arrive?
-            has_received_close_notify,
-            has_seen_eof: self.buffers.has_seen_eof,
-        }
-    }
-
-    /// Returns an object that allows writing plaintext.
-    pub(crate) fn writer(&mut self) -> Writer<'_> {
-        Writer::new(self)
-    }
-
-    pub(crate) fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        if self
-            .buffers
-            .received_plaintext
-            .is_full()
-        {
-            return Err(io::Error::other("received plaintext buffer full"));
-        }
-
-        if self.recv.has_received_close_notify {
-            return Ok(0);
-        }
-
-        let res = self
-            .buffers
-            .deframer_buffer
-            .read(rd, self.recv.hs_deframer.is_active());
-        if let Ok(0) = res {
-            self.buffers.has_seen_eof = true;
-        }
-        res
-    }
-
-    pub(crate) fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.send.sendable_tls.write_to(wr)
-    }
-}
-
-impl<Side: SideData> Deref for ConnectionCommon<Side> {
-    type Target = CommonState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.core.common
-    }
-}
-
-impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core.common
-    }
-}
-
-impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
-    fn from(core: ConnectionCore<Side>) -> Self {
-        Self {
-            core,
-            buffers: ConnectionBuffers::new(),
-            fips: FipsStatus::Unvalidated,
         }
     }
 }
@@ -903,26 +679,6 @@ impl<Side: SideData> ConnectionCore<Side> {
         )
     }
 
-    pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        Ok(self
-            .dangerous_into_kernel_connection()?
-            .0)
-    }
-
-    pub(crate) fn dangerous_into_kernel_connection(
-        mut self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
-        if self.common.is_handshaking() {
-            return Err(Error::HandshakeNotComplete);
-        }
-        Self::from_parts_into_kernel_connection(
-            &mut self.common.send,
-            self.common.recv,
-            self.common.outputs,
-            self.state?,
-        )
-    }
-
     pub(crate) fn from_parts_into_kernel_connection(
         send: &mut SendPath,
         recv: ReceivePath,
@@ -952,13 +708,6 @@ impl<Side: SideData> ConnectionCore<Side> {
         match self.common.exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None if self.common.is_handshaking() => Err(Error::HandshakeNotComplete),
-            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
-        }
-    }
-
-    pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match self.common.early_exporter.take() {
-            Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }

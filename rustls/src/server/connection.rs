@@ -807,10 +807,6 @@ impl EarlyDataState {
         };
     }
 
-    fn was_accepted(&self) -> bool {
-        matches!(self, Self::Accepted { .. })
-    }
-
     pub(super) fn peek(&self) -> Option<&[u8]> {
         match self {
             Self::Accepted { received, .. } => received.peek(),
@@ -827,13 +823,6 @@ impl EarlyDataState {
 
     pub(super) fn retire(&mut self) {
         *self = Self::Retired;
-    }
-
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Accepted { received, .. } => received.read(buf),
-            _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
-        }
     }
 
     fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
@@ -937,20 +926,4 @@ impl crate::conn::SideData for ServerSide {}
 impl crate::conn::private::SideData for ServerSide {
     type Data = ServerConnectionData;
     type StateMachine = hs::StateMachine;
-}
-
-#[cfg(test)]
-mod tests {
-    use std::format;
-
-    use super::*;
-
-    // these branches not reachable externally, unless something else goes wrong.
-    #[test]
-    fn test_read_in_new_state() {
-        assert_eq!(
-            format!("{:?}", EarlyDataState::default().read(&mut [0u8; 5])),
-            "Err(Kind(BrokenPipe))"
-        );
-    }
 }

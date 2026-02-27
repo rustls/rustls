@@ -7,7 +7,6 @@ use pki_types::DnsName;
 
 use crate::client::EchStatus;
 use crate::conn::Exporter;
-use crate::conn::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
     Decrypted, DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter,
@@ -418,43 +417,6 @@ impl SendPath {
         self.queue_tls_message(em);
     }
 
-    /// Send plaintext application data, fragmenting and
-    /// encrypting it as it goes out.
-    ///
-    /// If internal buffers are too small, this function will not accept
-    /// all the data.
-    pub(crate) fn buffer_plaintext(
-        &mut self,
-        payload: OutboundPlain<'_>,
-        sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
-        self.perhaps_write_key_update();
-        if !self.may_send_application_data {
-            // If we haven't completed handshaking, buffer
-            // plaintext to send once we do.
-            return sendable_plaintext.append_limited_copy(payload);
-        }
-
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(payload.len());
-        if len == 0 {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        debug_assert!(self.encrypt_state.is_encrypting());
-        self.send_appdata_encrypt(payload.split_at(len).0)
-    }
-
-    pub(crate) fn send_buffered_plaintext(&mut self, plaintext: &mut ChunkVecBuffer) {
-        while let Some(buf) = plaintext.pop() {
-            self.send_appdata_encrypt(buf.as_slice().into());
-        }
-    }
-
     // Put m into sendable_tls for writing.
     fn queue_tls_message(&mut self, m: EncodedMessage<OutboundOpaque>) {
         self.perhaps_write_key_update();
@@ -501,37 +463,6 @@ impl SendPath {
             Message::build_alert(level, desc),
             self.encrypt_state.is_encrypting(),
         );
-    }
-
-    /// Accurately predicts the buffer requriement for sending `appdata`.
-    pub(crate) fn predict_required_len(&self, appdata: OutboundPlain<'_>) -> usize {
-        self.message_fragmenter
-            .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                appdata,
-            )
-            .fold(0usize, |sum, item| {
-                sum + item.encoded_len(&self.encrypt_state)
-            })
-    }
-
-    fn check_required_size<'a>(
-        &self,
-        outgoing_tls: &[u8],
-        fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
-    ) -> Result<(), EncryptError> {
-        let required_size = fragments.fold(0usize, |sum, item| {
-            sum + item.encoded_len(&self.encrypt_state)
-        });
-
-        if required_size > outgoing_tls.len() {
-            return Err(EncryptError::InsufficientSize(InsufficientSizeError {
-                required_size,
-            }));
-        }
-
-        Ok(())
     }
 
     fn write_fragments<'a>(

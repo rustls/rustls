@@ -7,7 +7,6 @@ use std::borrow::Cow;
 use pki_types::DnsName;
 
 use crate::common_state::Protocol;
-use crate::conn::unbuffered::EncryptError;
 use crate::conn::{ConnectionCore, ProcessFinishCondition};
 use crate::crypto::cipher::OutboundPlain;
 use crate::error::{ApiMisuse, ErrorWithAlert};
