@@ -6,17 +6,17 @@ use std::io;
 use crate::msgs::MAX_WIRE_SIZE;
 
 #[derive(Default, Debug)]
-pub(crate) struct DeframerVecBuffer {
+pub(crate) struct VecInput {
     /// Buffer of data read from the socket, in the process of being parsed into messages.
     ///
-    /// For buffer size management, checkout out the [`DeframerVecBuffer::prepare_read()`] method.
+    /// For buffer size management, checkout out the [`VecInput::prepare_read()`] method.
     buf: Vec<u8>,
 
     /// What size prefix of `buf` is used.
     used: usize,
 }
 
-impl DeframerVecBuffer {
+impl VecInput {
     /// Discard `taken` bytes from the start of our buffer.
     pub(crate) fn discard(&mut self, taken: usize) {
         if taken < self.used {
@@ -121,7 +121,7 @@ impl DeframerVecBuffer {
     }
 }
 
-impl TlsInputBuffer for DeframerVecBuffer {
+impl TlsInputBuffer for VecInput {
     fn slice_mut(&mut self) -> &mut [u8] {
         self.filled_mut()
     }
