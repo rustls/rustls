@@ -30,9 +30,7 @@ pub use config::{
 };
 
 mod connection;
-pub use connection::{
-    ClientConnection, ClientConnectionBuilder, ClientSide, EarlyDataError, WriteEarlyData,
-};
+pub use connection::{ClientConnection, ClientConnectionBuilder, ClientSide, WriteEarlyData};
 
 mod ech;
 pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
