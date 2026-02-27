@@ -459,7 +459,7 @@ impl ConnectionRandoms {
     }
 }
 
-/// Common items for buffered, std::io-using connections.
+/// Buffer management for connection types with internal buffering.
 pub(crate) struct Buffers {
     pub(crate) deframer_buffer: VecInput,
     pub(crate) received_plaintext: ChunkVecBuffer,
@@ -570,26 +570,6 @@ impl<Side: SideData> ConnectionCore<Side> {
             .process_new_packets::<Side, FinishHandshake>(buffer, &mut self.state, &mut output)
     }
 
-    pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        Ok(self
-            .dangerous_into_kernel_connection()?
-            .0)
-    }
-
-    pub(crate) fn dangerous_into_kernel_connection(
-        mut self,
-    ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
-        if self.common.is_handshaking() {
-            return Err(Error::HandshakeNotComplete);
-        }
-        Self::from_parts_into_kernel_connection(
-            &mut self.common.send,
-            self.common.recv,
-            self.common.outputs,
-            self.state?,
-        )
-    }
-
     pub(crate) fn from_parts_into_kernel_connection(
         send: &mut SendPath,
         recv: ReceivePath,
@@ -619,13 +599,6 @@ impl<Side: SideData> ConnectionCore<Side> {
         match self.common.exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None if self.common.is_handshaking() => Err(Error::HandshakeNotComplete),
-            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
-        }
-    }
-
-    pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        match self.common.early_exporter.take() {
-            Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }

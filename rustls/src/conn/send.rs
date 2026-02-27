@@ -77,20 +77,6 @@ impl SendPath {
         );
     }
 
-    /// Like send_msg_encrypt, but operate on an appdata directly.
-    fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
-        let len = payload.len();
-        self.send_messages(
-            self.message_fragmenter
-                .fragment_payload(
-                    ContentType::ApplicationData,
-                    ProtocolVersion::TLSv1_2,
-                    payload,
-                ),
-        );
-        len
-    }
-
     /// Encrypt and queue a single fragment.
     fn send_messages<'a>(
         &mut self,
@@ -138,43 +124,6 @@ impl SendPath {
 
             // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
             Some(PreEncryptAction::Refuse) => Err(Error::EncryptError),
-        }
-    }
-
-    /// Send plaintext application data, fragmenting and
-    /// encrypting it as it goes out.
-    ///
-    /// If internal buffers are too small, this function will not accept
-    /// all the data.
-    pub(crate) fn buffer_plaintext(
-        &mut self,
-        payload: OutboundPlain<'_>,
-        sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
-        self.perhaps_write_key_update();
-        if !self.may_send_application_data {
-            // If we haven't completed handshaking, buffer
-            // plaintext to send once we do.
-            return sendable_plaintext.append_limited_copy(payload);
-        }
-
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(payload.len());
-        if len == 0 {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        debug_assert!(self.encrypt_state.is_encrypting());
-        self.send_appdata_encrypt(payload.split_at(len).0)
-    }
-
-    pub(crate) fn send_buffered_plaintext(&mut self, plaintext: &mut ChunkVecBuffer) {
-        while let Some(buf) = plaintext.pop() {
-            self.send_appdata_encrypt(buf.as_slice().into());
         }
     }
 
