@@ -10,8 +10,8 @@ use pki_types::{DnsName, FipsStatus};
 
 use super::config::{ClientHello, ServerConfig};
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, SendOutput, SendPath,
-    Side,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, ReceivePath,
+    SendOutput, SendPath, Side,
 };
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SideCommonOutput,
@@ -655,6 +655,10 @@ impl Output for ServerConnectionData {
 
     fn start_traffic(&mut self) {
         unreachable!();
+    }
+
+    fn receive(&mut self) -> &mut ReceivePath {
+        unreachable!()
     }
 
     fn send(&mut self) -> &mut dyn SendOutput {
