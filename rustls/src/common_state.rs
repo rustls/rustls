@@ -862,7 +862,7 @@ impl ReceivePath {
         &mut self,
         msg: EncodedMessage<&'a [u8]>,
         aligned_handshake: Option<HandshakeAlignedProof>,
-        send_path: &mut dyn Output,
+        send: &mut dyn SendOutput,
     ) -> Result<Option<Input<'a>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec && self.drop_tls13_ccs(&msg)? {
@@ -881,7 +881,7 @@ impl ReceivePath {
 
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if self.reject_renegotiation_request(&message, send_path)? {
+        if self.reject_renegotiation_request(&message, send)? {
             return Ok(None);
         }
 
@@ -913,7 +913,7 @@ impl ReceivePath {
     fn reject_renegotiation_request(
         &mut self,
         msg: &Message<'_>,
-        output: &mut dyn Output,
+        send: &mut dyn SendOutput,
     ) -> Result<bool, Error> {
         if !self.may_receive_application_data
             || matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
@@ -933,9 +933,7 @@ impl ReceivePath {
             .received_renegotiation_request()?;
         let desc = AlertDescription::NoRenegotiation;
         warn!("sending warning alert {desc:?}");
-        output
-            .send()
-            .send_alert(AlertLevel::Warning, desc);
+        send.send_alert(AlertLevel::Warning, desc);
         Ok(true)
     }
 
