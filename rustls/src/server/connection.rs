@@ -12,7 +12,8 @@ use super::config::{ClientHello, ServerConfig};
 use super::hs;
 use super::hs::ClientHelloInput;
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, OutputEvent, Protocol, ReceivePath, SendPath, Side, State, maybe_send_fatal_alert
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, OutputEvent, Protocol,
+    ReceivePath, SendPath, Side, State, maybe_send_fatal_alert,
 };
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SideCommonOutput,
