@@ -1024,7 +1024,8 @@ pub(crate) trait State: Send + Sync {
 }
 
 pub(crate) struct CaptureAppData<'a> {
-    pub(crate) data: &'a mut SplitReceive<'a>,
+    pub(crate) recv: &'a mut ReceivePath,
+    pub(crate) other: &'a mut dyn Output,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
@@ -1041,55 +1042,7 @@ pub(crate) struct CaptureAppData<'a> {
 
 impl Output for CaptureAppData<'_> {
     fn emit(&mut self, ev: Event<'_>) {
-        self.data.emit(ev)
-    }
-
-    fn output(&mut self, ev: OutputEvent<'_>) {
-        self.data.output(ev);
-    }
-
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        self.data.send_msg(m, must_encrypt);
-    }
-
-    fn quic(&mut self) -> Option<&mut Quic> {
-        self.data.quic()
-    }
-
-    fn received_plaintext(&mut self, payload: Payload<'_>) {
-        // Receive plaintext data [`Payload<'_>`].
-        //
-        // Since [`Context`] does not hold a lifetime to the receive buffer the
-        // passed [`Payload`] will have it's lifetime erased by storing an index
-        // into the receive buffer as an [`UnborrowedPayload`]. This enables the
-        // data to be later reborrowed after it has been decrypted in-place.
-        let previous = self
-            .received_plaintext
-            .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
-        debug_assert!(previous.is_none(), "overwrote plaintext data");
-    }
-
-    fn start_traffic(&mut self) {
-        self.data.start_traffic();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        self.data.recv
-    }
-
-    fn send(&mut self) -> &mut SendPath {
-        self.data.send()
-    }
-}
-
-pub(crate) struct SplitReceive<'a> {
-    pub(crate) recv: &'a mut ReceivePath,
-    pub(crate) other: &'a mut dyn Output,
-}
-
-impl Output for SplitReceive<'_> {
-    fn emit(&mut self, ev: Event<'_>) {
-        self.other.emit(ev);
+        self.other.emit(ev)
     }
 
     fn output(&mut self, ev: OutputEvent<'_>) {
@@ -1105,6 +1058,19 @@ impl Output for SplitReceive<'_> {
 
     fn quic(&mut self) -> Option<&mut Quic> {
         self.other.quic()
+    }
+
+    fn received_plaintext(&mut self, payload: Payload<'_>) {
+        // Receive plaintext data [`Payload<'_>`].
+        //
+        // Since [`Context`] does not hold a lifetime to the receive buffer the
+        // passed [`Payload`] will have it's lifetime erased by storing an index
+        // into the receive buffer as an [`UnborrowedPayload`]. This enables the
+        // data to be later reborrowed after it has been decrypted in-place.
+        let previous = self
+            .received_plaintext
+            .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
+        debug_assert!(previous.is_none(), "overwrote plaintext data");
     }
 
     fn start_traffic(&mut self) {

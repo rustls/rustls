@@ -8,8 +8,7 @@ use kernel::KernelConnection;
 
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, Input, JoinOutput, Output,
-    OutputEvent, ReceivePath, SendPath, SplitReceive, State, UnborrowedPayload,
-    maybe_send_fatal_alert,
+    OutputEvent, ReceivePath, SendPath, State, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -805,10 +804,8 @@ pub(crate) fn process_new_packets(
                 Some(input) => st.handle(
                     input,
                     &mut CaptureAppData {
-                        data: &mut SplitReceive {
-                            recv,
-                            other: output,
-                        },
+                        recv,
+                        other: output,
                         plaintext_locator: &locator,
                         received_plaintext: &mut plaintext,
                     },
