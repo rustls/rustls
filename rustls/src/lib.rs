@@ -360,7 +360,11 @@ mod log {
     macro_rules! error    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
     macro_rules! _warn    ( ($($tt:tt)*) => { crate::log::_used!($($tt)*) } );
     macro_rules! _used    ( ($($tt:tt)*) => { { let _ = format_args!($($tt)*); } } );
-    pub(crate) use {_used, _warn as warn, debug, error, trace};
+    pub(crate) use _used;
+    pub(crate) use _warn as warn;
+    pub(crate) use debug;
+    pub(crate) use error;
+    pub(crate) use trace;
 }
 
 /// This internal `sync` module aliases the `Arc` implementation to allow downstream forks
