@@ -77,17 +77,14 @@ impl CommonState {
 
 impl Output for CommonState {
     fn emit(&mut self, ev: Event<'_>) {
+        if let Event::ProtocolVersion(ver) = ev {
+            self.recv.negotiated_version = Some(ver);
+            self.send.negotiated_version = Some(ver);
+        }
+
         match ev.disposition() {
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
             EventDisposition::SideSpecific => unreachable!(),
-            EventDisposition::ProtocolVersion(ver) => {
-                self.outputs
-                    .emit(Event::ProtocolVersion(ver));
-                self.recv
-                    .emit(Event::ProtocolVersion(ver));
-                self.send
-                    .emit(Event::ProtocolVersion(ver));
-            }
         }
     }
 
@@ -633,11 +630,8 @@ impl SendPath {
 }
 
 impl Output for SendPath {
-    fn emit(&mut self, ev: Event<'_>) {
-        match ev {
-            Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
-            _ => unreachable!(),
-        }
+    fn emit(&mut self, _: Event<'_>) {
+        unreachable!();
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
@@ -1016,11 +1010,8 @@ impl ReceivePath {
 }
 
 impl Output for ReceivePath {
-    fn emit(&mut self, ev: Event<'_>) {
-        match ev {
-            Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
-            _ => unreachable!(),
-        }
+    fn emit(&mut self, _: Event<'_>) {
+        unreachable!();
     }
 
     fn send_msg(&mut self, _: Message<'_>, _: bool) {
@@ -1155,15 +1146,10 @@ pub(crate) struct SplitReceive<'a> {
 
 impl Output for SplitReceive<'_> {
     fn emit(&mut self, ev: Event<'_>) {
-        match ev.disposition() {
-            EventDisposition::ProtocolVersion(ver) => {
-                self.recv
-                    .emit(Event::ProtocolVersion(ver));
-                self.other
-                    .emit(Event::ProtocolVersion(ver));
-            }
-            _ => self.other.emit(ev),
+        if let Event::ProtocolVersion(ver) = ev {
+            self.recv.negotiated_version = Some(ver);
         }
+        self.other.emit(ev);
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
@@ -1197,13 +1183,11 @@ pub(crate) struct JoinOutput<'a> {
 
 impl Output for JoinOutput<'_> {
     fn emit(&mut self, ev: Event<'_>) {
+        if let Event::ProtocolVersion(ver) = ev {
+            self.send.negotiated_version = Some(ver);
+        }
+
         match ev.disposition() {
-            EventDisposition::ProtocolVersion(ver) => {
-                self.outputs
-                    .emit(Event::ProtocolVersion(ver));
-                self.send
-                    .emit(Event::ProtocolVersion(ver));
-            }
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
             EventDisposition::SideSpecific => self.side.emit(ev),
         }
@@ -1295,10 +1279,8 @@ impl Event<'_> {
             | Event::Exporter(_)
             | Event::HandshakeKind(_)
             | Event::KeyExchangeGroup(_)
-            | Event::PeerIdentity(_) => EventDisposition::ConnectionOutputs,
-
-            // broadcast events
-            Event::ProtocolVersion(ver) => EventDisposition::ProtocolVersion(*ver),
+            | Event::PeerIdentity(_)
+            | Event::ProtocolVersion(_) => EventDisposition::ConnectionOutputs,
 
             // higher levels
             Event::EarlyApplicationData(_)
@@ -1315,9 +1297,6 @@ impl Event<'_> {
 pub(crate) enum EventDisposition {
     /// Events destined for `ConnectionOutputs`
     ConnectionOutputs,
-
-    /// Event broadcast into `SendPath`, `ReceivePath`, and `ConnectionOutputs`
-    ProtocolVersion(ProtocolVersion),
 
     /// Events which are side (client or server) specific
     SideSpecific,
