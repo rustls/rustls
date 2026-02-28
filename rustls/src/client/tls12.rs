@@ -866,13 +866,13 @@ impl ExpectServerDone {
         );
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Client);
-        output.emit(Event::MessageEncrypter {
+        output.send().set_encrypter(
             encrypter,
-            limit: secrets
+            secrets
                 .suite()
                 .common
                 .confidentiality_limit,
-        });
+        );
 
         // 5.
         emit_finished(&secrets, &mut self.hs.transcript, output, &proof);
@@ -1118,14 +1118,13 @@ impl ExpectFinished {
 
         if let Some((_, encrypter)) = st.resuming.take() {
             emit_ccs(output);
-            output.emit(Event::MessageEncrypter {
+            output.send().set_encrypter(
                 encrypter,
-                limit: st
-                    .secrets
+                st.secrets
                     .suite()
                     .common
                     .confidentiality_limit,
-            });
+            );
             emit_finished(&st.secrets, &mut st.hs.transcript, output, &proof);
         }
 

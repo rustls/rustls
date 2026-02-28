@@ -10,7 +10,8 @@ use pki_types::FipsStatus;
 use crate::ConnectionOutputs;
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Input, JoinOutput,
-    Output, ReceivePath, SendPath, SplitReceive, UnborrowedPayload, maybe_send_fatal_alert,
+    Output, ReceivePath, SendOutput, SendPath, SplitReceive, UnborrowedPayload,
+    maybe_send_fatal_alert,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -775,10 +776,9 @@ pub(crate) fn process_new_packets<Side: SideData>(
         } = msg;
 
         if want_close_before_decrypt {
-            output.emit(Event::SendAlert(
-                AlertLevel::Warning,
-                AlertDescription::CloseNotify,
-            ));
+            output
+                .send()
+                .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
         }
 
         let hs_aligned = recv.hs_deframer.aligned();
@@ -935,6 +935,10 @@ impl<'q> Output for SideCommonOutput<'_, 'q> {
 
     fn start_traffic(&mut self) {
         self.common.start_traffic();
+    }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        self.common.send()
     }
 }
 

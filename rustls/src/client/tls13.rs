@@ -1391,7 +1391,9 @@ impl ExpectFinished {
 
         output.emit(Event::PeerIdentity(st.session_input.peer_identity.clone()));
         output.emit(Event::Exporter(Box::new(exporter)));
-        output.emit(Event::OutgoingKeySchedule(Box::new(key_schedule_send)));
+        output
+            .send()
+            .update_key_schedule(Box::new(key_schedule_send));
         output.start_traffic();
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
@@ -1525,7 +1527,7 @@ impl ExpectTraffic {
 
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => output.emit(Event::MaybeKeyUpdateRequest),
+            KeyUpdateRequest::UpdateRequested => output.send().ensure_key_update_queued(),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
