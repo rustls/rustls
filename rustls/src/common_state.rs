@@ -255,13 +255,11 @@ impl Output for ConnectionOutputs {
 }
 
 /// Send an alert via `output` if `error` specifies one.
-pub(crate) fn maybe_send_fatal_alert(output: &mut dyn Output, error: &Error) {
+pub(crate) fn maybe_send_fatal_alert(send: &mut dyn SendOutput, error: &Error) {
     let Ok(alert) = AlertDescription::try_from(error) else {
         return;
     };
-    output
-        .send()
-        .send_alert(AlertLevel::Fatal, alert);
+    send.send_alert(AlertLevel::Fatal, alert);
 }
 
 /// The data path from us to the peer.
@@ -614,28 +612,6 @@ impl SendPath {
         self.refresh_traffic_keys_pending = false;
         self.tls13_key_schedule = Some(ks);
         Ok(())
-    }
-}
-
-impl Output for SendPath {
-    fn emit(&mut self, _: Event<'_>) {
-        unreachable!();
-    }
-
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        self.send_msg(m, must_encrypt);
-    }
-
-    fn start_traffic(&mut self) {
-        self.start_outgoing_traffic();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        unreachable!()
-    }
-
-    fn send(&mut self) -> &mut dyn SendOutput {
-        self
     }
 }
 
