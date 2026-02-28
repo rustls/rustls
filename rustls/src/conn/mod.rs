@@ -926,7 +926,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 pub(crate) struct SideCommonOutput<'a> {
     pub(crate) side: &'a mut dyn Output,
     pub(crate) quic: Option<&'a mut Quic>,
-    pub(crate) common: &'a mut dyn Output,
+    pub(crate) common: &'a mut CommonState,
 }
 
 impl Output for SideCommonOutput<'_> {
