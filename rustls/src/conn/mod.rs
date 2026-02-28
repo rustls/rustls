@@ -942,6 +942,10 @@ impl Output for SideCommonOutput<'_> {
             _ => self.common.emit(ev),
         }
     }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        self.common.send_msg(m, must_encrypt);
+    }
 }
 
 /// Data specific to the peer's side (client or server).

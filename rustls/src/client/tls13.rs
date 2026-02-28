@@ -434,10 +434,13 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Out
         return;
     }
 
-    output.emit(Event::PlainMessage(Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    }));
+    output.send_msg(
+        Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
+        },
+        false,
+    );
 }
 
 fn validate_encrypted_extensions(
@@ -1187,7 +1190,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn
     };
 
     transcript.add_message(&m);
-    output.emit(Event::EncryptMessage(m));
+    output.send_msg(m, true);
 }
 
 struct ExpectFinished {

@@ -662,6 +662,10 @@ impl Output for ServerConnectionData {
             _ => unreachable!(),
         }
     }
+
+    fn send_msg(&mut self, _: Message<'_>, _: bool) {
+        unreachable!();
+    }
 }
 
 impl crate::conn::SideData for ServerConnectionData {}

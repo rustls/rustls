@@ -833,15 +833,18 @@ fn emit_ticket(
     };
 
     transcript.add_message(&m);
-    output.emit(Event::PlainMessage(m));
+    output.send_msg(m, false);
     Ok(())
 }
 
 fn emit_ccs(output: &mut dyn Output) {
-    output.emit(Event::PlainMessage(Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    }));
+    output.send_msg(
+        Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
+        },
+        false,
+    );
 }
 
 fn emit_finished(
@@ -862,7 +865,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    output.emit(Event::EncryptMessage(f));
+    output.send_msg(f, true);
 }
 
 struct ExpectFinished {

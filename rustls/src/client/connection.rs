@@ -21,7 +21,7 @@ use crate::crypto;
 use crate::enums::ApplicationProtocol;
 use crate::error::Error;
 use crate::log::trace;
-use crate::msgs::ClientExtensionsInput;
+use crate::msgs::{ClientExtensionsInput, Message};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 
@@ -464,5 +464,9 @@ impl Output for ClientConnectionData {
             Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
             _ => unreachable!(),
         }
+    }
+
+    fn send_msg(&mut self, _: Message<'_>, _: bool) {
+        unreachable!();
     }
 }

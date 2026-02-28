@@ -85,11 +85,6 @@ impl CommonState {
 impl Output for CommonState {
     fn emit(&mut self, ev: Event<'_>) {
         match ev.disposition() {
-            EventDisposition::MessageOutput => match self.protocol {
-                Protocol::Tcp => self.send.emit(ev),
-                Protocol::Quic(_) => self.quic.emit(ev),
-            },
-
             EventDisposition::SendPath => self.send.emit(ev),
             EventDisposition::ReceivePath => self.recv.emit(ev),
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
@@ -108,6 +103,13 @@ impl Output for CommonState {
                 self.recv.emit(Event::StartTraffic);
                 self.send.emit(Event::StartTraffic);
             }
+        }
+    }
+
+    fn send_msg(&mut self, msg: Message<'_>, must_encrypt: bool) {
+        match self.protocol {
+            Protocol::Tcp => self.send.send_msg(msg, must_encrypt),
+            Protocol::Quic(_) => self.quic.send_msg(msg, must_encrypt),
         }
     }
 }
@@ -251,6 +253,10 @@ impl Output for ConnectionOutputs {
             }
             _ => unreachable!(),
         }
+    }
+
+    fn send_msg(&mut self, _: Message<'_>, _: bool) {
+        unreachable!();
     }
 }
 
@@ -493,21 +499,6 @@ impl SendPath {
         }
     }
 
-    /// Send a raw TLS message, fragmenting it if needed.
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        if !must_encrypt {
-            let msg = &m.into();
-            let iter = self
-                .message_fragmenter
-                .fragment_message(msg);
-            for m in iter {
-                self.queue_tls_message(m.to_unencrypted_opaque());
-            }
-        } else {
-            self.send_msg_encrypt(m.into());
-        }
-    }
-
     fn send_close_notify(&mut self) {
         if self.has_sent_close_notify {
             return;
@@ -630,7 +621,6 @@ impl SendPath {
 impl Output for SendPath {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
-            Event::EncryptMessage(m) => self.send_msg(m, true),
             Event::MaybeKeyUpdateRequest => {
                 if self.ensure_key_update_queued() {
                     if let Some(mut ks) = self.tls13_key_schedule.take() {
@@ -643,11 +633,25 @@ impl Output for SendPath {
                 .encrypt_state
                 .set_message_encrypter(encrypter, limit),
             Event::OutgoingKeySchedule(klc) => self.tls13_key_schedule = Some(klc),
-            Event::PlainMessage(m) => self.send_msg(m, false),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
             Event::SendAlert(level, desc) => self.send_alert(level, desc),
             Event::StartOutgoingTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
             _ => unreachable!(),
+        }
+    }
+
+    /// Send a raw TLS message, fragmenting it if needed.
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        if !must_encrypt {
+            let msg = &m.into();
+            let iter = self
+                .message_fragmenter
+                .fragment_message(msg);
+            for m in iter {
+                self.queue_tls_message(m.to_unencrypted_opaque());
+            }
+        } else {
+            self.send_msg_encrypt(m.into());
         }
     }
 }
@@ -1020,6 +1024,10 @@ impl Output for ReceivePath {
             _ => unreachable!(),
         }
     }
+
+    fn send_msg(&mut self, _: Message<'_>, _: bool) {
+        unreachable!();
+    }
 }
 
 /// Describes which sort of handshake happened.
@@ -1096,6 +1104,10 @@ impl Output for CaptureAppData<'_> {
         self.data.emit(ev)
     }
 
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        self.data.send_msg(m, must_encrypt);
+    }
+
     fn received_plaintext(&mut self, payload: Payload<'_>) {
         // Receive plaintext data [`Payload<'_>`].
         //
@@ -1132,6 +1144,10 @@ impl Output for SplitReceive<'_> {
             _ => self.other.emit(ev),
         }
     }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        self.other.send_msg(m, must_encrypt);
+    }
 }
 
 pub(crate) struct JoinOutput<'a> {
@@ -1157,12 +1173,15 @@ impl Output for JoinOutput<'_> {
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
             EventDisposition::Quic => self.quic.emit(ev),
             EventDisposition::SendPath => self.send.emit(ev),
-            EventDisposition::MessageOutput => match self.protocol {
-                Protocol::Tcp => self.send.emit(ev),
-                Protocol::Quic(_) => self.quic.emit(ev),
-            },
             EventDisposition::StartTraffic => self.send.emit(ev),
             EventDisposition::SideSpecific => self.side.emit(ev),
+        }
+    }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        match self.protocol {
+            Protocol::Tcp => self.send.send_msg(m, must_encrypt),
+            Protocol::Quic(_) => self.quic.send_msg(m, must_encrypt),
         }
     }
 }
@@ -1187,6 +1206,8 @@ impl Input<'_> {
 pub(crate) trait Output {
     fn emit(&mut self, ev: Event<'_>);
 
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+
     fn received_plaintext(&mut self, _payload: Payload<'_>) {}
 }
 
@@ -1198,7 +1219,6 @@ pub(crate) enum Event<'a> {
     EarlyData(EarlyDataEvent),
     EarlyExporter(Box<dyn Exporter>),
     EchStatus(EchStatus),
-    EncryptMessage(Message<'a>),
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
@@ -1218,7 +1238,6 @@ pub(crate) enum Event<'a> {
     },
     OutgoingKeySchedule(Box<KeyScheduleTrafficSend>),
     PeerIdentity(Identity<'static>),
-    PlainMessage(Message<'a>),
     ProtocolVersion(ProtocolVersion),
     QuicEarlySecret(Option<OkmBlock>),
     QuicHandshakeSecrets(quic::Secrets),
@@ -1237,9 +1256,6 @@ pub(crate) enum Event<'a> {
 impl Event<'_> {
     pub(crate) fn disposition(&self) -> EventDisposition {
         match self {
-            // message dispatch
-            Event::EncryptMessage(_) | Event::PlainMessage(_) => EventDisposition::MessageOutput,
-
             // send-specific events
             Event::MaybeKeyUpdateRequest
             | Event::MessageEncrypter { .. }
@@ -1285,9 +1301,6 @@ impl Event<'_> {
 /// Where a given `Event` should be routed to.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum EventDisposition {
-    /// Events related to message output
-    MessageOutput,
-
     /// Events destined for `SendPath`
     SendPath,
 
@@ -1507,10 +1520,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
         };
 
-        output.emit(match TLS13 {
-            true => Event::EncryptMessage(m),
-            false => Event::PlainMessage(m),
-        });
+        output.send_msg(m, TLS13);
     }
 }
 

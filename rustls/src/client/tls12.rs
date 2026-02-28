@@ -422,7 +422,7 @@ fn emit_certificate(
     };
 
     transcript.add_message(&cert);
-    output.emit(Event::PlainMessage(cert));
+    output.send_msg(cert, false);
 }
 
 fn emit_client_kx(
@@ -451,7 +451,7 @@ fn emit_client_kx(
     };
 
     transcript.add_message(&ckx);
-    output.emit(Event::PlainMessage(ckx));
+    output.send_msg(ckx, false);
 }
 
 fn emit_certverify(
@@ -475,15 +475,18 @@ fn emit_certverify(
     };
 
     transcript.add_message(&m);
-    output.emit(Event::PlainMessage(m));
+    output.send_msg(m, false);
     Ok(())
 }
 
 fn emit_ccs(output: &mut dyn Output) {
-    output.emit(Event::PlainMessage(Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    }));
+    output.send_msg(
+        Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
+        },
+        false,
+    );
 }
 
 fn emit_finished(
@@ -504,7 +507,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    output.emit(Event::EncryptMessage(f));
+    output.send_msg(f, true);
 }
 
 struct ServerKxDetails {
