@@ -7,8 +7,9 @@ use std::io;
 use kernel::KernelConnection;
 
 use crate::common_state::{
-    CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Input, JoinOutput,
-    Output, ReceivePath, SendPath, SplitReceive, State, UnborrowedPayload, maybe_send_fatal_alert,
+    CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, Input, JoinOutput, Output,
+    OutputEvent, ReceivePath, SendPath, SplitReceive, State, UnborrowedPayload,
+    maybe_send_fatal_alert,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -930,10 +931,11 @@ pub(crate) struct SideCommonOutput<'a> {
 
 impl Output for SideCommonOutput<'_> {
     fn emit(&mut self, ev: Event<'_>) {
-        match ev.disposition() {
-            EventDisposition::SideSpecific => self.side.emit(ev),
-            _ => self.common.emit(ev),
-        }
+        self.side.emit(ev);
+    }
+
+    fn output(&mut self, ev: OutputEvent<'_>) {
+        self.common.output(ev);
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {

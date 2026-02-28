@@ -13,7 +13,7 @@ use super::{
     ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12Session, Tls13Session, tls13,
 };
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{EarlyDataEvent, Event, Input, Output, Protocol, State};
+use crate::common_state::{EarlyDataEvent, Event, Input, Output, OutputEvent, Protocol, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -80,7 +80,7 @@ impl ExpectServerHello {
             return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
 
-        output.emit(Event::ProtocolVersion(T::VERSION));
+        output.output(OutputEvent::ProtocolVersion(T::VERSION));
 
         // Extract ALPN protocol
         if T::VERSION != ProtocolVersion::TLSv1_3 {
@@ -114,7 +114,7 @@ impl ExpectServerHello {
             _ => {
                 debug!("Using ciphersuite {suite:?}");
                 self.suite = Some(SupportedCipherSuite::from(suite));
-                output.emit(Event::CipherSuite(SupportedCipherSuite::from(suite)));
+                output.output(OutputEvent::CipherSuite(SupportedCipherSuite::from(suite)));
             }
         }
 
@@ -253,7 +253,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
         match hrr.supported_versions {
             Some(ProtocolVersion::TLSv1_3) => {
-                output.emit(Event::ProtocolVersion(ProtocolVersion::TLSv1_3));
+                output.output(OutputEvent::ProtocolVersion(ProtocolVersion::TLSv1_3));
             }
             _ => {
                 return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
@@ -271,7 +271,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // HRR selects the ciphersuite.
-        output.emit(Event::CipherSuite(cs));
+        output.output(OutputEvent::CipherSuite(cs));
 
         // If we offered ECH, we need to confirm that the server accepted it.
         match (self.next.ech_state.as_ref(), cs) {
@@ -951,7 +951,7 @@ pub(super) fn process_alpn_protocol(
     );
 
     if let Some(protocol) = selected {
-        output.emit(Event::ApplicationProtocol(protocol.to_owned()));
+        output.output(OutputEvent::ApplicationProtocol(protocol.to_owned()));
     }
 
     Ok(())

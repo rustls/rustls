@@ -76,16 +76,17 @@ impl CommonState {
 }
 
 impl Output for CommonState {
-    fn emit(&mut self, ev: Event<'_>) {
-        if let Event::ProtocolVersion(ver) = ev {
+    fn emit(&mut self, _: Event<'_>) {
+        unreachable!();
+    }
+
+    fn output(&mut self, ev: OutputEvent<'_>) {
+        if let OutputEvent::ProtocolVersion(ver) = ev {
             self.recv.negotiated_version = Some(ver);
             self.send.negotiated_version = Some(ver);
         }
 
-        match ev.disposition() {
-            EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
-            EventDisposition::SideSpecific => unreachable!(),
-        }
+        self.outputs.output(ev);
     }
 
     fn send_msg(&mut self, msg: Message<'_>, must_encrypt: bool) {
@@ -223,27 +224,30 @@ impl ConnectionOutputs {
 }
 
 impl Output for ConnectionOutputs {
-    fn emit(&mut self, ev: Event<'_>) {
+    fn emit(&mut self, _: Event<'_>) {
+        unreachable!();
+    }
+
+    fn output(&mut self, ev: OutputEvent<'_>) {
         match ev {
-            Event::ApplicationProtocol(protocol) => {
+            OutputEvent::ApplicationProtocol(protocol) => {
                 self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
             }
-            Event::CipherSuite(suite) => self.suite = Some(suite),
-            Event::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
-            Event::Exporter(exporter) => self.exporter = Some(exporter),
-            Event::HandshakeKind(hk) => {
+            OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
+            OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
+            OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
+            OutputEvent::HandshakeKind(hk) => {
                 assert!(self.handshake_kind.is_none());
                 self.handshake_kind = Some(hk);
             }
-            Event::KeyExchangeGroup(kxg) => {
+            OutputEvent::KeyExchangeGroup(kxg) => {
                 assert!(self.negotiated_kx_group.is_none());
                 self.negotiated_kx_group = Some(kxg);
             }
-            Event::PeerIdentity(identity) => self.peer_identity = Some(identity),
-            Event::ProtocolVersion(ver) => {
+            OutputEvent::PeerIdentity(identity) => self.peer_identity = Some(identity),
+            OutputEvent::ProtocolVersion(ver) => {
                 self.negotiated_version = Some(ver);
             }
-            _ => unreachable!(),
         }
     }
 
@@ -1063,6 +1067,10 @@ impl Output for CaptureAppData<'_> {
         self.data.emit(ev)
     }
 
+    fn output(&mut self, ev: OutputEvent<'_>) {
+        self.data.output(ev);
+    }
+
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         self.data.send_msg(m, must_encrypt);
     }
@@ -1104,10 +1112,14 @@ pub(crate) struct SplitReceive<'a> {
 
 impl Output for SplitReceive<'_> {
     fn emit(&mut self, ev: Event<'_>) {
-        if let Event::ProtocolVersion(ver) = ev {
+        self.other.emit(ev);
+    }
+
+    fn output(&mut self, ev: OutputEvent<'_>) {
+        if let OutputEvent::ProtocolVersion(ver) = ev {
             self.recv.negotiated_version = Some(ver);
         }
-        self.other.emit(ev);
+        self.other.output(ev);
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
@@ -1140,15 +1152,16 @@ pub(crate) struct JoinOutput<'a> {
 }
 
 impl Output for JoinOutput<'_> {
-    fn emit(&mut self, ev: Event<'_>) {
-        if let Event::ProtocolVersion(ver) = ev {
+    fn output(&mut self, ev: OutputEvent<'_>) {
+        if let OutputEvent::ProtocolVersion(ver) = ev {
             self.send.negotiated_version = Some(ver);
         }
 
-        match ev.disposition() {
-            EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
-            EventDisposition::SideSpecific => self.side.emit(ev),
-        }
+        self.outputs.output(ev);
+    }
+
+    fn emit(&mut self, ev: Event<'_>) {
+        self.side.emit(ev);
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
@@ -1195,6 +1208,8 @@ impl Input<'_> {
 pub(crate) trait Output {
     fn emit(&mut self, ev: Event<'_>);
 
+    fn output(&mut self, ev: OutputEvent<'_>);
+
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
 
     fn quic(&mut self) -> Option<&mut Quic> {
@@ -1212,52 +1227,22 @@ pub(crate) trait Output {
 
 /// The set of events output by the low-level handshake state machine.
 pub(crate) enum Event<'a> {
-    ApplicationProtocol(ApplicationProtocol<'a>),
-    CipherSuite(SupportedCipherSuite),
     EarlyApplicationData(Payload<'a>),
     EarlyData(EarlyDataEvent),
-    EarlyExporter(Box<dyn Exporter>),
     EchStatus(EchStatus),
+    ReceivedServerName(Option<DnsName<'static>>),
+    ResumptionData(Vec<u8>),
+}
+
+pub(crate) enum OutputEvent<'a> {
+    ApplicationProtocol(ApplicationProtocol<'a>),
+    CipherSuite(SupportedCipherSuite),
+    EarlyExporter(Box<dyn Exporter>),
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
     PeerIdentity(Identity<'static>),
     ProtocolVersion(ProtocolVersion),
-    ReceivedServerName(Option<DnsName<'static>>),
-    ResumptionData(Vec<u8>),
-}
-
-impl Event<'_> {
-    pub(crate) fn disposition(&self) -> EventDisposition {
-        match self {
-            // presentation API events
-            Event::ApplicationProtocol(_)
-            | Event::CipherSuite(_)
-            | Event::EarlyExporter(_)
-            | Event::Exporter(_)
-            | Event::HandshakeKind(_)
-            | Event::KeyExchangeGroup(_)
-            | Event::PeerIdentity(_)
-            | Event::ProtocolVersion(_) => EventDisposition::ConnectionOutputs,
-
-            // higher levels
-            Event::EarlyApplicationData(_)
-            | Event::EarlyData(_)
-            | Event::EchStatus(_)
-            | Event::ReceivedServerName(_)
-            | Event::ResumptionData(_) => EventDisposition::SideSpecific,
-        }
-    }
-}
-
-/// Where a given `Event` should be routed to.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum EventDisposition {
-    /// Events destined for `ConnectionOutputs`
-    ConnectionOutputs,
-
-    /// Events which are side (client or server) specific
-    SideSpecific,
 }
 
 pub(crate) enum EarlyDataEvent {

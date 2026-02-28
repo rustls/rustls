@@ -12,8 +12,7 @@ use super::config::{ClientHello, ServerConfig};
 use super::hs;
 use super::hs::ClientHelloInput;
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, Protocol, ReceivePath,
-    SendPath, Side, State, maybe_send_fatal_alert,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Input, Output, OutputEvent, Protocol, ReceivePath, SendPath, Side, State, maybe_send_fatal_alert
 };
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SideCommonOutput,
@@ -668,6 +667,10 @@ impl Output for ServerConnectionData {
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
             _ => unreachable!(),
         }
+    }
+
+    fn output(&mut self, _: OutputEvent<'_>) {
+        unreachable!();
     }
 
     fn send_msg(&mut self, _: Message<'_>, _: bool) {

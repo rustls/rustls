@@ -11,7 +11,7 @@ use super::config::{ClientConfig, ClientSessionKey};
 use super::{ClientAuthDetails, ServerCertDetails, Tls12Session};
 use crate::ConnectionTrafficSecrets;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{Event, HandshakeKind, Input, Output, Side, State};
+use crate::common_state::{HandshakeKind, Input, Output, OutputEvent, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -157,7 +157,7 @@ mod server_hello {
                     );
 
                     let (dec, enc) = secrets.make_cipher_pair(Side::Client);
-                    output.emit(Event::HandshakeKind(HandshakeKind::Resumed));
+                    output.output(OutputEvent::HandshakeKind(HandshakeKind::Resumed));
                     let cert_verified = verify::PeerVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -195,7 +195,7 @@ mod server_hello {
                 }
             }
 
-            output.emit(Event::HandshakeKind(HandshakeKind::Full));
+            output.output(OutputEvent::HandshakeKind(HandshakeKind::Full));
             Ok(Box::new(ExpectCertificate {
                 hs: HandshakeState {
                     config,
@@ -787,7 +787,7 @@ impl ExpectServerDone {
             self.randoms,
             suite,
         )?;
-        output.emit(Event::KeyExchangeGroup(skxg));
+        output.output(OutputEvent::KeyExchangeGroup(skxg));
 
         // 4e. CCS. We are definitely going to switch on encryption.
         emit_ccs(output);
@@ -1052,8 +1052,8 @@ impl State for ExpectFinished {
             .enable_secret_extraction
             .then(|| st.secrets.extract_secrets(Side::Client));
 
-        output.emit(Event::PeerIdentity(st.peer_identity));
-        output.emit(Event::Exporter(st.secrets.into_exporter()));
+        output.output(OutputEvent::PeerIdentity(st.peer_identity));
+        output.output(OutputEvent::Exporter(st.secrets.into_exporter()));
         output.start_traffic();
 
         Ok(Box::new(ExpectTraffic {
