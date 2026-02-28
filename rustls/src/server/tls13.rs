@@ -13,7 +13,8 @@ use super::hs::{HandshakeHashOrBuffer, ServerState};
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
-    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, TrafficTemperCounters,
+    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, OutputEvent, Side,
+    TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::KernelState;
@@ -265,7 +266,7 @@ mod client_hello {
                 emit_fake_ccs(output);
             }
 
-            output.emit(Event::HandshakeKind(
+            output.output(OutputEvent::HandshakeKind(
                 match (full_handshake, st.done_retry) {
                     (true, true) => HandshakeKind::FullWithHelloRetryRequest,
                     (true, false) => HandshakeKind::Full,
@@ -533,7 +534,7 @@ mod client_hello {
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
         let ckx = kxgroup.start_and_complete(share.payload.bytes())?;
-        output.emit(Event::KeyExchangeGroup(kxgroup));
+        output.output(OutputEvent::KeyExchangeGroup(kxgroup));
 
         let extensions = Box::new(ServerExtensions {
             key_share: Some(KeyShareEntry::new(ckx.group, ckx.pub_key)),
@@ -575,11 +576,13 @@ mod client_hello {
             );
 
             if config.max_early_data_size > 0 {
-                output.emit(Event::EarlyExporter(early_key_schedule.early_exporter(
-                    &client_hello_hash,
-                    &*config.key_log,
-                    &randoms.client,
-                )));
+                output.output(OutputEvent::EarlyExporter(
+                    early_key_schedule.early_exporter(
+                        &client_hello_hash,
+                        &*config.key_log,
+                        &randoms.client,
+                    ),
+                ));
             }
 
             KeySchedulePreHandshake::from(early_key_schedule)
@@ -1446,9 +1449,9 @@ impl ExpectFinished {
 
         // Application data may now flow, even if we have client auth enabled.
         if let Some(identity) = self.peer_identity {
-            output.emit(Event::PeerIdentity(identity));
+            output.output(OutputEvent::PeerIdentity(identity));
         }
-        output.emit(Event::Exporter(Box::new(exporter)));
+        output.output(OutputEvent::Exporter(Box::new(exporter)));
         output
             .send()
             .update_key_schedule(Box::new(key_schedule_send));

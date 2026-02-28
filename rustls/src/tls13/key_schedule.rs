@@ -677,7 +677,7 @@ impl KeyScheduleTrafficSend {
         self.current = secret;
     }
 
-    pub(crate) fn request_key_update_and_update_encrypter(&mut self, send: &mut SendPath) {
+    pub(crate) fn request_key_update_and_update_encrypter(&mut self, send: &mut dyn SendOutput) {
         send.send_msg(Message::build_key_update_request(), true);
         let secret = self.ks.derive_next(&self.current);
         self.ks.set_encrypter(&secret, send);

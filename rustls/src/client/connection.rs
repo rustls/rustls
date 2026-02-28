@@ -9,8 +9,8 @@ use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, ReceivePath,
-    SendOutput, Side,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, OutputEvent, Protocol,
+    ReceivePath, SendOutput, Side,
 };
 use crate::conn::unbuffered::EncryptError;
 use crate::conn::{
@@ -471,6 +471,10 @@ impl Output for ClientConnectionData {
             Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
             _ => unreachable!(),
         }
+    }
+
+    fn output(&mut self, _: OutputEvent<'_>) {
+        unreachable!();
     }
 
     fn send_msg(&mut self, _: Message<'_>, _: bool) {
