@@ -573,17 +573,22 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    fn ensure_key_update_queued(&mut self) -> bool {
+    fn ensure_key_update_queued(&mut self) {
         if self.queued_key_update_message.is_some() {
-            return false;
+            return;
         }
+
         let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
         self.queued_key_update_message = Some(
             self.encrypt_state
                 .encrypt_outgoing(message.borrow_outbound())
                 .encode(),
         );
-        true
+
+        if let Some(mut ks) = self.tls13_key_schedule.take() {
+            ks.update_encrypter_for_key_update(self);
+            self.tls13_key_schedule = Some(ks);
+        }
     }
 
     /// Trigger a `refresh_traffic_keys` if required.
@@ -610,14 +615,7 @@ impl SendPath {
 impl Output for SendPath {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
-            Event::MaybeKeyUpdateRequest => {
-                if self.ensure_key_update_queued() {
-                    if let Some(mut ks) = self.tls13_key_schedule.take() {
-                        ks.update_encrypter_for_key_update(self);
-                        self.tls13_key_schedule = Some(ks);
-                    }
-                }
-            }
+            Event::MaybeKeyUpdateRequest => self.ensure_key_update_queued(),
             Event::MessageEncrypter { encrypter, limit } => self
                 .encrypt_state
                 .set_message_encrypter(encrypter, limit),
