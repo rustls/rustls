@@ -10,9 +10,9 @@ use pki_types::{DnsName, FipsStatus};
 
 use super::config::{ClientHello, ServerConfig};
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, OutputEvent, Protocol,
-    ReceivePath, SendOutput, SendPath, Side,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, SendPath, Side,
 };
+use crate::conn::private::SideOutput;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SideCommonOutput,
     Writer,
@@ -22,7 +22,7 @@ use crate::crypto;
 use crate::crypto::cipher::Payload;
 use crate::error::{ApiMisuse, Error, ErrorWithAlert};
 use crate::log::trace;
-use crate::msgs::{Message, ServerExtensionsInput, ServerNamePayload};
+use crate::msgs::{ServerExtensionsInput, ServerNamePayload};
 use crate::server::hs::{ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -636,7 +636,7 @@ impl ServerConnectionData {
     }
 }
 
-impl Output for ServerConnectionData {
+impl SideOutput for ServerConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EarlyApplicationData(data) => self
@@ -647,26 +647,6 @@ impl Output for ServerConnectionData {
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
             _ => unreachable!(),
         }
-    }
-
-    fn output(&mut self, _: OutputEvent<'_>) {
-        unreachable!();
-    }
-
-    fn send_msg(&mut self, _: Message<'_>, _: bool) {
-        unreachable!();
-    }
-
-    fn start_traffic(&mut self) {
-        unreachable!();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        unreachable!()
-    }
-
-    fn send(&mut self) -> &mut dyn SendOutput {
-        unreachable!()
     }
 }
 

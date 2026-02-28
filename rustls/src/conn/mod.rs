@@ -13,6 +13,7 @@ use crate::common_state::{
     OutputEvent, ReceivePath, SendOutput, SendPath, SplitReceive, UnborrowedPayload,
     maybe_send_fatal_alert,
 };
+use crate::conn::private::SideOutput;
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::kernel::KernelState;
@@ -906,7 +907,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 }
 
 pub(crate) struct SideCommonOutput<'a, 'q> {
-    pub(crate) side: &'a mut dyn Output,
+    pub(crate) side: &'a mut dyn SideOutput,
     pub(crate) quic: Option<&'q mut dyn QuicOutput>,
     pub(crate) common: &'a mut CommonState,
 }
@@ -956,9 +957,13 @@ pub(crate) mod private {
 
     pub(crate) trait Side: Debug {
         /// Data storage type.
-        type Data: Output + Debug;
+        type Data: SideOutput + Debug;
         /// State machine type.
         type State: StateMachine;
+    }
+
+    pub(crate) trait SideOutput {
+        fn emit(&mut self, ev: Event<'_>);
     }
 }
 

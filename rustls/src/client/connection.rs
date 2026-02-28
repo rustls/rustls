@@ -8,10 +8,8 @@ use pki_types::{FipsStatus, ServerName};
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
-use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, OutputEvent, Protocol,
-    ReceivePath, SendOutput, Side,
-};
+use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
+use crate::conn::private::SideOutput;
 use crate::conn::unbuffered::EncryptError;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader,
@@ -22,7 +20,7 @@ use crate::crypto;
 use crate::enums::ApplicationProtocol;
 use crate::error::Error;
 use crate::log::trace;
-use crate::msgs::{ClientExtensionsInput, Message};
+use crate::msgs::ClientExtensionsInput;
 use crate::quic::QuicOutput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -460,7 +458,19 @@ impl ClientConnectionData {
     }
 }
 
-impl Output for ClientConnectionData {
+/// State associated with a client connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ClientSide;
+
+impl crate::conn::SideData for ClientSide {}
+
+impl crate::conn::private::Side for ClientSide {
+    type Data = ClientConnectionData;
+    type State = super::hs::ClientState;
+}
+
+impl SideOutput for ClientConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
@@ -472,36 +482,4 @@ impl Output for ClientConnectionData {
             _ => unreachable!(),
         }
     }
-
-    fn output(&mut self, _: OutputEvent<'_>) {
-        unreachable!();
-    }
-
-    fn send_msg(&mut self, _: Message<'_>, _: bool) {
-        unreachable!();
-    }
-
-    fn start_traffic(&mut self) {
-        unreachable!();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        unreachable!()
-    }
-
-    fn send(&mut self) -> &mut dyn SendOutput {
-        unreachable!()
-    }
-}
-
-/// State associated with a client connection.
-#[expect(clippy::exhaustive_structs)]
-#[derive(Debug)]
-pub struct ClientSide;
-
-impl crate::conn::SideData for ClientSide {}
-
-impl crate::conn::private::Side for ClientSide {
-    type Data = ClientConnectionData;
-    type State = super::hs::ClientState;
 }
