@@ -651,6 +651,10 @@ impl Output for ServerConnectionData {
     fn send_msg(&mut self, _: Message<'_>, _: bool) {
         unreachable!();
     }
+
+    fn start_traffic(&mut self) {
+        unreachable!();
+    }
 }
 
 /// State associated with a server connection.
