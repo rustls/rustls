@@ -798,20 +798,21 @@ pub(crate) fn process_new_packets(
         }
 
         let hs_aligned = recv.hs_deframer.aligned();
-        match recv
-            .receive_message(msg, hs_aligned, output.send)
-            .and_then(|input| match input {
-                Some(input) => st.handle(
-                    input,
-                    &mut CaptureAppData {
-                        recv,
-                        other: output,
-                        plaintext_locator: &locator,
-                        received_plaintext: &mut plaintext,
-                    },
-                ),
-                None => Ok(st),
-            }) {
+        let result = match recv.receive_message(msg, hs_aligned, output.send) {
+            Ok(Some(input)) => st.handle(
+                input,
+                &mut CaptureAppData {
+                    recv,
+                    other: output,
+                    plaintext_locator: &locator,
+                    received_plaintext: &mut plaintext,
+                },
+            ),
+            Ok(None) => Ok(st),
+            Err(e) => Err(e),
+        };
+
+        match result {
             Ok(new) => st = new,
             Err(e) => {
                 maybe_send_fatal_alert(output.send, &e);
