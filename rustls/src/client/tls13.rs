@@ -601,7 +601,7 @@ impl ExpectEncryptedExtensions {
                             // If no early traffic, set the encryption key for handshakes
                             self.hs
                                 .key_schedule
-                                .set_handshake_encrypter(output);
+                                .set_handshake_encrypter(output.send());
                             self.in_early_traffic = false;
                         }
                     }
@@ -1318,7 +1318,7 @@ impl ExpectFinished {
             output.emit(Event::EarlyData(EarlyDataEvent::Finished));
             st.hs
                 .key_schedule
-                .set_handshake_encrypter(output);
+                .set_handshake_encrypter(output.send());
         }
 
         let mut flight = HandshakeFlightTls13::new(&mut st.hs.transcript);
@@ -1533,7 +1533,7 @@ impl ExpectTraffic {
 
         // Update our read-side keys.
         self.key_schedule_recv
-            .update_decrypter(output, &proof);
+            .update_decrypter(output.receive(), &proof);
         Ok(())
     }
 }

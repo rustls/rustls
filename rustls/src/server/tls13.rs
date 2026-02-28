@@ -326,7 +326,7 @@ mod client_hello {
             // are encrypted with the handshake keys.
             match doing_early_data {
                 EarlyDataDecision::Disabled => {
-                    key_schedule.set_handshake_decrypter(None, output, &input.proof);
+                    key_schedule.set_handshake_decrypter(None, output.receive(), &input.proof);
                 }
                 EarlyDataDecision::RequestedButRejected => {
                     debug!(
@@ -334,7 +334,7 @@ mod client_hello {
                     );
                     key_schedule.set_handshake_decrypter(
                         Some(max_early_data_size(st.config.max_early_data_size)),
-                        output,
+                        output.receive(),
                         &input.proof,
                     );
                 }
@@ -1170,7 +1170,7 @@ impl ExpectEarlyData {
             } => {
                 let proof = input.check_aligned_handshake()?;
                 self.key_schedule
-                    .update_decrypter(output, &proof);
+                    .update_decrypter(output.receive(), &proof);
                 self.hs
                     .transcript
                     .add_message(&input.message);
@@ -1413,7 +1413,7 @@ impl ExpectFinished {
         let proof = input.check_aligned_handshake()?;
         let (key_schedule_before_finished, expect_verify_data) = self
             .key_schedule
-            .sign_client_finish(&handshake_hash, output, &proof);
+            .sign_client_finish(&handshake_hash, output.receive(), &proof);
 
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
         {
@@ -1522,7 +1522,7 @@ impl ExpectTraffic {
 
         // Update our read-side keys.
         self.key_schedule_recv
-            .update_decrypter(output, &proof);
+            .update_decrypter(output.receive(), &proof);
         Ok(())
     }
 }
