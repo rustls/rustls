@@ -1049,7 +1049,7 @@ impl State for ExpectFinished {
 
         output.emit(Event::PeerIdentity(st.peer_identity));
         output.emit(Event::Exporter(st.secrets.into_exporter()));
-        output.emit(Event::StartTraffic);
+        output.start_traffic();
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,

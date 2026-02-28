@@ -469,4 +469,8 @@ impl Output for ClientConnectionData {
     fn send_msg(&mut self, _: Message<'_>, _: bool) {
         unreachable!();
     }
+
+    fn start_traffic(&mut self) {
+        unreachable!();
+    }
 }

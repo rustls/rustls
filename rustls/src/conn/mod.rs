@@ -947,6 +947,10 @@ impl Output for SideCommonOutput<'_> {
     fn quic(&mut self) -> Option<&mut Quic> {
         self.quic.as_deref_mut()
     }
+
+    fn start_traffic(&mut self) {
+        self.common.start_traffic();
+    }
 }
 
 /// Data specific to the peer's side (client or server).

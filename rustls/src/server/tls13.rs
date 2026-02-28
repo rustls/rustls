@@ -1379,7 +1379,7 @@ impl State for ExpectFinished {
         }
         output.emit(Event::Exporter(Box::new(exporter)));
         output.emit(Event::OutgoingKeySchedule(Box::new(key_schedule_send)));
-        output.emit(Event::StartTraffic);
+        output.start_traffic();
 
         Ok(match key_schedule_recv.protocol().is_quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),

@@ -82,7 +82,6 @@ impl Output for CommonState {
             EventDisposition::ReceivePath => self.recv.emit(ev),
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
             EventDisposition::SideSpecific => unreachable!(),
-
             EventDisposition::ProtocolVersion(ver) => {
                 self.outputs
                     .emit(Event::ProtocolVersion(ver));
@@ -91,15 +90,16 @@ impl Output for CommonState {
                 self.send
                     .emit(Event::ProtocolVersion(ver));
             }
-            EventDisposition::StartTraffic => {
-                self.recv.emit(Event::StartTraffic);
-                self.send.emit(Event::StartTraffic);
-            }
         }
     }
 
     fn send_msg(&mut self, msg: Message<'_>, must_encrypt: bool) {
         self.send.send_msg(msg, must_encrypt);
+    }
+
+    fn start_traffic(&mut self) {
+        self.recv.start_traffic();
+        self.send.start_traffic();
     }
 }
 
@@ -245,6 +245,10 @@ impl Output for ConnectionOutputs {
     }
 
     fn send_msg(&mut self, _: Message<'_>, _: bool) {
+        unreachable!();
+    }
+
+    fn start_traffic(&mut self) {
         unreachable!();
     }
 }
@@ -622,7 +626,7 @@ impl Output for SendPath {
             Event::OutgoingKeySchedule(klc) => self.tls13_key_schedule = Some(klc),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
             Event::SendAlert(level, desc) => self.send_alert(level, desc),
-            Event::StartOutgoingTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
+            Event::StartOutgoingTraffic => self.start_outgoing_traffic(),
             _ => unreachable!(),
         }
     }
@@ -640,6 +644,10 @@ impl Output for SendPath {
         } else {
             self.send_msg_encrypt(m.into());
         }
+    }
+
+    fn start_traffic(&mut self) {
+        self.start_outgoing_traffic();
     }
 }
 
@@ -1007,13 +1015,16 @@ impl Output for ReceivePath {
                     .tls13_tickets_received
                     .saturating_add(1)
             }
-            Event::StartTraffic => self.may_receive_application_data = true,
             _ => unreachable!(),
         }
     }
 
     fn send_msg(&mut self, _: Message<'_>, _: bool) {
         unreachable!();
+    }
+
+    fn start_traffic(&mut self) {
+        self.may_receive_application_data = true;
     }
 }
 
@@ -1111,6 +1122,10 @@ impl Output for CaptureAppData<'_> {
             .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
         debug_assert!(previous.is_none(), "overwrote plaintext data");
     }
+
+    fn start_traffic(&mut self) {
+        self.data.start_traffic();
+    }
 }
 
 pub(crate) struct SplitReceive<'a> {
@@ -1128,10 +1143,6 @@ impl Output for SplitReceive<'_> {
                 self.other
                     .emit(Event::ProtocolVersion(ver));
             }
-            EventDisposition::StartTraffic => {
-                self.recv.emit(Event::StartTraffic);
-                self.other.emit(Event::StartTraffic);
-            }
             _ => self.other.emit(ev),
         }
     }
@@ -1142,6 +1153,11 @@ impl Output for SplitReceive<'_> {
 
     fn quic(&mut self) -> Option<&mut Quic> {
         self.other.quic()
+    }
+
+    fn start_traffic(&mut self) {
+        self.recv.start_traffic();
+        self.other.start_traffic();
     }
 }
 
@@ -1164,7 +1180,6 @@ impl Output for JoinOutput<'_> {
             }
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
             EventDisposition::SendPath => self.send.emit(ev),
-            EventDisposition::StartTraffic => self.send.emit(ev),
             EventDisposition::SideSpecific => self.side.emit(ev),
         }
     }
@@ -1178,6 +1193,10 @@ impl Output for JoinOutput<'_> {
 
     fn quic(&mut self) -> Option<&mut Quic> {
         self.quic.as_deref_mut()
+    }
+
+    fn start_traffic(&mut self) {
+        self.send.start_traffic();
     }
 }
 
@@ -1208,6 +1227,8 @@ pub(crate) trait Output {
     }
 
     fn received_plaintext(&mut self, _payload: Payload<'_>) {}
+
+    fn start_traffic(&mut self);
 }
 
 /// The set of events output by the low-level handshake state machine.
@@ -1244,8 +1265,6 @@ pub(crate) enum Event<'a> {
     SendAlert(AlertLevel, AlertDescription),
     /// Mark the connection as ready to send application data.
     StartOutgoingTraffic,
-    /// Mark the connection as ready to send and receive application data.
-    StartTraffic,
 }
 
 impl Event<'_> {
@@ -1275,8 +1294,6 @@ impl Event<'_> {
             // broadcast events
             Event::ProtocolVersion(ver) => EventDisposition::ProtocolVersion(*ver),
 
-            Event::StartTraffic => EventDisposition::StartTraffic,
-
             // higher levels
             Event::EarlyApplicationData(_)
             | Event::EarlyData(_)
@@ -1301,9 +1318,6 @@ pub(crate) enum EventDisposition {
 
     /// Event broadcast into `SendPath`, `ReceivePath`, and `ConnectionOutputs`
     ProtocolVersion(ProtocolVersion),
-
-    /// Event broadcast into `SendPath` and `ReceivePath`
-    StartTraffic,
 
     /// Events which are side (client or server) specific
     SideSpecific,

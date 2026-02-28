@@ -978,7 +978,7 @@ impl State for ExpectFinished {
             });
 
         output.emit(Event::Exporter(self.secrets.into_exporter()));
-        output.emit(Event::StartTraffic);
+        output.start_traffic();
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,
