@@ -1010,7 +1010,7 @@ pub enum HandshakeKind {
 }
 
 pub(crate) struct CaptureAppData<'a> {
-    pub(crate) data: &'a mut dyn Output,
+    pub(crate) data: &'a mut SplitReceive<'a>,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
@@ -1060,7 +1060,7 @@ impl Output for CaptureAppData<'_> {
     }
 
     fn receive(&mut self) -> &mut ReceivePath {
-        self.data.receive()
+        self.data.recv
     }
 
     fn send(&mut self) -> &mut dyn SendOutput {
