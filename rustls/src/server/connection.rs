@@ -20,7 +20,7 @@ use crate::crypto;
 use crate::crypto::cipher::Payload;
 use crate::error::{ApiMisuse, Error, ErrorWithAlert};
 use crate::log::trace;
-use crate::msgs::{ServerExtensionsInput, ServerNamePayload};
+use crate::msgs::{Message, ServerExtensionsInput, ServerNamePayload};
 use crate::server::hs::{ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -639,6 +639,10 @@ impl Output for ServerConnectionData {
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
             _ => unreachable!(),
         }
+    }
+
+    fn send_msg(&mut self, _: Message<'_>, _: bool) {
+        unreachable!();
     }
 }
 
