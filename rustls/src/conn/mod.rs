@@ -919,13 +919,16 @@ impl<'q> Output for SideCommonOutput<'_, 'q> {
     }
 
     fn output(&mut self, ev: OutputEvent<'_>) {
-        self.common.output(ev);
+        self.common.outputs.handle(ev);
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         match self.quic() {
             Some(quic) => quic.send_msg(m, must_encrypt),
-            None => self.common.send_msg(m, must_encrypt),
+            None => self
+                .common
+                .send
+                .send_msg(m, must_encrypt),
         }
     }
 
@@ -937,15 +940,20 @@ impl<'q> Output for SideCommonOutput<'_, 'q> {
     }
 
     fn start_traffic(&mut self) {
-        self.common.start_traffic();
+        self.common
+            .recv
+            .may_receive_application_data = true;
+        self.common
+            .send
+            .start_outgoing_traffic();
     }
 
     fn receive(&mut self) -> &mut ReceivePath {
-        self.common.receive()
+        &mut self.common.recv
     }
 
     fn send(&mut self) -> &mut dyn SendOutput {
-        self.common.send()
+        &mut self.common.send
     }
 }
 
