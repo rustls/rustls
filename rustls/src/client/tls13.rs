@@ -16,7 +16,7 @@ use super::{
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side,
+    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, OutputEvent, Side,
     TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
@@ -255,7 +255,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             emit_fake_ccs(&mut sent_tls13_fake_ccs, output);
         }
 
-        output.emit(Event::HandshakeKind(
+        output.output(OutputEvent::HandshakeKind(
             match (&resuming_session, st.done_retry) {
                 (Some(_), true) => HandshakeKind::ResumedWithHelloRetryRequest,
                 (None, true) => HandshakeKind::FullWithHelloRetryRequest,
@@ -299,7 +299,7 @@ impl KeyExchangeChoice {
         their_key_share: &KeyShareEntry,
     ) -> Result<Self, ()> {
         if our_key_share.share.group() == their_key_share.group {
-            output.emit(Event::KeyExchangeGroup(our_key_share.group));
+            output.output(OutputEvent::KeyExchangeGroup(our_key_share.group));
             return Ok(Self::Whole(our_key_share.share.into_single()));
         }
 
@@ -318,7 +318,7 @@ impl KeyExchangeChoice {
 
         // correct the record for the benefit of accuracy of
         // `negotiated_key_exchange_group()`
-        output.emit(Event::KeyExchangeGroup(actual_skxg));
+        output.output(OutputEvent::KeyExchangeGroup(actual_skxg));
 
         Ok(Self::Component(hybrid_key_share))
     }
@@ -398,7 +398,7 @@ pub(super) fn prepare_resumption(
     doing_retry: bool,
 ) -> bool {
     let resuming_suite = resuming_session.suite;
-    output.emit(Event::CipherSuite(resuming_suite.into()));
+    output.output(OutputEvent::CipherSuite(resuming_suite.into()));
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size;
@@ -455,11 +455,9 @@ pub(super) fn derive_early_traffic_secret(
         output,
     );
 
-    output.emit(Event::EarlyExporter(early_key_schedule.early_exporter(
-        &client_hello_hash,
-        key_log,
-        client_random,
-    )));
+    output.output(OutputEvent::EarlyExporter(
+        early_key_schedule.early_exporter(&client_hello_hash, key_log, client_random),
+    ));
 
     // Now the client can send encrypted early data
     output.emit(Event::EarlyData(EarlyDataEvent::Start));
@@ -1389,8 +1387,10 @@ impl ExpectFinished {
             key_schedule_pre_finished.into_traffic(output, st.hs.transcript.current_hash(), &proof);
         let (key_schedule_send, key_schedule_recv) = key_schedule.split();
 
-        output.emit(Event::PeerIdentity(st.session_input.peer_identity.clone()));
-        output.emit(Event::Exporter(Box::new(exporter)));
+        output.output(OutputEvent::PeerIdentity(
+            st.session_input.peer_identity.clone(),
+        ));
+        output.output(OutputEvent::Exporter(Box::new(exporter)));
         output
             .send()
             .update_key_schedule(Box::new(key_schedule_send));

@@ -8,7 +8,7 @@ use pki_types::DnsName;
 
 use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13};
 use crate::SupportedCipherSuite;
-use crate::common_state::{Event, Input, Output, Protocol};
+use crate::common_state::{Event, Input, Output, OutputEvent, Protocol};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -259,7 +259,7 @@ impl<'a> ExtensionProcessing<'a> {
         // Enact ALPN selection by telling peer and high-level API.
         if let Some(protocol) = &chosen_protocol {
             extensions.selected_protocol = Some(SingleProtocolName::new((*protocol).to_owned()));
-            output.emit(Event::ApplicationProtocol((*protocol).to_owned()));
+            output.output(OutputEvent::ApplicationProtocol((*protocol).to_owned()));
         }
 
         if let Some(quic) = output.quic() {
@@ -512,7 +512,7 @@ impl ExpectClientHello {
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
     {
-        output.emit(Event::ProtocolVersion(T::VERSION));
+        output.output(OutputEvent::ProtocolVersion(T::VERSION));
 
         let sni = self
             .config
@@ -582,7 +582,7 @@ impl ExpectClientHello {
         )?;
 
         debug!("decided upon suite {suite:?}");
-        output.emit(Event::CipherSuite(suite.into()));
+        output.output(OutputEvent::CipherSuite(suite.into()));
 
         suite
             .server_handler()

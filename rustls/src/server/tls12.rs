@@ -11,7 +11,9 @@ use super::config::ServerConfig;
 use super::hs::ServerState;
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::inappropriate_message;
-use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side};
+use crate::common_state::{
+    Event, HandshakeFlightTls12, HandshakeKind, Input, Output, OutputEvent, Side,
+};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -64,6 +66,7 @@ impl Tls12State {
 
 mod client_hello {
     use super::*;
+    use crate::common_state::OutputEvent;
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::msgs::{
@@ -168,7 +171,7 @@ mod client_hello {
                 st.session_id = SessionId::random(st.config.provider.secure_random)?;
             }
 
-            output.emit(Event::HandshakeKind(HandshakeKind::Full));
+            output.output(OutputEvent::HandshakeKind(HandshakeKind::Full));
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
@@ -352,7 +355,7 @@ mod client_hello {
             secrets.master_secret(),
         );
 
-        output.emit(Event::HandshakeKind(HandshakeKind::Resumed));
+        output.output(OutputEvent::HandshakeKind(HandshakeKind::Resumed));
         output.emit(Event::ResumptionData(
             resumedata
                 .common
@@ -624,7 +627,7 @@ impl ExpectClientKx {
             self.randoms,
             self.suite,
         )?;
-        output.emit(Event::KeyExchangeGroup(self.server_kx.group));
+        output.output(OutputEvent::KeyExchangeGroup(self.server_kx.group));
 
         self.hs.config.key_log.log(
             "CLIENT_RANDOM",
@@ -1027,7 +1030,7 @@ impl ExpectFinished {
         }
 
         if let Some(identity) = self.peer_identity {
-            output.emit(Event::PeerIdentity(identity));
+            output.output(OutputEvent::PeerIdentity(identity));
         }
 
         let extracted_secrets = self
@@ -1039,7 +1042,7 @@ impl ExpectFinished {
                     .extract_secrets(Side::Server)
             });
 
-        output.emit(Event::Exporter(self.secrets.into_exporter()));
+        output.output(OutputEvent::Exporter(self.secrets.into_exporter()));
         output.start_traffic();
 
         Ok(Box::new(ExpectTraffic {
