@@ -800,7 +800,7 @@ pub(crate) fn process_new_packets(
 
         let hs_aligned = recv.hs_deframer.aligned();
         match recv
-            .receive_message(msg, hs_aligned, output)
+            .receive_message(msg, hs_aligned, output.send())
             .and_then(|input| match input {
                 Some(input) => st.handle(
                     input,
