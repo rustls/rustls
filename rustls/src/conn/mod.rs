@@ -932,6 +932,10 @@ impl<'q> Output for SideCommonOutput<'_, 'q> {
             None => None,
         }
     }
+
+    fn start_traffic(&mut self) {
+        self.common.start_traffic();
+    }
 }
 
 /// Data specific to the peer's side (client or server).

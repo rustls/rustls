@@ -1392,7 +1392,7 @@ impl ExpectFinished {
         output.emit(Event::PeerIdentity(st.session_input.peer_identity.clone()));
         output.emit(Event::Exporter(Box::new(exporter)));
         output.emit(Event::OutgoingKeySchedule(Box::new(key_schedule_send)));
-        output.emit(Event::StartTraffic);
+        output.start_traffic();
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
         // sending an alert and returning an error (potentially with retry configs) if the server
