@@ -951,6 +951,10 @@ impl Output for SideCommonOutput<'_> {
         self.common.start_traffic();
     }
 
+    fn receive(&mut self) -> &mut ReceivePath {
+        self.common.receive()
+    }
+
     fn send(&mut self) -> &mut SendPath {
         self.common.send()
     }

@@ -11,8 +11,8 @@ use crate::conn::kernel::KernelState;
 use crate::conn::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
-    Decrypted, DecryptionState, EncodedMessage, EncryptionState, MessageDecrypter, OutboundOpaque,
-    OutboundPlain, Payload, PreEncryptAction,
+    Decrypted, DecryptionState, EncodedMessage, EncryptionState, OutboundOpaque, OutboundPlain,
+    Payload, PreEncryptAction,
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
@@ -78,7 +78,6 @@ impl CommonState {
 impl Output for CommonState {
     fn emit(&mut self, ev: Event<'_>) {
         match ev.disposition() {
-            EventDisposition::ReceivePath => self.recv.emit(ev),
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
             EventDisposition::SideSpecific => unreachable!(),
             EventDisposition::ProtocolVersion(ver) => {
@@ -99,6 +98,10 @@ impl Output for CommonState {
     fn start_traffic(&mut self) {
         self.recv.start_traffic();
         self.send.start_traffic();
+    }
+
+    fn receive(&mut self) -> &mut ReceivePath {
+        &mut self.recv
     }
 
     fn send(&mut self) -> &mut SendPath {
@@ -253,6 +256,10 @@ impl Output for ConnectionOutputs {
 
     fn start_traffic(&mut self) {
         unreachable!();
+    }
+
+    fn receive(&mut self) -> &mut ReceivePath {
+        unreachable!()
     }
 
     fn send(&mut self) -> &mut SendPath {
@@ -652,6 +659,10 @@ impl Output for SendPath {
         self.start_outgoing_traffic();
     }
 
+    fn receive(&mut self) -> &mut ReceivePath {
+        unreachable!()
+    }
+
     fn send(&mut self) -> &mut SendPath {
         self
     }
@@ -1007,22 +1018,7 @@ impl ReceivePath {
 impl Output for ReceivePath {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
-            Event::MessageDecrypter { decrypter, proof } => self
-                .decrypt_state
-                .set_message_decrypter(decrypter, &proof),
-            Event::MessageDecrypterWithTrialDecryption {
-                decrypter,
-                max_length,
-                proof,
-            } => self
-                .decrypt_state
-                .set_message_decrypter_with_trial_decryption(decrypter, max_length, &proof),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
-            Event::ReceivedTicket => {
-                self.tls13_tickets_received = self
-                    .tls13_tickets_received
-                    .saturating_add(1)
-            }
             _ => unreachable!(),
         }
     }
@@ -1033,6 +1029,10 @@ impl Output for ReceivePath {
 
     fn start_traffic(&mut self) {
         self.may_receive_application_data = true;
+    }
+
+    fn receive(&mut self) -> &mut ReceivePath {
+        self
     }
 
     fn send(&mut self) -> &mut SendPath {
@@ -1139,20 +1139,23 @@ impl Output for CaptureAppData<'_> {
         self.data.start_traffic();
     }
 
+    fn receive(&mut self) -> &mut ReceivePath {
+        self.data.receive()
+    }
+
     fn send(&mut self) -> &mut SendPath {
         self.data.send()
     }
 }
 
 pub(crate) struct SplitReceive<'a> {
-    pub(crate) recv: &'a mut dyn Output,
+    pub(crate) recv: &'a mut ReceivePath,
     pub(crate) other: &'a mut dyn Output,
 }
 
 impl Output for SplitReceive<'_> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev.disposition() {
-            EventDisposition::ReceivePath => self.recv.emit(ev),
             EventDisposition::ProtocolVersion(ver) => {
                 self.recv
                     .emit(Event::ProtocolVersion(ver));
@@ -1176,6 +1179,10 @@ impl Output for SplitReceive<'_> {
         self.other.start_traffic();
     }
 
+    fn receive(&mut self) -> &mut ReceivePath {
+        self.recv
+    }
+
     fn send(&mut self) -> &mut SendPath {
         self.other.send()
     }
@@ -1191,7 +1198,6 @@ pub(crate) struct JoinOutput<'a> {
 impl Output for JoinOutput<'_> {
     fn emit(&mut self, ev: Event<'_>) {
         match ev.disposition() {
-            EventDisposition::ReceivePath => unreachable!(),
             EventDisposition::ProtocolVersion(ver) => {
                 self.outputs
                     .emit(Event::ProtocolVersion(ver));
@@ -1216,6 +1222,10 @@ impl Output for JoinOutput<'_> {
 
     fn start_traffic(&mut self) {
         self.send.start_traffic();
+    }
+
+    fn receive(&mut self) -> &mut ReceivePath {
+        unreachable!()
     }
 
     fn send(&mut self) -> &mut SendPath {
@@ -1253,6 +1263,8 @@ pub(crate) trait Output {
 
     fn start_traffic(&mut self);
 
+    fn receive(&mut self) -> &mut ReceivePath;
+
     fn send(&mut self) -> &mut SendPath;
 }
 
@@ -1267,30 +1279,15 @@ pub(crate) enum Event<'a> {
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
-    MessageDecrypter {
-        decrypter: Box<dyn MessageDecrypter>,
-        proof: HandshakeAlignedProof,
-    },
-    MessageDecrypterWithTrialDecryption {
-        decrypter: Box<dyn MessageDecrypter>,
-        max_length: usize,
-        proof: HandshakeAlignedProof,
-    },
     PeerIdentity(Identity<'static>),
     ProtocolVersion(ProtocolVersion),
     ReceivedServerName(Option<DnsName<'static>>),
-    ReceivedTicket,
     ResumptionData(Vec<u8>),
 }
 
 impl Event<'_> {
     pub(crate) fn disposition(&self) -> EventDisposition {
         match self {
-            // recv-specific events
-            Event::MessageDecrypter { .. }
-            | Event::MessageDecrypterWithTrialDecryption { .. }
-            | Event::ReceivedTicket => EventDisposition::ReceivePath,
-
             // presentation API events
             Event::ApplicationProtocol(_)
             | Event::CipherSuite(_)
@@ -1316,9 +1313,6 @@ impl Event<'_> {
 /// Where a given `Event` should be routed to.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum EventDisposition {
-    /// Events destined for `ReceivePath`
-    ReceivePath,
-
     /// Events destined for `ConnectionOutputs`
     ConnectionOutputs,
 

@@ -703,7 +703,10 @@ impl State for ExpectCcs {
             }
         };
 
-        output.emit(Event::MessageDecrypter { decrypter, proof });
+        output
+            .receive()
+            .decrypt_state
+            .set_message_decrypter(decrypter, &proof);
 
         Ok(Box::new(ExpectFinished {
             hs: self.hs,

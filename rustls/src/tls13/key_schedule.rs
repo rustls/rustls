@@ -3,7 +3,7 @@
 use alloc::boxed::Box;
 use core::ops::Deref;
 
-use crate::common_state::{Event, Output, Protocol, Side};
+use crate::common_state::{Output, Protocol, Side};
 use crate::conn::Exporter;
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
@@ -395,13 +395,15 @@ impl KeyScheduleHandshake {
             None => self
                 .ks
                 .set_decrypter(secret, output, proof),
-            Some(max_early_data_size) => output.emit(Event::MessageDecrypterWithTrialDecryption {
-                decrypter: self
-                    .ks
-                    .derive_decrypter(&self.client_handshake_traffic_secret),
-                max_length: max_early_data_size,
-                proof: *proof,
-            }),
+            Some(max_early_data_size) => output
+                .receive()
+                .decrypt_state
+                .set_message_decrypter_with_trial_decryption(
+                    self.ks
+                        .derive_decrypter(&self.client_handshake_traffic_secret),
+                    max_early_data_size,
+                    proof,
+                ),
         }
     }
 
@@ -945,10 +947,10 @@ impl KeyScheduleSuite {
         output: &mut dyn Output,
         proof: &HandshakeAlignedProof,
     ) {
-        output.emit(Event::MessageDecrypter {
-            decrypter: self.derive_decrypter(secret),
-            proof: *proof,
-        });
+        output
+            .receive()
+            .decrypt_state
+            .set_message_decrypter(self.derive_decrypter(secret), proof);
     }
 
     fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn MessageDecrypter> {

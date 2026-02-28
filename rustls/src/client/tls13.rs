@@ -1410,8 +1410,8 @@ impl ExpectTraffic {
         output: &mut dyn Output,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        output.emit(Event::ReceivedTicket);
-
+        let received = &mut output.receive().tls13_tickets_received;
+        *received = received.saturating_add(1);
         self.handle_new_ticket_impl(nst)
     }
 

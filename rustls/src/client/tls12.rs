@@ -918,10 +918,10 @@ impl State for ExpectCcs {
         let proof = input.check_aligned_handshake()?;
 
         // Note: msgs layer validates trivial contents of CCS.
-        output.emit(Event::MessageDecrypter {
-            decrypter: self.pending_decrypter,
-            proof,
-        });
+        output
+            .receive()
+            .decrypt_state
+            .set_message_decrypter(self.pending_decrypter, &proof);
 
         Ok(Box::new(ExpectFinished {
             hs: self.hs,
