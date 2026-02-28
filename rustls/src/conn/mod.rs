@@ -752,7 +752,7 @@ pub(crate) fn process_new_packets(
     input: &mut dyn TlsInputBuffer,
     state: &mut Result<Box<dyn State>, Error>,
     recv: &mut ReceivePath,
-    output: &mut dyn Output,
+    output: &mut JoinOutput<'_>,
 ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
     let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
         Ok(state) => state,
@@ -773,7 +773,7 @@ pub(crate) fn process_new_packets(
         let opt_msg = match res {
             Ok(opt_msg) => opt_msg,
             Err(e) => {
-                maybe_send_fatal_alert(output.send(), &e);
+                maybe_send_fatal_alert(output.send, &e);
                 if let Error::DecryptError = e {
                     st.handle_decrypt_error();
                 }
@@ -794,13 +794,13 @@ pub(crate) fn process_new_packets(
 
         if want_close_before_decrypt {
             output
-                .send()
+                .send
                 .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
         }
 
         let hs_aligned = recv.hs_deframer.aligned();
         match recv
-            .receive_message(msg, hs_aligned, output.send())
+            .receive_message(msg, hs_aligned, output.send)
             .and_then(|input| match input {
                 Some(input) => st.handle(
                     input,
@@ -817,7 +817,7 @@ pub(crate) fn process_new_packets(
             }) {
             Ok(new) => st = new,
             Err(e) => {
-                maybe_send_fatal_alert(output.send(), &e);
+                maybe_send_fatal_alert(output.send, &e);
                 *state = Err(e.clone());
                 input.discard(buffer_progress.take_discard());
                 return Err(e);
