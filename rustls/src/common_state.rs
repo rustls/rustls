@@ -8,6 +8,7 @@ use pki_types::{DnsName, FipsStatus};
 use crate::client::EchStatus;
 use crate::conn::Exporter;
 use crate::conn::kernel::KernelState;
+use crate::conn::private::SideData;
 use crate::conn::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
@@ -1148,7 +1149,7 @@ pub(crate) struct JoinOutput<'a> {
     pub(crate) outputs: &'a mut dyn Output,
     pub(crate) quic: Option<&'a mut Quic>,
     pub(crate) send: &'a mut SendPath,
-    pub(crate) side: &'a mut dyn Output,
+    pub(crate) side: &'a mut dyn SideData,
 }
 
 impl Output for JoinOutput<'_> {

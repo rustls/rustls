@@ -924,7 +924,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 }
 
 pub(crate) struct SideCommonOutput<'a> {
-    pub(crate) side: &'a mut dyn Output,
+    pub(crate) side: &'a mut dyn SideData,
     pub(crate) quic: Option<&'a mut Quic>,
     pub(crate) common: &'a mut CommonState,
 }
@@ -969,7 +969,9 @@ pub trait SideData: private::SideData {}
 pub(crate) mod private {
     use super::*;
 
-    pub(crate) trait SideData: Output + Debug {}
+    pub(crate) trait SideData: Debug {
+        fn emit(&mut self, ev: Event<'_>);
+    }
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

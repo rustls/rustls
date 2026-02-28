@@ -8,10 +8,7 @@ use pki_types::ServerName;
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
-use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, OutputEvent, ReceivePath,
-    SendPath, Side,
-};
+use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Side};
 use crate::conn::unbuffered::EncryptError;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader,
@@ -22,7 +19,7 @@ use crate::crypto;
 use crate::enums::ApplicationProtocol;
 use crate::error::Error;
 use crate::log::trace;
-use crate::msgs::{ClientExtensionsInput, Message};
+use crate::msgs::ClientExtensionsInput;
 use crate::quic::Quic;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -454,9 +451,7 @@ impl ClientConnectionData {
 
 impl crate::conn::SideData for ClientConnectionData {}
 
-impl crate::conn::private::SideData for ClientConnectionData {}
-
-impl Output for ClientConnectionData {
+impl crate::conn::private::SideData for ClientConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
             Event::EchStatus(ech) => self.ech_status = ech,
@@ -467,25 +462,5 @@ impl Output for ClientConnectionData {
             Event::EarlyData(EarlyDataEvent::Rejected) => self.early_data.rejected(),
             _ => unreachable!(),
         }
-    }
-
-    fn output(&mut self, _: OutputEvent<'_>) {
-        unreachable!();
-    }
-
-    fn send_msg(&mut self, _: Message<'_>, _: bool) {
-        unreachable!();
-    }
-
-    fn start_traffic(&mut self) {
-        unreachable!();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        unreachable!()
-    }
-
-    fn send(&mut self) -> &mut SendPath {
-        unreachable!()
     }
 }
