@@ -93,7 +93,7 @@ impl Output for CommonState {
     }
 
     fn start_traffic(&mut self) {
-        self.recv.start_traffic();
+        self.recv.may_receive_application_data = true;
         self.send.start_traffic();
     }
 
@@ -1009,28 +1009,6 @@ impl ReceivePath {
     }
 }
 
-impl Output for ReceivePath {
-    fn emit(&mut self, _: Event<'_>) {
-        unreachable!();
-    }
-
-    fn send_msg(&mut self, _: Message<'_>, _: bool) {
-        unreachable!();
-    }
-
-    fn start_traffic(&mut self) {
-        self.may_receive_application_data = true;
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        self
-    }
-
-    fn send(&mut self) -> &mut SendPath {
-        unreachable!()
-    }
-}
-
 /// Describes which sort of handshake happened.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[non_exhaustive]
@@ -1161,7 +1139,7 @@ impl Output for SplitReceive<'_> {
     }
 
     fn start_traffic(&mut self) {
-        self.recv.start_traffic();
+        self.recv.may_receive_application_data = true;
         self.other.start_traffic();
     }
 
