@@ -86,7 +86,7 @@ impl Output for CommonState {
             self.send.negotiated_version = Some(ver);
         }
 
-        self.outputs.output(ev);
+        self.outputs.handle(ev);
     }
 
     fn send_msg(&mut self, msg: Message<'_>, must_encrypt: bool) {
@@ -142,6 +142,29 @@ pub struct ConnectionOutputs {
 }
 
 impl ConnectionOutputs {
+    fn handle(&mut self, ev: OutputEvent<'_>) {
+        match ev {
+            OutputEvent::ApplicationProtocol(protocol) => {
+                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
+            }
+            OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
+            OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
+            OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
+            OutputEvent::HandshakeKind(hk) => {
+                assert!(self.handshake_kind.is_none());
+                self.handshake_kind = Some(hk);
+            }
+            OutputEvent::KeyExchangeGroup(kxg) => {
+                assert!(self.negotiated_kx_group.is_none());
+                self.negotiated_kx_group = Some(kxg);
+            }
+            OutputEvent::PeerIdentity(identity) => self.peer_identity = Some(identity),
+            OutputEvent::ProtocolVersion(ver) => {
+                self.negotiated_version = Some(ver);
+            }
+        }
+    }
+
     /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
     ///
     /// This is made available for both full and resumed handshakes.
@@ -211,51 +234,6 @@ impl ConnectionOutputs {
             (Some(version), Some(suite)) => Some((version, suite)),
             _ => None,
         }
-    }
-}
-
-impl Output for ConnectionOutputs {
-    fn emit(&mut self, _: Event<'_>) {
-        unreachable!();
-    }
-
-    fn output(&mut self, ev: OutputEvent<'_>) {
-        match ev {
-            OutputEvent::ApplicationProtocol(protocol) => {
-                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
-            }
-            OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
-            OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
-            OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
-            OutputEvent::HandshakeKind(hk) => {
-                assert!(self.handshake_kind.is_none());
-                self.handshake_kind = Some(hk);
-            }
-            OutputEvent::KeyExchangeGroup(kxg) => {
-                assert!(self.negotiated_kx_group.is_none());
-                self.negotiated_kx_group = Some(kxg);
-            }
-            OutputEvent::PeerIdentity(identity) => self.peer_identity = Some(identity),
-            OutputEvent::ProtocolVersion(ver) => {
-                self.negotiated_version = Some(ver);
-            }
-        }
-    }
-
-    fn send_msg(&mut self, _: Message<'_>, _: bool) {
-        unreachable!();
-    }
-
-    fn start_traffic(&mut self) {
-        unreachable!();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        unreachable!()
-    }
-
-    fn send(&mut self) -> &mut dyn SendOutput {
-        unreachable!()
     }
 }
 
@@ -1130,7 +1108,7 @@ impl Output for SplitReceive<'_> {
 }
 
 pub(crate) struct JoinOutput<'a> {
-    pub(crate) outputs: &'a mut dyn Output,
+    pub(crate) outputs: &'a mut ConnectionOutputs,
     pub(crate) quic: Option<&'a mut dyn QuicOutput>,
     pub(crate) send: &'a mut dyn SendOutput,
     pub(crate) side: &'a mut dyn SideOutput,
@@ -1142,7 +1120,7 @@ impl Output for JoinOutput<'_> {
             self.send().negotiated_version(ver);
         }
 
-        self.outputs.output(ev);
+        self.outputs.handle(ev);
     }
 
     fn emit(&mut self, ev: Event<'_>) {
