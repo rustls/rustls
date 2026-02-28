@@ -10,8 +10,7 @@ use pki_types::FipsStatus;
 use crate::ConnectionOutputs;
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, Input, JoinOutput, Output,
-    OutputEvent, ReceivePath, SendOutput, SendPath, SplitReceive, UnborrowedPayload,
-    maybe_send_fatal_alert,
+    OutputEvent, ReceivePath, SendOutput, SendPath, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::conn::private::SideOutput;
 use crate::crypto::cipher::Decrypted;
@@ -789,10 +788,8 @@ pub(crate) fn process_new_packets<Side: SideData>(
                 Some(input) => st.handle(
                     input,
                     &mut CaptureAppData {
-                        data: &mut SplitReceive {
-                            recv,
-                            other: output,
-                        },
+                        recv,
+                        other: output,
                         plaintext_locator: &locator,
                         received_plaintext: &mut plaintext,
                     },
