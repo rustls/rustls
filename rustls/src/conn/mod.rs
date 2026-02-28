@@ -747,11 +747,11 @@ impl IoState {
     }
 }
 
-pub(crate) fn process_new_packets(
+pub(crate) fn process_new_packets<'a>(
     input: &mut dyn TlsInputBuffer,
     state: &mut Result<Box<dyn State>, Error>,
     recv: &mut ReceivePath,
-    output: &mut JoinOutput<'_>,
+    output: &mut JoinOutput<'a>,
 ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
     let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
         Ok(state) => state,
@@ -769,10 +769,17 @@ pub(crate) fn process_new_packets(
         let locator = Locator::new(buffer);
         let res = recv.deframe(buffer, &mut buffer_progress);
 
+        let mut output = CaptureAppData {
+            recv,
+            other: &mut *output,
+            plaintext_locator: &locator,
+            received_plaintext: &mut plaintext,
+        };
+
         let opt_msg = match res {
             Ok(opt_msg) => opt_msg,
             Err(e) => {
-                maybe_send_fatal_alert(output.send, &e);
+                maybe_send_fatal_alert(output.other.send, &e);
                 if let Error::DecryptError = e {
                     st.handle_decrypt_error();
                 }
@@ -793,21 +800,17 @@ pub(crate) fn process_new_packets(
 
         if want_close_before_decrypt {
             output
+                .other
                 .send
                 .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
         }
 
-        let hs_aligned = recv.hs_deframer.aligned();
-        let result = match recv.receive_message(msg, hs_aligned, output.send) {
-            Ok(Some(input)) => st.handle(
-                input,
-                &mut CaptureAppData {
-                    recv,
-                    other: output,
-                    plaintext_locator: &locator,
-                    received_plaintext: &mut plaintext,
-                },
-            ),
+        let hs_aligned = output.recv.hs_deframer.aligned();
+        let result = match output
+            .recv
+            .receive_message(msg, hs_aligned, output.other.send)
+        {
+            Ok(Some(input)) => st.handle(input, &mut output),
             Ok(None) => Ok(st),
             Err(e) => Err(e),
         };
@@ -815,7 +818,7 @@ pub(crate) fn process_new_packets(
         match result {
             Ok(new) => st = new,
             Err(e) => {
-                maybe_send_fatal_alert(output.send, &e);
+                maybe_send_fatal_alert(output.other.send, &e);
                 *state = Err(e.clone());
                 input.discard(buffer_progress.take_discard());
                 return Err(e);

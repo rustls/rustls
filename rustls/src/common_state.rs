@@ -1023,9 +1023,9 @@ pub(crate) trait State: Send + Sync {
     }
 }
 
-pub(crate) struct CaptureAppData<'a> {
+pub(crate) struct CaptureAppData<'a, 'j> {
     pub(crate) recv: &'a mut ReceivePath,
-    pub(crate) other: &'a mut dyn Output,
+    pub(crate) other: &'a mut JoinOutput<'j>,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
@@ -1040,7 +1040,7 @@ pub(crate) struct CaptureAppData<'a> {
     pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
 }
 
-impl Output for CaptureAppData<'_> {
+impl Output for CaptureAppData<'_, '_> {
     fn emit(&mut self, ev: Event<'_>) {
         self.other.emit(ev)
     }
