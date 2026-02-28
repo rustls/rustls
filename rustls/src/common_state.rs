@@ -76,38 +76,6 @@ impl CommonState {
     }
 }
 
-impl Output for CommonState {
-    fn emit(&mut self, _: Event<'_>) {
-        unreachable!();
-    }
-
-    fn output(&mut self, ev: OutputEvent<'_>) {
-        if let OutputEvent::ProtocolVersion(ver) = ev {
-            self.recv.negotiated_version = Some(ver);
-            self.send.negotiated_version = Some(ver);
-        }
-
-        self.outputs.handle(ev);
-    }
-
-    fn send_msg(&mut self, msg: Message<'_>, must_encrypt: bool) {
-        self.send.send_msg(msg, must_encrypt);
-    }
-
-    fn start_traffic(&mut self) {
-        self.recv.may_receive_application_data = true;
-        self.send.start_outgoing_traffic();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        &mut self.recv
-    }
-
-    fn send(&mut self) -> &mut SendPath {
-        &mut self.send
-    }
-}
-
 impl Deref for CommonState {
     type Target = ConnectionOutputs;
 
@@ -143,7 +111,7 @@ pub struct ConnectionOutputs {
 }
 
 impl ConnectionOutputs {
-    fn handle(&mut self, ev: OutputEvent<'_>) {
+    pub(crate) fn handle(&mut self, ev: OutputEvent<'_>) {
         match ev {
             OutputEvent::ApplicationProtocol(protocol) => {
                 self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
@@ -645,7 +613,7 @@ impl Default for SendPath {
 pub(crate) struct ReceivePath {
     side: Side,
     pub(crate) decrypt_state: DecryptionState,
-    may_receive_application_data: bool,
+    pub(crate) may_receive_application_data: bool,
     /// If the peer has signaled end of stream.
     pub(crate) has_received_close_notify: bool,
     temper_counters: TemperCounters,
