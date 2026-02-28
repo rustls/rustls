@@ -677,6 +677,10 @@ impl Output for ServerConnectionData {
     fn start_traffic(&mut self) {
         unreachable!();
     }
+
+    fn send(&mut self) -> &mut SendPath {
+        unreachable!()
+    }
 }
 
 impl crate::conn::SideData for ServerConnectionData {}

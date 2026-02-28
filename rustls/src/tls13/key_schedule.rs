@@ -930,10 +930,13 @@ impl KeyScheduleSuite {
         let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
         let iv = derive_traffic_iv(expander.as_ref(), self.suite.aead_alg.iv_len());
 
-        output.emit(Event::MessageEncrypter {
-            encrypter: self.suite.aead_alg.encrypter(key, iv),
-            limit: self.suite.common.confidentiality_limit,
-        });
+        output
+            .send()
+            .encrypt_state
+            .set_message_encrypter(
+                self.suite.aead_alg.encrypter(key, iv),
+                self.suite.common.confidentiality_limit,
+            );
     }
 
     fn set_decrypter(

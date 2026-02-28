@@ -352,13 +352,16 @@ mod client_hello {
         emit_ccs(output);
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Server);
-        output.emit(Event::MessageEncrypter {
-            encrypter,
-            limit: secrets
-                .suite()
-                .common
-                .confidentiality_limit,
-        });
+        output
+            .send()
+            .encrypt_state
+            .set_message_encrypter(
+                encrypter,
+                secrets
+                    .suite()
+                    .common
+                    .confidentiality_limit,
+            );
         emit_finished(&secrets, &mut hs.transcript, output, &proof);
 
         Ok(Box::new(ExpectCcs {
@@ -953,14 +956,16 @@ impl State for ExpectFinished {
                 }
             }
             emit_ccs(output);
-            output.emit(Event::MessageEncrypter {
-                encrypter,
-                limit: self
-                    .secrets
-                    .suite()
-                    .common
-                    .confidentiality_limit,
-            });
+            output
+                .send()
+                .encrypt_state
+                .set_message_encrypter(
+                    encrypter,
+                    self.secrets
+                        .suite()
+                        .common
+                        .confidentiality_limit,
+                );
             emit_finished(&self.secrets, &mut self.hs.transcript, output, &proof);
         }
 

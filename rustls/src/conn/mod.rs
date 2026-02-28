@@ -8,7 +8,7 @@ use kernel::KernelConnection;
 
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Input, JoinOutput,
-    Output, ReceivePath, SplitReceive, State, UnborrowedPayload, maybe_send_fatal_alert,
+    Output, ReceivePath, SendPath, SplitReceive, State, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -792,10 +792,9 @@ pub(crate) fn process_new_packets(
         } = msg;
 
         if want_close_before_decrypt {
-            output.emit(Event::SendAlert(
-                AlertLevel::Warning,
-                AlertDescription::CloseNotify,
-            ));
+            output
+                .send()
+                .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
         }
 
         let hs_aligned = recv.hs_deframer.aligned();
@@ -950,6 +949,10 @@ impl Output for SideCommonOutput<'_> {
 
     fn start_traffic(&mut self) {
         self.common.start_traffic();
+    }
+
+    fn send(&mut self) -> &mut SendPath {
+        self.common.send()
     }
 }
 
