@@ -1042,22 +1042,29 @@ pub(crate) struct CaptureAppData<'a, 'j> {
 
 impl Output for CaptureAppData<'_, '_> {
     fn emit(&mut self, ev: Event<'_>) {
-        self.other.emit(ev)
+        self.other.side.emit(ev)
     }
 
     fn output(&mut self, ev: OutputEvent<'_>) {
         if let OutputEvent::ProtocolVersion(ver) = ev {
             self.recv.negotiated_version = Some(ver);
+            self.other.send.negotiated_version = Some(ver);
         }
-        self.other.output(ev);
+        self.other.outputs.handle(ev);
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        self.other.send_msg(m, must_encrypt);
+        match self.other.quic.as_deref_mut() {
+            Some(quic) => quic.send_msg(m, must_encrypt),
+            None => self
+                .other
+                .send
+                .send_msg(m, must_encrypt),
+        }
     }
 
     fn quic(&mut self) -> Option<&mut Quic> {
-        self.other.quic()
+        self.other.quic.as_deref_mut()
     }
 
     fn received_plaintext(&mut self, payload: Payload<'_>) {
@@ -1075,7 +1082,7 @@ impl Output for CaptureAppData<'_, '_> {
 
     fn start_traffic(&mut self) {
         self.recv.may_receive_application_data = true;
-        self.other.start_traffic();
+        self.other.send.start_outgoing_traffic();
     }
 
     fn receive(&mut self) -> &mut ReceivePath {
@@ -1083,7 +1090,7 @@ impl Output for CaptureAppData<'_, '_> {
     }
 
     fn send(&mut self) -> &mut SendPath {
-        self.other.send()
+        self.other.send
     }
 }
 
@@ -1092,43 +1099,6 @@ pub(crate) struct JoinOutput<'a> {
     pub(crate) quic: Option<&'a mut Quic>,
     pub(crate) send: &'a mut SendPath,
     pub(crate) side: &'a mut dyn SideData,
-}
-
-impl Output for JoinOutput<'_> {
-    fn output(&mut self, ev: OutputEvent<'_>) {
-        if let OutputEvent::ProtocolVersion(ver) = ev {
-            self.send.negotiated_version = Some(ver);
-        }
-
-        self.outputs.handle(ev);
-    }
-
-    fn emit(&mut self, ev: Event<'_>) {
-        self.side.emit(ev);
-    }
-
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        match self.quic() {
-            Some(quic) => quic.send_msg(m, must_encrypt),
-            None => self.send.send_msg(m, must_encrypt),
-        }
-    }
-
-    fn quic(&mut self) -> Option<&mut Quic> {
-        self.quic.as_deref_mut()
-    }
-
-    fn start_traffic(&mut self) {
-        self.send.start_outgoing_traffic();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        unreachable!()
-    }
-
-    fn send(&mut self) -> &mut SendPath {
-        self.send
-    }
 }
 
 pub(crate) struct Input<'a> {
