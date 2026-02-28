@@ -77,7 +77,6 @@ impl CommonState {
 impl Output for CommonState {
     fn emit(&mut self, ev: Event<'_>) {
         match ev.disposition() {
-            EventDisposition::SendPath => self.send.emit(ev),
             EventDisposition::ReceivePath => self.recv.emit(ev),
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
             EventDisposition::SideSpecific => unreachable!(),
@@ -86,8 +85,7 @@ impl Output for CommonState {
                     .emit(Event::ProtocolVersion(ver));
                 self.recv
                     .emit(Event::ProtocolVersion(ver));
-                self.send
-                    .emit(Event::ProtocolVersion(ver));
+                self.send.negotiated_version(ver);
             }
         }
     }
@@ -98,7 +96,11 @@ impl Output for CommonState {
 
     fn start_traffic(&mut self) {
         self.recv.start_traffic();
-        self.send.start_traffic();
+        self.send().start_traffic();
+    }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        &mut self.send
     }
 }
 
@@ -241,6 +243,10 @@ impl Output for ConnectionOutputs {
     fn start_traffic(&mut self) {
         unreachable!();
     }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        unreachable!()
+    }
 }
 
 /// Send an alert via `output` if `error` specifies one.
@@ -248,7 +254,9 @@ pub(crate) fn maybe_send_fatal_alert(output: &mut dyn Output, error: &Error) {
     let Ok(alert) = AlertDescription::try_from(error) else {
         return;
     };
-    output.emit(Event::SendAlert(AlertLevel::Fatal, alert));
+    output
+        .send()
+        .send_alert(AlertLevel::Fatal, alert);
 }
 
 /// The data path from us to the peer.
@@ -449,7 +457,7 @@ impl SendPath {
         }
     }
 
-    fn start_outgoing_traffic(&mut self) {
+    pub(crate) fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
         debug_assert!(self.encrypt_state.is_encrypting());
     }
@@ -485,7 +493,7 @@ impl SendPath {
         Ok(self.write_fragments(outgoing_tls, [].into_iter()))
     }
 
-    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
+    pub(crate) fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
         match level {
             AlertLevel::Fatal if self.has_sent_fatal_alert => return,
             AlertLevel::Fatal => self.has_sent_fatal_alert = true,
@@ -495,6 +503,20 @@ impl SendPath {
             Message::build_alert(level, desc),
             self.encrypt_state.is_encrypting(),
         );
+    }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        if !must_encrypt {
+            let msg = &m.into();
+            let iter = self
+                .message_fragmenter
+                .fragment_message(msg);
+            for m in iter {
+                self.queue_tls_message(m.to_unencrypted_opaque());
+            }
+        } else {
+            self.send_msg_encrypt(m.into());
+        }
     }
 
     fn check_required_size<'a>(
@@ -551,7 +573,7 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    fn ensure_key_update_queued(&mut self) {
+    pub(crate) fn ensure_key_update_queued(&mut self) {
         if self.queued_key_update_message.is_some() {
             return;
         }
@@ -592,36 +614,54 @@ impl SendPath {
 
 impl Output for SendPath {
     fn emit(&mut self, ev: Event<'_>) {
-        match ev {
-            Event::MaybeKeyUpdateRequest => self.ensure_key_update_queued(),
-            Event::MessageEncrypter { encrypter, limit } => self
-                .encrypt_state
-                .set_message_encrypter(encrypter, limit),
-            Event::OutgoingKeySchedule(klc) => self.tls13_key_schedule = Some(klc),
-            Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
-            Event::SendAlert(level, desc) => self.send_alert(level, desc),
-            Event::StartHalfRttTraffic => self.start_outgoing_traffic(),
+        match ev.disposition() {
+            EventDisposition::ProtocolVersion(ver) => self.negotiated_version(ver),
             _ => unreachable!(),
         }
     }
 
-    /// Send a raw TLS message, fragmenting it if needed.
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        if !must_encrypt {
-            let msg = &m.into();
-            let iter = self
-                .message_fragmenter
-                .fragment_message(msg);
-            for m in iter {
-                self.queue_tls_message(m.to_unencrypted_opaque());
-            }
-        } else {
-            self.send_msg_encrypt(m.into());
-        }
+        self.send_msg(m, must_encrypt);
     }
 
     fn start_traffic(&mut self) {
         self.start_outgoing_traffic();
+    }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        self
+    }
+}
+
+impl SendOutput for SendPath {
+    fn negotiated_version(&mut self, version: ProtocolVersion) {
+        self.negotiated_version = Some(version);
+    }
+
+    fn ensure_key_update_queued(&mut self) {
+        self.ensure_key_update_queued();
+    }
+
+    fn set_encrypter(&mut self, encrypter: Box<dyn MessageEncrypter>, max_messages: u64) {
+        self.encrypt_state
+            .set_message_encrypter(encrypter, max_messages);
+    }
+
+    fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
+        self.tls13_key_schedule = Some(schedule);
+    }
+
+    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
+        self.send_alert(level, desc);
+    }
+
+    fn start_traffic(&mut self) {
+        self.start_outgoing_traffic();
+    }
+
+    /// Send a raw TLS message, fragmenting it if needed.
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        self.send_msg(m, must_encrypt);
     }
 }
 
@@ -928,7 +968,9 @@ impl ReceivePath {
             .received_renegotiation_request()?;
         let desc = AlertDescription::NoRenegotiation;
         warn!("sending warning alert {desc:?}");
-        output.emit(Event::SendAlert(AlertLevel::Warning, desc));
+        output
+            .send()
+            .send_alert(AlertLevel::Warning, desc);
         Ok(true)
     }
 
@@ -999,6 +1041,10 @@ impl Output for ReceivePath {
 
     fn start_traffic(&mut self) {
         self.may_receive_application_data = true;
+    }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        unreachable!()
     }
 }
 
@@ -1079,6 +1125,10 @@ impl Output for CaptureAppData<'_> {
     fn start_traffic(&mut self) {
         self.data.start_traffic();
     }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        self.data.send()
+    }
 }
 
 pub(crate) struct SplitReceive<'a> {
@@ -1112,12 +1162,16 @@ impl Output for SplitReceive<'_> {
         self.recv.start_traffic();
         self.other.start_traffic();
     }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        self.other.send()
+    }
 }
 
 pub(crate) struct JoinOutput<'a> {
     pub(crate) outputs: &'a mut dyn Output,
     pub(crate) quic: Option<&'a mut dyn QuicOutput>,
-    pub(crate) send: &'a mut dyn Output,
+    pub(crate) send: &'a mut dyn SendOutput,
     pub(crate) side: &'a mut dyn Output,
 }
 
@@ -1128,11 +1182,9 @@ impl Output for JoinOutput<'_> {
             EventDisposition::ProtocolVersion(ver) => {
                 self.outputs
                     .emit(Event::ProtocolVersion(ver));
-                self.send
-                    .emit(Event::ProtocolVersion(ver));
+                self.send.negotiated_version(ver);
             }
             EventDisposition::ConnectionOutputs => self.outputs.emit(ev),
-            EventDisposition::SendPath => self.send.emit(ev),
             EventDisposition::SideSpecific => self.side.emit(ev),
         }
     }
@@ -1153,6 +1205,10 @@ impl Output for JoinOutput<'_> {
 
     fn start_traffic(&mut self) {
         self.send.start_traffic();
+    }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        self.send
     }
 }
 
@@ -1185,6 +1241,24 @@ pub(crate) trait Output {
     fn received_plaintext(&mut self, _payload: Payload<'_>) {}
 
     fn start_traffic(&mut self);
+
+    fn send(&mut self) -> &mut dyn SendOutput;
+}
+
+pub(crate) trait SendOutput {
+    fn negotiated_version(&mut self, version: ProtocolVersion);
+
+    fn ensure_key_update_queued(&mut self);
+
+    fn set_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>, max_messages: u64);
+
+    fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>);
+
+    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription);
+
+    fn start_traffic(&mut self);
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
 }
 
 /// The set of events output by the low-level handshake state machine.
@@ -1198,7 +1272,6 @@ pub(crate) enum Event<'a> {
     Exporter(Box<dyn Exporter>),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
-    MaybeKeyUpdateRequest,
     MessageDecrypter {
         decrypter: Box<dyn MessageDecrypter>,
         proof: HandshakeAlignedProof,
@@ -1208,31 +1281,16 @@ pub(crate) enum Event<'a> {
         max_length: usize,
         proof: HandshakeAlignedProof,
     },
-    MessageEncrypter {
-        encrypter: Box<dyn MessageEncrypter>,
-        limit: u64,
-    },
-    OutgoingKeySchedule(Box<KeyScheduleTrafficSend>),
     PeerIdentity(Identity<'static>),
     ProtocolVersion(ProtocolVersion),
     ReceivedServerName(Option<DnsName<'static>>),
     ReceivedTicket,
     ResumptionData(Vec<u8>),
-    SendAlert(AlertLevel, AlertDescription),
-    /// Mark the connection as ready to send half-RTT traffic (server only)
-    StartHalfRttTraffic,
 }
 
 impl Event<'_> {
     pub(crate) fn disposition(&self) -> EventDisposition {
         match self {
-            // send-specific events
-            Event::MaybeKeyUpdateRequest
-            | Event::MessageEncrypter { .. }
-            | Event::OutgoingKeySchedule(_)
-            | Event::SendAlert(..)
-            | Event::StartHalfRttTraffic => EventDisposition::SendPath,
-
             // recv-specific events
             Event::MessageDecrypter { .. }
             | Event::MessageDecrypterWithTrialDecryption { .. }
@@ -1263,9 +1321,6 @@ impl Event<'_> {
 /// Where a given `Event` should be routed to.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum EventDisposition {
-    /// Events destined for `SendPath`
-    SendPath,
-
     /// Events destined for `ReceivePath`
     ReceivePath,
 

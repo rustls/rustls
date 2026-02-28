@@ -9,7 +9,7 @@ use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
 use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, Side,
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Output, Protocol, SendOutput, Side,
 };
 use crate::conn::unbuffered::EncryptError;
 use crate::conn::{
@@ -478,6 +478,10 @@ impl Output for ClientConnectionData {
 
     fn start_traffic(&mut self) {
         unreachable!();
+    }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        unreachable!()
     }
 }
 
