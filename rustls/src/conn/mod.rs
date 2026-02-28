@@ -16,7 +16,8 @@ use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{
-    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Random, TlsInputBuffer,
+    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
+    TlsInputBuffer,
 };
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -922,6 +923,10 @@ impl Output for SideCommonOutput<'_> {
             EventDisposition::SideSpecific => self.side.emit(ev),
             _ => self.common.emit(ev),
         }
+    }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        self.common.send_msg(m, must_encrypt);
     }
 }
 

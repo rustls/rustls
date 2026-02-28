@@ -475,27 +475,6 @@ pub(crate) struct Quic {
 }
 
 impl Quic {
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        if let MessagePayload::Alert(_) = m.payload {
-            // alerts are sent out-of-band in QUIC mode
-            return;
-        }
-
-        debug_assert!(
-            matches!(
-                m.payload,
-                MessagePayload::Handshake { .. } | MessagePayload::HandshakeFlight(_)
-            ),
-            "QUIC uses TLS for the cryptographic handshake only"
-        );
-        let mut bytes = Vec::new();
-        m.payload.encode(&mut bytes);
-        self.hs_queue
-            .push_back((must_encrypt, bytes));
-    }
-}
-
-impl Quic {
     pub(crate) fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
         while let Some((_, msg)) = self.hs_queue.pop_front() {
             buf.extend_from_slice(&msg);
@@ -532,14 +511,31 @@ impl Quic {
 impl Output for Quic {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
-            Event::EncryptMessage(m) => self.send_msg(m, true),
             Event::QuicEarlySecret(sec) => self.early_secret = sec,
             Event::QuicHandshakeSecrets(sec) => self.hs_secrets = Some(sec),
             Event::QuicTrafficSecrets(sec) => self.traffic_secrets = Some(sec),
             Event::QuicTransportParameters(params) => self.params = Some(params),
-            Event::PlainMessage(m) => self.send_msg(m, false),
             _ => {}
         }
+    }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        if let MessagePayload::Alert(_) = m.payload {
+            // alerts are sent out-of-band in QUIC mode
+            return;
+        }
+
+        debug_assert!(
+            matches!(
+                m.payload,
+                MessagePayload::Handshake { .. } | MessagePayload::HandshakeFlight(_)
+            ),
+            "QUIC uses TLS for the cryptographic handshake only"
+        );
+        let mut bytes = Vec::new();
+        m.payload.encode(&mut bytes);
+        self.hs_queue
+            .push_back((must_encrypt, bytes));
     }
 }
 
