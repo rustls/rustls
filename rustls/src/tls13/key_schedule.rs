@@ -3,7 +3,7 @@
 use alloc::boxed::Box;
 use core::ops::Deref;
 
-use crate::common_state::{Output, Protocol, Side};
+use crate::common_state::{Output, Protocol, SendPath, Side};
 use crate::conn::Exporter;
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
@@ -38,7 +38,7 @@ impl KeyScheduleEarlyClient {
             &self
                 .0
                 .client_early_traffic_secret(hs_hash, key_log, client_random, output),
-            output,
+            output.send(),
         );
     }
 
@@ -272,7 +272,7 @@ impl KeyScheduleHandshakeStart {
         if !early_data_enabled {
             // Set the client encryption key for handshakes if early data is not used
             new.ks
-                .set_encrypter(&new.client_handshake_traffic_secret, output);
+                .set_encrypter(&new.client_handshake_traffic_secret, output.send());
         }
 
         new
@@ -292,7 +292,7 @@ impl KeyScheduleHandshakeStart {
         // If not doing early_data after all, this is corrected later to the handshake
         // keys (now stored in key_schedule).
         new.ks
-            .set_encrypter(&new.server_handshake_traffic_secret, output);
+            .set_encrypter(&new.server_handshake_traffic_secret, output.send());
         new
     }
 
@@ -380,7 +380,7 @@ impl KeyScheduleHandshake {
     pub(crate) fn set_handshake_encrypter(&self, output: &mut dyn Output) {
         debug_assert_eq!(self.ks.side, Side::Client);
         self.ks
-            .set_encrypter(&self.client_handshake_traffic_secret, output);
+            .set_encrypter(&self.client_handshake_traffic_secret, output.send());
     }
 
     pub(crate) fn set_handshake_decrypter(
@@ -425,7 +425,7 @@ impl KeyScheduleHandshake {
 
         before_finished
             .ks
-            .set_encrypter(server_secret, output);
+            .set_encrypter(server_secret, output.send());
 
         if let Some(quic) = output.quic() {
             quic.traffic_secrets = Some(quic::Secrets::new(
@@ -575,7 +575,7 @@ impl KeyScheduleClientBeforeFinished {
         next.ks
             .set_decrypter(server_secret, output, proof);
         next.ks
-            .set_encrypter(client_secret, output);
+            .set_encrypter(client_secret, output.send());
 
         if let Some(quic) = output.quic() {
             quic.traffic_secrets = Some(quic::Secrets::new(
@@ -674,16 +674,16 @@ pub(crate) struct KeyScheduleTrafficSend {
 }
 
 impl KeyScheduleTrafficSend {
-    pub(crate) fn update_encrypter_for_key_update(&mut self, output: &mut dyn Output) {
+    pub(crate) fn update_encrypter_for_key_update(&mut self, send: &mut SendPath) {
         let secret = self.ks.derive_next(&self.current);
-        self.ks.set_encrypter(&secret, output);
+        self.ks.set_encrypter(&secret, send);
         self.current = secret;
     }
 
-    pub(crate) fn request_key_update_and_update_encrypter(&mut self, output: &mut dyn Output) {
-        output.send_msg(Message::build_key_update_request(), true);
+    pub(crate) fn request_key_update_and_update_encrypter(&mut self, send: &mut SendPath) {
+        send.send_msg(Message::build_key_update_request(), true);
         let secret = self.ks.derive_next(&self.current);
-        self.ks.set_encrypter(&secret, output);
+        self.ks.set_encrypter(&secret, send);
         self.current = secret;
     }
 
@@ -924,7 +924,7 @@ struct KeyScheduleSuite {
 }
 
 impl KeyScheduleSuite {
-    fn set_encrypter(&self, secret: &OkmBlock, output: &mut dyn Output) {
+    fn set_encrypter(&self, secret: &OkmBlock, send: &mut SendPath) {
         let expander = self
             .suite
             .hkdf_provider
@@ -932,9 +932,7 @@ impl KeyScheduleSuite {
         let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
         let iv = derive_traffic_iv(expander.as_ref(), self.suite.aead_alg.iv_len());
 
-        output
-            .send()
-            .encrypt_state
+        send.encrypt_state
             .set_message_encrypter(
                 self.suite.aead_alg.encrypter(key, iv),
                 self.suite.common.confidentiality_limit,

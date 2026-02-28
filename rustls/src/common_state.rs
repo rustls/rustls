@@ -94,7 +94,7 @@ impl Output for CommonState {
 
     fn start_traffic(&mut self) {
         self.recv.may_receive_application_data = true;
-        self.send.start_traffic();
+        self.send.start_outgoing_traffic();
     }
 
     fn receive(&mut self) -> &mut ReceivePath {
@@ -281,13 +281,11 @@ impl Default for ConnectionOutputs {
 }
 
 /// Send an alert via `output` if `error` specifies one.
-pub(crate) fn maybe_send_fatal_alert(output: &mut dyn Output, error: &Error) {
+pub(crate) fn maybe_send_fatal_alert(send: &mut SendPath, error: &Error) {
     let Ok(alert) = AlertDescription::try_from(error) else {
         return;
     };
-    output
-        .send()
-        .send_alert(AlertLevel::Fatal, alert);
+    send.send_alert(AlertLevel::Fatal, alert);
 }
 
 /// The data path from us to the peer.
@@ -378,6 +376,21 @@ impl SendPath {
         }
 
         self.send_appdata_encrypt(data[..len].into())
+    }
+
+    /// Send a raw TLS message, fragmenting it if needed.
+    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        if !must_encrypt {
+            let msg = &m.into();
+            let iter = self
+                .message_fragmenter
+                .fragment_message(msg);
+            for m in iter {
+                self.queue_tls_message(m.to_unencrypted_opaque());
+            }
+        } else {
+            self.send_msg_encrypt(m.into());
+        }
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
@@ -626,39 +639,6 @@ impl SendPath {
         self.refresh_traffic_keys_pending = false;
         self.tls13_key_schedule = Some(ks);
         Ok(())
-    }
-}
-
-impl Output for SendPath {
-    fn emit(&mut self, _: Event<'_>) {
-        unreachable!();
-    }
-
-    /// Send a raw TLS message, fragmenting it if needed.
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        if !must_encrypt {
-            let msg = &m.into();
-            let iter = self
-                .message_fragmenter
-                .fragment_message(msg);
-            for m in iter {
-                self.queue_tls_message(m.to_unencrypted_opaque());
-            }
-        } else {
-            self.send_msg_encrypt(m.into());
-        }
-    }
-
-    fn start_traffic(&mut self) {
-        self.start_outgoing_traffic();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        unreachable!()
-    }
-
-    fn send(&mut self) -> &mut SendPath {
-        self
     }
 }
 
@@ -1183,7 +1163,7 @@ impl Output for JoinOutput<'_> {
     }
 
     fn start_traffic(&mut self) {
-        self.send.start_traffic();
+        self.send.start_outgoing_traffic();
     }
 
     fn receive(&mut self) -> &mut ReceivePath {

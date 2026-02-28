@@ -772,7 +772,7 @@ pub(crate) fn process_new_packets(
         let opt_msg = match res {
             Ok(opt_msg) => opt_msg,
             Err(e) => {
-                maybe_send_fatal_alert(output, &e);
+                maybe_send_fatal_alert(output.send(), &e);
                 if let Error::DecryptError = e {
                     st.handle_decrypt_error();
                 }
@@ -816,7 +816,7 @@ pub(crate) fn process_new_packets(
             }) {
             Ok(new) => st = new,
             Err(e) => {
-                maybe_send_fatal_alert(output, &e);
+                maybe_send_fatal_alert(output.send(), &e);
                 *state = Err(e.clone());
                 input.discard(buffer_progress.take_discard());
                 return Err(e);
