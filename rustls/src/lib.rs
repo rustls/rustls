@@ -127,10 +127,9 @@
 //!
 //! ### Rustls provides encrypted pipes
 //! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
-//! on the left (via the [`read_tls()`] and [`write_tls()`] methods) and then read/write the
+//! on the left (via a [`TlsInputBuffer`] and [`write_tls()`] methods) and then read/write the
 //! plaintext on the right:
 //!
-//! [`read_tls()`]: Connection::read_tls
 //! [`write_tls()`]: Connection::write_tls
 //!
 //! ```text
@@ -413,7 +412,8 @@ pub mod internal {
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind};
 pub use crate::conn::{
-    Connection, IoState, KeyingMaterialExporter, Reader, SideData, Writer, kernel,
+    Connection, IoState, KeyingMaterialExporter, Reader, SideData, TlsInputBuffer, VecBuffer,
+    Writer, kernel,
 };
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};

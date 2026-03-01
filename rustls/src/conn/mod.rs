@@ -1,7 +1,8 @@
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::fmt::{self, Debug};
 use core::mem;
-use core::ops::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut, Range};
 use std::io;
 
 use kernel::KernelConnection;
@@ -12,10 +13,7 @@ use crate::common_state::{
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
-use crate::msgs::{
-    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
-    TlsInputBuffer,
-};
+use crate::msgs::{AlertLevel, BufferProgress, Delocator, Locator, Message, Random};
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -29,8 +27,8 @@ mod connection {
     use core::ops::{Deref, DerefMut};
     use std::io::{self, BufRead, Read};
 
+    use super::{ConnectionCommon, IoState, KeyingMaterialExporter, SideData, TlsInputBuffer};
     use crate::common_state::ConnectionOutputs;
-    use crate::conn::{ConnectionCommon, IoState, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::OutboundPlain;
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
@@ -38,30 +36,6 @@ mod connection {
 
     /// A trait generalizing over buffered client or server connections.
     pub trait Connection: Debug + Deref<Target = ConnectionOutputs> + DerefMut {
-        /// Read TLS content from `rd` into the internal buffer.
-        ///
-        /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
-        /// a socket or pipe might).
-        ///
-        /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
-        /// to empty the incoming TLS data buffer.
-        ///
-        /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
-        /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
-        /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
-        ///
-        /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
-        ///   each time a call to this function succeeds.
-        /// * In order to empty the incoming plaintext data buffer, you should empty it through
-        ///   the [`reader()`] after the call to [`process_new_packets()`].
-        ///
-        /// This function also returns `Ok(0)` once a `close_notify` alert has been successfully
-        /// received.  No additional data is ever read in this state.
-        ///
-        /// [`process_new_packets()`]: Connection::process_new_packets
-        /// [`reader()`]: Connection::reader
-        fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error>;
-
         /// Writes TLS messages to `wr`.
         ///
         /// On success, this function returns `Ok(n)` where `n` is a number of bytes written to `wr`
@@ -72,15 +46,12 @@ mod connection {
         /// empty.
         fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error>;
 
-        /// Returns true if the caller should call [`Connection::read_tls`] as soon
+        /// Returns true if the caller should call [`Connection::process_new_packets()`] as soon
         /// as possible.
         ///
-        /// If there is pending plaintext data to read with [`Connection::reader`],
+        /// If there is pending plaintext data to read with [`Connection::reader()`],
         /// this returns false.  If your application respects this mechanism,
         /// only one full TLS message will be buffered by rustls.
-        ///
-        /// [`Connection::reader`]: crate::Connection::reader
-        /// [`Connection::read_tls`]: crate::Connection::read_tls
         fn wants_read(&self) -> bool;
 
         /// Returns true if the caller should call [`Connection::write_tls`] as soon as possible.
@@ -94,15 +65,13 @@ mod connection {
         /// Returns an object that allows writing plaintext.
         fn writer(&mut self) -> Writer<'_>;
 
-        /// Processes any new packets read by a previous call to
-        /// [`Connection::read_tls`].
+        /// Processes any new packets read from the buffer supplied in `buf`.
         ///
         /// Errors from this function relate to TLS protocol errors, and
         /// are fatal to the connection.  Future calls after an error will do
         /// no new work and will return the same error. After an error is
-        /// received from [`process_new_packets()`], you should not call [`read_tls()`]
-        /// any more (it will fill up buffers to no purpose). However, you
-        /// may call the other methods on the connection, including `write`,
+        /// received from [`process_new_packets()`], you should not continue to fill up the buffer.
+        /// However, you may call the other methods on the connection, including `write`,
         /// `send_close_notify`, and `write_tls`. Most likely you will want to
         /// call `write_tls` to send any alerts queued by the error and then
         /// close the underlying connection.
@@ -111,8 +80,7 @@ mod connection {
         /// about the connection.
         ///
         /// [`process_new_packets()`]: Connection::process_new_packets
-        /// [`read_tls()`]: Connection::read_tls
-        fn process_new_packets(&mut self) -> Result<IoState, Error>;
+        fn process_new_packets(&mut self, buf: &mut dyn TlsInputBuffer) -> Result<IoState, Error>;
 
         /// Returns an object that can derive key material from the agreed connection secrets.
         ///
@@ -512,7 +480,6 @@ impl ConnectionRandoms {
 /// [`SideData`]. This is used to store side-specific data.
 pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
-    deframer_buffer: DeframerVecBuffer,
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
     pub(crate) has_seen_eof: bool,
@@ -520,7 +487,16 @@ pub(crate) struct ConnectionCommon<Side: SideData> {
 
 impl<Side: SideData> ConnectionCommon<Side> {
     #[inline]
-    pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
+    pub(crate) fn process_new_packets(
+        &mut self,
+        buf: &mut dyn TlsInputBuffer,
+    ) -> Result<IoState, Error> {
+        if buf.has_seen_eof() {
+            self.has_seen_eof = true;
+        } else if self.received_plaintext.is_full() {
+            return Err(ApiMisuse::ReceivedPlaintextBufferFull.into());
+        }
+
         loop {
             let mut output = JoinOutput {
                 outputs: &mut self.core.common.outputs,
@@ -531,7 +507,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             };
 
             let Some((payload, mut buffer_progress)) = process_new_packets(
-                &mut self.deframer_buffer,
+                buf,
                 &mut self.core.state,
                 &mut self.core.common.recv,
                 &mut output,
@@ -540,11 +516,10 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 break;
             };
 
-            let payload = payload.reborrow(&Delocator::new(self.deframer_buffer.slice_mut()));
+            let payload = payload.reborrow(&Delocator::new(buf.slice_mut()));
             self.received_plaintext
                 .append(payload.into_vec());
-            self.deframer_buffer
-                .discard(buffer_progress.take_discard());
+            buf.discard(buffer_progress.take_discard());
         }
 
         // Release unsent buffered plaintext.
@@ -631,20 +606,27 @@ impl<Side: SideData> ConnectionCommon<Side> {
     ///
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
-    pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Input<'static>>, Error> {
-        let mut buffer_progress = self.recv.hs_deframer.progress();
+    pub(crate) fn first_handshake_message(
+        &mut self,
+        buf: &mut dyn TlsInputBuffer,
+    ) -> Result<Option<Input<'static>>, Error> {
+        let mut buffer_progress = self
+            .core
+            .common
+            .recv
+            .hs_deframer
+            .progress();
 
         let res = self
             .core
             .common
             .recv
-            .deframe(self.deframer_buffer.filled_mut(), &mut buffer_progress)
+            .deframe(buf.slice_mut(), &mut buffer_progress)
             .map(|opt| opt.map(|pm| Message::try_from(pm.plaintext).map(|m| m.into_owned())));
 
         match res? {
             Some(Ok(msg)) => {
-                self.deframer_buffer
-                    .discard(buffer_progress.take_discard());
+                buf.discard(buffer_progress.take_discard());
                 Ok(Some(Input {
                     message: msg,
                     aligned_handshake: self.recv.hs_deframer.aligned(),
@@ -657,24 +639,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
     pub(crate) fn replace_state(&mut self, new: Box<dyn State>) {
         self.core.state = Ok(new);
-    }
-
-    pub(crate) fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        if self.received_plaintext.is_full() {
-            return Err(io::Error::other("received plaintext buffer full"));
-        }
-
-        if self.recv.has_received_close_notify {
-            return Ok(0);
-        }
-
-        let res = self
-            .deframer_buffer
-            .read(rd, self.recv.hs_deframer.is_active());
-        if let Ok(0) = res {
-            self.has_seen_eof = true;
-        }
-        res
     }
 
     pub(crate) fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
@@ -700,7 +664,6 @@ impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
     fn from(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
-            deframer_buffer: DeframerVecBuffer::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             has_seen_eof: false,
@@ -830,6 +793,7 @@ pub(crate) fn process_new_packets(
             // This is data that has already been accepted in `read_tls`.
             let entirety = input.slice_mut().len();
             input.discard(entirety);
+            input.set_closed();
             break;
         }
 
@@ -928,6 +892,187 @@ impl<Side: SideData> ConnectionCore<Side> {
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }
+}
+
+/// Buffer for data read from the socket, in the process of being parsed into messages.
+#[derive(Default, Debug)]
+pub struct VecBuffer {
+    /// Buffer of data read from the socket, in the process of being parsed into messages.
+    ///
+    /// For buffer size management, checkout out the [`VecBuffer::prepare_read()`] method.
+    buf: Vec<u8>,
+
+    /// What size prefix of `buf` is used.
+    used: usize,
+
+    /// Whether we've seen a 0-byte read.
+    has_seen_eof: bool,
+
+    /// Whether a CloseNotify alert has been seen.
+    closed: bool,
+}
+
+impl VecBuffer {
+    /// Discard `taken` bytes from the start of our buffer.
+    pub(crate) fn discard(&mut self, taken: usize) {
+        if taken < self.used {
+            /* Before:
+             * +----------+----------+----------+
+             * | taken    | pending  |xxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ taken    ^ self.used
+             *
+             * After:
+             * +----------+----------+----------+
+             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ self.used
+             */
+
+            self.buf
+                .copy_within(taken..self.used, 0);
+            self.used -= taken;
+        } else if taken >= self.used {
+            self.used = 0;
+        }
+    }
+
+    pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[..self.used]
+    }
+
+    /// Read some bytes from `rd`, and add them to the buffer.
+    pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
+        if let Err(err) = self.prepare_read() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, err));
+        } else if self.closed {
+            return Ok(0);
+        }
+
+        // Try to do the largest reads possible. Note that if
+        // we get a message with a length field out of range here,
+        // we do a zero length read.  That looks like an EOF to
+        // the next layer up, which is fine.
+        let new_bytes = rd.read(&mut self.buf[self.used..])?;
+        if new_bytes == 0 {
+            self.has_seen_eof = true;
+        }
+
+        self.used += new_bytes;
+        Ok(new_bytes)
+    }
+
+    /// Resize the internal `buf` if necessary for reading more bytes.
+    fn prepare_read(&mut self) -> Result<(), &'static str> {
+        /// TLS allows for handshake messages of up to 16MB.  We
+        /// restrict that to 64KB to limit potential for denial-of-
+        /// service.
+        const MAX_HANDSHAKE_SIZE: usize = 0xffff;
+
+        const READ_SIZE: usize = 4096;
+
+        // We allow a maximum of 64k of buffered data. Given that the first read of such a
+        // payload will only ever be 4k bytes, the next time we come around here we allow a
+        // larger buffer size. Once the large message and any following handshake messages in
+        // the same flight have been consumed, `pop()` will call `discard()` to reset `used`.
+        // At this point, the buffer resizing logic below should reduce the buffer size.
+        if self.used >= MAX_HANDSHAKE_SIZE {
+            return Err("message buffer full");
+        }
+
+        // If we can and need to increase the buffer size to allow a 4k read, do so. After
+        // dealing with a large handshake message (exceeding `MAX_WIRE_SIZE`),
+        // make sure to reduce the buffer size again (large messages should be rare).
+        // Also, reduce the buffer size if there are neither full nor partial messages in it,
+        // which usually means that the other side suspended sending data.
+        let need_capacity = Ord::min(MAX_HANDSHAKE_SIZE, self.used + READ_SIZE);
+        if need_capacity > self.buf.len() {
+            self.buf.resize(need_capacity, 0);
+        } else if self.used == 0 || self.buf.len() > MAX_HANDSHAKE_SIZE {
+            self.buf.resize(need_capacity, 0);
+            self.buf.shrink_to(need_capacity);
+        }
+
+        Ok(())
+    }
+
+    /// Append `bytes` to the end of this buffer.
+    ///
+    /// Return a `Range` saying where it went.
+    pub(crate) fn extend(&mut self, bytes: &[u8]) -> Range<usize> {
+        let len = bytes.len();
+        let start = self.used;
+        let end = start + len;
+        if self.buf.len() < end {
+            self.buf.resize(end, 0);
+        }
+        self.buf[start..end].copy_from_slice(bytes);
+        self.used += len;
+        Range { start, end }
+    }
+
+    pub(crate) fn filled(&self) -> &[u8] {
+        &self.buf[..self.used]
+    }
+}
+
+impl TlsInputBuffer for VecBuffer {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        self.filled_mut()
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.discard(num_bytes)
+    }
+
+    fn has_seen_eof(&self) -> bool {
+        self.has_seen_eof
+    }
+
+    fn set_closed(&mut self) {
+        self.closed = true;
+    }
+}
+
+/// An abstraction over received data buffers (either owned or borrowed)
+pub trait TlsInputBuffer {
+    /// Return the buffer which contains the received data.
+    ///
+    /// If no data is available, return the empty slice.
+    ///
+    /// This is mutable, because the buffer is used for in-place decryption
+    /// and coalescing of TLS records.  Coalescing of TLS records can happen
+    /// incrementally over multiple calls into rustls.  As a result the
+    /// contents of this buffer must not be altered except to add new bytes
+    /// at the end.
+    fn slice_mut(&mut self) -> &mut [u8];
+
+    /// Discard `num_bytes` from the front of the buffer returned by `slice_mut()`.
+    ///
+    /// Multiple calls to `discard()` are cumulative, rather than "last wins".  In
+    /// other words, `discard(1)` followed by `discard(1)` gives the same result
+    /// as `discard(2)`.
+    ///
+    /// The next call to `slice_mut()` must reflect all previous `discard()`s. In
+    /// other words, if `slice_mut()` returns slice `[p..q]`, it should then
+    /// return `[p+n..q]` after `discard(n)`.
+    ///
+    /// Rustls guarantees it will not `discard()` more bytes than are returned
+    /// from `slice_mut()`.
+    fn discard(&mut self, num_bytes: usize);
+
+    /// Whether the buffer has seen an EOF.
+    ///
+    /// This is used to detect unclean connection closures, which are signalled by a TCP EOF
+    /// without a preceding TLS `close_notify` alert. In that case, the connection is closed
+    /// without the usual TLS closure semantics, and any data received so far should be
+    /// treated as suspect due to potential truncation attacks.
+    fn has_seen_eof(&self) -> bool;
+
+    /// Mark the connection as closed, so that no further data will be accepted.
+    ///
+    /// This will be called when the connection receives a TLS `close_notify` alert.
+    fn set_closed(&mut self);
 }
 
 pub(crate) struct SideCommonOutput<'a> {

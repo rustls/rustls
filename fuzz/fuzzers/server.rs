@@ -7,7 +7,7 @@ use std::io;
 use std::sync::Arc;
 
 use rustls::server::{Accepted, Acceptor};
-use rustls::{Connection, ServerConfig, ServerConnection};
+use rustls::{Connection, ServerConfig, ServerConnection, VecBuffer};
 
 fuzz_target!(|data: &[u8]| {
     let _ = env_logger::try_init();
@@ -28,21 +28,19 @@ fn fuzz_buffered_api(data: &[u8]) {
     let mut stream = io::Cursor::new(data);
     let mut server = ServerConnection::new(config).unwrap();
 
-    service_connection(&mut stream, &mut server);
+    service_connection(&mut stream, &mut VecBuffer::default(), &mut server);
 }
 
 fn fuzz_acceptor_api(data: &[u8]) {
     let mut server = Acceptor::default();
     let mut stream = io::Cursor::new(data);
+    let mut buf = VecBuffer::default();
 
     loop {
-        let rd = server
-            .read_tls(&mut stream)
-            .unwrap_or(0);
-
-        match server.accept() {
+        let rd = buf.read(&mut stream).unwrap_or(0);
+        match server.accept(&mut buf) {
             Ok(Some(accepted)) => {
-                fuzz_accepted(&mut stream, accepted);
+                fuzz_accepted(&mut stream, &mut buf, accepted);
                 break;
             }
             Err(_) => {
@@ -56,7 +54,7 @@ fn fuzz_acceptor_api(data: &[u8]) {
     }
 }
 
-fn fuzz_accepted(stream: &mut dyn io::Read, accepted: Accepted) {
+fn fuzz_accepted(stream: &mut dyn io::Read, buf: &mut VecBuffer, accepted: Accepted) {
     let mut maybe_server = accepted.into_connection(Arc::new(
         ServerConfig::builder(rustls_fuzzing_provider::PROVIDER.into())
             .with_no_client_auth()
@@ -65,14 +63,18 @@ fn fuzz_accepted(stream: &mut dyn io::Read, accepted: Accepted) {
     ));
 
     if let Ok(conn) = &mut maybe_server {
-        service_connection(stream, conn);
+        service_connection(stream, buf, conn);
     }
 }
 
-fn service_connection(stream: &mut dyn io::Read, server: &mut ServerConnection) {
+fn service_connection(
+    stream: &mut dyn io::Read,
+    buf: &mut VecBuffer,
+    server: &mut ServerConnection,
+) {
     loop {
-        let rd = server.read_tls(stream);
-        if server.process_new_packets().is_err() {
+        let rd = buf.read(stream);
+        if server.process_new_packets(buf).is_err() {
             break;
         }
 
