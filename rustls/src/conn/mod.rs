@@ -5,18 +5,21 @@ use core::ops::{Deref, DerefMut};
 use std::io;
 
 use kernel::KernelConnection;
+use pki_types::FipsStatus;
 
+use crate::ConnectionOutputs;
 use crate::common_state::{
     CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Input, JoinOutput,
-    Output, ReceivePath, SplitReceive, State, UnborrowedPayload, maybe_send_fatal_alert,
+    Output, ReceivePath, SendPath, SplitReceive, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
+use crate::kernel::KernelState;
 use crate::msgs::{
-    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
-    TlsInputBuffer,
+    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Random, TlsInputBuffer,
 };
-use crate::suites::ExtractedSecrets;
+use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
+use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
 // pub so that it can be re-exported from the crate root
@@ -28,6 +31,8 @@ mod connection {
     use core::fmt::Debug;
     use core::ops::{Deref, DerefMut};
     use std::io::{self, BufRead, Read};
+
+    use pki_types::FipsStatus;
 
     use crate::common_state::ConnectionOutputs;
     use crate::conn::{ConnectionCommon, IoState, KeyingMaterialExporter, SideData};
@@ -229,6 +234,13 @@ mod connection {
         ///
         /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
         fn is_handshaking(&self) -> bool;
+
+        /// Return the FIPS validation status of the connection.
+        ///
+        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
+        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+        fn fips(&self) -> FipsStatus;
     }
 
     /// A structure that implements [`std::io::Read`] for reading plaintext.
@@ -516,9 +528,21 @@ pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) received_plaintext: ChunkVecBuffer,
     pub(crate) sendable_plaintext: ChunkVecBuffer,
     pub(crate) has_seen_eof: bool,
+    pub(crate) fips: FipsStatus,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
+    pub(crate) fn new(core: ConnectionCore<Side>, fips: FipsStatus) -> Self {
+        Self {
+            core,
+            deframer_buffer: DeframerVecBuffer::default(),
+            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
+            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            has_seen_eof: false,
+            fips,
+        }
+    }
+
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         loop {
@@ -530,7 +554,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 side: &mut self.core.side,
             };
 
-            let Some((payload, mut buffer_progress)) = process_new_packets(
+            let Some((payload, mut buffer_progress)) = process_new_packets::<Side>(
                 &mut self.deframer_buffer,
                 &mut self.core.state,
                 &mut self.core.common.recv,
@@ -627,38 +651,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
         Writer::new(self)
     }
 
-    /// Extract the first handshake message.
-    ///
-    /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
-    /// `process_handshake_messages()` path, specialized for the first handshake message.
-    pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Input<'static>>, Error> {
-        let mut buffer_progress = self.recv.hs_deframer.progress();
-
-        let res = self
-            .core
-            .common
-            .recv
-            .deframe(self.deframer_buffer.filled_mut(), &mut buffer_progress)
-            .map(|opt| opt.map(|pm| Message::try_from(pm.plaintext).map(|m| m.into_owned())));
-
-        match res? {
-            Some(Ok(msg)) => {
-                self.deframer_buffer
-                    .discard(buffer_progress.take_discard());
-                Ok(Some(Input {
-                    message: msg,
-                    aligned_handshake: self.recv.hs_deframer.aligned(),
-                }))
-            }
-            Some(Err(err)) => Err(err.into()),
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) fn replace_state(&mut self, new: Box<dyn State>) {
-        self.core.state = Ok(new);
-    }
-
     pub(crate) fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
         if self.received_plaintext.is_full() {
             return Err(io::Error::other("received plaintext buffer full"));
@@ -693,18 +685,6 @@ impl<Side: SideData> Deref for ConnectionCommon<Side> {
 impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.core.common
-    }
-}
-
-impl<Side: SideData> From<ConnectionCore<Side>> for ConnectionCommon<Side> {
-    fn from(core: ConnectionCore<Side>) -> Self {
-        Self {
-            core,
-            deframer_buffer: DeframerVecBuffer::default(),
-            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
-            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
-            has_seen_eof: false,
-        }
     }
 }
 
@@ -747,9 +727,9 @@ impl IoState {
     }
 }
 
-pub(crate) fn process_new_packets(
+pub(crate) fn process_new_packets<Side: SideData>(
     input: &mut dyn TlsInputBuffer,
-    state: &mut Result<Box<dyn State>, Error>,
+    state: &mut Result<Side::State, Error>,
     recv: &mut ReceivePath,
     output: &mut dyn Output,
 ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
@@ -764,7 +744,7 @@ pub(crate) fn process_new_packets(
     let mut plaintext = None;
     let mut buffer_progress = recv.hs_deframer.progress();
 
-    loop {
+    while st.wants_input() {
         let buffer = input.slice_mut();
         let locator = Locator::new(buffer);
         let res = recv.deframe(buffer, &mut buffer_progress);
@@ -847,13 +827,13 @@ pub(crate) fn process_new_packets(
 }
 
 pub(crate) struct ConnectionCore<Side: SideData> {
-    pub(crate) state: Result<Box<dyn State>, Error>,
-    pub(crate) side: Side,
+    pub(crate) state: Result<Side::State, Error>,
+    pub(crate) side: Side::Data,
     pub(crate) common: CommonState,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Box<dyn State>, side: Side, common: CommonState) -> Self {
+    pub(crate) fn new(state: Side::State, side: Side::Data, common: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -880,36 +860,35 @@ impl<Side: SideData> ConnectionCore<Side> {
         if self.common.is_handshaking() {
             return Err(Error::HandshakeNotComplete);
         }
+        Self::from_parts_into_kernel_connection(
+            &mut self.common.send,
+            self.common.recv,
+            self.common.outputs,
+            self.state?,
+        )
+    }
 
-        if !self.common.send.sendable_tls.is_empty() {
+    pub(crate) fn from_parts_into_kernel_connection(
+        send: &mut SendPath,
+        recv: ReceivePath,
+        outputs: ConnectionOutputs,
+        state: Side::State,
+    ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
+        if !send.sendable_tls.is_empty() {
             return Err(ApiMisuse::SecretExtractionWithPendingSendableData.into());
         }
 
-        let state = self.state?;
+        let read_seq = recv.decrypt_state.read_seq();
+        let write_seq = send.encrypt_state.write_seq();
 
-        let read_seq = self
-            .common
-            .recv
-            .decrypt_state
-            .read_seq();
-        let write_seq = self
-            .common
-            .send
-            .encrypt_state
-            .write_seq();
-
-        let tls13_key_schedule = self
-            .common
-            .send
-            .tls13_key_schedule
-            .take();
+        let tls13_key_schedule = send.tls13_key_schedule.take();
 
         let (secrets, state) = state.into_external_state(&tls13_key_schedule)?;
         let secrets = ExtractedSecrets {
             tx: (write_seq, secrets.tx),
             rx: (read_seq, secrets.rx),
         };
-        let external = KernelConnection::new(state, self.common, tls13_key_schedule)?;
+        let external = KernelConnection::new(state, outputs, tls13_key_schedule)?;
 
         Ok((secrets, external))
     }
@@ -946,12 +925,27 @@ impl Output for SideCommonOutput<'_> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: private::SideData {}
+pub trait SideData: private::Side {}
 
 pub(crate) mod private {
     use super::*;
 
-    pub(crate) trait SideData: Output + Debug {}
+    pub(crate) trait Side: Debug {
+        /// Data storage type.
+        type Data: Debug + Output;
+        /// State machine type.
+        type State: StateMachine;
+    }
+}
+
+pub(crate) trait StateMachine: Sized {
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error>;
+    fn wants_input(&self) -> bool;
+    fn handle_decrypt_error(&mut self);
+    fn into_external_state(
+        self,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error>;
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

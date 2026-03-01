@@ -8,9 +8,10 @@ use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
 use super::config::ServerConfig;
+use super::hs::ServerState;
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::inappropriate_message;
-use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
+use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -33,6 +34,33 @@ use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::verify::{ClientIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
+
+#[expect(private_interfaces)]
+pub(crate) enum StateMachine {
+    Certificate(Box<ExpectCertificate>),
+    ClientKx(Box<ExpectClientKx>),
+    CertificateVerify(Box<ExpectCertificateVerify>),
+    ChangeCipherSpec(Box<ExpectCcs>),
+    Finished(Box<ExpectFinished>),
+    Traffic(Box<ExpectTraffic>),
+}
+
+impl StateMachine {
+    pub(crate) fn handle(
+        self,
+        input: Input<'_>,
+        output: &mut dyn Output,
+    ) -> Result<ServerState, Error> {
+        match self {
+            Self::Certificate(e) => e.handle(input, output),
+            Self::ClientKx(e) => e.handle(input, output),
+            Self::CertificateVerify(e) => e.handle(input, output),
+            Self::ChangeCipherSpec(e) => e.handle(input, output),
+            Self::Finished(e) => e.handle(input, output),
+            Self::Traffic(e) => e.handle(input, output),
+        }
+    }
+}
 
 mod client_hello {
     use super::*;
@@ -61,7 +89,7 @@ mod client_hello {
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             output: &mut dyn Output,
-        ) -> Result<Box<dyn State>, Error> {
+        ) -> Result<ServerState, Error> {
             let mut randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
@@ -187,7 +215,8 @@ mod client_hello {
                     randoms,
                     suite,
                     server_kx,
-                }))
+                })
+                .into())
             } else {
                 Ok(Box::new(ExpectClientKx {
                     hs,
@@ -195,7 +224,8 @@ mod client_hello {
                     suite,
                     server_kx,
                     peer_identity: None,
-                }))
+                })
+                .into())
             }
         }
     }
@@ -276,7 +306,7 @@ mod client_hello {
         config: Arc<ServerConfig>,
         resumedata: Tls12ServerSessionValue<'static>,
         proof: HandshakeAlignedProof,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         debug!("Resuming connection");
 
         if resumedata.extended_ms && !using_ems {
@@ -366,7 +396,8 @@ mod client_hello {
             secrets,
             peer_identity: resumedata.common.peer_identity,
             resuming_decrypter: Some(dec),
-        }))
+        })
+        .into())
     }
 
     fn emit_server_hello(
@@ -495,12 +526,12 @@ struct ExpectCertificate {
     server_kx: GroupAndKeyExchange,
 }
 
-impl State for ExpectCertificate {
+impl ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         self.hs.transcript.add_message(&message);
         let cert_chain = require_handshake_msg_move!(
             message,
@@ -544,7 +575,14 @@ impl State for ExpectCertificate {
             suite: self.suite,
             server_kx: self.server_kx,
             peer_identity,
-        }))
+        })
+        .into())
+    }
+}
+
+impl From<Box<ExpectCertificate>> for ServerState {
+    fn from(value: Box<ExpectCertificate>) -> Self {
+        Self::Tls12(StateMachine::Certificate(value))
     }
 }
 
@@ -557,12 +595,12 @@ struct ExpectClientKx {
     peer_identity: Option<Identity<'static>>,
 }
 
-impl State for ExpectClientKx {
+impl ExpectClientKx {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         let client_kx = require_handshake_msg!(
             message,
             HandshakeType::ClientKeyExchange,
@@ -599,14 +637,22 @@ impl State for ExpectClientKx {
                 hs: self.hs,
                 secrets,
                 peer_identity,
-            })),
+            })
+            .into()),
             _ => Ok(Box::new(ExpectCcs {
                 hs: self.hs,
                 secrets,
                 peer_identity: None,
                 resuming_decrypter: None,
-            })),
+            })
+            .into()),
         }
+    }
+}
+
+impl From<Box<ExpectClientKx>> for ServerState {
+    fn from(value: Box<ExpectClientKx>) -> Self {
+        Self::Tls12(StateMachine::ClientKx(value))
     }
 }
 
@@ -617,12 +663,12 @@ struct ExpectCertificateVerify {
     peer_identity: Identity<'static>,
 }
 
-impl State for ExpectCertificateVerify {
+impl ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         let signature = require_handshake_msg!(
             message,
             HandshakeType::CertificateVerify,
@@ -658,7 +704,14 @@ impl State for ExpectCertificateVerify {
             secrets: self.secrets,
             peer_identity: Some(self.peer_identity),
             resuming_decrypter: None,
-        }))
+        })
+        .into())
+    }
+}
+
+impl From<Box<ExpectCertificateVerify>> for ServerState {
+    fn from(value: Box<ExpectCertificateVerify>) -> Self {
+        Self::Tls12(StateMachine::CertificateVerify(value))
     }
 }
 
@@ -670,12 +723,12 @@ struct ExpectCcs {
     resuming_decrypter: Option<Box<dyn MessageDecrypter>>,
 }
 
-impl State for ExpectCcs {
+impl ExpectCcs {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
@@ -708,7 +761,14 @@ impl State for ExpectCcs {
             peer_identity: self.peer_identity,
             resuming: pending_encrypter.is_none(),
             pending_encrypter,
-        }))
+        })
+        .into())
+    }
+}
+
+impl From<Box<ExpectCcs>> for ServerState {
+    fn from(value: Box<ExpectCcs>) -> Self {
+        Self::Tls12(StateMachine::ChangeCipherSpec(value))
     }
 }
 
@@ -865,7 +925,7 @@ fn emit_finished(
     output.emit(Event::EncryptMessage(f));
 }
 
-struct ExpectFinished {
+pub(super) struct ExpectFinished {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
     peer_identity: Option<Identity<'static>>,
@@ -873,12 +933,12 @@ struct ExpectFinished {
     pending_encrypter: Option<Box<dyn MessageEncrypter>>,
 }
 
-impl State for ExpectFinished {
+impl ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         let finished = require_handshake_msg!(
             input.message,
             HandshakeType::Finished,
@@ -980,7 +1040,14 @@ impl State for ExpectFinished {
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,
             _fin_verified: fin_verified,
-        }))
+        })
+        .into())
+    }
+}
+
+impl From<Box<ExpectFinished>> for ServerState {
+    fn from(value: Box<ExpectFinished>) -> Self {
+        Self::Tls12(StateMachine::Finished(value))
     }
 }
 
@@ -996,7 +1063,7 @@ struct HandshakeState {
 }
 
 // --- Process traffic ---
-struct ExpectTraffic {
+pub(super) struct ExpectTraffic {
     // only `Some` if `config.enable_secret_extraction` is true
     extracted_secrets: Option<Result<PartiallyExtractedSecrets, Error>>,
     _fin_verified: verify::FinishedMessageVerified,
@@ -1004,12 +1071,12 @@ struct ExpectTraffic {
 
 impl ExpectTraffic {}
 
-impl State for ExpectTraffic {
+impl ExpectTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         match message.payload {
             MessagePayload::ApplicationData(payload) => output.received_plaintext(payload),
             payload => {
@@ -1019,10 +1086,10 @@ impl State for ExpectTraffic {
                 ));
             }
         }
-        Ok(self)
+        Ok(self.into())
     }
 
-    fn into_external_state(
+    pub(super) fn into_external_state(
         mut self: Box<Self>,
         _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
@@ -1046,6 +1113,12 @@ impl KernelState for ExpectTraffic {
         unreachable!(
             "server connections should never have handle_new_session_ticket called on them"
         )
+    }
+}
+
+impl From<Box<ExpectTraffic>> for ServerState {
+    fn from(value: Box<ExpectTraffic>) -> Self {
+        Self::Tls12(StateMachine::Traffic(value))
     }
 }
 

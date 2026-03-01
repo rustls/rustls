@@ -3,11 +3,10 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
 
-use pki_types::{DnsName, FipsStatus};
+use pki_types::DnsName;
 
 use crate::client::EchStatus;
 use crate::conn::Exporter;
-use crate::conn::kernel::KernelState;
 use crate::conn::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
@@ -17,7 +16,7 @@ use crate::crypto::cipher::{
 use crate::crypto::kx::SupportedKxGroup;
 use crate::crypto::tls13::OkmBlock;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::{
@@ -26,7 +25,7 @@ use crate::msgs::{
     MessageFragmenter, MessagePayload,
 };
 use crate::quic;
-use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
+use crate::suites::SupportedCipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -134,6 +133,7 @@ impl fmt::Debug for CommonState {
 }
 
 /// Facts about the connection learned through the handshake.
+#[derive(Default)]
 pub struct ConnectionOutputs {
     negotiated_version: Option<ProtocolVersion>,
     handshake_kind: Option<HandshakeKind>,
@@ -143,7 +143,6 @@ pub struct ConnectionOutputs {
     peer_identity: Option<Identity<'static>>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
-    pub(crate) fips: FipsStatus,
 }
 
 impl ConnectionOutputs {
@@ -205,15 +204,6 @@ impl ConnectionOutputs {
         self.handshake_kind
     }
 
-    /// Return the FIPS validation status of the connection.
-    ///
-    /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
-    /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
-    /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
-    pub fn fips(&self) -> FipsStatus {
-        self.fips
-    }
-
     pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
         let Self {
             negotiated_version,
@@ -250,22 +240,6 @@ impl Output for ConnectionOutputs {
                 self.negotiated_version = Some(ver);
             }
             _ => unreachable!(),
-        }
-    }
-}
-
-impl Default for ConnectionOutputs {
-    fn default() -> Self {
-        Self {
-            negotiated_version: None,
-            handshake_kind: None,
-            suite: None,
-            negotiated_kx_group: None,
-            alpn_protocol: None,
-            peer_identity: None,
-            exporter: None,
-            early_exporter: None,
-            fips: FipsStatus::Unvalidated,
         }
     }
 }
@@ -646,7 +620,7 @@ impl Output for SendPath {
             Event::PlainMessage(m) => self.send_msg(m, false),
             Event::ProtocolVersion(ver) => self.negotiated_version = Some(ver),
             Event::SendAlert(level, desc) => self.send_alert(level, desc),
-            Event::StartOutgoingTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
+            Event::StartHalfRttTraffic | Event::StartTraffic => self.start_outgoing_traffic(),
             _ => unreachable!(),
         }
     }
@@ -1054,27 +1028,6 @@ pub enum HandshakeKind {
     ResumedWithHelloRetryRequest,
 }
 
-pub(crate) trait State: Send + Sync {
-    fn handle<'m>(
-        self: Box<Self>,
-        input: Input<'m>,
-        output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>;
-
-    fn handle_decrypt_error(&self) {}
-
-    fn set_resumption_data(&mut self, _resumption_data: &[u8]) -> Result<(), Error> {
-        Err(ApiMisuse::ResumptionDataProvidedTooLate.into())
-    }
-
-    fn into_external_state(
-        self: Box<Self>,
-        _send_keys: &Option<Box<KeyScheduleTrafficSend>>,
-    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
-        Err(Error::HandshakeNotComplete)
-    }
-}
-
 pub(crate) struct CaptureAppData<'a> {
     pub(crate) data: &'a mut dyn Output,
     /// Store a [`Locator`] initialized from the current receive buffer
@@ -1228,8 +1181,8 @@ pub(crate) enum Event<'a> {
     ReceivedTicket,
     ResumptionData(Vec<u8>),
     SendAlert(AlertLevel, AlertDescription),
-    /// Mark the connection as ready to send application data.
-    StartOutgoingTraffic,
+    /// Mark the connection as ready to send half-RTT traffic (server only)
+    StartHalfRttTraffic,
     /// Mark the connection as ready to send and receive application data.
     StartTraffic,
 }
@@ -1245,7 +1198,7 @@ impl Event<'_> {
             | Event::MessageEncrypter { .. }
             | Event::OutgoingKeySchedule(_)
             | Event::SendAlert(..)
-            | Event::StartOutgoingTraffic => EventDisposition::SendPath,
+            | Event::StartHalfRttTraffic => EventDisposition::SendPath,
 
             // recv-specific events
             Event::MessageDecrypter { .. }

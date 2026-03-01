@@ -3,7 +3,7 @@ use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
 use std::io;
 
-use pki_types::ServerName;
+use pki_types::{FipsStatus, ServerName};
 
 use super::config::ClientConfig;
 use super::hs::ClientHelloInput;
@@ -27,7 +27,7 @@ use crate::sync::Arc;
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
-    inner: ConnectionCommon<ClientConnectionData>,
+    inner: ConnectionCommon<ClientSide>,
 }
 
 impl fmt::Debug for ClientConnection {
@@ -170,6 +170,10 @@ impl Connection for ClientConnection {
     fn is_handshaking(&self) -> bool {
         self.inner.is_handshaking()
     }
+
+    fn fips(&self) -> FipsStatus {
+        self.inner.fips
+    }
 }
 
 impl Deref for ClientConnection {
@@ -211,13 +215,17 @@ impl ClientConnectionBuilder {
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
+        let fips = config.fips();
         Ok(ClientConnection {
-            inner: ConnectionCommon::from(ConnectionCore::for_client(
-                config,
-                name,
-                ClientExtensionsInput::from_alpn(alpn_protocols),
-                Protocol::Tcp,
-            )?),
+            inner: ConnectionCommon::new(
+                ConnectionCore::for_client(
+                    config,
+                    name,
+                    ClientExtensionsInput::from_alpn(alpn_protocols),
+                    Protocol::Tcp,
+                )?,
+                fips,
+            ),
         })
     }
 }
@@ -281,7 +289,7 @@ impl io::Write for WriteEarlyData<'_> {
     }
 }
 
-impl ConnectionCore<ClientConnectionData> {
+impl ConnectionCore<ClientSide> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
@@ -292,7 +300,6 @@ impl ConnectionCore<ClientConnectionData> {
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
-        common_state.fips = config.fips();
         let mut data = ClientConnectionData::new();
 
         let mut output = SideCommonOutput {
@@ -433,9 +440,8 @@ impl fmt::Display for EarlyDataError {
 
 impl core::error::Error for EarlyDataError {}
 
-/// State associated with a client connection.
 #[derive(Debug)]
-pub struct ClientConnectionData {
+pub(crate) struct ClientConnectionData {
     early_data: EarlyData,
     ech_status: EchStatus,
 }
@@ -449,10 +455,6 @@ impl ClientConnectionData {
     }
 }
 
-impl crate::conn::SideData for ClientConnectionData {}
-
-impl crate::conn::private::SideData for ClientConnectionData {}
-
 impl Output for ClientConnectionData {
     fn emit(&mut self, ev: Event<'_>) {
         match ev {
@@ -465,4 +467,16 @@ impl Output for ClientConnectionData {
             _ => unreachable!(),
         }
     }
+}
+
+/// State associated with a client connection.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct ClientSide;
+
+impl crate::conn::SideData for ClientSide {}
+
+impl crate::conn::private::Side for ClientSide {
+    type Data = ClientConnectionData;
+    type State = super::hs::ClientState;
 }

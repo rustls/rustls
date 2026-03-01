@@ -9,11 +9,11 @@ use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
 use super::config::ServerConfig;
-use super::hs::{self, HandshakeHashOrBuffer};
+use super::hs::{HandshakeHashOrBuffer, ServerState};
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
-    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
+    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::KernelState;
@@ -31,6 +31,7 @@ use crate::msgs::{
     HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
     PresharedKeyIdentity, Reader, SizedPayload,
 };
+use crate::server::hs::ExpectClientHello;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::{
@@ -42,6 +43,37 @@ use crate::tls13::{
 };
 use crate::verify::ClientIdentity;
 use crate::{ConnectionTrafficSecrets, compress, verify};
+
+#[expect(private_interfaces)]
+pub(crate) enum StateMachine {
+    SkipRejectedEarlyData(Box<ExpectAndSkipRejectedEarlyData>),
+    CertificateOrCompressedCertificate(Box<ExpectCertificateOrCompressedCertificate>),
+    Certificate(Box<ExpectCertificate>),
+    CertificateVerify(Box<ExpectCertificateVerify>),
+    EarlyData(Box<ExpectEarlyData>),
+    Finished(Box<ExpectFinished>),
+    Traffic(Box<ExpectTraffic>),
+    QuicTraffic(Box<ExpectQuicTraffic>),
+}
+
+impl StateMachine {
+    pub(crate) fn handle(
+        self,
+        input: Input<'_>,
+        output: &mut dyn Output,
+    ) -> Result<ServerState, Error> {
+        match self {
+            Self::SkipRejectedEarlyData(e) => e.handle(input, output),
+            Self::CertificateOrCompressedCertificate(e) => e.handle(input, output),
+            Self::Certificate(e) => e.handle(input, output),
+            Self::CertificateVerify(e) => e.handle(input, output),
+            Self::EarlyData(e) => e.handle(input, output),
+            Self::Finished(e) => e.handle(input, output),
+            Self::Traffic(e) => e.handle(input, output),
+            Self::QuicTraffic(e) => e.handle(input, output),
+        }
+    }
+}
 
 mod client_hello {
     use super::*;
@@ -79,7 +111,7 @@ mod client_hello {
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
             output: &mut dyn Output,
-        ) -> Result<Box<dyn State>, Error> {
+        ) -> Result<ServerState, Error> {
             let randoms = st.randoms(&input)?;
             let mut transcript = st
                 .transcript
@@ -175,9 +207,10 @@ mod client_hello {
                     Ok(Box::new(ExpectAndSkipRejectedEarlyData {
                         skip_data_left: skip_early_data,
                         next,
-                    }))
+                    })
+                    .into())
                 } else {
-                    Ok(next)
+                    Ok(next.into())
                 };
             };
 
@@ -323,7 +356,7 @@ mod client_hello {
                 // Application data can be sent immediately after Finished, in one
                 // flight.  However, if client auth is enabled, we don't want to send
                 // application data to an unauthenticated peer.
-                output.emit(Event::StartOutgoingTraffic);
+                output.emit(Event::StartHalfRttTraffic);
             }
 
             let hs = HandshakeState {
@@ -342,13 +375,15 @@ mod client_hello {
                         hs,
                         key_schedule: key_schedule_traffic,
                         expected_certificate_type: certificate_types.client,
-                    }))
+                    })
+                    .into())
                 } else {
                     Ok(Box::new(ExpectCertificateOrCompressedCertificate {
                         hs,
                         key_schedule: key_schedule_traffic,
                         expected_certificate_type: certificate_types.client,
-                    }))
+                    })
+                    .into())
                 }
             } else if matches!(doing_early_data, EarlyDataDecision::Accepted { .. })
                 && !st.protocol.is_quic()
@@ -364,13 +399,15 @@ mod client_hello {
                     key_schedule: key_schedule_traffic,
                     peer_identity: resuming.and_then(|(_, session)| session.common.peer_identity),
                     remaining_length: max_length as usize,
-                }))
+                })
+                .into())
             } else {
                 Ok(Box::new(ExpectFinished {
                     hs,
                     key_schedule: key_schedule_traffic,
                     peer_identity: resuming.and_then(|(_, session)| session.common.peer_identity),
-                }))
+                })
+                .into())
             }
         }
     }
@@ -830,15 +867,15 @@ mod client_hello {
 
 struct ExpectAndSkipRejectedEarlyData {
     skip_data_left: usize,
-    next: Box<hs::ExpectClientHello>,
+    next: Box<ExpectClientHello>,
 }
 
-impl State for ExpectAndSkipRejectedEarlyData {
+impl ExpectAndSkipRejectedEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),
          *  up to the configured max_early_data_size."
@@ -846,11 +883,17 @@ impl State for ExpectAndSkipRejectedEarlyData {
         if let MessagePayload::ApplicationData(skip_data) = &input.message.payload {
             if skip_data.bytes().len() <= self.skip_data_left {
                 self.skip_data_left -= skip_data.bytes().len();
-                return Ok(self);
+                return Ok(self.into());
             }
         }
 
         self.next.handle(input, output)
+    }
+}
+
+impl From<Box<ExpectAndSkipRejectedEarlyData>> for ServerState {
+    fn from(value: Box<ExpectAndSkipRejectedEarlyData>) -> Self {
+        Self::Tls13(StateMachine::SkipRejectedEarlyData(value))
     }
 }
 
@@ -860,12 +903,12 @@ struct ExpectCertificateOrCompressedCertificate {
     expected_certificate_type: CertificateType,
 }
 
-impl State for ExpectCertificateOrCompressedCertificate {
+impl ExpectCertificateOrCompressedCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
@@ -899,6 +942,12 @@ impl State for ExpectCertificateOrCompressedCertificate {
     }
 }
 
+impl From<Box<ExpectCertificateOrCompressedCertificate>> for ServerState {
+    fn from(value: Box<ExpectCertificateOrCompressedCertificate>) -> Self {
+        Self::Tls13(StateMachine::CertificateOrCompressedCertificate(value))
+    }
+}
+
 struct ExpectCompressedCertificate {
     hs: HandshakeState,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
@@ -906,7 +955,7 @@ struct ExpectCompressedCertificate {
 }
 
 impl ExpectCompressedCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<ServerState, Error> {
         self.hs.transcript.add_message(&message);
         let compressed_cert = require_handshake_msg_move!(
             message,
@@ -960,7 +1009,7 @@ struct ExpectCertificate {
 }
 
 impl ExpectCertificate {
-    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<Box<dyn State>, Error> {
+    fn handle_input(mut self, Input { message, .. }: Input<'_>) -> Result<ServerState, Error> {
         self.hs.transcript.add_message(&message);
         self.handle_certificate(require_handshake_msg_move!(
             message,
@@ -972,7 +1021,7 @@ impl ExpectCertificate {
     fn handle_certificate(
         mut self,
         certp: CertificatePayloadTls13<'_>,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
         if certp
@@ -1001,7 +1050,8 @@ impl ExpectCertificate {
                     hs: self.hs,
                     key_schedule: self.key_schedule,
                     peer_identity: None,
-                }));
+                })
+                .into());
             }
 
             return Err(PeerMisbehaved::NoCertificatesPresented.into());
@@ -1019,17 +1069,24 @@ impl ExpectCertificate {
             hs: self.hs,
             key_schedule: self.key_schedule,
             peer_identity: peer_identity.into_owned(),
-        }))
+        })
+        .into())
     }
 }
 
-impl State for ExpectCertificate {
+impl ExpectCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         self.handle_input(input)
+    }
+}
+
+impl From<Box<ExpectCertificate>> for ServerState {
+    fn from(value: Box<ExpectCertificate>) -> Self {
+        Self::Tls13(StateMachine::Certificate(value))
     }
 }
 
@@ -1039,12 +1096,12 @@ struct ExpectCertificateVerify {
     peer_identity: Identity<'static>,
 }
 
-impl State for ExpectCertificateVerify {
+impl ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         let signature = require_handshake_msg!(
             message,
             HandshakeType::CertificateVerify,
@@ -1069,7 +1126,14 @@ impl State for ExpectCertificateVerify {
             hs: self.hs,
             key_schedule: self.key_schedule,
             peer_identity: Some(self.peer_identity),
-        }))
+        })
+        .into())
+    }
+}
+
+impl From<Box<ExpectCertificateVerify>> for ServerState {
+    fn from(value: Box<ExpectCertificateVerify>) -> Self {
+        Self::Tls13(StateMachine::CertificateVerify(value))
     }
 }
 
@@ -1083,12 +1147,12 @@ struct ExpectEarlyData {
     remaining_length: usize,
 }
 
-impl State for ExpectEarlyData {
+impl ExpectEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.remaining_length = match self
@@ -1100,7 +1164,7 @@ impl State for ExpectEarlyData {
                 };
 
                 output.emit(Event::EarlyApplicationData(payload));
-                Ok(self)
+                Ok(self.into())
             }
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::EndOfEarlyData),
@@ -1116,7 +1180,8 @@ impl State for ExpectEarlyData {
                     hs: self.hs,
                     key_schedule: self.key_schedule,
                     peer_identity: self.peer_identity,
-                }))
+                })
+                .into())
             }
             payload => Err(inappropriate_handshake_message(
                 &payload,
@@ -1124,6 +1189,12 @@ impl State for ExpectEarlyData {
                 &[HandshakeType::EndOfEarlyData],
             )),
         }
+    }
+}
+
+impl From<Box<ExpectEarlyData>> for ServerState {
+    fn from(value: Box<ExpectEarlyData>) -> Self {
+        Self::Tls13(StateMachine::EarlyData(value))
     }
 }
 
@@ -1328,12 +1399,12 @@ impl ExpectFinished {
     }
 }
 
-impl State for ExpectFinished {
+impl ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         let finished = require_handshake_msg!(
             input.message,
             HandshakeType::Finished,
@@ -1387,14 +1458,21 @@ impl State for ExpectFinished {
         output.emit(Event::StartTraffic);
 
         Ok(match key_schedule_recv.protocol().is_quic() {
-            true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
+            true => Box::new(ExpectQuicTraffic { _fin_verified: fin }).into(),
             false => Box::new(ExpectTraffic {
                 config: self.hs.config,
                 counters: TrafficTemperCounters::default(),
                 key_schedule_recv,
                 _fin_verified: fin,
-            }),
+            })
+            .into(),
         })
+    }
+}
+
+impl From<Box<ExpectFinished>> for ServerState {
+    fn from(value: Box<ExpectFinished>) -> Self {
+        Self::Tls13(StateMachine::Finished(value))
     }
 }
 
@@ -1409,7 +1487,7 @@ struct HandshakeState {
 }
 
 // --- Process traffic ---
-struct ExpectTraffic {
+pub(super) struct ExpectTraffic {
     config: Arc<ServerConfig>,
     key_schedule_recv: KeyScheduleTrafficReceive,
     counters: TrafficTemperCounters,
@@ -1449,12 +1527,12 @@ impl ExpectTraffic {
     }
 }
 
-impl State for ExpectTraffic {
+impl ExpectTraffic {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
                 self.counters.received_app_data();
@@ -1473,10 +1551,10 @@ impl State for ExpectTraffic {
             }
         }
 
-        Ok(self)
+        Ok(self.into())
     }
 
-    fn into_external_state(
+    pub(super) fn into_external_state(
         self: Box<Self>,
         send_keys: &Option<Box<KeyScheduleTrafficSend>>,
     ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
@@ -1514,16 +1592,22 @@ impl KernelState for ExpectTraffic {
     }
 }
 
+impl From<Box<ExpectTraffic>> for ServerState {
+    fn from(value: Box<ExpectTraffic>) -> Self {
+        Self::Tls13(StateMachine::Traffic(value))
+    }
+}
+
 struct ExpectQuicTraffic {
     _fin_verified: verify::FinishedMessageVerified,
 }
 
-impl State for ExpectQuicTraffic {
+impl ExpectQuicTraffic {
     fn handle(
-        self: Box<Self>,
+        self,
         Input { message, .. }: Input<'_>,
         _output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         // reject all messages
         Err(inappropriate_message(&message.payload, &[]))
     }
@@ -1543,6 +1627,12 @@ impl KernelState for ExpectQuicTraffic {
         _message: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         unreachable!("handle_new_session_ticket should not be called for server-side connections")
+    }
+}
+
+impl From<Box<ExpectQuicTraffic>> for ServerState {
+    fn from(value: Box<ExpectQuicTraffic>) -> Self {
+        Self::Tls13(StateMachine::QuicTraffic(value))
     }
 }
 

@@ -6,9 +6,9 @@ use core::fmt;
 
 use pki_types::DnsName;
 
-use super::{ClientHello, CommonServerSessionValue, ServerConfig};
+use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13};
 use crate::SupportedCipherSuite;
-use crate::common_state::{Event, Input, Output, Protocol, State};
+use crate::common_state::{Event, Input, Output, Protocol};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
@@ -16,6 +16,7 @@ use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureSc
 use crate::enums::{ApplicationProtocol, CertificateType, HandshakeType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
+use crate::kernel::KernelState;
 use crate::log::{debug, trace};
 use crate::msgs::{
     ClientHelloPayload, Compression, HandshakeAlignedProof, HandshakePayload, Message,
@@ -23,10 +24,61 @@ use crate::msgs::{
     SingleProtocolName, TransportParameters,
 };
 use crate::sealed::Sealed;
-use crate::suites::Suite;
+use crate::suites::{PartiallyExtractedSecrets, Suite};
 use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
+use crate::tls13::key_schedule::KeyScheduleTrafficSend;
+
+pub(crate) enum ServerState {
+    ReadClientHello(ReadClientHello),
+    ChooseConfig(ChooseConfig),
+    ClientHello(Box<ExpectClientHello>),
+    Tls12(tls12::StateMachine),
+    Tls13(tls13::StateMachine),
+}
+
+impl ServerState {
+    pub(crate) fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
+        match self {
+            Self::ReadClientHello(e) => e.set_resumption_data(resumption_data),
+            Self::ChooseConfig(e) => e.set_resumption_data(resumption_data),
+            Self::ClientHello(e) => e.set_resumption_data(resumption_data),
+            _ => Err(ApiMisuse::ResumptionDataProvidedTooLate.into()),
+        }
+    }
+}
+
+impl crate::conn::StateMachine for ServerState {
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error> {
+        match self {
+            Self::ReadClientHello(r) => r.handle(input, output),
+            Self::ChooseConfig(_) => {
+                Err(Error::Unreachable("ChooseConfig cannot process a message"))
+            }
+            Self::ClientHello(e) => e.handle(input, output),
+            Self::Tls12(sm) => sm.handle(input, output),
+            Self::Tls13(sm) => sm.handle(input, output),
+        }
+    }
+
+    fn wants_input(&self) -> bool {
+        !matches!(self, Self::ChooseConfig(_))
+    }
+
+    fn handle_decrypt_error(&mut self) {}
+
+    fn into_external_state(
+        self,
+        send_keys: &Option<Box<KeyScheduleTrafficSend>>,
+    ) -> Result<(PartiallyExtractedSecrets, Box<dyn KernelState + 'static>), Error> {
+        match self {
+            Self::Tls13(tls13::StateMachine::Traffic(e)) => e.into_external_state(send_keys),
+            Self::Tls12(tls12::StateMachine::Traffic(e)) => e.into_external_state(send_keys),
+            _ => Err(Error::HandshakeNotComplete),
+        }
+    }
+}
 
 pub(super) struct Tls12Extensions {
     pub(super) alpn_protocol: Option<ApplicationProtocol<'static>>,
@@ -299,6 +351,87 @@ pub(super) struct CertificateTypes {
     pub(super) client: CertificateType,
 }
 
+pub(crate) struct ReadClientHello {
+    protocol: Protocol,
+    resumption_data: Vec<u8>,
+}
+
+impl ReadClientHello {
+    pub(crate) fn new(protocol: Protocol) -> Self {
+        Self {
+            protocol,
+            resumption_data: Vec::new(),
+        }
+    }
+
+    pub(crate) fn handle<'m>(
+        self,
+        input: Input<'m>,
+        _output: &mut dyn Output,
+    ) -> Result<ServerState, Error> {
+        ClientHelloInput::from_input(&input)?;
+        Ok(ChooseConfig {
+            client_hello: Input {
+                message: input.message.into_owned(),
+                aligned_handshake: input.aligned_handshake,
+            },
+            resumption_data: self.resumption_data,
+            protocol: self.protocol,
+        }
+        .into())
+    }
+
+    fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
+        self.resumption_data = resumption_data.to_vec();
+        Ok(())
+    }
+}
+
+impl From<ReadClientHello> for ServerState {
+    fn from(value: ReadClientHello) -> Self {
+        Self::ReadClientHello(value)
+    }
+}
+
+pub(crate) struct ChooseConfig {
+    protocol: Protocol,
+    resumption_data: Vec<u8>,
+    client_hello: Input<'static>,
+}
+
+impl ChooseConfig {
+    pub(crate) fn use_config(
+        self,
+        config: Arc<ServerConfig>,
+        extra_exts: ServerExtensionsInput,
+        output: &mut dyn Output,
+    ) -> Result<ServerState, Error> {
+        ExpectClientHello::new(config, extra_exts, self.resumption_data, self.protocol)
+            .with_input(ClientHelloInput::from_input(&self.client_hello)?, output)
+    }
+
+    pub(crate) fn client_hello(&self) -> &ClientHelloPayload {
+        match &self.client_hello.message.payload {
+            MessagePayload::Handshake { parsed, .. } => match &parsed.0 {
+                HandshakePayload::ClientHello(ch) => ch,
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
+        self.resumption_data = resumption_data.to_vec();
+        Ok(())
+    }
+}
+
+impl From<ChooseConfig> for ServerState {
+    fn from(value: ChooseConfig) -> Self {
+        Self::ChooseConfig(value)
+    }
+}
+
 pub(crate) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) protocol: Protocol,
@@ -316,6 +449,7 @@ impl ExpectClientHello {
     pub(super) fn new(
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput,
+        resumption_data: Vec<u8>,
         protocol: Protocol,
     ) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
@@ -331,7 +465,7 @@ impl ExpectClientHello {
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
             session_id: SessionId::empty(),
             sni: None,
-            resumption_data: Vec::new(),
+            resumption_data,
             using_ems: false,
             done_retry: false,
             send_tickets: 0,
@@ -343,7 +477,7 @@ impl ExpectClientHello {
         self,
         input: ClientHelloInput<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3);
@@ -376,9 +510,9 @@ impl ExpectClientHello {
 
     fn with_version<T: Suite + 'static>(
         mut self,
-        mut input: ClientHelloInput<'_>,
+        input: ClientHelloInput<'_>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>
+    ) -> Result<ServerState, Error>
     where
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
@@ -418,23 +552,27 @@ impl ExpectClientHello {
             })
             .collect::<Vec<_>>();
 
+        let mut sig_schemes = input.sig_schemes.clone();
         if T::VERSION == ProtocolVersion::TLSv1_2 {
-            input.sig_schemes.retain(|scheme| {
+            sig_schemes.retain(|scheme| {
                 client_suites
                     .iter()
                     .any(|&suite| suite.usable_for_signature_scheme(*scheme))
             });
         } else if T::VERSION == ProtocolVersion::TLSv1_3 {
-            input
-                .sig_schemes
-                .retain(SignatureScheme::supported_in_tls13);
+            sig_schemes.retain(SignatureScheme::supported_in_tls13);
         }
 
         // Choose a certificate.
         let credentials = self
             .config
             .cert_resolver
-            .resolve(&ClientHello::new(&input, sni.as_ref(), T::VERSION))?;
+            .resolve(&ClientHello::new(
+                &input,
+                &sig_schemes,
+                sni.as_ref(),
+                T::VERSION,
+            ))?;
         self.sni = sni;
 
         let (suite, skxg) = self.choose_suite_and_kx_group(
@@ -578,12 +716,12 @@ impl ExpectClientHello {
     }
 }
 
-impl State for ExpectClientHello {
-    fn handle<'m>(
-        self: Box<Self>,
+impl ExpectClientHello {
+    pub(crate) fn handle<'m>(
+        self,
         input: Input<'m>,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error> {
+    ) -> Result<ServerState, Error> {
         let input = ClientHelloInput::from_input(&input)?;
         self.with_input(input, output)
     }
@@ -591,6 +729,12 @@ impl State for ExpectClientHello {
     fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
         self.resumption_data = resumption_data.to_vec();
         Ok(())
+    }
+}
+
+impl From<Box<ExpectClientHello>> for ServerState {
+    fn from(value: Box<ExpectClientHello>) -> Self {
+        Self::ClientHello(value)
     }
 }
 
@@ -603,13 +747,13 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
         output: &mut dyn Output,
-    ) -> Result<Box<dyn State>, Error>;
+    ) -> Result<ServerState, Error>;
 }
 
 pub(crate) struct ClientHelloInput<'a> {
     pub(super) message: &'a Message<'a>,
     pub(super) client_hello: &'a ClientHelloPayload,
-    pub(super) sig_schemes: Vec<SignatureScheme>,
+    pub(super) sig_schemes: &'a Vec<SignatureScheme>,
     pub(super) proof: HandshakeAlignedProof,
 }
 
@@ -647,7 +791,7 @@ impl<'a> ClientHelloInput<'a> {
         Ok(ClientHelloInput {
             message: &input.message,
             client_hello,
-            sig_schemes: sig_schemes.to_owned(),
+            sig_schemes,
             proof,
         })
     }
