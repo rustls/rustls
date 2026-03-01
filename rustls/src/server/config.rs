@@ -405,12 +405,13 @@ pub struct ClientHello<'a> {
 impl<'a> ClientHello<'a> {
     pub(super) fn new(
         input: &'a ClientHelloInput<'a>,
+        signature_schemes: &'a [SignatureScheme],
         sni: Option<&'a DnsName<'static>>,
         version: ProtocolVersion,
     ) -> Self {
         Self {
             server_name: sni.map(Cow::Borrowed),
-            signature_schemes: &input.sig_schemes,
+            signature_schemes,
             alpn: input.client_hello.protocols.as_ref(),
             server_cert_types: input
                 .client_hello

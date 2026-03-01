@@ -510,7 +510,7 @@ impl ExpectClientHello {
 
     fn with_version<T: Suite + 'static>(
         mut self,
-        mut input: ClientHelloInput<'_>,
+        input: ClientHelloInput<'_>,
         output: &mut dyn Output,
     ) -> Result<ServerState, Error>
     where
@@ -552,23 +552,27 @@ impl ExpectClientHello {
             })
             .collect::<Vec<_>>();
 
+        let mut sig_schemes = input.sig_schemes.clone();
         if T::VERSION == ProtocolVersion::TLSv1_2 {
-            input.sig_schemes.retain(|scheme| {
+            sig_schemes.retain(|scheme| {
                 client_suites
                     .iter()
                     .any(|&suite| suite.usable_for_signature_scheme(*scheme))
             });
         } else if T::VERSION == ProtocolVersion::TLSv1_3 {
-            input
-                .sig_schemes
-                .retain(SignatureScheme::supported_in_tls13);
+            sig_schemes.retain(SignatureScheme::supported_in_tls13);
         }
 
         // Choose a certificate.
         let credentials = self
             .config
             .cert_resolver
-            .resolve(&ClientHello::new(&input, sni.as_ref(), T::VERSION))?;
+            .resolve(&ClientHello::new(
+                &input,
+                &sig_schemes,
+                sni.as_ref(),
+                T::VERSION,
+            ))?;
         self.sni = sni;
 
         let (suite, skxg) = self.choose_suite_and_kx_group(
@@ -749,7 +753,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
 pub(crate) struct ClientHelloInput<'a> {
     pub(super) message: &'a Message<'a>,
     pub(super) client_hello: &'a ClientHelloPayload,
-    pub(super) sig_schemes: Vec<SignatureScheme>,
+    pub(super) sig_schemes: &'a Vec<SignatureScheme>,
     pub(super) proof: HandshakeAlignedProof,
 }
 
@@ -787,7 +791,7 @@ impl<'a> ClientHelloInput<'a> {
         Ok(ClientHelloInput {
             message: &input.message,
             client_hello,
-            sig_schemes: sig_schemes.to_owned(),
+            sig_schemes,
             proof,
         })
     }
