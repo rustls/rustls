@@ -13,7 +13,7 @@ use super::{
     ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12Session, Tls13Session, tls13,
 };
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{EarlyDataEvent, Event, Input, Output, Protocol, State};
+use crate::common_state::{EarlyDataEvent, Event, Input, Output, OutputEvent, Protocol, State};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};
@@ -80,7 +80,7 @@ impl ExpectServerHello {
             return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
 
-        output.emit(Event::ProtocolVersion(T::VERSION));
+        output.output(OutputEvent::ProtocolVersion(T::VERSION));
 
         // Extract ALPN protocol
         if T::VERSION != ProtocolVersion::TLSv1_3 {
@@ -114,7 +114,7 @@ impl ExpectServerHello {
             _ => {
                 debug!("Using ciphersuite {suite:?}");
                 self.suite = Some(SupportedCipherSuite::from(suite));
-                output.emit(Event::CipherSuite(SupportedCipherSuite::from(suite)));
+                output.output(OutputEvent::CipherSuite(SupportedCipherSuite::from(suite)));
             }
         }
 
@@ -253,7 +253,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
         match hrr.supported_versions {
             Some(ProtocolVersion::TLSv1_3) => {
-                output.emit(Event::ProtocolVersion(ProtocolVersion::TLSv1_3));
+                output.output(OutputEvent::ProtocolVersion(ProtocolVersion::TLSv1_3));
             }
             _ => {
                 return Err(PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion.into());
@@ -271,7 +271,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // HRR selects the ciphersuite.
-        output.emit(Event::CipherSuite(cs));
+        output.output(OutputEvent::CipherSuite(cs));
 
         // If we offered ECH, we need to confirm that the server accepted it.
         match (self.next.ech_state.as_ref(), cs) {
@@ -376,7 +376,6 @@ impl ClientHelloInput {
     pub(super) fn new(
         server_name: ServerName<'static>,
         extra_exts: &ClientExtensionsInput,
-        protocol: Protocol,
         output: &mut dyn Output,
         config: Arc<ClientConfig>,
     ) -> Result<Self, Error> {
@@ -411,7 +410,7 @@ impl ClientHelloInput {
         // https://tools.ietf.org/html/rfc9001#section-8.4
         let session_id = match session_id {
             Some(session_id) => session_id,
-            None if protocol.is_quic() => SessionId::empty(),
+            None if output.quic().is_some() => SessionId::empty(),
             None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
             None => SessionId::random(config.provider().secure_random)?,
         };
@@ -431,7 +430,10 @@ impl ClientHelloInput {
             random,
             sent_tls13_fake_ccs: false,
             hello,
-            protocol,
+            protocol: match output.quic() {
+                Some(quic) => Protocol::Quic(quic.version),
+                None => Protocol::Tcp,
+            },
             session_id,
             session_key,
             prev_ech_ext: None,
@@ -796,7 +798,7 @@ fn emit_client_hello_for_retry(
     trace!("Sending ClientHello {ch:#?}");
 
     transcript_buffer.add_message(&ch);
-    output.emit(Event::PlainMessage(ch));
+    output.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_data_key_schedule =
@@ -949,7 +951,7 @@ pub(super) fn process_alpn_protocol(
     );
 
     if let Some(protocol) = selected {
-        output.emit(Event::ApplicationProtocol(protocol.to_owned()));
+        output.output(OutputEvent::ApplicationProtocol(protocol.to_owned()));
     }
 
     Ok(())
@@ -995,11 +997,13 @@ impl ClientSessionValue {
                 None
             });
 
-        if let Some(quic_params) = found
-            .as_ref()
-            .and_then(|r| r.tls13().map(|v| &v.quic_params))
-        {
-            output.emit(Event::QuicTransportParameters(quic_params.bytes().to_vec()));
+        if let Some(quic) = output.quic() {
+            if let Some(quic_params) = found
+                .as_ref()
+                .and_then(|r| r.tls13().map(|v| &v.quic_params))
+            {
+                quic.params = Some(quic_params.bytes().to_vec());
+            }
         }
 
         found

@@ -6,7 +6,6 @@ use core::fmt::Debug;
 use pki_types::FipsStatus;
 
 pub use crate::common_state::Side;
-use crate::common_state::{Event, Output};
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::error::Error;
@@ -23,7 +22,7 @@ mod connection {
 
     use pki_types::{DnsName, ServerName};
 
-    use super::{DirectionalKeys, KeyChange, Version};
+    use super::{DirectionalKeys, KeyChange, Quic, Version};
     use crate::ConnectionOutputs;
     use crate::client::{ClientConfig, ClientConnectionData};
     use crate::common_state::{CommonState, JoinOutput, Protocol};
@@ -95,7 +94,7 @@ mod connection {
         /// Make a new QUIC ClientConnection with custom ALPN protocols.
         pub fn new_with_alpn(
             config: Arc<ClientConfig>,
-            quic_version: Version,
+            version: Version,
             name: ServerName<'static>,
             params: Vec<u8>,
             alpn_protocols: Vec<ApplicationProtocol<'static>>,
@@ -113,17 +112,20 @@ mod connection {
             }
 
             let exts = ClientExtensionsInput {
-                transport_parameters: Some(match quic_version {
+                transport_parameters: Some(match version {
                     Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
                 }),
 
                 ..ClientExtensionsInput::from_alpn(alpn_protocols)
             };
 
-            let inner =
-                ConnectionCore::for_client(config, name, exts, Protocol::Quic(quic_version))?;
+            let mut quic = Quic {
+                version,
+                ..Quic::default()
+            };
+            let inner = ConnectionCore::for_client(config, name, exts, Some(&mut quic))?;
             Ok(Self {
-                inner: ConnectionCommon::new(inner, quic_version),
+                inner: ConnectionCommon::new(inner, quic),
             })
         }
 
@@ -218,7 +220,7 @@ mod connection {
         /// which contains the TLS-encoded transport parameters to send.
         pub fn new(
             config: Arc<ServerConfig>,
-            quic_version: Version,
+            version: Version,
             params: Vec<u8>,
         ) -> Result<Self, Error> {
             let suites = &config.provider.tls13_cipher_suites;
@@ -238,13 +240,19 @@ mod connection {
             }
 
             let exts = ServerExtensionsInput {
-                transport_parameters: Some(match quic_version {
+                transport_parameters: Some(match version {
                     Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
                 }),
             };
 
-            let core = ConnectionCore::for_server(config, exts, Protocol::Quic(quic_version))?;
-            let inner = ConnectionCommon::new(core, quic_version);
+            let core = ConnectionCore::for_server(config, exts, Protocol::Quic(version))?;
+            let inner = ConnectionCommon::new(
+                core,
+                Quic {
+                    version,
+                    ..Quic::default()
+                },
+            );
             Ok(Self { inner })
         }
 
@@ -358,22 +366,20 @@ mod connection {
     struct ConnectionCommon<Side: SideData> {
         core: ConnectionCore<Side>,
         deframer_buffer: DeframerVecBuffer,
-        version: Version,
+        quic: Quic,
     }
 
     impl<Side: SideData> ConnectionCommon<Side> {
-        fn new(core: ConnectionCore<Side>, version: Version) -> Self {
+        fn new(core: ConnectionCore<Side>, quic: Quic) -> Self {
             Self {
                 core,
                 deframer_buffer: DeframerVecBuffer::default(),
-                version,
+                quic,
             }
         }
 
         fn quic_transport_parameters(&self) -> Option<&[u8]> {
-            self.core
-                .common
-                .quic
+            self.quic
                 .params
                 .as_ref()
                 .map(|v| v.as_ref())
@@ -392,12 +398,8 @@ mod connection {
             Some(DirectionalKeys::new(
                 suite,
                 suite.quic?,
-                self.core
-                    .common
-                    .quic
-                    .early_secret
-                    .as_ref()?,
-                self.version,
+                self.quic.early_secret.as_ref()?,
+                self.quic.version,
             ))
         }
 
@@ -424,14 +426,14 @@ mod connection {
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
+            std::dbg!("process new packets");
             process_new_packets(
                 &mut self.deframer_buffer,
                 &mut self.core.state,
                 &mut self.core.common.recv,
                 &mut JoinOutput {
                     outputs: &mut self.core.common.outputs,
-                    protocol: self.core.common.protocol,
-                    quic: &mut self.core.common.quic,
+                    quic: Some(&mut self.quic),
                     send: &mut self.core.common.send,
                     side: &mut self.core.side,
                 },
@@ -441,7 +443,7 @@ mod connection {
         }
 
         fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
-            self.core.common.quic.write_hs(buf)
+            self.quic.write_hs(buf)
         }
     }
 
@@ -464,6 +466,7 @@ pub use connection::{ClientConnection, Connection, ServerConnection};
 
 #[derive(Default)]
 pub(crate) struct Quic {
+    pub(crate) version: Version,
     /// QUIC transport parameters received from the peer during the handshake
     pub(crate) params: Option<Vec<u8>>,
     pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
@@ -475,7 +478,7 @@ pub(crate) struct Quic {
 }
 
 impl Quic {
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         if let MessagePayload::Alert(_) = m.payload {
             // alerts are sent out-of-band in QUIC mode
             return;
@@ -493,12 +496,11 @@ impl Quic {
         self.hs_queue
             .push_back((must_encrypt, bytes));
     }
-}
 
-impl Quic {
     pub(crate) fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
         while let Some((_, msg)) = self.hs_queue.pop_front() {
             buf.extend_from_slice(&msg);
+            std::println!("wrote handshake message of length {}", msg.len());
             if let Some(&(true, _)) = self.hs_queue.front() {
                 if self.hs_secrets.is_some() {
                     // Allow the caller to switch keys before proceeding.
@@ -526,20 +528,6 @@ impl Quic {
         }
 
         None
-    }
-}
-
-impl Output for Quic {
-    fn emit(&mut self, ev: Event<'_>) {
-        match ev {
-            Event::EncryptMessage(m) => self.send_msg(m, true),
-            Event::QuicEarlySecret(sec) => self.early_secret = sec,
-            Event::QuicHandshakeSecrets(sec) => self.hs_secrets = Some(sec),
-            Event::QuicTrafficSecrets(sec) => self.traffic_secrets = Some(sec),
-            Event::QuicTransportParameters(params) => self.params = Some(params),
-            Event::PlainMessage(m) => self.send_msg(m, false),
-            _ => {}
-        }
     }
 }
 

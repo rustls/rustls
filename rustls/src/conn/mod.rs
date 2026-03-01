@@ -7,8 +7,8 @@ use std::io;
 use kernel::KernelConnection;
 
 use crate::common_state::{
-    CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, EventDisposition, Input, JoinOutput,
-    Output, ReceivePath, SplitReceive, State, UnborrowedPayload, maybe_send_fatal_alert,
+    CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, Input, JoinOutput, Output,
+    OutputEvent, ReceivePath, SendPath, State, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::crypto::cipher::Decrypted;
 use crate::error::{AlertDescription, ApiMisuse, Error};
@@ -16,6 +16,7 @@ use crate::msgs::{
     AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
     TlsInputBuffer,
 };
+use crate::quic::Quic;
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -524,8 +525,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         loop {
             let mut output = JoinOutput {
                 outputs: &mut self.core.common.outputs,
-                protocol: self.core.common.protocol,
-                quic: &mut self.core.common.quic,
+                quic: None,
                 send: &mut self.core.common.send,
                 side: &mut self.core.side,
             };
@@ -747,11 +747,11 @@ impl IoState {
     }
 }
 
-pub(crate) fn process_new_packets(
+pub(crate) fn process_new_packets<'a>(
     input: &mut dyn TlsInputBuffer,
     state: &mut Result<Box<dyn State>, Error>,
     recv: &mut ReceivePath,
-    output: &mut dyn Output,
+    output: &mut JoinOutput<'a>,
 ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
     let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
         Ok(state) => state,
@@ -769,10 +769,17 @@ pub(crate) fn process_new_packets(
         let locator = Locator::new(buffer);
         let res = recv.deframe(buffer, &mut buffer_progress);
 
+        let mut output = CaptureAppData {
+            recv,
+            other: &mut *output,
+            plaintext_locator: &locator,
+            received_plaintext: &mut plaintext,
+        };
+
         let opt_msg = match res {
             Ok(opt_msg) => opt_msg,
             Err(e) => {
-                maybe_send_fatal_alert(output, &e);
+                maybe_send_fatal_alert(output.other.send, &e);
                 if let Error::DecryptError = e {
                     st.handle_decrypt_error();
                 }
@@ -792,32 +799,26 @@ pub(crate) fn process_new_packets(
         } = msg;
 
         if want_close_before_decrypt {
-            output.emit(Event::SendAlert(
-                AlertLevel::Warning,
-                AlertDescription::CloseNotify,
-            ));
+            output
+                .other
+                .send
+                .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
         }
 
-        let hs_aligned = recv.hs_deframer.aligned();
-        match recv
-            .receive_message(msg, hs_aligned, output)
-            .and_then(|input| match input {
-                Some(input) => st.handle(
-                    input,
-                    &mut CaptureAppData {
-                        data: &mut SplitReceive {
-                            recv,
-                            other: output,
-                        },
-                        plaintext_locator: &locator,
-                        received_plaintext: &mut plaintext,
-                    },
-                ),
-                None => Ok(st),
-            }) {
+        let hs_aligned = output.recv.hs_deframer.aligned();
+        let result = match output
+            .recv
+            .receive_message(msg, hs_aligned, output.other.send)
+        {
+            Ok(Some(input)) => st.handle(input, &mut output),
+            Ok(None) => Ok(st),
+            Err(e) => Err(e),
+        };
+
+        match result {
             Ok(new) => st = new,
             Err(e) => {
-                maybe_send_fatal_alert(output, &e);
+                maybe_send_fatal_alert(output.other.send, &e);
                 *state = Err(e.clone());
                 input.discard(buffer_progress.take_discard());
                 return Err(e);
@@ -858,13 +859,6 @@ impl<Side: SideData> ConnectionCore<Side> {
             state: Ok(state),
             side,
             common,
-        }
-    }
-
-    pub(crate) fn output(&mut self) -> SideCommonOutput<'_> {
-        SideCommonOutput {
-            side: &mut self.side,
-            common: &mut self.common,
         }
     }
 
@@ -931,16 +925,49 @@ impl<Side: SideData> ConnectionCore<Side> {
 }
 
 pub(crate) struct SideCommonOutput<'a> {
-    pub(crate) side: &'a mut dyn Output,
-    pub(crate) common: &'a mut dyn Output,
+    pub(crate) side: &'a mut dyn SideData,
+    pub(crate) quic: Option<&'a mut Quic>,
+    pub(crate) common: &'a mut CommonState,
 }
 
 impl Output for SideCommonOutput<'_> {
     fn emit(&mut self, ev: Event<'_>) {
-        match ev.disposition() {
-            EventDisposition::SideSpecific => self.side.emit(ev),
-            _ => self.common.emit(ev),
+        self.side.emit(ev);
+    }
+
+    fn output(&mut self, ev: OutputEvent<'_>) {
+        self.common.outputs.handle(ev);
+    }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        match self.quic() {
+            Some(quic) => quic.send_msg(m, must_encrypt),
+            None => self
+                .common
+                .send
+                .send_msg(m, must_encrypt),
         }
+    }
+
+    fn quic(&mut self) -> Option<&mut Quic> {
+        self.quic.as_deref_mut()
+    }
+
+    fn start_traffic(&mut self) {
+        self.common
+            .recv
+            .may_receive_application_data = true;
+        self.common
+            .send
+            .start_outgoing_traffic();
+    }
+
+    fn receive(&mut self) -> &mut ReceivePath {
+        &mut self.common.recv
+    }
+
+    fn send(&mut self) -> &mut SendPath {
+        &mut self.common.send
     }
 }
 
@@ -951,7 +978,9 @@ pub trait SideData: private::SideData {}
 pub(crate) mod private {
     use super::*;
 
-    pub(crate) trait SideData: Output + Debug {}
+    pub(crate) trait SideData: Debug {
+        fn emit(&mut self, ev: Event<'_>);
+    }
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

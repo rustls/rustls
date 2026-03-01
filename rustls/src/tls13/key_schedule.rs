@@ -3,7 +3,7 @@
 use alloc::boxed::Box;
 use core::ops::Deref;
 
-use crate::common_state::{Event, Output, Protocol, Side};
+use crate::common_state::{Output, Protocol, ReceivePath, SendPath, Side};
 use crate::conn::Exporter;
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
@@ -38,7 +38,7 @@ impl KeyScheduleEarlyClient {
             &self
                 .0
                 .client_early_traffic_secret(hs_hash, key_log, client_random, output),
-            output,
+            output.send(),
         );
     }
 
@@ -75,7 +75,7 @@ impl KeyScheduleEarlyServer {
             &self
                 .0
                 .client_early_traffic_secret(hs_hash, key_log, client_random, output),
-            output,
+            output.receive(),
             proof,
         );
     }
@@ -134,12 +134,10 @@ impl KeyScheduleEarly {
             client_random,
         );
 
-        if self.ks.protocol.is_quic() {
+        if let Some(quic) = output.quic() {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
             // before the application can see.
-            output.emit(Event::QuicEarlySecret(Some(
-                client_early_traffic_secret.clone(),
-            )));
+            quic.early_secret = Some(client_early_traffic_secret.clone());
         }
 
         client_early_traffic_secret
@@ -268,13 +266,16 @@ impl KeyScheduleHandshakeStart {
         let new = self.into_handshake(hs_hash, key_log, client_random, output);
 
         // Decrypt with the peer's key, encrypt with our own key
-        new.ks
-            .set_decrypter(&new.server_handshake_traffic_secret, output, proof);
+        new.ks.set_decrypter(
+            &new.server_handshake_traffic_secret,
+            output.receive(),
+            proof,
+        );
 
         if !early_data_enabled {
             // Set the client encryption key for handshakes if early data is not used
             new.ks
-                .set_encrypter(&new.client_handshake_traffic_secret, output);
+                .set_encrypter(&new.client_handshake_traffic_secret, output.send());
         }
 
         new
@@ -294,7 +295,7 @@ impl KeyScheduleHandshakeStart {
         // If not doing early_data after all, this is corrected later to the handshake
         // keys (now stored in key_schedule).
         new.ks
-            .set_encrypter(&new.server_handshake_traffic_secret, output);
+            .set_encrypter(&new.server_handshake_traffic_secret, output.send());
         new
     }
 
@@ -344,15 +345,15 @@ impl KeyScheduleHandshakeStart {
             client_random,
         );
 
-        if let Protocol::Quic(quic_version) = self.ks.protocol {
-            output.emit(Event::QuicHandshakeSecrets(quic::Secrets::new(
+        if let Some(quic) = output.quic() {
+            quic.hs_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 self.ks.suite,
                 self.ks.suite.quic.unwrap(),
                 self.ks.side,
-                quic_version,
-            )));
+                quic.version,
+            ));
         }
 
         KeyScheduleHandshake {
@@ -379,16 +380,16 @@ impl KeyScheduleHandshake {
             .sign_finish(&self.server_handshake_traffic_secret, hs_hash)
     }
 
-    pub(crate) fn set_handshake_encrypter(&self, output: &mut dyn Output) {
+    pub(crate) fn set_handshake_encrypter(&self, send: &mut SendPath) {
         debug_assert_eq!(self.ks.side, Side::Client);
         self.ks
-            .set_encrypter(&self.client_handshake_traffic_secret, output);
+            .set_encrypter(&self.client_handshake_traffic_secret, send);
     }
 
     pub(crate) fn set_handshake_decrypter(
         &self,
         skip_requested: Option<usize>,
-        output: &mut dyn Output,
+        receive: &mut ReceivePath,
         proof: &HandshakeAlignedProof,
     ) {
         debug_assert_eq!(self.ks.side, Side::Server);
@@ -396,14 +397,15 @@ impl KeyScheduleHandshake {
         match skip_requested {
             None => self
                 .ks
-                .set_decrypter(secret, output, proof),
-            Some(max_early_data_size) => output.emit(Event::MessageDecrypterWithTrialDecryption {
-                decrypter: self
-                    .ks
-                    .derive_decrypter(&self.client_handshake_traffic_secret),
-                max_length: max_early_data_size,
-                proof: *proof,
-            }),
+                .set_decrypter(secret, receive, proof),
+            Some(max_early_data_size) => receive
+                .decrypt_state
+                .set_message_decrypter_with_trial_decryption(
+                    self.ks
+                        .derive_decrypter(&self.client_handshake_traffic_secret),
+                    max_early_data_size,
+                    proof,
+                ),
         }
     }
 
@@ -425,17 +427,17 @@ impl KeyScheduleHandshake {
 
         before_finished
             .ks
-            .set_encrypter(server_secret, output);
+            .set_encrypter(server_secret, output.send());
 
-        if let Protocol::Quic(quic_version) = before_finished.ks.protocol {
-            output.emit(Event::QuicTrafficSecrets(quic::Secrets::new(
+        if let Some(quic) = output.quic() {
+            quic.traffic_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 before_finished.ks.suite,
                 before_finished.ks.suite.quic.unwrap(),
                 before_finished.ks.side,
-                quic_version,
-            )));
+                quic.version,
+            ));
         }
 
         KeyScheduleTrafficWithClientFinishedPending {
@@ -573,19 +575,19 @@ impl KeyScheduleClientBeforeFinished {
         );
 
         next.ks
-            .set_decrypter(server_secret, output, proof);
+            .set_decrypter(server_secret, output.receive(), proof);
         next.ks
-            .set_encrypter(client_secret, output);
+            .set_encrypter(client_secret, output.send());
 
-        if let Protocol::Quic(quic_version) = next.ks.protocol {
-            output.emit(Event::QuicTrafficSecrets(quic::Secrets::new(
+        if let Some(quic) = output.quic() {
+            quic.traffic_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 next.ks.suite,
                 next.ks.suite.quic.unwrap(),
                 next.ks.side,
-                quic_version,
-            )));
+                quic.version,
+            ));
         }
 
         next.into_traffic(hs_hash)
@@ -601,17 +603,23 @@ pub(crate) struct KeyScheduleTrafficWithClientFinishedPending {
 }
 
 impl KeyScheduleTrafficWithClientFinishedPending {
-    pub(crate) fn update_decrypter(&self, output: &mut dyn Output, proof: &HandshakeAlignedProof) {
+    pub(crate) fn update_decrypter(
+        &self,
+        receive: &mut ReceivePath,
+        proof: &HandshakeAlignedProof,
+    ) {
         debug_assert_eq!(self.before_finished.ks.side, Side::Server);
-        self.before_finished
-            .ks
-            .set_decrypter(&self.handshake_client_traffic_secret, output, proof);
+        self.before_finished.ks.set_decrypter(
+            &self.handshake_client_traffic_secret,
+            receive,
+            proof,
+        );
     }
 
     pub(crate) fn sign_client_finish(
         self,
         hs_hash: &hash::Output,
-        output: &mut dyn Output,
+        receive: &mut ReceivePath,
         proof: &HandshakeAlignedProof,
     ) -> (KeyScheduleBeforeFinished, hmac::PublicTag) {
         debug_assert_eq!(self.before_finished.ks.side, Side::Server);
@@ -625,7 +633,7 @@ impl KeyScheduleTrafficWithClientFinishedPending {
             &self
                 .before_finished
                 .current_client_traffic_secret,
-            output,
+            receive,
             proof,
         );
 
@@ -674,16 +682,16 @@ pub(crate) struct KeyScheduleTrafficSend {
 }
 
 impl KeyScheduleTrafficSend {
-    pub(crate) fn update_encrypter_for_key_update(&mut self, output: &mut dyn Output) {
+    pub(crate) fn update_encrypter_for_key_update(&mut self, send: &mut SendPath) {
         let secret = self.ks.derive_next(&self.current);
-        self.ks.set_encrypter(&secret, output);
+        self.ks.set_encrypter(&secret, send);
         self.current = secret;
     }
 
-    pub(crate) fn request_key_update_and_update_encrypter(&mut self, output: &mut dyn Output) {
-        output.emit(Event::EncryptMessage(Message::build_key_update_request()));
+    pub(crate) fn request_key_update_and_update_encrypter(&mut self, send: &mut SendPath) {
+        send.send_msg(Message::build_key_update_request(), true);
         let secret = self.ks.derive_next(&self.current);
-        self.ks.set_encrypter(&secret, output);
+        self.ks.set_encrypter(&secret, send);
         self.current = secret;
     }
 
@@ -716,12 +724,12 @@ pub(crate) struct KeyScheduleTrafficReceive {
 impl KeyScheduleTrafficReceive {
     pub(crate) fn update_decrypter(
         &mut self,
-        output: &mut dyn Output,
+        receive: &mut ReceivePath,
         proof: &HandshakeAlignedProof,
     ) {
         let secret = self.ks.derive_next(&self.current);
         self.ks
-            .set_decrypter(&secret, output, proof);
+            .set_decrypter(&secret, receive, proof);
         self.current = secret;
     }
 
@@ -924,7 +932,7 @@ struct KeyScheduleSuite {
 }
 
 impl KeyScheduleSuite {
-    fn set_encrypter(&self, secret: &OkmBlock, output: &mut dyn Output) {
+    fn set_encrypter(&self, secret: &OkmBlock, send: &mut SendPath) {
         let expander = self
             .suite
             .hkdf_provider
@@ -932,22 +940,22 @@ impl KeyScheduleSuite {
         let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
         let iv = derive_traffic_iv(expander.as_ref(), self.suite.aead_alg.iv_len());
 
-        output.emit(Event::MessageEncrypter {
-            encrypter: self.suite.aead_alg.encrypter(key, iv),
-            limit: self.suite.common.confidentiality_limit,
-        });
+        send.encrypt_state
+            .set_message_encrypter(
+                self.suite.aead_alg.encrypter(key, iv),
+                self.suite.common.confidentiality_limit,
+            );
     }
 
     fn set_decrypter(
         &self,
         secret: &OkmBlock,
-        output: &mut dyn Output,
+        receive: &mut ReceivePath,
         proof: &HandshakeAlignedProof,
     ) {
-        output.emit(Event::MessageDecrypter {
-            decrypter: self.derive_decrypter(secret),
-            proof: *proof,
-        });
+        receive
+            .decrypt_state
+            .set_message_decrypter(self.derive_decrypter(secret), proof);
     }
 
     fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn MessageDecrypter> {

@@ -13,7 +13,8 @@ use super::hs::{self, HandshakeHashOrBuffer};
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
-    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State, TrafficTemperCounters,
+    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, OutputEvent, Side, State,
+    TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::KernelState;
@@ -232,7 +233,7 @@ mod client_hello {
                 emit_fake_ccs(output);
             }
 
-            output.emit(Event::HandshakeKind(
+            output.output(OutputEvent::HandshakeKind(
                 match (full_handshake, st.done_retry) {
                     (true, true) => HandshakeKind::FullWithHelloRetryRequest,
                     (true, false) => HandshakeKind::Full,
@@ -252,7 +253,6 @@ mod client_hello {
             ) = emit_encrypted_extensions(
                 &mut flight,
                 suite,
-                st.protocol,
                 output,
                 &mut ocsp_response,
                 input.client_hello,
@@ -293,7 +293,7 @@ mod client_hello {
             // are encrypted with the handshake keys.
             match doing_early_data {
                 EarlyDataDecision::Disabled => {
-                    key_schedule.set_handshake_decrypter(None, output, &input.proof);
+                    key_schedule.set_handshake_decrypter(None, output.receive(), &input.proof);
                 }
                 EarlyDataDecision::RequestedButRejected => {
                     debug!(
@@ -301,7 +301,7 @@ mod client_hello {
                     );
                     key_schedule.set_handshake_decrypter(
                         Some(max_early_data_size(st.config.max_early_data_size)),
-                        output,
+                        output.receive(),
                         &input.proof,
                     );
                 }
@@ -323,7 +323,7 @@ mod client_hello {
                 // Application data can be sent immediately after Finished, in one
                 // flight.  However, if client auth is enabled, we don't want to send
                 // application data to an unauthenticated peer.
-                output.emit(Event::StartOutgoingTraffic);
+                output.send().start_outgoing_traffic();
             }
 
             let hs = HandshakeState {
@@ -497,7 +497,7 @@ mod client_hello {
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
         let ckx = kxgroup.start_and_complete(share.payload.bytes())?;
-        output.emit(Event::KeyExchangeGroup(kxgroup));
+        output.output(OutputEvent::KeyExchangeGroup(kxgroup));
 
         let extensions = Box::new(ServerExtensions {
             key_share: Some(KeyShareEntry::new(ckx.group, ckx.pub_key)),
@@ -524,7 +524,7 @@ mod client_hello {
 
         trace!("sending server hello {sh:?}");
         transcript.add_message(&sh);
-        output.emit(Event::PlainMessage(sh));
+        output.send_msg(sh, false);
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some((_, psk)) = resuming {
@@ -539,11 +539,13 @@ mod client_hello {
             );
 
             if config.max_early_data_size > 0 {
-                output.emit(Event::EarlyExporter(early_key_schedule.early_exporter(
-                    &client_hello_hash,
-                    &*config.key_log,
-                    &randoms.client,
-                )));
+                output.output(OutputEvent::EarlyExporter(
+                    early_key_schedule.early_exporter(
+                        &client_hello_hash,
+                        &*config.key_log,
+                        &randoms.client,
+                    ),
+                ));
             }
 
             KeySchedulePreHandshake::from(early_key_schedule)
@@ -570,7 +572,7 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
-        output.emit(Event::PlainMessage(m));
+        output.send_msg(m, false);
     }
 
     fn emit_hello_retry_request(
@@ -601,7 +603,7 @@ mod client_hello {
         trace!("Requesting retry {m:?}");
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
-        output.emit(Event::PlainMessage(m));
+        output.send_msg(m, false);
     }
 
     fn decide_if_early_data_allowed(
@@ -610,7 +612,6 @@ mod client_hello {
         resumedata: Option<&Tls13ServerSessionValue<'_>>,
         chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
         suite: &'static Tls13CipherSuite,
-        protocol: Protocol,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
         let early_data_requested = client_hello
@@ -656,8 +657,8 @@ mod client_hello {
                 max_length: config.max_early_data_size,
             }
         } else {
-            if protocol.is_quic() {
-                output.emit(Event::QuicEarlySecret(None));
+            if let Some(quic) = output.quic() {
+                quic.early_secret = None;
             }
 
             rejected_or_disabled
@@ -667,7 +668,6 @@ mod client_hello {
     fn emit_encrypted_extensions(
         flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
-        protocol: Protocol,
         output: &mut dyn Output,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -681,7 +681,6 @@ mod client_hello {
             resumedata.map(|r| &r.common),
             hello,
             output,
-            protocol,
             config,
         )?;
 
@@ -691,7 +690,6 @@ mod client_hello {
             resumedata,
             out.alpn_protocol.as_ref(),
             suite,
-            protocol,
             config,
         );
         if let EarlyDataDecision::Accepted { .. } = early_data {
@@ -1108,7 +1106,7 @@ impl State for ExpectEarlyData {
             } => {
                 let proof = input.check_aligned_handshake()?;
                 self.key_schedule
-                    .update_decrypter(output, &proof);
+                    .update_decrypter(output.receive(), &proof);
                 self.hs
                     .transcript
                     .add_message(&input.message);
@@ -1344,7 +1342,7 @@ impl State for ExpectFinished {
         let proof = input.check_aligned_handshake()?;
         let (key_schedule_before_finished, expect_verify_data) = self
             .key_schedule
-            .sign_client_finish(&handshake_hash, output, &proof);
+            .sign_client_finish(&handshake_hash, output.receive(), &proof);
 
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
         {
@@ -1380,11 +1378,11 @@ impl State for ExpectFinished {
 
         // Application data may now flow, even if we have client auth enabled.
         if let Some(identity) = self.peer_identity {
-            output.emit(Event::PeerIdentity(identity));
+            output.output(OutputEvent::PeerIdentity(identity));
         }
-        output.emit(Event::Exporter(Box::new(exporter)));
-        output.emit(Event::OutgoingKeySchedule(Box::new(key_schedule_send)));
-        output.emit(Event::StartTraffic);
+        output.output(OutputEvent::Exporter(Box::new(exporter)));
+        output.send().tls13_key_schedule = Some(Box::new(key_schedule_send));
+        output.start_traffic();
 
         Ok(match key_schedule_recv.protocol().is_quic() {
             true => Box::new(ExpectQuicTraffic { _fin_verified: fin }),
@@ -1438,13 +1436,13 @@ impl ExpectTraffic {
 
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => output.emit(Event::MaybeKeyUpdateRequest),
+            KeyUpdateRequest::UpdateRequested => output.send().ensure_key_update_queued(),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
         // Update our read-side keys.
         self.key_schedule_recv
-            .update_decrypter(output, &proof);
+            .update_decrypter(output.receive(), &proof);
         Ok(())
     }
 }

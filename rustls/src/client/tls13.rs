@@ -15,8 +15,8 @@ use super::{
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, Side, State,
-    TrafficTemperCounters,
+    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, OutputEvent, Side,
+    State, TrafficTemperCounters,
 };
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::KernelState;
@@ -219,7 +219,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
             emit_fake_ccs(&mut sent_tls13_fake_ccs, output);
         }
 
-        output.emit(Event::HandshakeKind(
+        output.output(OutputEvent::HandshakeKind(
             match (&resuming_session, st.done_retry) {
                 (Some(_), true) => HandshakeKind::ResumedWithHelloRetryRequest,
                 (None, true) => HandshakeKind::FullWithHelloRetryRequest,
@@ -262,7 +262,7 @@ impl KeyExchangeChoice {
         their_key_share: &KeyShareEntry,
     ) -> Result<Self, ()> {
         if our_key_share.share.group() == their_key_share.group {
-            output.emit(Event::KeyExchangeGroup(our_key_share.group));
+            output.output(OutputEvent::KeyExchangeGroup(our_key_share.group));
             return Ok(Self::Whole(our_key_share.share.into_single()));
         }
 
@@ -281,7 +281,7 @@ impl KeyExchangeChoice {
 
         // correct the record for the benefit of accuracy of
         // `negotiated_key_exchange_group()`
-        output.emit(Event::KeyExchangeGroup(actual_skxg));
+        output.output(OutputEvent::KeyExchangeGroup(actual_skxg));
 
         Ok(Self::Component(hybrid_key_share))
     }
@@ -361,7 +361,7 @@ pub(super) fn prepare_resumption(
     doing_retry: bool,
 ) -> bool {
     let resuming_suite = resuming_session.suite;
-    output.emit(Event::CipherSuite(resuming_suite.into()));
+    output.output(OutputEvent::CipherSuite(resuming_suite.into()));
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size;
@@ -418,11 +418,9 @@ pub(super) fn derive_early_traffic_secret(
         output,
     );
 
-    output.emit(Event::EarlyExporter(early_key_schedule.early_exporter(
-        &client_hello_hash,
-        key_log,
-        client_random,
-    )));
+    output.output(OutputEvent::EarlyExporter(
+        early_key_schedule.early_exporter(&client_hello_hash, key_log, client_random),
+    ));
 
     // Now the client can send encrypted early data
     output.emit(Event::EarlyData(EarlyDataEvent::Start));
@@ -434,10 +432,13 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Out
         return;
     }
 
-    output.emit(Event::PlainMessage(Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    }));
+    output.send_msg(
+        Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
+        },
+        false,
+    );
 }
 
 fn validate_encrypted_extensions(
@@ -540,19 +541,12 @@ impl State for ExpectEncryptedExtensions {
         };
 
         // QUIC transport parameters
-        let quic_params = if self
-            .hs
-            .key_schedule
-            .protocol()
-            .is_quic()
-        {
+        let quic_params = if let Some(quic) = output.quic() {
             let Some(quic_params) = exts.transport_parameters.as_ref() else {
                 return Err(PeerMisbehaved::MissingQuicTransportParameters.into());
             };
 
-            output.emit(Event::QuicTransportParameters(
-                quic_params.clone().into_vec(),
-            ));
+            quic.params = Some(quic_params.clone().into_vec());
             Some(SizedPayload::from(Payload::new(
                 quic_params.clone().into_vec(),
             )))
@@ -570,7 +564,7 @@ impl State for ExpectEncryptedExtensions {
                             // If no early traffic, set the encryption key for handshakes
                             self.hs
                                 .key_schedule
-                                .set_handshake_encrypter(output);
+                                .set_handshake_encrypter(output.send());
                             self.in_early_traffic = false;
                         }
                     }
@@ -1187,7 +1181,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn
     };
 
     transcript.add_message(&m);
-    output.emit(Event::EncryptMessage(m));
+    output.send_msg(m, true);
 }
 
 struct ExpectFinished {
@@ -1242,7 +1236,7 @@ impl State for ExpectFinished {
             output.emit(Event::EarlyData(EarlyDataEvent::Finished));
             st.hs
                 .key_schedule
-                .set_handshake_encrypter(output);
+                .set_handshake_encrypter(output.send());
         }
 
         let mut flight = HandshakeFlightTls13::new(&mut st.hs.transcript);
@@ -1311,10 +1305,12 @@ impl State for ExpectFinished {
             key_schedule_pre_finished.into_traffic(output, st.hs.transcript.current_hash(), &proof);
         let (key_schedule_send, key_schedule_recv) = key_schedule.split();
 
-        output.emit(Event::PeerIdentity(st.session_input.peer_identity.clone()));
-        output.emit(Event::Exporter(Box::new(exporter)));
-        output.emit(Event::OutgoingKeySchedule(Box::new(key_schedule_send)));
-        output.emit(Event::StartTraffic);
+        output.output(OutputEvent::PeerIdentity(
+            st.session_input.peer_identity.clone(),
+        ));
+        output.output(OutputEvent::Exporter(Box::new(exporter)));
+        output.send().tls13_key_schedule = Some(Box::new(key_schedule_send));
+        output.start_traffic();
 
         // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
         // sending an alert and returning an error (potentially with retry configs) if the server
@@ -1414,8 +1410,8 @@ impl ExpectTraffic {
         output: &mut dyn Output,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        output.emit(Event::ReceivedTicket);
-
+        let received = &mut output.receive().tls13_tickets_received;
+        *received = received.saturating_add(1);
         self.handle_new_ticket_impl(nst)
     }
 
@@ -1441,13 +1437,13 @@ impl ExpectTraffic {
 
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => output.emit(Event::MaybeKeyUpdateRequest),
+            KeyUpdateRequest::UpdateRequested => output.send().ensure_key_update_queued(),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),
         }
 
         // Update our read-side keys.
         self.key_schedule_recv
-            .update_decrypter(output, &proof);
+            .update_decrypter(output.receive(), &proof);
         Ok(())
     }
 }

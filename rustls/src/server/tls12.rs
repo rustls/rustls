@@ -10,7 +10,9 @@ use zeroize::Zeroize;
 use super::config::ServerConfig;
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::inappropriate_message;
-use crate::common_state::{Event, HandshakeFlightTls12, HandshakeKind, Input, Output, Side, State};
+use crate::common_state::{
+    Event, HandshakeFlightTls12, HandshakeKind, Input, Output, OutputEvent, Side, State,
+};
 use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::KernelState;
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
@@ -36,6 +38,7 @@ use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
     use super::*;
+    use crate::common_state::OutputEvent;
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::msgs::{
@@ -140,7 +143,7 @@ mod client_hello {
                 st.session_id = SessionId::random(st.config.provider.secure_random)?;
             }
 
-            output.emit(Event::HandshakeKind(HandshakeKind::Full));
+            output.output(OutputEvent::HandshakeKind(HandshakeKind::Full));
 
             let mut flight = HandshakeFlightTls12::new(&mut transcript);
 
@@ -322,7 +325,7 @@ mod client_hello {
             secrets.master_secret(),
         );
 
-        output.emit(Event::HandshakeKind(HandshakeKind::Resumed));
+        output.output(OutputEvent::HandshakeKind(HandshakeKind::Resumed));
         output.emit(Event::ResumptionData(
             resumedata
                 .common
@@ -352,13 +355,16 @@ mod client_hello {
         emit_ccs(output);
 
         let (dec, encrypter) = secrets.make_cipher_pair(Side::Server);
-        output.emit(Event::MessageEncrypter {
-            encrypter,
-            limit: secrets
-                .suite()
-                .common
-                .confidentiality_limit,
-        });
+        output
+            .send()
+            .encrypt_state
+            .set_message_encrypter(
+                encrypter,
+                secrets
+                    .suite()
+                    .common
+                    .confidentiality_limit,
+            );
         emit_finished(&secrets, &mut hs.transcript, output, &proof);
 
         Ok(Box::new(ExpectCcs {
@@ -586,7 +592,7 @@ impl State for ExpectClientKx {
             self.randoms,
             self.suite,
         )?;
-        output.emit(Event::KeyExchangeGroup(self.server_kx.group));
+        output.output(OutputEvent::KeyExchangeGroup(self.server_kx.group));
 
         self.hs.config.key_log.log(
             "CLIENT_RANDOM",
@@ -700,7 +706,10 @@ impl State for ExpectCcs {
             }
         };
 
-        output.emit(Event::MessageDecrypter { decrypter, proof });
+        output
+            .receive()
+            .decrypt_state
+            .set_message_decrypter(decrypter, &proof);
 
         Ok(Box::new(ExpectFinished {
             hs: self.hs,
@@ -833,15 +842,18 @@ fn emit_ticket(
     };
 
     transcript.add_message(&m);
-    output.emit(Event::PlainMessage(m));
+    output.send_msg(m, false);
     Ok(())
 }
 
 fn emit_ccs(output: &mut dyn Output) {
-    output.emit(Event::PlainMessage(Message {
-        version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
-    }));
+    output.send_msg(
+        Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
+        },
+        false,
+    );
 }
 
 fn emit_finished(
@@ -862,7 +874,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    output.emit(Event::EncryptMessage(f));
+    output.send_msg(f, true);
 }
 
 struct ExpectFinished {
@@ -950,19 +962,21 @@ impl State for ExpectFinished {
                 }
             }
             emit_ccs(output);
-            output.emit(Event::MessageEncrypter {
-                encrypter,
-                limit: self
-                    .secrets
-                    .suite()
-                    .common
-                    .confidentiality_limit,
-            });
+            output
+                .send()
+                .encrypt_state
+                .set_message_encrypter(
+                    encrypter,
+                    self.secrets
+                        .suite()
+                        .common
+                        .confidentiality_limit,
+                );
             emit_finished(&self.secrets, &mut self.hs.transcript, output, &proof);
         }
 
         if let Some(identity) = self.peer_identity {
-            output.emit(Event::PeerIdentity(identity));
+            output.output(OutputEvent::PeerIdentity(identity));
         }
 
         let extracted_secrets = self
@@ -974,8 +988,8 @@ impl State for ExpectFinished {
                     .extract_secrets(Side::Server)
             });
 
-        output.emit(Event::Exporter(self.secrets.into_exporter()));
-        output.emit(Event::StartTraffic);
+        output.output(OutputEvent::Exporter(self.secrets.into_exporter()));
+        output.start_traffic();
 
         Ok(Box::new(ExpectTraffic {
             extracted_secrets,

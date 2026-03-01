@@ -766,6 +766,7 @@ fn packet_key_api() {
 fn test_quic_exporter() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     for &kt in KeyType::all_for_provider(&provider) {
+        dbg!(kt);
         let client_config = make_client_config(kt, &provider);
         let server_config = make_server_config(kt, &provider);
 
