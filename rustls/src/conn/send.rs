@@ -17,6 +17,7 @@ use crate::vecbuf::ChunkVecBuffer;
 pub(crate) struct SendPath {
     pub(crate) encrypt_state: EncryptionState,
     pub(crate) may_send_application_data: bool,
+    pub(crate) may_send_half_rtt_data: bool,
     has_sent_fatal_alert: bool,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
@@ -389,6 +390,7 @@ impl SendOutput for SendPath {
     }
 
     fn start_traffic(&mut self) {
+        self.may_send_half_rtt_data = true;
         self.start_outgoing_traffic();
     }
 
@@ -403,6 +405,7 @@ impl Default for SendPath {
         Self {
             encrypt_state: EncryptionState::new(),
             may_send_application_data: false,
+            may_send_half_rtt_data: false,
             has_sent_fatal_alert: false,
             has_sent_close_notify: false,
             message_fragmenter: MessageFragmenter::default(),
