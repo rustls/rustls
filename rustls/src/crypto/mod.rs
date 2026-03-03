@@ -117,15 +117,14 @@ pub use crate::suites::CipherSuiteCommon;
 /// API (with [`ConfigBuilder::with_single_cert`], etc.), it might look like this:
 ///
 /// ```
-/// # #[cfg(feature = "aws-lc-rs")] {
 /// # use std::sync::Arc;
 /// # mod fictitious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
-/// use rustls::crypto::aws_lc_rs;
 ///
 /// pub fn provider() -> rustls::crypto::CryptoProvider {
-///   rustls::crypto::CryptoProvider{
+/// # let DEFAULT_PROVIDER = panic!();
+///   rustls::crypto::CryptoProvider {
 ///     key_provider: &HsmKeyLoader,
-///     ..aws_lc_rs::DEFAULT_PROVIDER
+///     ..DEFAULT_PROVIDER
 ///   }
 /// }
 ///
@@ -137,7 +136,6 @@ pub use crate::suites::CipherSuiteCommon;
 ///          fictitious_hsm_api::load_private_key(key_der)
 ///     }
 /// }
-/// # }
 /// ```
 ///
 /// ## References to the individual elements
