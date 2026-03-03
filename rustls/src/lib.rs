@@ -157,13 +157,11 @@
 //! the Mozilla set of root certificates.
 //!
 //! ```rust,no_run
-//! # #[cfg(feature = "aws-lc-rs")] {
 //! let root_store = rustls::RootCertStore::from_iter(
 //!     webpki_roots::TLS_SERVER_ROOTS
 //!         .iter()
 //!         .cloned(),
 //! );
-//! # }
 //! ```
 //!
 //! [`webpki_roots`]: https://crates.io/crates/webpki-roots
@@ -172,38 +170,36 @@
 //! and use it for all connections made by that process.
 //!
 //! ```rust,no_run
-//! # #[cfg(feature = "aws-lc-rs")] {
-//! # use std::sync::Arc;
+//! # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap().clone();
 //! # let root_store: rustls::RootCertStore = panic!();
-//! let config = rustls::ClientConfig::builder(Arc::new(rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER))
+//! let config = rustls::ClientConfig::builder(DEFAULT_PROVIDER)
 //!     .with_root_certificates(root_store)
 //!     .with_no_client_auth()
 //!     .unwrap();
-//! # }
 //! ```
 //!
 //! Now we can make a connection.  You need to provide the server's hostname so we
 //! know what to expect to find in the server's certificate.
 //!
-//! ```rust
-//! # #[cfg(feature = "aws-lc-rs")] {
+//! ```rust,no_run
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
-//! # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
+//! # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap().clone();
 //! # let root_store = rustls::RootCertStore::from_iter(
 //! #  webpki_roots::TLS_SERVER_ROOTS
 //! #      .iter()
 //! #      .cloned(),
 //! # );
-//! # let config = rustls::ClientConfig::builder(Arc::new(DEFAULT_PROVIDER))
+//! # let client_config = Arc::new(rustls::ClientConfig::builder(DEFAULT_PROVIDER)
 //! #     .with_root_certificates(root_store)
 //! #     .with_no_client_auth()
-//! #     .unwrap();
-//! let rc_config = Arc::new(config);
+//! #     .unwrap());
+//!
 //! let example_com = "example.com".try_into().unwrap();
-//! let mut client = rustls::ClientConnection::new(rc_config, example_com);
-//! # }
+//! let mut client = client_config.connect(example_com)
+//!     .build()
+//!     .unwrap();
 //! ```
 //!
 //! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields
@@ -230,8 +226,7 @@
 //! errors.
 //!
 //! ```rust,no_run
-//! # #[cfg(feature = "aws-lc-rs")] {
-//! # let mut client = rustls::ClientConnection::new(panic!(), panic!()).unwrap();
+//! # let mut client: rustls::ClientConnection = panic!();
 //! # struct Socket { }
 //! # impl Socket {
 //! #   fn ready_for_write(&self) -> bool { false }
@@ -272,7 +267,6 @@
 //!
 //!   socket.wait_for_something_to_happen();
 //! }
-//! # }
 //! ```
 //!
 //! # Examples

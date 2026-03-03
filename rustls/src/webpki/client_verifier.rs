@@ -204,35 +204,30 @@ impl ClientVerifierBuilder {
 ///
 /// To require all clients present a client certificate issued by a trusted CA:
 /// ```no_run
-/// # #[cfg(feature = "aws-lc-rs")] {
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
-/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
+/// # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap();
 /// # let roots = RootCertStore::empty();
 /// let client_verifier = WebPkiClientVerifier::builder(roots.into(), &DEFAULT_PROVIDER)
 ///   .build()
 ///   .unwrap();
-/// # }
 /// ```
 ///
 /// Or, to allow clients presenting a client certificate authenticated by a trusted CA, or
 /// anonymous clients that present no client certificate:
 /// ```no_run
-/// # #[cfg(feature = "aws-lc-rs")] {
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
-/// # #[cfg(feature = "aws-lc-rs")]
-/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
+/// # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap();
 /// # let roots = RootCertStore::empty();
 /// let client_verifier = WebPkiClientVerifier::builder(roots.into(), &DEFAULT_PROVIDER)
 ///   .allow_unauthenticated()
 ///   .build()
 ///   .unwrap();
-/// # }
 /// ```
 ///
 /// If you wish to disable advertising client authentication:
-/// ```no_run
+/// ```
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
 /// # let roots = RootCertStore::empty();
@@ -242,18 +237,15 @@ impl ClientVerifierBuilder {
 /// You can also configure the client verifier to check for certificate revocation with
 /// client certificate revocation lists (CRLs):
 /// ```no_run
-/// # #[cfg(feature = "aws-lc-rs")] {
-/// # #[cfg(feature = "aws-lc-rs")]
-/// # use rustls::crypto::aws_lc_rs::DEFAULT_PROVIDER;
 /// # use rustls::RootCertStore;
-/// # use rustls::server::{WebPkiClientVerifier};
+/// # use rustls::server::WebPkiClientVerifier;
+/// # let DEFAULT_PROVIDER = rustls::crypto::CryptoProvider::get_default().unwrap();
 /// # let roots = RootCertStore::empty();
 /// # let crls = Vec::new();
 /// let client_verifier = WebPkiClientVerifier::builder(roots.into(), &DEFAULT_PROVIDER)
 ///   .with_crls(crls)
 ///   .build()
 ///   .unwrap();
-/// # }
 /// ```
 ///
 /// [^1]: <https://github.com/rustls/webpki>
