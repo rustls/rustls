@@ -50,13 +50,6 @@ While Rustls itself is platform independent, it requires the use of cryptography
 for implementing the cryptography algorithms used in TLS. In Rustls, a
 [`crypto::CryptoProvider`] represents a collection of crypto primitive implementations.
 
-The Rustls team recommends using the [`aws-lc-rs`] crate for its complete feature set
-and performance. See [the aws-lc-rs FAQ][aws-lc-rs-platforms-faq] for more details of the
-platform/architecture support constraints in aws-lc-rs.
-
-[`ring`] is also available via the `ring` crate feature: see
-[the supported `ring` target platforms][ring-target-platforms].
-
 By providing a custom instance of the [`crypto::CryptoProvider`] struct, you
 can replace all cryptography dependencies of rustls.  This is a route to being portable
 to a wider set of architectures and environments, or compliance requirements.  See the
@@ -64,11 +57,7 @@ to a wider set of architectures and environments, or compliance requirements.  S
 
 Rustls requires Rust 1.83 or later.
 
-[ring-target-platforms]: https://github.com/briansmith/ring/blob/2e8363b433fa3b3962c877d9ed2e9145612f3160/include/ring-core/target.h#L18-L64
 [`crypto::CryptoProvider`]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html
-[`ring`]: https://crates.io/crates/ring
-[aws-lc-rs-platforms-faq]: https://aws.github.io/aws-lc-rs/faq.html#can-i-run-aws-lc-rs-on-x-platform-or-architecture
-[`aws-lc-rs`]: https://crates.io/crates/aws-lc-rs
 
 ### Cryptography providers
 
@@ -84,11 +73,15 @@ From 0.24, users must explicitly provide a crypto provider when constructing `Cl
 The Rustls project currently maintains two cryptography providers:
 
 * [`rustls-aws-lc-rs`] - a provider that uses the [`aws-lc-rs`] crate for cryptography.
-While this provider can be harder to build on some platforms, it provides excellent
+While this provider can be harder to build on [some platforms][aws-lc-rs-platforms-faq], it provides excellent
 performance and a complete feature set (including post-quantum algorithms).
 * [`rustls-ring`] - a provider that uses the [`ring`] crate for cryptography. This
 provider is easier to build on a variety of platforms, but has a more limited feature set
 (for example, it does not support post-quantum algorithms).
+
+The Rustls team recommends using the [`rustls-aws-lc-rs`] crate for its complete feature set
+and performance. See [the aws-lc-rs FAQ][aws-lc-rs-platforms-faq] for more details of the
+platform/architecture support constraints in aws-lc-rs.
 
 See the documentation for [`crypto::CryptoProvider`] for details on how providers are
 selected.
@@ -99,6 +92,7 @@ was enabled by default.)
 
 [`rustls-aws-lc-rs`]: https://crates.io/crates/rustls-aws-lc-rs
 [`aws-lc-rs`]: https://crates.io/crates/aws-lc-rs
+[aws-lc-rs-platforms-faq]: https://aws.github.io/aws-lc-rs/faq.html#can-i-run-aws-lc-rs-on-x-platform-or-architecture
 [`rustls-ring`]: https://crates.io/crates/rustls-ring
 [`ring`]: https://crates.io/crates/ring
 
