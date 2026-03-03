@@ -446,6 +446,16 @@ pub struct ServerConfig {
     ///
     /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
+
+    /// RA-TLS challenge nonce to include in the TLS 1.3 CertificateRequest
+    /// message as extension `0xFFBB`.
+    ///
+    /// When set, this raw byte nonce is sent to the client so it can bind
+    /// the nonce into its own attestation `report_data`, proving the client
+    /// certificate was generated specifically for this TLS connection.
+    ///
+    /// This is typically set per-connection via a fresh `ServerConfig`.
+    pub ratls_challenge: Option<Vec<u8>>,
 }
 
 impl ServerConfig {

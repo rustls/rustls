@@ -586,6 +586,7 @@ impl client::ResolvesClientCert for MultipleClientCredentialResolver {
         &self,
         root_hint_subjects: &[&[u8]],
         sig_schemes: &[SignatureScheme],
+        _ratls_challenge: Option<&[u8]>,
     ) -> Option<Arc<sign::CertifiedKey>> {
         // `sig_schemes` is in server preference order, so respect that.
         for sig_scheme in sig_schemes.iter().copied() {

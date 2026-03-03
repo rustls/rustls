@@ -925,6 +925,11 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 .authority_names
                 .as_deref(),
             &compat_sigschemes,
+            certreq
+                .extensions
+                .ratls_challenge
+                .as_ref()
+                .map(|c| c.0.as_slice()),
             Some(certreq.context.0.clone()),
             compat_compressor,
         );

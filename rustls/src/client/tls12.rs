@@ -764,6 +764,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
                 .as_ref(),
             Some(&certreq.canames),
             &certreq.sigschemes,
+            None, // RA-TLS challenge is TLS 1.3 only
             NO_CONTEXT,
             no_compression,
         );

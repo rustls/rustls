@@ -2231,6 +2231,32 @@ impl Codec<'_> for CertificateRequestPayload {
     }
 }
 
+/// RA-TLS challenge nonce (extension type `0xFFBB`).
+///
+/// Carries a raw byte nonce (typically 32 bytes) for bidirectional
+/// challenge-response attestation between TEEs.  The server includes
+/// this in the CertificateRequest so the client can bind it into its
+/// own attestation report_data.
+#[derive(Clone, Default)]
+pub(crate) struct RaTlsChallenge(pub(crate) Vec<u8>);
+
+impl fmt::Debug for RaTlsChallenge {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RaTlsChallenge({} bytes)", self.0.len())
+    }
+}
+
+impl Codec<'_> for RaTlsChallenge {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.0);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let data = r.rest().to_vec();
+        Ok(Self(data))
+    }
+}
+
 extension_struct! {
     pub(crate) struct CertificateRequestExtensions {
         ExtensionType::SignatureAlgorithms =>
@@ -2241,6 +2267,9 @@ extension_struct! {
 
         ExtensionType::CompressCertificate =>
             pub(crate) certificate_compression_algorithms: Option<Vec<CertificateCompressionAlgorithm>>,
+
+        ExtensionType::RaTls =>
+            pub(crate) ratls_challenge: Option<RaTlsChallenge>,
     }
 }
 

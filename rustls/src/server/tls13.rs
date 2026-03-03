@@ -48,7 +48,7 @@ mod client_hello {
     use crate::msgs::handshake::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
         ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
-        ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
+        RaTlsChallenge, ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
@@ -719,6 +719,10 @@ mod client_hello {
                     &[] => None,
                     authorities => Some(authorities.to_vec()),
                 },
+                ratls_challenge: config.ratls_challenge.as_ref().map(|n| {
+                    RaTlsChallenge(n.clone())
+                }),
+                ..<_>::default()
             },
         };
 

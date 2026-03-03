@@ -110,6 +110,11 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
     /// `sigschemes` is the list of the [`SignatureScheme`]s the server
     /// supports.
     ///
+    /// `ratls_challenge` contains the RA-TLS challenge nonce from
+    /// extension `0xFFBB` in the CertificateRequest, if the server
+    /// included one.  A TEE client can bind this into its attestation
+    /// `report_data` for bidirectional challenge-response attestation.
+    ///
     /// Return `None` to continue the handshake without any client
     /// authentication.  The server may reject the handshake later
     /// if it requires authentication.
@@ -119,6 +124,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
         &self,
         root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
+        ratls_challenge: Option<&[u8]>,
     ) -> Option<Arc<sign::CertifiedKey>>;
 
     /// Return true if the client only supports raw public keys.

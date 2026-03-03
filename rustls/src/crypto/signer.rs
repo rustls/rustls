@@ -112,6 +112,7 @@ impl ResolvesClientCert for SingleCertAndKey {
         &self,
         _root_hint_subjects: &[&[u8]],
         _sigschemes: &[SignatureScheme],
+        _ratls_challenge: Option<&[u8]>,
     ) -> Option<Arc<CertifiedKey>> {
         Some(self.0.clone())
     }

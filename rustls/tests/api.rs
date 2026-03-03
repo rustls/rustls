@@ -1829,6 +1829,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
         &self,
         root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
+        _ratls_challenge: Option<&[u8]>,
     ) -> Option<Arc<sign::CertifiedKey>> {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);
