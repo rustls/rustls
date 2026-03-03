@@ -1,10 +1,14 @@
 /*!
 
-The below list reflects the support provided with the default crate features.
-Items marked with an asterisk `*` can be extended or altered via public
-APIs ([`CryptoProvider`] for example).
+The below list reflects the support provided from the first-party provider crates
+[`rustls-aws-lc-rs`] or [`rustls-ring`].
+
+Items marked with an asterisk `*` can be extended or altered via public APIs ([`CryptoProvider`] for example)
+and are dependent on the provider used.
 
 [`CryptoProvider`]: crate::crypto::CryptoProvider
+[`rustls-aws-lc-rs`]: https://crates.io/crates/rustls-aws-lc-rs
+[`rustls-ring`]: https://crates.io/crates/rustls-ring
 
 ## Current features
 

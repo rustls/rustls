@@ -289,23 +289,14 @@
 //! - `std` (enabled by default): enable the high-level (buffered) Connection API and other functionality
 //!   which relies on the `std` library.
 //!
-//! - `aws-lc-rs`: makes the rustls crate depend on the [`aws-lc-rs`] crate.
-//!   Use `rustls::crypto::aws_lc_rs::default_provider().install_default()` to
-//!   use it as the default `CryptoProvider`, or provide it explicitly
-//!   when making a `ClientConfig` or `ServerConfig`.
-//!
-//!   Note that aws-lc-rs has additional build-time dependencies like cmake.
-//!   See [the documentation](https://aws.github.io/aws-lc-rs/requirements/index.html) for details.
-//!
-//! - `ring`: makes the rustls crate depend on the *ring* crate for cryptography.
-//!   Use `rustls::crypto::ring::default_provider().install_default()` to
-//!   use it as the default `CryptoProvider`, or provide it explicitly
-//!   when making a `ClientConfig` or `ServerConfig`.
-//!
 //! - `log` (enabled by default): make the rustls crate depend on the `log` crate.
 //!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
 //!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
 //!   contain secret key data, and so are safe to archive without affecting session security.
+//!
+//! - `webpki` (enabled by default): make the rustls crate depend on the `rustls-wepbki` crate, which
+//!   is used by default to provide built-in certificate verification.  Without this feature, users must
+//!   provide certificate verification themselves.
 //!
 //! - `brotli`: uses the `brotli` crate for RFC8879 certificate compression support.
 //!
