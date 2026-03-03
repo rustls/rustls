@@ -148,6 +148,11 @@ pub struct ClientHello<'a> {
     /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
     pub(super) certificate_authorities: Option<&'a [DistinguishedName]>,
     pub(super) named_groups: Option<&'a [NamedGroup]>,
+    /// RA-TLS challenge nonce received in the ClientHello extension `0xFFBB`.
+    ///
+    /// When the client includes the nonce, this is `Some(&[u8])` so the
+    /// server cert resolver can bind its attestation quote to the challenge.
+    pub(super) ratls_challenge: Option<&'a [u8]>,
 }
 
 impl<'a> ClientHello<'a> {
@@ -239,6 +244,13 @@ impl<'a> ClientHello<'a> {
     /// [`named_groups`]:https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.7
     pub fn named_groups(&self) -> Option<&'a [NamedGroup]> {
         self.named_groups
+    }
+
+    /// Get the RA-TLS challenge nonce from the ClientHello extension `0xFFBB`.
+    ///
+    /// Returns `None` if the client did not include the extension.
+    pub fn ratls_challenge(&self) -> Option<&'a [u8]> {
+        self.ratls_challenge
     }
 }
 
@@ -1041,6 +1053,10 @@ impl Accepted {
                 .certificate_authority_names
                 .as_deref(),
             named_groups: payload.named_groups.as_deref(),
+            ratls_challenge: payload
+                .ratls_challenge
+                .as_ref()
+                .map(|c| c.0.as_slice()),
         };
 
         trace!("Accepted::client_hello(): {ch:#?}");

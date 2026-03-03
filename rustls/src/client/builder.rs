@@ -169,6 +169,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             max_fragment_size: None,
             client_auth_cert_resolver,
             versions: self.state.versions,
+            ratls_challenge: None,
             enable_sni: true,
             verifier: self.state.verifier,
             key_log: Arc::new(NoKeyLog {}),

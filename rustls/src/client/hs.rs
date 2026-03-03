@@ -31,8 +31,9 @@ use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, KeyShareEntry, ProtocolName, PskKeyExchangeModes, Random, ServerNamePayload,
-    SessionId, SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
+    HelloRetryRequest, KeyShareEntry, ProtocolName, PskKeyExchangeModes, Random, RaTlsChallenge,
+    ServerNamePayload, SessionId, SupportedEcPointFormats, SupportedProtocolVersions,
+    TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -228,6 +229,10 @@ fn emit_client_hello_for_retry(
         extended_master_secret_request: Some(()),
         certificate_status_request: Some(CertificateStatusRequest::build_ocsp()),
         protocols: extra_exts.protocols.clone(),
+        ratls_challenge: config
+            .ratls_challenge
+            .as_ref()
+            .map(|n| RaTlsChallenge(n.clone())),
         ..Default::default()
     });
 

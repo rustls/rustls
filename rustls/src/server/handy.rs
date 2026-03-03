@@ -283,6 +283,7 @@ mod sni_resolver {
                         cipher_suites: &[],
                         certificate_authorities: None,
                         named_groups: None,
+                        ratls_challenge: None,
                     })
                     .is_none()
             );
@@ -305,6 +306,7 @@ mod sni_resolver {
                         cipher_suites: &[],
                         certificate_authorities: None,
                         named_groups: None,
+                        ratls_challenge: None,
                     })
                     .is_none()
             );

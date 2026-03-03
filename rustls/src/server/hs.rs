@@ -437,6 +437,10 @@ impl ExpectClientHello {
                 cipher_suites: &client_hello.cipher_suites,
                 certificate_authorities,
                 named_groups: client_hello.named_groups.as_deref(),
+                ratls_challenge: client_hello
+                    .ratls_challenge
+                    .as_ref()
+                    .map(|c| c.0.as_slice()),
             };
             trace!("Resolving server certificate: {client_hello:#?}");
 

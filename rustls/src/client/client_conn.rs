@@ -242,6 +242,15 @@ pub struct ClientConfig {
     #[cfg(feature = "tls12")]
     pub require_ems: bool,
 
+    /// RA-TLS challenge nonce to include in the ClientHello as extension `0xFFBB`.
+    ///
+    /// When set, the client sends this nonce in the ClientHello so the server
+    /// can bind its attestation quote to the client's challenge. This enables
+    /// bidirectional challenge-response RA-TLS attestation.
+    ///
+    /// `None` (the default) means no RA-TLS challenge extension is sent.
+    pub ratls_challenge: Option<Vec<u8>>,
+
     /// Provides the current system time
     pub time_provider: Arc<dyn TimeProvider>,
 

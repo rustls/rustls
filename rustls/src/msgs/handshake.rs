@@ -927,6 +927,11 @@ extension_struct! {
         /// Encrypted client hello outer extensions (draft-ietf-tls-esni)
         ExtensionType::EncryptedClientHelloOuterExtensions =>
             pub(crate) encrypted_client_hello_outer: Option<Vec<ExtensionType>>,
+
+        /// RA-TLS challenge nonce for bidirectional challenge-response attestation.
+        /// Sent in TLS extension 0xFFBB so the server can bind its quote to the client's nonce.
+        ExtensionType::RaTls =>
+            pub(crate) ratls_challenge: Option<RaTlsChallenge>,
     } + {
         /// Order randomization seed.
         pub(crate) order_seed: u16,
@@ -962,6 +967,7 @@ impl ClientExtensions<'_> {
             transport_parameters_draft,
             encrypted_client_hello,
             encrypted_client_hello_outer,
+            ratls_challenge,
             order_seed,
             contiguous_extensions,
         } = self;
@@ -989,6 +995,7 @@ impl ClientExtensions<'_> {
             transport_parameters_draft: transport_parameters_draft.map(|x| x.into_owned()),
             encrypted_client_hello,
             encrypted_client_hello_outer,
+            ratls_challenge,
             order_seed,
             contiguous_extensions,
         }
