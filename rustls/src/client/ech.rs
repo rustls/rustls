@@ -145,7 +145,7 @@ impl EchConfig {
 
     /// Compute the HPKE `SetupBaseS` `info` parameter for this ECH configuration.
     ///
-    /// See <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-6.1>.
+    /// See <https://datatracker.ietf.org/doc/html/rfc9849#section-6.1>.
     pub(crate) fn hpke_info(&self) -> Vec<u8> {
         let mut info = Vec::with_capacity(128);
         // "tls ech" || 0x00 || ECHConfig
@@ -228,7 +228,7 @@ impl EchGreaseConfig {
 
     /// Build a GREASE ECH extension based on the placeholder configuration.
     ///
-    /// See <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#name-grease-ech> for
+    /// See <https://datatracker.ietf.org/doc/html/rfc9849#name-grease-ech> for
     /// more information.
     pub(crate) fn grease_ext(
         &self,
@@ -753,7 +753,7 @@ impl EchState {
         encoded_hello
     }
 
-    // See https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#name-grease-psk
+    // See https://datatracker.ietf.org/doc/html/rfc9849#name-grease-psk
     fn grease_psk(&self, psk_offer: &mut PresharedKeyOffer) -> Result<(), Error> {
         for ident in psk_offer.identities.iter_mut() {
             // "For each PSK identity advertised in the ClientHelloInner, the

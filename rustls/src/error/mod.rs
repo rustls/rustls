@@ -753,7 +753,7 @@ enum_builder! {
         UnknownPskIdentity => 0x73,
         CertificateRequired => 0x74,
         NoApplicationProtocol => 0x78,
-        EncryptedClientHelloRequired => 0x79, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-11.2
+        EncryptedClientHelloRequired => 0x79, // https://datatracker.ietf.org/doc/html/rfc9849#section-11.2
     }
 }
 
@@ -861,7 +861,7 @@ impl fmt::Display for AlertDescription {
             ),
 
             // ECH requirement by clients, see
-            // <https://datatracker.ietf.org/doc/draft-ietf-tls-esni/25/>
+            // <https://datatracker.ietf.org/doc/html/rfc9849#name-update-of-the-tls-alert-reg>
             Self::EncryptedClientHelloRequired => {
                 write!(f, "required use of encrypted client hello")
             }

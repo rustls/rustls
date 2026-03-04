@@ -154,7 +154,7 @@ extension_struct! {
         ExtensionType::EarlyData =>
             pub(crate) early_data_ack: Option<()>,
 
-        /// Encrypted inner client hello response (draft-ietf-tls-esni)
+        /// Encrypted inner client hello response (RFC 9849)
         ExtensionType::EncryptedClientHello =>
             pub(crate) encrypted_client_hello_ack: Option<ServerEncryptedClientHello>,
     } + {
@@ -229,9 +229,9 @@ impl<'a> Codec<'a> for ServerExtensions<'a> {
 }
 
 /// Representation of the ECHEncryptedExtensions extension specified in
-/// [draft-ietf-tls-esni Section 5].
+/// [RFC 9849 Section 5].
 ///
-/// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-18.html#section-5>
+/// [RFC 9849 Section 5]: <https://datatracker.ietf.org/doc/html/rfc9849#section-5>
 #[derive(Clone, Debug)]
 pub(crate) struct ServerEncryptedClientHello {
     pub(crate) retry_configs: Vec<EchConfigPayload>,
@@ -361,7 +361,7 @@ impl Codec<'_> for EchConfigContents {
 pub(crate) struct HpkeKeyConfig {
     pub config_id: u8,
     pub kem_id: HpkeKem,
-    /// draft-ietf-tls-esni-24: `opaque HpkePublicKey<1..2^16-1>;`
+    /// RFC 9849: `opaque HpkePublicKey<1..2^16-1>;`
     pub public_key: SizedPayload<'static, u16, NonEmpty>,
     pub symmetric_cipher_suites: Vec<HpkeSymmetricCipherSuite>,
 }

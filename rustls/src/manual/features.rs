@@ -35,7 +35,7 @@ and are dependent on the provider used.
 * [RFC8879](https://tools.ietf.org/html/rfc8879) certificate compression by clients
   and servers `*`
 * Client-side Encrypted client hello (ECH)
-   ([draft-ietf-tls-esni](https://datatracker.ietf.org/doc/draft-ietf-tls-esni/)).
+   ([RFC 9849](https://datatracker.ietf.org/doc/html/rfc9849)).
 
 [^1]: Note that, at the time of writing, Ed25519 does not have wide support
       in browsers.  It is also not supported by the WebPKI, because the

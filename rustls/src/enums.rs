@@ -221,9 +221,9 @@ enum_builder! {
 enum_builder! {
     /// The type of Encrypted Client Hello (`EchClientHelloType`).
     ///
-    /// Specified in [draft-ietf-tls-esni Section 5].
+    /// Specified in [RFC 9849 Section 5].
     ///
-    /// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-18.html#section-5>
+    /// [RFC 9849 Section 5]: <https://datatracker.ietf.org/doc/html/rfc9849#section-5>
     #[repr(u8)]
     pub enum EchClientHelloType {
         ClientHelloOuter => 0,
