@@ -3,7 +3,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection};
+use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection, VecBuffer};
 
 // These tests exercise rustls_fuzzing_provider and makes sure it can
 // handshake with itself without errors.
@@ -103,6 +103,7 @@ fn test_version(provider: CryptoProvider) -> Transcript {
         .unwrap();
 
     let mut transcript = Transcript::default();
+    let (mut client_buf, mut server_buf) = (VecBuffer::default(), VecBuffer::default());
 
     while client.is_handshaking() || server.is_handshaking() {
         let mut buffer = vec![];
@@ -112,10 +113,12 @@ fn test_version(provider: CryptoProvider) -> Transcript {
         transcript
             .client_wrote
             .extend_from_slice(&buffer);
-        server
-            .read_tls(&mut &buffer[..])
+        server_buf
+            .read(&mut &buffer[..])
             .unwrap();
-        server.process_new_packets().unwrap();
+        server
+            .process_new_packets(&mut server_buf)
+            .unwrap();
 
         let mut buffer = vec![];
         server
@@ -124,10 +127,12 @@ fn test_version(provider: CryptoProvider) -> Transcript {
         transcript
             .server_wrote
             .extend_from_slice(&buffer);
-        client
-            .read_tls(&mut &buffer[..])
+        client_buf
+            .read(&mut &buffer[..])
             .unwrap();
-        client.process_new_packets().unwrap();
+        client
+            .process_new_packets(&mut client_buf)
+            .unwrap();
     }
 
     transcript

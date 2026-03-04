@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use rustls::VecBuffer;
 use rustls::crypto::Identity;
 use rustls::enums::CertificateType;
 use rustls::error::{Error, PeerIncompatible};
@@ -21,7 +22,9 @@ fn successful_raw_key_connection_and_correct_peer_certificates() {
         let server_config = make_server_config_with_raw_key_support(*kt, &provider);
 
         let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-        do_handshake(&mut client, &mut server);
+        let mut client_buf = VecBuffer::default();
+        let mut server_buf = VecBuffer::default();
+        do_handshake(&mut client_buf, &mut client, &mut server_buf, &mut server);
 
         // Test that the client peer certificate is the server's public key
         match client.peer_identity() {
@@ -67,7 +70,10 @@ fn correct_certificate_type_extensions_from_client_hello() {
         });
 
         let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-        let err = do_handshake_until_error(&mut client, &mut server);
+        let mut client_buf = VecBuffer::default();
+        let mut server_buf = VecBuffer::default();
+        let err =
+            do_handshake_until_error(&mut client_buf, &mut client, &mut server_buf, &mut server);
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -85,7 +91,14 @@ fn only_client_supports_raw_keys() {
         let (mut client_rpk, mut server) = make_pair_for_configs(client_config_rpk, server_config);
 
         // The client
-        match do_handshake_until_error(&mut client_rpk, &mut server) {
+        let mut client_buf = VecBuffer::default();
+        let mut server_buf = VecBuffer::default();
+        match do_handshake_until_error(
+            &mut client_buf,
+            &mut client_rpk,
+            &mut server_buf,
+            &mut server,
+        ) {
             Err(err) => {
                 assert_eq!(
                     err,
@@ -110,7 +123,14 @@ fn only_server_supports_raw_keys() {
 
         let (mut client, mut server_rpk) = make_pair_for_configs(client_config, server_config_rpk);
 
-        match do_handshake_until_error(&mut client, &mut server_rpk) {
+        let mut client_buf = VecBuffer::default();
+        let mut server_buf = VecBuffer::default();
+        match do_handshake_until_error(
+            &mut client_buf,
+            &mut client,
+            &mut server_buf,
+            &mut server_rpk,
+        ) {
             Err(err) => {
                 assert_eq!(
                     err,

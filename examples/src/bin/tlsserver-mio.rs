@@ -33,7 +33,7 @@ use rustls::enums::{ApplicationProtocol, ProtocolVersion};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::{NoServerSessionStorage, WebPkiClientVerifier};
-use rustls::{Connection, RootCertStore, ServerConfig, ServerConnection};
+use rustls::{Connection, RootCertStore, ServerConfig, ServerConnection, VecBuffer};
 use rustls_aws_lc_rs as provider;
 use rustls_util::KeyLogFile;
 
@@ -130,6 +130,7 @@ struct OpenConnection {
     mode: ServerMode,
     tls_conn: ServerConnection,
     back: Option<TcpStream>,
+    buf: VecBuffer,
     sent_http_response: bool,
 }
 
@@ -176,6 +177,7 @@ impl OpenConnection {
             mode,
             tls_conn,
             back,
+            buf: VecBuffer::default(),
             sent_http_response: false,
         }
     }
@@ -217,7 +219,7 @@ impl OpenConnection {
 
     fn do_tls_read(&mut self) {
         // Read some TLS data.
-        match self.tls_conn.read_tls(&mut self.socket) {
+        match self.buf.read(&mut self.socket) {
             Err(err) => {
                 if let io::ErrorKind::WouldBlock = err.kind() {
                     return;
@@ -236,7 +238,10 @@ impl OpenConnection {
         };
 
         // Process newly-received TLS messages.
-        if let Err(err) = self.tls_conn.process_new_packets() {
+        if let Err(err) = self
+            .tls_conn
+            .process_new_packets(&mut self.buf)
+        {
             error!("cannot process packet: {err:?}");
 
             // last gasp write to send any alerts
@@ -248,7 +253,10 @@ impl OpenConnection {
 
     fn try_plain_read(&mut self) {
         // Read and process all available plaintext.
-        if let Ok(io_state) = self.tls_conn.process_new_packets() {
+        if let Ok(io_state) = self
+            .tls_conn
+            .process_new_packets(&mut self.buf)
+        {
             if let Some(mut early_data) = self.tls_conn.early_data() {
                 let mut buf = Vec::new();
                 early_data
