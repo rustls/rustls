@@ -408,7 +408,7 @@ impl TlsListElement for Compression {
     };
 }
 
-/// draft-ietf-tls-esni-17: `ExtensionType OuterExtensions<2..254>;`
+/// RFC 9849: `ExtensionType OuterExtensions<2..254>;`
 impl TlsListElement for ExtensionType {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
         empty_error: InvalidMessage::IllegalEmptyList("ExtensionTypes"),
@@ -533,8 +533,8 @@ impl HelloRetryRequest {
             // For the purpose of ECH confirmation, the Encrypted Client Hello extension
             // must have its payload replaced by 8 zero bytes.
             //
-            // See draft-ietf-tls-esni-18 7.2.1:
-            // <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#name-sending-helloretryrequest-2>
+            // See RFC 9849 7.2.1:
+            // <https://datatracker.ietf.org/doc/html/rfc9849#name-sending-helloretryrequest>
             Encoding::EchConfirmation
                 if self
                     .extensions

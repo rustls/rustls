@@ -99,8 +99,8 @@ enum_builder! {
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
         RenegotiationInfo => 0xff01,
-        EncryptedClientHello => 0xfe0d, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-11.1
-        EncryptedClientHelloOuterExtensions => 0xfd00, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-5.1
+        EncryptedClientHello => 0xfe0d, // https://datatracker.ietf.org/doc/html/rfc9849#section-11.1
+        EncryptedClientHelloOuterExtensions => 0xfd00, // https://datatracker.ietf.org/doc/html/rfc9849#section-5.1
     }
 }
 
@@ -112,8 +112,8 @@ impl ExtensionType {
     /// sometimes (e.g. server name, cert compression methods), but not always, SHOULD NOT be
     /// compressed.
     ///
-    /// See [draft-ietf-tls-esni-18 §5](https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-5)
-    /// and [draft-ietf-tls-esni-18 §10.5](https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-10.5)
+    /// See [RFC 9849 §5](https://datatracker.ietf.org/doc/html/rfc9849#section-5)
+    /// and [RFC 9849 §10.5](https://datatracker.ietf.org/doc/html/rfc9849#section-10.5)
     /// for more information.
     pub(crate) fn ech_compress(&self) -> bool {
         // We match which extensions we will compress with BoringSSL and Go's stdlib.
@@ -212,10 +212,9 @@ enum_builder! {
 enum_builder! {
     /// The Encrypted Client Hello protocol version (`EchVersion`).
     ///
-    /// Specified in [draft-ietf-tls-esni Section 4].
-    /// TODO(XXX): Update reference once RFC is published.
+    /// Specified in [RFC 9849 Section 4].
     ///
-    /// [draft-ietf-tls-esni Section 4]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-4>
+    /// [RFC 9849 Section 4]: <https://datatracker.ietf.org/doc/html/rfc9849#section-4>
     #[repr(u16)]
     pub enum EchVersion {
         V18 => 0xfe0d,

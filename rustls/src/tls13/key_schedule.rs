@@ -304,8 +304,8 @@ impl KeyScheduleHandshakeStart {
         hs_hash: hash::Output,
     ) -> [u8; 8] {
         /*
-        Per ietf-tls-esni-17 section 7.2:
-        <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-7.2>
+        Per RFC 9849 section 7.2:
+        <https://datatracker.ietf.org/doc/html/rfc9849#section-7.2>
         accept_confirmation = HKDF-Expand-Label(
           HKDF-Extract(0, ClientHelloInner.random),
           "ech accept confirmation",
@@ -1128,8 +1128,8 @@ pub(crate) fn server_ech_hrr_confirmation_secret(
     hs_hash: hash::Output,
 ) -> [u8; 8] {
     /*
-    Per ietf-tls-esni-17 section 7.2.1:
-    <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-7.2.1>
+    Per RFC 9849 section 7.2.1:
+    <https://datatracker.ietf.org/doc/html/rfc9849#section-7.2.1>
     hrr_accept_confirmation = HKDF-Expand-Label(
       HKDF-Extract(0, ClientHelloInner1.random),
       "hrr ech accept confirmation",
@@ -1204,9 +1204,9 @@ impl SecretKind {
             ExporterMasterSecret => b"exp master",
             ResumptionMasterSecret => b"res master",
             DerivedSecret => b"derived",
-            // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-7.2
+            // https://datatracker.ietf.org/doc/html/rfc9849#section-7.2
             ServerEchConfirmationSecret => b"ech accept confirmation",
-            // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-7.2.1
+            // https://datatracker.ietf.org/doc/html/rfc9849#section-7.2.1
             ServerEchHrrConfirmationSecret => b"hrr ech accept confirmation",
         }
     }
