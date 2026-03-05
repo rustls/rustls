@@ -662,9 +662,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             return Ok(0);
         }
 
-        let res = self
-            .deframer_buffer
-            .read(rd, self.recv.hs_deframer.is_active());
+        let res = self.deframer_buffer.read(rd);
         if let Ok(0) = res {
             self.has_seen_eof = true;
         }
