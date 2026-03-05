@@ -6,6 +6,7 @@ We recommend new users start by looking at `simpleclient.rs` and `simpleserver.r
 
 ## Client examples
 
+* `async-client.rs` - demonstrates using the lower-level state-based API to make a client using `tokio` for asynchronous I/O.
 * `simpleclient.rs` - shows a simple client configuration that uses sensible defaults. It demonstrates using the `Stream` helper to treat a Rustls connection as you would a bi-directional TCP stream.
 * `tlsclient-mio.rs` - shows a more complete client example that handles command line flags for customizing TLS options, and uses MIO to handle asynchronous I/O.
 * `limitedclient.rs` - shows how to configure Rustls so that unused cryptography is discarded by the linker. This client only supports TLS 1.3 and a single cipher suite.
