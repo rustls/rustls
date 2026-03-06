@@ -388,6 +388,12 @@ impl EchState {
             sender,
             config_id: key_config.config_id,
             inner_name,
+            // outer_name: config_contents.public_name.clone(),
+            // testing this via: 
+            // cargo run --package rustls-examples --bin ech-client -- --host test.defo.ie --path "" test.defo.ie test.defo.ie
+            // or 
+            // cargo run --package rustls-examples --bin ech-client -- --host rfc5746.mywaifu.best --port 5443 --path "plain" rfc5746.mywaifu.best rfc5746.mywaifu.best
+            outer_name: DnsName::try_from("superpublicname.com").unwrap(),
             maximum_name_length: config_contents.maximum_name_length,
             cipher_suite: config.suite.suite().sym,
             protocol,
