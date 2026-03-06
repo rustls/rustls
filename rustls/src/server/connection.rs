@@ -429,7 +429,7 @@ impl io::Read for ReadEarlyData<'_> {
 pub struct Accepted {
     // invariant: `connection.core.state` is `Err(_)` and requires restoring
     connection: ConnectionCommon<ServerSide>,
-    choose_config: ChooseConfig,
+    choose_config: Box<ChooseConfig>,
 }
 
 impl Accepted {
