@@ -5,7 +5,8 @@ use core::ops::Range;
 use super::SendOutput;
 use crate::SideData;
 use crate::common_state::{
-    ConnectionOutputs, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
+    ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, Side, UnborrowedPayload,
+    maybe_send_fatal_alert,
 };
 use crate::conn::StateMachine;
 use crate::conn::private::SideOutput;
