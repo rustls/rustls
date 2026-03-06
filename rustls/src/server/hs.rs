@@ -38,7 +38,7 @@ pub(crate) enum ServerState {
     ReadClientHello(ReadClientHello),
 
     /// Choose a [`ServerConfig`] based on the received ClientHello.
-    ChooseConfig(ChooseConfig),
+    ChooseConfig(Box<ChooseConfig>),
 
     /// Processing the received ClientHello.
     ClientHello(Box<ExpectClientHello>),
@@ -365,14 +365,14 @@ impl ReadClientHello {
         _output: &mut dyn Output,
     ) -> Result<ServerState, Error> {
         ClientHelloInput::from_input(&input)?;
-        Ok(ChooseConfig {
+        Ok(Box::new(ChooseConfig {
             client_hello: Input {
                 message: input.message.into_owned(),
                 aligned_handshake: input.aligned_handshake,
             },
             resumption_data: self.resumption_data,
             protocol: self.protocol,
-        }
+        })
         .into())
     }
 
@@ -428,8 +428,8 @@ impl ChooseConfig {
     }
 }
 
-impl From<ChooseConfig> for ServerState {
-    fn from(value: ChooseConfig) -> Self {
+impl From<Box<ChooseConfig>> for ServerState {
+    fn from(value: Box<ChooseConfig>) -> Self {
         Self::ChooseConfig(value)
     }
 }

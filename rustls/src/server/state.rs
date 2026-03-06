@@ -220,7 +220,7 @@ pub struct ChooseConfig {
     // invariant: `inner.state` is `Err(_)` with a meaningless error,
     // it should be reinserted before further use.
     inner: Box<ConnectionCore<ServerSide>>,
-    choose_config: hs::ChooseConfig,
+    choose_config: Box<hs::ChooseConfig>,
 }
 
 impl ChooseConfig {
