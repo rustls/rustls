@@ -9,8 +9,9 @@ use pki_types::FipsStatus;
 
 use crate::ConnectionOutputs;
 use crate::common_state::{
-    CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, Input, JoinOutput, Output,
-    OutputEvent, ReceivePath, SendOutput, SendPath, UnborrowedPayload, maybe_send_fatal_alert,
+    CaptureAppData, CommonState, ConnectionOutput, DEFAULT_BUFFER_LIMIT, Event, Input, JoinOutput,
+    Output, OutputEvent, ReceivePath, SendOutput, SendPath, UnborrowedPayload,
+    maybe_send_fatal_alert,
 };
 use crate::conn::private::SideOutput;
 use crate::crypto::cipher::Decrypted;

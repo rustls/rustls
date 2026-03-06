@@ -110,29 +110,6 @@ pub struct ConnectionOutputs {
 }
 
 impl ConnectionOutputs {
-    pub(crate) fn handle(&mut self, ev: OutputEvent<'_>) {
-        match ev {
-            OutputEvent::ApplicationProtocol(protocol) => {
-                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
-            }
-            OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
-            OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
-            OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
-            OutputEvent::HandshakeKind(hk) => {
-                assert!(self.handshake_kind.is_none());
-                self.handshake_kind = Some(hk);
-            }
-            OutputEvent::KeyExchangeGroup(kxg) => {
-                assert!(self.negotiated_kx_group.is_none());
-                self.negotiated_kx_group = Some(kxg);
-            }
-            OutputEvent::PeerIdentity(identity) => self.peer_identity = Some(identity),
-            OutputEvent::ProtocolVersion(ver) => {
-                self.negotiated_version = Some(ver);
-            }
-        }
-    }
-
     /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
     ///
     /// This is made available for both full and resumed handshakes.
@@ -201,6 +178,31 @@ impl ConnectionOutputs {
         match (negotiated_version, suite) {
             (Some(version), Some(suite)) => Some((version, suite)),
             _ => None,
+        }
+    }
+}
+
+impl ConnectionOutput for ConnectionOutputs {
+    fn handle(&mut self, ev: OutputEvent<'_>) {
+        match ev {
+            OutputEvent::ApplicationProtocol(protocol) => {
+                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
+            }
+            OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
+            OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
+            OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
+            OutputEvent::HandshakeKind(hk) => {
+                assert!(self.handshake_kind.is_none());
+                self.handshake_kind = Some(hk);
+            }
+            OutputEvent::KeyExchangeGroup(kxg) => {
+                assert!(self.negotiated_kx_group.is_none());
+                self.negotiated_kx_group = Some(kxg);
+            }
+            OutputEvent::PeerIdentity(identity) => self.peer_identity = Some(identity),
+            OutputEvent::ProtocolVersion(ver) => {
+                self.negotiated_version = Some(ver);
+            }
         }
     }
 }
@@ -1053,7 +1055,7 @@ impl Output for CaptureAppData<'_, '_> {
 }
 
 pub(crate) struct JoinOutput<'a> {
-    pub(crate) outputs: &'a mut ConnectionOutputs,
+    pub(crate) outputs: &'a mut dyn ConnectionOutput,
     pub(crate) quic: Option<&'a mut dyn QuicOutput>,
     pub(crate) send: &'a mut dyn SendOutput,
     pub(crate) side: &'a mut dyn SideOutput,
@@ -1110,6 +1112,10 @@ pub(crate) trait SendOutput {
     fn start_traffic(&mut self);
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+}
+
+pub(crate) trait ConnectionOutput {
+    fn handle(&mut self, ev: OutputEvent<'_>);
 }
 
 /// The set of events output by the low-level handshake state machine.
