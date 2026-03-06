@@ -7,7 +7,7 @@ use kernel::KernelConnection;
 use pki_types::FipsStatus;
 
 use crate::common_state::{
-    CommonState, ConnectionOutputs, Event, Output, OutputEvent, UnborrowedPayload,
+    CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, UnborrowedPayload,
 };
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;

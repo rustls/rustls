@@ -100,29 +100,6 @@ pub struct ConnectionOutputs {
 }
 
 impl ConnectionOutputs {
-    pub(crate) fn handle(&mut self, ev: OutputEvent<'_>) {
-        match ev {
-            OutputEvent::ApplicationProtocol(protocol) => {
-                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
-            }
-            OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
-            OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
-            OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
-            OutputEvent::HandshakeKind(hk) => {
-                assert!(self.handshake_kind.is_none());
-                self.handshake_kind = Some(hk);
-            }
-            OutputEvent::KeyExchangeGroup(kxg) => {
-                assert!(self.negotiated_kx_group.is_none());
-                self.negotiated_kx_group = Some(kxg);
-            }
-            OutputEvent::PeerIdentity(identity) => self.peer_identity = Some(identity),
-            OutputEvent::ProtocolVersion(ver) => {
-                self.negotiated_version = Some(ver);
-            }
-        }
-    }
-
     /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
     ///
     /// This is made available for both full and resumed handshakes.
@@ -195,6 +172,31 @@ impl ConnectionOutputs {
     }
 }
 
+impl ConnectionOutput for ConnectionOutputs {
+    fn handle(&mut self, ev: OutputEvent<'_>) {
+        match ev {
+            OutputEvent::ApplicationProtocol(protocol) => {
+                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
+            }
+            OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
+            OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
+            OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
+            OutputEvent::HandshakeKind(hk) => {
+                assert!(self.handshake_kind.is_none());
+                self.handshake_kind = Some(hk);
+            }
+            OutputEvent::KeyExchangeGroup(kxg) => {
+                assert!(self.negotiated_kx_group.is_none());
+                self.negotiated_kx_group = Some(kxg);
+            }
+            OutputEvent::PeerIdentity(identity) => self.peer_identity = Some(identity),
+            OutputEvent::ProtocolVersion(ver) => {
+                self.negotiated_version = Some(ver);
+            }
+        }
+    }
+}
+
 /// Send an alert via `output` if `error` specifies one.
 pub(crate) fn maybe_send_fatal_alert(send: &mut dyn SendOutput, error: &Error) {
     let Ok(alert) = AlertDescription::try_from(error) else {
@@ -254,6 +256,10 @@ pub(crate) trait Output<'m> {
     fn receive(&mut self) -> &mut ReceivePath;
 
     fn send(&mut self) -> &mut dyn SendOutput;
+}
+
+pub(crate) trait ConnectionOutput {
+    fn handle(&mut self, ev: OutputEvent<'_>);
 }
 
 /// The set of events output by the low-level handshake state machine.
