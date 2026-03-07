@@ -11,8 +11,8 @@ use crate::enums::{ApplicationProtocol, CertificateType};
 use crate::error::{ApiMisuse, Error, InvalidMessage};
 use crate::log::{debug, trace};
 use crate::msgs::{
-    CertificateChain, Codec, ExtensionType, MaybeEmpty, Reader, ServerExtensions, SessionId,
-    SizedPayload,
+    CertificateChain, Codec, ExtensionType, MaybeEmpty, NewSessionTicketPayloadTls13, Reader,
+    ServerExtensions, SessionId, SizedPayload,
 };
 use crate::sync::Arc;
 use crate::verify::DistinguishedName;
@@ -145,20 +145,25 @@ impl Tls13Session {
     }
 
     pub(crate) fn new(
+        ticket: &NewSessionTicketPayloadTls13,
         input: Tls13ClientSessionInput,
-        ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
         secret: &[u8],
         time_now: UnixTime,
-        lifetime: Duration,
-        age_add: u32,
-        max_early_data_size: u32,
     ) -> Self {
         Self {
             suite: input.suite,
             secret: Zeroizing::new(secret.to_vec().into()),
-            age_add,
-            max_early_data_size,
-            common: ClientSessionCommon::new(ticket, time_now, lifetime, input.peer_identity),
+            age_add: ticket.age_add,
+            max_early_data_size: ticket
+                .extensions
+                .max_early_data_size
+                .unwrap_or_default(),
+            common: ClientSessionCommon::new(
+                ticket.ticket.clone(),
+                time_now,
+                ticket.lifetime,
+                input.peer_identity,
+            ),
             quic_params: input
                 .quic_params
                 .unwrap_or_else(|| SizedPayload::from(Payload::new(Vec::new()))),
