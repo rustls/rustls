@@ -3,8 +3,8 @@
 use alloc::boxed::Box;
 use core::ops::Deref;
 
-use crate::common_state::{Output, Protocol, ReceivePath, SendOutput, Side};
-use crate::conn::Exporter;
+use crate::common_state::{Output, Protocol, ReceivePath, Side};
+use crate::conn::{Exporter, SendOutput};
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::kx::SharedSecret;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};

@@ -11,7 +11,8 @@ use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 #[cfg(feature = "webpki")]
 use webpki::ExtendedKeyUsage;
 
-use crate::common_state::{SendPath, maybe_send_fatal_alert};
+use crate::common_state::maybe_send_fatal_alert;
+use crate::conn::SendPath;
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{CipherSuite, GetRandomFailed, InconsistentKeys};
 use crate::enums::{ContentType, HandshakeType};
