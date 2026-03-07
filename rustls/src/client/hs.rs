@@ -49,7 +49,7 @@ pub(crate) enum ClientState {
 }
 
 impl StateMachine for ClientState {
-    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error> {
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error> {
         match self {
             Self::ServerHello(e) => e.handle(input, output),
             Self::ServerHelloOrHelloRetryRequest(e) => e.handle(input, output),
@@ -104,7 +104,7 @@ impl ExpectServerHello {
         mut self,
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error>
     where
         CryptoProvider: Borrow<[&'static T]>,
@@ -173,7 +173,7 @@ impl ExpectServerHello {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         let server_hello = require_handshake_msg!(
             &input.message,
@@ -236,7 +236,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
     fn handle_hello_retry_request(
         mut self,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         let hrr = require_handshake_msg!(
             input.message,
@@ -379,7 +379,11 @@ impl ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self, input: Input<'_>, output: &mut dyn Output) -> Result<ClientState, Error> {
+    fn handle<'m>(
+        self,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
+    ) -> Result<ClientState, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(..)),
@@ -417,7 +421,7 @@ impl ClientHelloInput {
         server_name: ServerName<'static>,
         extra_exts: &ClientExtensionsInput,
         protocol: Protocol,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         config: Arc<ClientConfig>,
     ) -> Result<Self, Error> {
         let session_key = ClientSessionKey {
@@ -481,7 +485,7 @@ impl ClientHelloInput {
     pub(super) fn start_handshake(
         self,
         extra_exts: ClientExtensionsInput,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         let mut transcript_buffer = HandshakeHashBuffer::new();
         if !self
@@ -537,7 +541,7 @@ fn emit_client_hello_for_retry(
     extra_exts: ClientExtensionsInput,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
-    output: &mut dyn Output,
+    output: &mut dyn Output<'_>,
     mut ech_state: Option<EchState>,
     mut ech_status: EchStatus,
 ) -> Result<ClientState, Error> {
@@ -924,7 +928,7 @@ fn prepare_resumption<'a>(
     resuming: &'a Option<Retrieved<ClientSessionValue>>,
     exts: &mut ClientExtensions<'_>,
     suite: Option<SupportedCipherSuite>,
-    output: &mut dyn Output,
+    output: &mut dyn Output<'_>,
     config: &ClientConfig,
 ) -> Option<(Retrieved<&'a Tls13Session>, bool)> {
     // Check whether we're resuming with a non-empty ticket.
@@ -973,7 +977,7 @@ fn prepare_resumption<'a>(
 }
 
 pub(super) fn process_alpn_protocol(
-    output: &mut dyn Output,
+    output: &mut dyn Output<'_>,
     offered_protocols: &[ApplicationProtocol<'_>],
     selected: Option<&ApplicationProtocol<'_>>,
 ) -> Result<(), Error> {
@@ -1006,7 +1010,7 @@ impl ClientSessionValue {
     fn retrieve(
         key: &ClientSessionKey<'static>,
         config: &ClientConfig,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Option<Retrieved<Self>> {
         let found = config
             .resumption
@@ -1079,6 +1083,6 @@ pub(crate) trait ClientHandler<T>: fmt::Debug + Sealed + Send + Sync {
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
         st: ExpectServerHello,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error>;
 }

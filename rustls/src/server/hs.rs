@@ -58,7 +58,7 @@ impl ServerState {
 }
 
 impl crate::conn::StateMachine for ServerState {
-    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error> {
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error> {
         match self {
             Self::ReadClientHello(r) => r.handle(input, output),
             Self::ChooseConfig(_) => {
@@ -99,7 +99,7 @@ impl Tls12Extensions {
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&CommonServerSessionValue<'_>>,
         hello: &ClientHelloPayload,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         using_ems: bool,
         config: &ServerConfig,
     ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
@@ -157,7 +157,7 @@ impl Tls13Extensions {
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&CommonServerSessionValue<'_>>,
         hello: &ClientHelloPayload,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         config: &ServerConfig,
     ) -> Result<(Self, Box<ServerExtensions<'static>>), Error> {
         let ep = ExtensionProcessing::new(hello, config);
@@ -216,7 +216,7 @@ impl<'a> ExtensionProcessing<'a> {
     fn process_common(
         self,
         extra_exts: ServerExtensionsInput,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         ocsp_response: &mut Option<&[u8]>,
         resumedata: Option<&CommonServerSessionValue<'_>>,
     ) -> Result<
@@ -362,7 +362,7 @@ impl ReadClientHello {
     pub(crate) fn handle<'m>(
         self,
         input: Input<'m>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         ClientHelloInput::from_input(&input)?;
         Ok(ChooseConfig {
@@ -399,7 +399,7 @@ impl ChooseConfig {
         self,
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         ExpectClientHello::new(config, extra_exts, self.resumption_data, self.protocol)
             .with_input(ClientHelloInput::from_input(&self.client_hello)?, output)
@@ -471,7 +471,7 @@ impl ExpectClientHello {
     pub(super) fn with_input(
         self,
         input: ClientHelloInput<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         let tls13_enabled = self
             .config
@@ -506,7 +506,7 @@ impl ExpectClientHello {
     fn with_version<T: Suite + 'static>(
         mut self,
         input: ClientHelloInput<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error>
     where
         CryptoProvider: Borrow<[&'static T]>,
@@ -715,7 +715,7 @@ impl ExpectClientHello {
     pub(crate) fn handle<'m>(
         self,
         input: Input<'m>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         let input = ClientHelloInput::from_input(&input)?;
         self.with_input(input, output)
@@ -741,7 +741,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
         credentials: SelectedCredential,
         input: ClientHelloInput<'_>,
         st: ExpectClientHello,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error>;
 }
 

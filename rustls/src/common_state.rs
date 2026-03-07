@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
+use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut, Range};
 
 use pki_types::DnsName;
@@ -236,7 +237,7 @@ pub enum HandshakeKind {
     ResumedWithHelloRetryRequest,
 }
 
-pub(crate) struct CaptureAppData<'a, 'j> {
+pub(crate) struct CaptureAppData<'a, 'j, 'm> {
     pub(crate) recv: &'a mut ReceivePath,
     pub(crate) other: &'a mut JoinOutput<'j>,
     /// Store a [`Locator`] initialized from the current receive buffer
@@ -251,9 +252,10 @@ pub(crate) struct CaptureAppData<'a, 'j> {
     /// Plaintext data may be reborrowed using a [`Delocator`] which was
     /// initialized from the same slice as `plaintext_locator`.
     pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
+    pub(crate) _message_lifetime: PhantomData<&'m ()>,
 }
 
-impl Output for CaptureAppData<'_, '_> {
+impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
     fn emit(&mut self, ev: Event<'_>) {
         self.other.side.emit(ev)
     }
@@ -283,7 +285,7 @@ impl Output for CaptureAppData<'_, '_> {
         }
     }
 
-    fn received_plaintext(&mut self, payload: Payload<'_>) {
+    fn received_plaintext(&mut self, payload: Payload<'m>) {
         // Receive plaintext data [`Payload<'_>`].
         //
         // Since [`Context`] does not hold a lifetime to the receive buffer the
@@ -318,7 +320,7 @@ pub(crate) struct JoinOutput<'a> {
 }
 
 /// The route for handshake state machine to surface determinations about the connection.
-pub(crate) trait Output {
+pub(crate) trait Output<'m> {
     fn emit(&mut self, ev: Event<'_>);
 
     fn output(&mut self, ev: OutputEvent<'_>);
@@ -329,7 +331,7 @@ pub(crate) trait Output {
         None
     }
 
-    fn received_plaintext(&mut self, _payload: Payload<'_>) {}
+    fn received_plaintext(&mut self, _payload: Payload<'m>) {}
 
     fn start_traffic(&mut self);
 
@@ -454,7 +456,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             .add(&self.body[start_len..]);
     }
 
-    pub(crate) fn finish(self, output: &mut dyn Output) {
+    pub(crate) fn finish(self, output: &mut dyn Output<'_>) {
         let m = Message {
             version: match TLS13 {
                 true => ProtocolVersion::TLSv1_3,
