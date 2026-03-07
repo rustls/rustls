@@ -1426,14 +1426,11 @@ pub enum ApiMisuse {
 
     /// Secret extraction operation attempted without opting-in to secret extraction.
     ///
-    /// This is possible from:
-    ///
-    /// - [`ClientConnection::dangerous_extract_secrets()`][crate::client::ClientConnection::dangerous_extract_secrets]
-    /// - [`ServerConnection::dangerous_extract_secrets()`][crate::server::ServerConnection::dangerous_extract_secrets]
+    /// This is possible from [`Connection::dangerous_extract_secrets()`][crate::Connection::dangerous_extract_secrets].
     ///
     /// You must set [`ServerConfig::enable_secret_extraction`][crate::server::ServerConfig::enable_secret_extraction] or
-    /// [`ClientConfig::enable_secret_extraction`][crate::client::ClientConfig::enable_secret_extraction] to true before calling
-    /// these functions.
+    /// [`ClientConfig::enable_secret_extraction`][crate::client::ClientConfig::enable_secret_extraction] to true before this
+    /// is available.
     SecretExtractionRequiresPriorOptIn,
 
     /// Secret extraction operation attempted without first extracting all pending
@@ -1488,6 +1485,15 @@ pub enum ApiMisuse {
     ///
     /// [`KernelConnection::update_tx_secret()`]: crate::conn::kernel::KernelConnection::update_tx_secret()
     KeyUpdateNotAvailableForTls12,
+
+    /// The receive side of a connection was already closed.
+    ReceiveSideAlreadyClosed,
+
+    /// The send side of a connection was already closed.
+    SendSideAlreadyClosed,
+
+    /// An unrecoverable error previously happened on this connection.
+    PreviousConnectionError,
 }
 
 impl fmt::Display for ApiMisuse {

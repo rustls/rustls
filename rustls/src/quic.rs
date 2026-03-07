@@ -26,13 +26,15 @@ mod connection {
     use crate::ConnectionOutputs;
     use crate::client::{ClientConfig, ClientSide};
     use crate::common_state::{CommonState, JoinOutput, Protocol};
-    use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData, process_new_packets};
+    use crate::conn::{
+        ConnectionCore, KeyingMaterialExporter, ProcessFinishCondition, SideData,
+        process_new_packets,
+    };
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
     use crate::msgs::{
-        ClientExtensionsInput, DeframerVecBuffer, Locator, ServerExtensionsInput,
-        TransportParameters,
+        ClientExtensionsInput, Locator, ServerExtensionsInput, TransportParameters, VecInput,
     };
     use crate::server::{ServerConfig, ServerSide};
     use crate::suites::SupportedCipherSuite;
@@ -373,7 +375,7 @@ mod connection {
     /// A shared interface for QUIC connections.
     struct ConnectionCommon<Side: SideData> {
         core: ConnectionCore<Side>,
-        deframer_buffer: DeframerVecBuffer,
+        deframer_buffer: VecInput,
         quic: Quic,
     }
 
@@ -381,7 +383,7 @@ mod connection {
         fn new(core: ConnectionCore<Side>, quic: Quic) -> Self {
             Self {
                 core,
-                deframer_buffer: DeframerVecBuffer::default(),
+                deframer_buffer: VecInput::default(),
                 quic,
             }
         }
@@ -437,6 +439,7 @@ mod connection {
             process_new_packets::<Side>(
                 &mut self.deframer_buffer,
                 &mut self.core.state,
+                ProcessFinishCondition::AppData,
                 &mut self.core.common.recv,
                 &mut JoinOutput {
                     outputs: &mut self.core.common.outputs,

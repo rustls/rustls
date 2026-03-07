@@ -8,7 +8,6 @@ use pki_types::DnsName;
 use crate::client::EchStatus;
 use crate::conn::Exporter;
 use crate::conn::private::SideOutput;
-use crate::conn::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::crypto::Identity;
 use crate::crypto::cipher::{
     Decrypted, DecryptionState, EncodedMessage, EncryptionState, MessageEncrypter, OutboundOpaque,
@@ -16,7 +15,7 @@ use crate::crypto::cipher::{
 };
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::{
@@ -24,10 +23,11 @@ use crate::msgs::{
     HandshakeAlignedProof, HandshakeDeframer, HandshakeMessagePayload, Locator, Message,
     MessageFragmenter, MessagePayload,
 };
-use crate::quic::{self, QuicOutput};
+use crate::quic::QuicOutput;
 use crate::suites::SupportedCipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
+use crate::{KeyingMaterialExporter, quic};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -110,29 +110,6 @@ pub struct ConnectionOutputs {
 }
 
 impl ConnectionOutputs {
-    pub(crate) fn handle(&mut self, ev: OutputEvent<'_>) {
-        match ev {
-            OutputEvent::ApplicationProtocol(protocol) => {
-                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
-            }
-            OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
-            OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
-            OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
-            OutputEvent::HandshakeKind(hk) => {
-                assert!(self.handshake_kind.is_none());
-                self.handshake_kind = Some(hk);
-            }
-            OutputEvent::KeyExchangeGroup(kxg) => {
-                assert!(self.negotiated_kx_group.is_none());
-                self.negotiated_kx_group = Some(kxg);
-            }
-            OutputEvent::PeerIdentity(identity) => self.peer_identity = Some(identity),
-            OutputEvent::ProtocolVersion(ver) => {
-                self.negotiated_version = Some(ver);
-            }
-        }
-    }
-
     /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
     ///
     /// This is made available for both full and resumed handshakes.
@@ -191,6 +168,13 @@ impl ConnectionOutputs {
         self.handshake_kind
     }
 
+    pub(crate) fn take_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
+        }
+    }
+
     pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
         let Self {
             negotiated_version,
@@ -201,6 +185,31 @@ impl ConnectionOutputs {
         match (negotiated_version, suite) {
             (Some(version), Some(suite)) => Some((version, suite)),
             _ => None,
+        }
+    }
+}
+
+impl ConnectionOutput for ConnectionOutputs {
+    fn handle(&mut self, ev: OutputEvent<'_>) {
+        match ev {
+            OutputEvent::ApplicationProtocol(protocol) => {
+                self.alpn_protocol = Some(ApplicationProtocol::from(protocol.as_ref()).to_owned())
+            }
+            OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
+            OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
+            OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
+            OutputEvent::HandshakeKind(hk) => {
+                assert!(self.handshake_kind.is_none());
+                self.handshake_kind = Some(hk);
+            }
+            OutputEvent::KeyExchangeGroup(kxg) => {
+                assert!(self.negotiated_kx_group.is_none());
+                self.negotiated_kx_group = Some(kxg);
+            }
+            OutputEvent::PeerIdentity(identity) => self.peer_identity = Some(identity),
+            OutputEvent::ProtocolVersion(ver) => {
+                self.negotiated_version = Some(ver);
+            }
         }
     }
 }
@@ -217,6 +226,7 @@ pub(crate) fn maybe_send_fatal_alert(send: &mut dyn SendOutput, error: &Error) {
 pub(crate) struct SendPath {
     pub(crate) encrypt_state: EncryptionState,
     pub(crate) may_send_application_data: bool,
+    pub(crate) may_send_half_rtt_data: bool,
     has_sent_fatal_alert: bool,
     /// If we signaled end of stream.
     pub(crate) has_sent_close_notify: bool,
@@ -229,14 +239,12 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    #[expect(dead_code)]
     pub(crate) fn write_plaintext(
         &mut self,
         payload: OutboundPlain<'_>,
-        outgoing_tls: &mut [u8],
-    ) -> Result<usize, EncryptError> {
+    ) -> Result<Vec<Vec<u8>>, Error> {
         if payload.is_empty() {
-            return Ok(0);
+            return Ok(self.sendable_tls.take());
         }
 
         let fragments = self
@@ -263,18 +271,16 @@ impl SendPath {
                             "traffic keys exhausted, closing connection to prevent security failure"
                         );
                         self.send_close_notify();
-                        return Err(EncryptError::EncryptExhausted);
+                        return Err(Error::EncryptError);
                     }
                 },
                 PreEncryptAction::Refuse => {
-                    return Err(EncryptError::EncryptExhausted);
+                    return Err(Error::EncryptError);
                 }
             }
         }
 
         self.perhaps_write_key_update();
-
-        self.check_required_size(outgoing_tls, fragments)?;
 
         let fragments = self
             .message_fragmenter
@@ -284,23 +290,7 @@ impl SendPath {
                 payload,
             );
 
-        Ok(self.write_fragments(outgoing_tls, fragments))
-    }
-
-    pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
-        debug_assert!(self.encrypt_state.is_encrypting());
-
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(data.len());
-        if len == 0 {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        self.send_appdata_encrypt(data[..len].into())
+        Ok(self.write_fragments(fragments))
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
@@ -312,23 +302,6 @@ impl SendPath {
         for m in iter {
             self.send_single_fragment(m);
         }
-    }
-
-    /// Like send_msg_encrypt, but operate on an appdata directly.
-    fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
-        let len = payload.len();
-        let iter = self
-            .message_fragmenter
-            .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                payload,
-            );
-        for m in iter {
-            self.send_single_fragment(m);
-        }
-
-        len
     }
 
     fn send_single_fragment(&mut self, m: EncodedMessage<OutboundPlain<'_>>) {
@@ -374,43 +347,6 @@ impl SendPath {
         self.queue_tls_message(em);
     }
 
-    /// Send plaintext application data, fragmenting and
-    /// encrypting it as it goes out.
-    ///
-    /// If internal buffers are too small, this function will not accept
-    /// all the data.
-    pub(crate) fn buffer_plaintext(
-        &mut self,
-        payload: OutboundPlain<'_>,
-        sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
-        self.perhaps_write_key_update();
-        if !self.may_send_application_data {
-            // If we haven't completed handshaking, buffer
-            // plaintext to send once we do.
-            return sendable_plaintext.append_limited_copy(payload);
-        }
-
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(payload.len());
-        if len == 0 {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        debug_assert!(self.encrypt_state.is_encrypting());
-        self.send_appdata_encrypt(payload.split_at(len).0)
-    }
-
-    pub(crate) fn send_buffered_plaintext(&mut self, plaintext: &mut ChunkVecBuffer) {
-        while let Some(buf) = plaintext.pop() {
-            self.send_appdata_encrypt(buf.as_slice().into());
-        }
-    }
-
     pub(crate) fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
         debug_assert!(self.encrypt_state.is_encrypting());
@@ -428,23 +364,13 @@ impl SendPath {
         }
     }
 
-    fn send_close_notify(&mut self) {
+    pub(crate) fn send_close_notify(&mut self) {
         if self.has_sent_close_notify {
             return;
         }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
         self.has_sent_close_notify = true;
         self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
-    }
-
-    #[expect(dead_code)]
-    pub(crate) fn eager_send_close_notify(
-        &mut self,
-        outgoing_tls: &mut [u8],
-    ) -> Result<usize, EncryptError> {
-        self.send_close_notify();
-        self.check_required_size(outgoing_tls, [].into_iter())?;
-        Ok(self.write_fragments(outgoing_tls, [].into_iter()))
     }
 
     pub(crate) fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
@@ -473,53 +399,20 @@ impl SendPath {
         }
     }
 
-    fn check_required_size<'a>(
-        &self,
-        outgoing_tls: &[u8],
-        fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
-    ) -> Result<(), EncryptError> {
-        let mut required_size = self.sendable_tls.len();
-
-        for m in fragments {
-            required_size += m.encoded_len(&self.encrypt_state);
-        }
-
-        if required_size > outgoing_tls.len() {
-            return Err(EncryptError::InsufficientSize(InsufficientSizeError {
-                required_size,
-            }));
-        }
-
-        Ok(())
-    }
-
     fn write_fragments<'a>(
         &mut self,
-        outgoing_tls: &mut [u8],
         fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
-    ) -> usize {
-        let mut written = 0;
-
-        // Any pre-existing encrypted messages in `sendable_tls` must
-        // be output before encrypting any of the `fragments`.
-        while let Some(message) = self.sendable_tls.pop() {
-            let len = message.len();
-            outgoing_tls[written..written + len].copy_from_slice(&message);
-            written += len;
-        }
-
+    ) -> Vec<Vec<u8>> {
         for m in fragments {
             let em = self
                 .encrypt_state
                 .encrypt_outgoing(m)
                 .encode();
 
-            let len = em.len();
-            outgoing_tls[written..written + len].copy_from_slice(&em);
-            written += len;
+            self.sendable_tls.append(em);
         }
 
-        written
+        self.sendable_tls.take()
     }
 
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
@@ -589,6 +482,7 @@ impl SendOutput for SendPath {
     }
 
     fn start_traffic(&mut self) {
+        self.may_send_half_rtt_data = true;
         self.start_outgoing_traffic();
     }
 
@@ -603,6 +497,7 @@ impl Default for SendPath {
         Self {
             encrypt_state: EncryptionState::new(),
             may_send_application_data: false,
+            may_send_half_rtt_data: false,
             has_sent_fatal_alert: false,
             has_sent_close_notify: false,
             message_fragmenter: MessageFragmenter::default(),
@@ -1049,8 +944,57 @@ impl Output for CaptureAppData<'_, '_> {
     }
 }
 
+pub(crate) struct DropAppData<'a, 'j> {
+    pub(crate) recv: &'a mut ReceivePath,
+    pub(crate) other: &'a mut JoinOutput<'j>,
+}
+
+impl Output for DropAppData<'_, '_> {
+    fn emit(&mut self, ev: Event<'_>) {
+        self.other.side.emit(ev)
+    }
+
+    fn output(&mut self, ev: OutputEvent<'_>) {
+        if let OutputEvent::ProtocolVersion(ver) = ev {
+            self.recv.negotiated_version = Some(ver);
+            self.other.send.negotiated_version(ver);
+        }
+        self.other.outputs.handle(ev);
+    }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        match self.other.quic.as_deref_mut() {
+            Some(quic) => quic.send_msg(m, must_encrypt),
+            None => self
+                .other
+                .send
+                .send_msg(m, must_encrypt),
+        }
+    }
+
+    fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
+        match &mut self.other.quic {
+            Some(quic) => Some(*quic),
+            None => None,
+        }
+    }
+
+    fn start_traffic(&mut self) {
+        self.recv.may_receive_application_data = true;
+        self.other.send.start_traffic();
+    }
+
+    fn receive(&mut self) -> &mut ReceivePath {
+        self.recv
+    }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        self.other.send
+    }
+}
+
 pub(crate) struct JoinOutput<'a> {
-    pub(crate) outputs: &'a mut ConnectionOutputs,
+    pub(crate) outputs: &'a mut dyn ConnectionOutput,
     pub(crate) quic: Option<&'a mut dyn QuicOutput>,
     pub(crate) send: &'a mut dyn SendOutput,
     pub(crate) side: &'a mut dyn SideOutput,
@@ -1107,6 +1051,10 @@ pub(crate) trait SendOutput {
     fn start_traffic(&mut self);
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+}
+
+pub(crate) trait ConnectionOutput {
+    fn handle(&mut self, ev: OutputEvent<'_>);
 }
 
 /// The set of events output by the low-level handshake state machine.

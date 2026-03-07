@@ -4,17 +4,17 @@ use core::ops::Range;
 use std::io;
 
 #[derive(Default, Debug)]
-pub(crate) struct DeframerVecBuffer {
+pub struct VecInput {
     /// Buffer of data read from the socket, in the process of being parsed into messages.
     ///
-    /// For buffer size management, checkout out the [`DeframerVecBuffer::prepare_read()`] method.
+    /// For buffer size management, checkout out the [`VecInput::prepare_read()`] method.
     buf: Vec<u8>,
 
     /// What size prefix of `buf` is used.
     used: usize,
 }
 
-impl DeframerVecBuffer {
+impl VecInput {
     /// Discard `taken` bytes from the start of our buffer.
     pub(crate) fn discard(&mut self, taken: usize) {
         if taken < self.used {
@@ -110,9 +110,13 @@ impl DeframerVecBuffer {
     pub(crate) fn filled(&self) -> &[u8] {
         &self.buf[..self.used]
     }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.used == 0
+    }
 }
 
-impl TlsInputBuffer for DeframerVecBuffer {
+impl TlsInputBuffer for VecInput {
     fn slice_mut(&mut self) -> &mut [u8] {
         self.filled_mut()
     }
@@ -122,8 +126,38 @@ impl TlsInputBuffer for DeframerVecBuffer {
     }
 }
 
+/// A borrowed version of [`VecInput`] that tracks discard operations
+#[derive(Debug)]
+pub struct SliceInput<'a> {
+    // a fully initialized buffer that will be deframed
+    buf: &'a mut [u8],
+    // number of bytes to discard from the front of `buf` at a later time
+    discard: usize,
+}
+
+impl<'a> SliceInput<'a> {
+    pub fn new(buf: &'a mut [u8]) -> Self {
+        Self { buf, discard: 0 }
+    }
+
+    /// Returns how many bytes were consumed at the start of the original buffer.
+    pub fn into_used(self) -> usize {
+        self.discard
+    }
+}
+
+impl TlsInputBuffer for SliceInput<'_> {
+    fn slice_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[self.discard..]
+    }
+
+    fn discard(&mut self, num_bytes: usize) {
+        self.discard += num_bytes;
+    }
+}
+
 /// An abstraction over received data buffers (either owned or borrowed)
-pub(crate) trait TlsInputBuffer {
+pub trait TlsInputBuffer {
     /// Return the buffer which contains the received data.
     ///
     /// If no data is available, return the empty slice.
