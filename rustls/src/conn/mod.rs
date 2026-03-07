@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use core::fmt::{self, Debug};
+use core::marker::PhantomData;
 use core::mem;
 use core::ops::{Deref, DerefMut};
 use std::io;
@@ -736,8 +737,8 @@ impl IoState {
     }
 }
 
-pub(crate) fn process_new_packets<'a, Side: SideData>(
-    input: &mut dyn TlsInputBuffer,
+pub(crate) fn process_new_packets<'a, 'm, Side: SideData>(
+    input: &'m mut dyn TlsInputBuffer,
     state: &mut Result<Side::State, Error>,
     recv: &mut ReceivePath,
     output: &mut JoinOutput<'a>,
@@ -763,6 +764,7 @@ pub(crate) fn process_new_packets<'a, Side: SideData>(
             other: &mut *output,
             plaintext_locator: &locator,
             received_plaintext: &mut plaintext,
+            _message_lifetime: PhantomData,
         };
 
         let opt_msg = match res {
@@ -918,7 +920,7 @@ pub(crate) struct SideCommonOutput<'a, 'q> {
     pub(crate) common: &'a mut CommonState,
 }
 
-impl<'q> Output for SideCommonOutput<'_, 'q> {
+impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
     fn emit(&mut self, ev: Event<'_>) {
         self.side.emit(ev);
     }
@@ -982,7 +984,7 @@ pub(crate) mod private {
 }
 
 pub(crate) trait StateMachine: Sized {
-    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error>;
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error>;
     fn wants_input(&self) -> bool;
     fn handle_decrypt_error(&mut self);
     fn into_external_state(

@@ -66,10 +66,10 @@ pub(crate) enum Tls13State {
 }
 
 impl Tls13State {
-    pub(crate) fn handle(
+    pub(crate) fn handle<'m>(
         self,
-        input: Input<'_>,
-        output: &mut dyn Output,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ClientState, Error> {
         match self {
             Self::EncryptedExtensions(e) => e.handle(input, output),
@@ -99,7 +99,7 @@ impl ClientHandler<Tls13CipherSuite> for Handler {
         server_hello: &ServerHelloPayload,
         input: &Input<'_>,
         mut st: ExpectServerHello,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         // Start our handshake hash, and input the server-hello.
         let mut transcript = st
@@ -293,7 +293,7 @@ impl KeyExchangeChoice {
     /// based on the selection of the server expressed in `their_key_share`.
     fn new(
         config: &Arc<ClientConfig>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         our_key_share: GroupAndKeyShare,
         their_key_share: &KeyShareEntry,
     ) -> Result<Self, ()> {
@@ -391,7 +391,7 @@ pub(super) fn fill_in_psk_binder(
 
 pub(super) fn prepare_resumption(
     config: &ClientConfig,
-    output: &mut dyn Output,
+    output: &mut dyn Output<'_>,
     resuming_session: &Retrieved<&Tls13Session>,
     exts: &mut ClientExtensions<'_>,
     doing_retry: bool,
@@ -434,7 +434,7 @@ pub(super) fn prepare_resumption(
 
 pub(super) fn derive_early_traffic_secret(
     key_log: &dyn KeyLog,
-    output: &mut dyn Output,
+    output: &mut dyn Output<'_>,
     hash_alg: &'static dyn Hash,
     early_key_schedule: &KeyScheduleEarlyClient,
     sent_tls13_fake_ccs: &mut bool,
@@ -463,7 +463,7 @@ pub(super) fn derive_early_traffic_secret(
     trace!("Starting early data traffic");
 }
 
-pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Output) {
+pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Output<'_>) {
     if core::mem::replace(sent_tls13_fake_ccs, true) {
         return;
     }
@@ -505,7 +505,7 @@ impl ExpectEncryptedExtensions {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         let exts = require_handshake_msg!(
             message,
@@ -695,7 +695,7 @@ impl ExpectCertificateOrCompressedCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
@@ -772,7 +772,7 @@ impl ExpectCertificateOrCompressedCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
@@ -832,7 +832,7 @@ impl ExpectCertificateOrCertReq {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
@@ -1090,7 +1090,7 @@ impl ExpectCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         self.handle_input(input)
     }
@@ -1117,7 +1117,7 @@ impl ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         let cert_verify = require_handshake_msg!(
             message,
@@ -1253,7 +1253,7 @@ fn emit_finished_tls13(
     )));
 }
 
-fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn Output) {
+fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn Output<'_>) {
     let m = Message {
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -1279,7 +1279,7 @@ impl ExpectFinished {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         let mut st = *self;
         let finished = require_handshake_msg!(
@@ -1484,7 +1484,7 @@ impl ExpectTraffic {
 
     fn handle_new_ticket_tls13(
         &self,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         let received = &mut output.receive().tls13_tickets_received;
@@ -1495,7 +1495,7 @@ impl ExpectTraffic {
     fn handle_key_update(
         &mut self,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         if self
@@ -1526,10 +1526,10 @@ impl ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle(
+    fn handle<'m>(
         mut self: Box<Self>,
-        input: Input<'_>,
-        output: &mut dyn Output,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ClientState, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
@@ -1604,7 +1604,7 @@ impl ExpectQuicTraffic {
     fn handle(
         self: Box<Self>,
         Input { message, .. }: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ClientState, Error> {
         let nst = require_handshake_msg!(
             message,

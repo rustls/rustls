@@ -55,10 +55,10 @@ pub(crate) enum Tls13State {
 }
 
 impl Tls13State {
-    pub(crate) fn handle(
+    pub(crate) fn handle<'m>(
         self,
-        input: Input<'_>,
-        output: &mut dyn Output,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ServerState, Error> {
         match self {
             Self::SkipRejectedEarlyData(e) => e.handle(input, output),
@@ -108,7 +108,7 @@ mod client_hello {
             signer: SelectedCredential,
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
-            output: &mut dyn Output,
+            output: &mut dyn Output<'_>,
         ) -> Result<ServerState, Error> {
             let randoms = st.randoms(&input)?;
             let mut transcript = st
@@ -520,7 +520,7 @@ mod client_hello {
         randoms: &ConnectionRandoms,
         suite: &'static Tls13CipherSuite,
         protocol: Protocol,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
         resuming: Option<&(usize, Tls13ServerSessionValue<'_>)>,
@@ -601,7 +601,7 @@ mod client_hello {
         Ok(key_schedule)
     }
 
-    fn emit_fake_ccs(output: &mut dyn Output) {
+    fn emit_fake_ccs(output: &mut dyn Output<'_>) {
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
@@ -613,7 +613,7 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         suite: &'static Tls13CipherSuite,
         session_id: SessionId,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         group: NamedGroup,
     ) {
         let req = HelloRetryRequest {
@@ -641,7 +641,7 @@ mod client_hello {
     }
 
     fn decide_if_early_data_allowed(
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         client_hello: &ClientHelloPayload,
         resumedata: Option<&Tls13ServerSessionValue<'_>>,
         chosen_alpn_protocol: Option<&ApplicationProtocol<'_>>,
@@ -702,7 +702,7 @@ mod client_hello {
     fn emit_encrypted_extensions(
         flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&Tls13ServerSessionValue<'_>>,
@@ -833,7 +833,7 @@ mod client_hello {
     fn emit_finished_tls13(
         mut flight: HandshakeFlightTls13<'_>,
         randoms: &ConnectionRandoms,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         key_schedule: KeyScheduleHandshake,
         config: &ServerConfig,
         proof: &HandshakeAlignedProof,
@@ -869,7 +869,7 @@ impl ExpectAndSkipRejectedEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),
@@ -902,7 +902,7 @@ impl ExpectCertificateOrCompressedCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::Handshake {
@@ -1073,7 +1073,7 @@ impl ExpectCertificate {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         self.handle_input(input)
     }
@@ -1095,7 +1095,7 @@ impl ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         let signature = require_handshake_msg!(
             message,
@@ -1146,7 +1146,7 @@ impl ExpectEarlyData {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
@@ -1398,7 +1398,7 @@ impl ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         let finished = require_handshake_msg!(
             input.message,
@@ -1495,7 +1495,7 @@ impl ExpectTraffic {
     fn handle_key_update(
         &mut self,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         if self
@@ -1525,10 +1525,10 @@ impl ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    fn handle(
+    fn handle<'m>(
         mut self: Box<Self>,
-        input: Input<'_>,
-        output: &mut dyn Output,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::ApplicationData(payload) => {
@@ -1603,7 +1603,7 @@ impl ExpectQuicTraffic {
     fn handle(
         self,
         Input { message, .. }: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         // reject all messages
         Err(inappropriate_message(&message.payload, &[]))

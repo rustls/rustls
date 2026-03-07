@@ -32,7 +32,7 @@ impl KeyScheduleEarlyClient {
         hs_hash: &hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) {
         self.0.ks.set_encrypter(
             &self
@@ -68,7 +68,7 @@ impl KeyScheduleEarlyServer {
         hs_hash: &hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         proof: &HandshakeAlignedProof,
     ) {
         self.0.ks.set_decrypter(
@@ -125,7 +125,7 @@ impl KeyScheduleEarly {
         hs_hash: &hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> OkmBlock {
         let client_early_traffic_secret = self.ks.derive_logged_secret(
             SecretKind::ClientEarlyTrafficSecret,
@@ -257,7 +257,7 @@ impl KeyScheduleHandshakeStart {
         suite: &'static Tls13CipherSuite,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         proof: &HandshakeAlignedProof,
     ) -> KeyScheduleHandshake {
         debug_assert_eq!(self.ks.side, Side::Client);
@@ -286,7 +286,7 @@ impl KeyScheduleHandshakeStart {
         hs_hash: hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> KeyScheduleHandshake {
         debug_assert_eq!(self.ks.side, Side::Server);
         let new = self.into_handshake(hs_hash, key_log, client_random, output);
@@ -328,7 +328,7 @@ impl KeyScheduleHandshakeStart {
         hs_hash: hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> KeyScheduleHandshake {
         // Use an empty handshake hash for the initial handshake.
         let client_secret = self.ks.derive_logged_secret(
@@ -413,7 +413,7 @@ impl KeyScheduleHandshake {
         hs_hash: hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> KeyScheduleTrafficWithClientFinishedPending {
         debug_assert_eq!(self.ks.side, Side::Server);
 
@@ -556,7 +556,7 @@ pub(crate) struct KeyScheduleClientBeforeFinished(KeyScheduleBeforeFinished);
 impl KeyScheduleClientBeforeFinished {
     pub(crate) fn into_traffic(
         self,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         hs_hash: hash::Output,
         proof: &HandshakeAlignedProof,
     ) -> (

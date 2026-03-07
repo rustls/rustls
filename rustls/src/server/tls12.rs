@@ -46,10 +46,10 @@ pub(crate) enum Tls12State {
 }
 
 impl Tls12State {
-    pub(crate) fn handle(
+    pub(crate) fn handle<'m>(
         self,
-        input: Input<'_>,
-        output: &mut dyn Output,
+        input: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ServerState, Error> {
         match self {
             Self::Certificate(e) => e.handle(input, output),
@@ -89,7 +89,7 @@ mod client_hello {
             credentials: SelectedCredential,
             input: ClientHelloInput<'_>,
             mut st: ExpectClientHello,
-            output: &mut dyn Output,
+            output: &mut dyn Output<'_>,
         ) -> Result<ServerState, Error> {
             let mut randoms = st.randoms(&input)?;
             let mut transcript = st
@@ -297,7 +297,7 @@ mod client_hello {
     fn start_resumption(
         suite: &'static Tls12CipherSuite,
         using_ems: bool,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         input: ClientHelloInput<'_>,
         sni: Option<DnsName<'static>>,
         resumption_data: Vec<u8>,
@@ -404,7 +404,7 @@ mod client_hello {
     fn emit_server_hello(
         flight: &mut HandshakeFlightTls12<'_>,
         config: &ServerConfig,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
         session_id: SessionId,
         suite: &'static Tls12CipherSuite,
         using_ems: bool,
@@ -531,7 +531,7 @@ impl ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         self.hs.transcript.add_message(&message);
         let cert_chain = require_handshake_msg_move!(
@@ -600,7 +600,7 @@ impl ExpectClientKx {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         let client_kx = require_handshake_msg!(
             message,
@@ -668,7 +668,7 @@ impl ExpectCertificateVerify {
     fn handle(
         mut self: Box<Self>,
         Input { message, .. }: Input<'_>,
-        _output: &mut dyn Output,
+        _output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         let signature = require_handshake_msg!(
             message,
@@ -728,7 +728,7 @@ impl ExpectCcs {
     fn handle(
         self: Box<Self>,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         match input.message.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
@@ -861,7 +861,7 @@ fn emit_ticket(
     alpn_protocol: Option<&ApplicationProtocol<'_>>,
     sni: Option<&DnsName<'static>>,
     resumption_data: Vec<u8>,
-    output: &mut dyn Output,
+    output: &mut dyn Output<'_>,
     ticketer: &dyn TicketProducer,
     now: UnixTime,
 ) -> Result<(), Error> {
@@ -901,7 +901,7 @@ fn emit_ticket(
     Ok(())
 }
 
-fn emit_ccs(output: &mut dyn Output) {
+fn emit_ccs(output: &mut dyn Output<'_>) {
     output.send_msg(
         Message {
             version: ProtocolVersion::TLSv1_2,
@@ -914,7 +914,7 @@ fn emit_ccs(output: &mut dyn Output) {
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
-    output: &mut dyn Output,
+    output: &mut dyn Output<'_>,
     proof: &HandshakeAlignedProof,
 ) {
     let vh = transcript.current_hash();
@@ -944,7 +944,7 @@ impl ExpectFinished {
     fn handle(
         mut self: Box<Self>,
         input: Input<'_>,
-        output: &mut dyn Output,
+        output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
         let finished = require_handshake_msg!(
             input.message,
@@ -1078,10 +1078,10 @@ pub(super) struct ExpectTraffic {
 impl ExpectTraffic {}
 
 impl ExpectTraffic {
-    fn handle(
+    fn handle<'m>(
         self: Box<Self>,
-        Input { message, .. }: Input<'_>,
-        output: &mut dyn Output,
+        Input { message, .. }: Input<'m>,
+        output: &mut dyn Output<'m>,
     ) -> Result<ServerState, Error> {
         match message.payload {
             MessagePayload::ApplicationData(payload) => output.received_plaintext(payload),
