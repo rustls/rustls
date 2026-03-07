@@ -9,8 +9,8 @@ use pki_types::FipsStatus;
 
 use crate::ConnectionOutputs;
 use crate::common_state::{
-    CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, Input, JoinOutput, Output,
-    OutputEvent, ReceivePath, SendOutput, SendPath, UnborrowedPayload, maybe_send_fatal_alert,
+    CaptureAppData, CommonState, Event, Input, JoinOutput, Output, OutputEvent, ReceivePath,
+    UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::conn::private::SideOutput;
 use crate::crypto::cipher::Decrypted;
@@ -28,6 +28,10 @@ use crate::vecbuf::ChunkVecBuffer;
 // pub so that it can be re-exported from the crate root
 pub mod kernel;
 pub(crate) mod unbuffered;
+
+mod send;
+use send::DEFAULT_BUFFER_LIMIT;
+pub(crate) use send::{SendOutput, SendPath};
 
 mod connection {
     use alloc::vec::Vec;

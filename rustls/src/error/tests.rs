@@ -8,7 +8,7 @@ use super::{
     AlertDescription, CertRevocationListError, Error, ErrorWithAlert, InconsistentKeys,
     InvalidMessage, OtherError, UnixTime,
 };
-use crate::common_state::SendPath;
+use crate::conn::SendPath;
 use crate::crypto::GetRandomFailed;
 use crate::msgs::test_enum8_display;
 

@@ -9,13 +9,11 @@ use std::io;
 use pki_types::{DnsName, FipsStatus};
 
 use super::config::{ClientHello, ServerConfig};
-use crate::common_state::{
-    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, SendPath, Side,
-};
+use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SideCommonOutput,
-    Writer,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendPath,
+    SideCommonOutput, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
