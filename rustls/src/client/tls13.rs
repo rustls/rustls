@@ -1465,19 +1465,7 @@ impl ExpectTraffic {
             .derive_ticket_psk(nst.nonce.bytes());
 
         let now = self.config.current_time()?;
-
-        let value = Tls13Session::new(
-            self.session_input.clone(),
-            nst.ticket.clone(),
-            secret.as_ref(),
-            now,
-            nst.lifetime,
-            nst.age_add,
-            nst.extensions
-                .max_early_data_size
-                .unwrap_or_default(),
-        );
-
+        let value = Tls13Session::new(nst, self.session_input.clone(), secret.as_ref(), now);
         if self
             .key_schedule_recv
             .protocol()

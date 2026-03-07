@@ -88,7 +88,7 @@ pub(crate) use handshake::{
     SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 #[cfg(test)]
-pub(crate) use handshake::{EcParameters, ServerEcdhParams};
+pub(crate) use handshake::{EcParameters, NewSessionTicketExtensions, ServerEcdhParams};
 
 mod server_hello;
 pub(crate) use server_hello::{

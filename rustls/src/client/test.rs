@@ -24,9 +24,10 @@ use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     CertificateChain, ClientHelloPayload, Codec, Compression, ECCurveType, EcParameters,
     HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, HelloRetryRequestExtensions,
-    KeyShareEntry, MaybeEmpty, Message, MessagePayload, Random, Reader, ServerEcdhParams,
-    ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
-    ServerKeyExchangePayload, SessionId, SizedPayload,
+    KeyShareEntry, MaybeEmpty, Message, MessagePayload, NewSessionTicketExtensions,
+    NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams, ServerExtensions,
+    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+    SessionId, SizedPayload,
 };
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
@@ -84,6 +85,15 @@ fn tls13_client_session_value_roundtrip() {
     ));
 
     let session = Tls13Session::new(
+        &NewSessionTicketPayloadTls13 {
+            lifetime: Duration::from_secs(1800),
+            age_add,
+            nonce: SizedPayload::empty(),
+            ticket: Arc::new(SizedPayload::from(vec![0x11, 0x22, 0x33])),
+            extensions: NewSessionTicketExtensions {
+                max_early_data_size: Some(8192),
+            },
+        },
         Tls13ClientSessionInput {
             suite: TEST_PROVIDER.tls13_cipher_suites[0],
             peer_identity: peer_identity.clone(),
@@ -91,12 +101,8 @@ fn tls13_client_session_value_roundtrip() {
                 0xaa, 0xbb, 0xcc, 0xdd,
             ])),
         },
-        Arc::new(SizedPayload::from(vec![0x11, 0x22, 0x33])),
         &[0x55; 48],
         UnixTime::since_unix_epoch(Duration::from_secs(9999999)),
-        Duration::from_secs(1800),
-        age_add,
-        8192_u32,
     );
 
     let mut encoded = Vec::new();
