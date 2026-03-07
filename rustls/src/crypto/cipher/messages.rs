@@ -93,6 +93,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     ///
     /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
     /// or the message (post-unpadding) is too long.
+    #[inline]
     pub fn into_tls13_unpadded_message(mut self) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let payload = &mut self.payload;
 
@@ -121,6 +122,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
     /// [`EncodedMessage<InboundOpaque<'_>>`] should be decrypted into an
     /// `EncodedMessage<&'_ [u8]>` using a `MessageDecrypter`.
+    #[inline]
     pub fn into_plain_message_range(self, range: Range<usize>) -> EncodedMessage<&'a [u8]> {
         EncodedMessage {
             typ: self.typ,
@@ -304,6 +306,7 @@ impl OutboundOpaque {
     /// Create a new value with the given payload capacity.
     ///
     /// (The actual capacity of the returned value will be at least `HEADER_SIZE + capacity`.)
+    #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         let mut prefixed_payload = Vec::with_capacity(HEADER_SIZE + capacity);
         prefixed_payload.resize(HEADER_SIZE, 0);
@@ -311,11 +314,13 @@ impl OutboundOpaque {
     }
 
     /// Append bytes from a slice.
+    #[inline]
     pub fn extend_from_slice(&mut self, slice: &[u8]) {
         self.0.extend_from_slice(slice)
     }
 
     /// Append bytes from an `OutboundChunks`.
+    #[inline]
     pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
         chunks.copy_to_vec(&mut self.0)
     }
@@ -331,12 +336,14 @@ impl OutboundOpaque {
 }
 
 impl AsRef<[u8]> for OutboundOpaque {
+    #[inline]
     fn as_ref(&self) -> &[u8] {
         &self.0[HEADER_SIZE..]
     }
 }
 
 impl AsMut<[u8]> for OutboundOpaque {
+    #[inline]
     fn as_mut(&mut self) -> &mut [u8] {
         &mut self.0[HEADER_SIZE..]
     }
@@ -379,6 +386,7 @@ pub enum Payload<'a> {
 
 impl<'a> Payload<'a> {
     /// A reference to the payload's bytes
+    #[inline]
     pub fn bytes(&'a self) -> &'a [u8] {
         match self {
             Self::Borrowed(bytes) => bytes,
@@ -431,6 +439,7 @@ pub struct InboundOpaque<'a>(pub &'a mut [u8]);
 
 impl<'a> InboundOpaque<'a> {
     /// Truncate the payload to `len` bytes.
+    #[inline]
     pub fn truncate(&mut self, len: usize) {
         if len >= self.len() {
             return;
@@ -460,12 +469,14 @@ impl<'a> InboundOpaque<'a> {
 impl Deref for InboundOpaque<'_> {
     type Target = [u8];
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         self.0
     }
 }
 
 impl DerefMut for InboundOpaque<'_> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }
