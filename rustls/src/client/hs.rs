@@ -13,8 +13,8 @@ use super::{
     ClientHelloDetails, ClientSessionCommon, Retrieved, Tls12Session, Tls13Session, tls12, tls13,
 };
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{EarlyDataEvent, Event, Input, Output, OutputEvent, Protocol};
-use crate::conn::StateMachine;
+use crate::common_state::{EarlyDataEvent, Event, Output, OutputEvent, Protocol};
+use crate::conn::{Input, StateMachine};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::{KeyExchangeAlgorithm, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, rand};

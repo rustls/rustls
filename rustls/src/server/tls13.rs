@@ -12,12 +12,9 @@ use super::config::ServerConfig;
 use super::hs::{HandshakeHashOrBuffer, ServerState};
 use super::{CommonServerSessionValue, ServerSessionKey, ServerSessionValue};
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{
-    Event, HandshakeFlightTls13, HandshakeKind, Input, Output, OutputEvent, Side,
-    TrafficTemperCounters,
-};
-use crate::conn::ConnectionRandoms;
+use crate::common_state::{Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
+use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters};
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{Identity, rand};

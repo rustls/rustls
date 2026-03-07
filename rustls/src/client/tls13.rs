@@ -16,11 +16,10 @@ use super::{
 };
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{
-    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Input, Output, OutputEvent, Side,
-    TrafficTemperCounters,
+    EarlyDataEvent, Event, HandshakeFlightTls13, HandshakeKind, Output, OutputEvent, Side,
 };
-use crate::conn::ConnectionRandoms;
 use crate::conn::kernel::KernelState;
+use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters};
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};

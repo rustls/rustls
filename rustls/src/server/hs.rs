@@ -8,8 +8,8 @@ use pki_types::DnsName;
 
 use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13};
 use crate::SupportedCipherSuite;
-use crate::common_state::{Event, Input, Output, OutputEvent, Protocol};
-use crate::conn::ConnectionRandoms;
+use crate::common_state::{Event, Output, OutputEvent, Protocol};
+use crate::conn::{ConnectionRandoms, Input};
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{KeyExchangeAlgorithm, NamedGroup, SupportedKxGroup};
 use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme};
