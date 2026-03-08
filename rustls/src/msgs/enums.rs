@@ -8,15 +8,7 @@ enum_builder! {
     #[repr(u8)]
     pub(crate) enum ClientCertificateType {
         RSASign => 0x01,
-        DSSSign => 0x02,
-        RSAFixedDH => 0x03,
-        DSSFixedDH => 0x04,
-        RSAEphemeralDH => 0x05,
-        DSSEphemeralDH => 0x06,
-        FortezzaDMS => 0x14,
         ECDSASign => 0x40,
-        RSAFixedECDH => 0x41,
-        ECDSAFixedECDH => 0x42,
     }
 }
 
@@ -27,8 +19,6 @@ enum_builder! {
     #[repr(u8)]
     pub enum Compression {
         Null => 0x00,
-        Deflate => 0x01,
-        LSZ => 0x40,
     }
 }
 
@@ -138,8 +128,6 @@ enum_builder! {
     #[repr(u8)]
     pub enum ECPointFormat {
         Uncompressed => 0x00,
-        ANSIX962CompressedPrime => 0x01,
-        ANSIX962CompressedChar2 => 0x02,
     }
 }
 
@@ -149,8 +137,6 @@ enum_builder! {
     /// The `Unknown` item is used when processing unrecognized ordinals.
     #[repr(u8)]
     pub(crate) enum ECCurveType {
-        ExplicitPrime => 0x01,
-        ExplicitChar2 => 0x02,
         NamedCurve => 0x03,
     }
 }
@@ -213,17 +199,13 @@ pub(crate) mod tests {
     fn test_enums() {
         test_enum8::<ClientCertificateType>(
             ClientCertificateType::RSASign,
-            ClientCertificateType::ECDSAFixedECDH,
+            ClientCertificateType::ECDSASign,
         );
-        test_enum8::<Compression>(Compression::Null, Compression::LSZ);
+        test_enum8::<Compression>(Compression::Null, Compression::Null);
         test_enum8::<AlertLevel>(AlertLevel::Warning, AlertLevel::Fatal);
         test_enum16::<ExtensionType>(ExtensionType::ServerName, ExtensionType::RenegotiationInfo);
         test_enum8::<ServerNameType>(ServerNameType::HostName, ServerNameType::HostName);
-        test_enum8::<ECPointFormat>(
-            ECPointFormat::Uncompressed,
-            ECPointFormat::ANSIX962CompressedChar2,
-        );
-        test_enum8::<ECCurveType>(ECCurveType::ExplicitPrime, ECCurveType::NamedCurve);
+        test_enum8::<ECPointFormat>(ECPointFormat::Uncompressed, ECPointFormat::Uncompressed);
         test_enum8::<PskKeyExchangeMode>(
             PskKeyExchangeMode::PSK_KE,
             PskKeyExchangeMode::PSK_DHE_KE,
