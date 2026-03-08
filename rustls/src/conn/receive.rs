@@ -7,7 +7,7 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
-    AlertLevel, AlertMessagePayload, BufferProgress, DeframerIter, Delocator,
+    AlertLevel, AlertLevelName, AlertMessagePayload, BufferProgress, DeframerIter, Delocator,
     HandshakeAlignedProof, HandshakeDeframer, Locator, Message, MessagePayload,
 };
 
@@ -303,8 +303,8 @@ impl ReceivePath {
 
     fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
         // Reject unknown AlertLevels.
-        if let AlertLevel::Unknown(level) = alert.level {
-            return Err(PeerMisbehaved::IllegalAlertLevel(level, alert.description).into());
+        if AlertLevelName::try_from(alert.level).is_err() {
+            return Err(PeerMisbehaved::IllegalAlertLevel(alert.level.0, alert.description).into());
         }
 
         // If we get a CloseNotify, make a note to declare EOF to our

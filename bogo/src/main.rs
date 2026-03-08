@@ -284,7 +284,7 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
             }
             if opts.expect_version == 0x0304 {
                 match sess.protocol_version() {
-                    Some(ProtocolVersion::TLSv1_3) | Some(ProtocolVersion::Unknown(0x7f17)) => {}
+                    Some(ProtocolVersion::TLSv1_3) | Some(ProtocolVersion(0x7f17)) => {}
                     _ => quit_err("wrong protocol version"),
                 }
             }
@@ -686,11 +686,11 @@ impl Options {
             }
             "-min-version" => {
                 let min = args.remove(0).parse::<u16>().unwrap();
-                self.min_version = Some(ProtocolVersion::Unknown(min));
+                self.min_version = Some(ProtocolVersion(min));
             }
             "-max-version" => {
                 let max = args.remove(0).parse::<u16>().unwrap();
-                self.max_version = Some(ProtocolVersion::Unknown(max));
+                self.max_version = Some(ProtocolVersion(max));
             }
             "-max-send-fragment" => {
                 let max_fragment = args.remove(0).parse::<usize>().unwrap();
@@ -2173,7 +2173,7 @@ impl ShrinkingAlgorithm {
 
 impl compress::CertDecompressor for ShrinkingAlgorithm {
     fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm::Unknown(Self::ALGORITHM)
+        CertificateCompressionAlgorithm(Self::ALGORITHM)
     }
 
     fn decompress(
@@ -2192,7 +2192,7 @@ impl compress::CertDecompressor for ShrinkingAlgorithm {
 
 impl compress::CertCompressor for ShrinkingAlgorithm {
     fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm::Unknown(Self::ALGORITHM)
+        CertificateCompressionAlgorithm(Self::ALGORITHM)
     }
 
     fn compress(
@@ -2211,7 +2211,7 @@ struct ExpandingAlgorithm;
 
 impl compress::CertDecompressor for ExpandingAlgorithm {
     fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm::Unknown(0xff02)
+        CertificateCompressionAlgorithm(0xff02)
     }
 
     fn decompress(
@@ -2232,7 +2232,7 @@ impl compress::CertDecompressor for ExpandingAlgorithm {
 
 impl compress::CertCompressor for ExpandingAlgorithm {
     fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm::Unknown(0xff02)
+        CertificateCompressionAlgorithm(0xff02)
     }
 
     fn compress(
@@ -2253,7 +2253,7 @@ struct RandomAlgorithm;
 
 impl compress::CertDecompressor for RandomAlgorithm {
     fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm::Unknown(0xff03)
+        CertificateCompressionAlgorithm(0xff03)
     }
 
     fn decompress(
@@ -2271,7 +2271,7 @@ impl compress::CertDecompressor for RandomAlgorithm {
 
 impl compress::CertCompressor for RandomAlgorithm {
     fn algorithm(&self) -> CertificateCompressionAlgorithm {
-        CertificateCompressionAlgorithm::Unknown(0xff03)
+        CertificateCompressionAlgorithm(0xff03)
     }
 
     fn compress(

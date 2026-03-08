@@ -1511,7 +1511,7 @@ impl ExpectTraffic {
         self.counters
             .received_key_update_request()?;
 
-        match key_update_request {
+        match *key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
             KeyUpdateRequest::UpdateRequested => output.send().ensure_key_update_queued(),
             _ => return Err(InvalidMessage::InvalidKeyUpdate.into()),

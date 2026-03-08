@@ -195,7 +195,7 @@ fn test_secret_extraction_enabled() {
         #[cfg(not(feature = "fips"))]
         SupportedCipherSuite::Tls12(cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256),
     ] {
-        println!("Testing suite {:?}", suite.suite().as_str());
+        println!("Testing suite {:?}", suite.suite());
 
         // Only offer the cipher suite (and protocol version) that we're testing
         let mut server_config =

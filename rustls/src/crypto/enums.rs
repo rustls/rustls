@@ -1,12 +1,11 @@
-#![expect(non_camel_case_types)]
 use crate::crypto::hash;
 
 enum_builder! {
     /// The `CipherSuite` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u16)]
-    pub enum CipherSuite {
+    pub struct CipherSuite(pub u16);
+
+    enum CipherSuiteName {
         /// The `TLS_DHE_RSA_WITH_AES_128_GCM_SHA256` cipher suite.  Recommended=Y.  Defined in
         /// <https://www.iana.org/go/rfc5288>
         TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 => 0x009e,
@@ -364,9 +363,9 @@ enum_builder! {
 enum_builder! {
     /// The `SignatureScheme` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u16)]
-    pub enum SignatureScheme {
+    pub struct SignatureScheme(pub u16);
+
+    enum SignatureSchemeName {
         RSA_PKCS1_SHA1 => 0x0201,
         ECDSA_SHA1_Legacy => 0x0203,
         RSA_PKCS1_SHA256 => 0x0401,
@@ -405,7 +404,7 @@ impl SignatureScheme {
             | Self::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
             Self::ED25519 => SignatureAlgorithm::ED25519,
             Self::ED448 => SignatureAlgorithm::ED448,
-            _ => SignatureAlgorithm::Unknown(0),
+            _ => SignatureAlgorithm(0),
         }
     }
 
@@ -451,9 +450,9 @@ impl SignatureScheme {
 enum_builder! {
     /// The `HashAlgorithm` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub enum HashAlgorithm {
+    pub struct HashAlgorithm(pub u8);
+
+    enum HashAlgorithmName {
         NONE => 0x00,
         MD5 => 0x01,
         SHA1 => 0x02,
@@ -470,7 +469,7 @@ impl HashAlgorithm {
     /// This returns `None` for some hash algorithms, so the caller
     /// should be prepared to do the computation themselves in this case.
     pub(crate) fn hash_for_empty_input(&self) -> Option<hash::Output> {
-        match self {
+        match *self {
             Self::SHA256 => Some(hash::Output::new(
                 b"\xe3\xb0\xc4\x42\x98\xfc\x1c\x14\
                   \x9a\xfb\xf4\xc8\x99\x6f\xb9\x24\
@@ -493,9 +492,9 @@ impl HashAlgorithm {
 enum_builder! {
     /// The `SignatureAlgorithm` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub enum SignatureAlgorithm {
+    pub struct SignatureAlgorithm(pub u8);
+
+    enum SignatureAlgorithmName  {
         Anonymous => 0x00,
         RSA => 0x01,
         DSA => 0x02,

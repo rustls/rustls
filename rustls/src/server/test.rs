@@ -420,7 +420,7 @@ fn minimal_client_hello() -> ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_3,
         random: Random::from([0u8; 32]),
         session_id: SessionId::empty(),
-        cipher_suites: vec![CipherSuite::Unknown(0xff13), CipherSuite::Unknown(0xff12)],
+        cipher_suites: vec![CipherSuite(0xff13), CipherSuite(0xff12)],
         compression_methods: vec![Compression::Null],
         extensions: Box::new(ClientExtensions {
             signature_schemes: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
