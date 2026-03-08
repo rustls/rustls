@@ -8,14 +8,13 @@ use subtle::ConstantTimeEq;
 use super::config::ClientConfig;
 use super::{Retrieved, Tls13Session, tls13};
 use crate::common_state::Protocol;
-use crate::crypto::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
-use crate::crypto::SecureRandom;
 use crate::crypto::cipher::Payload;
 use crate::crypto::hash::Hash;
 use crate::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeKem, HpkePublicKey, HpkeSealer, HpkeSuite,
     HpkeSymmetricCipherSuite,
 };
+use crate::crypto::{CipherSuite, SecureRandom};
 use crate::enums::ProtocolVersion;
 use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -606,7 +605,7 @@ impl EchState {
             cipher_suites: outer_hello
                 .cipher_suites
                 .iter()
-                .filter(|cs| **cs != TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
+                .filter(|cs| **cs != CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
                 .copied()
                 .collect(),
             compression_methods: outer_hello.compression_methods.clone(),

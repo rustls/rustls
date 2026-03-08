@@ -121,7 +121,7 @@ impl crypto::TicketerFactory for Provider {
 
 pub const TLS13_FUZZING_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
-        suite: CipherSuite::Unknown(0xff13),
+        suite: CipherSuite(0xff13),
         hash_provider: &Hash,
         confidentiality_limit: u64::MAX,
     },
@@ -133,7 +133,7 @@ pub const TLS13_FUZZING_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
 
 pub const TLS_FUZZING_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
     common: CipherSuiteCommon {
-        suite: CipherSuite::Unknown(0xff12),
+        suite: CipherSuite(0xff12),
         hash_provider: &Hash,
         confidentiality_limit: u64::MAX,
     },

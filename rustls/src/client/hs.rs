@@ -182,11 +182,10 @@ impl ExpectServerHello {
         )?;
         trace!("We got ServerHello {server_hello:#?}");
 
-        use ProtocolVersion::{TLSv1_2, TLSv1_3};
         let config = &self.input.config;
-        let tls13_supported = config.supports_version(TLSv1_3);
+        let tls13_supported = config.supports_version(ProtocolVersion::TLSv1_3);
 
-        let server_version = if server_hello.legacy_version == TLSv1_2 {
+        let server_version = if server_hello.legacy_version == ProtocolVersion::TLSv1_2 {
             server_hello
                 .selected_version
                 .unwrap_or(server_hello.legacy_version)
@@ -195,10 +194,10 @@ impl ExpectServerHello {
         };
 
         match server_version {
-            TLSv1_3 if tls13_supported => {
+            ProtocolVersion::TLSv1_3 if tls13_supported => {
                 self.with_version::<Tls13CipherSuite>(server_hello, &input, output)
             }
-            TLSv1_2 if config.supports_version(TLSv1_2) => {
+            ProtocolVersion::TLSv1_2 if config.supports_version(ProtocolVersion::TLSv1_2) => {
                 if let Some((_, true)) = &self.early_data_key_schedule {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
@@ -213,7 +212,9 @@ impl ExpectServerHello {
             }
             _ => {
                 let reason = match server_version {
-                    TLSv1_2 | TLSv1_3 => PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig,
+                    ProtocolVersion::TLSv1_2 | ProtocolVersion::TLSv1_3 => {
+                        PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig
+                    }
                     _ => PeerIncompatible::ServerDoesNotSupportTls12Or13,
                 };
                 Err(reason.into())

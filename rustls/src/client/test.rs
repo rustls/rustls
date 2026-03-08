@@ -233,7 +233,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             ServerHelloPayload {
                 random: Random::new(config.provider().secure_random).unwrap(),
                 compression_method: Compression::Null,
-                cipher_suite: CipherSuite::Unknown(0xff12),
+                cipher_suite: CipherSuite(0xff12),
                 legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: SessionId::empty(),
                 extensions: Box::new(ServerExtensions::default()),
@@ -709,8 +709,8 @@ fn hybrid_kx_component_share_offered_if_supported_separately() {
         .as_ref()
         .unwrap();
     assert_eq!(key_shares.len(), 2);
-    assert_eq!(key_shares[0].group, NamedGroup::Unknown(0xfe00));
-    assert_eq!(key_shares[1].group, NamedGroup::Unknown(0xfe01));
+    assert_eq!(key_shares[0].group, NamedGroup(0xfe00));
+    assert_eq!(key_shares[1].group, NamedGroup(0xfe01));
 }
 
 #[test]
@@ -733,7 +733,7 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
         .as_ref()
         .unwrap();
     assert_eq!(key_shares.len(), 1);
-    assert_eq!(key_shares[0].group, NamedGroup::Unknown(0xfe00));
+    assert_eq!(key_shares[0].group, NamedGroup(0xfe00));
 }
 
 fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPayload, Error> {
@@ -765,10 +765,10 @@ const HYBRID_PROVIDER: CryptoProvider = CryptoProvider {
 };
 
 const FAKE_HYBRID: &FakeHybrid = &FakeHybrid {
-    name: NamedGroup::Unknown(0xfe00),
-    classical: NamedGroup::Unknown(0xfe01),
+    name: NamedGroup(0xfe00),
+    classical: NamedGroup(0xfe01),
 };
-const FAKE_KX_GROUP: &dyn SupportedKxGroup = &FakeKeyExchangeGroup(NamedGroup::Unknown(0xfe01));
+const FAKE_KX_GROUP: &dyn SupportedKxGroup = &FakeKeyExchangeGroup(NamedGroup(0xfe01));
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FakeHybrid {

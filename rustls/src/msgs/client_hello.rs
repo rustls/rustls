@@ -340,7 +340,7 @@ impl ClientExtensions<'_> {
         // Remove extensions which have specific order requirements.
         order.retain(|ext| {
             !(matches!(
-                ext,
+                *ext,
                 ExtensionType::PreSharedKey
                     | ExtensionType::EncryptedClientHello
                     | ExtensionType::EncryptedClientHelloOuterExtensions

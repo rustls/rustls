@@ -101,7 +101,7 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
         }
 
         self.typ = unpad_tls13_payload(payload);
-        if self.typ == ContentType::Unknown(0) {
+        if self.typ == ContentType(0) {
             return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
         }
 
@@ -483,7 +483,7 @@ fn unpad_tls13_payload(p: &mut InboundOpaque<'_>) -> ContentType {
         match p.pop() {
             Some(0) => {}
             Some(content_type) => return ContentType::from(content_type),
-            None => return ContentType::Unknown(0),
+            None => return ContentType(0),
         }
     }
 }

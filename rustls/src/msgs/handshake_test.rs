@@ -617,7 +617,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
                 | (HandshakeType::ServerKeyExchange, _)
                 | (HandshakeType::ClientKeyExchange, _)
                 | (HandshakeType::Finished, _)
-                | (HandshakeType::Unknown(_), _) => continue,
+                | (HandshakeType(99), _) => continue,
                 _ => {}
             };
 
@@ -683,7 +683,7 @@ fn can_detect_truncation_of_all_tls13_handshake_payloads() {
                 | (HandshakeType::ServerKeyExchange, _)
                 | (HandshakeType::ClientKeyExchange, _)
                 | (HandshakeType::Finished, _)
-                | (HandshakeType::Unknown(_), _) => continue,
+                | (HandshakeType(99), _) => continue,
                 _ => {}
             };
 
@@ -837,7 +837,7 @@ fn test_decode_config_list() {
     assert!(matches!(
         config_list[0],
         EchConfigPayload::Unknown {
-            version: EchVersion::Unknown(0xBADD),
+            version: EchVersion(0xBADD),
             ..
         }
     ));
@@ -1000,7 +1000,7 @@ fn all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             sample_certificate_status(),
         )),
         HandshakeMessagePayload(HandshakePayload::Unknown((
-            HandshakeType::Unknown(99),
+            HandshakeType(99),
             Payload::Borrowed(&[1, 2, 3]),
         ))),
     ]
@@ -1056,7 +1056,7 @@ fn all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             sample_certificate_status(),
         )),
         HandshakeMessagePayload(HandshakePayload::Unknown((
-            HandshakeType::Unknown(99),
+            HandshakeType(99),
             Payload::Borrowed(&[1, 2, 3]),
         ))),
     ]
