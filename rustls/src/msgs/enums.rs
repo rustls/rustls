@@ -44,17 +44,6 @@ enum_builder! {
 }
 
 enum_builder! {
-    /// The `HeartbeatMessageType` TLS protocol enum.  Values in this enum are taken
-    /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub(crate) enum HeartbeatMessageType {
-        Request => 0x01,
-        Response => 0x02,
-    }
-}
-
-enum_builder! {
     /// The `ExtensionType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognized ordinals.
@@ -155,17 +144,6 @@ enum_builder! {
 }
 
 enum_builder! {
-    /// The `HeartbeatMode` TLS protocol enum.  Values in this enum are taken
-    /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub(crate) enum HeartbeatMode {
-        PeerAllowedToSend => 0x01,
-        PeerNotAllowedToSend => 0x02,
-    }
-}
-
-enum_builder! {
     /// The `ECCurveType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognized ordinals.
@@ -239,19 +217,11 @@ pub(crate) mod tests {
         );
         test_enum8::<Compression>(Compression::Null, Compression::LSZ);
         test_enum8::<AlertLevel>(AlertLevel::Warning, AlertLevel::Fatal);
-        test_enum8::<HeartbeatMessageType>(
-            HeartbeatMessageType::Request,
-            HeartbeatMessageType::Response,
-        );
         test_enum16::<ExtensionType>(ExtensionType::ServerName, ExtensionType::RenegotiationInfo);
         test_enum8::<ServerNameType>(ServerNameType::HostName, ServerNameType::HostName);
         test_enum8::<ECPointFormat>(
             ECPointFormat::Uncompressed,
             ECPointFormat::ANSIX962CompressedChar2,
-        );
-        test_enum8::<HeartbeatMode>(
-            HeartbeatMode::PeerAllowedToSend,
-            HeartbeatMode::PeerNotAllowedToSend,
         );
         test_enum8::<ECCurveType>(ECCurveType::ExplicitPrime, ECCurveType::NamedCurve);
         test_enum8::<PskKeyExchangeMode>(
