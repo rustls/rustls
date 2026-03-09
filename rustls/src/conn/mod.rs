@@ -19,7 +19,6 @@ use crate::vecbuf::ChunkVecBuffer;
 
 // pub so that it can be re-exported from the crate root
 pub mod kernel;
-pub(crate) mod unbuffered;
 
 mod receive;
 use receive::JoinOutput;
