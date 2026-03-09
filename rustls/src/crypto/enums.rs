@@ -208,6 +208,14 @@ enum_builder! {
         /// <https://www.iana.org/go/rfc5487>
         TLS_RSA_PSK_WITH_AES_256_CBC_SHA384 => 0x00b7,
 
+        /// The `TLS_SM4_GCM_SM3` cipher suite.  Recommended=N.  Defined in
+        /// <https://www.iana.org/go/rfc8998>
+        TLS13_SM4_GCM_SM3 => 0x00c6,
+
+        /// The `TLS_SM4_CCM_SM3` cipher suite.  Recommended=N.  Defined in
+        /// <https://www.iana.org/go/rfc8998>
+        TLS13_SM4_CCM_SM3 => 0x00c7,
+
         /// The `TLS_EMPTY_RENEGOTIATION_INFO_SCSV` cipher suite.  Recommended=N.  Defined in
         /// <https://www.iana.org/go/rfc5746>
         TLS_EMPTY_RENEGOTIATION_INFO_SCSV => 0x00ff,
@@ -368,6 +376,8 @@ enum_builder! {
         ECDSA_NISTP384_SHA384 => 0x0503,
         RSA_PKCS1_SHA512 => 0x0601,
         ECDSA_NISTP521_SHA512 => 0x0603,
+        /// <https://www.iana.org/go/rfc8998>
+        SM2_SM3 => 0x0708,
         RSA_PSS_SHA256 => 0x0804,
         RSA_PSS_SHA384 => 0x0805,
         RSA_PSS_SHA512 => 0x0806,
@@ -539,5 +549,8 @@ mod tests {
         assert!(SignatureScheme::from(0x081a).supported_in_tls13());
         assert!(SignatureScheme::from(0x081b).supported_in_tls13());
         assert!(SignatureScheme::from(0x081c).supported_in_tls13());
+
+        // sm2sig_sm3 (RFC 8998)
+        assert!(SignatureScheme::SM2_SM3.supported_in_tls13());
     }
 }
