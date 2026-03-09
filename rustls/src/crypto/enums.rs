@@ -103,7 +103,6 @@ enum_builder! {
         /// <https://www.iana.org/go/rfc8442>
         TLS_ECDHE_PSK_WITH_AES_128_CCM_SHA256 => 0xd005,
 
-    !Debug:
         /// The `TLS_RSA_WITH_AES_128_CBC_SHA` cipher suite.  Recommended=N.  Defined in
         /// <https://www.iana.org/go/rfc5246>
         TLS_RSA_WITH_AES_128_CBC_SHA => 0x002f,
