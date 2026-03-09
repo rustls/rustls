@@ -1,13 +1,11 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
-use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut, Range};
 
 use pki_types::DnsName;
 
 use crate::client::EchStatus;
-use crate::conn::private::SideOutput;
 use crate::conn::{Exporter, ReceivePath, SendOutput, SendPath};
 use crate::crypto::Identity;
 use crate::crypto::cipher::Payload;
@@ -235,88 +233,6 @@ pub enum HandshakeKind {
     /// is unacceptable for several reasons, but this does not prevent the client
     /// from resuming.
     ResumedWithHelloRetryRequest,
-}
-
-pub(crate) struct CaptureAppData<'a, 'j, 'm> {
-    pub(crate) recv: &'a mut ReceivePath,
-    pub(crate) other: &'a mut JoinOutput<'j>,
-    /// Store a [`Locator`] initialized from the current receive buffer
-    ///
-    /// Allows received plaintext data to be unborrowed and stored in
-    /// `received_plaintext` for in-place decryption.
-    pub(crate) plaintext_locator: &'a Locator,
-    /// Unborrowed received plaintext data
-    ///
-    /// Set if plaintext data was received.
-    ///
-    /// Plaintext data may be reborrowed using a [`Delocator`] which was
-    /// initialized from the same slice as `plaintext_locator`.
-    pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
-    pub(crate) _message_lifetime: PhantomData<&'m ()>,
-}
-
-impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
-    fn emit(&mut self, ev: Event<'_>) {
-        self.other.side.emit(ev)
-    }
-
-    fn output(&mut self, ev: OutputEvent<'_>) {
-        if let OutputEvent::ProtocolVersion(ver) = ev {
-            self.recv.negotiated_version = Some(ver);
-            self.other.send.negotiated_version(ver);
-        }
-        self.other.outputs.handle(ev);
-    }
-
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        match self.other.quic.as_deref_mut() {
-            Some(quic) => quic.send_msg(m, must_encrypt),
-            None => self
-                .other
-                .send
-                .send_msg(m, must_encrypt),
-        }
-    }
-
-    fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
-        match &mut self.other.quic {
-            Some(quic) => Some(*quic),
-            None => None,
-        }
-    }
-
-    fn received_plaintext(&mut self, payload: Payload<'m>) {
-        // Receive plaintext data [`Payload<'_>`].
-        //
-        // Since [`Context`] does not hold a lifetime to the receive buffer the
-        // passed [`Payload`] will have it's lifetime erased by storing an index
-        // into the receive buffer as an [`UnborrowedPayload`]. This enables the
-        // data to be later reborrowed after it has been decrypted in-place.
-        let previous = self
-            .received_plaintext
-            .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
-        debug_assert!(previous.is_none(), "overwrote plaintext data");
-    }
-
-    fn start_traffic(&mut self) {
-        self.recv.may_receive_application_data = true;
-        self.other.send.start_traffic();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        self.recv
-    }
-
-    fn send(&mut self) -> &mut dyn SendOutput {
-        self.other.send
-    }
-}
-
-pub(crate) struct JoinOutput<'a> {
-    pub(crate) outputs: &'a mut ConnectionOutputs,
-    pub(crate) quic: Option<&'a mut dyn QuicOutput>,
-    pub(crate) send: &'a mut dyn SendOutput,
-    pub(crate) side: &'a mut dyn SideOutput,
 }
 
 /// The route for handshake state machine to surface determinations about the connection.

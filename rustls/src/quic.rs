@@ -25,8 +25,10 @@ mod connection {
     use super::{DirectionalKeys, KeyChange, Quic, Version};
     use crate::ConnectionOutputs;
     use crate::client::{ClientConfig, ClientSide};
-    use crate::common_state::{CommonState, JoinOutput, Protocol};
-    use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData, process_new_packets};
+    use crate::common_state::{CommonState, Protocol};
+    use crate::conn::{
+        ConnectionCore, JoinOutput, KeyingMaterialExporter, SideData, process_new_packets,
+    };
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
