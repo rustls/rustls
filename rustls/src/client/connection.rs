@@ -10,7 +10,6 @@ use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
-use crate::conn::unbuffered::EncryptError;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader,
     SideCommonOutput, Writer,
@@ -415,33 +414,6 @@ enum EarlyDataState {
     AcceptedFinished,
     Rejected,
 }
-
-/// Errors that may arise when encrypting early (RTT-0) data
-#[non_exhaustive]
-#[derive(Debug)]
-pub enum EarlyDataError {
-    /// Cannot encrypt more early data due to imposed limits
-    ExceededAllowedEarlyData,
-    /// Encryption error
-    Encrypt(EncryptError),
-}
-
-impl From<EncryptError> for EarlyDataError {
-    fn from(v: EncryptError) -> Self {
-        Self::Encrypt(v)
-    }
-}
-
-impl fmt::Display for EarlyDataError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ExceededAllowedEarlyData => f.write_str("cannot send any more early data"),
-            Self::Encrypt(e) => fmt::Display::fmt(e, f),
-        }
-    }
-}
-
-impl core::error::Error for EarlyDataError {}
 
 #[derive(Debug)]
 pub(crate) struct ClientConnectionData {
