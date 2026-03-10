@@ -16,8 +16,7 @@ use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, BufferProgress, DeframerIter, Delocator,
-    FragmentSpan, HandshakeAlignedProof, HandshakeDeframer, Locator, Message, MessagePayload,
-    TlsInputBuffer,
+    HandshakeAlignedProof, HandshakeDeframer, Locator, Message, MessagePayload, TlsInputBuffer,
 };
 use crate::quic::QuicOutput;
 
@@ -159,44 +158,29 @@ impl ReceivePath {
         buffer: &'b mut [u8],
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<Decrypted<'b>>, Error> {
-        // before processing any more of `buffer`, return any extant messages from `hs_deframer`
-        match self.hs_deframer.complete_span() {
-            Some(span) => Ok(Some(self.take_handshake_message(
-                span,
-                buffer,
-                buffer_progress,
-            ))),
-            None => self.process_more_input(buffer, buffer_progress),
-        }
-    }
-
-    fn take_handshake_message<'b>(
-        &mut self,
-        span: FragmentSpan,
-        buffer: &'b [u8],
-        buffer_progress: &mut BufferProgress,
-    ) -> Decrypted<'b> {
-        let (message, discard) = self.hs_deframer.message(span, buffer);
-        if let Some(discard) = discard {
-            buffer_progress.add_discard(discard);
-        }
-
-        Decrypted {
-            want_close_before_decrypt: false,
-            plaintext: message,
-        }
-    }
-
-    fn process_more_input<'b>(
-        &mut self,
-        buffer: &'b mut [u8],
-        buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<Decrypted<'b>>, Error> {
         let version_is_tls13 = matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3));
 
         let locator = Locator::new(buffer);
 
+        let mut want_close_before_decrypt = false;
         loop {
+            // before processing any more of `buffer`, return any extant messages from `hs_deframer`
+            if let Some(span) = self.hs_deframer.complete_span() {
+                let (plaintext, discard) = self.hs_deframer.message(span, buffer);
+                if let Some(discard) = discard {
+                    buffer_progress.add_discard(discard);
+                }
+
+                // trial decryption finishes with the first handshake message after it started.
+                self.decrypt_state
+                    .finish_trial_decryption();
+
+                return Ok(Some(Decrypted {
+                    plaintext,
+                    want_close_before_decrypt,
+                }));
+            }
+
             let mut iter = DeframerIter::new(&mut buffer[buffer_progress.processed()..]);
 
             let (message, processed) = loop {
@@ -259,9 +243,10 @@ impl ReceivePath {
                 break (message, iter.bytes_consumed());
             };
 
+            want_close_before_decrypt = message.want_close_before_decrypt;
             let Decrypted {
                 plaintext: message,
-                want_close_before_decrypt,
+                want_close_before_decrypt: _,
             } = message;
 
             if self.hs_deframer.aligned().is_none() && message.typ != ContentType::Handshake {
@@ -310,20 +295,6 @@ impl ReceivePath {
             self.hs_deframer
                 .input_message(message, &locator, buffer_progress.processed());
             self.hs_deframer.coalesce(buffer)?;
-
-            let Some(span) = self.hs_deframer.complete_span() else {
-                continue;
-            };
-
-            // trial decryption finishes with the first handshake message after it started.
-            self.decrypt_state
-                .finish_trial_decryption();
-
-            let decrypted = self.take_handshake_message(span, buffer, buffer_progress);
-            return Ok(Some(Decrypted {
-                plaintext: decrypted.plaintext,
-                want_close_before_decrypt,
-            }));
         }
     }
 
