@@ -78,11 +78,11 @@ impl HandshakeDeframer {
         BufferProgress::new(self.outer_discard)
     }
 
-    /// Do we have a message ready? ie, would `next()` return `Some`?
-    pub(crate) fn has_message_ready(&self) -> bool {
+    /// Yield the first complete [`FragmentSpan`] if any.
+    pub(crate) fn complete_span(&mut self) -> Option<FragmentSpan> {
         match self.spans.front() {
-            Some(span) => span.is_complete(),
-            None => false,
+            Some(span) if span.is_complete() => self.spans.pop_front(),
+            _ => None,
         }
     }
 
@@ -101,15 +101,11 @@ impl HandshakeDeframer {
     }
 
     /// Iterate over the complete messages.
-    pub(crate) fn next<'a, 'b>(
-        &'a mut self,
+    pub(crate) fn message<'b>(
+        &mut self,
+        next_span: FragmentSpan,
         containing_buffer: &'b [u8],
-    ) -> Option<(EncodedMessage<&'b [u8]>, usize)> {
-        let next_span = self.spans.pop_front()?;
-        if !next_span.is_complete() {
-            return None;
-        }
-
+    ) -> (EncodedMessage<&'b [u8]>, usize) {
         // if this is the last handshake message, then we'll end
         // up with an empty `spans` and can discard the remainder
         // of the input buffer.
@@ -119,14 +115,14 @@ impl HandshakeDeframer {
             0
         };
 
-        Some((
+        (
             EncodedMessage {
                 typ: ContentType::Handshake,
                 version: next_span.version,
                 payload: Delocator::new(containing_buffer).slice_from_range(&next_span.bounds),
             },
             discard,
-        ))
+        )
     }
 
     /// Coalesce the handshake portions of the given buffer,
@@ -326,7 +322,7 @@ impl Iterator for DissectHandshakeIter<'_, '_> {
 }
 
 #[derive(Debug)]
-struct FragmentSpan {
+pub(crate) struct FragmentSpan {
     /// version taken from containing message.
     version: ProtocolVersion,
 
@@ -399,7 +395,8 @@ mod tests {
         hs.coalesce(&mut input).unwrap();
         std::println!("after:  {hs:?}");
 
-        let (msg, discard) = hs.next(&input).unwrap();
+        let span = hs.complete_span().unwrap();
+        let (msg, discard) = hs.message(span, &input);
         std::println!("msg {msg:?} discard {discard:?}");
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
@@ -419,9 +416,9 @@ mod tests {
         assert_eq!(hs.spans.len(), 2);
 
         hs.coalesce(&mut input).unwrap();
-        assert_eq!(hs.spans.len(), 1);
+        let span = hs.complete_span().unwrap();
 
-        let (msg, discard) = std::dbg!(hs.next(&input).unwrap());
+        let (msg, discard) = std::dbg!(hs.message(span, &input));
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
@@ -456,8 +453,9 @@ mod tests {
         add_bytes(&mut hs, &input[3..8], &input);
         add_bytes(&mut hs, &input[8..12], &input);
 
-        let (msg, discard) = hs.next(&input).unwrap();
-        assert!(hs.next(&input).is_none());
+        let span = hs.complete_span().unwrap();
+        let (msg, discard) = hs.message(span, &input);
+        assert!(hs.complete_span().is_none());
 
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
@@ -485,7 +483,8 @@ mod tests {
         hs.coalesce(&mut input[..]).unwrap();
 
         for _ in 0..4 {
-            let (msg, discard) = hs.next(&input[..]).unwrap();
+            let span = hs.complete_span().unwrap();
+            let (msg, discard) = hs.message(span, &input[..]);
             assert!(matches!(
                 msg,
                 EncodedMessage {
@@ -496,7 +495,8 @@ mod tests {
             assert_eq!(discard, 0);
         }
 
-        let (msg, discard) = hs.next(&input[..]).unwrap();
+        let span = hs.complete_span().unwrap();
+        let (msg, discard) = hs.message(span, &input[..]);
         assert!(matches!(
             msg,
             EncodedMessage {
