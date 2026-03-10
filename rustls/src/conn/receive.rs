@@ -55,9 +55,10 @@ impl ReceivePath {
     pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
         &mut self,
         input: &'m mut dyn TlsInputBuffer,
+        buffer_progress: &mut BufferProgress,
         state: &mut Result<Side::State, Error>,
         output: &mut JoinOutput<'a>,
-    ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
+    ) -> Result<Option<UnborrowedPayload>, Error> {
         let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
             Err(e) => {
@@ -67,12 +68,10 @@ impl ReceivePath {
         };
 
         let mut plaintext = None;
-        let mut buffer_progress = self.hs_deframer.progress();
-
         while st.wants_input() {
             let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
-            let res = self.deframe(buffer, &mut buffer_progress);
+            let res = self.deframe(buffer, buffer_progress);
 
             let mut output = CaptureAppData {
                 recv: self,
@@ -142,7 +141,7 @@ impl ReceivePath {
 
             if let Some(payload) = plaintext.take() {
                 *state = Ok(st);
-                return Ok(Some((payload, buffer_progress)));
+                return Ok(Some(payload));
             }
 
             input.discard(buffer_progress.take_discard());
