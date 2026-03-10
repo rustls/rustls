@@ -6,10 +6,12 @@ use std::io;
 use kernel::KernelConnection;
 use pki_types::FipsStatus;
 
-use crate::common_state::{CommonState, ConnectionOutputs, Event, Output, OutputEvent};
+use crate::common_state::{
+    CommonState, ConnectionOutputs, Event, Output, OutputEvent, UnborrowedPayload,
+};
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{DeframerVecBuffer, Delocator, Message, Random, TlsInputBuffer};
+use crate::msgs::{BufferProgress, DeframerVecBuffer, Delocator, Message, Random, TlsInputBuffer};
 use crate::quic::QuicOutput;
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -20,7 +22,8 @@ pub mod kernel;
 pub(crate) mod unbuffered;
 
 mod receive;
-pub(crate) use receive::{Input, JoinOutput, ReceivePath, TrafficTemperCounters};
+use receive::JoinOutput;
+pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
 
 mod send;
 use send::DEFAULT_BUFFER_LIMIT;
@@ -548,22 +551,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         loop {
-            let mut output = JoinOutput {
-                outputs: &mut self.core.common.outputs,
-                quic: None,
-                send: &mut self.core.common.send,
-                side: &mut self.core.side,
-            };
-
             let Some((payload, mut buffer_progress)) = self
                 .core
-                .common
-                .recv
-                .process_new_packets::<Side>(
-                    &mut self.deframer_buffer,
-                    &mut self.core.state,
-                    &mut output,
-                )?
+                .process_new_packets(&mut self.deframer_buffer, None)?
             else {
                 break;
             };
@@ -742,6 +732,24 @@ impl<Side: SideData> ConnectionCore<Side> {
             side,
             common,
         }
+    }
+
+    #[inline]
+    pub(crate) fn process_new_packets<'a>(
+        &'a mut self,
+        buffer: &mut dyn TlsInputBuffer,
+        quic: Option<&'a mut dyn QuicOutput>,
+    ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
+        let mut output = JoinOutput {
+            outputs: &mut self.common.outputs,
+            quic,
+            send: &mut self.common.send,
+            side: &mut self.side,
+        };
+
+        self.common
+            .recv
+            .process_new_packets::<Side>(buffer, &mut self.state, &mut output)
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
