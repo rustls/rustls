@@ -550,10 +550,13 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        let mut buffer_progress = self.core.buffer_progress();
         loop {
-            let Some((payload, mut buffer_progress)) = self
-                .core
-                .process_new_packets(&mut self.deframer_buffer, None)?
+            let Some(payload) = self.core.process_new_packets(
+                &mut self.deframer_buffer,
+                &mut buffer_progress,
+                None,
+            )?
             else {
                 break;
             };
@@ -738,8 +741,9 @@ impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn process_new_packets<'a>(
         &'a mut self,
         buffer: &mut dyn TlsInputBuffer,
+        buffer_progress: &mut BufferProgress,
         quic: Option<&'a mut dyn QuicOutput>,
-    ) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
+    ) -> Result<Option<UnborrowedPayload>, Error> {
         let mut output = JoinOutput {
             outputs: &mut self.common.outputs,
             quic,
@@ -749,7 +753,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
         self.common
             .recv
-            .process_new_packets::<Side>(buffer, &mut self.state, &mut output)
+            .process_new_packets::<Side>(buffer, buffer_progress, &mut self.state, &mut output)
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
@@ -810,6 +814,10 @@ impl<Side: SideData> ConnectionCore<Side> {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
+    }
+
+    pub(crate) fn buffer_progress(&self) -> BufferProgress {
+        self.common.recv.hs_deframer.progress()
     }
 }
 

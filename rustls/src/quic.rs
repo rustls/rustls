@@ -434,8 +434,12 @@ mod connection {
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
-            self.core
-                .process_new_packets(&mut self.deframer_buffer, Some(&mut self.quic))?;
+            let mut buffer_progress = self.core.buffer_progress();
+            self.core.process_new_packets(
+                &mut self.deframer_buffer,
+                &mut buffer_progress,
+                Some(&mut self.quic),
+            )?;
 
             Ok(())
         }
