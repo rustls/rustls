@@ -440,6 +440,14 @@ mod connection {
                 Some(&mut self.quic),
             )?;
 
+            let discard = buffer_progress.take_discard();
+            self.deframer_buffer.discard(discard);
+            self.core
+                .common
+                .recv
+                .hs_deframer
+                .discarded(discard);
+
             Ok(())
         }
 

@@ -559,12 +559,18 @@ impl<Side: SideData> ConnectionCommon<Side> {
             self.buffers
                 .received_plaintext
                 .append(payload.into_vec());
-            self.buffers
-                .deframer_buffer
-                .discard(buffer_progress.take_discard());
         }
 
         // Release unsent buffered plaintext.
+        let discard = buffer_progress.take_discard();
+        self.buffers
+            .deframer_buffer
+            .discard(discard);
+        self.core
+            .common
+            .recv
+            .hs_deframer
+            .discarded(discard);
         if self.send.may_send_application_data
             && !self
                 .buffers
