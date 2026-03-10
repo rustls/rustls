@@ -51,7 +51,7 @@ impl ReceivePath {
         }
     }
 
-    pub(crate) fn process_new_packets<'a, 'm, Side: SideData>(
+    pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
         &mut self,
         input: &'m mut dyn TlsInputBuffer,
         state: &mut Result<Side::State, Error>,
@@ -523,11 +523,11 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
     }
 }
 
-pub(crate) struct JoinOutput<'a> {
-    pub(crate) outputs: &'a mut ConnectionOutputs,
-    pub(crate) quic: Option<&'a mut dyn QuicOutput>,
-    pub(crate) send: &'a mut dyn SendOutput,
-    pub(crate) side: &'a mut dyn SideOutput,
+pub(super) struct JoinOutput<'a> {
+    pub(super) outputs: &'a mut ConnectionOutputs,
+    pub(super) quic: Option<&'a mut dyn QuicOutput>,
+    pub(super) send: &'a mut dyn SendOutput,
+    pub(super) side: &'a mut dyn SideOutput,
 }
 
 /// Tracking technically-allowed protocol actions
