@@ -1,25 +1,15 @@
 use alloc::boxed::Box;
 use core::fmt::{self, Debug};
-use core::marker::PhantomData;
-use core::mem;
 use core::ops::{Deref, DerefMut};
 use std::io;
 
 use kernel::KernelConnection;
 use pki_types::FipsStatus;
 
-use crate::ConnectionOutputs;
-use crate::common_state::{
-    CommonState, Event, Output, OutputEvent, UnborrowedPayload, maybe_send_fatal_alert,
-};
-use crate::conn::private::SideOutput;
-use crate::crypto::cipher::{Decrypted, Payload};
-use crate::error::{AlertDescription, ApiMisuse, Error};
+use crate::common_state::{CommonState, ConnectionOutputs, Event, Output, OutputEvent};
+use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{
-    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
-    TlsInputBuffer,
-};
+use crate::msgs::{DeframerVecBuffer, Delocator, Message, Random, TlsInputBuffer};
 use crate::quic::QuicOutput;
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -30,7 +20,7 @@ pub mod kernel;
 pub(crate) mod unbuffered;
 
 mod receive;
-pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
+pub(crate) use receive::{Input, JoinOutput, ReceivePath, TrafficTemperCounters};
 
 mod send;
 use send::DEFAULT_BUFFER_LIMIT;
@@ -565,12 +555,15 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 side: &mut self.core.side,
             };
 
-            let Some((payload, mut buffer_progress)) = process_new_packets::<Side>(
-                &mut self.deframer_buffer,
-                &mut self.core.state,
-                &mut self.core.common.recv,
-                &mut output,
-            )?
+            let Some((payload, mut buffer_progress)) = self
+                .core
+                .common
+                .recv
+                .process_new_packets::<Side>(
+                    &mut self.deframer_buffer,
+                    &mut self.core.state,
+                    &mut output,
+                )?
             else {
                 break;
             };
@@ -736,189 +729,6 @@ impl IoState {
     }
 }
 
-pub(crate) fn process_new_packets<'a, 'm, Side: SideData>(
-    input: &'m mut dyn TlsInputBuffer,
-    state: &mut Result<Side::State, Error>,
-    recv: &mut ReceivePath,
-    output: &mut JoinOutput<'a>,
-) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
-    let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
-        Ok(state) => state,
-        Err(e) => {
-            *state = Err(e.clone());
-            return Err(e);
-        }
-    };
-
-    let mut plaintext = None;
-    let mut buffer_progress = recv.hs_deframer.progress();
-
-    while st.wants_input() {
-        let buffer = input.slice_mut();
-        let locator = Locator::new(buffer);
-        let res = recv.deframe(buffer, &mut buffer_progress);
-
-        let mut output = CaptureAppData {
-            recv,
-            other: &mut *output,
-            plaintext_locator: &locator,
-            received_plaintext: &mut plaintext,
-            _message_lifetime: PhantomData,
-        };
-
-        let opt_msg = match res {
-            Ok(opt_msg) => opt_msg,
-            Err(e) => {
-                maybe_send_fatal_alert(output.other.send, &e);
-                if let Error::DecryptError = e {
-                    st.handle_decrypt_error();
-                }
-                *state = Err(e.clone());
-                input.discard(buffer_progress.take_discard());
-                return Err(e);
-            }
-        };
-
-        let Some(msg) = opt_msg else {
-            break;
-        };
-
-        let Decrypted {
-            plaintext: msg,
-            want_close_before_decrypt,
-        } = msg;
-
-        if want_close_before_decrypt {
-            output
-                .other
-                .send
-                .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
-        }
-
-        let hs_aligned = output.recv.hs_deframer.aligned();
-        let result = match output
-            .recv
-            .receive_message(msg, hs_aligned, output.other.send)
-        {
-            Ok(Some(input)) => st.handle(input, &mut output),
-            Ok(None) => Ok(st),
-            Err(e) => Err(e),
-        };
-
-        match result {
-            Ok(new) => st = new,
-            Err(e) => {
-                maybe_send_fatal_alert(output.other.send, &e);
-                *state = Err(e.clone());
-                input.discard(buffer_progress.take_discard());
-                return Err(e);
-            }
-        }
-
-        if recv.has_received_close_notify {
-            // "Any data received after a closure alert has been received MUST be ignored."
-            // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
-            // This is data that has already been accepted in `read_tls`.
-            let entirety = input.slice_mut().len();
-            input.discard(entirety);
-            break;
-        }
-
-        if let Some(payload) = plaintext.take() {
-            *state = Ok(st);
-            return Ok(Some((payload, buffer_progress)));
-        }
-
-        input.discard(buffer_progress.take_discard());
-    }
-
-    input.discard(buffer_progress.take_discard());
-    *state = Ok(st);
-    Ok(None)
-}
-
-struct CaptureAppData<'a, 'j, 'm> {
-    recv: &'a mut ReceivePath,
-    other: &'a mut JoinOutput<'j>,
-    /// Store a [`Locator`] initialized from the current receive buffer
-    ///
-    /// Allows received plaintext data to be unborrowed and stored in
-    /// `received_plaintext` for in-place decryption.
-    plaintext_locator: &'a Locator,
-    /// Unborrowed received plaintext data
-    ///
-    /// Set if plaintext data was received.
-    ///
-    /// Plaintext data may be reborrowed using a [`Delocator`] which was
-    /// initialized from the same slice as `plaintext_locator`.
-    received_plaintext: &'a mut Option<UnborrowedPayload>,
-    _message_lifetime: PhantomData<&'m ()>,
-}
-
-impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
-    fn emit(&mut self, ev: Event<'_>) {
-        self.other.side.emit(ev)
-    }
-
-    fn output(&mut self, ev: OutputEvent<'_>) {
-        if let OutputEvent::ProtocolVersion(ver) = ev {
-            self.recv.negotiated_version = Some(ver);
-            self.other.send.negotiated_version(ver);
-        }
-        self.other.outputs.handle(ev);
-    }
-
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        match self.other.quic.as_deref_mut() {
-            Some(quic) => quic.send_msg(m, must_encrypt),
-            None => self
-                .other
-                .send
-                .send_msg(m, must_encrypt),
-        }
-    }
-
-    fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
-        match &mut self.other.quic {
-            Some(quic) => Some(*quic),
-            None => None,
-        }
-    }
-
-    fn received_plaintext(&mut self, payload: Payload<'m>) {
-        // Receive plaintext data [`Payload<'_>`].
-        //
-        // Since [`Context`] does not hold a lifetime to the receive buffer the
-        // passed [`Payload`] will have it's lifetime erased by storing an index
-        // into the receive buffer as an [`UnborrowedPayload`]. This enables the
-        // data to be later reborrowed after it has been decrypted in-place.
-        let previous = self
-            .received_plaintext
-            .replace(UnborrowedPayload::unborrow(self.plaintext_locator, payload));
-        debug_assert!(previous.is_none(), "overwrote plaintext data");
-    }
-
-    fn start_traffic(&mut self) {
-        self.recv.may_receive_application_data = true;
-        self.other.send.start_traffic();
-    }
-
-    fn receive(&mut self) -> &mut ReceivePath {
-        self.recv
-    }
-
-    fn send(&mut self) -> &mut dyn SendOutput {
-        self.other.send
-    }
-}
-
-pub(crate) struct JoinOutput<'a> {
-    pub(crate) outputs: &'a mut ConnectionOutputs,
-    pub(crate) quic: Option<&'a mut dyn QuicOutput>,
-    pub(crate) send: &'a mut dyn SendOutput,
-    pub(crate) side: &'a mut dyn SideOutput,
-}
-
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Side::State, Error>,
     pub(crate) side: Side::Data,
@@ -1063,6 +873,8 @@ pub(crate) mod private {
         fn emit(&mut self, ev: Event<'_>);
     }
 }
+
+use private::SideOutput;
 
 pub(crate) trait StateMachine: Sized {
     fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error>;

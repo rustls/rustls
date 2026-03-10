@@ -26,9 +26,7 @@ mod connection {
     use crate::ConnectionOutputs;
     use crate::client::{ClientConfig, ClientSide};
     use crate::common_state::{CommonState, Protocol};
-    use crate::conn::{
-        ConnectionCore, JoinOutput, KeyingMaterialExporter, SideData, process_new_packets,
-    };
+    use crate::conn::{ConnectionCore, JoinOutput, KeyingMaterialExporter, SideData};
     use crate::crypto::cipher::{EncodedMessage, Payload};
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
@@ -436,17 +434,19 @@ mod connection {
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
-            process_new_packets::<Side>(
-                &mut self.deframer_buffer,
-                &mut self.core.state,
-                &mut self.core.common.recv,
-                &mut JoinOutput {
-                    outputs: &mut self.core.common.outputs,
-                    quic: Some(&mut self.quic),
-                    send: &mut self.core.common.send,
-                    side: &mut self.core.side,
-                },
-            )?;
+            self.core
+                .common
+                .recv
+                .process_new_packets::<Side>(
+                    &mut self.deframer_buffer,
+                    &mut self.core.state,
+                    &mut JoinOutput {
+                        outputs: &mut self.core.common.outputs,
+                        quic: Some(&mut self.quic),
+                        send: &mut self.core.common.send,
+                        side: &mut self.core.side,
+                    },
+                )?;
 
             Ok(())
         }
