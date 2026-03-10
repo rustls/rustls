@@ -172,8 +172,7 @@ impl ReceivePath {
         buffer_progress: &mut BufferProgress,
     ) -> Option<Decrypted<'b>> {
         self.hs_deframer
-            .iter(buffer)
-            .next()
+            .next(buffer)
             .map(|(message, discard)| {
                 buffer_progress.add_discard(discard);
                 Decrypted {
