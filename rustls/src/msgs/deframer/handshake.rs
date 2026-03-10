@@ -105,14 +105,13 @@ impl HandshakeDeframer {
         &mut self,
         next_span: FragmentSpan,
         containing_buffer: &'b [u8],
-    ) -> (EncodedMessage<&'b [u8]>, usize) {
+    ) -> (EncodedMessage<&'b [u8]>, Option<usize>) {
         // if this is the last handshake message, then we'll end
         // up with an empty `spans` and can discard the remainder
         // of the input buffer.
-        let discard = if self.spans.is_empty() {
-            mem::take(&mut self.outer_discard)
-        } else {
-            0
+        let discard = match self.spans.is_empty() {
+            true => Some(mem::take(&mut self.outer_discard)),
+            false => None,
         };
 
         (
@@ -402,7 +401,10 @@ mod tests {
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xff]);
 
-        input.drain(..discard);
+        if let Some(discard) = discard {
+            input.drain(..discard);
+        }
+
         assert_eq!(input, &[0, 1]);
     }
 
@@ -423,7 +425,10 @@ mod tests {
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
 
-        input.drain(..discard);
+        if let Some(discard) = discard {
+            input.drain(..discard);
+        }
+
         assert_eq!(input, &[0]);
     }
 
@@ -460,7 +465,7 @@ mod tests {
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xab]);
-        assert_eq!(discard, 0);
+        assert_eq!(discard, None);
     }
 
     #[test]
@@ -492,7 +497,7 @@ mod tests {
                     ..
                 }
             ));
-            assert_eq!(discard, 0);
+            assert_eq!(discard, None);
         }
 
         let span = hs.complete_span().unwrap();
@@ -504,8 +509,9 @@ mod tests {
                 ..
             }
         ));
-        assert_eq!(discard, 4280);
 
+        let discard = discard.expect("last message should have discard");
+        assert_eq!(discard, 4280);
         input.drain(0..discard);
         assert!(input.is_empty());
     }

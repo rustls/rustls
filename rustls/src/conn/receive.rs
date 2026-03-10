@@ -176,7 +176,10 @@ impl ReceivePath {
         buffer_progress: &mut BufferProgress,
     ) -> Decrypted<'b> {
         let (message, discard) = self.hs_deframer.message(span, buffer);
-        buffer_progress.add_discard(discard);
+        if let Some(discard) = discard {
+            buffer_progress.add_discard(discard);
+        }
+
         Decrypted {
             want_close_before_decrypt: false,
             plaintext: message,
