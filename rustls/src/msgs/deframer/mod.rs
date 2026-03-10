@@ -9,7 +9,7 @@ mod buffers;
 pub(crate) use buffers::{BufferProgress, DeframerVecBuffer, Delocator, Locator, TlsInputBuffer};
 
 mod handshake;
-pub(crate) use handshake::{HandshakeAlignedProof, HandshakeDeframer};
+pub(crate) use handshake::{FragmentSpan, HandshakeAlignedProof, HandshakeDeframer};
 
 /// A deframer of TLS wire messages.
 ///

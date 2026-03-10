@@ -15,7 +15,8 @@ use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, BufferProgress, DeframerIter, Delocator,
-    HandshakeAlignedProof, HandshakeDeframer, Locator, Message, MessagePayload, TlsInputBuffer,
+    FragmentSpan, HandshakeAlignedProof, HandshakeDeframer, Locator, Message, MessagePayload,
+    TlsInputBuffer,
 };
 use crate::quic::QuicOutput;
 
@@ -159,27 +160,28 @@ impl ReceivePath {
         buffer_progress: &mut BufferProgress,
     ) -> Result<Option<Decrypted<'b>>, Error> {
         // before processing any more of `buffer`, return any extant messages from `hs_deframer`
-        if self.hs_deframer.has_message_ready() {
-            Ok(self.take_handshake_message(buffer, buffer_progress))
-        } else {
-            self.process_more_input(buffer, buffer_progress)
+        match self.hs_deframer.complete_span() {
+            Some(span) => Ok(Some(self.take_handshake_message(
+                span,
+                buffer,
+                buffer_progress,
+            ))),
+            None => self.process_more_input(buffer, buffer_progress),
         }
     }
 
     fn take_handshake_message<'b>(
         &mut self,
+        span: FragmentSpan,
         buffer: &'b [u8],
         buffer_progress: &mut BufferProgress,
-    ) -> Option<Decrypted<'b>> {
-        self.hs_deframer
-            .next(buffer)
-            .map(|(message, discard)| {
-                buffer_progress.add_discard(discard);
-                Decrypted {
-                    want_close_before_decrypt: false,
-                    plaintext: message,
-                }
-            })
+    ) -> Decrypted<'b> {
+        let (message, discard) = self.hs_deframer.message(span, buffer);
+        buffer_progress.add_discard(discard);
+        Decrypted {
+            want_close_before_decrypt: false,
+            plaintext: message,
+        }
     }
 
     fn process_more_input<'b>(
@@ -306,18 +308,19 @@ impl ReceivePath {
                 .input_message(message, &locator, buffer_progress.processed());
             self.hs_deframer.coalesce(buffer)?;
 
-            if self.hs_deframer.has_message_ready() {
-                // trial decryption finishes with the first handshake message after it started.
-                self.decrypt_state
-                    .finish_trial_decryption();
+            let Some(span) = self.hs_deframer.complete_span() else {
+                continue;
+            };
 
-                return Ok(self
-                    .take_handshake_message(buffer, buffer_progress)
-                    .map(|decrypted| Decrypted {
-                        plaintext: decrypted.plaintext,
-                        want_close_before_decrypt,
-                    }));
-            }
+            // trial decryption finishes with the first handshake message after it started.
+            self.decrypt_state
+                .finish_trial_decryption();
+
+            let decrypted = self.take_handshake_message(span, buffer, buffer_progress);
+            return Ok(Some(Decrypted {
+                plaintext: decrypted.plaintext,
+                want_close_before_decrypt,
+            }));
         }
     }
 
