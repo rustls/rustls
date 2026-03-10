@@ -1,6 +1,6 @@
-use alloc::vec::Vec;
 use core::mem;
 use core::ops::Range;
+use std::collections::VecDeque;
 
 use super::buffers::{BufferProgress, Coalescer, Delocator, Locator};
 use crate::crypto::cipher::EncodedMessage;
@@ -11,7 +11,7 @@ use crate::msgs::codec::{Codec, U24};
 #[derive(Debug)]
 pub(crate) struct HandshakeDeframer {
     /// Spans covering individual handshake payloads, in order of receipt.
-    spans: Vec<FragmentSpan>,
+    spans: VecDeque<FragmentSpan>,
 
     /// Discard value, tracking the rightmost extent of the last message
     /// in `spans`.
@@ -55,10 +55,10 @@ impl HandshakeDeframer {
         // buffer, and `msg` borrows it.
         if let Some(_last_incomplete) = self
             .spans
-            .last()
+            .back()
             .filter(|span| !span.is_complete())
         {
-            self.spans.push(FragmentSpan {
+            self.spans.push_back(FragmentSpan {
                 version: msg.version,
                 size: None,
                 bounds: containing_buffer.locate(msg.payload),
@@ -69,7 +69,7 @@ impl HandshakeDeframer {
         // otherwise, we can expect `msg` to contain a handshake header introducing
         // a new message (and perhaps several of them.)
         for span in DissectHandshakeIter::new(msg, containing_buffer) {
-            self.spans.push(span);
+            self.spans.push_back(span);
         }
     }
 
@@ -80,7 +80,7 @@ impl HandshakeDeframer {
 
     /// Do we have a message ready? ie, would `iter().next()` return `Some`?
     pub(crate) fn has_message_ready(&self) -> bool {
-        match self.spans.first() {
+        match self.spans.front() {
             Some(span) => span.is_complete(),
             None => false,
         }
@@ -184,8 +184,14 @@ impl HandshakeDeframer {
     /// Within `containing_buffer`, move `span[index+1]` to be contiguous
     /// with `span[index]`.
     fn coalesce_one(&mut self, index: usize, mut containing_buffer: Coalescer<'_>) {
-        let second = self.spans.remove(index + 1);
-        let mut first = self.spans.remove(index);
+        let Some(second) = self.spans.remove(index + 1) else {
+            return;
+        };
+
+        let Some(mut first) = self.spans.remove(index) else {
+            self.spans.insert(index + 1, second);
+            return;
+        };
 
         // move the entirety of `second` to be contiguous with `first`
         let len = second.bounds.len();
@@ -217,14 +223,15 @@ impl HandshakeDeframer {
     /// Returns an index into `spans` for the first non-complete span:
     /// this will never be the last item.
     fn requires_coalesce(&self) -> Option<usize> {
-        self.spans
-            .split_last()
-            .and_then(|(_last, elements)| {
-                elements
-                    .iter()
-                    .enumerate()
-                    .find_map(|(i, span)| (!span.is_complete()).then_some(i))
-            })
+        let limit = self.spans.len().saturating_sub(1);
+        let iter = self.spans.iter();
+        for (i, span) in iter.enumerate().take(limit) {
+            if !span.is_complete() {
+                return Some(i);
+            }
+        }
+
+        None
     }
 }
 
@@ -233,7 +240,7 @@ impl Default for HandshakeDeframer {
         Self {
             // capacity: a typical upper limit on handshake messages in
             // a single flight
-            spans: Vec::with_capacity(16),
+            spans: VecDeque::with_capacity(16),
             outer_discard: 0,
         }
     }
