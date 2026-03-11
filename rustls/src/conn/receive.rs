@@ -52,7 +52,7 @@ impl ReceivePath {
         }
     }
 
-    pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
+    pub(super) fn process_new_packets<'a, 'm, Side: SideData, Finish: FinishCondition>(
         &mut self,
         input: &'m mut dyn TlsInputBuffer,
         state: &mut Result<Side::State, Error>,
@@ -67,7 +67,8 @@ impl ReceivePath {
         };
 
         let mut plaintext = None;
-        while st.wants_input() {
+
+        while st.wants_input() && !Finish::is_done(&st) {
             let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
             let res = self.deframe(buffer);
@@ -411,6 +412,18 @@ impl ReceivePath {
         }
 
         Err(err)
+    }
+}
+
+pub(super) trait FinishCondition {
+    fn is_done<S: StateMachine>(state: &S) -> bool;
+}
+
+pub(super) struct FinishOnAppData;
+
+impl FinishCondition for FinishOnAppData {
+    fn is_done<S: StateMachine>(_state: &S) -> bool {
+        false
     }
 }
 
