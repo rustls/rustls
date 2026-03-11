@@ -16,10 +16,10 @@ use clap::Parser;
 use rcgen::{Issuer, KeyPair, SerialNumber};
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
-use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
+use rustls::server::{ClientHello, ServerConfig, ServerHandshake, WebPkiClientVerifier};
 use rustls::{RootCertStore, VecInput};
 use rustls_aws_lc_rs::DEFAULT_PROVIDER;
-use rustls_util::{KeyLogFile, complete_io};
+use rustls_util::KeyLogFile;
 
 fn main() {
     let args = Args::parse();
@@ -77,44 +77,39 @@ fn main() {
     let listener = std::net::TcpListener::bind(format!("[::]:{}", args.port)).unwrap();
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        let mut acceptor = Acceptor::default();
+        let mut handshake = ServerHandshake::NeedsInput(ServerHandshake::start());
         let mut input = VecInput::default();
+        let mut output = vec![];
 
-        // Read TLS packets until we've consumed a full client hello and are ready to accept a
-        // connection.
-        let accepted = loop {
-            input.read(&mut stream).unwrap();
-            match acceptor.accept(&mut input) {
-                Ok(Some(accepted)) => break accepted,
-                Ok(None) => continue,
-                Err(mut error_with_alert) => {
-                    if let Some(alert) = error_with_alert.take_tls_data() {
-                        stream.write_all(&alert).unwrap();
+        let _connection = loop {
+            handshake = match handshake {
+                // Read TLS packets until we've completed the handshake.
+                ServerHandshake::NeedsInput(receive) => {
+                    input.read(&mut stream).unwrap();
+                    match receive.process(&mut input, &mut output) {
+                        Ok(next) => next,
+                        Err(error) => panic!("error completing handshake: {error}"),
                     }
-                    panic!("error accepting connection: {}", error_with_alert.error);
                 }
-            }
-        };
 
-        // Generate a server config for the accepted connection, optionally customizing the
-        // configuration based on the client hello.
-        let config = test_pki.server_config(&args.crl_path, accepted.client_hello());
-        let mut conn = match accepted.into_connection(config) {
-            Ok(conn) => conn,
-            Err(mut error_with_alert) => {
-                if let Some(alert) = error_with_alert.take_tls_data() {
-                    stream.write_all(&alert).unwrap();
+                // Generate a server config for the accepted connection, optionally customizing the
+                // configuration based on the client hello.
+                ServerHandshake::Accepted(accepted) => {
+                    let config = test_pki.server_config(&args.crl_path, accepted.client_hello());
+                    accepted
+                        .choose_config(config, &mut output)
+                        .expect("error choosing configuration for connection")
                 }
-                panic!(
-                    "error completing accepting connection: {}",
-                    error_with_alert.error
-                );
-            }
-        };
 
-        // Proceed with handling the ServerConnection
-        // Important: We do no error handling here, but you should!
-        _ = complete_io(&mut stream, &mut input, &mut conn);
+                ServerHandshake::Complete(connection) => break connection,
+
+                other => panic!("unexpected ServerHandshake state {other:?}"),
+            };
+
+            stream
+                .write_all(&output.concat())
+                .unwrap();
+        };
     }
 }
 

@@ -112,7 +112,6 @@ pub struct ServerConfig {
 
     /// How to choose a server cert and key. This is usually set by
     /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_server_credential_resolver].
-    /// For async applications, see also [`Acceptor`][super::Acceptor].
     pub cert_resolver: Arc<dyn ServerCredentialResolver>,
 
     /// Protocol names we support, most preferred first.
@@ -378,10 +377,6 @@ pub trait StoresServerSessions: Debug + Send + Sync {
 ///
 /// This is suitable when selecting a certificate does not require
 /// I/O or when the application is using blocking I/O anyhow.
-///
-/// For applications that use async I/O and need to do I/O to choose
-/// a certificate (for instance, fetching a certificate from a data store),
-/// the [`Acceptor`][super::Acceptor] interface is more suitable.
 pub trait ServerCredentialResolver: Debug + Send + Sync {
     /// Choose a certificate chain and matching key given simplified ClientHello information.
     ///

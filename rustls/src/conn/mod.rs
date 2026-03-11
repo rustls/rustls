@@ -872,6 +872,7 @@ use private::SideOutput;
 pub(crate) trait StateMachine: Sized {
     fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error>;
     fn wants_input(&self) -> bool;
+    fn is_traffic(&self) -> bool;
     fn handle_decrypt_error(&mut self);
     fn into_external_state(
         self,
