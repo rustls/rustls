@@ -628,14 +628,14 @@ enum InnerState {
 /// # }
 /// ```
 pub struct Acceptor {
-    inner: Option<ServerConnection>,
+    inner: Option<Box<ServerConnection>>,
 }
 
 impl Default for Acceptor {
     /// Return an empty Acceptor, ready to receive bytes from a new client connection.
     fn default() -> Self {
         Self {
-            inner: Some(ServerConnection {
+            inner: Some(Box::new(ServerConnection {
                 state: Ok(InnerState::Handshake(ServerState::new())),
                 buffers: Buffers::new(),
                 config: None,
@@ -644,7 +644,7 @@ impl Default for Acceptor {
                 received_early_data: ChunkVecBuffer::new(None),
                 early_exporter: None,
                 fips: FipsStatus::Unvalidated,
-            }),
+            })),
         }
     }
 }
@@ -794,7 +794,7 @@ impl io::Read for ReadEarlyData<'_> {
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
 pub struct Accepted {
     // invariant: `connection.state` is `Err(_)` and requires restoring
-    connection: ServerConnection,
+    connection: Box<ServerConnection>,
     choose_config: ChooseConfig,
 }
 
@@ -819,7 +819,7 @@ impl Accepted {
             self.choose_config,
         )));
         match self.connection.process_new_packets() {
-            Ok(_) => Ok(self.connection),
+            Ok(_) => Ok(*self.connection),
             Err(err) => Err((err, AcceptedAlert(self.connection.buffers.sendable_tls))),
         }
     }
