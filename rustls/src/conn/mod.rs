@@ -9,6 +9,7 @@ use pki_types::FipsStatus;
 use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, UnborrowedPayload,
 };
+use crate::conn::receive::FinishOnAppData;
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
 use crate::msgs::{BufferProgress, Delocator, Message, Random, TlsInputBuffer, VecInput};
@@ -783,7 +784,12 @@ impl<Side: SideData> ConnectionCore<Side> {
 
         self.common
             .recv
-            .process_new_packets::<Side>(buffer, buffer_progress, &mut self.state, &mut output)
+            .process_new_packets::<Side, FinishOnAppData>(
+                buffer,
+                buffer_progress,
+                &mut self.state,
+                &mut output,
+            )
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {

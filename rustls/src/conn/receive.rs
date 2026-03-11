@@ -52,7 +52,7 @@ impl ReceivePath {
         }
     }
 
-    pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
+    pub(super) fn process_new_packets<'a, 'm, Side: SideData, Finish: FinishCondition>(
         &mut self,
         input: &'m mut dyn TlsInputBuffer,
         buffer_progress: &mut BufferProgress,
@@ -68,7 +68,9 @@ impl ReceivePath {
         };
 
         let mut plaintext = None;
-        while st.wants_input() {
+        let finish_state = Finish::start(self);
+
+        while st.wants_input() && !Finish::is_done(&finish_state, self) {
             let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
             let res = self.deframe(buffer, buffer_progress);
@@ -421,6 +423,35 @@ impl ReceivePath {
         }
 
         Err(err)
+    }
+}
+
+pub(super) trait FinishCondition {
+    type State;
+    fn start(recv: &ReceivePath) -> Self::State;
+    fn is_done(state: &Self::State, recv: &ReceivePath) -> bool;
+}
+
+pub(super) struct FinishOnAppData;
+
+impl FinishCondition for FinishOnAppData {
+    type State = ();
+    fn start(_recv: &ReceivePath) -> Self::State {}
+    fn is_done(_state: &Self::State, _recv: &ReceivePath) -> bool {
+        false
+    }
+}
+
+#[expect(dead_code)]
+pub(super) struct FinishHandshake;
+
+impl FinishCondition for FinishHandshake {
+    type State = bool;
+    fn start(recv: &ReceivePath) -> Self::State {
+        recv.may_receive_application_data
+    }
+    fn is_done(state: &Self::State, recv: &ReceivePath) -> bool {
+        *state != recv.may_receive_application_data
     }
 }
 
