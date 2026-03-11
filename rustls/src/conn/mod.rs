@@ -21,7 +21,7 @@ use crate::vecbuf::ChunkVecBuffer;
 pub mod kernel;
 
 mod receive;
-use receive::JoinOutput;
+use receive::{FinishOnAppData, JoinOutput};
 pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
 
 mod send;
@@ -783,7 +783,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
         self.common
             .recv
-            .process_new_packets::<Side>(buffer, &mut self.state, &mut output)
+            .process_new_packets::<Side, FinishOnAppData>(buffer, &mut self.state, &mut output)
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
