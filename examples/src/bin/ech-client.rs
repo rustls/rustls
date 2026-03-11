@@ -81,19 +81,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // NOTE: we defer setting up env_logger and setting the trace default filter level until
     //       after doing the DNS-over-HTTPS lookup above - we don't want to muddy the output
     //       with the rustls debug logs from the lookup.
-    // env_logger::Builder::new()
-    //     // .parse_filters("trace")
-    //     .init();
-    env_logger::init();
+    env_logger::Builder::new()
+        .parse_filters("trace")
+        .init();
 
     let ech_mode = match server_ech_configs.is_empty() {
         false => EchMode::from(
             server_ech_configs
                 .into_iter()
                 .find_map(|list| {
-                    EchConfig::new(list, ALL_SUPPORTED_SUITES)
-                        .ok()
-                        .map(|e| e.with_outer_sni(DnsName::try_from(args.outer_sni.clone().unwrap()).unwrap()))
+                    let ech_config = EchConfig::new(list, ALL_SUPPORTED_SUITES).ok()?;
+                    let ech_config = match &args.outer_sni {
+                        Some(sni) => ech_config.with_outer_sni(DnsName::try_from(sni.as_str()).ok()?.to_owned()),
+                        None => ech_config,
+                    };
+                    Some(ech_config)
                 })
                 .ok_or("no supported ECH configs")?,
         ),
