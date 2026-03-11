@@ -168,6 +168,10 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
     pub(super) fn input(&mut self) -> &mut dyn TlsInputBuffer {
         self.input
     }
+
+    pub(crate) fn state(&self) -> &Result<Side::State, Error> {
+        self.state
+    }
 }
 
 pub(crate) struct ReceivePath {

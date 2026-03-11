@@ -19,7 +19,7 @@ use rustls::crypto::{
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
 use rustls::server::{
-    Acceptor, ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver,
+    ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver, ServerHandshake,
 };
 use rustls::{
     ClientConfig, ClientConnection, Connection as _, HandshakeKind, KeyingMaterialExporter,
@@ -1848,17 +1848,24 @@ fn large_client_hello() {
 
 #[test]
 fn large_client_hello_acceptor() {
-    let mut acceptor = Acceptor::default();
+    let mut state = ServerHandshake::NeedsInput(ServerHandshake::start());
     let mut input = VecInput::default();
     let hello = include_bytes!("../data/bug2227-clienthello.bin");
     let mut cursor = io::Cursor::new(hello);
+
     loop {
         input.read(&mut cursor).unwrap();
 
-        if let Some(accepted) = acceptor.accept(&mut input).unwrap() {
-            println!("{accepted:?}");
-            break;
-        }
+        state = match state {
+            ServerHandshake::NeedsInput(receive) => receive
+                .process(&mut input, &mut vec![])
+                .unwrap(),
+            ServerHandshake::Accepted(accepted) => {
+                println!("{accepted:?}");
+                break;
+            }
+            other => panic!("unexpected {other:?}"),
+        };
     }
 }
 
@@ -1867,7 +1874,7 @@ fn acceptor_with_illegal_max_fragment_size() {
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     server_config.max_fragment_size = Some(31);
 
-    let mut acceptor = Acceptor::default();
+    let receive = ServerHandshake::start();
     let mut input = VecInput::default();
     input
         .read(
@@ -1880,19 +1887,21 @@ fn acceptor_with_illegal_max_fragment_size() {
         )
         .unwrap();
 
-    let accepted = acceptor
-        .accept(&mut input)
+    let mut output = vec![];
+    let ServerHandshake::Accepted(accepted) = receive
+        .process(&mut input, &mut output)
         .unwrap()
-        .unwrap();
-    let mut error_with_alert = accepted
-        .into_connection(Arc::new(server_config))
+    else {
+        panic!("unexpected receive state");
+    };
+
+    accepted
+        .choose_config(Arc::new(server_config), &mut output)
         .err()
         .unwrap();
 
-    assert_eq!(error_with_alert.error, Error::BadMaxFragmentSize);
-    assert_eq!(
-        error_with_alert.take_tls_data(),
-        None,
+    assert!(
+        output.is_empty(),
         "illegal max fragment size should not send an alert, as it is a local configuration issue"
     );
 }
@@ -1905,16 +1914,14 @@ fn excess_client_hello_acceptor() {
     let mut hello =
         encoding::message_framing(ContentType::Handshake, ProtocolVersion::TLSv1_2, hello);
 
-    let mut acceptor = Acceptor::default();
-    let mut error_with_alert = acceptor
-        .accept(&mut SliceInput::new(&mut hello))
+    let receive = ServerHandshake::start();
+    let mut output = vec![];
+    let error = receive
+        .process(&mut SliceInput::new(&mut hello), &mut output)
         .unwrap_err();
+    assert_eq!(error, PeerMisbehaved::KeyEpochWithPendingFragment.into());
     assert_eq!(
-        error_with_alert.error,
-        PeerMisbehaved::KeyEpochWithPendingFragment.into()
-    );
-    assert_eq!(
-        error_with_alert.take_tls_data(),
+        output.pop(),
         Some(encoding::alert(AlertDescription::UnexpectedMessage, &[]))
     );
 }

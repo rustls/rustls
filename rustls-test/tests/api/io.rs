@@ -12,10 +12,8 @@ use pki_types::DnsName;
 use rustls::crypto::CryptoProvider;
 use rustls::crypto::kx::NamedGroup;
 use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
-use rustls::error::{
-    AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
-};
-use rustls::server::Acceptor;
+use rustls::error::{AlertDescription, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use rustls::server::ServerHandshake;
 use rustls::{
     ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, SliceInput, VecInput,
 };
@@ -1763,7 +1761,69 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
 }
 
 #[test]
-fn test_acceptor() {
+fn test_full_server_handshake() {
+    let provider = provider::DEFAULT_PROVIDER;
+    let client_config = Arc::new(make_client_config(KeyType::Ed25519, &provider));
+    let mut client = client_config
+        .connect(server_name("localhost"))
+        .build()
+        .unwrap();
+    let mut buf = Vec::new();
+    client.write_tls(&mut buf).unwrap();
+
+    // client first flight
+    let receive = ServerHandshake::start();
+    let mut acceptor_input = VecInput::default();
+    acceptor_input
+        .read(&mut buf.as_slice())
+        .unwrap();
+
+    // server first flight and config choice
+    let mut server_output = vec![];
+    let ServerHandshake::Accepted(accepted) = receive
+        .process(&mut acceptor_input, &mut server_output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+    let mut server = accepted
+        .choose_config(
+            Arc::new(make_server_config(KeyType::Ed25519, &provider)),
+            &mut server_output,
+        )
+        .unwrap();
+    assert!(!server_output.is_empty());
+
+    // client receives server flight
+    let mut server_output = server_output.concat();
+    client
+        .process_new_packets(&mut SliceInput::new(&mut server_output))
+        .unwrap();
+    let mut client_output = vec![];
+    client
+        .write_tls(&mut client_output)
+        .unwrap();
+
+    // client second flight
+    let mut server_output = vec![];
+    server = if let ServerHandshake::NeedsInput(receive) = server {
+        receive
+            .process(&mut SliceInput::new(&mut client_output), &mut server_output)
+            .unwrap()
+    } else {
+        panic!("unexpected state");
+    };
+    let mut server_output = server_output.concat();
+    client
+        .process_new_packets(&mut SliceInput::new(&mut server_output))
+        .unwrap();
+
+    assert!(matches!(server, ServerHandshake::Complete(_)));
+    assert!(!client.is_handshaking());
+}
+
+#[test]
+fn test_server_handshake() {
     let provider = provider::DEFAULT_PROVIDER;
     let client_config = Arc::new(make_client_config(KeyType::Ed25519, &provider));
     let mut client = client_config
@@ -1774,15 +1834,18 @@ fn test_acceptor() {
     client.write_tls(&mut buf).unwrap();
 
     let server_config = Arc::new(make_server_config(KeyType::Ed25519, &provider));
-    let mut acceptor = Acceptor::default();
+    let receive = ServerHandshake::start();
     let mut acceptor_input = VecInput::default();
     acceptor_input
         .read(&mut buf.as_slice())
         .unwrap();
-    let accepted = acceptor
-        .accept(&mut acceptor_input)
+    let mut output = vec![];
+    let ServerHandshake::Accepted(accepted) = receive
+        .process(&mut acceptor_input, &mut output)
         .unwrap()
-        .unwrap();
+    else {
+        panic!("unexpected state");
+    };
     let ch = accepted.client_hello();
     assert_eq!(
         ch.server_name(),
@@ -1797,54 +1860,52 @@ fn test_acceptor() {
             .collect::<Vec<NamedGroup>>()
     );
 
-    let server = accepted
-        .into_connection(server_config)
+    let _server = accepted
+        .choose_config(server_config, &mut output)
         .unwrap();
-    assert!(server.wants_write());
+    assert!(!output.is_empty());
 
-    // Reusing an acceptor is not allowed
-    assert_eq!(
-        acceptor
-            .accept(&mut acceptor_input)
-            .err()
-            .unwrap()
-            .error,
-        ApiMisuse::AcceptorPolledAfterCompletion.into()
-    );
+    // (Reusing `accepted` is not possible)
 
-    let mut acceptor = Acceptor::default();
+    let receive = ServerHandshake::start();
     let mut acceptor_input = VecInput::default();
-    assert!(
-        acceptor
-            .accept(&mut acceptor_input)
-            .unwrap()
-            .is_none()
-    );
+    let mut output = vec![];
+    let ServerHandshake::NeedsInput(receive) = receive
+        .process(&mut acceptor_input, &mut output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+    assert!(output.is_empty());
+
     acceptor_input
         .read(&mut &buf[..3])
         .unwrap(); // incomplete message
-    assert!(
-        acceptor
-            .accept(&mut acceptor_input)
-            .unwrap()
-            .is_none()
-    );
+    let ServerHandshake::NeedsInput(receive) = receive
+        .process(&mut acceptor_input, &mut output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+    assert!(output.is_empty());
 
     acceptor_input
         .read(&mut [0x80, 0x00].as_ref())
         .unwrap(); // invalid message (len = 32k bytes)
-    let mut ea = acceptor
-        .accept(&mut acceptor_input)
+    let error = receive
+        .process(&mut acceptor_input, &mut output)
         .unwrap_err();
     assert_eq!(
-        ea.error,
+        error,
         Error::InvalidMessage(InvalidMessage::MessageTooLarge)
     );
-    let alert_content = ea.take_tls_data().unwrap();
+    let alert_content = output
+        .pop()
+        .expect("should've sent an alert");
     let expected = encoding::alert(AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 
-    let mut acceptor = Acceptor::default();
+    let receive = ServerHandshake::start();
     let mut acceptor_input = VecInput::default();
     // Minimal valid 1-byte application data message is not a handshake message
     acceptor_input
@@ -1857,19 +1918,17 @@ fn test_acceptor() {
             .as_slice(),
         )
         .unwrap();
-    let mut ea = acceptor
-        .accept(&mut acceptor_input)
+    let error = receive
+        .process(&mut acceptor_input, &mut output)
         .unwrap_err();
-    assert!(matches!(ea.error, Error::InappropriateMessage { .. }));
-    let alert_content = ea.take_tls_data().unwrap();
+    assert!(matches!(error, Error::InappropriateMessage { .. }));
+    let alert_content = output
+        .pop()
+        .expect("should've sent an alert");
     let expected = encoding::alert(AlertDescription::UnexpectedMessage, &[]);
     assert_eq!(alert_content, expected);
-    assert_eq!(
-        format!("{ea:?}"),
-        "ErrorWithAlert { error: InappropriateMessage { expect_types: [Handshake], got_type: ApplicationData }, data: 0, .. }"
-    );
 
-    let mut acceptor = Acceptor::default();
+    let receive = ServerHandshake::start();
     let mut acceptor_input = VecInput::default();
     // Minimal 1-byte ClientHello message is not a legal handshake message
     acceptor_input
@@ -1882,14 +1941,14 @@ fn test_acceptor() {
             .as_slice(),
         )
         .unwrap();
-    let mut ea = acceptor
-        .accept(&mut acceptor_input)
+    let error = receive
+        .process(&mut acceptor_input, &mut output)
         .unwrap_err();
     assert!(matches!(
-        ea.error,
+        error,
         Error::InvalidMessage(InvalidMessage::MissingData(_))
     ));
-    let alert_content = ea.take_tls_data().unwrap();
+    let alert_content = output.pop().unwrap();
     let expected = encoding::alert(AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 }
@@ -1923,16 +1982,27 @@ fn test_acceptor_continues_tls13_hrr_with_compatibility_ccs() {
         .read(&mut client_hello.as_slice())
         .unwrap();
 
-    let mut acceptor = Acceptor::default();
-    let accepted = acceptor
-        .accept(&mut server_input)
+    let receive = ServerHandshake::start();
+    let mut output = vec![];
+    let ServerHandshake::Accepted(accepted) = receive
+        .process(&mut server_input, &mut output)
         .unwrap()
-        .unwrap();
-    let mut server = accepted
-        .into_connection(server_config)
-        .unwrap();
+    else {
+        panic!("unexpected state");
+    };
+    let ServerHandshake::NeedsInput(receive) = accepted
+        .choose_config(server_config, &mut output)
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+    let mut server = receive.into_buffered_connection();
 
     let mut client_input = VecInput::default();
+    client_input
+        .read(&mut io::Cursor::new(output.concat()))
+        .unwrap();
+
     do_handshake(
         &mut client_input,
         &mut client,
@@ -1964,30 +2034,35 @@ fn test_acceptor_rejected_handshake() {
 
     let server_config =
         ServerConfig::builder(provider::DEFAULT_TLS12_PROVIDER.into()).finish(KeyType::Ed25519);
-    let mut acceptor = Acceptor::default();
+    let receive = ServerHandshake::start();
     let mut acceptor_input = VecInput::default();
     acceptor_input
         .read(&mut buf.as_slice())
         .unwrap();
-    let accepted = acceptor
-        .accept(&mut acceptor_input)
+    let mut output = vec![];
+    let ServerHandshake::Accepted(accepted) = receive
+        .process(&mut acceptor_input, &mut output)
         .unwrap()
-        .unwrap();
+    else {
+        panic!("unexpected state");
+    };
     let ch = accepted.client_hello();
     assert_eq!(
         ch.server_name(),
         Some(&DnsName::try_from("localhost").unwrap())
     );
 
-    let mut ea = accepted
-        .into_connection(server_config.into())
+    let error = accepted
+        .choose_config(server_config.into(), &mut output)
         .unwrap_err();
     assert_eq!(
-        ea.error,
+        error,
         Error::PeerIncompatible(PeerIncompatible::Tls12NotOfferedOrEnabled)
     );
 
-    let alert_content = ea.take_tls_data().unwrap();
+    let alert_content = output
+        .pop()
+        .expect("should've sent an alert");
     let expected = encoding::alert(AlertDescription::ProtocolVersion, &[]);
     assert_eq!(alert_content, expected);
 }

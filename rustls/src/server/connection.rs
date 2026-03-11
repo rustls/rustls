@@ -1,6 +1,5 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt::{Debug, Formatter};
 use core::ops::Deref;
 use core::{fmt, mem};
 use std::io;
@@ -8,17 +7,19 @@ use std::io;
 use pki_types::{DnsName, FipsStatus};
 
 use super::config::{ClientHello, ServerConfig};
-use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
+use crate::common_state::{
+    CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side, maybe_send_fatal_alert,
+};
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SideData,
-    TlsInputBuffer, Writer,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, MessageIter, Reader,
+    SideData, StateMachine, TlsInputBuffer, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
 use crate::crypto::cipher::Payload;
-use crate::error::{ApiMisuse, Error, ErrorWithAlert};
+use crate::error::Error;
 use crate::log::trace;
 use crate::msgs::ServerExtensionsInput;
 use crate::server::hs::{ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
@@ -208,129 +209,216 @@ impl Deref for ServerConnection {
     }
 }
 
-impl Debug for ServerConnection {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for ServerConnection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerConnection")
             .finish_non_exhaustive()
     }
 }
 
-/// Handle a server-side connection before configuration is available.
-///
-/// `Acceptor` allows the caller to choose a [`ServerConfig`] after reading
-/// the [`ClientHello`] of an incoming connection. This is useful for
-/// servers that choose different certificates or cipher suites based on the
-/// characteristics of the `ClientHello`. In particular it is useful for
-/// servers that need to do some I/O to load a certificate and its private key
-/// and don't want to use the blocking interface provided by
-/// [`ServerCredentialResolver`][crate::server::ServerCredentialResolver].
-///
-/// Create an Acceptor with [`Acceptor::default()`].
-///
-/// # Example
-///
-/// ```no_run
-/// # fn choose_server_config(
-/// #     _: rustls::server::ClientHello,
-/// # ) -> std::sync::Arc<rustls::ServerConfig> {
-/// #     unimplemented!();
-/// # }
-/// # use std::io::Write;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use rustls::server::{Acceptor, ServerConfig};
-///
-/// let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
-/// let mut input = rustls::VecInput::default();
-///
-/// for stream in listener.incoming() {
-///     let mut stream = stream?;
-///     let mut acceptor = Acceptor::default();
-///     let accepted = loop {
-///         input.read(&mut stream)?;
-///         match acceptor.accept(&mut input) {
-///             Ok(Some(accepted)) => break accepted,
-///             Ok(None) => continue,
-///             Err(mut error_with_alert) => {
-///                 if let Some(alert) = error_with_alert.take_tls_data() {
-///                     stream.write_all(&alert)?;
-///                 }
-///                 return Err(Box::new(error_with_alert.error));
-///             }
-///         };
-///     };
-///
-///     // For some user-defined choose_server_config:
-///     let config = choose_server_config(accepted.client_hello());
-///     let conn = match accepted.into_connection(config) {
-///         Ok(conn) => conn,
-///         Err(mut error_with_alert) => {
-///             if let Some(alert) = error_with_alert.take_tls_data() {
-///                 stream.write_all(&alert)?;
-///             }
-///             return Err(Box::new(error_with_alert.error));
-///         }
-///     };
-///
-///     // Proceed with handling the ServerConnection.
-/// }
-/// #   Ok(())
-/// # }
-/// ```
-pub struct Acceptor {
-    inner: Option<ConnectionCommon<ServerSide>>,
+/// An in-progress TLS server handshake.
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum ServerHandshake {
+    /// More data needs to be received to make progress.
+    NeedsInput(NeedsInput),
+
+    /// A complete `ClientHello` has been received.
+    ///
+    /// The handshake can be progressed by choosing a [`ServerConfig`] based on
+    /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
+    Accepted(Accepted),
+
+    /// The handshake is complete.
+    ///
+    /// Now see [`SplitConnection`] to continue the connection.
+    Complete(SplitConnection<ServerSide>),
 }
 
-impl Default for Acceptor {
-    /// Return an empty Acceptor, ready to receive bytes from a new client connection.
-    fn default() -> Self {
-        Self {
-            inner: Some(ConnectionCommon::new(ConnectionCore::for_acceptor(
-                Protocol::Tcp,
-            ))),
+impl ServerHandshake {
+    /// Creates a new [`ServerHandshake`] via the payload of the [`ServerHandshake::NeedsInput`] variant.
+    ///
+    /// It is a fundamental fact of server TLS connections that the server reads first; this is reflected
+    /// in the returned type.
+    ///
+    /// You may wrap this in the [`ServerHandshake::NeedsInput`] variant to generalise the type to a
+    /// [`ServerHandshake`].
+    ///
+    /// The returned object should be fed data from a single potential client.
+    pub fn start() -> NeedsInput {
+        NeedsInput {
+            inner: ConnectionCore::for_acceptor(Protocol::Tcp),
         }
     }
 }
 
-impl Acceptor {
-    /// Check if a `ClientHello` message has been received.
+impl TryFrom<ConnectionCore<ServerSide>> for ServerHandshake {
+    type Error = Error;
+
+    fn try_from(mut inner: ConnectionCore<ServerSide>) -> Result<Self, Error> {
+        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+
+        Ok(match mem::replace(&mut inner.state, Err(MISUSED))? {
+            ServerState::ChooseConfig(choose_config) => Self::Accepted(Accepted {
+                inner,
+                choose_config,
+            }),
+
+            state if state.is_traffic() => {
+                inner.state = Ok(state);
+                Self::Complete(SplitConnection::try_from(inner)?)
+            }
+
+            state => {
+                inner.state = Ok(state);
+                Self::NeedsInput(NeedsInput { inner })
+            }
+        })
+    }
+}
+
+/// More data needs to be received to make progress.
+///
+/// Provide this to [`Self::process()`].
+pub struct NeedsInput {
+    inner: ConnectionCore<ServerSide>,
+}
+
+impl NeedsInput {
+    /// Progress the handshake by receiving further data.
     ///
-    /// Returns `Ok(None)` if the complete `ClientHello` has not yet been received.
-    /// Do more I/O and then call this function again.
+    /// The data is obtained via `input`.  Any output produced is appended to `output` and
+    /// should be sent to the peer (including if this function returns an error, because
+    /// the `output` may contain an alert.)
     ///
-    /// Returns `Ok(Some(accepted))` if the connection has been accepted. Call
-    /// `accepted.into_connection()` to continue. Do not call this function again.
+    /// An error from this function is otherwise fatal to the connection, as it consumes
+    /// the [`NeedsInput`] object.
     ///
-    /// Returns `Err(_)` if an error occurred. The error type optionally carries a TLS alert;
-    /// the application should obtain and write these bytes to the client.
+    /// On success, this returns:
     ///
-    /// Don't call `accept()` again after an error.
-    pub fn accept(
-        &mut self,
+    /// - a [`ServerHandshake::NeedsInput`] if more data is required.
+    /// - a [`ServerHandshake::Accepted`] if a whole `ClientHello` has been received, requiring
+    ///   and a choice of [`ServerConfig`] is required to continue.
+    /// - a [`ServerHandshake::Complete`] if the handshake is complete.
+    pub fn process(
+        mut self,
         input: &mut dyn TlsInputBuffer,
-    ) -> Result<Option<Accepted>, ErrorWithAlert> {
-        let Some(mut connection) = self.inner.take() else {
-            return Err(ErrorWithAlert::from(Error::ApiMisuse(
-                ApiMisuse::AcceptorPolledAfterCompletion,
-            )));
+        output: &mut Vec<Vec<u8>>,
+    ) -> Result<ServerHandshake, Error> {
+        let mut iter = MessageIter::new(input, None, &mut self.inner);
+        let r = loop {
+            match iter.next() {
+                Some(Ok(_)) => {}
+                Some(Err(e)) => break Err(e),
+                None => break Ok(()),
+            };
+
+            // end loop as soon as traffic state is entered, as the above loop drops
+            // incoming appdata.
+            if iter
+                .state()
+                .as_ref()
+                .map(|st| st.is_traffic())
+                .unwrap_or_default()
+            {
+                break Ok(());
+            }
         };
 
-        if let Err(e) = connection.process_new_packets(input) {
-            return Err(ErrorWithAlert::new(e, &mut connection.core.common.send));
+        input.discard(
+            self.inner
+                .common
+                .recv
+                .deframer
+                .take_discard(),
+        );
+
+        while let Some(chunk) = self
+            .inner
+            .common
+            .send
+            .sendable_tls
+            .pop()
+        {
+            output.push(chunk);
+        }
+        r?;
+        ServerHandshake::try_from(self.inner)
+    }
+
+    /// Temporary escape hatch during migration to new API.
+    pub fn into_buffered_connection(self) -> ServerConnection {
+        ServerConnection {
+            inner: ConnectionCommon::new(self.inner),
+        }
+    }
+}
+
+impl fmt::Debug for NeedsInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NeedsInput")
+            .finish_non_exhaustive()
+    }
+}
+
+/// Represents a `ClientHello` message.
+///
+/// The handshake can be progressed by choosing a [`ServerConfig`] based on
+/// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
+pub struct Accepted {
+    // invariant: `inner.state` is `Err(_)` and requires restoring
+    inner: ConnectionCore<ServerSide>,
+    choose_config: Box<ChooseConfig>,
+}
+
+impl Accepted {
+    /// Get the [`ClientHello`] for this connection.
+    pub fn client_hello(&self) -> ClientHello<'_> {
+        let ch = self.choose_config.client_hello();
+        trace!("Accepted::client_hello(): {ch:#?}");
+        ch
+    }
+
+    /// Choose a [`ServerConfig`] to progress the handshake.
+    ///
+    /// Output to send to the peer is appended to `output`.  Typically, this is the `ServerHello`,
+    /// but it may also be an `Alert` if an error is returned.
+    ///
+    /// Returns an error if configuration-dependent validation of the received `ClientHello` message fails.
+    pub fn choose_config(
+        mut self,
+        config: Arc<ServerConfig>,
+        output: &mut Vec<Vec<u8>>,
+    ) -> Result<ServerHandshake, Error> {
+        let result = self.inner.accepted(
+            self.choose_config,
+            ServerExtensionsInput::default(),
+            None,
+            config,
+        );
+
+        let send_path = &mut self.inner.common.send;
+
+        if let Err(err) = &result {
+            maybe_send_fatal_alert(send_path, err);
         }
 
-        const MISUSED: Error = Error::Unreachable("Accepted misused state");
-        match mem::replace(&mut connection.core.state, Err(MISUSED)) {
-            Ok(ServerState::ChooseConfig(choose_config)) => Ok(Some(Accepted {
-                connection,
-                choose_config,
-            })),
-            Ok(state) => {
-                connection.core.state = Ok(state);
-                self.inner = Some(connection);
-                Ok(None)
-            }
-            Err(e) => Err(ErrorWithAlert::new(e, &mut connection.core.common.send)),
+        while let Some(chunk) = send_path.sendable_tls.pop() {
+            output.push(chunk);
         }
+
+        result?;
+
+        Ok(ServerHandshake::NeedsInput(NeedsInput {
+            inner: self.inner,
+        }))
+    }
+}
+
+impl fmt::Debug for Accepted {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Accepted")
+            .finish_non_exhaustive()
     }
 }
 
@@ -379,58 +467,6 @@ impl io::Read for ReadEarlyData<'_> {
             .side
             .early_data
             .read(buf)
-    }
-}
-
-/// Represents a `ClientHello` message received through the [`Acceptor`].
-///
-/// Contains the state required to resume the connection through [`Accepted::into_connection()`].
-pub struct Accepted {
-    // invariant: `connection.core.state` is `Err(_)` and requires restoring
-    connection: ConnectionCommon<ServerSide>,
-    choose_config: Box<ChooseConfig>,
-}
-
-impl Accepted {
-    /// Get the [`ClientHello`] for this connection.
-    pub fn client_hello(&self) -> ClientHello<'_> {
-        let ch = self.choose_config.client_hello();
-        trace!("Accepted::client_hello(): {ch:#?}");
-        ch
-    }
-
-    /// Convert the [`Accepted`] into a [`ServerConnection`].
-    ///
-    /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] that
-    /// should be used for the session. Returns an error if configuration-dependent validation of
-    /// the received `ClientHello` message fails.
-    pub fn into_connection(
-        mut self,
-        config: Arc<ServerConfig>,
-    ) -> Result<ServerConnection, ErrorWithAlert> {
-        let result = self.connection.core.accepted(
-            self.choose_config,
-            ServerExtensionsInput::default(),
-            None,
-            config,
-        );
-
-        match result {
-            Ok(()) => Ok(ServerConnection {
-                inner: self.connection,
-            }),
-            Err(e) => Err(ErrorWithAlert::new(
-                e,
-                &mut self.connection.core.common.send,
-            )),
-        }
-    }
-}
-
-impl Debug for Accepted {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Accepted")
-            .finish_non_exhaustive()
     }
 }
 

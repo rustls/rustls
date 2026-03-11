@@ -6,14 +6,14 @@ extern crate rustls;
 use std::io;
 use std::sync::Arc;
 
-use rustls::server::{Accepted, Acceptor};
+use rustls::server::{Accepted, ServerHandshake};
 use rustls::{Connection, ServerConfig, ServerConnection, VecInput};
 
 fuzz_target!(|data: &[u8]| {
     let _ = env_logger::try_init();
     match data.split_first() {
         Some((0x00, rest)) => fuzz_buffered_api(rest),
-        Some((0x01, rest)) => fuzz_acceptor_api(rest),
+        Some((0x01, rest)) => fuzz_handshake_api(rest),
         Some((_, _)) | None => {}
     }
 });
@@ -31,23 +31,26 @@ fn fuzz_buffered_api(data: &[u8]) {
     service_connection(&mut stream, &mut VecInput::default(), &mut server);
 }
 
-fn fuzz_acceptor_api(data: &[u8]) {
-    let mut server = Acceptor::default();
+fn fuzz_handshake_api(data: &[u8]) {
+    let mut server = ServerHandshake::start();
     let mut stream = io::Cursor::new(data);
     let mut input = VecInput::default();
+    let mut output = vec![];
 
     loop {
         let rd = input.read(&mut stream).unwrap_or(0);
-        match server.accept(&mut input) {
-            Ok(Some(accepted)) => {
+
+        server = match server.process(&mut input, &mut output) {
+            Ok(ServerHandshake::Accepted(accepted)) => {
                 fuzz_accepted(&mut stream, &mut input, accepted);
                 break;
             }
+            Ok(ServerHandshake::NeedsInput(next)) => next,
+            Ok(_) => unreachable!(),
             Err(_) => {
                 break;
             }
-            Ok(None) => {}
-        }
+        };
         if rd == 0 {
             break;
         }
@@ -55,15 +58,18 @@ fn fuzz_acceptor_api(data: &[u8]) {
 }
 
 fn fuzz_accepted(stream: &mut dyn io::Read, input: &mut VecInput, accepted: Accepted) {
-    let mut maybe_server = accepted.into_connection(Arc::new(
-        ServerConfig::builder(rustls_fuzzing_provider::PROVIDER.into())
-            .with_no_client_auth()
-            .with_server_credential_resolver(rustls_fuzzing_provider::server_cert_resolver())
-            .unwrap(),
-    ));
+    let maybe_server = accepted.choose_config(
+        Arc::new(
+            ServerConfig::builder(rustls_fuzzing_provider::PROVIDER.into())
+                .with_no_client_auth()
+                .with_server_credential_resolver(rustls_fuzzing_provider::server_cert_resolver())
+                .unwrap(),
+        ),
+        &mut vec![],
+    );
 
-    if let Ok(conn) = &mut maybe_server {
-        service_connection(stream, input, conn);
+    if let Ok(ServerHandshake::NeedsInput(next)) = maybe_server {
+        service_connection(stream, input, &mut next.into_buffered_connection());
     }
 }
 
