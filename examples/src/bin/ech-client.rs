@@ -92,7 +92,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .find_map(|list| {
                     let ech_config = EchConfig::new(list, ALL_SUPPORTED_SUITES).ok()?;
                     let ech_config = match &args.outer_sni {
-                        Some(sni) => ech_config.with_outer_sni(DnsName::try_from(sni.as_str()).ok()?.to_owned()),
+                        Some(sni) => ech_config.with_outer_sni(
+                            DnsName::try_from(sni.as_str())
+                                .ok()?
+                                .to_owned(),
+                        ),
                         None => ech_config,
                     };
                     Some(ech_config)
