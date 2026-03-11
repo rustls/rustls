@@ -80,6 +80,10 @@ pub struct EchConfig {
     /// An HPKE instance corresponding to a suite from the `config` we have selected as
     /// a compatible choice.
     pub(crate) suite: &'static dyn Hpke,
+
+    /// Optional custom outer SNI to use in the client hello when offering ECH.
+    /// If `None`, the `public_name` from the ECH configuration is used.
+    outer_sni: Option<DnsName<'static>>,
 }
 
 impl EchConfig {
@@ -122,6 +126,14 @@ impl EchConfig {
         };
 
         Self::new_for_configs(configs, hpke_suites)
+    }
+
+    /// Set a custom outer SNI to use in the client hello when offering ECH.
+    ///
+    /// If not set, the `public_name` from the ECH configuration is used.
+    pub fn with_outer_sni(mut self, name: DnsName<'static>) -> Self {
+        self.outer_sni = Some(name);
+        self
     }
 
     pub(super) fn state(
@@ -193,6 +205,7 @@ impl EchConfig {
                     return Ok(Self {
                         config: config.clone(),
                         suite: *hpke,
+                        outer_sni: None,
                     });
                 }
             }
@@ -261,6 +274,7 @@ impl EchGreaseConfig {
                     extensions: Vec::default(),
                 }),
                 suite: self.suite,
+                outer_sni: None,
             },
             inner_name,
             protocol,
@@ -379,8 +393,13 @@ impl EchState {
             inner_hello_transcript.set_client_auth_enabled();
         }
 
+        let outer_name = config
+            .outer_sni
+            .as_ref()
+            .unwrap_or(&config_contents.public_name);
+
         Ok(Self {
-            outer_name: config_contents.public_name.clone(),
+            outer_name: outer_name.clone(),
             early_data_key_schedule: None,
             inner_hello_random: Random::new(secure_random)?,
             inner_hello_transcript,
@@ -388,12 +407,6 @@ impl EchState {
             sender,
             config_id: key_config.config_id,
             inner_name,
-            // outer_name: config_contents.public_name.clone(),
-            // testing this via: 
-            // cargo run --package rustls-examples --bin ech-client -- --host test.defo.ie --path "" test.defo.ie test.defo.ie
-            // or 
-            // cargo run --package rustls-examples --bin ech-client -- --host rfc5746.mywaifu.best --port 5443 --path "plain" rfc5746.mywaifu.best rfc5746.mywaifu.best
-            outer_name: DnsName::try_from("superpublicname.com").unwrap(),
             maximum_name_length: config_contents.maximum_name_length,
             cipher_suite: config.suite.suite().sym,
             protocol,

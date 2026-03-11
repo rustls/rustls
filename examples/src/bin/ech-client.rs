@@ -44,7 +44,7 @@ use log::trace;
 use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
+use rustls::pki_types::{CertificateDer, DnsName, EchConfigListBytes, ServerName};
 use rustls::{ClientConfig, Connection, RootCertStore};
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_util::{KeyLogFile, Stream};
@@ -81,15 +81,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // NOTE: we defer setting up env_logger and setting the trace default filter level until
     //       after doing the DNS-over-HTTPS lookup above - we don't want to muddy the output
     //       with the rustls debug logs from the lookup.
-    env_logger::Builder::new()
-        .parse_filters("trace")
-        .init();
+    // env_logger::Builder::new()
+    //     // .parse_filters("trace")
+    //     .init();
+    env_logger::init();
 
     let ech_mode = match server_ech_configs.is_empty() {
         false => EchMode::from(
             server_ech_configs
                 .into_iter()
-                .find_map(|list| EchConfig::new(list, ALL_SUPPORTED_SUITES).ok())
+                .find_map(|list| {
+                    EchConfig::new(list, ALL_SUPPORTED_SUITES)
+                        .ok()
+                        .map(|e| e.with_outer_sni(DnsName::try_from(args.outer_sni.clone().unwrap()).unwrap()))
+                })
                 .ok_or("no supported ECH configs")?,
         ),
         true => {
@@ -191,6 +196,10 @@ struct Args {
     /// HTTP HOST to use for GET request (defaults to value of inner-hostname).
     #[clap(long)]
     host: Option<String>,
+
+    /// Override the outer SNI to a custom value (instead of the public_name from the ECH config).
+    #[clap(long)]
+    outer_sni: Option<String>,
 
     /// Use Google DNS for the DNS-over-HTTPS lookup (default).
     #[clap(long, group = "dns")]
