@@ -179,6 +179,22 @@ pub enum ConnectionTrafficSecrets {
         /// Initialization vector
         iv: Iv,
     },
+
+    /// Secrets for the SM4_GCM AEAD algorithm
+    Sm4Gcm {
+        /// AEAD Key
+        key: AeadKey,
+        /// Initialization vector
+        iv: Iv,
+    },
+
+    /// Secrets for the SM4_CCM AEAD algorithm
+    Sm4Ccm {
+        /// AEAD Key
+        key: AeadKey,
+        /// Initialization vector
+        iv: Iv,
+    },
 }
 
 #[cfg(test)]

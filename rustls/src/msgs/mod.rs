@@ -35,7 +35,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::crypto::cipher::{EncodedMessage, MessageError, Payload};
-use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
+use crate::enums::{ContentType, ContentTypeName, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::verify::DigitallySignedStruct;
 
@@ -58,8 +58,8 @@ use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
 pub(crate) use deframer::{
-    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, HandshakeAlignedProof,
-    HandshakeDeframer, Locator, TlsInputBuffer,
+    BufferProgress, DeframerIter, DeframerVecBuffer, Delocator, FragmentSpan,
+    HandshakeAlignedProof, HandshakeDeframer, Locator, TlsInputBuffer,
 };
 
 mod enums;
@@ -68,7 +68,7 @@ pub(crate) use enums::ECCurveType;
 #[cfg(test)]
 pub(crate) use enums::tests::{test_enum8, test_enum8_display, test_enum16};
 pub(crate) use enums::{
-    AlertLevel, ClientCertificateType, Compression, ExtensionType, KeyUpdateRequest,
+    AlertLevel, AlertLevelName, ClientCertificateType, Compression, ExtensionType, KeyUpdateRequest,
 };
 
 mod fragmenter;
@@ -88,7 +88,7 @@ pub(crate) use handshake::{
     SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 #[cfg(test)]
-pub(crate) use handshake::{EcParameters, ServerEcdhParams};
+pub(crate) use handshake::{EcParameters, NewSessionTicketExtensions, ServerEcdhParams};
 
 mod server_hello;
 pub(crate) use server_hello::{
@@ -236,18 +236,15 @@ pub(crate) fn read_opaque_message_header(
 ) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
     let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
     // Don't accept any new content-types.
-    if let ContentType::Unknown(_) = typ {
+    if ContentTypeName::try_from(typ).is_err() {
         return Err(MessageError::InvalidContentType);
     }
 
     let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
     // Accept only versions 0x03XX for any XX.
-    match &version {
-        ProtocolVersion::Unknown(v) if (v & 0xff00) != 0x0300 => {
-            return Err(MessageError::UnknownProtocolVersion);
-        }
-        _ => {}
-    };
+    if version.0 & 0xff00 != 0x0300 {
+        return Err(MessageError::UnknownProtocolVersion);
+    }
 
     let len = u16::read(r).map_err(|_| MessageError::TooShortForHeader)?;
 
@@ -706,6 +703,7 @@ mod tests {
 
     use super::*;
     use crate::crypto::cipher::OutboundOpaque;
+    use crate::error::AlertDescription;
 
     #[test]
     fn test_read_fuzz_corpus() {

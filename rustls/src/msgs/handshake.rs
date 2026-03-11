@@ -513,7 +513,7 @@ impl Codec<'_> for HelloRetryRequest {
         }
 
         Ok(Self {
-            legacy_version: ProtocolVersion::Unknown(0),
+            legacy_version: ProtocolVersion(0),
             session_id,
             cipher_suite,
             extensions: HelloRetryRequestExtensions::read(r)?.into_owned(),

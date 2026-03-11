@@ -2,102 +2,102 @@
 macro_rules! enum_builder {
     (
         $(#[doc = $comment:literal])*
-        #[repr($uint:ty)]
-        $(#[$metas:meta])*
-        $enum_vis:vis enum $enum_name:ident
-        {
-          $(
-              $(#[$enum_metas:meta])*
-              $enum_var:ident => $enum_val:literal
-          ),*
-          $(,)?
-          $(
-              !Debug:
-              $(
-                  $(#[$enum_metas_no_debug:meta])*
-                  $enum_var_no_debug:ident => $enum_val_no_debug:literal
-              ),*
-              $(,)?
-          )?
+        $struct_vis:vis struct $struct_name:ident($inner_vis:vis $uint:ty);
+
+        $enum_vis:vis enum $enum_name:ident {
+            $(
+                $(#[$enum_metas:meta])*
+                $enum_var:ident => $enum_val:literal
+            ),*
+            $(,)?
         }
     ) => {
         $(#[doc = $comment])*
-        $(#[$metas])*
-        #[allow(missing_docs)]
-        #[non_exhaustive]
+        ///
+        /// Protocol enumerations in rustls are represented with a struct, which contains
+        /// the numeric value used on the wire
+        #[doc = concat!("(in this case, ", stringify!($uint), ").")]
+        /// Each known value has a named const item on this type -- this can be used in a
+        /// match arm or to access the numeric value.
+        ///
+        /// If a known value does not exist for a value you need, you can simply create it locally:
+        ///
+        /// ```no_compile
+        #[doc = concat!("pub const MyValue: ", stringify!($struct_name), " = ", stringify!($struct_name), "(123);")]
+        /// ```
+        ///
+        /// The [`Debug`][core::fmt::Debug] impl for this type also looks up and pretty-prints
+        /// known named items.  Unknown values are formatted in hexadecimal.
+        #[allow(missing_docs, clippy::exhaustive_structs)]
         #[derive(PartialEq, Eq, Clone, Copy, Hash)]
-        $enum_vis enum $enum_name {
-            $(
-                $(#[$enum_metas])*
-                $enum_var
-            ),*
-            $(
-                ,
-                $(
-                    $(#[$enum_metas_no_debug])*
-                    $enum_var_no_debug
-                ),*
-            )?
-            ,Unknown($uint)
-        }
+        $struct_vis struct $struct_name($inner_vis $uint);
 
-        #[allow(missing_docs)]
-        impl $enum_name {
+        #[allow(missing_docs, non_upper_case_globals, clippy::upper_case_acronyms)]
+        impl $struct_name {
+            /// Encode the value as a big-endian byte array.
             // NOTE(allow) generated irrespective if there are callers
             #[allow(dead_code)]
-            $enum_vis fn to_array(self) -> [u8; core::mem::size_of::<$uint>()] {
-                <$uint>::from(self).to_be_bytes()
+            $struct_vis fn to_array(self) -> [u8; core::mem::size_of::<$uint>()] {
+                self.0.to_be_bytes()
             }
 
-            // NOTE(allow) generated irrespective if there are callers
-            #[allow(dead_code)]
-            $enum_vis fn as_str(&self) -> Option<&'static str> {
-                match self {
-                    $( $enum_name::$enum_var => Some(stringify!($enum_var))),*
-                    $(, $( $enum_name::$enum_var_no_debug => Some(stringify!($enum_var_no_debug))),* )?
-                    ,$enum_name::Unknown(_) => None,
-                }
-            }
+            $(
+               $(#[$enum_metas])*
+               $struct_vis const $enum_var: Self = Self($enum_val);
+            )*
         }
 
-        impl crate::msgs::Codec<'_> for $enum_name {
+        impl crate::msgs::Codec<'_> for $struct_name {
             fn encode(&self, bytes: &mut alloc::vec::Vec<u8>) {
-                <$uint>::from(*self).encode(bytes);
+                self.0.encode(bytes);
             }
 
             fn read(r: &mut crate::msgs::Reader<'_>) -> Result<Self, crate::error::InvalidMessage> {
                 match <$uint>::read(r) {
-                    Ok(x) => Ok($enum_name::from(x)),
-                    Err(_) => Err(crate::error::InvalidMessage::MissingData(stringify!($enum_name))),
+                    Ok(x) => Ok(Self(x)),
+                    Err(_) => Err(crate::error::InvalidMessage::MissingData(stringify!($struct_name))),
                 }
             }
         }
 
-        impl From<$uint> for $enum_name {
-            fn from(x: $uint) -> Self {
-                match x {
-                    $($enum_val => $enum_name::$enum_var),*
-                    $(, $($enum_val_no_debug => $enum_name::$enum_var_no_debug),* )?
-                    , x => $enum_name::Unknown(x),
-                }
-            }
-        }
-
-        impl From<$enum_name> for $uint {
-            fn from(value: $enum_name) -> Self {
-                match value {
-                    $( $enum_name::$enum_var => $enum_val),*
-                    $(, $( $enum_name::$enum_var_no_debug => $enum_val_no_debug),* )?
-                    ,$enum_name::Unknown(x) => x
-                }
-            }
-        }
-
-        impl core::fmt::Debug for $enum_name {
+        impl core::fmt::Debug for $struct_name {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                match self {
-                    $( $enum_name::$enum_var => f.write_str(stringify!($enum_var)), )*
-                    _ => write!(f, "{}(0x{:x?})", stringify!($enum_name), <$uint>::from(*self)),
+                match $enum_name::try_from(*self) {
+                    Ok(known) => known.fmt(f),
+                    Err(unknown) => write!(f, "0x{:x?}", unknown.0),
+                }
+            }
+        }
+
+        impl From<$uint> for $struct_name {
+            fn from(x: $uint) -> Self {
+                Self(x)
+            }
+        }
+
+        impl From<$struct_name> for $uint {
+            fn from(x: $struct_name) -> Self {
+                x.0
+            }
+        }
+
+        $(#[doc = $comment])*
+        #[allow(missing_docs, non_camel_case_types, clippy::upper_case_acronyms)]
+        #[non_exhaustive]
+        #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+        $enum_vis enum $enum_name {
+            $(
+                $(#[$enum_metas])*
+                $enum_var = $enum_val
+            ),*
+        }
+
+        impl TryFrom<$struct_name> for $enum_name {
+            type Error = $struct_name;
+            fn try_from(value: $struct_name) -> Result<Self, Self::Error> {
+                match value.0 {
+                    $($enum_val => Ok(Self::$enum_var), )*
+                    _ => Err(value),
                 }
             }
         }

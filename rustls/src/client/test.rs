@@ -24,9 +24,10 @@ use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     CertificateChain, ClientHelloPayload, Codec, Compression, ECCurveType, EcParameters,
     HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, HelloRetryRequestExtensions,
-    KeyShareEntry, MaybeEmpty, Message, MessagePayload, Random, Reader, ServerEcdhParams,
-    ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
-    ServerKeyExchangePayload, SessionId, SizedPayload,
+    KeyShareEntry, MaybeEmpty, Message, MessagePayload, NewSessionTicketExtensions,
+    NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams, ServerExtensions,
+    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+    SessionId, SizedPayload,
 };
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
@@ -84,6 +85,15 @@ fn tls13_client_session_value_roundtrip() {
     ));
 
     let session = Tls13Session::new(
+        &NewSessionTicketPayloadTls13 {
+            lifetime: Duration::from_secs(1800),
+            age_add,
+            nonce: SizedPayload::empty(),
+            ticket: Arc::new(SizedPayload::from(vec![0x11, 0x22, 0x33])),
+            extensions: NewSessionTicketExtensions {
+                max_early_data_size: Some(8192),
+            },
+        },
         Tls13ClientSessionInput {
             suite: TEST_PROVIDER.tls13_cipher_suites[0],
             peer_identity: peer_identity.clone(),
@@ -91,12 +101,8 @@ fn tls13_client_session_value_roundtrip() {
                 0xaa, 0xbb, 0xcc, 0xdd,
             ])),
         },
-        Arc::new(SizedPayload::from(vec![0x11, 0x22, 0x33])),
         &[0x55; 48],
         UnixTime::since_unix_epoch(Duration::from_secs(9999999)),
-        Duration::from_secs(1800),
-        age_add,
-        8192_u32,
     );
 
     let mut encoded = Vec::new();
@@ -227,7 +233,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             ServerHelloPayload {
                 random: Random::new(config.provider().secure_random).unwrap(),
                 compression_method: Compression::Null,
-                cipher_suite: CipherSuite::Unknown(0xff12),
+                cipher_suite: CipherSuite(0xff12),
                 legacy_version: ProtocolVersion::TLSv1_2,
                 session_id: SessionId::empty(),
                 extensions: Box::new(ServerExtensions::default()),
@@ -703,8 +709,8 @@ fn hybrid_kx_component_share_offered_if_supported_separately() {
         .as_ref()
         .unwrap();
     assert_eq!(key_shares.len(), 2);
-    assert_eq!(key_shares[0].group, NamedGroup::Unknown(0xfe00));
-    assert_eq!(key_shares[1].group, NamedGroup::Unknown(0xfe01));
+    assert_eq!(key_shares[0].group, NamedGroup(0xfe00));
+    assert_eq!(key_shares[1].group, NamedGroup(0xfe01));
 }
 
 #[test]
@@ -727,7 +733,7 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
         .as_ref()
         .unwrap();
     assert_eq!(key_shares.len(), 1);
-    assert_eq!(key_shares[0].group, NamedGroup::Unknown(0xfe00));
+    assert_eq!(key_shares[0].group, NamedGroup(0xfe00));
 }
 
 fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPayload, Error> {
@@ -759,10 +765,10 @@ const HYBRID_PROVIDER: CryptoProvider = CryptoProvider {
 };
 
 const FAKE_HYBRID: &FakeHybrid = &FakeHybrid {
-    name: NamedGroup::Unknown(0xfe00),
-    classical: NamedGroup::Unknown(0xfe01),
+    name: NamedGroup(0xfe00),
+    classical: NamedGroup(0xfe01),
 };
-const FAKE_KX_GROUP: &dyn SupportedKxGroup = &FakeKeyExchangeGroup(NamedGroup::Unknown(0xfe01));
+const FAKE_KX_GROUP: &dyn SupportedKxGroup = &FakeKeyExchangeGroup(NamedGroup(0xfe01));
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FakeHybrid {

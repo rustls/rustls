@@ -11,7 +11,8 @@ use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 #[cfg(feature = "webpki")]
 use webpki::ExtendedKeyUsage;
 
-use crate::common_state::{SendPath, maybe_send_fatal_alert};
+use crate::common_state::maybe_send_fatal_alert;
+use crate::conn::SendPath;
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{CipherSuite, GetRandomFailed, InconsistentKeys};
 use crate::enums::{ContentType, HandshakeType};
@@ -716,9 +717,9 @@ impl fmt::Display for CertificateError {
 enum_builder! {
     /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub enum AlertDescription {
+    pub struct AlertDescription(pub u8);
+
+    enum AlertDescriptionName {
         CloseNotify => 0x00,
         UnexpectedMessage => 0x0a,
         BadRecordMac => 0x14,
@@ -759,114 +760,134 @@ enum_builder! {
 
 impl fmt::Display for AlertDescription {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Ok(known) = AlertDescriptionName::try_from(*self) else {
+            return write!(f, "sent an unknown alert (0x{:02x?})", self.0);
+        };
+
         // these should be:
         // - in past tense
         // - be syntactically correct if prefaced with 'the peer' to describe
         //   received alerts
-        match self {
+        match known {
             // this is normal.
-            Self::CloseNotify => write!(f, "cleanly closed the connection"),
+            AlertDescriptionName::CloseNotify => write!(f, "cleanly closed the connection"),
 
             // these are abnormal.  they are usually symptomatic of an interop failure.
             // please file a bug report.
-            Self::UnexpectedMessage => write!(f, "received an unexpected message"),
-            Self::BadRecordMac => write!(f, "failed to verify a message"),
-            Self::RecordOverflow => write!(f, "rejected an over-length message"),
-            Self::IllegalParameter => write!(
+            AlertDescriptionName::UnexpectedMessage => write!(f, "received an unexpected message"),
+            AlertDescriptionName::BadRecordMac => write!(f, "failed to verify a message"),
+            AlertDescriptionName::RecordOverflow => write!(f, "rejected an over-length message"),
+            AlertDescriptionName::IllegalParameter => write!(
                 f,
                 "rejected a message because a field was incorrect or inconsistent"
             ),
-            Self::DecodeError => write!(f, "failed to decode a message"),
-            Self::DecryptError => {
+            AlertDescriptionName::DecodeError => write!(f, "failed to decode a message"),
+            AlertDescriptionName::DecryptError => {
                 write!(f, "failed to perform a handshake cryptographic operation")
             }
-            Self::InappropriateFallback => {
+            AlertDescriptionName::InappropriateFallback => {
                 write!(f, "detected an attempted version downgrade")
             }
-            Self::MissingExtension => {
+            AlertDescriptionName::MissingExtension => {
                 write!(f, "required a specific extension that was not provided")
             }
-            Self::UnsupportedExtension => write!(f, "rejected an unsolicited extension"),
+            AlertDescriptionName::UnsupportedExtension => {
+                write!(f, "rejected an unsolicited extension")
+            }
 
             // these are deprecated by TLS1.3 and should be very rare (but possible
             // with TLS1.2 or earlier peers)
-            Self::DecryptionFailed => write!(f, "failed to decrypt a message"),
-            Self::DecompressionFailure => write!(f, "failed to decompress a message"),
-            Self::NoCertificate => write!(f, "found no certificate"),
-            Self::ExportRestriction => write!(f, "refused due to export restrictions"),
-            Self::NoRenegotiation => write!(f, "rejected an attempt at renegotiation"),
-            Self::CertificateUnobtainable => {
+            AlertDescriptionName::DecryptionFailed => write!(f, "failed to decrypt a message"),
+            AlertDescriptionName::DecompressionFailure => {
+                write!(f, "failed to decompress a message")
+            }
+            AlertDescriptionName::NoCertificate => write!(f, "found no certificate"),
+            AlertDescriptionName::ExportRestriction => {
+                write!(f, "refused due to export restrictions")
+            }
+            AlertDescriptionName::NoRenegotiation => {
+                write!(f, "rejected an attempt at renegotiation")
+            }
+            AlertDescriptionName::CertificateUnobtainable => {
                 write!(f, "failed to retrieve its certificate")
             }
-            Self::BadCertificateHashValue => {
+            AlertDescriptionName::BadCertificateHashValue => {
                 write!(f, "rejected the `certificate_hash` extension")
             }
 
             // this is fairly normal. it means a server cannot choose compatible parameters
             // given our offer.  please use ssllabs.com or similar to investigate what parameters
             // the server supports.
-            Self::HandshakeFailure => write!(
+            AlertDescriptionName::HandshakeFailure => write!(
                 f,
                 "failed to negotiate an acceptable set of security parameters"
             ),
-            Self::ProtocolVersion => write!(f, "did not support a suitable TLS version"),
-            Self::InsufficientSecurity => {
+            AlertDescriptionName::ProtocolVersion => {
+                write!(f, "did not support a suitable TLS version")
+            }
+            AlertDescriptionName::InsufficientSecurity => {
                 write!(f, "required a higher security level than was offered")
             }
 
             // these usually indicate a local misconfiguration, either in certificate selection
             // or issuance.
-            Self::BadCertificate => {
+            AlertDescriptionName::BadCertificate => {
                 write!(
                     f,
                     "rejected the certificate as corrupt or incorrectly signed"
                 )
             }
-            Self::UnsupportedCertificate => {
+            AlertDescriptionName::UnsupportedCertificate => {
                 write!(f, "did not support the certificate")
             }
-            Self::CertificateRevoked => write!(f, "found the certificate to be revoked"),
-            Self::CertificateExpired => write!(f, "found the certificate to be expired"),
-            Self::CertificateUnknown => {
+            AlertDescriptionName::CertificateRevoked => {
+                write!(f, "found the certificate to be revoked")
+            }
+            AlertDescriptionName::CertificateExpired => {
+                write!(f, "found the certificate to be expired")
+            }
+            AlertDescriptionName::CertificateUnknown => {
                 write!(f, "rejected the certificate for an unspecified reason")
             }
-            Self::UnknownCa => write!(f, "found the certificate was not issued by a trusted CA"),
-            Self::BadCertificateStatusResponse => {
+            AlertDescriptionName::UnknownCa => {
+                write!(f, "found the certificate was not issued by a trusted CA")
+            }
+            AlertDescriptionName::BadCertificateStatusResponse => {
                 write!(f, "rejected the certificate status response")
             }
             // typically this means client authentication is required, in TLS1.2...
-            Self::AccessDenied => write!(f, "denied access"),
+            AlertDescriptionName::AccessDenied => write!(f, "denied access"),
             // and in TLS1.3...
-            Self::CertificateRequired => write!(f, "required a client certificate"),
+            AlertDescriptionName::CertificateRequired => {
+                write!(f, "required a client certificate")
+            }
 
-            Self::InternalError => write!(f, "encountered an internal error"),
-            Self::UserCanceled => write!(f, "canceled the handshake"),
+            AlertDescriptionName::InternalError => write!(f, "encountered an internal error"),
+            AlertDescriptionName::UserCanceled => write!(f, "canceled the handshake"),
 
             // rejection of SNI (uncommon; usually servers behave as if it was not sent)
-            Self::UnrecognizedName => {
+            AlertDescriptionName::UnrecognizedName => {
                 write!(f, "did not recognize a name in the `server_name` extension")
             }
 
             // rejection of PSK connections (NYI in this library); indicates a local
             // misconfiguration.
-            Self::UnknownPskIdentity => {
+            AlertDescriptionName::UnknownPskIdentity => {
                 write!(f, "did not recognize any offered PSK identity")
             }
 
             // rejection of ALPN (varying levels of support, but missing support is
             // often dangerous if the peers fail to agree on the same protocol)
-            Self::NoApplicationProtocol => write!(
+            AlertDescriptionName::NoApplicationProtocol => write!(
                 f,
                 "did not support any of the offered application protocols"
             ),
 
             // ECH requirement by clients, see
             // <https://datatracker.ietf.org/doc/html/rfc9849#name-update-of-the-tls-alert-reg>
-            Self::EncryptedClientHelloRequired => {
+            AlertDescriptionName::EncryptedClientHelloRequired => {
                 write!(f, "required use of encrypted client hello")
             }
-
-            Self::Unknown(n) => write!(f, "sent an unknown alert (0x{n:02x?})"),
         }
     }
 }

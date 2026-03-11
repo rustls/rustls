@@ -55,7 +55,7 @@ impl Codec<'_> for ServerHelloPayload {
         );
 
         let ret = Self {
-            legacy_version: ProtocolVersion::Unknown(0),
+            legacy_version: ProtocolVersion(0),
             random: ZERO_RANDOM,
             session_id,
             cipher_suite: suite,
@@ -326,10 +326,7 @@ impl EchConfigContents {
         self.extensions
             .iter()
             // An extension is considered mandatory if the high bit of its type is set.
-            .any(|ext| {
-                matches!(ext.ext_type(), ExtensionType::Unknown(_))
-                    && u16::from(ext.ext_type()) & 0x8000 != 0
-            })
+            .any(|ext| (ext.ext_type().0 & 0x8000) != 0)
     }
 }
 
@@ -456,7 +453,7 @@ mod tests {
     #[test]
     fn test_ech_config_dupe_exts() {
         let unknown_ext = EchConfigExtension::Unknown(UnknownExtension {
-            typ: ExtensionType::Unknown(0x42),
+            typ: ExtensionType(0x42),
             payload: Payload::new(vec![0x42]),
         });
         let mut config = config_template();
@@ -472,7 +469,7 @@ mod tests {
     #[test]
     fn test_ech_config_mandatory_exts() {
         let mandatory_unknown_ext = EchConfigExtension::Unknown(UnknownExtension {
-            typ: ExtensionType::Unknown(0x42 | 0x8000), // Note: high bit set.
+            typ: ExtensionType(0x42 | 0x8000), // Note: high bit set.
             payload: Payload::new(vec![0x42]),
         });
         let mut config = config_template();

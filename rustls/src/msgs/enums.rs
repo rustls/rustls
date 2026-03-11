@@ -4,62 +4,41 @@
 enum_builder! {
     /// The `ClientCertificateType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub(crate) enum ClientCertificateType {
+    pub(crate) struct ClientCertificateType(pub u8);
+
+    enum ClientCertificateTypeName {
         RSASign => 0x01,
-        DSSSign => 0x02,
-        RSAFixedDH => 0x03,
-        DSSFixedDH => 0x04,
-        RSAEphemeralDH => 0x05,
-        DSSEphemeralDH => 0x06,
-        FortezzaDMS => 0x14,
         ECDSASign => 0x40,
-        RSAFixedECDH => 0x41,
-        ECDSAFixedECDH => 0x42,
     }
 }
 
 enum_builder! {
     /// The `Compression` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub enum Compression {
+    pub(crate) struct Compression(pub(crate) u8);
+
+    pub(crate) enum CompressionName {
         Null => 0x00,
-        Deflate => 0x01,
-        LSZ => 0x40,
     }
 }
 
 enum_builder! {
     /// The `AlertLevel` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub enum AlertLevel {
+    pub struct AlertLevel(pub u8);
+
+    pub(crate) enum AlertLevelName {
         Warning => 0x01,
         Fatal => 0x02,
     }
 }
 
 enum_builder! {
-    /// The `HeartbeatMessageType` TLS protocol enum.  Values in this enum are taken
-    /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub(crate) enum HeartbeatMessageType {
-        Request => 0x01,
-        Response => 0x02,
-    }
-}
-
-enum_builder! {
     /// The `ExtensionType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u16)]
-    pub enum ExtensionType {
+    pub struct ExtensionType(pub u16);
+
+    enum ExtensionTypeName {
         ServerName => 0x0000,
         MaxFragmentLength => 0x0001,
         ClientCertificateUrl => 0x0002,
@@ -118,7 +97,7 @@ impl ExtensionType {
     pub(crate) fn ech_compress(&self) -> bool {
         // We match which extensions we will compress with BoringSSL and Go's stdlib.
         matches!(
-            self,
+            *self,
             Self::StatusRequest
                 | Self::EllipticCurves
                 | Self::SignatureAlgorithms
@@ -135,9 +114,9 @@ impl ExtensionType {
 enum_builder! {
     /// The `ServerNameType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub(crate) enum ServerNameType {
+    pub(crate) struct ServerNameType(pub u8);
+
+    enum ServerNameTypeName {
         HostName => 0x00,
     }
 }
@@ -145,34 +124,19 @@ enum_builder! {
 enum_builder! {
     /// The `ECPointFormat` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub enum ECPointFormat {
-        Uncompressed => 0x00,
-        ANSIX962CompressedPrime => 0x01,
-        ANSIX962CompressedChar2 => 0x02,
-    }
-}
+    pub struct ECPointFormat(pub u8);
 
-enum_builder! {
-    /// The `HeartbeatMode` TLS protocol enum.  Values in this enum are taken
-    /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub(crate) enum HeartbeatMode {
-        PeerAllowedToSend => 0x01,
-        PeerNotAllowedToSend => 0x02,
+    enum ECPointFormatName {
+        Uncompressed => 0x00,
     }
 }
 
 enum_builder! {
     /// The `ECCurveType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub(crate) enum ECCurveType {
-        ExplicitPrime => 0x01,
-        ExplicitChar2 => 0x02,
+    pub(crate) struct ECCurveType(pub(crate) u8);
+
+    enum ECCurveTypeName {
         NamedCurve => 0x03,
     }
 }
@@ -180,9 +144,9 @@ enum_builder! {
 enum_builder! {
     /// The `PskKeyExchangeMode` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub enum PskKeyExchangeMode {
+    pub struct PskKeyExchangeMode(pub u8);
+
+    enum PskKeyExchangeModeName {
         PSK_KE => 0x00,
         PSK_DHE_KE => 0x01,
     }
@@ -191,9 +155,9 @@ enum_builder! {
 enum_builder! {
     /// The `KeyUpdateRequest` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub enum KeyUpdateRequest {
+    pub struct KeyUpdateRequest(pub u8);
+
+     enum KeyUpdateRequestName {
         UpdateNotRequested => 0x00,
         UpdateRequested => 0x01,
     }
@@ -202,9 +166,9 @@ enum_builder! {
 enum_builder! {
     /// The `CertificateStatusType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognized ordinals.
-    #[repr(u8)]
-    pub enum CertificateStatusType {
+    pub struct CertificateStatusType(pub u8);
+
+    enum CertificateStatusTypeName {
         OCSP => 0x01,
     }
 }
@@ -215,8 +179,9 @@ enum_builder! {
     /// Specified in [RFC 9849 Section 4].
     ///
     /// [RFC 9849 Section 4]: <https://datatracker.ietf.org/doc/html/rfc9849#section-4>
-    #[repr(u16)]
-    pub enum EchVersion {
+    pub struct EchVersion(pub u16);
+
+    enum EchVersionName {
         V18 => 0xfe0d,
     }
 }
@@ -235,25 +200,13 @@ pub(crate) mod tests {
     fn test_enums() {
         test_enum8::<ClientCertificateType>(
             ClientCertificateType::RSASign,
-            ClientCertificateType::ECDSAFixedECDH,
+            ClientCertificateType::ECDSASign,
         );
-        test_enum8::<Compression>(Compression::Null, Compression::LSZ);
+        test_enum8::<Compression>(Compression::Null, Compression::Null);
         test_enum8::<AlertLevel>(AlertLevel::Warning, AlertLevel::Fatal);
-        test_enum8::<HeartbeatMessageType>(
-            HeartbeatMessageType::Request,
-            HeartbeatMessageType::Response,
-        );
         test_enum16::<ExtensionType>(ExtensionType::ServerName, ExtensionType::RenegotiationInfo);
         test_enum8::<ServerNameType>(ServerNameType::HostName, ServerNameType::HostName);
-        test_enum8::<ECPointFormat>(
-            ECPointFormat::Uncompressed,
-            ECPointFormat::ANSIX962CompressedChar2,
-        );
-        test_enum8::<HeartbeatMode>(
-            HeartbeatMode::PeerAllowedToSend,
-            HeartbeatMode::PeerNotAllowedToSend,
-        );
-        test_enum8::<ECCurveType>(ECCurveType::ExplicitPrime, ECCurveType::NamedCurve);
+        test_enum8::<ECPointFormat>(ECPointFormat::Uncompressed, ECPointFormat::Uncompressed);
         test_enum8::<PskKeyExchangeMode>(
             PskKeyExchangeMode::PSK_KE,
             PskKeyExchangeMode::PSK_DHE_KE,

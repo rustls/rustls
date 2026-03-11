@@ -102,6 +102,7 @@ The community has also started developing third-party providers for Rustls:
 
 * [`boring-rustls-provider`] - a work-in-progress provider that uses [`boringssl`] for
 cryptography.
+* [`rustls-ccm`] - adds AES-CCM cipher suites (TLS 1.2 and 1.3) using [`RustCrypto`], for IoT/constrained-device protocols (IEEE 2030.5, Matter, RFC 7925).
 * [`rustls-graviola`] - a provider that uses [`graviola`] for cryptography.
 * [`rustls-mbedtls-provider`] - a provider that uses [`mbedtls`] for cryptography.
 * [`rustls-openssl`] - a provider that uses [OpenSSL] for cryptography.
@@ -110,6 +111,7 @@ from [`RustCrypto`] for cryptography.
 * [`rustls-symcrypt`] - a provider that uses Microsoft's [SymCrypt] library.
 * [`rustls-wolfcrypt-provider`] - a work-in-progress provider that uses [`wolfCrypt`] for cryptography.
 
+[`rustls-ccm`]: https://github.com/jsulmont/rustls-ccm
 [`rustls-graviola`]: https://crates.io/crates/rustls-graviola
 [`graviola`]: https://github.com/ctz/graviola
 [`rustls-mbedtls-provider`]: https://github.com/fortanix/rustls-mbedtls-provider

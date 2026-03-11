@@ -1,6 +1,6 @@
-use alloc::vec::Vec;
 use core::mem;
 use core::ops::Range;
+use std::collections::VecDeque;
 
 use super::buffers::{BufferProgress, Coalescer, Delocator, Locator};
 use crate::crypto::cipher::EncodedMessage;
@@ -11,7 +11,7 @@ use crate::msgs::codec::{Codec, U24};
 #[derive(Debug)]
 pub(crate) struct HandshakeDeframer {
     /// Spans covering individual handshake payloads, in order of receipt.
-    spans: Vec<FragmentSpan>,
+    spans: VecDeque<FragmentSpan>,
 
     /// Discard value, tracking the rightmost extent of the last message
     /// in `spans`.
@@ -55,10 +55,10 @@ impl HandshakeDeframer {
         // buffer, and `msg` borrows it.
         if let Some(_last_incomplete) = self
             .spans
-            .last()
+            .back()
             .filter(|span| !span.is_complete())
         {
-            self.spans.push(FragmentSpan {
+            self.spans.push_back(FragmentSpan {
                 version: msg.version,
                 size: None,
                 bounds: containing_buffer.locate(msg.payload),
@@ -69,7 +69,7 @@ impl HandshakeDeframer {
         // otherwise, we can expect `msg` to contain a handshake header introducing
         // a new message (and perhaps several of them.)
         for span in DissectHandshakeIter::new(msg, containing_buffer) {
-            self.spans.push(span);
+            self.spans.push_back(span);
         }
     }
 
@@ -78,11 +78,11 @@ impl HandshakeDeframer {
         BufferProgress::new(self.outer_discard)
     }
 
-    /// Do we have a message ready? ie, would `iter().next()` return `Some`?
-    pub(crate) fn has_message_ready(&self) -> bool {
-        match self.spans.first() {
-            Some(span) => span.is_complete(),
-            None => false,
+    /// Yield the first complete [`FragmentSpan`] if any.
+    pub(crate) fn complete_span(&mut self) -> Option<FragmentSpan> {
+        match self.spans.front() {
+            Some(span) if span.is_complete() => self.spans.pop_front(),
+            _ => None,
         }
     }
 
@@ -101,12 +101,27 @@ impl HandshakeDeframer {
     }
 
     /// Iterate over the complete messages.
-    pub(crate) fn iter<'a, 'b>(&'a mut self, containing_buffer: &'b [u8]) -> HandshakeIter<'a, 'b> {
-        HandshakeIter {
-            deframer: self,
-            containing_buffer: Delocator::new(containing_buffer),
-            index: 0,
-        }
+    pub(crate) fn message<'b>(
+        &mut self,
+        next_span: FragmentSpan,
+        containing_buffer: &'b [u8],
+    ) -> (EncodedMessage<&'b [u8]>, Option<usize>) {
+        // if this is the last handshake message, then we'll end
+        // up with an empty `spans` and can discard the remainder
+        // of the input buffer.
+        let discard = match self.spans.is_empty() {
+            true => Some(mem::take(&mut self.outer_discard)),
+            false => None,
+        };
+
+        (
+            EncodedMessage {
+                typ: ContentType::Handshake,
+                version: next_span.version,
+                payload: Delocator::new(containing_buffer).slice_from_range(&next_span.bounds),
+            },
+            discard,
+        )
     }
 
     /// Coalesce the handshake portions of the given buffer,
@@ -184,8 +199,14 @@ impl HandshakeDeframer {
     /// Within `containing_buffer`, move `span[index+1]` to be contiguous
     /// with `span[index]`.
     fn coalesce_one(&mut self, index: usize, mut containing_buffer: Coalescer<'_>) {
-        let second = self.spans.remove(index + 1);
-        let mut first = self.spans.remove(index);
+        let Some(second) = self.spans.remove(index + 1) else {
+            return;
+        };
+
+        let Some(mut first) = self.spans.remove(index) else {
+            self.spans.insert(index + 1, second);
+            return;
+        };
 
         // move the entirety of `second` to be contiguous with `first`
         let len = second.bounds.len();
@@ -217,14 +238,15 @@ impl HandshakeDeframer {
     /// Returns an index into `spans` for the first non-complete span:
     /// this will never be the last item.
     fn requires_coalesce(&self) -> Option<usize> {
-        self.spans
-            .split_last()
-            .and_then(|(_last, elements)| {
-                elements
-                    .iter()
-                    .enumerate()
-                    .find_map(|(i, span)| (!span.is_complete()).then_some(i))
-            })
+        let limit = self.spans.len().saturating_sub(1);
+        let iter = self.spans.iter();
+        for (i, span) in iter.enumerate().take(limit) {
+            if !span.is_complete() {
+                return Some(i);
+            }
+        }
+
+        None
     }
 }
 
@@ -233,7 +255,7 @@ impl Default for HandshakeDeframer {
         Self {
             // capacity: a typical upper limit on handshake messages in
             // a single flight
-            spans: Vec::with_capacity(16),
+            spans: VecDeque::with_capacity(16),
             outer_discard: 0,
         }
     }
@@ -298,53 +320,8 @@ impl Iterator for DissectHandshakeIter<'_, '_> {
     }
 }
 
-pub(crate) struct HandshakeIter<'a, 'b> {
-    deframer: &'a mut HandshakeDeframer,
-    containing_buffer: Delocator<'b>,
-    index: usize,
-}
-
-impl<'b> Iterator for HandshakeIter<'_, 'b> {
-    type Item = (EncodedMessage<&'b [u8]>, usize);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let next_span = self.deframer.spans.get(self.index)?;
-
-        if !next_span.is_complete() {
-            return None;
-        }
-
-        // if this is the last handshake message, then we'll end
-        // up with an empty `spans` and can discard the remainder
-        // of the input buffer.
-        let discard = if self.deframer.spans.len() - 1 == self.index {
-            mem::take(&mut self.deframer.outer_discard)
-        } else {
-            0
-        };
-
-        self.index += 1;
-        Some((
-            EncodedMessage {
-                typ: ContentType::Handshake,
-                version: next_span.version,
-                payload: self
-                    .containing_buffer
-                    .slice_from_range(&next_span.bounds),
-            },
-            discard,
-        ))
-    }
-}
-
-impl Drop for HandshakeIter<'_, '_> {
-    fn drop(&mut self) {
-        self.deframer.spans.drain(..self.index);
-    }
-}
-
 #[derive(Debug)]
-struct FragmentSpan {
+pub(crate) struct FragmentSpan {
     /// version taken from containing message.
     version: ProtocolVersion,
 
@@ -417,13 +394,17 @@ mod tests {
         hs.coalesce(&mut input).unwrap();
         std::println!("after:  {hs:?}");
 
-        let (msg, discard) = hs.iter(&input).next().unwrap();
+        let span = hs.complete_span().unwrap();
+        let (msg, discard) = hs.message(span, &input);
         std::println!("msg {msg:?} discard {discard:?}");
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xff]);
 
-        input.drain(..discard);
+        if let Some(discard) = discard {
+            input.drain(..discard);
+        }
+
         assert_eq!(input, &[0, 1]);
     }
 
@@ -437,14 +418,17 @@ mod tests {
         assert_eq!(hs.spans.len(), 2);
 
         hs.coalesce(&mut input).unwrap();
-        assert_eq!(hs.spans.len(), 1);
+        let span = hs.complete_span().unwrap();
 
-        let (msg, discard) = std::dbg!(hs.iter(&input).next().unwrap());
+        let (msg, discard) = std::dbg!(hs.message(span, &input));
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
 
-        input.drain(..discard);
+        if let Some(discard) = discard {
+            input.drain(..discard);
+        }
+
         assert_eq!(input, &[0]);
     }
 
@@ -474,14 +458,14 @@ mod tests {
         add_bytes(&mut hs, &input[3..8], &input);
         add_bytes(&mut hs, &input[8..12], &input);
 
-        let mut iter = hs.iter(&input);
-        let (msg, discard) = iter.next().unwrap();
-        assert!(iter.next().is_none());
+        let span = hs.complete_span().unwrap();
+        let (msg, discard) = hs.message(span, &input);
+        assert!(hs.complete_span().is_none());
 
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xab]);
-        assert_eq!(discard, 0);
+        assert_eq!(discard, None);
     }
 
     #[test]
@@ -503,9 +487,9 @@ mod tests {
 
         hs.coalesce(&mut input[..]).unwrap();
 
-        let mut iter = hs.iter(&input[..]);
         for _ in 0..4 {
-            let (msg, discard) = iter.next().unwrap();
+            let span = hs.complete_span().unwrap();
+            let (msg, discard) = hs.message(span, &input[..]);
             assert!(matches!(
                 msg,
                 EncodedMessage {
@@ -513,10 +497,11 @@ mod tests {
                     ..
                 }
             ));
-            assert_eq!(discard, 0);
+            assert_eq!(discard, None);
         }
 
-        let (msg, discard) = iter.next().unwrap();
+        let span = hs.complete_span().unwrap();
+        let (msg, discard) = hs.message(span, &input[..]);
         assert!(matches!(
             msg,
             EncodedMessage {
@@ -524,9 +509,9 @@ mod tests {
                 ..
             }
         ));
-        assert_eq!(discard, 4280);
-        drop(iter);
 
+        let discard = discard.expect("last message should have discard");
+        assert_eq!(discard, 4280);
         input.drain(0..discard);
         assert!(input.is_empty());
     }

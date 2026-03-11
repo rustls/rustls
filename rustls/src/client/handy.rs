@@ -185,7 +185,9 @@ mod tests {
     use crate::crypto::{
         CertificateIdentity, CipherSuite, Identity, TEST_PROVIDER, tls12_suite, tls13_suite,
     };
-    use crate::msgs::{SessionId, SizedPayload};
+    use crate::msgs::{
+        NewSessionTicketExtensions, NewSessionTicketPayloadTls13, SessionId, SizedPayload,
+    };
     use crate::sync::Arc;
 
     #[test]
@@ -205,7 +207,7 @@ mod tests {
             c.set_tls12_session(
                 key.clone(),
                 Tls12Session::new(
-                    tls12_suite(CipherSuite::Unknown(0xff12), &TEST_PROVIDER),
+                    tls12_suite(CipherSuite(0xff12), &TEST_PROVIDER),
                     SessionId::empty(),
                     Arc::new(SizedPayload::empty()),
                     &[0u8; 48],
@@ -225,20 +227,25 @@ mod tests {
         c.insert_tls13_ticket(
             key.clone(),
             Tls13Session::new(
+                &NewSessionTicketPayloadTls13 {
+                    lifetime: Duration::ZERO,
+                    age_add: 0,
+                    nonce: SizedPayload::empty(),
+                    ticket: Arc::new(SizedPayload::empty()),
+                    extensions: NewSessionTicketExtensions {
+                        max_early_data_size: None,
+                    },
+                },
                 Tls13ClientSessionInput {
-                    suite: tls13_suite(CipherSuite::Unknown(0xff13), &TEST_PROVIDER),
+                    suite: tls13_suite(CipherSuite(0xff13), &TEST_PROVIDER),
                     peer_identity: Identity::X509(CertificateIdentity {
                         end_entity: CertificateDer::from(&[][..]),
                         intermediates: Vec::new(),
                     }),
                     quic_params: None,
                 },
-                Arc::new(SizedPayload::empty()),
                 &[],
                 now,
-                Duration::ZERO,
-                0,
-                0,
             ),
         );
 

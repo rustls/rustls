@@ -71,7 +71,7 @@ impl crypto::TicketerFactory for Provider {
 
 pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
-        suite: CipherSuite::Unknown(0xff13),
+        suite: CipherSuite(0xff13),
         hash_provider: FAKE_HASH,
         confidentiality_limit: u64::MAX,
     },
@@ -83,7 +83,7 @@ pub(crate) const TLS13_TEST_SUITE: &Tls13CipherSuite = &Tls13CipherSuite {
 
 const TLS_TEST_SUITE: &Tls12CipherSuite = &Tls12CipherSuite {
     common: CipherSuiteCommon {
-        suite: CipherSuite::Unknown(0xff12),
+        suite: CipherSuite(0xff12),
         hash_provider: FAKE_HASH,
         confidentiality_limit: u64::MAX,
     },
@@ -292,8 +292,7 @@ impl crypto::kx::ActiveKeyExchange for ActiveKeyExchange {
     }
 }
 
-const KEY_EXCHANGE_GROUP: &dyn SupportedKxGroup =
-    &FakeKeyExchangeGroup(NamedGroup::Unknown(0xfe00));
+const KEY_EXCHANGE_GROUP: &dyn SupportedKxGroup = &FakeKeyExchangeGroup(NamedGroup(0xfe00));
 
 #[derive(Debug)]
 pub(crate) struct FakeKeyExchangeGroup(pub(crate) NamedGroup);

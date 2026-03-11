@@ -251,9 +251,7 @@ impl<'a> Identity<'a> {
                 ))),
                 _ => Err(PeerIncompatible::MultipleRawKeys.into()),
             },
-            CertificateType::Unknown(ty) => {
-                Err(PeerIncompatible::UnknownCertificateType(ty).into())
-            }
+            CertificateType(ty) => Err(PeerIncompatible::UnknownCertificateType(ty).into()),
         }
     }
 

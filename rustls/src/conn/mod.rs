@@ -1,25 +1,17 @@
 use alloc::boxed::Box;
 use core::fmt::{self, Debug};
-use core::mem;
 use core::ops::{Deref, DerefMut};
 use std::io;
 
 use kernel::KernelConnection;
 use pki_types::FipsStatus;
 
-use crate::ConnectionOutputs;
 use crate::common_state::{
-    CaptureAppData, CommonState, DEFAULT_BUFFER_LIMIT, Event, Input, JoinOutput, Output,
-    OutputEvent, ReceivePath, SendOutput, SendPath, UnborrowedPayload, maybe_send_fatal_alert,
+    CommonState, ConnectionOutputs, Event, Output, OutputEvent, UnborrowedPayload,
 };
-use crate::conn::private::SideOutput;
-use crate::crypto::cipher::Decrypted;
-use crate::error::{AlertDescription, ApiMisuse, Error};
+use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{
-    AlertLevel, BufferProgress, DeframerVecBuffer, Delocator, Locator, Message, Random,
-    TlsInputBuffer,
-};
+use crate::msgs::{BufferProgress, DeframerVecBuffer, Delocator, Message, Random, TlsInputBuffer};
 use crate::quic::QuicOutput;
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -28,6 +20,14 @@ use crate::vecbuf::ChunkVecBuffer;
 // pub so that it can be re-exported from the crate root
 pub mod kernel;
 pub(crate) mod unbuffered;
+
+mod receive;
+use receive::JoinOutput;
+pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
+
+mod send;
+use send::DEFAULT_BUFFER_LIMIT;
+pub(crate) use send::{SendOutput, SendPath};
 
 mod connection {
     use alloc::vec::Vec;
@@ -550,19 +550,12 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        let mut buffer_progress = self.core.buffer_progress();
         loop {
-            let mut output = JoinOutput {
-                outputs: &mut self.core.common.outputs,
-                quic: None,
-                send: &mut self.core.common.send,
-                side: &mut self.core.side,
-            };
-
-            let Some((payload, mut buffer_progress)) = process_new_packets::<Side>(
+            let Some(payload) = self.core.process_new_packets(
                 &mut self.deframer_buffer,
-                &mut self.core.state,
-                &mut self.core.common.recv,
-                &mut output,
+                &mut buffer_progress,
+                None,
             )?
             else {
                 break;
@@ -729,106 +722,6 @@ impl IoState {
     }
 }
 
-pub(crate) fn process_new_packets<'a, Side: SideData>(
-    input: &mut dyn TlsInputBuffer,
-    state: &mut Result<Side::State, Error>,
-    recv: &mut ReceivePath,
-    output: &mut JoinOutput<'a>,
-) -> Result<Option<(UnborrowedPayload, BufferProgress)>, Error> {
-    let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
-        Ok(state) => state,
-        Err(e) => {
-            *state = Err(e.clone());
-            return Err(e);
-        }
-    };
-
-    let mut plaintext = None;
-    let mut buffer_progress = recv.hs_deframer.progress();
-
-    while st.wants_input() {
-        let buffer = input.slice_mut();
-        let locator = Locator::new(buffer);
-        let res = recv.deframe(buffer, &mut buffer_progress);
-
-        let mut output = CaptureAppData {
-            recv,
-            other: &mut *output,
-            plaintext_locator: &locator,
-            received_plaintext: &mut plaintext,
-        };
-
-        let opt_msg = match res {
-            Ok(opt_msg) => opt_msg,
-            Err(e) => {
-                maybe_send_fatal_alert(output.other.send, &e);
-                if let Error::DecryptError = e {
-                    st.handle_decrypt_error();
-                }
-                *state = Err(e.clone());
-                input.discard(buffer_progress.take_discard());
-                return Err(e);
-            }
-        };
-
-        let Some(msg) = opt_msg else {
-            break;
-        };
-
-        let Decrypted {
-            plaintext: msg,
-            want_close_before_decrypt,
-        } = msg;
-
-        if want_close_before_decrypt {
-            output
-                .other
-                .send
-                .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
-        }
-
-        let hs_aligned = output.recv.hs_deframer.aligned();
-        let result = match output
-            .recv
-            .receive_message(msg, hs_aligned, output.other.send)
-        {
-            Ok(Some(input)) => st.handle(input, &mut output),
-            Ok(None) => Ok(st),
-            Err(e) => Err(e),
-        };
-
-        match result {
-            Ok(new) => st = new,
-            Err(e) => {
-                maybe_send_fatal_alert(output.other.send, &e);
-                *state = Err(e.clone());
-                input.discard(buffer_progress.take_discard());
-                return Err(e);
-            }
-        }
-
-        if recv.has_received_close_notify {
-            // "Any data received after a closure alert has been received MUST be ignored."
-            // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
-            // This is data that has already been accepted in `read_tls`.
-            let entirety = input.slice_mut().len();
-            input.discard(entirety);
-            break;
-        }
-
-        if let Some(payload) = plaintext.take() {
-            *state = Ok(st);
-            return Ok(Some((payload, buffer_progress)));
-        }
-
-        input.discard(buffer_progress.take_discard());
-    }
-
-    input.discard(buffer_progress.take_discard());
-    *state = Ok(st);
-    Ok(None)
-}
-
 pub(crate) struct ConnectionCore<Side: SideData> {
     pub(crate) state: Result<Side::State, Error>,
     pub(crate) side: Side::Data,
@@ -842,6 +735,25 @@ impl<Side: SideData> ConnectionCore<Side> {
             side,
             common,
         }
+    }
+
+    #[inline]
+    pub(crate) fn process_new_packets<'a>(
+        &'a mut self,
+        buffer: &mut dyn TlsInputBuffer,
+        buffer_progress: &mut BufferProgress,
+        quic: Option<&'a mut dyn QuicOutput>,
+    ) -> Result<Option<UnborrowedPayload>, Error> {
+        let mut output = JoinOutput {
+            outputs: &mut self.common.outputs,
+            quic,
+            send: &mut self.common.send,
+            side: &mut self.side,
+        };
+
+        self.common
+            .recv
+            .process_new_packets::<Side>(buffer, buffer_progress, &mut self.state, &mut output)
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
@@ -903,6 +815,10 @@ impl<Side: SideData> ConnectionCore<Side> {
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
     }
+
+    pub(crate) fn buffer_progress(&self) -> BufferProgress {
+        self.common.recv.hs_deframer.progress()
+    }
 }
 
 pub(crate) struct SideCommonOutput<'a, 'q> {
@@ -911,7 +827,7 @@ pub(crate) struct SideCommonOutput<'a, 'q> {
     pub(crate) common: &'a mut CommonState,
 }
 
-impl<'q> Output for SideCommonOutput<'_, 'q> {
+impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
     fn emit(&mut self, ev: Event<'_>) {
         self.side.emit(ev);
     }
@@ -974,8 +890,10 @@ pub(crate) mod private {
     }
 }
 
+use private::SideOutput;
+
 pub(crate) trait StateMachine: Sized {
-    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output) -> Result<Self, Error>;
+    fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error>;
     fn wants_input(&self) -> bool;
     fn handle_decrypt_error(&mut self);
     fn into_external_state(
