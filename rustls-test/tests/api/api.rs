@@ -1622,7 +1622,7 @@ fn excess_client_hello_acceptor() {
     assert_eq!(error, PeerMisbehaved::KeyEpochWithPendingFragment.into());
 
     let mut alert_buf = vec![];
-    alert.write(&mut alert_buf).unwrap();
+    alert.write_all(&mut alert_buf).unwrap();
     assert_eq!(
         alert_buf,
         encoding::alert(AlertDescription::UnexpectedMessage, &[])
