@@ -1507,9 +1507,12 @@ fn test_acceptor() {
     let (err, mut alert) = acceptor.accept().unwrap_err();
     assert!(matches!(err, Error::InappropriateMessage { .. }));
     let mut alert_content = Vec::new();
-    let _ = alert.write(&mut alert_content);
+    alert
+        .write_all(&mut alert_content)
+        .unwrap();
     let expected = encoding::alert(AlertDescription::UnexpectedMessage, &[]);
     assert_eq!(alert_content, expected);
+    assert_eq!(format!("{alert:?}"), "AcceptedAlert { .. }");
 
     let mut acceptor = Acceptor::default();
     // Minimal 1-byte ClientHello message is not a legal handshake message
@@ -1529,7 +1532,9 @@ fn test_acceptor() {
         Error::InvalidMessage(InvalidMessage::MissingData(_))
     ));
     let mut alert_content = Vec::new();
-    let _ = alert.write(&mut alert_content);
+    alert
+        .write_all(&mut alert_content)
+        .unwrap();
     let expected = encoding::alert(AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 }
@@ -1569,7 +1574,9 @@ fn test_acceptor_rejected_handshake() {
     );
 
     let mut alert_content = Vec::new();
-    let _ = alert.write(&mut alert_content);
+    alert
+        .write_all(&mut alert_content)
+        .unwrap();
     let expected = encoding::alert(AlertDescription::ProtocolVersion, &[]);
     assert_eq!(alert_content, expected);
 }
