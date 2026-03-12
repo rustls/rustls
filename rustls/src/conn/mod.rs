@@ -910,7 +910,7 @@ pub(crate) mod private {
 
     pub(crate) trait Side: Debug {
         /// Data storage type.
-        type Data: SideOutput + Debug;
+        type Data: SideOutput;
         /// State machine type.
         type State: StateMachine;
     }

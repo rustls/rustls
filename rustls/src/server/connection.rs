@@ -571,19 +571,6 @@ impl EarlyDataState {
     }
 }
 
-impl Debug for EarlyDataState {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::New => write!(f, "EarlyDataState::New"),
-            Self::Accepted { received } => write!(
-                f,
-                "EarlyDataState::Accepted {{ received: {} }}",
-                received.len(),
-            ),
-        }
-    }
-}
-
 impl ConnectionCore<ServerSide> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
@@ -617,7 +604,7 @@ impl ConnectionCore<ServerSide> {
 }
 
 /// State associated with a server connection.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub(crate) struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
