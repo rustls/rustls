@@ -1575,6 +1575,39 @@ fn large_client_hello_acceptor() {
 }
 
 #[test]
+fn acceptor_with_illegal_max_fragment_size() {
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    server_config.max_fragment_size = Some(31);
+
+    let mut acceptor = Acceptor::default();
+    acceptor
+        .read_tls(
+            &mut encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                encoding::basic_client_hello(vec![]),
+            )
+            .as_slice(),
+        )
+        .unwrap();
+
+    let accepted = acceptor.accept().unwrap().unwrap();
+    let (err, mut alert) = accepted
+        .into_connection(Arc::new(server_config))
+        .err()
+        .unwrap();
+
+    assert_eq!(err, Error::BadMaxFragmentSize);
+    assert_eq!(
+        alert
+            .write(&mut &mut [0u8; 128][..])
+            .ok(),
+        Some(0),
+        "illegal max fragment size should not send an alert, as it is a local configuration issue"
+    );
+}
+
+#[test]
 fn excess_client_hello_acceptor() {
     // this is a trivial ClientHello, followed by a fragment of a ClientHello
     let mut hello = encoding::basic_client_hello(vec![]);
