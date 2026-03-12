@@ -81,6 +81,7 @@ impl<'a, L: PayloadSize<'a>, C: Cardinality> Codec<'a> for SizedPayload<'a, L, C
 }
 
 impl<C: Cardinality> Zeroize for SizedPayload<'_, u8, C> {
+    #[inline(never)]
     fn zeroize(&mut self) {
         if let Payload::Owned(buf) = &mut self.inner {
             buf.zeroize();

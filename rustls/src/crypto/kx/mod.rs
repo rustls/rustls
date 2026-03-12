@@ -624,6 +624,7 @@ impl SharedSecret {
 }
 
 impl Drop for SharedSecret {
+    #[inline(never)]
     fn drop(&mut self) {
         self.buf.zeroize();
     }

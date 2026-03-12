@@ -53,6 +53,7 @@ impl Tag {
 }
 
 impl Drop for Tag {
+    #[inline(never)]
     fn drop(&mut self) {
         self.0.buf.zeroize();
     }

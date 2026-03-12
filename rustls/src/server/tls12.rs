@@ -846,6 +846,7 @@ impl<const N: usize> AsRef<[u8; N]> for ZeroizingCow<'_, N> {
 }
 
 impl<const N: usize> Drop for ZeroizingCow<'_, N> {
+    #[inline(never)]
     fn drop(&mut self) {
         if let ZeroizingCow::Owned(o) = self {
             o.zeroize();

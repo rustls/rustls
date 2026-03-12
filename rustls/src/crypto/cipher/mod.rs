@@ -375,6 +375,7 @@ impl AeadKey {
 }
 
 impl Drop for AeadKey {
+    #[inline(never)]
     fn drop(&mut self) {
         self.buf.zeroize();
     }

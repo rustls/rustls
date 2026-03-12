@@ -916,6 +916,7 @@ impl LabeledSuiteId {
 struct AeadKey<const KEY_LEN: usize>([u8; KEY_LEN]);
 
 impl<const KEY_LEN: usize> Drop for AeadKey<KEY_LEN> {
+    #[inline(never)]
     fn drop(&mut self) {
         self.0.zeroize()
     }
@@ -925,6 +926,7 @@ impl<const KEY_LEN: usize> Drop for AeadKey<KEY_LEN> {
 struct KemSharedSecret<const KDF_LEN: usize>([u8; KDF_LEN]);
 
 impl<const KDF_LEN: usize> Drop for KemSharedSecret<KDF_LEN> {
+    #[inline(never)]
     fn drop(&mut self) {
         self.0.zeroize();
     }
