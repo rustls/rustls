@@ -249,6 +249,7 @@ impl OkmBlock {
 }
 
 impl Drop for OkmBlock {
+    #[inline(never)]
     fn drop(&mut self) {
         self.buf.zeroize();
     }

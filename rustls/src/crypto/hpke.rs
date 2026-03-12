@@ -130,6 +130,7 @@ impl From<Vec<u8>> for HpkePrivateKey {
 }
 
 impl Drop for HpkePrivateKey {
+    #[inline(never)]
     fn drop(&mut self) {
         self.0.zeroize();
     }
