@@ -631,7 +631,6 @@ impl ConnectionCore<ClientSide> {
     }
 }
 
-#[derive(Debug)]
 pub(super) struct EarlyData {
     state: EarlyDataState,
     left: usize,
@@ -726,7 +725,6 @@ enum EarlyDataState {
     Rejected,
 }
 
-#[derive(Debug)]
 pub(crate) struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     ech_status: EchStatus,
