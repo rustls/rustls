@@ -181,6 +181,7 @@ pub trait TlsInputBuffer {
     ///
     /// Rustls guarantees it will not `discard()` more bytes than are returned
     /// from `slice_mut()`.
+    #[expect(dead_code)]
     fn discard(&mut self, num_bytes: usize);
 }
 
@@ -233,6 +234,11 @@ impl BufferProgress {
             .processed
             .saturating_sub(self.discard);
         mem::take(&mut self.discard)
+    }
+
+    #[inline]
+    pub(crate) fn set_discard(&mut self, discard: usize) {
+        self.discard = discard;
     }
 
     #[inline]

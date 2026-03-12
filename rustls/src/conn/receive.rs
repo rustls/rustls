@@ -89,7 +89,6 @@ impl ReceivePath {
                         st.handle_decrypt_error();
                     }
                     *state = Err(e.clone());
-                    input.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
             };
@@ -125,7 +124,6 @@ impl ReceivePath {
                 Err(e) => {
                     maybe_send_fatal_alert(output.other.send, &e);
                     *state = Err(e.clone());
-                    input.discard(buffer_progress.take_discard());
                     return Err(e);
                 }
             }
@@ -134,8 +132,7 @@ impl ReceivePath {
                 // "Any data received after a closure alert has been received MUST be ignored."
                 // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
                 // This is data that has already been accepted in `read_tls`.
-                let entirety = input.slice_mut().len();
-                input.discard(entirety);
+                buffer_progress.set_discard(buffer.len());
                 break;
             }
 
@@ -143,11 +140,8 @@ impl ReceivePath {
                 *state = Ok(st);
                 return Ok(Some(payload));
             }
-
-            input.discard(buffer_progress.take_discard());
         }
 
-        input.discard(buffer_progress.take_discard());
         *state = Ok(st);
         Ok(None)
     }
@@ -168,7 +162,7 @@ impl ReceivePath {
             if let Some(span) = self.hs_deframer.complete_span() {
                 let (plaintext, discard) = self.hs_deframer.message(span, buffer);
                 if let Some(discard) = discard {
-                    buffer_progress.add_discard(discard);
+                    buffer_progress.set_discard(discard);
                 }
 
                 // trial decryption finishes with the first handshake message after it started.

@@ -248,6 +248,19 @@ impl HandshakeDeframer {
 
         None
     }
+
+    pub(crate) fn discarded(&mut self, discard: usize) {
+        self.outer_discard = self
+            .outer_discard
+            .saturating_sub(discard);
+        for span in &mut self.spans {
+            span.bounds.start = span
+                .bounds
+                .start
+                .saturating_sub(discard);
+            span.bounds.end = span.bounds.end.saturating_sub(discard);
+        }
+    }
 }
 
 impl Default for HandshakeDeframer {
