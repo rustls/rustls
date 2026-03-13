@@ -209,30 +209,26 @@ impl HandshakeDeframer {
         // for a pair where the first is not complete.  move
         // the second down towards the first, then reparse the contents.
         while let Some(i) = self.requires_coalesce() {
-            self.coalesce_one(i, Coalescer::new(containing_buffer));
+            self.coalesce_one(i, Coalescer::new(containing_buffer))?;
         }
 
-        // check resulting spans pass our imposed length limit
-        match self
-            .spans
-            .iter()
-            .any(|span| span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE)
-        {
-            true => Err(InvalidMessage::HandshakePayloadTooLarge),
-            false => Ok(()),
-        }
+        Ok(())
     }
 
     /// Within `containing_buffer`, move `span[index+1]` to be contiguous
     /// with `span[index]`.
-    fn coalesce_one(&mut self, index: usize, mut containing_buffer: Coalescer<'_>) {
+    fn coalesce_one(
+        &mut self,
+        index: usize,
+        mut containing_buffer: Coalescer<'_>,
+    ) -> Result<(), InvalidMessage> {
         let Some(second) = self.spans.remove(index + 1) else {
-            return;
+            return Ok(());
         };
 
         let Some(mut first) = self.spans.remove(index) else {
             self.spans.insert(index + 1, second);
-            return;
+            return Ok(());
         };
 
         // move the entirety of `second` to be contiguous with `first`
@@ -255,8 +251,17 @@ impl HandshakeDeframer {
             payload: delocator.slice_from_range(&first.bounds),
         };
 
+        let mut too_large = false;
         for (i, span) in DissectHandshakeIter::new(msg, &delocator.locator()).enumerate() {
+            if span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE {
+                too_large = true;
+            }
             self.spans.insert(index + i, span);
+        }
+
+        match too_large {
+            true => Err(InvalidMessage::HandshakePayloadTooLarge),
+            false => Ok(()),
         }
     }
 
