@@ -2,7 +2,7 @@ use core::mem;
 use core::ops::Range;
 use std::collections::VecDeque;
 
-use super::buffers::{BufferProgress, Coalescer, Delocator, Locator};
+use super::buffers::{Coalescer, Delocator, Locator};
 use crate::crypto::cipher::EncodedMessage;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::InvalidMessage;
@@ -13,9 +13,23 @@ pub(crate) struct HandshakeDeframer {
     /// Spans covering individual handshake payloads, in order of receipt.
     spans: VecDeque<FragmentSpan>,
 
-    /// Discard value, tracking the rightmost extent of the last message
-    /// in `spans`.
-    outer_discard: usize,
+    /// Prefix of the buffer that has been processed so far.
+    ///
+    /// `processed` may exceed `discard`, that means we have parsed
+    /// some buffer, but are still using it.  This happens due to
+    /// in-place decryption of incoming records, and in-place
+    /// reassembly of handshake messages.
+    ///
+    /// 0 <= processed <= len
+    processed: usize,
+
+    /// Prefix of the buffer that can be removed.
+    ///
+    /// If `discard` exceeds `processed`, that means we are ignoring
+    /// data without processing it.
+    ///
+    /// 0 <= discard <= len
+    discard: usize,
 }
 
 impl HandshakeDeframer {
@@ -31,19 +45,13 @@ impl HandshakeDeframer {
     /// `CryptoProvider` interface).  `coalesce()` arranges for that to happen, but
     /// to do so it needs to move the fragments together in the original buffer.
     /// This would not be possible if the messages were borrowing from that buffer.
-    ///
-    /// `outer_discard` is the rightmost extent of the original message.
     pub(crate) fn input_message(
         &mut self,
         msg: EncodedMessage<&'_ [u8]>,
         containing_buffer: &Locator,
-        outer_discard: usize,
     ) {
         debug_assert_eq!(msg.typ, ContentType::Handshake);
         debug_assert!(containing_buffer.fully_contains(msg.payload));
-        debug_assert!(self.outer_discard <= outer_discard);
-
-        self.outer_discard = outer_discard;
 
         // if our last span is incomplete, we can blindly add this as a new span --
         // no need to attempt parsing it with `DissectHandshakeIter`.
@@ -73,11 +81,6 @@ impl HandshakeDeframer {
         }
     }
 
-    /// Returns a `BufferProgress` that skips over unprocessed handshake data.
-    pub(crate) fn progress(&self) -> BufferProgress {
-        BufferProgress::new(self.outer_discard)
-    }
-
     /// Yield the first complete [`FragmentSpan`] if any.
     pub(crate) fn complete_span(&mut self) -> Option<FragmentSpan> {
         match self.spans.front() {
@@ -100,28 +103,53 @@ impl HandshakeDeframer {
             .then_some(HandshakeAlignedProof(()))
     }
 
-    /// Iterate over the complete messages.
+    /// Yield the next complete handshake message from `containing_buffer`.
+    ///
+    /// If this was the last pending handshake message, marks the processed
+    /// buffer region for discard.
     pub(crate) fn message<'b>(
         &mut self,
         next_span: FragmentSpan,
         containing_buffer: &'b [u8],
-    ) -> (EncodedMessage<&'b [u8]>, Option<usize>) {
+    ) -> EncodedMessage<&'b [u8]> {
         // if this is the last handshake message, then we'll end
         // up with an empty `spans` and can discard the remainder
         // of the input buffer.
-        let discard = match self.spans.is_empty() {
-            true => Some(mem::take(&mut self.outer_discard)),
-            false => None,
-        };
+        if self.spans.is_empty() {
+            self.discard += self.processed;
+        }
 
-        (
-            EncodedMessage {
-                typ: ContentType::Handshake,
-                version: next_span.version,
-                payload: Delocator::new(containing_buffer).slice_from_range(&next_span.bounds),
-            },
-            discard,
-        )
+        EncodedMessage {
+            typ: ContentType::Handshake,
+            version: next_span.version,
+            payload: Delocator::new(containing_buffer).slice_from_range(&next_span.bounds),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn add_discard(&mut self, discard: usize) {
+        self.discard += discard;
+    }
+
+    #[inline]
+    pub(crate) fn add_processed(&mut self, processed: usize) {
+        self.processed += processed;
+    }
+
+    #[inline]
+    pub(crate) fn take_discard(&mut self) -> usize {
+        // the caller is about to discard `discard` bytes
+        // from the front of the buffer.  adjust `processed`
+        // down by the same amount.
+        self.processed = self
+            .processed
+            .saturating_sub(self.discard);
+        mem::take(&mut self.discard)
+    }
+
+    #[inline]
+    pub(crate) fn processed(&self) -> usize {
+        self.processed
     }
 
     /// Coalesce the handshake portions of the given buffer,
@@ -256,7 +284,8 @@ impl Default for HandshakeDeframer {
             // capacity: a typical upper limit on handshake messages in
             // a single flight
             spans: VecDeque::with_capacity(16),
-            outer_discard: 0,
+            processed: 0,
+            discard: 0,
         }
     }
 }
@@ -374,8 +403,8 @@ mod tests {
             payload: slice,
         };
         let locator = Locator::new(within);
-        let discard = locator.locate(slice).end;
-        hs.input_message(msg, &locator, discard);
+        hs.processed = locator.locate(slice).end;
+        hs.input_message(msg, &locator);
     }
 
     #[test]
@@ -395,15 +424,13 @@ mod tests {
         std::println!("after:  {hs:?}");
 
         let span = hs.complete_span().unwrap();
-        let (msg, discard) = hs.message(span, &input);
-        std::println!("msg {msg:?} discard {discard:?}");
+        let msg = hs.message(span, &input);
+        std::println!("msg {msg:?}");
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xff]);
 
-        if let Some(discard) = discard {
-            input.drain(..discard);
-        }
+        input.drain(..hs.take_discard());
 
         assert_eq!(input, &[0, 1]);
     }
@@ -420,14 +447,12 @@ mod tests {
         hs.coalesce(&mut input).unwrap();
         let span = hs.complete_span().unwrap();
 
-        let (msg, discard) = std::dbg!(hs.message(span, &input));
+        let msg = std::dbg!(hs.message(span, &input));
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5]);
 
-        if let Some(discard) = discard {
-            input.drain(..discard);
-        }
+        input.drain(..hs.take_discard());
 
         assert_eq!(input, &[0]);
     }
@@ -459,13 +484,14 @@ mod tests {
         add_bytes(&mut hs, &input[8..12], &input);
 
         let span = hs.complete_span().unwrap();
-        let (msg, discard) = hs.message(span, &input);
+        let msg = hs.message(span, &input);
         assert!(hs.complete_span().is_none());
 
         assert_eq!(msg.typ, ContentType::Handshake);
         assert_eq!(msg.version, ProtocolVersion::TLSv1_3);
         assert_eq!(msg.payload, &[0x21, 0x00, 0x00, 0x01, 0xab]);
-        assert_eq!(discard, None);
+        // second span is incomplete, so no discard yet
+        assert_eq!(hs.discard, 0);
     }
 
     #[test]
@@ -482,14 +508,15 @@ mod tests {
             let plain = message.unwrap().into_plain_message();
             std::println!("message {plain:?}");
 
-            hs.input_message(plain, &locator, iter.bytes_consumed());
+            hs.processed = iter.bytes_consumed();
+            hs.input_message(plain, &locator);
         }
 
         hs.coalesce(&mut input[..]).unwrap();
 
         for _ in 0..4 {
             let span = hs.complete_span().unwrap();
-            let (msg, discard) = hs.message(span, &input[..]);
+            let msg = hs.message(span, &input[..]);
             assert!(matches!(
                 msg,
                 EncodedMessage {
@@ -497,11 +524,11 @@ mod tests {
                     ..
                 }
             ));
-            assert_eq!(discard, None);
+            assert_eq!(hs.discard, 0);
         }
 
         let span = hs.complete_span().unwrap();
-        let (msg, discard) = hs.message(span, &input[..]);
+        let msg = hs.message(span, &input[..]);
         assert!(matches!(
             msg,
             EncodedMessage {
@@ -510,7 +537,7 @@ mod tests {
             }
         ));
 
-        let discard = discard.expect("last message should have discard");
+        let discard = hs.take_discard();
         assert_eq!(discard, 4280);
         input.drain(0..discard);
         assert!(input.is_empty());

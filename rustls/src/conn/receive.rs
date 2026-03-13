@@ -15,7 +15,7 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
-    AlertLevel, AlertLevelName, AlertMessagePayload, BufferProgress, DeframerIter, Delocator,
+    AlertLevel, AlertLevelName, AlertMessagePayload, DeframerIter, Delocator,
     HandshakeAlignedProof, HandshakeDeframer, Locator, Message, MessagePayload, TlsInputBuffer,
 };
 use crate::quic::QuicOutput;
@@ -55,7 +55,6 @@ impl ReceivePath {
     pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
         &mut self,
         input: &'m mut dyn TlsInputBuffer,
-        buffer_progress: &mut BufferProgress,
         state: &mut Result<Side::State, Error>,
         output: &mut JoinOutput<'a>,
     ) -> Result<Option<UnborrowedPayload>, Error> {
@@ -71,7 +70,7 @@ impl ReceivePath {
         while st.wants_input() {
             let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
-            let res = self.deframe(buffer, buffer_progress);
+            let res = self.deframe(buffer);
 
             let mut output = CaptureAppData {
                 recv: self,
@@ -89,7 +88,7 @@ impl ReceivePath {
                         st.handle_decrypt_error();
                     }
                     *state = Err(e.clone());
-                    input.discard(buffer_progress.take_discard());
+                    input.discard(self.hs_deframer.take_discard());
                     return Err(e);
                 }
             };
@@ -125,7 +124,7 @@ impl ReceivePath {
                 Err(e) => {
                     maybe_send_fatal_alert(output.other.send, &e);
                     *state = Err(e.clone());
-                    input.discard(buffer_progress.take_discard());
+                    input.discard(self.hs_deframer.take_discard());
                     return Err(e);
                 }
             }
@@ -144,20 +143,16 @@ impl ReceivePath {
                 return Ok(Some(payload));
             }
 
-            input.discard(buffer_progress.take_discard());
+            input.discard(self.hs_deframer.take_discard());
         }
 
-        input.discard(buffer_progress.take_discard());
+        input.discard(self.hs_deframer.take_discard());
         *state = Ok(st);
         Ok(None)
     }
 
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
-    fn deframe<'b>(
-        &mut self,
-        buffer: &'b mut [u8],
-        buffer_progress: &mut BufferProgress,
-    ) -> Result<Option<Decrypted<'b>>, Error> {
+    fn deframe<'b>(&mut self, buffer: &'b mut [u8]) -> Result<Option<Decrypted<'b>>, Error> {
         let version_is_tls13 = matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3));
 
         let locator = Locator::new(buffer);
@@ -166,10 +161,7 @@ impl ReceivePath {
         loop {
             // before processing any more of `buffer`, return any extant messages from `hs_deframer`
             if let Some(span) = self.hs_deframer.complete_span() {
-                let (plaintext, discard) = self.hs_deframer.message(span, buffer);
-                if let Some(discard) = discard {
-                    buffer_progress.add_discard(discard);
-                }
+                let plaintext = self.hs_deframer.message(span, buffer);
 
                 // trial decryption finishes with the first handshake message after it started.
                 self.decrypt_state
@@ -181,7 +173,7 @@ impl ReceivePath {
                 }));
             }
 
-            let mut iter = DeframerIter::new(&mut buffer[buffer_progress.processed()..]);
+            let mut iter = DeframerIter::new(&mut buffer[self.hs_deframer.processed()..]);
 
             let (message, processed) = loop {
                 let message = match iter.next().transpose() {
@@ -271,7 +263,8 @@ impl ReceivePath {
                 }
             };
 
-            buffer_progress.add_processed(processed);
+            self.hs_deframer
+                .add_processed(processed);
 
             // do an end-run around the borrow checker, converting `message` (containing
             // a borrowed slice) to an unborrowed one (containing a `Range` into the
@@ -284,7 +277,7 @@ impl ReceivePath {
 
             if unborrowed.typ != ContentType::Handshake {
                 let message = unborrowed.reborrow(&Delocator::new(buffer));
-                buffer_progress.add_discard(processed);
+                self.hs_deframer.add_discard(processed);
                 return Ok(Some(Decrypted {
                     plaintext: message,
                     want_close_before_decrypt,
@@ -293,7 +286,7 @@ impl ReceivePath {
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
             self.hs_deframer
-                .input_message(message, &locator, buffer_progress.processed());
+                .input_message(message, &locator);
             self.hs_deframer.coalesce(buffer)?;
         }
     }

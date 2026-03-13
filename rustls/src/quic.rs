@@ -413,19 +413,16 @@ mod connection {
         fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             let range = self.deframer_buffer.extend(plaintext);
 
-            self.core
-                .common
-                .recv
-                .hs_deframer
-                .input_message(
-                    EncodedMessage {
-                        typ: ContentType::Handshake,
-                        version: ProtocolVersion::TLSv1_3,
-                        payload: &self.deframer_buffer.filled()[range.clone()],
-                    },
-                    &Locator::new(self.deframer_buffer.filled()),
-                    range.end,
-                );
+            let hs_deframer = &mut self.core.common.recv.hs_deframer;
+            hs_deframer.add_processed(range.len());
+            hs_deframer.input_message(
+                EncodedMessage {
+                    typ: ContentType::Handshake,
+                    version: ProtocolVersion::TLSv1_3,
+                    payload: &self.deframer_buffer.filled()[range],
+                },
+                &Locator::new(self.deframer_buffer.filled()),
+            );
 
             self.core
                 .common
@@ -433,12 +430,8 @@ mod connection {
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
-            let mut buffer_progress = self.core.buffer_progress();
-            self.core.process_new_packets(
-                &mut self.deframer_buffer,
-                &mut buffer_progress,
-                Some(&mut self.quic),
-            )?;
+            self.core
+                .process_new_packets(&mut self.deframer_buffer, Some(&mut self.quic))?;
 
             Ok(())
         }

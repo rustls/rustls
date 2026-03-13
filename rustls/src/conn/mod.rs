@@ -11,7 +11,7 @@ use crate::common_state::{
 };
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{BufferProgress, Delocator, Message, Random, TlsInputBuffer, VecInput};
+use crate::msgs::{Delocator, Message, Random, TlsInputBuffer, VecInput};
 use crate::quic::QuicOutput;
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -543,13 +543,10 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        let mut buffer_progress = self.core.buffer_progress();
         loop {
-            let Some(payload) = self.core.process_new_packets(
-                &mut self.buffers.deframer_buffer,
-                &mut buffer_progress,
-                None,
-            )?
+            let Some(payload) = self
+                .core
+                .process_new_packets(&mut self.buffers.deframer_buffer, None)?
             else {
                 break;
             };
@@ -559,9 +556,13 @@ impl<Side: SideData> ConnectionCommon<Side> {
             self.buffers
                 .received_plaintext
                 .append(payload.into_vec());
-            self.buffers
-                .deframer_buffer
-                .discard(buffer_progress.take_discard());
+            self.buffers.deframer_buffer.discard(
+                self.core
+                    .common
+                    .recv
+                    .hs_deframer
+                    .take_discard(),
+            );
         }
 
         // Release unsent buffered plaintext.
@@ -771,7 +772,6 @@ impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn process_new_packets<'a>(
         &'a mut self,
         buffer: &mut dyn TlsInputBuffer,
-        buffer_progress: &mut BufferProgress,
         quic: Option<&'a mut dyn QuicOutput>,
     ) -> Result<Option<UnborrowedPayload>, Error> {
         let mut output = JoinOutput {
@@ -783,7 +783,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 
         self.common
             .recv
-            .process_new_packets::<Side>(buffer, buffer_progress, &mut self.state, &mut output)
+            .process_new_packets::<Side>(buffer, &mut self.state, &mut output)
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
@@ -844,10 +844,6 @@ impl<Side: SideData> ConnectionCore<Side> {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
-    }
-
-    pub(crate) fn buffer_progress(&self) -> BufferProgress {
-        self.common.recv.hs_deframer.progress()
     }
 }
 
