@@ -94,8 +94,7 @@ impl HandshakeDeframer {
         !self.spans.is_empty()
     }
 
-    /// We are "aligned" if there is no partial fragment of a handshake
-    /// message.
+    /// We are "aligned" if there is no partial fragments of a handshake message.
     pub(crate) fn aligned(&self) -> Option<HandshakeAlignedProof> {
         self.spans
             .iter()
