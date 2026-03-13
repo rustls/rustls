@@ -11,13 +11,14 @@ use crate::crypto::Identity;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
-use crate::error::{AlertDescription, Error};
+use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
     AlertLevel, Codec, Delocator, HandshakeMessagePayload, Locator, Message, MessagePayload,
 };
-use crate::quic::{self, QuicOutput};
+use crate::quic::QuicOutput;
 use crate::suites::SupportedCipherSuite;
+use crate::{KeyingMaterialExporter, quic};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -156,6 +157,13 @@ impl ConnectionOutputs {
     /// handshake occurred.
     pub fn handshake_kind(&self) -> Option<HandshakeKind> {
         self.handshake_kind
+    }
+
+    pub(crate) fn take_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
+        }
     }
 
     pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {

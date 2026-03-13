@@ -1506,6 +1506,15 @@ pub enum ApiMisuse {
     ///
     /// [`KernelConnection::update_tx_secret()`]: crate::conn::kernel::KernelConnection::update_tx_secret()
     KeyUpdateNotAvailableForTls12,
+
+    /// The receive side of a connection was already closed.
+    ReceiveSideAlreadyClosed,
+
+    /// The send side of a connection was already closed.
+    SendSideAlreadyClosed,
+
+    /// An unrecoverable error previously happened on this connection.
+    PreviousConnectionError,
 }
 
 impl fmt::Display for ApiMisuse {

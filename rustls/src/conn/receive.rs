@@ -5,8 +5,7 @@ use core::ops::Range;
 use super::SendOutput;
 use crate::SideData;
 use crate::common_state::{
-    ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, Side, UnborrowedPayload,
-    maybe_send_fatal_alert,
+    ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::conn::StateMachine;
 use crate::conn::private::SideOutput;
@@ -52,7 +51,27 @@ impl ReceivePath {
         }
     }
 
-    pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
+    pub(crate) fn process_recv_traffic<Side: SideData>(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        buffer_progress: &mut BufferProgress,
+        state: &mut Result<Side::State, Error>,
+        send: &mut dyn SendOutput,
+    ) -> Result<Option<UnborrowedPayload>, Error> {
+        self.process_new_packets::<Side, FinishOnAppData>(
+            input,
+            buffer_progress,
+            state,
+            &mut JoinOutput {
+                outputs: &mut Discard,
+                quic: None,
+                send,
+                side: &mut Discard,
+            },
+        )
+    }
+
+    pub(super) fn process_new_packets<'a, 'm, Side: SideData, Finish: FinishCondition>(
         &mut self,
         input: &'m mut dyn TlsInputBuffer,
         buffer_progress: &mut BufferProgress,
@@ -68,7 +87,9 @@ impl ReceivePath {
         };
 
         let mut plaintext = None;
-        while st.wants_input() {
+        let finish_state = Finish::start(self);
+
+        while st.wants_input() && !Finish::is_done(&finish_state, self) {
             let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
             let res = self.deframe(buffer, buffer_progress);
@@ -422,6 +443,38 @@ impl ReceivePath {
 
         Err(err)
     }
+
+    pub(crate) fn buffer_progress(&self) -> BufferProgress {
+        self.hs_deframer.progress()
+    }
+}
+
+pub(super) trait FinishCondition {
+    type State;
+    fn start(recv: &ReceivePath) -> Self::State;
+    fn is_done(state: &Self::State, recv: &ReceivePath) -> bool;
+}
+
+pub(super) struct FinishOnAppData;
+
+impl FinishCondition for FinishOnAppData {
+    type State = ();
+    fn start(_recv: &ReceivePath) -> Self::State {}
+    fn is_done(_state: &Self::State, _recv: &ReceivePath) -> bool {
+        false
+    }
+}
+
+pub(super) struct FinishHandshake;
+
+impl FinishCondition for FinishHandshake {
+    type State = bool;
+    fn start(recv: &ReceivePath) -> Self::State {
+        recv.may_receive_application_data
+    }
+    fn is_done(state: &Self::State, recv: &ReceivePath) -> bool {
+        *state != recv.may_receive_application_data
+    }
 }
 
 struct CaptureAppData<'a, 'j, 'm> {
@@ -499,11 +552,70 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
     }
 }
 
-pub(super) struct JoinOutput<'a> {
-    pub(super) outputs: &'a mut ConnectionOutputs,
-    pub(super) quic: Option<&'a mut dyn QuicOutput>,
-    pub(super) send: &'a mut dyn SendOutput,
-    pub(super) side: &'a mut dyn SideOutput,
+pub(crate) struct DropAppData<'a, 'j> {
+    pub(crate) recv: &'a mut ReceivePath,
+    pub(crate) other: &'a mut JoinOutput<'j>,
+}
+
+impl<'m> Output<'m> for DropAppData<'_, '_> {
+    fn emit(&mut self, ev: Event<'_>) {
+        self.other.side.emit(ev)
+    }
+
+    fn output(&mut self, ev: OutputEvent<'_>) {
+        if let OutputEvent::ProtocolVersion(ver) = ev {
+            self.recv.negotiated_version = Some(ver);
+            self.other.send.negotiated_version(ver);
+        }
+        self.other.outputs.handle(ev);
+    }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        match self.other.quic.as_deref_mut() {
+            Some(quic) => quic.send_msg(m, must_encrypt),
+            None => self
+                .other
+                .send
+                .send_msg(m, must_encrypt),
+        }
+    }
+
+    fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
+        match &mut self.other.quic {
+            Some(quic) => Some(*quic),
+            None => None,
+        }
+    }
+
+    fn start_traffic(&mut self) {
+        self.recv.may_receive_application_data = true;
+        self.other.send.start_traffic();
+    }
+
+    fn receive(&mut self) -> &mut ReceivePath {
+        self.recv
+    }
+
+    fn send(&mut self) -> &mut dyn SendOutput {
+        self.other.send
+    }
+}
+
+pub(crate) struct JoinOutput<'a> {
+    pub(crate) outputs: &'a mut dyn ConnectionOutput,
+    pub(crate) quic: Option<&'a mut dyn QuicOutput>,
+    pub(crate) send: &'a mut dyn SendOutput,
+    pub(crate) side: &'a mut dyn SideOutput,
+}
+
+struct Discard;
+
+impl ConnectionOutput for Discard {
+    fn handle(&mut self, _ev: OutputEvent<'_>) {}
+}
+
+impl SideOutput for Discard {
+    fn emit(&mut self, _ev: Event<'_>) {}
 }
 
 /// Tracking technically-allowed protocol actions

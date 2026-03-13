@@ -1507,9 +1507,12 @@ fn test_acceptor() {
     let (err, mut alert) = acceptor.accept().unwrap_err();
     assert!(matches!(err, Error::InappropriateMessage { .. }));
     let mut alert_content = Vec::new();
-    let _ = alert.write(&mut alert_content);
+    alert
+        .write_all(&mut alert_content)
+        .unwrap();
     let expected = encoding::alert(AlertDescription::UnexpectedMessage, &[]);
     assert_eq!(alert_content, expected);
+    assert_eq!(format!("{alert:?}"), "AcceptedAlert { .. }");
 
     let mut acceptor = Acceptor::default();
     // Minimal 1-byte ClientHello message is not a legal handshake message
@@ -1529,7 +1532,9 @@ fn test_acceptor() {
         Error::InvalidMessage(InvalidMessage::MissingData(_))
     ));
     let mut alert_content = Vec::new();
-    let _ = alert.write(&mut alert_content);
+    alert
+        .write_all(&mut alert_content)
+        .unwrap();
     let expected = encoding::alert(AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 }
@@ -1569,7 +1574,9 @@ fn test_acceptor_rejected_handshake() {
     );
 
     let mut alert_content = Vec::new();
-    let _ = alert.write(&mut alert_content);
+    alert
+        .write_all(&mut alert_content)
+        .unwrap();
     let expected = encoding::alert(AlertDescription::ProtocolVersion, &[]);
     assert_eq!(alert_content, expected);
 }
@@ -1972,7 +1979,7 @@ fn test_junk_after_close_notify_received() {
 }
 
 #[test]
-fn test_data_after_close_notify_is_ignored() {
+fn test_data_after_close_notify_is_refused() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     do_handshake(&mut client, &mut server);
 
@@ -1981,10 +1988,7 @@ fn test_data_after_close_notify_is_ignored() {
         .write_all(b"before")
         .unwrap();
     client.send_close_notify();
-    client
-        .writer()
-        .write_all(b"after")
-        .unwrap();
+    assert_eq!(client.writer().write(b"after").unwrap(), 0);
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
 
