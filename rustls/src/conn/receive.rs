@@ -176,10 +176,10 @@ impl ReceivePath {
             let mut iter = DeframerIter::new(&mut buffer[self.hs_deframer.processed()..]);
 
             let (message, processed) = loop {
-                let message = match iter.next().transpose() {
-                    Ok(Some(message)) => message,
-                    Ok(None) => return Ok(None),
-                    Err(err) => return Err(err),
+                let message = match iter.next() {
+                    Some(Ok(message)) => message,
+                    Some(Err(err)) => return Err(err),
+                    None => return Ok(None),
                 };
 
                 let allowed_plaintext = match message.typ {
