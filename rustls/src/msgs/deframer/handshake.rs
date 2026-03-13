@@ -319,36 +319,34 @@ impl Iterator for DissectHandshakeIter<'_, '_> {
         }
 
         // If there is not enough data to have a header the length is unknown
-        if self.payload.len() < HANDSHAKE_HEADER_LEN {
-            let buf = mem::take(&mut self.payload);
-            let bounds = self.containing_buffer.locate(buf);
+        let all = mem::take(&mut self.payload);
+        let Some((header, rest)) = all.split_at_checked(HANDSHAKE_HEADER_LEN) else {
+            let bounds = self.containing_buffer.locate(all);
             return Some(FragmentSpan {
                 version: self.version,
                 size: None,
                 bounds,
             });
-        }
-
-        let (header, rest) = mem::take(&mut self.payload).split_at(HANDSHAKE_HEADER_LEN);
+        };
 
         // safety: header[1..] is exactly 3 bytes, so `u24::read_bytes` cannot fail
         let size = U24::read_bytes(&header[1..])
             .unwrap()
             .into();
 
-        let available = if size < rest.len() {
-            self.payload = &rest[size..];
-            size
-        } else {
-            rest.len()
+        let header = self.containing_buffer.locate(header);
+        let payload = match rest.split_at_checked(size) {
+            Some((payload, rest)) => {
+                self.payload = rest;
+                payload
+            }
+            None => rest,
         };
 
-        let mut bounds = self.containing_buffer.locate(header);
-        bounds.end += available;
         Some(FragmentSpan {
             version: self.version,
             size: Some(size),
-            bounds,
+            bounds: header.start..(header.end + payload.len()),
         })
     }
 }
