@@ -66,13 +66,10 @@ impl<'a> Iterator for DeframerIter<'a> {
             }
         };
 
-        let end = HEADER_SIZE + len as usize;
-
-        self.buf.get(HEADER_SIZE..end)?;
-
         // we now have a TLS header and body on the front of `self.buf`.  remove
         // it from the front.
-        let (consumed, remainder) = mem::take(&mut self.buf).split_at_mut(end);
+        let end = HEADER_SIZE + len as usize;
+        let (consumed, remainder) = mem::take(&mut self.buf).split_at_mut_checked(end)?;
         self.buf = remainder;
         self.consumed += end;
 
