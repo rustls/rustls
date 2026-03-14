@@ -1,5 +1,4 @@
 use alloc::vec::Vec;
-use core::mem;
 use core::ops::Range;
 use std::io;
 
@@ -182,63 +181,6 @@ pub trait TlsInputBuffer {
     /// Rustls guarantees it will not `discard()` more bytes than are returned
     /// from `slice_mut()`.
     fn discard(&mut self, num_bytes: usize);
-}
-
-/// Accounting structure tracking progress in parsing a single buffer.
-#[derive(Clone, Debug)]
-pub(crate) struct BufferProgress {
-    /// Prefix of the buffer that has been processed so far.
-    ///
-    /// `processed` may exceed `discard`, that means we have parsed
-    /// some buffer, but are still using it.  This happens due to
-    /// in-place decryption of incoming records, and in-place
-    /// reassembly of handshake messages.
-    ///
-    /// 0 <= processed <= len
-    processed: usize,
-
-    /// Prefix of the buffer that can be removed.
-    ///
-    /// If `discard` exceeds `processed`, that means we are ignoring
-    /// data without processing it.
-    ///
-    /// 0 <= discard <= len
-    discard: usize,
-}
-
-impl BufferProgress {
-    pub(super) fn new(processed: usize) -> Self {
-        Self {
-            processed,
-            discard: 0,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn add_discard(&mut self, discard: usize) {
-        self.discard += discard;
-    }
-
-    #[inline]
-    pub(crate) fn add_processed(&mut self, processed: usize) {
-        self.processed += processed;
-    }
-
-    #[inline]
-    pub(crate) fn take_discard(&mut self) -> usize {
-        // the caller is about to discard `discard` bytes
-        // from the front of the buffer.  adjust `processed`
-        // down by the same amount.
-        self.processed = self
-            .processed
-            .saturating_sub(self.discard);
-        mem::take(&mut self.discard)
-    }
-
-    #[inline]
-    pub(crate) fn processed(&self) -> usize {
-        self.processed
-    }
 }
 
 /// Reordering the underlying buffer based on ranges.
