@@ -178,7 +178,7 @@ impl ReceivePath {
                 self.hs_deframer.processed(),
             );
 
-            let (message, bounds) = loop {
+            let (message, bounds, processed) = loop {
                 let (message, bounds) = match iter.next() {
                     Some(Ok((message, bounds))) => (message, bounds),
                     Some(Err(err)) => return Err(err),
@@ -205,6 +205,7 @@ impl ReceivePath {
                     _ => false,
                 };
 
+                let processed = bounds.len();
                 if allowed_plaintext && !self.hs_deframer.is_active() {
                     break (
                         Decrypted {
@@ -212,10 +213,11 @@ impl ReceivePath {
                             want_close_before_decrypt: false,
                         },
                         bounds,
+                        processed,
                     );
                 }
 
-                let message = match self
+                match self
                     .decrypt_state
                     .decrypt_incoming(message)
                 {
@@ -230,12 +232,14 @@ impl ReceivePath {
                     // failed decryption during trial decryption.
                     Ok(None) => continue,
 
-                    Ok(Some(message)) => message,
+                    Ok(Some(decrypted)) => {
+                        // After decryption, the payload is shorter
+                        let bounds = locator.locate(decrypted.plaintext.payload);
+                        break (decrypted, bounds, processed);
+                    }
 
                     Err(err) => return Err(err),
-                };
-
-                break (message, bounds);
+                }
             };
 
             want_close_before_decrypt = message.want_close_before_decrypt;
@@ -267,7 +271,7 @@ impl ReceivePath {
             };
 
             self.hs_deframer
-                .add_processed(bounds.len());
+                .add_processed(processed);
 
             // do an end-run around the borrow checker, converting `message` (containing
             // a borrowed slice) to an unborrowed one (containing a `Range` into the
@@ -280,7 +284,7 @@ impl ReceivePath {
 
             if unborrowed.typ != ContentType::Handshake {
                 let message = unborrowed.reborrow(&Delocator::new(buffer));
-                self.hs_deframer.add_discard(bounds.len());
+                self.hs_deframer.add_discard(processed);
                 return Ok(Some(Decrypted {
                     plaintext: message,
                     want_close_before_decrypt,
@@ -289,7 +293,7 @@ impl ReceivePath {
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
             self.hs_deframer
-                .input_message(message, &locator);
+                .input_message(message, &locator, bounds);
             self.hs_deframer.coalesce(buffer)?;
         }
     }
