@@ -49,9 +49,9 @@ impl HandshakeDeframer {
         &mut self,
         msg: EncodedMessage<&'_ [u8]>,
         containing_buffer: &Locator,
+        bounds: Range<usize>,
     ) {
         debug_assert_eq!(msg.typ, ContentType::Handshake);
-        debug_assert!(containing_buffer.fully_contains(msg.payload));
 
         // if our last span is incomplete, we can blindly add this as a new span --
         // no need to attempt parsing it with `DissectHandshakeIter`.
@@ -61,7 +61,7 @@ impl HandshakeDeframer {
         //
         // we cannot merge these processes, because `coalesce` mutates the underlying
         // buffer, and `msg` borrows it.
-        let bounds = containing_buffer.locate(msg.payload);
+        assert_eq!(containing_buffer.locate(msg.payload), bounds);
         if let Some(_last_incomplete) = self
             .spans
             .back()
@@ -398,17 +398,19 @@ mod tests {
     use std::vec;
 
     use super::*;
-    use crate::msgs::DeframerIter;
+    use crate::msgs::{DeframerIter, HEADER_SIZE};
 
-    fn add_bytes(hs: &mut HandshakeDeframer, slice: &[u8], within: &[u8]) {
+    fn add_bytes(hs: &mut HandshakeDeframer, range: Range<usize>, within: &[u8]) {
         let msg = EncodedMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
-            payload: slice,
+            payload: &within[range.start..range.end],
         };
+
         let locator = Locator::new(within);
-        hs.processed = locator.locate(slice).end;
-        hs.input_message(msg, &locator);
+        assert_eq!(locator.locate(msg.payload), range);
+        hs.processed = range.end;
+        hs.input_message(msg, &locator, range);
     }
 
     #[test]
@@ -416,11 +418,11 @@ mod tests {
         let mut input = vec![0, 0, 0, 0x21, 0, 0, 0, 0, 0x01, 0xff, 0x00, 0x01];
         let mut hs = HandshakeDeframer::default();
 
-        add_bytes(&mut hs, &input[3..4], &input);
+        add_bytes(&mut hs, 3..4, &input);
         assert_eq!(hs.requires_coalesce(), None);
-        add_bytes(&mut hs, &input[4..6], &input);
+        add_bytes(&mut hs, 4..6, &input);
         assert_eq!(hs.requires_coalesce(), Some(0));
-        add_bytes(&mut hs, &input[8..10], &input);
+        add_bytes(&mut hs, 8..10, &input);
         assert_eq!(hs.requires_coalesce(), Some(0));
 
         std::println!("before: {hs:?}");
@@ -444,8 +446,8 @@ mod tests {
         let mut input = vec![0, 0, 0, 0x21, 0, 0, 5, 0, 0, 1, 2, 3, 4, 5, 0];
         let mut hs = HandshakeDeframer::default();
 
-        add_bytes(&mut hs, &input[3..7], &input);
-        add_bytes(&mut hs, &input[9..14], &input);
+        add_bytes(&mut hs, 3..7, &input);
+        add_bytes(&mut hs, 9..14, &input);
         assert_eq!(hs.spans.len(), 2);
 
         hs.coalesce(&mut input).unwrap();
@@ -469,8 +471,8 @@ mod tests {
 
         // split header over multiple messages, which motivates doing
         // this check in `coalesce()`
-        add_bytes(&mut hs, &input[0..3], &input);
-        add_bytes(&mut hs, &input[4..6], &input);
+        add_bytes(&mut hs, 0..3, &input);
+        add_bytes(&mut hs, 4..6, &input);
 
         assert_eq!(
             hs.coalesce(&mut input),
@@ -484,8 +486,8 @@ mod tests {
 
         let mut hs = HandshakeDeframer::default();
 
-        add_bytes(&mut hs, &input[3..8], &input);
-        add_bytes(&mut hs, &input[8..12], &input);
+        add_bytes(&mut hs, 3..8, &input);
+        add_bytes(&mut hs, 8..12, &input);
 
         let span = hs.complete_span().unwrap();
         let msg = hs.message(span, &input);
@@ -514,7 +516,7 @@ mod tests {
             std::println!("message {plain:?}");
 
             hs.processed = bounds.end;
-            hs.input_message(plain, &locator);
+            hs.input_message(plain, &locator, bounds.start + HEADER_SIZE..bounds.end);
         }
 
         hs.coalesce(&mut input[..]).unwrap();

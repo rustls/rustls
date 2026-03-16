@@ -419,9 +419,10 @@ mod connection {
                 EncodedMessage {
                     typ: ContentType::Handshake,
                     version: ProtocolVersion::TLSv1_3,
-                    payload: &self.deframer_buffer.filled()[range],
+                    payload: &self.deframer_buffer.filled()[range.start..range.end],
                 },
                 &Locator::new(self.deframer_buffer.filled()),
+                range,
             );
 
             self.core
