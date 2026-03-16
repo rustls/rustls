@@ -906,7 +906,7 @@ impl KeySchedule {
         let empty_hash = hp
             .algorithm()
             .hash_for_empty_input()
-            .unwrap_or_else(|| hp.start().finish());
+            .unwrap_or_else(|| hp.hash(b""));
         self.derive(kind, empty_hash.as_ref())
     }
 }
