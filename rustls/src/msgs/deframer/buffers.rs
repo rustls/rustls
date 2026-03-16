@@ -225,11 +225,6 @@ impl<'b> Delocator<'b> {
         // for the same buffer
         self.slice.get(range.clone()).unwrap()
     }
-
-    #[inline]
-    pub(crate) fn locator(self) -> Locator {
-        Locator::new(self.slice)
-    }
 }
 
 /// Conversion from a slice within a larger buffer into

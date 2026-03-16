@@ -61,6 +61,7 @@ impl HandshakeDeframer {
         //
         // we cannot merge these processes, because `coalesce` mutates the underlying
         // buffer, and `msg` borrows it.
+        let bounds = containing_buffer.locate(msg.payload);
         if let Some(_last_incomplete) = self
             .spans
             .back()
@@ -69,14 +70,14 @@ impl HandshakeDeframer {
             self.spans.push_back(FragmentSpan {
                 version: msg.version,
                 size: None,
-                bounds: containing_buffer.locate(msg.payload),
+                bounds,
             });
             return;
         }
 
         // otherwise, we can expect `msg` to contain a handshake header introducing
         // a new message (and perhaps several of them.)
-        for span in DissectHandshakeIter::new(msg, containing_buffer) {
+        for span in DissectHandshakeIter::new(msg, bounds) {
             self.spans.push_back(span);
         }
     }
@@ -252,7 +253,7 @@ impl HandshakeDeframer {
         };
 
         let mut too_large = false;
-        for (i, span) in DissectHandshakeIter::new(msg, &delocator.locator()).enumerate() {
+        for (i, span) in DissectHandshakeIter::new(msg, first.bounds).enumerate() {
             if span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE {
                 too_large = true;
             }
@@ -294,23 +295,23 @@ impl Default for HandshakeDeframer {
     }
 }
 
-struct DissectHandshakeIter<'a, 'b> {
+struct DissectHandshakeIter<'b> {
     version: ProtocolVersion,
     payload: &'b [u8],
-    containing_buffer: &'a Locator,
+    bounds: Range<usize>,
 }
 
-impl<'a, 'b> DissectHandshakeIter<'a, 'b> {
-    fn new(msg: EncodedMessage<&'b [u8]>, containing_buffer: &'a Locator) -> Self {
+impl<'b> DissectHandshakeIter<'b> {
+    fn new(msg: EncodedMessage<&'b [u8]>, bounds: Range<usize>) -> Self {
         Self {
             version: msg.version,
             payload: msg.payload,
-            containing_buffer,
+            bounds,
         }
     }
 }
 
-impl Iterator for DissectHandshakeIter<'_, '_> {
+impl Iterator for DissectHandshakeIter<'_> {
     type Item = FragmentSpan;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -321,11 +322,10 @@ impl Iterator for DissectHandshakeIter<'_, '_> {
         // If there is not enough data to have a header the length is unknown
         let all = mem::take(&mut self.payload);
         let Some((header, rest)) = all.split_at_checked(HANDSHAKE_HEADER_LEN) else {
-            let bounds = self.containing_buffer.locate(all);
             return Some(FragmentSpan {
                 version: self.version,
                 size: None,
-                bounds,
+                bounds: mem::take(&mut self.bounds),
             });
         };
 
@@ -334,7 +334,6 @@ impl Iterator for DissectHandshakeIter<'_, '_> {
             .unwrap()
             .into();
 
-        let header = self.containing_buffer.locate(header);
         let payload = match rest.split_at_checked(size) {
             Some((payload, rest)) => {
                 self.payload = rest;
@@ -343,10 +342,13 @@ impl Iterator for DissectHandshakeIter<'_, '_> {
             None => rest,
         };
 
+        let span_len = header.len() + payload.len();
+        let bounds = self.bounds.start..self.bounds.start + span_len;
+        self.bounds = self.bounds.start + span_len..self.bounds.end;
         Some(FragmentSpan {
             version: self.version,
             size: Some(size),
-            bounds: header.start..(header.end + payload.len()),
+            bounds,
         })
     }
 }
