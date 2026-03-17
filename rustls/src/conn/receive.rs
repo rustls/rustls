@@ -560,33 +560,33 @@ impl Default for TemperCounters {
 }
 
 pub(crate) struct TrafficTemperCounters {
-    allowed_key_update_requests: u8,
+    allowed_consecutive_handshake_messages: u8,
 }
 
 impl TrafficTemperCounters {
-    pub(crate) fn received_key_update_request(&mut self) -> Result<(), Error> {
-        match self.allowed_key_update_requests {
-            0 => Err(PeerMisbehaved::TooManyKeyUpdateRequests.into()),
+    pub(crate) fn received_handshake_message(&mut self) -> Result<(), Error> {
+        match self.allowed_consecutive_handshake_messages {
+            0 => Err(PeerMisbehaved::TooManyConsecutiveHandshakeMessagesAfterHandshake.into()),
             _ => {
-                self.allowed_key_update_requests -= 1;
+                self.allowed_consecutive_handshake_messages -= 1;
                 Ok(())
             }
         }
     }
 
     pub(crate) fn received_app_data(&mut self) {
-        self.allowed_key_update_requests = Self::INITIAL_KEY_UPDATE_REQUESTS;
+        self.allowed_consecutive_handshake_messages = Self::MAX_CONSECUTIVE_HANDSHAKE_MESSAGES;
     }
 
     // cf. BoringSSL `kMaxKeyUpdates`
     // <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls13_both.cc#L35-L38>
-    const INITIAL_KEY_UPDATE_REQUESTS: u8 = 32;
+    const MAX_CONSECUTIVE_HANDSHAKE_MESSAGES: u8 = 32;
 }
 
 impl Default for TrafficTemperCounters {
     fn default() -> Self {
         Self {
-            allowed_key_update_requests: Self::INITIAL_KEY_UPDATE_REQUESTS,
+            allowed_consecutive_handshake_messages: Self::MAX_CONSECUTIVE_HANDSHAKE_MESSAGES,
         }
     }
 }
