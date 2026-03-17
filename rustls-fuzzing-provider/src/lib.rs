@@ -455,10 +455,10 @@ const AEAD_MASK: &[u8] = b"AeadMaskPattern";
 const AEAD_TAG: &[u8] = b"AeadTagA";
 const AEAD_OVERHEAD: usize = 16;
 
-pub static VERIFY_ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
-    all: &[VERIFY_ALGORITHM],
-    mapping: &[(SIGNATURE_SCHEME, &[VERIFY_ALGORITHM])],
-};
+pub static VERIFY_ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms::new(
+    &[VERIFY_ALGORITHM],
+    &[(SIGNATURE_SCHEME, &[VERIFY_ALGORITHM])],
+);
 
 static VERIFY_ALGORITHM: &dyn SignatureVerificationAlgorithm = &VerifyAlgorithm;
 

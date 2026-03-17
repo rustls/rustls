@@ -383,17 +383,24 @@ impl Borrow<[&'static Tls13CipherSuite]> for CryptoProvider {
 
 /// Describes which `webpki` signature verification algorithms are supported and
 /// how they map to TLS [`SignatureScheme`]s.
-#[expect(clippy::exhaustive_structs)]
+///
+/// Create one with [`WebPkiSupportedAlgorithms::new`], which can be done in const-context.
 #[derive(Clone, Copy)]
 pub struct WebPkiSupportedAlgorithms {
     /// A list of all supported signature verification algorithms.
     ///
     /// Used for verifying certificate chains.
     ///
-    /// The order of this list is not significant.
-    pub all: &'static [&'static dyn SignatureVerificationAlgorithm],
+    /// The order of this list is not significant.  It may be empty, but the default
+    /// certificate verifier will reject all certificates so a custom verifier will be required.
+    pub(crate) all: &'static [&'static dyn SignatureVerificationAlgorithm],
 
     /// A mapping from TLS `SignatureScheme`s to matching webpki signature verification algorithms.
+    ///
+    /// This field has invariants enforced by [`Self::new()`]:
+    ///
+    /// - The mappings must be non-empty.
+    /// - The list of verification algorithms for each mapping must be non-empty.
     ///
     /// This is one (`SignatureScheme`) to many ([`SignatureVerificationAlgorithm`]) because
     /// (depending on the protocol version) there is not necessary a 1-to-1 mapping.
@@ -404,13 +411,34 @@ pub struct WebPkiSupportedAlgorithms {
     ///
     /// The supported schemes in this mapping is communicated to the peer and the order is significant.
     /// The first mapping is our highest preference.
-    pub mapping: &'static [(
+    pub(crate) mapping: &'static [(
         SignatureScheme,
         &'static [&'static dyn SignatureVerificationAlgorithm],
     )],
 }
 
 impl WebPkiSupportedAlgorithms {
+    /// Creating a `WebPkiSupportedAlgorithms`
+    pub const fn new(
+        all: &'static [&'static dyn SignatureVerificationAlgorithm],
+        mapping: &'static [(
+            SignatureScheme,
+            &'static [&'static dyn SignatureVerificationAlgorithm],
+        )],
+    ) -> Self {
+        let s = Self { all, mapping };
+        assert!(!all.is_empty());
+        assert!(!mapping.is_empty());
+
+        let mut i = 0;
+        while i < s.mapping.len() {
+            assert!(!s.mapping[i].1.is_empty());
+            i += 1;
+        }
+
+        s
+    }
+
     /// Return all the `scheme` items in `mapping`, maintaining order.
     pub fn supported_schemes(&self) -> Vec<SignatureScheme> {
         self.mapping
