@@ -8,6 +8,7 @@ use core::time::Duration;
 
 use pki_types::{FipsStatus, PrivateKeyDer, SignatureVerificationAlgorithm};
 
+use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::enums::ProtocolVersion;
 #[cfg(feature = "webpki")]
 use crate::error::PeerMisbehaved;
@@ -288,6 +289,17 @@ impl CryptoProvider {
 
         if self.kx_groups.is_empty() {
             return Err(ApiMisuse::NoKeyExchangeGroupsConfigured.into());
+        }
+
+        // verifying DHE kx groups return their actual group
+        for group in self.kx_groups.iter() {
+            if group.name().key_exchange_algorithm() == KeyExchangeAlgorithm::DHE
+                && group.ffdhe_group().is_none()
+            {
+                return Err(Error::General(alloc::format!(
+                    "SupportedKxGroup {group:?} must return Some() from `ffdhe_group()`"
+                )));
+            }
         }
 
         // verifying cipher suites have matching kx groups
