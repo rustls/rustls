@@ -61,7 +61,7 @@ MSRV than this policy.
 
 Before reporting a security bug, make sure to:
 
-- Consider the threat model. Misconfiguration that is unlikely to happen accidentally is
+- Consider the threat model below. Misconfiguration that is unlikely to happen accidentally is
   unlikely to be a security bug.
 - If applicable, compare the behavior to other TLS implementations. If the behavior is consistent
   with other implementations, it is less likely to be a security bug.
@@ -78,3 +78,112 @@ We'll then:
 
 If you're *looking* for security bugs, this crate is set up for
 `cargo fuzz` but would benefit from more runtime, targets and corpora.
+
+## Threat model
+
+### Scope and assumptions
+
+This library typically sits between raw network I/O and application code.  The network side
+is fully attacker-controlled; the application-side is relatively trusted but still aims to be
+misuse-resistant.
+
+By "fully attacker-controlled", we specifically include:
+
+- on-path attackers (manipulating traffic to a real, honest peer)
+- malicious peers (whether pre- or post-authentication)
+- honest but broken peers (again, pre- or post-authentication)
+
+The core `rustls` library is a TLS protocol implementation, and requires additional items to
+become useful.  These items are therefore in scope:
+
+- the default certificate verifiers based on `rustls-webpki`.
+- the cryptography providers published from the rustls repository (currently `rustls-ring` and `rustls-aws-lc-rs`;
+  but not the underlying libraries).
+
+These items are out of scope (security reports for them will be treated as normal bug reports):
+
+- examples, benchmarking and test code,
+- code in the `rustls-util` crate
+- our public website https://rustls.dev/
+
+### Boundary: network-originated input
+
+Everything arriving from the wire is treated as adversarially crafted. This is the primary attack surface.
+
+Specific threats (non-exhaustive):
+
+- Integer overflow or underflow in length fields,
+- Buffer over-read during fragment reassembly,
+- Infinite loops, 
+- Reachable loops with inappropriate and attacker-controlled complexity, with significant amplification,
+- Reachable panics,
+- Authentication bypass,
+- Protocol downgrade,
+- Memory exhaustion or excessive memory consumption, with a significant amplification compared to attacker-controlled input.
+
+Mitigations:
+
+- The entire crate which processes items on this trust boundary is `forbid(unsafe_code)`.  This means all
+  code within is the memory safe-subset of Rust.  This ameliorates impact of items like integer overflows (generally
+  reducing their impact to denial-of-service), but has little impact on other threats.
+- We fuzz this interface, looking for reachable panics.  The project is registered with OSS-Fuzz which provides
+  compute for this effort.  Fuzzing is performed with a mock provider of cryptography, which is intended to make
+  both pre-auth and post-auth code paths reachable to the fuzzer (at the cost of fuzzing not covering the actual
+  cryptography implementations).
+- We have [studied and explained](https://rustls.dev/docs/manual/_01_impl_vulnerabilities/index.html#a-review-of-tls-implementation-vulnerabilities)
+  issues encountered in other TLS implementations and discuss further mitigations there.
+- We implement the TLS 1.3 downgrade sentinel (a [standard and required protocol feature](https://datatracker.ietf.org/doc/html/rfc8446#section-4.1.3)
+  which limits downgrade from TLS 1.3).
+
+### Boundary: cryptography provider
+
+All items under the `CryptoProvider` and associated interfaces are external to the core `rustls`
+library, but overall secure operation is contingent on their correct implementation. Specific 
+responsibilities are delegated through this interface (non-exhaustive):
+
+- random material generation
+- cryptography operations (encryption, decryption, hashing, key agreement, key derivation, signing, verification)
+- zeroization of long-term, ephemeral and intermediate secret key material
+- side-channel safety of cryptographic operations
+- correct error reporting (especially for cases such as signature verification and input validation)
+
+The core `rustls` crate cannot perform securely if these items are faulty, and it is not
+a security finding that (for example) rustls does not detect random material generation which produces
+the number 4 repeatedly.
+
+In addition, the core `rustls` crate itself:
+
+- performs zeroization of key material values it holds,
+- compares secret and public values in constant time,
+- correctly propagates and handles errors,
+- avoids `Debug` impls on any type that contains secret key material,
+- eschews support for problematic protocol features such as RSA encryption, and CBC-mode ciphersuites.
+
+### Boundary: public API
+
+The public API is the interface between the core `rustls` library and application code.
+This is a semi-trusted boundary: callers are not treated as adversaries, but the API
+aims to be misuse-resistant so that common mistakes do not lead to security failures.
+
+However, application code is not treated as adversarial.  Callers who deliberately work
+to undermine their own security (for example, by implementing a custom certificate verifier
+that accepts all certificates) are outside the threat model.  Security reports that
+require the caller to actively opt in to insecure behavior — through custom configuration
+that is unlikely to arise by accident — will be treated as normal bug reports.
+
+Specific threats (non-exhaustive):
+
+- Accidental or inadvertent disabling of essential security controls such as 
+  hostname verification or certificate chain validation.
+- Accidental or inadvertent exposure of secret key material outside the library.
+- Reachable panics from normal sequences of API calls.
+
+Mitigations:
+
+- We make it specifically unfriendly to configure a custom certificate verifier,
+  to guide people away from this route of problem solving deployment issues.
+- Support for [`SSLKEYLOGFILE`](https://datatracker.ietf.org/doc/draft-ietf-tls-keylogfile/)
+  requires explicit action on the part of the application.
+- Avoiding `Debug` impls on any type that contains secret key material.
+- In the public API error type, we have items for unreachable conditions, and
+  conditions that indicate misuse of the public API.  These are returned instead of panics.
