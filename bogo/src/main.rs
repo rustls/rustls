@@ -1974,9 +1974,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::TooManyWarningAlertsReceived) => {
             quit(":TOO_MANY_WARNING_ALERTS:")
         }
-        Error::PeerMisbehaved(PeerMisbehaved::TooManyKeyUpdateRequests) => {
-            quit(":TOO_MANY_KEY_UPDATES:")
-        }
+        Error::PeerMisbehaved(
+            PeerMisbehaved::TooManyConsecutiveHandshakeMessagesAfterHandshake,
+        ) => quit(":TOO_MANY_KEY_UPDATES:"),
         Error::PeerMisbehaved(PeerMisbehaved::MissingKeyShare) => quit(":MISSING_KEY_SHARE:"),
         Error::PeerMisbehaved(PeerMisbehaved::OfferedDuplicateKeyShares) => {
             quit(":DUPLICATE_KEY_SHARE:")
