@@ -1,4 +1,5 @@
 use core::mem;
+use core::ops::Range;
 
 use super::{HEADER_SIZE, read_opaque_message_header};
 use crate::crypto::cipher::{EncodedMessage, InboundOpaque, MessageError};
@@ -28,27 +29,21 @@ pub(crate) use handshake::{HandshakeAlignedProof, HandshakeDeframer};
 /// when a message is successfully deframed (ie. `Some(Ok(_))` is returned).
 pub(crate) struct DeframerIter<'a> {
     buf: &'a mut [u8],
-    consumed: usize,
+    processed: usize,
 }
 
 impl<'a> DeframerIter<'a> {
     /// Make a new `DeframerIter`
-    pub(crate) fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, consumed: 0 }
-    }
-
-    /// How many bytes were processed successfully from the front
-    /// of the buffer passed to `new()`?
-    pub(crate) fn bytes_consumed(&self) -> usize {
-        self.consumed
+    pub(crate) fn new(buf: &'a mut [u8], processed: usize) -> Self {
+        Self { buf, processed }
     }
 }
 
 impl<'a> Iterator for DeframerIter<'a> {
-    type Item = Result<EncodedMessage<InboundOpaque<'a>>, Error>;
+    type Item = Result<(EncodedMessage<InboundOpaque<'a>>, Range<usize>), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut reader = Reader::new(self.buf);
+        let mut reader = Reader::new(&mut self.buf);
 
         let (typ, version, len) = match read_opaque_message_header(&mut reader) {
             Ok(header) => header,
@@ -68,22 +63,26 @@ impl<'a> Iterator for DeframerIter<'a> {
 
         // we now have a TLS header and body on the front of `self.buf`.  remove
         // it from the front.
-        let end = HEADER_SIZE + len as usize;
-        let (consumed, remainder) = mem::take(&mut self.buf).split_at_mut_checked(end)?;
+        let end = HEADER_SIZE + len as usize; // relative to start of `buf`
+        let (message, remainder) = mem::take(&mut self.buf).split_at_mut_checked(end)?;
         self.buf = remainder;
-        self.consumed += end;
+        let bounds = self.processed..self.processed + end;
+        self.processed += end;
 
-        Some(Ok(EncodedMessage {
-            typ,
-            version,
-            payload: InboundOpaque(&mut consumed[HEADER_SIZE..]),
-        }))
+        Some(Ok((
+            EncodedMessage {
+                typ,
+                version,
+                payload: InboundOpaque(&mut message[HEADER_SIZE..]),
+            },
+            bounds,
+        )))
     }
 }
 
 pub fn fuzz_deframer(data: &[u8]) {
     let mut buf = data.to_vec();
-    let mut iter = DeframerIter::new(&mut buf);
+    let mut iter = DeframerIter::new(&mut buf, 0);
 
     for message in iter.by_ref() {
         if message.is_err() {
@@ -91,7 +90,7 @@ pub fn fuzz_deframer(data: &[u8]) {
         }
     }
 
-    assert!(iter.bytes_consumed() <= buf.len());
+    assert!(iter.processed <= buf.len());
 }
 
 #[cfg(test)]
@@ -104,32 +103,32 @@ mod tests {
     #[test]
     fn iterator_empty_before_header_received() {
         assert!(
-            DeframerIter::new(&mut [])
+            DeframerIter::new(&mut [], 0)
                 .next()
                 .is_none()
         );
         assert!(
-            DeframerIter::new(&mut [0x16])
+            DeframerIter::new(&mut [0x16], 0)
                 .next()
                 .is_none()
         );
         assert!(
-            DeframerIter::new(&mut [0x16, 0x03])
+            DeframerIter::new(&mut [0x16, 0x03], 0)
                 .next()
                 .is_none()
         );
         assert!(
-            DeframerIter::new(&mut [0x16, 0x03, 0x03])
+            DeframerIter::new(&mut [0x16, 0x03, 0x03], 0)
                 .next()
                 .is_none()
         );
         assert!(
-            DeframerIter::new(&mut [0x16, 0x03, 0x03, 0x00])
+            DeframerIter::new(&mut [0x16, 0x03, 0x03, 0x00], 0)
                 .next()
                 .is_none()
         );
         assert!(
-            DeframerIter::new(&mut [0x16, 0x03, 0x03, 0x00, 0x01])
+            DeframerIter::new(&mut [0x16, 0x03, 0x03, 0x00, 0x01], 0)
                 .next()
                 .is_none()
         );
@@ -138,12 +137,10 @@ mod tests {
     #[test]
     fn iterate_one_message() {
         let mut buffer = [0x17, 0x03, 0x03, 0x00, 0x01, 0x00];
-        let mut iter = DeframerIter::new(&mut buffer);
-        assert_eq!(
-            iter.next().unwrap().unwrap().typ,
-            ContentType::ApplicationData
-        );
-        assert_eq!(iter.bytes_consumed(), 6);
+        let mut iter = DeframerIter::new(&mut buffer, 0);
+        let (message, bounds) = iter.next().unwrap().unwrap();
+        assert_eq!(message.typ, ContentType::ApplicationData);
+        assert_eq!(bounds.end, 6);
         assert!(iter.next().is_none());
     }
 
@@ -152,21 +149,22 @@ mod tests {
         let mut buffer = [
             0x16, 0x03, 0x03, 0x00, 0x01, 0x00, 0x17, 0x03, 0x03, 0x00, 0x01, 0x00,
         ];
-        let mut iter = DeframerIter::new(&mut buffer);
-        assert_eq!(iter.next().unwrap().unwrap().typ, ContentType::Handshake);
-        assert_eq!(iter.bytes_consumed(), 6);
-        assert_eq!(
-            iter.next().unwrap().unwrap().typ,
-            ContentType::ApplicationData
-        );
-        assert_eq!(iter.bytes_consumed(), 12);
+
+        let mut iter = DeframerIter::new(&mut buffer, 0);
+        let (message, bounds) = iter.next().unwrap().unwrap();
+        assert_eq!(message.typ, ContentType::Handshake);
+        assert_eq!(bounds.end, 6);
+
+        let (message, bounds) = iter.next().unwrap().unwrap();
+        assert_eq!(message.typ, ContentType::ApplicationData);
+        assert_eq!(bounds.end, 12);
         assert!(iter.next().is_none());
     }
 
     #[test]
     fn iterator_invalid_protocol_version_rejected() {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-version.bin").to_vec();
-        let mut iter = DeframerIter::new(&mut buffer);
+        let mut iter = DeframerIter::new(&mut buffer, 0);
         assert_eq!(
             iter.next().unwrap().err(),
             Some(Error::InvalidMessage(
@@ -178,7 +176,7 @@ mod tests {
     #[test]
     fn iterator_invalid_content_type_rejected() {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-contenttype.bin").to_vec();
-        let mut iter = DeframerIter::new(&mut buffer);
+        let mut iter = DeframerIter::new(&mut buffer, 0);
         assert_eq!(
             iter.next().unwrap().err(),
             Some(Error::InvalidMessage(InvalidMessage::InvalidContentType))
@@ -188,7 +186,7 @@ mod tests {
     #[test]
     fn iterator_excess_message_length_rejected() {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-length.bin").to_vec();
-        let mut iter = DeframerIter::new(&mut buffer);
+        let mut iter = DeframerIter::new(&mut buffer, 0);
         assert_eq!(
             iter.next().unwrap().err(),
             Some(Error::InvalidMessage(InvalidMessage::MessageTooLarge))
@@ -198,7 +196,7 @@ mod tests {
     #[test]
     fn iterator_zero_message_length_rejected() {
         let mut buffer = include_bytes!("../../testdata/deframer-invalid-empty.bin").to_vec();
-        let mut iter = DeframerIter::new(&mut buffer);
+        let mut iter = DeframerIter::new(&mut buffer, 0);
         assert_eq!(
             iter.next().unwrap().err(),
             Some(Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload))
@@ -212,17 +210,19 @@ mod tests {
         buffer.extend(client_hello);
         buffer.extend(client_hello);
         buffer.extend(client_hello);
-        let mut iter = DeframerIter::new(&mut buffer);
+        let mut iter = DeframerIter::new(&mut buffer, 0);
         let mut count = 0;
 
-        for message in iter.by_ref() {
-            let message = message.unwrap();
+        let mut end = 0;
+        for result in iter.by_ref() {
+            let (message, bounds) = result.unwrap();
             assert_eq!(ContentType::Handshake, message.typ);
             count += 1;
+            end = bounds.end;
         }
 
         assert_eq!(count, 3);
-        assert_eq!(client_hello.len() * 3, iter.bytes_consumed());
+        assert_eq!(client_hello.len() * 3, end);
     }
 
     #[test]
