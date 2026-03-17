@@ -129,7 +129,13 @@ pub fn verify_tls13_signature(
         return Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into());
     }
 
-    let alg = supported_schemes.convert_scheme(input.signature.scheme)?[0];
+    let &alg = supported_schemes
+        .convert_scheme(input.signature.scheme)?
+        .first()
+        .ok_or(Error::ApiMisuse(
+            ApiMisuse::NoSignatureVerificationAlgorithms,
+        ))?;
+
     match input.signer {
         SignerPublicKey::X509(cert_der) => {
             webpki::EndEntityCert::try_from(*cert_der).and_then(|cert| {
@@ -181,9 +187,36 @@ pub(crate) fn verify_identity_signed_by_trust_anchor_impl(
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
     use std::format;
 
     use super::*;
+    use crate::crypto::{SignatureScheme, TEST_PROVIDER};
+    use crate::verify::DigitallySignedStruct;
+
+    #[test]
+    fn tls13_empty_signature_mapping_panics() {
+        let supported = WebPkiSupportedAlgorithms {
+            all: TEST_PROVIDER
+                .signature_verification_algorithms
+                .all,
+            mapping: &[(SignatureScheme::ED25519, &[])],
+        };
+
+        let cert = CertificateDer::from(vec![0u8]); // never parsed; panic happens first
+        let dss = DigitallySignedStruct::new(SignatureScheme::ED25519, vec![]);
+        let signer = SignerPublicKey::X509(&cert);
+        let input = SignatureVerificationInput {
+            message: b"hello",
+            signer: &signer,
+            signature: &dss,
+        };
+
+        assert_eq!(
+            verify_tls13_signature(&input, &supported).unwrap_err(),
+            Error::ApiMisuse(ApiMisuse::NoSignatureVerificationAlgorithms)
+        );
+    }
 
     #[test]
     fn certificate_debug() {
