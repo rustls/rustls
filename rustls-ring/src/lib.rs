@@ -191,8 +191,8 @@ pub mod cipher_suite {
 
 /// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
 /// compiled against *ring*.
-static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
-    all: &[
+static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgorithms::new(
+    &[
         ECDSA_P256_SHA256,
         ECDSA_P256_SHA384,
         ECDSA_P384_SHA256,
@@ -208,7 +208,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
         RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
         RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
     ],
-    mapping: &[
+    &[
         // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
         (
             SignatureScheme::ECDSA_NISTP384_SHA384,
@@ -244,6 +244,9 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
             &[RSA_PKCS1_2048_8192_SHA256],
         ),
     ],
+) {
+    Ok(algs) => algs,
+    Err(_) => panic!("bad WebPkiSupportedAlgorithms"),
 };
 
 /// All defined key exchange groups supported by *ring* appear in this module.

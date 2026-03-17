@@ -78,7 +78,7 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
 /// [`SignatureVerificationAlgorithm`], this function will map to several candidates and try each in
 /// succession until one succeeds or we exhaust all candidates.
 ///
-/// See [WebPkiSupportedAlgorithms::mapping] for more information.
+/// See [`WebPkiSupportedAlgorithms::mapping()`] for more information.
 pub fn verify_tls12_signature(
     input: &SignatureVerificationInput<'_>,
     supported_schemes: &WebPkiSupportedAlgorithms,
@@ -115,8 +115,8 @@ pub fn verify_tls12_signature(
 /// supported scheme.
 ///
 /// This function verifies the `dss` signature over `message` using the subject public key from
-/// `cert`. Unlike [verify_tls12_signature], this function only tries the first matching scheme. See
-/// [WebPkiSupportedAlgorithms::mapping] for more information.
+/// `cert`. Unlike [`verify_tls12_signature()`], this function only tries the first matching scheme. See
+/// [`WebPkiSupportedAlgorithms::mapping()`] for more information.
 pub fn verify_tls13_signature(
     input: &SignatureVerificationInput<'_>,
     supported_schemes: &WebPkiSupportedAlgorithms,

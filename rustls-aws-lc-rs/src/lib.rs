@@ -258,8 +258,8 @@ pub mod cipher_suite {
 
 /// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
 /// compiled against aws-lc-rs.
-pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
-    all: &[
+pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgorithms::new(
+    &[
         ECDSA_P256_SHA256,
         ECDSA_P256_SHA384,
         ECDSA_P256_SHA512,
@@ -280,7 +280,7 @@ pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgori
         RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
         RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
     ],
-    mapping: &[
+    &[
         // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
         (
             SignatureScheme::ECDSA_NISTP384_SHA384,
@@ -320,6 +320,9 @@ pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgori
             &[RSA_PKCS1_2048_8192_SHA256],
         ),
     ],
+) {
+    Ok(algs) => algs,
+    Err(_) => panic!("bad WebPkiSupportedAlgorithms"),
 };
 
 /// All defined key exchange groups supported by aws-lc-rs appear in this module.
@@ -386,7 +389,6 @@ const MAX_FRAGMENT_LEN: usize = 16384;
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
 
     #[cfg(feature = "fips")]
     use pki_types::FipsStatus;
@@ -416,27 +418,6 @@ mod tests {
         assert_eq!(
             super::DEFAULT_TLS13_CIPHER_SUITES,
             super::ALL_TLS13_CIPHER_SUITES
-        );
-    }
-
-    #[test]
-    fn certificate_sig_algs() {
-        // `all` should not contain duplicates (not incorrect, but a waste of time)
-        assert_eq!(
-            super::SUPPORTED_SIG_ALGS
-                .all
-                .iter()
-                .map(|alg| {
-                    (
-                        alg.public_key_alg_id()
-                            .as_ref()
-                            .to_vec(),
-                        alg.signature_alg_id().as_ref().to_vec(),
-                    )
-                })
-                .collect::<HashSet<_>>()
-                .len(),
-            super::SUPPORTED_SIG_ALGS.all.len(),
         );
     }
 }
