@@ -173,11 +173,14 @@ impl ReceivePath {
                 }));
             }
 
-            let mut iter = DeframerIter::new(&mut buffer[self.hs_deframer.processed()..]);
+            let mut iter = DeframerIter::new(
+                &mut buffer[self.hs_deframer.processed()..],
+                self.hs_deframer.processed(),
+            );
 
-            let (message, processed) = loop {
-                let message = match iter.next() {
-                    Some(Ok(message)) => message,
+            let (message, bounds) = loop {
+                let (message, bounds) = match iter.next() {
+                    Some(Ok((message, bounds))) => (message, bounds),
                     Some(Err(err)) => return Err(err),
                     None => return Ok(None),
                 };
@@ -208,7 +211,7 @@ impl ReceivePath {
                             plaintext: message.into_plain_message(),
                             want_close_before_decrypt: false,
                         },
-                        iter.bytes_consumed(),
+                        bounds,
                     );
                 }
 
@@ -232,7 +235,7 @@ impl ReceivePath {
                     Err(err) => return Err(err),
                 };
 
-                break (message, iter.bytes_consumed());
+                break (message, bounds);
             };
 
             want_close_before_decrypt = message.want_close_before_decrypt;
@@ -264,7 +267,7 @@ impl ReceivePath {
             };
 
             self.hs_deframer
-                .add_processed(processed);
+                .add_processed(bounds.len());
 
             // do an end-run around the borrow checker, converting `message` (containing
             // a borrowed slice) to an unborrowed one (containing a `Range` into the
@@ -277,7 +280,7 @@ impl ReceivePath {
 
             if unborrowed.typ != ContentType::Handshake {
                 let message = unborrowed.reborrow(&Delocator::new(buffer));
-                self.hs_deframer.add_discard(processed);
+                self.hs_deframer.add_discard(bounds.len());
                 return Ok(Some(Decrypted {
                     plaintext: message,
                     want_close_before_decrypt,

@@ -506,13 +506,14 @@ mod tests {
 
         let mut hs = HandshakeDeframer::default();
 
-        let mut iter = DeframerIter::new(&mut input[..]);
+        let mut iter = DeframerIter::new(&mut input[..], 0);
 
-        while let Some(message) = iter.next() {
-            let plain = message.unwrap().into_plain_message();
+        while let Some(result) = iter.next() {
+            let (opaque, bounds) = result.unwrap();
+            let plain = opaque.into_plain_message();
             std::println!("message {plain:?}");
 
-            hs.processed = iter.bytes_consumed();
+            hs.processed = bounds.end;
             hs.input_message(plain, &locator);
         }
 
