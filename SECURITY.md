@@ -61,7 +61,7 @@ MSRV than this policy.
 
 Before reporting a security bug, make sure to:
 
-- Consider the threat model. Misconfiguration that is unlikely to be happen accidentally is
+- Consider the threat model. Misconfiguration that is unlikely to happen accidentally is
   unlikely to be a security bug.
 - If applicable, compare the behavior to other TLS implementations. If the behavior is consistent
   with other implementations, it is less likely to be a security bug.
