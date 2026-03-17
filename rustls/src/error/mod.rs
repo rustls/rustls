@@ -1049,7 +1049,7 @@ pub enum PeerMisbehaved {
     SignedKxWithWrongAlgorithm,
     SignedHandshakeWithUnadvertisedSigScheme,
     TooManyEmptyFragments,
-    TooManyKeyUpdateRequests,
+    TooManyConsecutiveHandshakeMessagesAfterHandshake,
     TooManyRenegotiationRequests,
     TooManyWarningAlertsReceived,
     TooMuchEarlyDataReceived,

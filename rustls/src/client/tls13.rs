@@ -1509,9 +1509,6 @@ impl ExpectTraffic {
         // Mustn't be interleaved with other handshake messages.
         let proof = input.check_aligned_handshake()?;
 
-        self.counters
-            .received_key_update_request()?;
-
         match *key_update_request {
             KeyUpdateRequest::UpdateNotRequested => {}
             KeyUpdateRequest::UpdateRequested => output.send().ensure_key_update_queued(),
@@ -1539,11 +1536,19 @@ impl ExpectTraffic {
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(new_ticket)),
                 ..
-            } => self.handle_new_ticket_tls13(output, &new_ticket)?,
+            } => {
+                self.counters
+                    .received_handshake_message()?;
+                self.handle_new_ticket_tls13(output, &new_ticket)?
+            }
             MessagePayload::Handshake {
                 parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
-            } => self.handle_key_update(input, output, &key_update)?,
+            } => {
+                self.counters
+                    .received_handshake_message()?;
+                self.handle_key_update(input, output, &key_update)?
+            }
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,
