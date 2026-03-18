@@ -203,7 +203,17 @@ impl HandshakeDeframer {
         // Strategy: while there is work to do, scan `spans`
         // for a pair where the first is not complete.  move
         // the second down towards the first, then reparse the contents.
-        while let Some(index) = self.requires_coalesce() {
+        loop {
+            let limit = self.spans.len().saturating_sub(1);
+            let iter = self.spans.iter();
+            let Some(index) = iter
+                .enumerate()
+                .take(limit)
+                .find_map(|(i, span)| (!span.is_complete()).then_some(i))
+            else {
+                return Ok(());
+            };
+
             let Some(second) = self.spans.remove(index + 1) else {
                 return Ok(());
             };
@@ -246,24 +256,6 @@ impl HandshakeDeframer {
                 return Err(InvalidMessage::HandshakePayloadTooLarge);
             }
         }
-
-        Ok(())
-    }
-
-    /// We require coalescing if any span except the last is not complete.
-    ///
-    /// Returns an index into `spans` for the first non-complete span:
-    /// this will never be the last item.
-    fn requires_coalesce(&self) -> Option<usize> {
-        let limit = self.spans.len().saturating_sub(1);
-        let iter = self.spans.iter();
-        for (i, span) in iter.enumerate().take(limit) {
-            if !span.is_complete() {
-                return Some(i);
-            }
-        }
-
-        None
     }
 }
 
@@ -401,11 +393,8 @@ mod tests {
         let mut hs = HandshakeDeframer::default();
 
         add_bytes(&mut hs, 3..4, &input);
-        assert_eq!(hs.requires_coalesce(), None);
         add_bytes(&mut hs, 4..6, &input);
-        assert_eq!(hs.requires_coalesce(), Some(0));
         add_bytes(&mut hs, 8..10, &input);
-        assert_eq!(hs.requires_coalesce(), Some(0));
 
         std::println!("before: {hs:?}");
         hs.coalesce(&mut input).unwrap();
