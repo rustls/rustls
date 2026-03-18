@@ -3,10 +3,11 @@ use core::ops::Range;
 use std::collections::VecDeque;
 
 use super::buffers::{Coalescer, Delocator};
-use crate::crypto::cipher::EncodedMessage;
+use crate::crypto::cipher::{EncodedMessage, InboundOpaque, MessageError};
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::error::InvalidMessage;
-use crate::msgs::codec::{Codec, U24};
+use crate::error::{Error, InvalidMessage};
+use crate::msgs::codec::{Codec, Reader, U24};
+use crate::msgs::{HEADER_SIZE, read_opaque_message_header};
 
 #[derive(Debug)]
 pub(crate) struct HandshakeDeframer {
@@ -33,6 +34,42 @@ pub(crate) struct HandshakeDeframer {
 }
 
 impl HandshakeDeframer {
+    pub(crate) fn deframe<'a>(&mut self, buf: &'a mut [u8]) -> Option<Result<Deframed<'a>, Error>> {
+        let mut reader = Reader::new(buf.get(self.processed..)?);
+
+        let (typ, version, len) = match read_opaque_message_header(&mut reader) {
+            Ok(header) => header,
+            Err(err) => {
+                let err = match err {
+                    MessageError::TooShortForHeader | MessageError::TooShortForLength => {
+                        return None;
+                    }
+                    MessageError::InvalidEmptyPayload => InvalidMessage::InvalidEmptyPayload,
+                    MessageError::MessageTooLarge => InvalidMessage::MessageTooLarge,
+                    MessageError::InvalidContentType => InvalidMessage::InvalidContentType,
+                    MessageError::UnknownProtocolVersion => InvalidMessage::UnknownProtocolVersion,
+                };
+                return Some(Err(err.into()));
+            }
+        };
+
+        // we now have a TLS header and body on the front of `self.buf`.  remove
+        // it from the front.
+        let end = self.processed + HEADER_SIZE + len as usize;
+        let head = buf.get_mut(..end)?;
+        let bounds = self.processed..end;
+        self.processed = end;
+
+        Some(Ok(Deframed {
+            message: EncodedMessage {
+                typ,
+                version,
+                payload: InboundOpaque(&mut head[bounds.start + HEADER_SIZE..]),
+            },
+            bounds,
+        }))
+    }
+
     /// Accepts a message into the deframer.
     ///
     /// `containing_buffer` allows mapping the message payload to its position
@@ -121,8 +158,8 @@ impl HandshakeDeframer {
     }
 
     #[inline]
-    pub(crate) fn add_discard(&mut self, discard: usize) {
-        self.discard += discard;
+    pub(crate) fn discard_processed(&mut self) {
+        self.discard = self.processed;
     }
 
     #[inline]
@@ -355,6 +392,11 @@ impl FragmentSpan {
     }
 }
 
+pub(crate) struct Deframed<'a> {
+    pub(crate) message: EncodedMessage<InboundOpaque<'a>>,
+    pub(crate) bounds: Range<usize>,
+}
+
 /// Proof type that the handshake deframer is aligned.
 ///
 /// See [`HandshakeDeframer::aligned()`] for more details.
@@ -371,10 +413,11 @@ const MAX_HANDSHAKE_SIZE: usize = 0xffff;
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
+    use alloc::vec;
+    use alloc::vec::Vec;
 
     use super::*;
-    use crate::msgs::{Deframed, DeframerIter, HEADER_SIZE};
+    use crate::msgs::HEADER_SIZE;
 
     fn add_bytes(hs: &mut HandshakeDeframer, range: Range<usize>, within: &[u8]) {
         let msg = EncodedMessage {
@@ -477,16 +520,12 @@ mod tests {
         let mut input = include_bytes!("../../testdata/handshake-test.1.bin").to_vec();
 
         let mut hs = HandshakeDeframer::default();
-
-        let mut iter = DeframerIter::new(&mut input[..], 0);
-
-        while let Some(result) = iter.next() {
+        while let Some(result) = hs.deframe(&mut input) {
             let Deframed { message, bounds } = result.unwrap();
-            let message = message.into_plain_message();
-            std::println!("message {message:?}");
+            let plain = message.into_plain_message();
+            std::println!("message {plain:?}");
 
-            hs.processed = bounds.end;
-            hs.input_message(message, bounds.start + HEADER_SIZE..bounds.end);
+            hs.input_message(plain, bounds.start + HEADER_SIZE..bounds.end);
         }
 
         hs.coalesce(&mut input[..]).unwrap();
@@ -518,5 +557,147 @@ mod tests {
         assert_eq!(discard, 4280);
         input.drain(0..discard);
         assert!(input.is_empty());
+    }
+
+    #[test]
+    fn iterator_empty_before_header_received() {
+        assert!(
+            HandshakeDeframer::default()
+                .deframe(&mut [])
+                .is_none()
+        );
+        assert!(
+            HandshakeDeframer::default()
+                .deframe(&mut [0x16])
+                .is_none()
+        );
+        assert!(
+            HandshakeDeframer::default()
+                .deframe(&mut [0x16, 0x03])
+                .is_none()
+        );
+        assert!(
+            HandshakeDeframer::default()
+                .deframe(&mut [0x16, 0x03, 0x03])
+                .is_none()
+        );
+        assert!(
+            HandshakeDeframer::default()
+                .deframe(&mut [0x16, 0x03, 0x03, 0x00])
+                .is_none()
+        );
+        assert!(
+            HandshakeDeframer::default()
+                .deframe(&mut [0x16, 0x03, 0x03, 0x00, 0x01])
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn iterate_one_message() {
+        let mut buffer = [0x17, 0x03, 0x03, 0x00, 0x01, 0x00];
+        let mut deframer = HandshakeDeframer::default();
+
+        let Deframed { message, bounds } = deframer
+            .deframe(&mut buffer)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(message.typ, ContentType::ApplicationData);
+        assert_eq!(bounds.end, 6);
+        assert!(deframer.deframe(&mut buffer).is_none());
+    }
+
+    #[test]
+    fn iterate_two_messages() {
+        let mut buffer = [
+            0x16, 0x03, 0x03, 0x00, 0x01, 0x00, 0x17, 0x03, 0x03, 0x00, 0x01, 0x00,
+        ];
+        let mut deframer = HandshakeDeframer::default();
+
+        let Deframed { message, bounds } = deframer
+            .deframe(&mut buffer)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(message.typ, ContentType::Handshake);
+        assert_eq!(bounds.end, 6);
+
+        let Deframed { message, bounds } = deframer
+            .deframe(&mut buffer)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(message.typ, ContentType::ApplicationData);
+        assert_eq!(bounds.end, 12);
+        assert!(deframer.deframe(&mut buffer).is_none());
+    }
+
+    #[test]
+    fn iterator_invalid_protocol_version_rejected() {
+        let mut buffer = include_bytes!("../../testdata/deframer-invalid-version.bin").to_vec();
+        let mut deframer = HandshakeDeframer::default();
+        let result = deframer.deframe(&mut buffer).unwrap();
+        assert_eq!(
+            result.err(),
+            Some(Error::InvalidMessage(
+                InvalidMessage::UnknownProtocolVersion
+            ))
+        );
+    }
+
+    #[test]
+    fn iterator_invalid_content_type_rejected() {
+        let mut buffer = include_bytes!("../../testdata/deframer-invalid-contenttype.bin").to_vec();
+        let mut deframer = HandshakeDeframer::default();
+        let result = deframer.deframe(&mut buffer).unwrap();
+        assert_eq!(
+            result.err(),
+            Some(Error::InvalidMessage(InvalidMessage::InvalidContentType))
+        );
+    }
+
+    #[test]
+    fn iterator_excess_message_length_rejected() {
+        let mut buffer = include_bytes!("../../testdata/deframer-invalid-length.bin").to_vec();
+        let mut deframer = HandshakeDeframer::default();
+        let result = deframer.deframe(&mut buffer).unwrap();
+        assert_eq!(
+            result.err(),
+            Some(Error::InvalidMessage(InvalidMessage::MessageTooLarge))
+        );
+    }
+
+    #[test]
+    fn iterator_zero_message_length_rejected() {
+        let mut buffer = include_bytes!("../../testdata/deframer-invalid-empty.bin").to_vec();
+        let mut deframer = HandshakeDeframer::default();
+        let result = deframer.deframe(&mut buffer).unwrap();
+        assert_eq!(
+            result.err(),
+            Some(Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload))
+        );
+    }
+
+    #[test]
+    fn iterator_over_many_messages() {
+        let client_hello = include_bytes!("../../testdata/deframer-test.1.bin");
+        let mut buffer = Vec::with_capacity(3 * client_hello.len());
+        buffer.extend(client_hello);
+        buffer.extend(client_hello);
+        buffer.extend(client_hello);
+        let mut deframer = HandshakeDeframer::default();
+        let mut count = 0;
+        let mut end = 0;
+
+        while let Some(result) = deframer.deframe(&mut buffer) {
+            let Deframed { message, bounds } = result.unwrap();
+            assert_eq!(ContentType::Handshake, message.typ);
+            count += 1;
+            end = bounds.end;
+        }
+
+        assert_eq!(count, 3);
+        assert_eq!(client_hello.len() * 3, end);
     }
 }
