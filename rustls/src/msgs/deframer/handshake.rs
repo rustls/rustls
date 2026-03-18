@@ -203,61 +203,51 @@ impl HandshakeDeframer {
         // Strategy: while there is work to do, scan `spans`
         // for a pair where the first is not complete.  move
         // the second down towards the first, then reparse the contents.
-        while let Some(i) = self.requires_coalesce() {
-            self.coalesce_one(i, Coalescer::new(containing_buffer))?;
+        while let Some(index) = self.requires_coalesce() {
+            let Some(second) = self.spans.remove(index + 1) else {
+                return Ok(());
+            };
+
+            let Some(mut first) = self.spans.remove(index) else {
+                self.spans.insert(index + 1, second);
+                return Ok(());
+            };
+
+            // move the entirety of `second` to be contiguous with `first`
+            let len = second.bounds.len();
+            let target = Range {
+                start: first.bounds.end,
+                end: first.bounds.end + len,
+            };
+
+            let mut coalescer = Coalescer::new(containing_buffer);
+            coalescer.copy_within(second.bounds, target);
+            let delocator = coalescer.delocator();
+
+            // now adjust `first` to cover both
+            first.bounds.end += len;
+
+            // finally, attempt to re-dissect `first`
+            let msg = EncodedMessage {
+                typ: ContentType::Handshake,
+                version: first.version,
+                payload: delocator.slice_from_range(&first.bounds),
+            };
+
+            let mut too_large = false;
+            for (i, span) in DissectHandshakeIter::new(msg, first.bounds).enumerate() {
+                if span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE {
+                    too_large = true;
+                }
+                self.spans.insert(index + i, span);
+            }
+
+            if too_large {
+                return Err(InvalidMessage::HandshakePayloadTooLarge);
+            }
         }
 
         Ok(())
-    }
-
-    /// Within `containing_buffer`, move `span[index+1]` to be contiguous
-    /// with `span[index]`.
-    fn coalesce_one(
-        &mut self,
-        index: usize,
-        mut containing_buffer: Coalescer<'_>,
-    ) -> Result<(), InvalidMessage> {
-        let Some(second) = self.spans.remove(index + 1) else {
-            return Ok(());
-        };
-
-        let Some(mut first) = self.spans.remove(index) else {
-            self.spans.insert(index + 1, second);
-            return Ok(());
-        };
-
-        // move the entirety of `second` to be contiguous with `first`
-        let len = second.bounds.len();
-        let target = Range {
-            start: first.bounds.end,
-            end: first.bounds.end + len,
-        };
-
-        containing_buffer.copy_within(second.bounds, target);
-        let delocator = containing_buffer.delocator();
-
-        // now adjust `first` to cover both
-        first.bounds.end += len;
-
-        // finally, attempt to re-dissect `first`
-        let msg = EncodedMessage {
-            typ: ContentType::Handshake,
-            version: first.version,
-            payload: delocator.slice_from_range(&first.bounds),
-        };
-
-        let mut too_large = false;
-        for (i, span) in DissectHandshakeIter::new(msg, first.bounds).enumerate() {
-            if span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE {
-                too_large = true;
-            }
-            self.spans.insert(index + i, span);
-        }
-
-        match too_large {
-            true => Err(InvalidMessage::HandshakePayloadTooLarge),
-            false => Ok(()),
-        }
     }
 
     /// We require coalescing if any span except the last is not complete.
