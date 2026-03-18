@@ -31,7 +31,7 @@ mod connection {
     use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
     use crate::error::{ApiMisuse, Error};
     use crate::msgs::{
-        ClientExtensionsInput, Locator, ServerExtensionsInput, TransportParameters, VecInput,
+        ClientExtensionsInput, ServerExtensionsInput, TransportParameters, VecInput,
     };
     use crate::server::{ServerConfig, ServerSide};
     use crate::suites::SupportedCipherSuite;
@@ -421,7 +421,6 @@ mod connection {
                     version: ProtocolVersion::TLSv1_3,
                     payload: &self.deframer_buffer.filled()[range.start..range.end],
                 },
-                &Locator::new(self.deframer_buffer.filled()),
                 range,
             );
 

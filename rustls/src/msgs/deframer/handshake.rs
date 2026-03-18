@@ -2,7 +2,7 @@ use core::mem;
 use core::ops::Range;
 use std::collections::VecDeque;
 
-use super::buffers::{Coalescer, Delocator, Locator};
+use super::buffers::{Coalescer, Delocator};
 use crate::crypto::cipher::EncodedMessage;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::InvalidMessage;
@@ -45,12 +45,7 @@ impl HandshakeDeframer {
     /// `CryptoProvider` interface).  `coalesce()` arranges for that to happen, but
     /// to do so it needs to move the fragments together in the original buffer.
     /// This would not be possible if the messages were borrowing from that buffer.
-    pub(crate) fn input_message(
-        &mut self,
-        msg: EncodedMessage<&'_ [u8]>,
-        containing_buffer: &Locator,
-        bounds: Range<usize>,
-    ) {
+    pub(crate) fn input_message(&mut self, msg: EncodedMessage<&'_ [u8]>, bounds: Range<usize>) {
         debug_assert_eq!(msg.typ, ContentType::Handshake);
 
         // if our last span is incomplete, we can blindly add this as a new span --
@@ -61,7 +56,6 @@ impl HandshakeDeframer {
         //
         // we cannot merge these processes, because `coalesce` mutates the underlying
         // buffer, and `msg` borrows it.
-        assert_eq!(containing_buffer.locate(msg.payload), bounds);
         if let Some(_last_incomplete) = self
             .spans
             .back()
@@ -407,10 +401,8 @@ mod tests {
             payload: &within[range.start..range.end],
         };
 
-        let locator = Locator::new(within);
-        assert_eq!(locator.locate(msg.payload), range);
         hs.processed = range.end;
-        hs.input_message(msg, &locator, range);
+        hs.input_message(msg, range);
     }
 
     #[test]
@@ -504,7 +496,6 @@ mod tests {
     fn handshake_flight() {
         // intended to be a realistic example
         let mut input = include_bytes!("../../testdata/handshake-test.1.bin").to_vec();
-        let locator = Locator::new(&input);
 
         let mut hs = HandshakeDeframer::default();
 
@@ -516,7 +507,7 @@ mod tests {
             std::println!("message {plain:?}");
 
             hs.processed = bounds.end;
-            hs.input_message(plain, &locator, bounds.start + HEADER_SIZE..bounds.end);
+            hs.input_message(plain, bounds.start + HEADER_SIZE..bounds.end);
         }
 
         hs.coalesce(&mut input[..]).unwrap();
