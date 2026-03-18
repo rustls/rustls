@@ -15,8 +15,8 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
-    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, DeframerIter, Delocator,
-    HandshakeAlignedProof, HandshakeDeframer, Locator, Message, MessagePayload, TlsInputBuffer,
+    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Delocator, HandshakeAlignedProof,
+    HandshakeDeframer, Locator, Message, MessagePayload, TlsInputBuffer,
 };
 use crate::quic::QuicOutput;
 
@@ -173,13 +173,8 @@ impl ReceivePath {
                 }));
             }
 
-            let mut iter = DeframerIter::new(
-                &mut buffer[self.hs_deframer.processed()..],
-                self.hs_deframer.processed(),
-            );
-
-            let (message, bounds, processed) = loop {
-                let (message, bounds) = match iter.next() {
+            let (message, bounds) = loop {
+                let (message, bounds) = match self.hs_deframer.deframe(buffer) {
                     Some(Ok(Deframed { message, bounds })) => (message, bounds),
                     Some(Err(err)) => return Err(err),
                     None => return Ok(None),
@@ -205,7 +200,6 @@ impl ReceivePath {
                     _ => false,
                 };
 
-                let processed = bounds.len();
                 if allowed_plaintext && !self.hs_deframer.is_active() {
                     break (
                         Decrypted {
@@ -213,7 +207,6 @@ impl ReceivePath {
                             want_close_before_decrypt: false,
                         },
                         bounds,
-                        processed,
                     );
                 }
 
@@ -235,7 +228,7 @@ impl ReceivePath {
                     Ok(Some(decrypted)) => {
                         // After decryption, the payload is shorter
                         let bounds = locator.locate(decrypted.plaintext.payload);
-                        break (decrypted, bounds, processed);
+                        break (decrypted, bounds);
                     }
 
                     Err(err) => return Err(err),
@@ -270,9 +263,6 @@ impl ReceivePath {
                 }
             };
 
-            self.hs_deframer
-                .add_processed(processed);
-
             // do an end-run around the borrow checker, converting `message` (containing
             // a borrowed slice) to an unborrowed one (containing a `Range` into the
             // same buffer).  the reborrow happens inside the branch that returns the
@@ -284,7 +274,7 @@ impl ReceivePath {
 
             if unborrowed.typ != ContentType::Handshake {
                 let message = unborrowed.reborrow(&Delocator::new(buffer));
-                self.hs_deframer.add_discard(processed);
+                self.hs_deframer.discard_processed();
                 return Ok(Some(Decrypted {
                     plaintext: message,
                     want_close_before_decrypt,
