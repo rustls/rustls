@@ -293,7 +293,7 @@ impl ReceivePath {
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
             self.hs_deframer
-                .input_message(message, &locator, bounds);
+                .input_message(message, bounds);
             self.hs_deframer.coalesce(buffer)?;
         }
     }
