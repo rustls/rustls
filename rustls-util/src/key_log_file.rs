@@ -120,7 +120,7 @@ impl Debug for KeyLogFile {
     }
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::*;
 
@@ -155,7 +155,14 @@ mod tests {
     #[test]
     fn test_env_var_cannot_be_written() {
         init();
-        let mut inner = KeyLogFileInner::new(Some("/dev/full".into()));
+
+        #[cfg(target_os = "linux")]
+        const UNWRITABLE_FILE: &str = "/dev/full";
+
+        #[cfg(target_os = "macos")]
+        const UNWRITABLE_FILE: &str = "/dev/urandom";
+
+        let mut inner = KeyLogFileInner::new(Some(UNWRITABLE_FILE.into()));
         assert!(
             inner
                 .try_write("label", b"random", b"secret")
