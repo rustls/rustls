@@ -587,7 +587,7 @@ fn client_check_server_certificate_helper_api() {
                 &incorrect_roots,
                 &identity.intermediates,
                 UnixTime::now(),
-                webpki::ALL_VERIFICATION_ALGS,
+                provider::ALL_VERIFICATION_ALGS,
             )
             .unwrap_err(),
             Error::InvalidCertificate(CertificateError::UnknownIssuer)
@@ -615,7 +615,7 @@ fn client_check_server_valid_purpose() {
         &roots,
         &identity.intermediates,
         UnixTime::now(),
-        webpki::ALL_VERIFICATION_ALGS,
+        provider::ALL_VERIFICATION_ALGS,
     )
     .unwrap_err();
     assert_eq!(

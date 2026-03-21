@@ -102,7 +102,7 @@ subtle = { version = "2.5.0", default-features = false }
 time = { version = "0.3.6", default-features = false }
 tikv-jemallocator = "0.6"
 tokio = { version = "1.34", features = ["io-util", "macros", "net", "rt"] }
-webpki = { package = "rustls-webpki", version = "=0.104.0-alpha.2", features = [
+webpki = { package = "rustls-webpki", version = "=0.104.0-alpha.5", features = [
   "alloc",
 ], default-features = false }
 webpki-roots = "1"
