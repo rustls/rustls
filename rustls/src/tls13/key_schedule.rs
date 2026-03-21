@@ -304,22 +304,10 @@ impl KeyScheduleHandshakeStart {
         client_hello_inner_random: &[u8],
         hs_hash: hash::Output,
     ) -> [u8; 8] {
-        /*
-        Per RFC 9849 section 7.2:
-        <https://datatracker.ietf.org/doc/html/rfc9849#section-7.2>
-        accept_confirmation = HKDF-Expand-Label(
-          HKDF-Extract(0, ClientHelloInner.random),
-          "ech accept confirmation",
-          transcript_ech_conf,8)
-         */
-        hkdf_expand_label(
-            self.ks
-                .suite
-                .hkdf_provider
-                .extract_from_secret(None, client_hello_inner_random)
-                .as_ref(),
-            SecretKind::ServerEchConfirmationSecret.to_bytes(),
-            hs_hash.as_ref(),
+        server_ech_confirmation_secret(
+            self.ks.suite.hkdf_provider,
+            client_hello_inner_random,
+            hs_hash,
         )
     }
 
@@ -1124,6 +1112,35 @@ fn hkdf_expand_label_slice(
     hkdf_expand_label_inner(expander, label, context, output.len(), |e, info| {
         e.expand_slice(info, output)
     })
+}
+
+/// Compute the ECH acceptance confirmation for ServerHello.
+///
+/// This is independent of the TLS key schedule. It uses
+/// HKDF-Extract(0, inner_random) as the PRK.
+///
+/// See <https://datatracker.ietf.org/doc/html/rfc9849#section-7.2>.
+pub(crate) fn server_ech_confirmation_secret(
+    hkdf_provider: &'static dyn Hkdf,
+    client_hello_inner_random: &[u8],
+    hs_hash: hash::Output,
+) -> [u8; 8] {
+    /*
+    Per RFC 9849 section 7.2:
+    <https://datatracker.ietf.org/doc/html/rfc9849#section-7.2>
+    accept_confirmation = HKDF-Expand-Label(
+      HKDF-Extract(0, ClientHelloInner.random),
+      "ech accept confirmation",
+      transcript_ech_conf,
+      8)
+     */
+    hkdf_expand_label(
+        hkdf_provider
+            .extract_from_secret(None, client_hello_inner_random)
+            .as_ref(),
+        SecretKind::ServerEchConfirmationSecret.to_bytes(),
+        hs_hash.as_ref(),
+    )
 }
 
 pub(crate) fn server_ech_hrr_confirmation_secret(
