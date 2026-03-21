@@ -13,24 +13,26 @@ use std::sync::Arc;
 
 fn main() {
     env_logger::init();
-    rustls_post_quantum::provider()
-        .install_default()
-        .unwrap();
 
     let root_store = rustls::RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let config = rustls::ClientConfig::builder()
+    let config = rustls::ClientConfig::builder(Arc::new(rustls_post_quantum::provider()))
         .with_root_certificates(root_store)
-        .with_no_client_auth();
+        .with_no_client_auth()
+        .unwrap();
 
     let server_name = "pq.cloudflareresearch.com"
         .try_into()
         .unwrap();
-    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+
+    let mut conn = Arc::new(config)
+        .connect(server_name)
+        .build()
+        .unwrap();
     let mut sock = TcpStream::connect("pq.cloudflareresearch.com:443").unwrap();
-    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+    let mut tls = rustls_util::Stream::new(&mut conn, &mut sock);
     tls.write_all(
         concat!(
             "GET /cdn-cgi/trace HTTP/1.0\r\n",

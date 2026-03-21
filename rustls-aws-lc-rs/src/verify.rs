@@ -2,8 +2,6 @@ use aws_lc_rs::signature;
 use pki_types::{
     AlgorithmIdentifier, FipsStatus, InvalidSignature, SignatureVerificationAlgorithm, alg_id,
 };
-#[cfg(all(feature = "unstable", not(feature = "fips")))]
-use unstable;
 
 // nb. aws-lc-rs has an API that is broadly compatible with *ring*,
 // so this is very similar to ring_algs.rs.
@@ -99,7 +97,7 @@ impl SignatureVerificationAlgorithm for AwsLcRsAlgorithm {
 pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_44,
     signature_alg_id: alg_id::ML_DSA_44,
-    verification_alg: &unstable::signature::ML_DSA_44,
+    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_44,
     // Not included in AWS-LC-FIPS 3.0 FIPS scope
     in_fips_submission: false,
 };
@@ -109,7 +107,7 @@ pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
 pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_65,
     signature_alg_id: alg_id::ML_DSA_65,
-    verification_alg: &unstable::signature::ML_DSA_65,
+    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_65,
     // Not included in AWS-LC-FIPS 3.0 FIPS scope
     in_fips_submission: false,
 };
@@ -119,7 +117,7 @@ pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
 pub static ML_DSA_87: &dyn SignatureVerificationAlgorithm = &AwsLcRsAlgorithm {
     public_key_alg_id: alg_id::ML_DSA_87,
     signature_alg_id: alg_id::ML_DSA_87,
-    verification_alg: &unstable::signature::ML_DSA_87,
+    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_87,
     // Not included in AWS-LC-FIPS 3.0 FIPS scope
     in_fips_submission: false,
 };

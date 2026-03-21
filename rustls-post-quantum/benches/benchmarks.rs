@@ -1,12 +1,15 @@
 use core::hint::black_box;
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use rustls::crypto::aws_lc_rs::kx_group::X25519;
-use rustls::crypto::{
-    ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup, aws_lc_rs,
+use rustls::crypto::CryptoProvider;
+use rustls::crypto::kx::{
+    ActiveKeyExchange, HybridKeyExchange, NamedGroup, SharedSecret, StartedKeyExchange,
+    SupportedKxGroup,
 };
-use rustls::{ClientConfig, ClientConnection, Error, NamedGroup, RootCertStore};
+use rustls::{ClientConfig, Connection, Error, RootCertStore};
+use rustls_aws_lc_rs::kx_group::X25519;
 use rustls_post_quantum::{MLKEM768, X25519MLKEM768};
 
 fn bench_client(c: &mut Criterion) {
@@ -73,28 +76,26 @@ fn bench_clienthello(c: &mut Criterion) {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     });
 
-    let config_x25519 = ClientConfig::builder_with_provider(aws_lc_rs::default_provider().into())
-        .with_safe_default_protocol_versions()
-        .unwrap()
-        .with_root_certificates(anchors.clone())
-        .with_no_client_auth()
-        .into();
-
-    let config_x25519mlkem768 =
-        ClientConfig::builder_with_provider(rustls_post_quantum::provider().into())
-            .with_safe_default_protocol_versions()
-            .unwrap()
+    let config_x25519 = Arc::new(
+        ClientConfig::builder(rustls_aws_lc_rs::DEFAULT_PROVIDER.into())
             .with_root_certificates(anchors.clone())
             .with_no_client_auth()
-            .into();
+            .unwrap(),
+    );
 
-    let config_x25519mlkem768_x25519 =
-        ClientConfig::builder_with_provider(separate_provider().into())
-            .with_safe_default_protocol_versions()
-            .unwrap()
+    let config_x25519mlkem768 = Arc::new(
+        ClientConfig::builder(rustls_post_quantum::provider().into())
+            .with_root_certificates(anchors.clone())
+            .with_no_client_auth()
+            .unwrap(),
+    );
+
+    let config_x25519mlkem768_x25519 = Arc::new(
+        ClientConfig::builder(separate_provider().into())
             .with_root_certificates(anchors)
             .with_no_client_auth()
-            .into();
+            .unwrap(),
+    );
 
     println!("Clienthello lengths:");
     println!("  X25519 alone = {:?}", do_client_hello(&config_x25519));
@@ -119,7 +120,10 @@ fn bench_clienthello(c: &mut Criterion) {
 }
 
 fn do_client_hello(config: &Arc<ClientConfig>) -> usize {
-    let mut conn = ClientConnection::new(config.clone(), "localhost".try_into().unwrap()).unwrap();
+    let mut conn = config
+        .connect("localhost".try_into().unwrap())
+        .build()
+        .unwrap();
     let mut buf = vec![];
     let len = conn.write_tls(&mut &mut buf).unwrap();
     black_box(buf);
@@ -127,15 +131,16 @@ fn do_client_hello(config: &Arc<ClientConfig>) -> usize {
 }
 
 fn separate_provider() -> CryptoProvider {
+    const KX_GROUPS: &[&'static dyn SupportedKxGroup] = &[
+        &SeparateX25519Mlkem768,
+        MLKEM768,
+        X25519,
+        rustls_aws_lc_rs::kx_group::SECP256R1,
+        rustls_aws_lc_rs::kx_group::SECP384R1,
+    ];
     CryptoProvider {
-        kx_groups: vec![
-            &SeparateX25519Mlkem768,
-            MLKEM768,
-            X25519,
-            aws_lc_rs::kx_group::SECP256R1,
-            aws_lc_rs::kx_group::SECP384R1,
-        ],
-        ..aws_lc_rs::default_provider()
+        kx_groups: Cow::Borrowed(KX_GROUPS),
+        ..rustls_aws_lc_rs::DEFAULT_PROVIDER
     }
 }
 
@@ -144,11 +149,18 @@ fn separate_provider() -> CryptoProvider {
 struct SeparateX25519Mlkem768;
 
 impl SupportedKxGroup for SeparateX25519Mlkem768 {
-    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
-        Ok(Box::new(Active {
-            hybrid: X25519MLKEM768.start()?,
-            separate: X25519.start()?,
-        }))
+    fn start(&self) -> Result<StartedKeyExchange, Error> {
+        let StartedKeyExchange::Hybrid(hybrid) = X25519MLKEM768.start()? else {
+            unreachable!();
+        };
+        let StartedKeyExchange::Single(separate) = X25519.start()? else {
+            unreachable!();
+        };
+
+        Ok(StartedKeyExchange::Hybrid(Box::new(Active {
+            hybrid,
+            separate,
+        })))
     }
 
     fn name(&self) -> NamedGroup {
@@ -157,7 +169,7 @@ impl SupportedKxGroup for SeparateX25519Mlkem768 {
 }
 
 struct Active {
-    hybrid: Box<dyn ActiveKeyExchange>,
+    hybrid: Box<dyn HybridKeyExchange>,
     separate: Box<dyn ActiveKeyExchange>,
 }
 
@@ -166,16 +178,30 @@ impl ActiveKeyExchange for Active {
         todo!()
     }
 
-    fn hybrid_component(&self) -> Option<(NamedGroup, &[u8])> {
-        Some((self.separate.group(), self.separate.pub_key()))
-    }
-
     fn group(&self) -> NamedGroup {
         self.hybrid.group()
     }
 
     fn pub_key(&self) -> &[u8] {
         self.hybrid.pub_key()
+    }
+}
+
+impl HybridKeyExchange for Active {
+    fn component(&self) -> (NamedGroup, &[u8]) {
+        (self.separate.group(), self.separate.pub_key())
+    }
+
+    fn complete_component(self: Box<Self>, peer_pub_key: &[u8]) -> Result<SharedSecret, Error> {
+        self.separate.complete(peer_pub_key)
+    }
+
+    fn as_key_exchange(&self) -> &(dyn ActiveKeyExchange + 'static) {
+        self
+    }
+
+    fn into_key_exchange(self: Box<Self>) -> Box<dyn ActiveKeyExchange> {
+        self.separate
     }
 }
 
