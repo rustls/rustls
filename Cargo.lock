@@ -2771,14 +2771,16 @@ dependencies = [
 
 [[package]]
 name = "rustls-post-quantum"
-version = "0.2.4"
+version = "0.3.0-alpha.0"
 dependencies = [
  "aws-lc-rs",
  "criterion",
  "env_logger",
  "rcgen",
- "rustls 0.23.37",
+ "rustls 0.24.0-dev.0",
+ "rustls-aws-lc-rs",
  "rustls-test",
+ "rustls-util",
  "rustls-webpki 0.104.0-alpha.2",
  "webpki-roots 1.0.6",
 ]

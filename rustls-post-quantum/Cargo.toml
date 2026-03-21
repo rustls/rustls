@@ -1,6 +1,6 @@
 [package]
 name = "rustls-post-quantum"
-version = "0.2.4"
+version = "0.3.0-alpha.0"
 edition = "2021"
 rust-version = "1.79"
 license = "Apache-2.0 OR ISC OR MIT"
@@ -16,7 +16,8 @@ aws-lc-rs-unstable = ["webpki/aws-lc-rs-unstable", "aws-lc-rs/unstable", "rcgen/
 
 [dependencies]
 aws-lc-rs = { workspace = true }
-rustls = { version = "0.23.30", features = ["aws-lc-rs"] }
+rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
+rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }
 webpki = { workspace = true }
 
 [dev-dependencies]
@@ -24,6 +25,7 @@ criterion = { workspace = true }
 env_logger = { workspace = true }
 rcgen = { workspace = true }
 rustls-test = { workspace = true, default-features = false }
+rustls-util = { workspace = true }
 webpki-roots = { workspace = true }
 
 [[bench]]
