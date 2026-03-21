@@ -15,8 +15,8 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
-    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Delocator, HandshakeAlignedProof,
-    HandshakeDeframer, Locator, Message, MessagePayload, TlsInputBuffer,
+    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
+    HandshakeAlignedProof, Locator, Message, MessagePayload, TlsInputBuffer,
 };
 use crate::quic::QuicOutput;
 
@@ -28,7 +28,7 @@ pub(crate) struct ReceivePath {
     pub(crate) has_received_close_notify: bool,
     temper_counters: TemperCounters,
     pub(crate) negotiated_version: Option<ProtocolVersion>,
-    pub(crate) hs_deframer: HandshakeDeframer,
+    pub(crate) deframer: Deframer,
 
     /// We limit consecutive empty fragments to avoid a route for the peer to send
     /// us significant but fruitless traffic.
@@ -46,7 +46,7 @@ impl ReceivePath {
             has_received_close_notify: false,
             temper_counters: TemperCounters::default(),
             negotiated_version: None,
-            hs_deframer: HandshakeDeframer::default(),
+            deframer: Deframer::default(),
             seen_consecutive_empty_fragments: 0,
             tls13_tickets_received: 0,
         }
@@ -88,7 +88,7 @@ impl ReceivePath {
                         st.handle_decrypt_error();
                     }
                     *state = Err(e.clone());
-                    input.discard(self.hs_deframer.take_discard());
+                    input.discard(self.deframer.take_discard());
                     return Err(e);
                 }
             };
@@ -109,7 +109,7 @@ impl ReceivePath {
                     .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
             }
 
-            let hs_aligned = output.recv.hs_deframer.aligned();
+            let hs_aligned = output.recv.deframer.aligned();
             let result = match output
                 .recv
                 .receive_message(msg, hs_aligned, output.other.send)
@@ -124,7 +124,7 @@ impl ReceivePath {
                 Err(e) => {
                     maybe_send_fatal_alert(output.other.send, &e);
                     *state = Err(e.clone());
-                    input.discard(self.hs_deframer.take_discard());
+                    input.discard(self.deframer.take_discard());
                     return Err(e);
                 }
             }
@@ -143,10 +143,10 @@ impl ReceivePath {
                 return Ok(Some(payload));
             }
 
-            input.discard(self.hs_deframer.take_discard());
+            input.discard(self.deframer.take_discard());
         }
 
-        input.discard(self.hs_deframer.take_discard());
+        input.discard(self.deframer.take_discard());
         *state = Ok(st);
         Ok(None)
     }
@@ -159,9 +159,9 @@ impl ReceivePath {
 
         let mut want_close_before_decrypt = false;
         loop {
-            // before processing any more of `buffer`, return any extant messages from `hs_deframer`
-            if let Some(span) = self.hs_deframer.complete_span() {
-                let plaintext = self.hs_deframer.message(span, buffer);
+            // before processing any more of `buffer`, return any extant messages from `deframer`
+            if let Some(span) = self.deframer.complete_span() {
+                let plaintext = self.deframer.message(span, buffer);
 
                 // trial decryption finishes with the first handshake message after it started.
                 self.decrypt_state
@@ -174,7 +174,7 @@ impl ReceivePath {
             }
 
             let (message, bounds) = loop {
-                let (message, bounds) = match self.hs_deframer.deframe(buffer) {
+                let (message, bounds) = match self.deframer.deframe(buffer) {
                     Some(Ok(Deframed { message, bounds })) => (message, bounds),
                     Some(Err(err)) => return Err(err),
                     None => return Ok(None),
@@ -200,7 +200,7 @@ impl ReceivePath {
                     _ => false,
                 };
 
-                if allowed_plaintext && !self.hs_deframer.is_active() {
+                if allowed_plaintext && !self.deframer.is_active() {
                     break (
                         Decrypted {
                             plaintext: message.into_plain_message(),
@@ -216,7 +216,7 @@ impl ReceivePath {
                 {
                     // failed decryption during trial decryption is not allowed to be
                     // interleaved with partial handshake data.
-                    Ok(None) if self.hs_deframer.aligned().is_none() => {
+                    Ok(None) if self.deframer.aligned().is_none() => {
                         return Err(
                             PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
                         );
@@ -241,7 +241,7 @@ impl ReceivePath {
                 want_close_before_decrypt: _,
             } = message;
 
-            if self.hs_deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+            if self.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
                 // "Handshake messages MUST NOT be interleaved with other record
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
@@ -274,7 +274,7 @@ impl ReceivePath {
 
             if unborrowed.typ != ContentType::Handshake {
                 let message = unborrowed.reborrow(&Delocator::new(buffer));
-                self.hs_deframer.discard_processed();
+                self.deframer.discard_processed();
                 return Ok(Some(Decrypted {
                     plaintext: message,
                     want_close_before_decrypt,
@@ -282,9 +282,9 @@ impl ReceivePath {
             }
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
-            self.hs_deframer
+            self.deframer
                 .input_message(message, bounds);
-            self.hs_deframer.coalesce(buffer)?;
+            self.deframer.coalesce(buffer)?;
         }
     }
 

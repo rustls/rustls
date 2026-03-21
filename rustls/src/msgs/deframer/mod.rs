@@ -2,11 +2,11 @@ mod buffers;
 pub(crate) use buffers::{Delocator, Locator, TlsInputBuffer, VecInput};
 
 mod handshake;
-pub(crate) use handshake::{Deframed, HandshakeAlignedProof, HandshakeDeframer};
+pub(crate) use handshake::{Deframed, Deframer, HandshakeAlignedProof};
 
 pub fn fuzz_deframer(data: &[u8]) {
     let mut buf = data.to_vec();
-    let mut deframer = HandshakeDeframer::default();
+    let mut deframer = Deframer::default();
     while let Some(result) = deframer.deframe(&mut buf) {
         if result.is_err() {
             break;
