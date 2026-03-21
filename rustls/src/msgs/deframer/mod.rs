@@ -128,76 +128,6 @@ impl Deframer {
         }
     }
 
-    /// Yield the first complete [`FragmentSpan`] if any.
-    pub(crate) fn complete_span(&mut self) -> Option<FragmentSpan> {
-        match self.spans.front() {
-            Some(span) if span.is_complete() => self.spans.pop_front(),
-            _ => None,
-        }
-    }
-
-    /// Do we have any message data, partial or otherwise?
-    pub(crate) fn is_active(&self) -> bool {
-        !self.spans.is_empty()
-    }
-
-    /// We are "aligned" if there is no partial fragments of a handshake message.
-    pub(crate) fn aligned(&self) -> Option<HandshakeAlignedProof> {
-        self.spans
-            .iter()
-            .all(|span| span.is_complete())
-            .then_some(HandshakeAlignedProof(()))
-    }
-
-    /// Yield the next complete handshake message from `containing_buffer`.
-    ///
-    /// If this was the last pending handshake message, marks the processed
-    /// buffer region for discard.
-    pub(crate) fn message<'b>(
-        &mut self,
-        next_span: FragmentSpan,
-        containing_buffer: &'b [u8],
-    ) -> EncodedMessage<&'b [u8]> {
-        // if this is the last handshake message, then we'll end
-        // up with an empty `spans` and can discard the remainder
-        // of the input buffer.
-        if self.spans.is_empty() {
-            self.discard += self.processed;
-        }
-
-        EncodedMessage {
-            typ: ContentType::Handshake,
-            version: next_span.version,
-            payload: Delocator::new(containing_buffer).slice_from_range(&next_span.bounds),
-        }
-    }
-
-    #[inline]
-    pub(crate) fn discard_processed(&mut self) {
-        self.discard = self.processed;
-    }
-
-    #[inline]
-    pub(crate) fn add_processed(&mut self, processed: usize) {
-        self.processed += processed;
-    }
-
-    #[inline]
-    pub(crate) fn take_discard(&mut self) -> usize {
-        // the caller is about to discard `discard` bytes
-        // from the front of the buffer.  adjust `processed`
-        // down by the same amount.
-        self.processed = self
-            .processed
-            .saturating_sub(self.discard);
-        mem::take(&mut self.discard)
-    }
-
-    #[inline]
-    pub(crate) fn processed(&self) -> usize {
-        self.processed
-    }
-
     /// Coalesce the handshake portions of the given buffer,
     /// if needed.
     ///
@@ -308,6 +238,76 @@ impl Deframer {
                 return Err(InvalidMessage::HandshakePayloadTooLarge);
             }
         }
+    }
+
+    /// Yield the next complete handshake message from `containing_buffer`.
+    ///
+    /// If this was the last pending handshake message, marks the processed
+    /// buffer region for discard.
+    pub(crate) fn message<'b>(
+        &mut self,
+        next_span: FragmentSpan,
+        containing_buffer: &'b [u8],
+    ) -> EncodedMessage<&'b [u8]> {
+        // if this is the last handshake message, then we'll end
+        // up with an empty `spans` and can discard the remainder
+        // of the input buffer.
+        if self.spans.is_empty() {
+            self.discard += self.processed;
+        }
+
+        EncodedMessage {
+            typ: ContentType::Handshake,
+            version: next_span.version,
+            payload: Delocator::new(containing_buffer).slice_from_range(&next_span.bounds),
+        }
+    }
+
+    /// Yield the first complete [`FragmentSpan`] if any.
+    pub(crate) fn complete_span(&mut self) -> Option<FragmentSpan> {
+        match self.spans.front() {
+            Some(span) if span.is_complete() => self.spans.pop_front(),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn take_discard(&mut self) -> usize {
+        // the caller is about to discard `discard` bytes
+        // from the front of the buffer.  adjust `processed`
+        // down by the same amount.
+        self.processed = self
+            .processed
+            .saturating_sub(self.discard);
+        mem::take(&mut self.discard)
+    }
+
+    #[inline]
+    pub(crate) fn discard_processed(&mut self) {
+        self.discard = self.processed;
+    }
+
+    #[inline]
+    pub(crate) fn add_processed(&mut self, processed: usize) {
+        self.processed += processed;
+    }
+
+    /// We are "aligned" if there is no partial fragments of a handshake message.
+    pub(crate) fn aligned(&self) -> Option<HandshakeAlignedProof> {
+        self.spans
+            .iter()
+            .all(|span| span.is_complete())
+            .then_some(HandshakeAlignedProof(()))
+    }
+
+    /// Do we have any message data, partial or otherwise?
+    pub(crate) fn is_active(&self) -> bool {
+        !self.spans.is_empty()
+    }
+
+    #[inline]
+    pub(crate) fn processed(&self) -> usize {
+        self.processed
     }
 }
 
