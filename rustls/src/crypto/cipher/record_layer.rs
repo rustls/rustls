@@ -251,7 +251,7 @@ const SEQ_HARD_LIMIT: u64 = u64::MAX - 1;
 mod tests {
     use super::*;
     use crate::enums::{ContentType, ProtocolVersion};
-    use crate::msgs::HandshakeDeframer;
+    use crate::msgs::Deframer;
 
     #[test]
     fn test_has_decrypted() {
@@ -274,7 +274,7 @@ mod tests {
 
         // Initializing the record layer should update the decrypt state, but shouldn't affect whether it
         // has decrypted.
-        let deframer = HandshakeDeframer::default();
+        let deframer = Deframer::default();
         record_layer
             .set_message_decrypter(Box::new(PassThroughDecrypter), &deframer.aligned().unwrap());
         assert!(record_layer.message_decrypter.is_some());

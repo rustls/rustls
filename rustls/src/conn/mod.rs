@@ -560,7 +560,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 self.core
                     .common
                     .recv
-                    .hs_deframer
+                    .deframer
                     .take_discard(),
             );
         }

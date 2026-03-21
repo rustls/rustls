@@ -413,9 +413,9 @@ mod connection {
         fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             let range = self.deframer_buffer.extend(plaintext);
 
-            let hs_deframer = &mut self.core.common.recv.hs_deframer;
-            hs_deframer.add_processed(range.len());
-            hs_deframer.input_message(
+            let deframer = &mut self.core.common.recv.deframer;
+            deframer.add_processed(range.len());
+            deframer.input_message(
                 EncodedMessage {
                     typ: ContentType::Handshake,
                     version: ProtocolVersion::TLSv1_3,
@@ -427,7 +427,7 @@ mod connection {
             self.core
                 .common
                 .recv
-                .hs_deframer
+                .deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
 
             self.core

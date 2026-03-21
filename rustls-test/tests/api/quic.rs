@@ -333,7 +333,7 @@ fn test_quic_invalid_early_data_size() {
 }
 
 #[test]
-fn test_quic_read_hs_deframer_failure() {
+fn test_quic_read_deframer_failure() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let server_config = make_server_config(KeyType::EcdsaP256, &provider);
     let server_config = Arc::new(server_config);
