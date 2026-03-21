@@ -16,8 +16,6 @@ use rustls::crypto::SignatureScheme;
 #[cfg(feature = "aws-lc-rs-unstable")]
 use rustls::crypto::WebPkiSupportedAlgorithms;
 pub use rustls_aws_lc_rs::kx_group::{MLKEM768, X25519MLKEM768};
-#[cfg(feature = "aws-lc-rs-unstable")]
-use webpki::aws_lc_rs as webpki_algs;
 
 pub fn provider() -> CryptoProvider {
     #[cfg_attr(not(feature = "aws-lc-rs-unstable"), allow(unused_mut))]
@@ -209,69 +207,69 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgo
         rustls_aws_lc_rs::RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
         rustls_aws_lc_rs::RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
         #[cfg(feature = "aws-lc-rs-unstable")]
-        webpki_algs::ML_DSA_44,
+        rustls_aws_lc_rs::ML_DSA_44,
         #[cfg(feature = "aws-lc-rs-unstable")]
-        webpki_algs::ML_DSA_65,
+        rustls_aws_lc_rs::ML_DSA_65,
         #[cfg(feature = "aws-lc-rs-unstable")]
-        webpki_algs::ML_DSA_87,
+        rustls_aws_lc_rs::ML_DSA_87,
     ],
     &[
         // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
         (
             SignatureScheme::ECDSA_NISTP384_SHA384,
             &[
-                webpki_algs::ECDSA_P384_SHA384,
-                webpki_algs::ECDSA_P256_SHA384,
-                webpki_algs::ECDSA_P521_SHA384,
+                rustls_aws_lc_rs::ECDSA_P384_SHA384,
+                rustls_aws_lc_rs::ECDSA_P256_SHA384,
+                rustls_aws_lc_rs::ECDSA_P521_SHA384,
             ],
         ),
         (
             SignatureScheme::ECDSA_NISTP256_SHA256,
             &[
-                webpki_algs::ECDSA_P256_SHA256,
-                webpki_algs::ECDSA_P384_SHA256,
-                webpki_algs::ECDSA_P521_SHA256,
+                rustls_aws_lc_rs::ECDSA_P256_SHA256,
+                rustls_aws_lc_rs::ECDSA_P384_SHA256,
+                rustls_aws_lc_rs::ECDSA_P521_SHA256,
             ],
         ),
         (
             SignatureScheme::ECDSA_NISTP521_SHA512,
             &[
-                webpki_algs::ECDSA_P521_SHA512,
-                webpki_algs::ECDSA_P384_SHA512,
-                webpki_algs::ECDSA_P256_SHA512,
+                rustls_aws_lc_rs::ECDSA_P521_SHA512,
+                rustls_aws_lc_rs::ECDSA_P384_SHA512,
+                rustls_aws_lc_rs::ECDSA_P256_SHA512,
             ],
         ),
-        (SignatureScheme::ED25519, &[webpki_algs::ED25519]),
+        (SignatureScheme::ED25519, &[rustls_aws_lc_rs::ED25519]),
         (
             SignatureScheme::RSA_PSS_SHA512,
-            &[webpki_algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
+            &[rustls_aws_lc_rs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
         ),
         (
             SignatureScheme::RSA_PSS_SHA384,
-            &[webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
+            &[rustls_aws_lc_rs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
         ),
         (
             SignatureScheme::RSA_PSS_SHA256,
-            &[webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
+            &[rustls_aws_lc_rs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
         ),
         (
             SignatureScheme::RSA_PKCS1_SHA512,
-            &[webpki_algs::RSA_PKCS1_2048_8192_SHA512],
+            &[rustls_aws_lc_rs::RSA_PKCS1_2048_8192_SHA512],
         ),
         (
             SignatureScheme::RSA_PKCS1_SHA384,
-            &[webpki_algs::RSA_PKCS1_2048_8192_SHA384],
+            &[rustls_aws_lc_rs::RSA_PKCS1_2048_8192_SHA384],
         ),
         (
             SignatureScheme::RSA_PKCS1_SHA256,
-            &[webpki_algs::RSA_PKCS1_2048_8192_SHA256],
+            &[rustls_aws_lc_rs::RSA_PKCS1_2048_8192_SHA256],
         ),
         #[cfg(feature = "aws-lc-rs-unstable")]
-        (SignatureScheme::ML_DSA_44, &[webpki_algs::ML_DSA_44]),
+        (SignatureScheme::ML_DSA_44, &[rustls_aws_lc_rs::ML_DSA_44]),
         #[cfg(feature = "aws-lc-rs-unstable")]
-        (SignatureScheme::ML_DSA_65, &[webpki_algs::ML_DSA_65]),
+        (SignatureScheme::ML_DSA_65, &[rustls_aws_lc_rs::ML_DSA_65]),
         #[cfg(feature = "aws-lc-rs-unstable")]
-        (SignatureScheme::ML_DSA_87, &[webpki_algs::ML_DSA_87]),
+        (SignatureScheme::ML_DSA_87, &[rustls_aws_lc_rs::ML_DSA_87]),
     ],
 ) {
     Ok(algs) => algs,

@@ -346,7 +346,7 @@ dependencies = [
  "rustls 0.24.0-dev.0",
  "rustls-aws-lc-rs",
  "rustls-ring",
- "rustls-webpki 0.104.0-alpha.2",
+ "rustls-webpki 0.104.0-alpha.5",
 ]
 
 [[package]]
@@ -2643,7 +2643,7 @@ dependencies = [
  "rcgen",
  "rustls-pki-types",
  "rustls-test",
- "rustls-webpki 0.104.0-alpha.2",
+ "rustls-webpki 0.104.0-alpha.5",
  "subtle",
  "time",
  "webpki-roots 1.0.6",
@@ -2781,7 +2781,7 @@ dependencies = [
  "rustls-aws-lc-rs",
  "rustls-test",
  "rustls-util",
- "rustls-webpki 0.104.0-alpha.2",
+ "rustls-webpki 0.104.0-alpha.5",
  "webpki-roots 1.0.6",
 ]
 
@@ -2848,7 +2848,7 @@ dependencies = [
  "rustls-pki-types",
  "rustls-ring",
  "rustls-util",
- "rustls-webpki 0.104.0-alpha.2",
+ "rustls-webpki 0.104.0-alpha.5",
  "webpki-roots 1.0.6",
  "x509-parser",
 ]
@@ -2876,12 +2876,10 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.104.0-alpha.2"
+version = "0.104.0-alpha.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d58d0ba9664baf780379001ecb183f4b95dabec82d464bff14173dee21bf49e3"
+checksum = "efaee54a62850296c2ebdbf3533a60ac84ea0fe3e9e0809266ca91d2a96eb1ec"
 dependencies = [
- "aws-lc-rs",
- "ring",
  "rustls-pki-types",
  "untrusted 0.9.0",
 ]
