@@ -11,19 +11,16 @@ repository = "https://github.com/rustls/rustls"
 categories = ["network-programming", "cryptography"]
 autobenches = false
 
-[features]
-aws-lc-rs-unstable = ["aws-lc-rs/unstable", "rcgen/aws_lc_rs_unstable", "rustls-aws-lc-rs/unstable"]
-
 [dependencies]
-aws-lc-rs = { workspace = true }
-rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
+aws-lc-rs = { workspace = true, features = ["unstable"] }
+rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", features = ["unstable"] }
 rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }
 webpki = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 env_logger = { workspace = true }
-rcgen = { workspace = true }
+rcgen = { workspace = true, features = ["aws_lc_rs_unstable"] }
 rustls-test = { workspace = true, default-features = false }
 rustls-util = { workspace = true }
 webpki-roots = { workspace = true }
