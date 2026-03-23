@@ -259,15 +259,14 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgo
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use rcgen::{
         CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
     };
     use rustls::crypto::Identity;
-    use rustls::pki_types::PrivateKeyDer;
     use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection};
     use rustls_test::do_handshake;
+
+    use super::*;
 
     #[test]
     fn ml_dsa() {
@@ -287,7 +286,7 @@ mod tests {
             .signed_by(&ee_key, &issuer)
             .unwrap();
 
-        let provider = Arc::new(super::provider());
+        let provider = Arc::new(provider());
         let server_config = ServerConfig::builder(provider.clone())
             .with_no_client_auth()
             .with_single_cert(
