@@ -9,8 +9,7 @@ use rustls::crypto::kx::{
     SupportedKxGroup,
 };
 use rustls::{ClientConfig, Connection, Error, RootCertStore};
-use rustls_aws_lc_rs::kx_group::X25519;
-use rustls_post_quantum::{MLKEM768, X25519MLKEM768};
+use rustls_aws_lc_rs::kx_group::{MLKEM768, X25519, X25519MLKEM768};
 
 fn bench_client(c: &mut Criterion) {
     let mut group = c.benchmark_group("client");

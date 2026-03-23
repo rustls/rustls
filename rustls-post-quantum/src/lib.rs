@@ -25,7 +25,6 @@ use rustls::crypto::{
 use rustls::pki_types::{
     AlgorithmIdentifier, FipsStatus, PrivateKeyDer, SubjectPublicKeyInfoDer, alg_id,
 };
-pub use rustls_aws_lc_rs::kx_group::{MLKEM768, X25519MLKEM768};
 
 pub fn provider() -> CryptoProvider {
     let mut provider = rustls_aws_lc_rs::DEFAULT_PROVIDER;
