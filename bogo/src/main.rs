@@ -43,7 +43,8 @@ use rustls::pki_types::{
 };
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{
-    self, ClientHello, ServerConfig, ServerConnection, ServerSessionKey, WebPkiClientVerifier,
+    self, ClientHello, EchServerKey, FixedEchKeys, ServerConfig, ServerConnection,
+    ServerSessionKey, WebPkiClientVerifier,
 };
 use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, compress};
 use rustls_aws_lc_rs::hpke;
@@ -346,11 +347,16 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
         {
             let ech_accept_required =
                 (count == 0 && opts.on_initial_expect_ech_accept) || opts.expect_ech_accept;
-            if ech_accept_required
-                && !sess.is_handshaking()
-                && client(&mut sess).ech_status() != EchStatus::Accepted
-            {
-                quit_err("ECH was not accepted, but we expect the opposite");
+            if ech_accept_required && !sess.is_handshaking() {
+                let accepted = match opts.side {
+                    Side::Client => client(&mut sess).ech_status() == EchStatus::Accepted,
+                    Side::Server => server(&mut sess)
+                        .ech_accepted()
+                        .is_some(),
+                };
+                if !accepted {
+                    quit_err("ECH was not accepted, but we expect the opposite");
+                }
             }
         }
 
@@ -530,6 +536,10 @@ struct Options {
     on_resume_expect_ech_accept: bool,
     on_initial_expect_ech_accept: bool,
     enable_ech_grease: bool,
+    ech_rewind: bool,
+    ech_server_configs: Vec<Vec<u8>>,
+    ech_server_keys: Vec<Vec<u8>>,
+    ech_is_retry_configs: Vec<bool>,
     send_key_update: bool,
     expect_curve_id: Option<NamedGroup>,
     on_initial_expect_curve_id: Option<NamedGroup>,
@@ -590,7 +600,14 @@ impl Options {
             queue_early_data_after_received_messages: vec![],
             require_ems: false,
             expect_handshake_kind: None,
-            expect_handshake_kind_resumed: Some(vec![HandshakeKind::Resumed]),
+            // Accept any resumed handshake, with or without HelloRetryRequest.
+            // This catches accidental full handshakes on resumption while
+            // staying agnostic about HelloRetryRequest, which is tested
+            // separately via -expect-hrr and -expect-no-hrr.
+            expect_handshake_kind_resumed: Some(vec![
+                HandshakeKind::Resumed,
+                HandshakeKind::ResumedWithHelloRetryRequest,
+            ]),
             install_cert_compression_algs: CompressionAlgs::None,
             selected_provider,
             provider: selected_provider.provider(),
@@ -601,6 +618,10 @@ impl Options {
             on_resume_expect_ech_accept: false,
             on_initial_expect_ech_accept: false,
             enable_ech_grease: false,
+            ech_rewind: false,
+            ech_server_configs: vec![],
+            ech_server_keys: vec![],
+            ech_is_retry_configs: vec![],
             send_key_update: false,
             expect_curve_id: None,
             on_initial_expect_curve_id: None,
@@ -787,6 +808,7 @@ impl Options {
             }
             "-expect-no-hrr" => {
                 self.expect_handshake_kind = Some(vec![HandshakeKind::Full]);
+                self.expect_handshake_kind_resumed = Some(vec![HandshakeKind::Resumed]);
             }
             "-on-retry-expect-early-data-reason" | "-on-resume-expect-early-data-reason" => {
                 if args.remove(0) == "hello_retry_request" {
@@ -972,6 +994,24 @@ impl Options {
             "-enable-ech-grease" => {
                 self.enable_ech_grease = true;
             }
+            "-ech-server-config" => {
+                self.ech_server_configs.push(
+                    BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                        .expect("invalid ECH server config base64"),
+                );
+            }
+            "-ech-server-key" => {
+                self.ech_server_keys.push(
+                    BASE64_STANDARD.decode(args.remove(0).as_bytes())
+                        .expect("invalid ECH server key base64"),
+                );
+            }
+            "-ech-is-retry-config" => {
+                self.ech_is_retry_configs.push(args.remove(0) == "1");
+            }
+            "-fail-early-callback-ech-rewind" => {
+                self.ech_rewind = true;
+            }
             "-server-preference" => {
                 self.server_preference = true;
             }
@@ -993,6 +1033,7 @@ impl Options {
             "-decline-alpn" |
             "-enable-all-curves" |
             "-enable-ocsp-stapling" |
+            "-expect-no-server-name" |
             "-expect-no-session" |
             "-expect-ticket-renewal" |
             "-forbid-renegotiation-after-handshake" |
@@ -1388,6 +1429,19 @@ impl SigningKey for FixedSignatureSchemeSigningKey {
     }
 }
 
+/// Wraps a cert resolver to reject ECH inner hellos, triggering the rewind path.
+#[derive(Debug)]
+struct EchRewindResolver(Arc<dyn server::ServerCredentialResolver>);
+
+impl server::ServerCredentialResolver for EchRewindResolver {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Result<SelectedCredential, Error> {
+        if client_hello.is_ech_inner() {
+            return Err(Error::NoSuitableCertificate);
+        }
+        self.0.resolve(client_hello)
+    }
+}
+
 #[derive(Debug)]
 struct FixedSignatureSchemeServerCertResolver {
     credentials: Credentials,
@@ -1630,12 +1684,17 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     let mut credentials = cred.load_from_file(&provider);
     credentials.ocsp = Some(opts.server_ocsp_response.clone());
 
-    let cert_resolver = match cred.use_signing_scheme {
+    let cert_resolver: Arc<dyn server::ServerCredentialResolver> = match cred.use_signing_scheme {
         Some(scheme) => Arc::new(FixedSignatureSchemeServerCertResolver {
             credentials,
             scheme: lookup_scheme(scheme),
-        }) as Arc<dyn server::ServerCredentialResolver>,
+        }),
         None => Arc::new(SingleCredential::from(credentials)),
+    };
+    let cert_resolver: Arc<dyn server::ServerCredentialResolver> = if opts.ech_rewind {
+        Arc::new(EchRewindResolver(cert_resolver))
+    } else {
+        cert_resolver
     };
 
     let mut cfg = ServerConfig::builder(Arc::new(provider))
@@ -1693,6 +1752,33 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
         }
         CompressionAlgs::None => {}
         _ => unimplemented!(),
+    }
+
+    if !opts.ech_server_configs.is_empty() {
+        assert_eq!(
+            opts.ech_server_configs.len(),
+            opts.ech_server_keys.len(),
+            "ECH server configs and keys must be the same length"
+        );
+        assert_eq!(
+            opts.ech_server_configs.len(),
+            opts.ech_is_retry_configs.len(),
+            "ECH server configs and retry flags must be the same length"
+        );
+
+        let ech_keys: Vec<EchServerKey> = opts
+            .ech_server_configs
+            .iter()
+            .zip(opts.ech_server_keys.iter())
+            .zip(opts.ech_is_retry_configs.iter())
+            .map(|((config, key), &is_retry)| {
+                EchServerKey::from_raw(config, key.clone(), ALL_HPKE_SUITES)
+                    .expect("invalid ECH server config/key")
+                    .with_retry(is_retry)
+            })
+            .collect();
+
+        cfg.ech_keys = Arc::new(FixedEchKeys::new(ech_keys));
     }
 
     Arc::new(cfg)
@@ -1895,6 +1981,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidMessage(
             InvalidMessage::EmptyTicketValue | InvalidMessage::IllegalEmptyList(_),
         ) => quit(":DECODE_ERROR:"),
+        Error::InvalidMessage(InvalidMessage::TrailingData("EncryptedClientHello")) => {
+            quit(":ERROR_PARSING_EXTENSION:")
+        }
         Error::InvalidMessage(
             InvalidMessage::InvalidKeyUpdate
             | InvalidMessage::MissingData(_)
@@ -1931,6 +2020,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::DecryptError if opts.ech_config_list.is_some() => {
             quit(":INCONSISTENT_ECH_NEGOTIATION:")
         }
+        Error::DecryptError if !opts.ech_server_configs.is_empty() => quit(":DECRYPTION_FAILED:"),
         Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
         Error::NoApplicationProtocol => quit(":NO_APPLICATION_PROTOCOL:"),
         Error::PeerIncompatible(
@@ -1999,6 +2089,19 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch)
         | Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEchExtension) => {
             quit(":UNEXPECTED_EXTENSION:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::InvalidEchClientHelloInner) => {
+            quit(":INVALID_CLIENT_HELLO_INNER:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::InvalidEchOuterExtension) => {
+            quit(":INVALID_OUTER_EXTENSION:")
+        }
+        Error::PeerMisbehaved(
+            PeerMisbehaved::InvalidEchPadding | PeerMisbehaved::EchHrrMismatch,
+        ) => quit(":DECODE_ERROR:"),
+        Error::PeerMisbehaved(PeerMisbehaved::MissingEchExtension) => quit(":MISSING_EXTENSION:"),
+        Error::PeerMisbehaved(PeerMisbehaved::EchHrrDecryptionFailed) => {
+            quit(":DECRYPTION_FAILED:")
         }
         Error::PeerMisbehaved(
             PeerMisbehaved::UnsolicitedEncryptedExtension

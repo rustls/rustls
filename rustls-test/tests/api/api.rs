@@ -1687,23 +1687,26 @@ fn test_ech_server_rewind() {
 #[cfg(feature = "aws-lc-rs")]
 #[test]
 fn test_ech_server_rejected_hrr_includes_ech_extension() {
-    let provider = CryptoProvider {
-        // Only X25519 on server to force HRR (client offers P-256 first).
-        kx_groups: Cow::Owned(vec![provider::kx_group::X25519]),
+    let hpke_suite = ALL_SUPPORTED_SUITES[0];
+
+    // Server only supports P-384, client offers X25519MLKEM768 first → HRR.
+    let server_provider = CryptoProvider {
+        kx_groups: Cow::Owned(vec![provider::kx_group::SECP384R1]),
         ..provider::DEFAULT_TLS13_PROVIDER.clone()
     };
-    let hpke_suite = ALL_SUPPORTED_SUITES[0];
+    let client_provider = provider::DEFAULT_TLS13_PROVIDER.clone();
 
     // Client uses config_id 1, server has config_id 2 → ECH rejected.
     let (_, config_list_bytes) = generate_ech_config(hpke_suite, 1, "public.example.com", 128);
     let (ech_server_key, _) = generate_ech_config(hpke_suite, 2, "public.example.com", 128);
 
-    let mut server_config = ServerConfig::builder(Arc::new(provider.clone())).finish(KeyType::EcdsaP256);
+    let mut server_config =
+        ServerConfig::builder(Arc::new(server_provider)).finish(KeyType::EcdsaP256);
     server_config.ech_keys = Arc::new(rustls::server::FixedEchKeys::new(vec![ech_server_key]));
 
     let ech_config =
         EchConfig::new(EchConfigListBytes::from(config_list_bytes), &[hpke_suite]).unwrap();
-    let client_config = ClientConfig::builder(Arc::new(provider))
+    let client_config = ClientConfig::builder(Arc::new(client_provider))
         .with_ech(EchMode::Enable(ech_config))
         .finish(KeyType::EcdsaP256);
 
@@ -1712,9 +1715,7 @@ fn test_ech_server_rejected_hrr_includes_ech_extension() {
     // Client sends ClientHello.
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
-    server
-        .read_tls(&mut &buf[..])
-        .unwrap();
+    server.read_tls(&mut &buf[..]).unwrap();
     server.process_new_packets().unwrap();
 
     // Server sends HRR (+ CCS). Capture the raw bytes.
@@ -1751,8 +1752,7 @@ fn test_ech_server_no_keys_hrr_includes_ech_extension() {
     let client_provider = provider::DEFAULT_TLS13_PROVIDER.clone();
 
     // Server has NO ECH keys.
-    let server_config =
-        ServerConfig::builder(Arc::new(server_provider)).finish(KeyType::EcdsaP256);
+    let server_config = ServerConfig::builder(Arc::new(server_provider)).finish(KeyType::EcdsaP256);
 
     // Client sends ECH (will be GREASE-like since server has no keys).
     let (_, config_list_bytes) = generate_ech_config(hpke_suite, 1, "public.example.com", 128);
@@ -1767,9 +1767,7 @@ fn test_ech_server_no_keys_hrr_includes_ech_extension() {
     // Client sends ClientHello.
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
-    server
-        .read_tls(&mut &buf[..])
-        .unwrap();
+    server.read_tls(&mut &buf[..]).unwrap();
     server.process_new_packets().unwrap();
 
     // Server sends HRR (+ CCS). Capture the raw bytes.
