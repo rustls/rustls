@@ -8,7 +8,7 @@ use pki_types::{CertificateDer, DnsName};
 use super::client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
     EncryptedClientHello, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
-    PskKeyExchangeModes, ServerNamePayload,
+    PskKeyExchangeModes, RawClientHello, ServerNamePayload,
 };
 use super::codec::{Codec, Reader, SizedPayload, put_u16};
 use super::enums::{
@@ -1174,3 +1174,118 @@ static ECHCONFIG_LIST_CF: &[u8] = include_bytes!("../../tests/data/cloudflare-es
 // Three EchConfigs, the first one with an unsupported version.
 static ECHCONFIG_LIST_WITH_UNSUPPORTED: &[u8] =
     include_bytes!("../../tests/data/unsupported-then-valid-echconfigs.bin");
+
+fn make_raw_client_hello_test_payload() -> ClientHelloPayload {
+    ClientHelloPayload {
+        client_version: ProtocolVersion::TLSv1_2,
+        random: Random([0x42u8; 32]),
+        session_id: SessionId::empty(),
+        cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+        compression_methods: vec![Compression::Null],
+        extensions: Box::new(ClientExtensions::default()),
+    }
+}
+
+#[test]
+fn raw_client_hello_round_trip_with_version_and_random() {
+    let mut hello = make_raw_client_hello_test_payload();
+    hello.encrypted_client_hello = Some(EncryptedClientHello::Inner);
+
+    let mut encoded = Vec::new();
+    hello.encode(&mut encoded);
+
+    let raw = RawClientHello::parse(&encoded).unwrap();
+    assert_eq!(raw.version_and_random.len(), 34);
+    assert_eq!(raw.version_and_random[2..], [0x42u8; 32]);
+    assert!(raw.session_id.is_empty());
+    assert!(!raw.cipher_suites.is_empty());
+    assert!(raw.trailing.is_empty());
+}
+
+#[test]
+fn raw_client_hello_round_trip_with_extensions() {
+    let mut hello = make_raw_client_hello_test_payload();
+    hello.supported_versions = Some(SupportedProtocolVersions {
+        tls13: true,
+        tls12: false,
+    });
+    hello.encrypted_client_hello = Some(EncryptedClientHello::Inner);
+
+    let mut encoded = Vec::new();
+    hello.encode(&mut encoded);
+
+    let raw = RawClientHello::parse(&encoded).unwrap();
+    let exts: Vec<_> = raw
+        .iter_extensions()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(exts.len(), 2);
+}
+
+#[test]
+fn raw_client_hello_round_trip_ech_inner_encoding() {
+    let mut hello = make_raw_client_hello_test_payload();
+    hello.encrypted_client_hello = Some(EncryptedClientHello::Inner);
+
+    let encoded = hello.ech_inner_encoding(vec![]);
+    let raw = RawClientHello::parse(&encoded).unwrap();
+    assert!(raw.session_id.is_empty());
+}
+
+#[test]
+fn raw_client_hello_parse_truncated() {
+    assert!(RawClientHello::parse(&[0x03, 0x03]).is_none());
+    assert!(RawClientHello::parse(&[]).is_none());
+}
+
+#[test]
+fn raw_extension_iter_advance_to() {
+    // Build a ClientHello body with two extensions: type 0x0001 and type 0x0002.
+    let mut body = Vec::new();
+    body.extend_from_slice(&[0x03, 0x03]); // version
+    body.extend_from_slice(&[0u8; 32]); // random
+    body.push(0); // session_id len
+    body.extend_from_slice(&[0x00, 0x02, 0x13, 0x01]); // cipher suites
+    body.extend_from_slice(&[0x01, 0x00]); // compression
+    let mut exts = Vec::new();
+    // ext 0x0001 with data [0xAA]
+    exts.extend_from_slice(&[0x00, 0x01, 0x00, 0x01, 0xAA]);
+    // ext 0x0002 with data [0xBB, 0xCC]
+    exts.extend_from_slice(&[0x00, 0x02, 0x00, 0x02, 0xBB, 0xCC]);
+    body.extend_from_slice(&(exts.len() as u16).to_be_bytes());
+    body.extend_from_slice(&exts);
+
+    let raw = RawClientHello::parse(&body).unwrap();
+    let mut iter = raw.iter_extensions();
+
+    // Skip past 0x0001 to find 0x0002.
+    let found = iter.advance_to(0x0002).unwrap();
+    assert_eq!(found.ext_type, 0x0002);
+    assert_eq!(found.data, &[0xBB, 0xCC]);
+
+    // Iterator is now exhausted; searching for anything should fail.
+    assert!(iter.advance_to(0x0001).is_err());
+}
+
+#[test]
+fn raw_extension_iter_malformed() {
+    // Build a raw ClientHello body with a malformed extension section:
+    // the extension claims 0xFFFF bytes but only 2 follow.
+    let mut body = Vec::new();
+    body.extend_from_slice(&[0x03, 0x03]); // version
+    body.extend_from_slice(&[0u8; 32]); // random
+    body.push(0); // session_id len
+    body.extend_from_slice(&[0x00, 0x02, 0x13, 0x01]); // cipher suites
+    body.extend_from_slice(&[0x01, 0x00]); // compression
+    let ext_data = [
+        0x00, 0x01, // ext_type
+        0xFF, 0xFF, // ext_len (way too large)
+        0x00, 0x00, // only 2 bytes of data
+    ];
+    body.extend_from_slice(&(ext_data.len() as u16).to_be_bytes());
+    body.extend_from_slice(&ext_data);
+
+    let raw = RawClientHello::parse(&body).unwrap();
+    let results: Vec<_> = raw.iter_extensions().collect();
+    assert!(results.iter().any(|r| r.is_err()));
+}
