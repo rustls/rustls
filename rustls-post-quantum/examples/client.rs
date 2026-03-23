@@ -18,7 +18,7 @@ fn main() {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let config = rustls::ClientConfig::builder(Arc::new(rustls_post_quantum::provider()))
+    let config = rustls::ClientConfig::builder(Arc::new(rustls_post_quantum::DEFAULT_PROVIDER))
         .with_root_certificates(root_store)
         .with_no_client_auth()
         .unwrap();

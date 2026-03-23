@@ -26,12 +26,12 @@ use rustls::pki_types::{
     AlgorithmIdentifier, FipsStatus, PrivateKeyDer, SubjectPublicKeyInfoDer, alg_id,
 };
 
-pub fn provider() -> CryptoProvider {
-    let mut provider = rustls_aws_lc_rs::DEFAULT_PROVIDER;
-    provider.signature_verification_algorithms = SUPPORTED_SIG_ALGS;
-    provider.key_provider = &PqAwsLcRs;
-    provider
-}
+/// The default `CryptoProvider` backed by aws-lc-rs.
+pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
+    signature_verification_algorithms: SUPPORTED_SIG_ALGS,
+    key_provider: &PqAwsLcRs,
+    ..rustls_aws_lc_rs::DEFAULT_PROVIDER
+};
 
 #[derive(Debug)]
 pub struct PqAwsLcRs;
@@ -286,7 +286,7 @@ mod tests {
             .signed_by(&ee_key, &issuer)
             .unwrap();
 
-        let provider = Arc::new(provider());
+        let provider = Arc::new(DEFAULT_PROVIDER);
         let server_config = ServerConfig::builder(provider.clone())
             .with_no_client_auth()
             .with_single_cert(

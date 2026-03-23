@@ -83,7 +83,7 @@ fn bench_clienthello(c: &mut Criterion) {
     );
 
     let config_x25519mlkem768 = Arc::new(
-        ClientConfig::builder(rustls_post_quantum::provider().into())
+        ClientConfig::builder(rustls_post_quantum::DEFAULT_PROVIDER.into())
             .with_root_certificates(anchors.clone())
             .with_no_client_auth()
             .unwrap(),
