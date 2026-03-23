@@ -13,7 +13,7 @@ autobenches = false
 
 [dependencies]
 aws-lc-rs = { workspace = true, features = ["unstable"] }
-rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs", features = ["unstable"] }
+rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
 rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }
 webpki = { workspace = true }
 

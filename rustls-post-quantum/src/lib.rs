@@ -23,8 +23,10 @@ use rustls::crypto::{
     public_key_to_spki,
 };
 use rustls::pki_types::{
-    AlgorithmIdentifier, FipsStatus, PrivateKeyDer, SubjectPublicKeyInfoDer, alg_id,
+    AlgorithmIdentifier, FipsStatus, PrivateKeyDer, SignatureVerificationAlgorithm,
+    SubjectPublicKeyInfoDer, alg_id,
 };
+use rustls_aws_lc_rs::AwsLcRsVerificationAlgorithm;
 
 /// The default `CryptoProvider` backed by aws-lc-rs.
 pub const DEFAULT_PROVIDER: CryptoProvider = CryptoProvider {
@@ -193,9 +195,9 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgo
         rustls_aws_lc_rs::RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS,
         rustls_aws_lc_rs::RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS,
         rustls_aws_lc_rs::RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS,
-        rustls_aws_lc_rs::ML_DSA_44,
-        rustls_aws_lc_rs::ML_DSA_65,
-        rustls_aws_lc_rs::ML_DSA_87,
+        ML_DSA_44,
+        ML_DSA_65,
+        ML_DSA_87,
     ],
     &[
         // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
@@ -248,13 +250,40 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupportedAlgo
             SignatureScheme::RSA_PKCS1_SHA256,
             &[rustls_aws_lc_rs::RSA_PKCS1_2048_8192_SHA256],
         ),
-        (SignatureScheme::ML_DSA_44, &[rustls_aws_lc_rs::ML_DSA_44]),
-        (SignatureScheme::ML_DSA_65, &[rustls_aws_lc_rs::ML_DSA_65]),
-        (SignatureScheme::ML_DSA_87, &[rustls_aws_lc_rs::ML_DSA_87]),
+        (SignatureScheme::ML_DSA_44, &[ML_DSA_44]),
+        (SignatureScheme::ML_DSA_65, &[ML_DSA_65]),
+        (SignatureScheme::ML_DSA_87, &[ML_DSA_87]),
     ],
 ) {
     Ok(algs) => algs,
     Err(_) => panic!("bad WebPkiSupportedAlgorithms"),
+};
+
+/// ML-DSA signatures using the [4, 4] matrix (security strength category 2).
+pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
+    public_key_alg_id: alg_id::ML_DSA_44,
+    signature_alg_id: alg_id::ML_DSA_44,
+    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_44,
+    // Not included in AWS-LC-FIPS 3.0 FIPS scope
+    in_fips_submission: false,
+};
+
+/// ML-DSA signatures using the [6, 5] matrix (security strength category 3).
+pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
+    public_key_alg_id: alg_id::ML_DSA_65,
+    signature_alg_id: alg_id::ML_DSA_65,
+    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_65,
+    // Not included in AWS-LC-FIPS 3.0 FIPS scope
+    in_fips_submission: false,
+};
+
+/// ML-DSA signatures using the [8. 7] matrix (security strength category 5).
+pub static ML_DSA_87: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
+    public_key_alg_id: alg_id::ML_DSA_87,
+    signature_alg_id: alg_id::ML_DSA_87,
+    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_87,
+    // Not included in AWS-LC-FIPS 3.0 FIPS scope
+    in_fips_submission: false,
 };
 
 #[cfg(test)]

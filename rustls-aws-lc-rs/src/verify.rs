@@ -30,21 +30,20 @@ pub static ALL_VERIFICATION_ALGS: &[&dyn SignatureVerificationAlgorithm] = &[
     RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
     RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
     RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-    #[cfg(all(feature = "unstable", not(feature = "fips")))]
-    ML_DSA_44,
-    #[cfg(all(feature = "unstable", not(feature = "fips")))]
-    ML_DSA_65,
-    #[cfg(all(feature = "unstable", not(feature = "fips")))]
-    ML_DSA_87,
 ];
 
 /// A `SignatureVerificationAlgorithm` implemented using aws-lc-rs.
+#[expect(clippy::exhaustive_structs)]
 #[derive(Debug)]
-struct AwsLcRsVerificationAlgorithm {
-    public_key_alg_id: AlgorithmIdentifier,
-    signature_alg_id: AlgorithmIdentifier,
-    verification_alg: &'static dyn signature::VerificationAlgorithm,
-    in_fips_submission: bool,
+pub struct AwsLcRsVerificationAlgorithm {
+    /// The public key algorithm identifier (for example, `id-ecPublicKey`).
+    pub public_key_alg_id: AlgorithmIdentifier,
+    /// The signature algorithm identifier (for example, `ecdsa-with-SHA256`).
+    pub signature_alg_id: AlgorithmIdentifier,
+    /// The aws-lc-rs verification algorithm to use for this signature algorithm.
+    pub verification_alg: &'static dyn signature::VerificationAlgorithm,
+    /// Whether this algorithm is included in the FIPS submission for aws-lc-rs.
+    pub in_fips_submission: bool,
 }
 
 impl SignatureVerificationAlgorithm for AwsLcRsVerificationAlgorithm {
@@ -91,36 +90,6 @@ impl SignatureVerificationAlgorithm for AwsLcRsVerificationAlgorithm {
         }
     }
 }
-
-/// ML-DSA signatures using the [4, 4] matrix (security strength category 2).
-#[cfg(all(feature = "unstable", not(feature = "fips")))]
-pub static ML_DSA_44: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
-    public_key_alg_id: alg_id::ML_DSA_44,
-    signature_alg_id: alg_id::ML_DSA_44,
-    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_44,
-    // Not included in AWS-LC-FIPS 3.0 FIPS scope
-    in_fips_submission: false,
-};
-
-/// ML-DSA signatures using the [6, 5] matrix (security strength category 3).
-#[cfg(all(feature = "unstable", not(feature = "fips")))]
-pub static ML_DSA_65: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
-    public_key_alg_id: alg_id::ML_DSA_65,
-    signature_alg_id: alg_id::ML_DSA_65,
-    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_65,
-    // Not included in AWS-LC-FIPS 3.0 FIPS scope
-    in_fips_submission: false,
-};
-
-/// ML-DSA signatures using the [8. 7] matrix (security strength category 5).
-#[cfg(all(feature = "unstable", not(feature = "fips")))]
-pub static ML_DSA_87: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
-    public_key_alg_id: alg_id::ML_DSA_87,
-    signature_alg_id: alg_id::ML_DSA_87,
-    verification_alg: &aws_lc_rs::unstable::signature::ML_DSA_87,
-    // Not included in AWS-LC-FIPS 3.0 FIPS scope
-    in_fips_submission: false,
-};
 
 /// ECDSA signatures using the P-256 curve and SHA-256.
 pub static ECDSA_P256_SHA256: &dyn SignatureVerificationAlgorithm = &AwsLcRsVerificationAlgorithm {
