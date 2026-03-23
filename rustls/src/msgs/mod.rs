@@ -91,7 +91,8 @@ pub(crate) use handshake::{EcParameters, NewSessionTicketExtensions, ServerEcdhP
 
 mod server_hello;
 pub(crate) use server_hello::{
-    EchConfigContents, EchConfigPayload, HpkeKeyConfig, ServerExtensions, ServerHelloPayload,
+    EchConfigContents, EchConfigPayload, HpkeKeyConfig, ServerEncryptedClientHello,
+    ServerExtensions, ServerHelloPayload,
 };
 
 #[cfg(test)]
@@ -285,6 +286,20 @@ impl<'a> MessagePayload<'a> {
             Self::HandshakeFlight(x) => bytes.extend(x.bytes()),
             Self::ChangeCipherSpec(x) => x.encode(bytes),
             Self::ApplicationData(x) => x.encode(bytes),
+        }
+    }
+
+    /// Patch bytes in the handshake encoding at the given range.
+    ///
+    /// Used by the server ECH confirmation to splice the confirmation
+    /// signal into an already-encoded ServerHello or HelloRetryRequest.
+    pub(crate) fn patch_encoded(&mut self, range: core::ops::Range<usize>, data: &[u8]) {
+        if let Self::Handshake {
+            encoded: Payload::Owned(ref mut bytes),
+            ..
+        } = self
+        {
+            bytes[range].copy_from_slice(data);
         }
     }
 
