@@ -229,6 +229,22 @@ pub struct ServerConfig {
 
     /// Policy for how an invalid Server Name Indication (SNI) value from a client is handled.
     pub invalid_sni_policy: InvalidSniPolicy,
+
+    /// ECH server keys for decrypting Encrypted Client Hello offers.
+    ///
+    /// Multiple keys can be configured to support key rotation: publish new configs
+    /// in DNS while still accepting connections encrypted to old configs during the
+    /// DNS TTL transition period.
+    ///
+    /// If empty, ECH is not supported and any ECH offers will be rejected (the server
+    /// will proceed with the outer ClientHello).
+    ///
+    /// The default is an empty set of keys. Use [`FixedEchKeys`] for a static list,
+    /// or implement [`EchKeyResolver`] for dynamic key rotation.
+    ///
+    /// [`FixedEchKeys`]: super::FixedEchKeys
+    /// [`EchKeyResolver`]: super::EchKeyResolver
+    pub ech_keys: Arc<dyn super::ech::EchKeyResolver>,
 }
 
 impl ServerConfig {
@@ -400,6 +416,8 @@ pub struct ClientHello<'a> {
     /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
     pub(super) certificate_authorities: Option<&'a [DistinguishedName]>,
     pub(super) named_groups: Option<&'a [NamedGroup]>,
+    /// Whether this ClientHello is the inner (decrypted) ECH hello.
+    pub(super) is_ech_inner: bool,
 }
 
 impl<'a> ClientHello<'a> {
@@ -408,6 +426,7 @@ impl<'a> ClientHello<'a> {
         signature_schemes: &'a [SignatureScheme],
         sni: Option<&'a DnsName<'static>>,
         version: ProtocolVersion,
+        is_ech_inner: bool,
     ) -> Self {
         Self {
             server_name: sni.map(Cow::Borrowed),
@@ -434,7 +453,18 @@ impl<'a> ClientHello<'a> {
                 .client_hello
                 .named_groups
                 .as_deref(),
+            is_ech_inner,
         }
+    }
+
+    /// Whether this ClientHello is the inner (decrypted) ECH hello.
+    ///
+    /// When `true`, the server has successfully decrypted an ECH offer and
+    /// this `ClientHello` represents the real client intent. If the resolver
+    /// returns an error for an ECH inner hello, the server falls back to
+    /// the outer ClientHello (ECH rewind).
+    pub fn is_ech_inner(&self) -> bool {
+        self.is_ech_inner
     }
 
     /// Get the server name indicator.
@@ -692,6 +722,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
             invalid_sni_policy: InvalidSniPolicy::default(),
+            ech_keys: Arc::new(super::ech::FixedEchKeys::empty()),
         })
     }
 }

@@ -269,6 +269,7 @@ pub(crate) enum Event<'a> {
     EchStatus(EchStatus),
     ReceivedServerName(Option<DnsName<'static>>),
     ResumptionData(Vec<u8>),
+    ServerEchAccepted(Option<crate::server::ech::EchFrontendInfo>),
 }
 
 pub(crate) enum OutputEvent<'a> {

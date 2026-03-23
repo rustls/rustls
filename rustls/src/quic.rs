@@ -282,6 +282,16 @@ mod connection {
             self.inner.core.side.server_name()
         }
 
+        /// If this server terminated ECH (shared mode), returns the frontend info
+        /// including `config_id` and outer server name.
+        ///
+        /// Returns `None` if ECH was not offered, was rejected, or was handled
+        /// by a split-mode frontend. The value is available after the ClientHello
+        /// has been processed.
+        pub fn ech_accepted(&self) -> Option<&crate::server::ech::EchFrontendInfo> {
+            self.inner.core.side.ech_accepted()
+        }
+
         /// Set the resumption data to embed in future resumption tickets supplied to the client.
         ///
         /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other

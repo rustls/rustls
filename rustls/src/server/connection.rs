@@ -70,6 +70,16 @@ impl ServerConnection {
         self.inner.core.side.server_name()
     }
 
+    /// If this server terminated ECH (shared mode), returns the frontend info
+    /// including `config_id` and outer server name.
+    ///
+    /// Returns `None` if ECH was not offered, was rejected, or was handled
+    /// by a split-mode frontend. The value is available after the ClientHello
+    /// has been processed.
+    pub fn ech_accepted(&self) -> Option<&super::ech::EchFrontendInfo> {
+        self.inner.core.side.ech_accepted()
+    }
+
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
     ///
     /// Recovered from the prior session's `set_resumption_data`. Integrity is guaranteed by rustls.
@@ -459,6 +469,7 @@ impl Accepted {
                 .certificate_authority_names
                 .as_deref(),
             named_groups: client_hello.named_groups.as_deref(),
+            is_ech_inner: false,
         };
 
         trace!("Accepted::client_hello(): {ch:#?}");
@@ -609,6 +620,7 @@ pub(crate) struct ServerConnectionData {
     sni: Option<DnsName<'static>>,
     received_resumption_data: Option<Vec<u8>>,
     early_data: EarlyDataState,
+    ech_accepted: Option<super::ech::EchFrontendInfo>,
 }
 
 impl ServerConnectionData {
@@ -618,6 +630,10 @@ impl ServerConnectionData {
 
     pub(crate) fn server_name(&self) -> Option<&DnsName<'static>> {
         self.sni.as_ref()
+    }
+
+    pub(crate) fn ech_accepted(&self) -> Option<&super::ech::EchFrontendInfo> {
+        self.ech_accepted.as_ref()
     }
 }
 
@@ -630,6 +646,7 @@ impl SideOutput for ServerConnectionData {
             Event::EarlyData(EarlyDataEvent::Accepted) => self.early_data.accept(),
             Event::ReceivedServerName(sni) => self.sni = sni,
             Event::ResumptionData(data) => self.received_resumption_data = Some(data),
+            Event::ServerEchAccepted(info) => self.ech_accepted = info,
             _ => unreachable!(),
         }
     }
