@@ -15,7 +15,7 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
-    AlertLevel, AlertLevelName, AlertMessagePayload, DeframerIter, Delocator,
+    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, DeframerIter, Delocator,
     HandshakeAlignedProof, HandshakeDeframer, Locator, Message, MessagePayload, TlsInputBuffer,
 };
 use crate::quic::QuicOutput;
@@ -180,7 +180,7 @@ impl ReceivePath {
 
             let (message, bounds, processed) = loop {
                 let (message, bounds) = match iter.next() {
-                    Some(Ok((message, bounds))) => (message, bounds),
+                    Some(Ok(Deframed { message, bounds })) => (message, bounds),
                     Some(Err(err)) => return Err(err),
                     None => return Ok(None),
                 };
