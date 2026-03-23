@@ -46,15 +46,15 @@ mod client_hello;
 pub(crate) use client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
     EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder, PresharedKeyIdentity,
-    PresharedKeyOffer, PskKeyExchangeModes, ServerNamePayload,
+    PresharedKeyOffer, PskKeyExchangeModes, RawClientHello, ServerNamePayload,
 };
 
 mod codec;
+use codec::LengthPrefixedBuffer;
 pub(crate) use codec::{
     CERTIFICATE_MAX_SIZE_LIMIT, Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
-    TlsListElement, hex, put_u16, put_u64,
+    TlsListElement, U24, hex, put_u16, put_u64,
 };
-use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
 pub(crate) use deframer::{

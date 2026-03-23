@@ -853,3 +853,143 @@ fn low_quality_integer_hash(mut x: u32) -> u32 {
     x = (x ^ 0xb55a4f09) ^ (x >> 16);
     x
 }
+
+// --- Raw ClientHello parsing for ECH ---
+
+/// Zero-copy parsed view of a ClientHello body (without the 4-byte handshake header).
+///
+/// Provides access to the raw wire-level fields of a ClientHello without
+/// allocating or interpreting extension contents. Used by server-side ECH
+/// ([RFC 9849]) where raw bytes are needed because:
+///
+/// - The AAD for HPKE decryption is the ClientHello body with the ECH
+///   ciphertext zeroed out ([section 5.2]), which must match the exact byte
+///   layout the client sent.
+/// - The inner ClientHello is reconstructed by splicing raw extension bytes
+///   from the outer hello ([section 5.1]), preserving wire ordering.
+/// - The transcript hash must cover the reconstructed bytes, not a
+///   re-encoding from parsed structures.
+///
+/// All fields are borrowed slices into the original buffer.
+///
+/// [RFC 9849]: https://datatracker.ietf.org/doc/html/rfc9849
+/// [section 5.1]: https://datatracker.ietf.org/doc/html/rfc9849#section-5.1
+/// [section 5.2]: https://datatracker.ietf.org/doc/html/rfc9849#section-5.2
+pub(crate) struct RawClientHello<'a> {
+    /// client_version (2 bytes) and random (32 bytes).
+    pub(crate) version_and_random: &'a [u8],
+    /// Session ID bytes (without the 1-byte length prefix).
+    pub(crate) session_id: &'a [u8],
+    /// Cipher suites bytes (without the 2-byte length prefix).
+    pub(crate) cipher_suites: &'a [u8],
+    /// Compression methods bytes (without the 1-byte length prefix).
+    pub(crate) compression: &'a [u8],
+    /// Extension data bytes (without the 2-byte total-length prefix).
+    pub(crate) extensions: &'a [u8],
+    /// Byte offset where `extensions` starts within the original body.
+    pub(crate) extensions_offset: usize,
+    /// Any bytes after extensions (padding in an encoded inner hello).
+    pub(crate) trailing: &'a [u8],
+}
+
+impl<'a> RawClientHello<'a> {
+    /// Parse a ClientHello body (without the 4-byte handshake header).
+    pub(crate) fn parse(body: &'a [u8]) -> Option<Self> {
+        let mut r = Reader::new(body);
+        let version_and_random = r.take(2 + 32)?;
+        let sid_len = u8::read(&mut r).ok()? as usize;
+        let session_id = r.take(sid_len)?;
+        let cs_len = u16::read(&mut r).ok()? as usize;
+        let cipher_suites = r.take(cs_len)?;
+        let comp_len = u8::read(&mut r).ok()? as usize;
+        let compression = r.take(comp_len)?;
+        let ext_len = u16::read(&mut r).ok()? as usize;
+        let extensions_offset = body.len() - r.left();
+        let extensions = r.take(ext_len)?;
+        let trailing = r.rest();
+        Some(Self {
+            version_and_random,
+            session_id,
+            cipher_suites,
+            compression,
+            extensions,
+            extensions_offset,
+            trailing,
+        })
+    }
+
+    /// Iterate over extensions as raw type+data pairs.
+    pub(crate) fn iter_extensions(&self) -> RawExtensionIter<'a> {
+        RawExtensionIter {
+            reader: Reader::new(self.extensions),
+            total_len: self.extensions.len(),
+        }
+    }
+}
+
+/// Iterator over raw extensions in a byte slice.
+///
+/// Yields `Ok(RawExtension)` for each well-formed extension, or `Err(())`
+/// if the data is malformed.
+pub(crate) struct RawExtensionIter<'a> {
+    reader: Reader<'a>,
+    total_len: usize,
+}
+
+impl<'a> RawExtensionIter<'a> {
+    /// Advance past extensions until one with the given type is found.
+    ///
+    /// Returns `Err(())` if the iterator is exhausted without finding
+    /// the type, or if a malformed extension is encountered.
+    pub(crate) fn advance_to(&mut self, ext_type: u16) -> Result<RawExtension<'a>, ()> {
+        loop {
+            let ext = self.next().ok_or(())??;
+            if ext.ext_type == ext_type {
+                return Ok(ext);
+            }
+        }
+    }
+}
+
+impl<'a> Iterator for RawExtensionIter<'a> {
+    type Item = Result<RawExtension<'a>, ()>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.reader.any_left() {
+            return None;
+        }
+        let Ok(ext_type) = u16::read(&mut self.reader) else {
+            return Some(Err(()));
+        };
+        let Ok(ext_len) = u16::read(&mut self.reader) else {
+            return Some(Err(()));
+        };
+        let Some(data) = self.reader.take(ext_len as usize) else {
+            return Some(Err(()));
+        };
+        let data_end = self.total_len - self.reader.left();
+        Some(Ok(RawExtension {
+            ext_type,
+            data,
+            data_end,
+        }))
+    }
+}
+
+/// A single TLS extension as raw bytes: type (u16) and data.
+pub(crate) struct RawExtension<'a> {
+    pub(crate) ext_type: u16,
+    pub(crate) data: &'a [u8],
+    /// Byte offset of the end of this extension's data within the
+    /// extensions slice.
+    pub(crate) data_end: usize,
+}
+
+impl RawExtension<'_> {
+    /// Write this extension (type || length || data) to the output buffer.
+    pub(crate) fn write_to(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.ext_type.to_be_bytes());
+        out.extend_from_slice(&(self.data.len() as u16).to_be_bytes());
+        out.extend_from_slice(self.data);
+    }
+}
