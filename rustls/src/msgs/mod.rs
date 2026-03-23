@@ -58,8 +58,8 @@ use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
 pub(crate) use deframer::{
-    DeframerIter, Delocator, HandshakeAlignedProof, HandshakeDeframer, Locator, TlsInputBuffer,
-    VecInput,
+    Deframed, DeframerIter, Delocator, HandshakeAlignedProof, HandshakeDeframer, Locator,
+    TlsInputBuffer, VecInput,
 };
 
 mod enums;

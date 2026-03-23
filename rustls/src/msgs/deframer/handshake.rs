@@ -374,7 +374,7 @@ mod tests {
     use std::vec;
 
     use super::*;
-    use crate::msgs::{DeframerIter, HEADER_SIZE};
+    use crate::msgs::{Deframed, DeframerIter, HEADER_SIZE};
 
     fn add_bytes(hs: &mut HandshakeDeframer, range: Range<usize>, within: &[u8]) {
         let msg = EncodedMessage {
@@ -481,12 +481,12 @@ mod tests {
         let mut iter = DeframerIter::new(&mut input[..], 0);
 
         while let Some(result) = iter.next() {
-            let (opaque, bounds) = result.unwrap();
-            let plain = opaque.into_plain_message();
-            std::println!("message {plain:?}");
+            let Deframed { message, bounds } = result.unwrap();
+            let message = message.into_plain_message();
+            std::println!("message {message:?}");
 
             hs.processed = bounds.end;
-            hs.input_message(plain, bounds.start + HEADER_SIZE..bounds.end);
+            hs.input_message(message, bounds.start + HEADER_SIZE..bounds.end);
         }
 
         hs.coalesce(&mut input[..]).unwrap();

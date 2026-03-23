@@ -40,7 +40,7 @@ impl<'a> DeframerIter<'a> {
 }
 
 impl<'a> Iterator for DeframerIter<'a> {
-    type Item = Result<(EncodedMessage<InboundOpaque<'a>>, Range<usize>), Error>;
+    type Item = Result<Deframed<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut reader = Reader::new(&mut self.buf);
@@ -69,15 +69,20 @@ impl<'a> Iterator for DeframerIter<'a> {
         let bounds = self.processed..self.processed + end;
         self.processed += end;
 
-        Some(Ok((
-            EncodedMessage {
+        Some(Ok(Deframed {
+            message: EncodedMessage {
                 typ,
                 version,
                 payload: InboundOpaque(&mut message[HEADER_SIZE..]),
             },
             bounds,
-        )))
+        }))
     }
+}
+
+pub(crate) struct Deframed<'a> {
+    pub(crate) message: EncodedMessage<InboundOpaque<'a>>,
+    pub(crate) bounds: Range<usize>,
 }
 
 pub fn fuzz_deframer(data: &[u8]) {
@@ -138,7 +143,7 @@ mod tests {
     fn iterate_one_message() {
         let mut buffer = [0x17, 0x03, 0x03, 0x00, 0x01, 0x00];
         let mut iter = DeframerIter::new(&mut buffer, 0);
-        let (message, bounds) = iter.next().unwrap().unwrap();
+        let Deframed { message, bounds } = iter.next().unwrap().unwrap();
         assert_eq!(message.typ, ContentType::ApplicationData);
         assert_eq!(bounds.end, 6);
         assert!(iter.next().is_none());
@@ -151,11 +156,11 @@ mod tests {
         ];
 
         let mut iter = DeframerIter::new(&mut buffer, 0);
-        let (message, bounds) = iter.next().unwrap().unwrap();
+        let Deframed { message, bounds } = iter.next().unwrap().unwrap();
         assert_eq!(message.typ, ContentType::Handshake);
         assert_eq!(bounds.end, 6);
 
-        let (message, bounds) = iter.next().unwrap().unwrap();
+        let Deframed { message, bounds } = iter.next().unwrap().unwrap();
         assert_eq!(message.typ, ContentType::ApplicationData);
         assert_eq!(bounds.end, 12);
         assert!(iter.next().is_none());
@@ -215,7 +220,7 @@ mod tests {
 
         let mut end = 0;
         for result in iter.by_ref() {
-            let (message, bounds) = result.unwrap();
+            let Deframed { message, bounds } = result.unwrap();
             assert_eq!(ContentType::Handshake, message.typ);
             count += 1;
             end = bounds.end;
