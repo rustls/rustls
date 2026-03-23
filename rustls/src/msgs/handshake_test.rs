@@ -1289,3 +1289,16 @@ fn raw_extension_iter_malformed() {
     let results: Vec<_> = raw.iter_extensions().collect();
     assert!(results.iter().any(|r| r.is_err()));
 }
+
+#[test]
+fn ech_inner_rejects_trailing_data() {
+    // ECH inner type (0x01) followed by unexpected trailing byte.
+    let mut buf = Vec::new();
+    EncryptedClientHello::Inner.encode(&mut buf);
+    buf.push(0x00); // trailing data
+    let mut reader = Reader::new(&buf);
+    assert!(matches!(
+        EncryptedClientHello::read(&mut reader),
+        Err(InvalidMessage::TrailingData("EncryptedClientHello"))
+    ));
+}

@@ -429,7 +429,10 @@ impl Codec<'_> for EncryptedClientHello {
             EchClientHelloType::ClientHelloOuter => {
                 Ok(Self::Outer(EncryptedClientHelloOuter::read(r)?))
             }
-            EchClientHelloType::ClientHelloInner => Ok(Self::Inner),
+            EchClientHelloType::ClientHelloInner => match r.any_left() {
+                true => Err(InvalidMessage::TrailingData("EncryptedClientHello")),
+                false => Ok(Self::Inner),
+            },
             _ => Err(InvalidMessage::InvalidContentType),
         }
     }
