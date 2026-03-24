@@ -1010,12 +1010,16 @@ pub enum PeerMisbehaved {
     IncorrectBinder,
     IncorrectFinished,
     InvalidCertCompression,
+    InvalidEchClientHelloInner,
+    InvalidEchOuterExtension,
+    InvalidEchPadding,
     InvalidKeyShare,
     InvalidMaxEarlyDataSize,
     KeyEpochWithPendingFragment,
     KeyUpdateReceivedInQuicConnection,
     MessageInterleavedWithHandshakeMessage,
     MissingBinderInPskExtension,
+    MissingEchExtension,
     MissingKeyShare,
     MissingPskModesExtension,
     MissingQuicTransportParameters,
@@ -1085,7 +1089,8 @@ impl From<PeerMisbehaved> for AlertDescription {
             PeerMisbehaved::InvalidCertCompression
             | PeerMisbehaved::SelectedUnofferedCertCompression => Self::BadCertificate,
 
-            PeerMisbehaved::MissingKeyShare
+            PeerMisbehaved::MissingEchExtension
+            | PeerMisbehaved::MissingKeyShare
             | PeerMisbehaved::MissingPskModesExtension
             | PeerMisbehaved::MissingQuicTransportParameters => Self::MissingExtension,
 
