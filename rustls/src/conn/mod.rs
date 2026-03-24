@@ -22,7 +22,7 @@ use crate::vecbuf::ChunkVecBuffer;
 pub mod kernel;
 
 mod receive;
-use receive::{FinishOnAppData, JoinOutput};
+use receive::{FinishHandshake, FinishOnAppData, JoinOutput};
 pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
 
 mod send;
@@ -771,6 +771,25 @@ impl<Side: SideData> ConnectionCore<Side> {
             .process_new_packets::<Side, FinishOnAppData>(buffer, &mut self.state, &mut output)
     }
 
+    #[expect(dead_code)]
+    #[inline]
+    pub(crate) fn process_handshake<'a>(
+        &'a mut self,
+        buffer: &mut dyn TlsInputBuffer,
+        quic: Option<&'a mut dyn QuicOutput>,
+    ) -> Result<Option<UnborrowedPayload>, Error> {
+        let mut output = JoinOutput {
+            outputs: &mut self.common.outputs,
+            quic,
+            send: &mut self.common.send,
+            side: &mut self.side,
+        };
+
+        self.common
+            .recv
+            .process_new_packets::<Side, FinishHandshake>(buffer, &mut self.state, &mut output)
+    }
+
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         Ok(self
             .dangerous_into_kernel_connection()?
@@ -906,6 +925,7 @@ use private::SideOutput;
 pub(crate) trait StateMachine: Sized {
     fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error>;
     fn wants_input(&self) -> bool;
+    fn traffic(&self) -> bool;
     fn handle_decrypt_error(&mut self);
     fn into_external_state(
         self,

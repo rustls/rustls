@@ -74,6 +74,14 @@ impl crate::conn::StateMachine for ServerState {
         !matches!(self, Self::ChooseConfig(_))
     }
 
+    fn traffic(&self) -> bool {
+        matches!(
+            self,
+            Self::Tls12(tls12::Tls12State::Traffic(..))
+                | Self::Tls13(tls13::Tls13State::Traffic(..) | tls13::Tls13State::QuicTraffic(..))
+        )
+    }
+
     fn handle_decrypt_error(&mut self) {}
 
     fn into_external_state(
