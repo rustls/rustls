@@ -427,6 +427,14 @@ impl FinishCondition for FinishOnAppData {
     }
 }
 
+pub(super) struct FinishHandshake;
+
+impl FinishCondition for FinishHandshake {
+    fn is_done<S: StateMachine>(state: &S) -> bool {
+        state.traffic()
+    }
+}
+
 struct CaptureAppData<'a, 'j, 'm> {
     recv: &'a mut ReceivePath,
     other: &'a mut JoinOutput<'j>,
