@@ -992,6 +992,8 @@ pub enum PeerMisbehaved {
     EarlyDataAttemptedInSecondClientHello,
     EarlyDataExtensionWithoutResumption,
     EarlyDataOfferedWithVariedCipherSuite,
+    EchHrrDecryptionFailed,
+    EchHrrMismatch,
     HandshakeHashVariedAfterRetry,
     /// Received an alert with an undefined level and the given [`AlertDescription`]
     IllegalAlertLevel(u8, AlertDescription),
@@ -1082,9 +1084,9 @@ impl From<PeerMisbehaved> for AlertDescription {
 
             PeerMisbehaved::IllegalWarningAlert(_) => Self::DecodeError,
 
-            PeerMisbehaved::IncorrectBinder | PeerMisbehaved::IncorrectFinished => {
-                Self::DecryptError
-            }
+            PeerMisbehaved::EchHrrDecryptionFailed
+            | PeerMisbehaved::IncorrectBinder
+            | PeerMisbehaved::IncorrectFinished => Self::DecryptError,
 
             PeerMisbehaved::InvalidCertCompression
             | PeerMisbehaved::SelectedUnofferedCertCompression => Self::BadCertificate,
