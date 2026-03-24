@@ -9,6 +9,7 @@ use crate::crypto::hpke::{
 };
 use crate::enums::HandshakeType;
 use crate::error::{Error, PeerMisbehaved};
+use crate::hash_hs::HandshakeHash;
 use crate::log::debug;
 use crate::msgs::{
     ClientHelloPayload, Codec, EchConfigPayload, EncryptedClientHello, EncryptedClientHelloOuter,
@@ -16,6 +17,7 @@ use crate::msgs::{
     RawClientHello, Reader,
 };
 use crate::sync::Arc;
+use crate::tls13::Tls13CipherSuite;
 
 // --- Public API ---
 
@@ -201,6 +203,333 @@ impl Debug for EchServerKey {
     }
 }
 
+/// Information from ECH termination on this server.
+///
+/// Returned by [`ServerConnection::ech_accepted`] when this server
+/// successfully decrypted an ECH offer (shared mode). Contains the
+/// `config_id` that matched and the outer (public-facing) server name.
+///
+/// [`ServerConnection::ech_accepted`]: crate::ServerConnection::ech_accepted
+#[non_exhaustive]
+#[derive(Clone, Debug)]
+pub struct EchFrontendInfo {
+    pub(crate) config_id: u8,
+    pub(crate) outer_server_name: Option<pki_types::DnsName<'static>>,
+}
+
+impl EchFrontendInfo {
+    /// The ECH config_id that the client used.
+    pub fn config_id(&self) -> u8 {
+        self.config_id
+    }
+
+    /// The outer (public-facing) server name from the ClientHelloOuter.
+    ///
+    /// This is the `public_name` that was visible on the wire before ECH
+    /// decryption. Returns `None` if the outer ClientHello had no SNI.
+    pub fn outer_server_name(&self) -> Option<&pki_types::DnsName<'_>> {
+        self.outer_server_name.as_ref()
+    }
+}
+
+// --- Handshake state ---
+
+/// Server-side ECH state carried across the handshake.
+///
+/// Groups the frontend (HPKE decryption context) and backend (accepted ECH
+/// state for confirmation signals).
+pub(crate) struct EchServerState {
+    /// Resolved keys for this connection.
+    keys: EchKeys,
+    /// Whether an ECH outer extension was present in the ClientHello.
+    offered: bool,
+    /// HPKE decryption context, present only when ECH decryption succeeded.
+    frontend: Option<Box<EchFrontend>>,
+    /// Accepted ECH state, present only when ECH was accepted.
+    backend: Option<EchBackend>,
+    /// Retry configs to send in EncryptedExtensions when ECH was offered
+    /// but rejected. `None` means ECH was not offered or was accepted.
+    retry_configs: Option<Vec<EchConfigPayload>>,
+}
+
+impl EchServerState {
+    /// Initial state with resolved keys.
+    pub(crate) fn new(keys: EchKeys) -> Self {
+        Self {
+            keys,
+            offered: false,
+            frontend: None,
+            backend: None,
+            retry_configs: None,
+        }
+    }
+
+    /// Whether ECH was accepted (backend state exists).
+    pub(crate) fn is_accepted(&self) -> bool {
+        self.backend.is_some()
+    }
+
+    /// Whether an ECH outer extension was present in the ClientHello.
+    ///
+    /// True for both accepted and rejected ECH (including GREASE).
+    /// Used to decide whether to include an ECH extension in HRR.
+    pub(crate) fn ech_offered(&self) -> bool {
+        self.offered
+    }
+
+    /// Retry configs to include in EncryptedExtensions, if any.
+    ///
+    /// Returns `Some` when ECH was offered but rejected, `None` otherwise.
+    pub(crate) fn retry_configs(&self) -> Option<&[EchConfigPayload]> {
+        self.retry_configs.as_deref()
+    }
+
+    /// Frontend info for the connection, if ECH was accepted.
+    pub(crate) fn frontend_info(&self) -> Option<EchFrontendInfo> {
+        self.frontend
+            .as_ref()
+            .map(|f| EchFrontendInfo {
+                config_id: f.config_id,
+                outer_server_name: f.outer_server_name.clone(),
+            })
+    }
+
+    /// Access the backend state for confirmation signals.
+    pub(crate) fn backend(&self) -> Option<&EchBackend> {
+        self.backend.as_ref()
+    }
+
+    /// Rewind from accepted ECH to rejected.
+    ///
+    /// Called when the cert resolver cannot serve the inner SNI. Drops
+    /// the frontend and backend so the handshake restarts on the outer
+    /// ClientHello.
+    pub(crate) fn rewind(&mut self) {
+        self.frontend = None;
+        self.backend = None;
+    }
+
+    /// Resolve ECH for a ClientHello.
+    ///
+    /// On the initial ClientHello (`done_retry == false`), attempts HPKE
+    /// decryption. On a retried ClientHello after HRR (`done_retry == true`),
+    /// reuses the HPKE context from the first attempt.
+    ///
+    /// Returns the decrypted inner ClientHello if ECH was accepted,
+    /// or `None` to proceed with the outer ClientHello.
+    pub(crate) fn resolve<'m>(
+        &mut self,
+        input: &'m Input<'m>,
+        done_retry: bool,
+    ) -> Result<Option<Input<'m>>, Error> {
+        if done_retry {
+            return self.resolve_retry(input);
+        }
+
+        let outer_hello = require_handshake_msg!(
+            input.message,
+            HandshakeType::ClientHello,
+            HandshakePayload::ClientHello
+        )?;
+
+        match &outer_hello.encrypted_client_hello {
+            // RFC 9849 section 7: a shared-mode server receiving Inner directly
+            // from the network MUST abort with illegal_parameter.
+            Some(EncryptedClientHello::Inner) => {
+                Err(PeerMisbehaved::InvalidEchClientHelloInner.into())
+            }
+            Some(EncryptedClientHello::Outer(_)) => {
+                self.offered = true;
+
+                if self.keys.index().is_empty() {
+                    return Ok(None);
+                }
+
+                let outer = OuterClientHello::from_input(input)?;
+                match EchFrontend::decrypt(&outer, self.keys.index())? {
+                    Some((frontend, decrypted)) => {
+                        let (inner_input, inner_random) = decrypted.into_input(input);
+                        self.frontend = Some(Box::new(frontend));
+                        self.backend = Some(EchBackend { inner_random });
+                        Ok(Some(inner_input))
+                    }
+                    None => {
+                        self.retry_configs = Some(
+                            self.keys
+                                .index()
+                                .retry_configs()
+                                .to_vec(),
+                        );
+                        Ok(None)
+                    }
+                }
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Resolve ECH for a retried ClientHello (after HelloRetryRequest).
+    fn resolve_retry<'m>(&mut self, input: &'m Input<'m>) -> Result<Option<Input<'m>>, Error> {
+        let Some(backend) = &mut self.backend else {
+            return Ok(None);
+        };
+
+        let Some(frontend) = &mut self.frontend else {
+            return Ok(None);
+        };
+
+        let outer = OuterClientHello::from_input(input)?;
+        let decrypted = frontend.decrypt_hrr(&outer)?;
+        let (inner_input, inner_random) = decrypted.into_input(input);
+        backend.inner_random = inner_random;
+        Ok(Some(inner_input))
+    }
+}
+
+/// HPKE decryption context for ECH.
+///
+/// Created on successful ECH decryption, kept alive for HRR (the HPKE
+/// context is reused for the second ClientHello), dropped after ClientHello
+/// processing completes.
+struct EchFrontend {
+    opener: Box<dyn HpkeOpener>,
+    config_id: u8,
+    cipher_suite: HpkeSymmetricCipherSuite,
+    outer_server_name: Option<pki_types::DnsName<'static>>,
+}
+
+impl EchFrontend {
+    /// Attempt ECH decryption on the first ClientHello.
+    ///
+    /// Returns `Ok(Some((frontend, decrypted)))` on success, `Ok(None)` if
+    /// decryption fails (config mismatch, wrong key), or `Err` if the
+    /// decrypted inner hello is malformed (fatal).
+    ///
+    /// See <https://datatracker.ietf.org/doc/html/rfc9849#section-7.1>.
+    fn decrypt(
+        outer: &OuterClientHello<'_>,
+        index: &EchKeyIndex,
+    ) -> Result<Option<(Self, DecryptedEch)>, Error> {
+        match outer.decrypt_ech(index) {
+            EchDecryptResult::Accepted(decrypted, opener) => {
+                let Some(EncryptedClientHello::Outer(ech_ext)) =
+                    &outer.hello.encrypted_client_hello
+                else {
+                    unreachable!("Accepted requires Outer ECH extension")
+                };
+                let outer_server_name = outer
+                    .hello
+                    .server_name
+                    .as_ref()
+                    .and_then(crate::msgs::ServerNamePayload::to_dns_name_normalized);
+                Ok(Some((
+                    Self {
+                        opener,
+                        config_id: ech_ext.config_id,
+                        cipher_suite: ech_ext.cipher_suite,
+                        outer_server_name,
+                    },
+                    decrypted,
+                )))
+            }
+            EchDecryptResult::Rejected | EchDecryptResult::NotOffered => Ok(None),
+            EchDecryptResult::Fatal(e) => Err(e),
+        }
+    }
+
+    /// Decrypt the second ClientHello after a HelloRetryRequest.
+    ///
+    /// The second ClientHello reuses the HPKE context from the first. A
+    /// decryption failure here IS fatal (unlike the first ClientHello).
+    ///
+    /// See <https://datatracker.ietf.org/doc/html/rfc9849#section-7.1.1>.
+    fn decrypt_hrr(&mut self, outer: &OuterClientHello<'_>) -> Result<DecryptedEch, Error> {
+        let ech_ext = match &outer.hello.encrypted_client_hello {
+            Some(EncryptedClientHello::Outer(ext)) => ext,
+            None => return Err(PeerMisbehaved::MissingEchExtension.into()),
+            _ => return Err(PeerMisbehaved::InvalidEchClientHelloInner.into()),
+        };
+
+        // The second ClientHello's ECH must have empty enc (RFC 9849 section 7.1.1).
+        // <https://datatracker.ietf.org/doc/html/rfc9849#section-7.1.1>
+        if !ech_ext.enc.bytes().is_empty() {
+            return Err(PeerMisbehaved::InvalidEchClientHelloInner.into());
+        }
+
+        // Verify config_id and cipher suite match the first ClientHello.
+        if ech_ext.config_id != self.config_id || ech_ext.cipher_suite != self.cipher_suite {
+            return Err(PeerMisbehaved::EchHrrMismatch.into());
+        }
+
+        let aad = outer.compute_aad(ech_ext)?;
+        let encoded_inner = self
+            .opener
+            .open(&aad, ech_ext.payload.bytes())
+            .map_err(|_| Error::PeerMisbehaved(PeerMisbehaved::EchHrrDecryptionFailed))?;
+
+        outer.decode_inner_hello(encoded_inner)
+    }
+}
+
+/// Accepted ECH state for the rest of the handshake.
+///
+/// Only exists when ECH was accepted (via decryption).
+/// Carries the inner_random needed for confirmation signals.
+pub(crate) struct EchBackend {
+    inner_random: Random,
+}
+
+/// Byte range of the ECH confirmation signal within a handshake-encoded ServerHello.
+///
+/// HandshakeType (1) + length (3) + legacy_version (2) + random[..24] (24) = 30,
+/// then the last 8 bytes of random: 30..38.
+pub(super) const ECH_CONFIRMATION_SPAN: core::ops::Range<usize> = 30..38;
+
+impl EchBackend {
+    /// Compute the ServerHello confirmation signal.
+    ///
+    /// `sh` must have been built with zeros in random[24..32]. The
+    /// confirmation is derived from the transcript including `sh`.
+    ///
+    /// See <https://datatracker.ietf.org/doc/html/rfc9849#section-7.2>.
+    pub(crate) fn server_hello_confirmation(
+        &self,
+        suite: &'static Tls13CipherSuite,
+        transcript: &HandshakeHash,
+        sh: &Message<'_>,
+    ) -> [u8; 8] {
+        let mut conf_transcript = transcript.clone();
+        conf_transcript.add_message(sh);
+        crate::tls13::key_schedule::server_ech_confirmation_secret(
+            suite.hkdf_provider,
+            &self.inner_random.0,
+            conf_transcript.current_hash(),
+        )
+    }
+
+    /// Compute the HRR confirmation signal.
+    ///
+    /// `hrr` must have been built with 8 zero bytes in the
+    /// `encrypted_client_hello` extension. The confirmation is derived
+    /// from the transcript including the HRR.
+    ///
+    /// See <https://datatracker.ietf.org/doc/html/rfc9849#section-7.2.1>.
+    pub(crate) fn hrr_confirmation(
+        &self,
+        suite: &'static Tls13CipherSuite,
+        transcript: &HandshakeHash,
+        hrr: &Message<'_>,
+    ) -> [u8; 8] {
+        let mut conf_transcript = transcript.clone();
+        conf_transcript.rollup_for_hrr();
+        conf_transcript.add_message(hrr);
+        crate::tls13::key_schedule::server_ech_hrr_confirmation_secret(
+            suite.hkdf_provider,
+            &self.inner_random.0,
+            conf_transcript.current_hash(),
+        )
+    }
+}
 // --- Decryption internals ---
 
 /// A parsed outer ClientHello bundled with its raw wire encoding.
