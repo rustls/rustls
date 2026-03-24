@@ -559,7 +559,7 @@ impl Options {
             shut_down_after_handshake: false,
             check_close_notify: false,
             require_any_client_cert: false,
-            server_preference: false,
+            server_preference: true,
             root_hint_subjects: vec![],
             offer_no_client_cas: false,
             trusted_cert_file: "".to_string(),
@@ -973,6 +973,7 @@ impl Options {
                 self.enable_ech_grease = true;
             }
             "-server-preference" => {
+                // Note: this setting is currently ignored.
                 self.server_preference = true;
             }
             "-fail-ocsp-callback" => {
@@ -1647,7 +1648,6 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
     cfg.max_fragment_size = opts.max_fragment;
     cfg.send_tls13_tickets = 1;
     cfg.require_ems = opts.require_ems;
-    cfg.ignore_client_order = opts.server_preference;
     if opts.export_traffic_secrets {
         cfg.key_log = key_log.clone();
     }
