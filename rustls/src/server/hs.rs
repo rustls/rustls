@@ -6,7 +6,9 @@ use core::fmt;
 
 use pki_types::DnsName;
 
-use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13};
+use super::{
+    CipherSuiteSelector, ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13,
+};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Output, OutputEvent, Protocol};
 use crate::conn::{ConnectionRandoms, Input};
@@ -503,7 +505,7 @@ impl ExpectClientHello {
         }
     }
 
-    fn with_version<T: Suite + 'static>(
+    fn with_version<T: Suite + CipherSuiteSelectorDispatcher<T> + 'static>(
         mut self,
         input: ClientHelloInput<'_>,
         output: &mut dyn Output<'_>,
@@ -589,13 +591,16 @@ impl ExpectClientHello {
             .handle_client_hello(suite, skxg, credentials, input, self, output)
     }
 
-    fn choose_suite_and_kx_group<T: Suite + 'static>(
+    fn choose_suite_and_kx_group<T: Suite + CipherSuiteSelectorDispatcher<T> + 'static>(
         &self,
         suites: &[&'static T],
         sig_scheme: SignatureScheme,
         client_groups: &[NamedGroup],
         client_suites: &[CipherSuite],
-    ) -> Result<(&'static T, &'static dyn SupportedKxGroup), PeerIncompatible> {
+    ) -> Result<(&'static T, &'static dyn SupportedKxGroup), PeerIncompatible>
+    where
+        SupportedCipherSuite: From<&'static T>,
+    {
         // Determine which `KeyExchangeAlgorithm`s are theoretically possible, based
         // on the offered and supported groups.
         let mut ecdhe_possible = false;
@@ -652,14 +657,7 @@ impl ExpectClientHello {
 
         let suite = client_suites
             .iter()
-            .find_map(|suite| {
-                let Some(&suite) = suites
-                    .iter()
-                    .find(|&&s| s.suite() == *suite)
-                else {
-                    return None;
-                };
-
+            .filter_map(|suite| {
                 // Reduce our supported ciphersuites by the certified key's algorithm.
                 (suite.usable_for_signature_scheme(sig_scheme)
                 // And support for one of the key exchange groups
@@ -668,6 +666,10 @@ impl ExpectClientHello {
                 .then_some(suite)
             })
             .ok_or(PeerIncompatible::NoCipherSuitesInCommon)?;
+
+        let suite =
+            T::select_cipher_suite(self.config.cipher_suite_selector, client_suites, suites)
+                .ok_or(PeerIncompatible::NoCipherSuitesInCommon)?;
 
         // Finally, choose a key exchange group that is compatible with the selected cipher
         // suite.
@@ -800,5 +802,34 @@ impl HandshakeHashOrBuffer {
             Self::Hash(inner) if inner.algorithm() == hash.algorithm() => Ok(inner),
             _ => Err(PeerMisbehaved::HandshakeHashVariedAfterRetry.into()),
         }
+    }
+}
+
+/// Wrapper that calls the appropriate method of a CipherSuiteSelector based on the type T.
+trait CipherSuiteSelectorDispatcher<T> {
+    fn select_cipher_suite(
+        selector: &dyn CipherSuiteSelector,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static T],
+    ) -> Option<&'static T>;
+}
+
+impl CipherSuiteSelectorDispatcher<Self> for Tls12CipherSuite {
+    fn select_cipher_suite(
+        selector: &dyn CipherSuiteSelector,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Self],
+    ) -> Option<&'static Self> {
+        selector.select_tls12_cipher_suite(client_suites, server_suites)
+    }
+}
+
+impl CipherSuiteSelectorDispatcher<Self> for Tls13CipherSuite {
+    fn select_cipher_suite(
+        selector: &dyn CipherSuiteSelector,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Self],
+    ) -> Option<&'static Self> {
+        selector.select_tls13_cipher_suite(client_suites, server_suites)
     }
 }

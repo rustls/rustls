@@ -21,10 +21,11 @@ use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::ServerNamePayload;
+use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
 use crate::verify::{ClientVerifier, DistinguishedName, NoClientAuth};
-use crate::{KeyLog, NoKeyLog, compress};
+use crate::{KeyLog, NoKeyLog, Tls12CipherSuite, Tls13CipherSuite, compress};
 
 /// Common configuration for a set of server sessions.
 ///
@@ -81,6 +82,9 @@ use crate::{KeyLog, NoKeyLog, compress};
 pub struct ServerConfig {
     /// Source of randomness and other crypto.
     pub(crate) provider: Arc<CryptoProvider>,
+
+    /// How to select a cipher suite to use for a TLS session.
+    pub cipher_suite_selector: &'static dyn CipherSuiteSelector,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
@@ -669,6 +673,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         let require_ems = !matches!(self.provider.fips(), FipsStatus::Unvalidated);
         Ok(ServerConfig {
             provider: self.provider,
+            cipher_suite_selector: &DEFAULT_CIPHER_SUITE_SELECTOR,
             max_fragment_size: None,
             session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: None,
@@ -688,4 +693,58 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             invalid_sni_policy: InvalidSniPolicy::default(),
         })
     }
+}
+
+/// A simple implementation of CipherSuiteSelector that prioritizes server preferences.
+#[derive(Debug)]
+struct DefaultCipherSuiteSelector;
+
+impl CipherSuiteSelector for DefaultCipherSuiteSelector {
+    fn select_tls12_cipher_suite(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Tls12CipherSuite],
+    ) -> Option<&'static Tls12CipherSuite> {
+        self.select_cipher_suite(client_suites, server_suites)
+    }
+
+    fn select_tls13_cipher_suite(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Tls13CipherSuite],
+    ) -> Option<&'static Tls13CipherSuite> {
+        self.select_cipher_suite(client_suites, server_suites)
+    }
+}
+
+impl DefaultCipherSuiteSelector {
+    fn select_cipher_suite<T: Suite>(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static T],
+    ) -> Option<&'static T> {
+        server_suites
+            .iter()
+            .find(|server_suite| client_suites.contains(&server_suite.suite()))
+            .copied()
+    }
+}
+
+static DEFAULT_CIPHER_SUITE_SELECTOR: DefaultCipherSuiteSelector = DefaultCipherSuiteSelector;
+
+/// A filter that chooses the cipher suite to use for a TLS session.
+pub trait CipherSuiteSelector: Debug + Send + Sync {
+    /// Choose a cipher suite, given the server's and client's order lists of supported options.
+    fn select_tls12_cipher_suite(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Tls12CipherSuite],
+    ) -> Option<&'static Tls12CipherSuite>;
+
+    /// Choose a cipher suite, given the server's and client's order lists of supported options.
+    fn select_tls13_cipher_suite(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Tls13CipherSuite],
+    ) -> Option<&'static Tls13CipherSuite>;
 }
