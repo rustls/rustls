@@ -156,6 +156,41 @@ fn test_server_preference_cipher_suite_selection() {
     );
 }
 
+#[test]
+fn test_server_preference_cipher_suite_selection_with_chacha20_override() {
+    // Configure a server to use the default CipherSuiteSelector.
+    // Include a ChaCha20-based cipher suite as one of the supported
+    // server-side suites, but not the first preference.
+    let mut provider = ffdhe_provider(TEST_PROVIDER);
+    static SERVER_CIPHERS_TLS13: &[&Tls13CipherSuite] = &[];
+    static SERVER_CIPHERS_TLS12: &[&Tls12CipherSuite] = &[
+        &TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+        &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+        &TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    ];
+    provider.tls13_cipher_suites = Cow::Borrowed(SERVER_CIPHERS_TLS13);
+    provider.tls12_cipher_suites = Cow::Borrowed(SERVER_CIPHERS_TLS12);
+    let config = ServerConfig::builder(provider.into())
+        .with_no_client_auth()
+        .with_single_cert(server_identity(), server_key())
+        .unwrap();
+
+    // In the ClientHello, list a ChaCha20-based cipher suite as the first
+    // preference. The server should choose this suite.
+    let mut ch = minimal_client_hello();
+    ch.cipher_suites.clear();
+    ch.cipher_suites.extend([
+        CipherSuite::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+        CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+    ]);
+    let selected_suite = select_cipher_suite(ServerConnection::new(config.into()).unwrap(), ch);
+    assert_eq!(
+        selected_suite.unwrap(),
+        CipherSuite::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+    );
+}
+
 // Process the `ClientHelloPayload` and return the `CipherSuite` from the resulting ServerHello.
 fn select_cipher_suite(
     mut conn: ServerConnection,
@@ -477,6 +512,19 @@ static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite 
 static TLS_DHE_RSA_WITH_AES_256_GCM_SHA384: Tls12CipherSuite = Tls12CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+        hash_provider: FAKE_HASH,
+        confidentiality_limit: 0,
+    },
+    kx: KeyExchangeAlgorithm::DHE,
+    protocol_version: TLS12_VERSION,
+    prf_provider: &tls12::PrfUsingHmac(FAKE_HMAC),
+    sign: &[SignatureScheme::ECDSA_NISTP256_SHA256],
+    aead_alg: &FakeAead,
+};
+
+static TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256: Tls12CipherSuite = Tls12CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         hash_provider: FAKE_HASH,
         confidentiality_limit: 0,
     },

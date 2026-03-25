@@ -695,7 +695,11 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     }
 }
 
-/// A simple implementation of CipherSuiteSelector that prioritizes server preferences.
+/// A simple implementation of CipherSuiteSelector that balances client and server preferences.
+///
+/// If the server is configured to ignore the client's cipher suite ordering, but the first
+/// cipher suite in the client's preferred list uses ChaCha20, the server prioritizes ChaCha20
+/// cipher suites.
 #[derive(Debug)]
 struct DefaultCipherSuiteSelector;
 
@@ -723,6 +727,24 @@ impl DefaultCipherSuiteSelector {
         client_suites: &[CipherSuite],
         server_suites: &[&'static T],
     ) -> Option<&'static T> {
+        // Check whether the first cipher suite in the client's ordered list uses ChaCha20.
+        if client_suites
+            .first()
+            .is_some_and(|suite| suite.is_chacha20())
+        {
+            // First, look for a match among (only) the ChaCha20 ciphers supported by the server.
+            if let Some(suite) = server_suites
+                .iter()
+                .filter(|server_suite| server_suite.suite().is_chacha20())
+                .find(|server_suite| client_suites.contains(&server_suite.suite()))
+                .copied()
+            {
+                return Some(suite);
+            }
+        }
+
+        // Find the first cipher suite in the server's ordered list that
+        // also is in the client's list.
         server_suites
             .iter()
             .find(|server_suite| client_suites.contains(&server_suite.suite()))
