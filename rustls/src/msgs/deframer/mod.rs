@@ -85,6 +85,31 @@ impl Deframer {
         }))
     }
 
+    /// Accepts a QUIC frame into the deframer.
+    ///
+    /// QUIC omits the outer frames and only uses TLS for handshake messages. Therefore,
+    /// this exposes a simpler API for accepting handshake messages directly.
+    ///
+    /// `buf` is the containing buffer, and `bounds` is the range of the received frame
+    /// within that buffer.
+    pub(crate) fn input_quic(
+        &mut self,
+        buf: &mut [u8],
+        bounds: Range<usize>,
+    ) -> Result<(), InvalidMessage> {
+        self.processed += bounds.len();
+        self.input_message(
+            EncodedMessage {
+                typ: ContentType::Handshake,
+                version: ProtocolVersion::TLSv1_3,
+                payload: &buf[bounds.start..bounds.end],
+            },
+            bounds,
+        );
+        self.coalesce(buf)?;
+        Ok(())
+    }
+
     /// Accepts a message into the deframer.
     ///
     /// `containing_buffer` allows mapping the message payload to its position
@@ -285,11 +310,6 @@ impl Deframer {
     #[inline]
     pub(crate) fn discard_processed(&mut self) {
         self.discard = self.processed;
-    }
-
-    #[inline]
-    pub(crate) fn add_processed(&mut self, processed: usize) {
-        self.processed += processed;
     }
 
     /// We are "aligned" if there is no partial fragments of a handshake message.
