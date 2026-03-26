@@ -197,6 +197,19 @@ impl ConnectionOutput for ConnectionOutputs {
     }
 }
 
+impl fmt::Debug for ConnectionOutputs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConnectionOutputs")
+            .field("negotiated_version", &self.negotiated_version)
+            .field("handshake_kind", &self.handshake_kind)
+            .field("suite", &self.suite)
+            .field("negotiated_kx_group", &self.negotiated_kx_group)
+            .field("alpn_protocol", &self.alpn_protocol)
+            .field("peer_identity", &self.peer_identity)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Send an alert via `output` if `error` specifies one.
 pub(crate) fn maybe_send_fatal_alert(send: &mut dyn SendOutput, error: &Error) {
     let Ok(alert) = AlertDescription::try_from(error) else {
