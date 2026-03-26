@@ -106,10 +106,6 @@ impl VecInput {
         self.used += len;
         Range { start, end }
     }
-
-    pub(crate) fn filled(&self) -> &[u8] {
-        &self.buf[..self.used]
-    }
 }
 
 impl TlsInputBuffer for VecInput {
