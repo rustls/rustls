@@ -98,11 +98,7 @@ impl Deframer {
         bounds: Range<usize>,
     ) -> Result<(), InvalidMessage> {
         self.processed += bounds.len();
-        self.input_message(
-            ProtocolVersion::TLSv1_3,
-            &buf[bounds.start..bounds.end],
-            bounds,
-        );
+        self.input_message(ProtocolVersion::TLSv1_3, bounds, buf);
         self.coalesce(buf)?;
         Ok(())
     }
@@ -122,8 +118,8 @@ impl Deframer {
     pub(crate) fn input_message(
         &mut self,
         version: ProtocolVersion,
-        payload: &[u8],
         bounds: Range<usize>,
+        buf: &[u8],
     ) {
         // if our last span is incomplete, we can blindly add this as a new span --
         // no need to attempt parsing it with `DissectHandshakeIter`.
@@ -150,7 +146,7 @@ impl Deframer {
         // a new message (and perhaps several of them.)
         let iter = DissectHandshakeIter {
             version,
-            payload,
+            payload: &buf[bounds.start..bounds.end],
             bounds,
         };
 
@@ -466,11 +462,7 @@ mod tests {
 
     fn add_bytes(deframer: &mut Deframer, range: Range<usize>, within: &[u8]) {
         deframer.processed = range.end;
-        deframer.input_message(
-            ProtocolVersion::TLSv1_3,
-            &within[range.start..range.end],
-            range,
-        );
+        deframer.input_message(ProtocolVersion::TLSv1_3, range, within);
     }
 
     #[test]
@@ -570,8 +562,8 @@ mod tests {
 
             deframer.input_message(
                 plain.version,
-                plain.payload,
                 bounds.start + HEADER_SIZE..bounds.end,
+                &input,
             );
         }
 
