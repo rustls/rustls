@@ -99,11 +99,8 @@ impl Deframer {
     ) -> Result<(), InvalidMessage> {
         self.processed += bounds.len();
         self.input_message(
-            EncodedMessage {
-                typ: ContentType::Handshake,
-                version: ProtocolVersion::TLSv1_3,
-                payload: &buf[bounds.start..bounds.end],
-            },
+            ProtocolVersion::TLSv1_3,
+            &buf[bounds.start..bounds.end],
             bounds,
         );
         self.coalesce(buf)?;
@@ -122,9 +119,12 @@ impl Deframer {
     /// `CryptoProvider` interface).  `coalesce()` arranges for that to happen, but
     /// to do so it needs to move the fragments together in the original buffer.
     /// This would not be possible if the messages were borrowing from that buffer.
-    pub(crate) fn input_message(&mut self, msg: EncodedMessage<&'_ [u8]>, bounds: Range<usize>) {
-        debug_assert_eq!(msg.typ, ContentType::Handshake);
-
+    pub(crate) fn input_message(
+        &mut self,
+        version: ProtocolVersion,
+        payload: &[u8],
+        bounds: Range<usize>,
+    ) {
         // if our last span is incomplete, we can blindly add this as a new span --
         // no need to attempt parsing it with `DissectHandshakeIter`.
         //
@@ -139,7 +139,7 @@ impl Deframer {
             .filter(|span| !span.is_complete())
         {
             self.spans.push_back(FragmentSpan {
-                version: msg.version,
+                version,
                 size: None,
                 bounds,
             });
@@ -149,8 +149,8 @@ impl Deframer {
         // otherwise, we can expect `msg` to contain a handshake header introducing
         // a new message (and perhaps several of them.)
         let iter = DissectHandshakeIter {
-            version: msg.version,
-            payload: msg.payload,
+            version,
+            payload,
             bounds,
         };
 
@@ -465,14 +465,12 @@ mod tests {
     }
 
     fn add_bytes(deframer: &mut Deframer, range: Range<usize>, within: &[u8]) {
-        let msg = EncodedMessage {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: &within[range.start..range.end],
-        };
-
         deframer.processed = range.end;
-        deframer.input_message(msg, range);
+        deframer.input_message(
+            ProtocolVersion::TLSv1_3,
+            &within[range.start..range.end],
+            range,
+        );
     }
 
     #[test]
@@ -570,7 +568,11 @@ mod tests {
             let plain = message.into_plain_message();
             std::println!("message {plain:?}");
 
-            deframer.input_message(plain, bounds.start + HEADER_SIZE..bounds.end);
+            deframer.input_message(
+                plain.version,
+                plain.payload,
+                bounds.start + HEADER_SIZE..bounds.end,
+            );
         }
 
         deframer
