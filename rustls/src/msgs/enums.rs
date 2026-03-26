@@ -281,6 +281,6 @@ pub(crate) mod tests {
     fn get16<T: for<'a> Codec<'a>>(enum_value: &T) -> u16 {
         let enc = enum_value.get_encoding();
         assert_eq!(enc.len(), 2);
-        (enc[0] as u16 >> 8) | (enc[1] as u16)
+        (enc[0] as u16 << 8) | (enc[1] as u16)
     }
 }
