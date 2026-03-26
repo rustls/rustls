@@ -221,6 +221,13 @@ pub(crate) mod tests {
         );
     }
 
+    #[test]
+    fn get16_decodes_big_endian_u16() {
+        // NextProtocolNegotiation = 0x3374; wire bytes are big-endian [0x33, 0x74].
+        // Shifting the high byte right (instead of left) decodes to 0x0074 instead.
+        assert_eq!(get16(&ExtensionType::NextProtocolNegotiation), 0x3374);
+    }
+
     pub(crate) fn test_enum8<T: for<'a> Codec<'a>>(first: T, last: T) {
         let first_v = get8(&first);
         let last_v = get8(&last);
