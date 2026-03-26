@@ -27,8 +27,8 @@ mod connection {
     use crate::client::{ClientConfig, ClientSide};
     use crate::common_state::{CommonState, Protocol};
     use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
-    use crate::crypto::cipher::{EncodedMessage, Payload};
-    use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
+    use crate::crypto::cipher::Payload;
+    use crate::enums::ApplicationProtocol;
     use crate::error::{ApiMisuse, Error};
     use crate::msgs::{
         ClientExtensionsInput, ServerExtensionsInput, TransportParameters, VecInput,
@@ -400,27 +400,13 @@ mod connection {
 
         fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
             let range = self.deframer_buffer.extend(plaintext);
-
-            let deframer = &mut self.core.common.recv.deframer;
-            deframer.add_processed(range.len());
-            deframer.input_message(
-                EncodedMessage {
-                    typ: ContentType::Handshake,
-                    version: ProtocolVersion::TLSv1_3,
-                    payload: &self.deframer_buffer.filled()[range.start..range.end],
-                },
-                range,
-            );
-
             self.core
                 .common
                 .recv
                 .deframer
-                .coalesce(self.deframer_buffer.filled_mut())?;
-
+                .input_quic(self.deframer_buffer.filled_mut(), range)?;
             self.core
                 .process_new_packets(&mut self.deframer_buffer, Some(&mut self.quic))?;
-
             Ok(())
         }
 
