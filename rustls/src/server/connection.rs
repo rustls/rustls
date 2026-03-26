@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
 use core::fmt::{Debug, Formatter};
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
 use std::io;
 
 use pki_types::{DnsName, FipsStatus};
@@ -197,12 +197,6 @@ impl Deref for ServerConnection {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
-    }
-}
-
-impl DerefMut for ServerConnection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
     }
 }
 

@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::ops::{Deref, DerefMut};
+use core::ops::Deref;
 use core::{fmt, mem};
 use std::io;
 
@@ -180,12 +180,6 @@ impl Deref for ClientConnection {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
-    }
-}
-
-impl DerefMut for ClientConnection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
     }
 }
 

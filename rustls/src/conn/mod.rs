@@ -31,7 +31,7 @@ pub(crate) use send::{SendOutput, SendPath};
 mod connection {
     use alloc::vec::Vec;
     use core::fmt::Debug;
-    use core::ops::{Deref, DerefMut};
+    use core::ops::Deref;
     use std::io::{self, BufRead, Read};
 
     use pki_types::FipsStatus;
@@ -44,7 +44,7 @@ mod connection {
     use crate::vecbuf::ChunkVecBuffer;
 
     /// A trait generalizing over buffered client or server connections.
-    pub trait Connection: Debug + Deref<Target = ConnectionOutputs> + DerefMut {
+    pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
         /// Read TLS content from `rd` into the internal buffer.
         ///
         /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like

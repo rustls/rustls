@@ -38,7 +38,7 @@ mod connection {
     use crate::sync::Arc;
 
     /// A QUIC client or server connection.
-    pub trait Connection: Debug + Deref<Target = ConnectionOutputs> + DerefMut {
+    pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
         /// Return the TLS-encoded transport parameters for the session's peer.
         ///
         /// While the transport parameters are technically available prior to the
@@ -202,12 +202,6 @@ mod connection {
         }
     }
 
-    impl DerefMut for ClientConnection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
-        }
-    }
-
     impl Debug for ClientConnection {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("quic::ClientConnection")
@@ -353,12 +347,6 @@ mod connection {
 
         fn deref(&self) -> &Self::Target {
             &self.inner
-        }
-    }
-
-    impl DerefMut for ServerConnection {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.inner
         }
     }
 
