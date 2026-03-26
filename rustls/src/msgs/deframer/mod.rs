@@ -148,7 +148,13 @@ impl Deframer {
 
         // otherwise, we can expect `msg` to contain a handshake header introducing
         // a new message (and perhaps several of them.)
-        for span in DissectHandshakeIter::new(msg, bounds) {
+        let iter = DissectHandshakeIter {
+            version: msg.version,
+            payload: msg.payload,
+            bounds,
+        };
+
+        for span in iter {
             self.spans.push_back(span);
         }
     }
@@ -251,8 +257,14 @@ impl Deframer {
                 payload: delocator.slice_from_range(&first.bounds),
             };
 
+            let iter = DissectHandshakeIter {
+                version: first.version,
+                payload: msg.payload,
+                bounds: first.bounds.start..first.bounds.end,
+            };
+
             let mut too_large = false;
-            for (i, span) in DissectHandshakeIter::new(msg, first.bounds).enumerate() {
+            for (i, span) in iter.enumerate() {
                 if span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE {
                     too_large = true;
                 }
@@ -347,16 +359,6 @@ struct DissectHandshakeIter<'b> {
     version: ProtocolVersion,
     payload: &'b [u8],
     bounds: Range<usize>,
-}
-
-impl<'b> DissectHandshakeIter<'b> {
-    fn new(msg: EncodedMessage<&'b [u8]>, bounds: Range<usize>) -> Self {
-        Self {
-            version: msg.version,
-            payload: msg.payload,
-            bounds,
-        }
-    }
 }
 
 impl Iterator for DissectHandshakeIter<'_> {
