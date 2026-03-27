@@ -21,10 +21,11 @@ use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::ServerNamePayload;
+use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
 use crate::verify::{ClientVerifier, DistinguishedName, NoClientAuth};
-use crate::{KeyLog, NoKeyLog, compress};
+use crate::{KeyLog, NoKeyLog, Tls12CipherSuite, Tls13CipherSuite, compress};
 
 /// Common configuration for a set of server sessions.
 ///
@@ -82,10 +83,8 @@ pub struct ServerConfig {
     /// Source of randomness and other crypto.
     pub(crate) provider: Arc<CryptoProvider>,
 
-    /// Ignore the client's ciphersuite order. Instead,
-    /// choose the top ciphersuite in the server list
-    /// which is supported by the client.
-    pub ignore_client_order: bool,
+    /// How to select a cipher suite to use for a TLS session.
+    pub cipher_suite_selector: &'static dyn CipherSuiteSelector,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
@@ -674,7 +673,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         let require_ems = !matches!(self.provider.fips(), FipsStatus::Unvalidated);
         Ok(ServerConfig {
             provider: self.provider,
-            ignore_client_order: false,
+            cipher_suite_selector: &PreferClientOrder,
             max_fragment_size: None,
             session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: None,
@@ -694,4 +693,135 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             invalid_sni_policy: InvalidSniPolicy::default(),
         })
     }
+}
+
+/// A [`CipherSuiteSelector`] implementation that prioritizes client order.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct PreferClientOrder;
+
+impl CipherSuiteSelector for PreferClientOrder {
+    fn select_tls12_cipher_suite(
+        &self,
+        client: &mut dyn Iterator<Item = &'static Tls12CipherSuite>,
+        server: &[&'static Tls12CipherSuite],
+    ) -> Option<&'static Tls12CipherSuite> {
+        self.select(client, server)
+    }
+
+    fn select_tls13_cipher_suite(
+        &self,
+        client: &mut dyn Iterator<Item = &'static Tls13CipherSuite>,
+        server: &[&'static Tls13CipherSuite],
+    ) -> Option<&'static Tls13CipherSuite> {
+        self.select(client, server)
+    }
+}
+
+impl PreferClientOrder {
+    fn select<T: Suite>(
+        &self,
+        client: &mut dyn Iterator<Item = &'static T>,
+        _server: &[&'static T],
+    ) -> Option<&'static T> {
+        client.next()
+    }
+}
+
+/// A [`CipherSuiteSelector`] implementation that prioritizes server order.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Debug)]
+pub struct PreferServerOrder;
+
+impl CipherSuiteSelector for PreferServerOrder {
+    fn select_tls12_cipher_suite(
+        &self,
+        client: &mut dyn Iterator<Item = &'static Tls12CipherSuite>,
+        server: &[&'static Tls12CipherSuite],
+    ) -> Option<&'static Tls12CipherSuite> {
+        client
+            .filter_map(|cs| {
+                server
+                    .iter()
+                    .position(|&ss| ss == cs)
+                    .map(|pos| (pos, cs))
+            })
+            .min_by_key(|&(pos, _)| pos)
+            .map(|(_, cs)| cs)
+    }
+
+    fn select_tls13_cipher_suite(
+        &self,
+        client: &mut dyn Iterator<Item = &'static Tls13CipherSuite>,
+        server: &[&'static Tls13CipherSuite],
+    ) -> Option<&'static Tls13CipherSuite> {
+        client
+            .filter_map(|cs| {
+                server
+                    .iter()
+                    .position(|&ss| ss == cs)
+                    .map(|pos| (pos, cs))
+            })
+            .min_by_key(|&(pos, _)| pos)
+            .map(|(_, cs)| cs)
+    }
+}
+
+impl<T: CipherSuiteSelector + ?Sized> VersionSuiteSelector<Tls12CipherSuite> for T {
+    fn select(
+        &self,
+        client: &mut dyn Iterator<Item = &'static Tls12CipherSuite>,
+        server: &[&'static Tls12CipherSuite],
+    ) -> Option<&'static Tls12CipherSuite> {
+        self.select_tls12_cipher_suite(client, server)
+    }
+}
+
+impl<T: CipherSuiteSelector + ?Sized> VersionSuiteSelector<Tls13CipherSuite> for T {
+    fn select(
+        &self,
+        client: &mut dyn Iterator<Item = &'static Tls13CipherSuite>,
+        server: &[&'static Tls13CipherSuite],
+    ) -> Option<&'static Tls13CipherSuite> {
+        self.select_tls13_cipher_suite(client, server)
+    }
+}
+
+pub(super) trait VersionSuiteSelector<T> {
+    fn select(
+        &self,
+        client: &mut dyn Iterator<Item = &'static T>,
+        server: &[&'static T],
+    ) -> Option<&'static T>;
+}
+
+/// A filter that chooses the cipher suite to use for a TLS session.
+pub trait CipherSuiteSelector: Debug + Send + Sync {
+    /// Choose a cipher suite, given the client's and server's options, in preference order.
+    ///
+    /// The `client` list is generated in order from the [`CipherSuite`] values received in the
+    /// `ClientHello`, filtered to only contain suites that the server supports. The `server`
+    /// list comes from the [`ServerConfig`]'s [`CryptoProvider`].
+    ///
+    /// Yields the chosen cipher suite supported by both sides, or `None` to indicate that no
+    /// mutually supported cipher suite could be agreed on.
+    fn select_tls12_cipher_suite(
+        &self,
+        client: &mut dyn Iterator<Item = &'static Tls12CipherSuite>,
+        server: &[&'static Tls12CipherSuite],
+    ) -> Option<&'static Tls12CipherSuite>;
+
+    /// Choose a cipher suite, given the client's and server's options, in preference order.
+    ///
+    /// The `client` list is generated in order from the [`CipherSuite`] values received in the
+    /// `ClientHello`, filtered to only contain suites that the server supports. The `server`
+    /// list comes from the [`ServerConfig`]'s [`CryptoProvider`].
+    ///
+    /// Yields the chosen cipher suite supported by both sides, or `None` to indicate that no
+    /// mutually supported cipher suite could be agreed on.
+    fn select_tls13_cipher_suite(
+        &self,
+        server: &mut dyn Iterator<Item = &'static Tls13CipherSuite>,
+        server: &[&'static Tls13CipherSuite],
+    ) -> Option<&'static Tls13CipherSuite>;
 }
