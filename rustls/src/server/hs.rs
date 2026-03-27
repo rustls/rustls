@@ -644,29 +644,29 @@ impl ExpectClientHello {
             return Err(PeerIncompatible::NoKxGroupsInCommon);
         }
 
-        let suitable_suites_iter = suites.iter().filter(|suite| {
-            // Reduce our supported ciphersuites by the certified key's algorithm.
-            suite.usable_for_signature_scheme(sig_scheme)
-                // And support for one of the key exchange groups
-                && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
-                || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE))
-        });
-
         // RFC 7919 (https://datatracker.ietf.org/doc/html/rfc7919#section-4) requires us to send
         // the InsufficientSecurity alert in case we don't recognize client's FFDHE groups (i.e.,
         // `suitable_suites` becomes empty). But that does not make a lot of sense (e.g., client
         // proposes FFDHE4096 and we only support FFDHE2048), so we ignore that requirement here,
         // and continue to send HandshakeFailure.
 
-        let suitable_suites = suitable_suites_iter.collect::<Vec<_>>();
         let suite = client_suites
             .iter()
-            .find_map(|client_suite| {
-                suitable_suites
+            .find_map(|suite| {
+                let Some(&suite) = suites
                     .iter()
-                    .find(|x| *client_suite == x.suite())
+                    .find(|&&s| s.suite() == *suite)
+                else {
+                    return None;
+                };
+
+                // Reduce our supported ciphersuites by the certified key's algorithm.
+                (suite.usable_for_signature_scheme(sig_scheme)
+                // And support for one of the key exchange groups
+                && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
+                || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE)))
+                .then_some(suite)
             })
-            .copied()
             .ok_or(PeerIncompatible::NoCipherSuitesInCommon)?;
 
         // Finally, choose a key exchange group that is compatible with the selected cipher
