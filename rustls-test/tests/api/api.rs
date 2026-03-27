@@ -18,7 +18,9 @@ use rustls::crypto::{
 };
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
-use rustls::server::{Acceptor, ClientHello, ParsedCertificate, ServerCredentialResolver};
+use rustls::server::{
+    Acceptor, ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver,
+};
 use rustls::{
     ClientConfig, ClientConnection, Connection as _, HandshakeKind, KeyingMaterialExporter,
     ServerConfig, ServerConnection, SupportedCipherSuite,
@@ -1016,7 +1018,7 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
             provider_with_suites(&provider::DEFAULT_PROVIDER, &[scs, scs_other]).into(),
         )
         .finish(kt);
-        server_config.ignore_client_order = true;
+        server_config.cipher_suite_selector = &PreferServerOrder;
 
         let client_config = ClientConfig::builder(
             provider_with_suites(&provider::DEFAULT_PROVIDER, &[scs_other, scs]).into(),

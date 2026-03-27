@@ -6,6 +6,7 @@ use core::fmt;
 
 use pki_types::DnsName;
 
+use super::config::{CipherSuiteSelector, VersionSuiteSelector};
 use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Output, OutputEvent, Protocol};
@@ -511,6 +512,7 @@ impl ExpectClientHello {
     where
         CryptoProvider: Borrow<[&'static T]>,
         SupportedCipherSuite: From<&'static T>,
+        dyn CipherSuiteSelector: VersionSuiteSelector<T>,
     {
         output.output(OutputEvent::ProtocolVersion(T::VERSION));
 
@@ -595,7 +597,11 @@ impl ExpectClientHello {
         sig_scheme: SignatureScheme,
         client_groups: &[NamedGroup],
         client_suites: &[CipherSuite],
-    ) -> Result<(&'static T, &'static dyn SupportedKxGroup), PeerIncompatible> {
+    ) -> Result<(&'static T, &'static dyn SupportedKxGroup), PeerIncompatible>
+    where
+        SupportedCipherSuite: From<&'static T>,
+        dyn CipherSuiteSelector: VersionSuiteSelector<T>,
+    {
         // Determine which `KeyExchangeAlgorithm`s are theoretically possible, based
         // on the offered and supported groups.
         let mut ecdhe_possible = false;
@@ -644,34 +650,32 @@ impl ExpectClientHello {
             return Err(PeerIncompatible::NoKxGroupsInCommon);
         }
 
-        let mut suitable_suites_iter = suites.iter().filter(|suite| {
-            // Reduce our supported ciphersuites by the certified key's algorithm.
-            suite.usable_for_signature_scheme(sig_scheme)
-                // And support for one of the key exchange groups
-                && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
-                || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE))
-        });
-
         // RFC 7919 (https://datatracker.ietf.org/doc/html/rfc7919#section-4) requires us to send
         // the InsufficientSecurity alert in case we don't recognize client's FFDHE groups (i.e.,
         // `suitable_suites` becomes empty). But that does not make a lot of sense (e.g., client
         // proposes FFDHE4096 and we only support FFDHE2048), so we ignore that requirement here,
         // and continue to send HandshakeFailure.
 
-        let suite = if self.config.ignore_client_order {
-            suitable_suites_iter.find(|suite| client_suites.contains(&suite.suite()))
-        } else {
-            let suitable_suites = suitable_suites_iter.collect::<Vec<_>>();
-            client_suites
-                .iter()
-                .find_map(|client_suite| {
-                    suitable_suites
-                        .iter()
-                        .find(|x| *client_suite == x.suite())
-                })
-                .copied()
-        }
-        .ok_or(PeerIncompatible::NoCipherSuitesInCommon)?;
+        let mut client_suites = client_suites
+            .iter()
+            .filter_map(|&suite| {
+                let &suite = suites
+                    .iter()
+                    .find(|ss| ss.suite() == suite)?;
+
+                // Reduce our supported ciphersuites by the certified key's algorithm.
+                (suite.usable_for_signature_scheme(sig_scheme)
+                // And support for one of the key exchange groups
+                && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
+                || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE)))
+                .then_some(suite)
+            });
+
+        let suite = self
+            .config
+            .cipher_suite_selector
+            .select(&mut client_suites, suites)
+            .ok_or(PeerIncompatible::NoCipherSuitesInCommon)?;
 
         // Finally, choose a key exchange group that is compatible with the selected cipher
         // suite.
