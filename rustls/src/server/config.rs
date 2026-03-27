@@ -82,11 +82,6 @@ pub struct ServerConfig {
     /// Source of randomness and other crypto.
     pub(crate) provider: Arc<CryptoProvider>,
 
-    /// Ignore the client's ciphersuite order. Instead,
-    /// choose the top ciphersuite in the server list
-    /// which is supported by the client.
-    pub ignore_client_order: bool,
-
     /// The maximum size of plaintext input to be emitted in a single TLS record.
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
     ///
@@ -674,7 +669,6 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         let require_ems = !matches!(self.provider.fips(), FipsStatus::Unvalidated);
         Ok(ServerConfig {
             provider: self.provider,
-            ignore_client_order: false,
             max_fragment_size: None,
             session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: None,

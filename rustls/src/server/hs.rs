@@ -644,7 +644,7 @@ impl ExpectClientHello {
             return Err(PeerIncompatible::NoKxGroupsInCommon);
         }
 
-        let mut suitable_suites_iter = suites.iter().filter(|suite| {
+        let suitable_suites_iter = suites.iter().filter(|suite| {
             // Reduce our supported ciphersuites by the certified key's algorithm.
             suite.usable_for_signature_scheme(sig_scheme)
                 // And support for one of the key exchange groups
@@ -658,20 +658,16 @@ impl ExpectClientHello {
         // proposes FFDHE4096 and we only support FFDHE2048), so we ignore that requirement here,
         // and continue to send HandshakeFailure.
 
-        let suite = if self.config.ignore_client_order {
-            suitable_suites_iter.find(|suite| client_suites.contains(&suite.suite()))
-        } else {
-            let suitable_suites = suitable_suites_iter.collect::<Vec<_>>();
-            client_suites
-                .iter()
-                .find_map(|client_suite| {
-                    suitable_suites
-                        .iter()
-                        .find(|x| *client_suite == x.suite())
-                })
-                .copied()
-        }
-        .ok_or(PeerIncompatible::NoCipherSuitesInCommon)?;
+        let suitable_suites = suitable_suites_iter.collect::<Vec<_>>();
+        let suite = client_suites
+            .iter()
+            .find_map(|client_suite| {
+                suitable_suites
+                    .iter()
+                    .find(|x| *client_suite == x.suite())
+            })
+            .copied()
+            .ok_or(PeerIncompatible::NoCipherSuitesInCommon)?;
 
         // Finally, choose a key exchange group that is compatible with the selected cipher
         // suite.
