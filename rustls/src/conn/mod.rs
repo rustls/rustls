@@ -534,21 +534,16 @@ impl<Side: SideData> ConnectionCommon<Side> {
         );
 
         while let Some(result) = iter.next() {
-<<<<<<< HEAD
-            let payload = result?;
-            let payload = payload.reborrow(&Delocator::new(iter.input));
-=======
             let Some(payload) = result? else {
                 continue;
             };
-            
-            let payload = payload.reborrow(&Delocator::new(iter.input().slice_mut()));
->>>>>>> 652b6d21 (conn: flatten outer loop in MessageIter)
+
+            let payload = payload.reborrow(&Delocator::new(iter.input));
             self.buffers
                 .received_plaintext
                 .append(payload.into_vec());
         }
-        
+
         self.buffers.deframer_buffer.discard(
             self.core
                 .common
