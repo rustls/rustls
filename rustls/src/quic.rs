@@ -10,7 +10,7 @@ use pki_types::{DnsName, FipsStatus, ServerName};
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
-use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData, VecInput};
+use crate::conn::{ConnectionCore, KeyingMaterialExporter, MessageIter, SideData, VecInput};
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::ApplicationProtocol;
@@ -520,8 +520,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .recv
             .deframer
             .input_quic(self.input.filled_mut(), range)?;
-        self.core
-            .process_new_packets(&mut self.input, Some(&mut self.quic))?;
+
+        MessageIter::new(&mut self.input, Some(&mut self.quic), &mut self.core).next()?;
+
         Ok(())
     }
 

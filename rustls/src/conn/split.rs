@@ -4,9 +4,10 @@ use core::fmt;
 use core::ops::{DerefMut, Range};
 use std::sync::MutexGuard;
 
+use super::receive::{Discard, JoinOutput};
 use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
-use crate::conn::{ConnectionCore, ReceivePath, SendOutput, SendPath, TlsInputBuffer};
+use crate::conn::{ConnectionCore, MessageIter, ReceivePath, SendOutput, SendPath, TlsInputBuffer};
 use crate::crypto::cipher::{MessageEncrypter, OutboundPlain};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
@@ -174,18 +175,23 @@ impl<Side: SideData> ReceiveTraffic<Side> {
 
         let mut send_adapter = SendAdapter::Unlocked(&send);
         let mut state = Ok(state);
-        let received_plain =
-            match recv.process_recv_traffic::<Side>(received_tls, &mut state, &mut send_adapter) {
-                Ok(received_plain) => received_plain,
-                Err(err) => {
-                    return Err(ErrorWithAlert::new(
-                        err,
-                        send_adapter
-                            .as_locked(false)
-                            .deref_mut(),
-                    ));
-                }
-            };
+        let output = JoinOutput {
+            outputs: &mut Discard,
+            quic: None,
+            send: &mut send_adapter,
+            side: &mut Discard,
+        };
+
+        let mut iter = MessageIter::<Side>::receive(received_tls, &mut state, &mut recv, output);
+        let received_plain = iter.next().map_err(|error| {
+            ErrorWithAlert::new(
+                error,
+                send_adapter
+                    .as_locked(false)
+                    .deref_mut(),
+            )
+        })?;
+
         // nb. state consumed only on error.
         let state = state.unwrap();
 
