@@ -360,6 +360,23 @@ enum_builder! {
     }
 }
 
+impl CipherSuite {
+    /// Check whether the `CipherSuite` uses ChaCha-20 as its stream cipher.
+    pub(crate) fn is_chacha20(&self) -> bool {
+        matches!(
+            *self,
+            Self::TLS13_CHACHA20_POLY1305_SHA256
+                | Self::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+                | Self::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+                | Self::TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256
+                | Self::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+                | Self::TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256
+                | Self::TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256
+                | Self::TLS_PSK_WITH_CHACHA20_POLY1305_SHA256
+        )
+    }
+}
+
 enum_builder! {
     /// The `SignatureScheme` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.

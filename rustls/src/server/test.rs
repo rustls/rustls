@@ -1,6 +1,6 @@
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use std::vec;
+use std::{error, vec};
 
 use pki_types::UnixTime;
 
@@ -9,6 +9,7 @@ use super::{
     CommonServerSessionValue, ServerConfig, ServerConnection, ServerSessionValue,
     Tls13ServerSessionValue,
 };
+use crate::Tls13CipherSuite;
 use crate::conn::{Connection, Input};
 use crate::crypto::cipher::FakeAead;
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
@@ -121,6 +122,99 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
         aligned_handshake: None,
     })
     .map(|_| ())
+}
+
+#[test]
+fn test_server_preference_cipher_suite_selection() {
+    // Configure a server to use the default CipherSuiteSelector.
+    let mut provider = ffdhe_provider(TEST_PROVIDER);
+    static SERVER_CIPHERS_TLS13: &[&Tls13CipherSuite] = &[];
+    static SERVER_CIPHERS_TLS12: &[&Tls12CipherSuite] = &[
+        &TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+        &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+    ];
+    provider.tls13_cipher_suites = Cow::Borrowed(SERVER_CIPHERS_TLS13);
+    provider.tls12_cipher_suites = Cow::Borrowed(SERVER_CIPHERS_TLS12);
+    let config = ServerConfig::builder(provider.into())
+        .with_no_client_auth()
+        .with_single_cert(server_identity(), server_key())
+        .unwrap();
+
+    // The server should choose the first cipher suite in its supported list that is
+    // also supported by the client.
+    let mut ch = minimal_client_hello();
+    ch.cipher_suites.clear();
+    ch.cipher_suites.extend([
+        CipherSuite::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+        CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+    ]);
+    let selected_suite = select_cipher_suite(ServerConnection::new(config.into()).unwrap(), ch);
+    assert_eq!(
+        selected_suite.unwrap(),
+        CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384
+    );
+}
+
+#[test]
+fn test_server_preference_cipher_suite_selection_with_chacha20_override() {
+    // Configure a server to use the default CipherSuiteSelector.
+    // Include a ChaCha20-based cipher suite as one of the supported
+    // server-side suites, but not the first preference.
+    let mut provider = ffdhe_provider(TEST_PROVIDER);
+    static SERVER_CIPHERS_TLS13: &[&Tls13CipherSuite] = &[];
+    static SERVER_CIPHERS_TLS12: &[&Tls12CipherSuite] = &[
+        &TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+        &TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+        &TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    ];
+    provider.tls13_cipher_suites = Cow::Borrowed(SERVER_CIPHERS_TLS13);
+    provider.tls12_cipher_suites = Cow::Borrowed(SERVER_CIPHERS_TLS12);
+    let config = ServerConfig::builder(provider.into())
+        .with_no_client_auth()
+        .with_single_cert(server_identity(), server_key())
+        .unwrap();
+
+    // In the ClientHello, list a ChaCha20-based cipher suite as the first
+    // preference. The server should choose this suite.
+    let mut ch = minimal_client_hello();
+    ch.cipher_suites.clear();
+    ch.cipher_suites.extend([
+        CipherSuite::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+        CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+    ]);
+    let selected_suite = select_cipher_suite(ServerConnection::new(config.into()).unwrap(), ch);
+    assert_eq!(
+        selected_suite.unwrap(),
+        CipherSuite::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+    );
+}
+
+// Process the `ClientHelloPayload` and return the `CipherSuite` from the resulting ServerHello.
+fn select_cipher_suite(
+    mut conn: ServerConnection,
+    client_hello: ClientHelloPayload,
+) -> Result<CipherSuite, Box<dyn error::Error>> {
+    let ch = Message {
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
+            client_hello,
+        ))),
+    };
+    conn.read_tls(&mut ch.into_wire_bytes().as_slice())?;
+    conn.process_new_packets()?;
+
+    let mut flight = vec![];
+    conn.write_tls(&mut &mut flight)
+        .unwrap();
+    let mut r = Reader::new(&flight[HEADER_SIZE..]);
+    let HandshakeMessagePayload(HandshakePayload::ServerHello(server_hello)) =
+        HandshakeMessagePayload::read(&mut r).unwrap()
+    else {
+        panic!("expected ServerHello");
+    };
+    Ok(server_hello.cipher_suite)
 }
 
 #[test]
@@ -407,6 +501,32 @@ static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite = Tls12CipherSuite 
         suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
         hash_provider: FAKE_HASH,
         confidentiality_limit: 1,
+    },
+    kx: KeyExchangeAlgorithm::DHE,
+    protocol_version: TLS12_VERSION,
+    prf_provider: &tls12::PrfUsingHmac(FAKE_HMAC),
+    sign: &[SignatureScheme::ECDSA_NISTP256_SHA256],
+    aead_alg: &FakeAead,
+};
+
+static TLS_DHE_RSA_WITH_AES_256_GCM_SHA384: Tls12CipherSuite = Tls12CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite::TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+        hash_provider: FAKE_HASH,
+        confidentiality_limit: 0,
+    },
+    kx: KeyExchangeAlgorithm::DHE,
+    protocol_version: TLS12_VERSION,
+    prf_provider: &tls12::PrfUsingHmac(FAKE_HMAC),
+    sign: &[SignatureScheme::ECDSA_NISTP256_SHA256],
+    aead_alg: &FakeAead,
+};
+
+static TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256: Tls12CipherSuite = Tls12CipherSuite {
+    common: CipherSuiteCommon {
+        suite: CipherSuite::TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        hash_provider: FAKE_HASH,
+        confidentiality_limit: 0,
     },
     kx: KeyExchangeAlgorithm::DHE,
     protocol_version: TLS12_VERSION,

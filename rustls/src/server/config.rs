@@ -21,10 +21,11 @@ use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::ServerNamePayload;
+use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
 use crate::verify::{ClientVerifier, DistinguishedName, NoClientAuth};
-use crate::{KeyLog, NoKeyLog, compress};
+use crate::{KeyLog, NoKeyLog, Tls12CipherSuite, Tls13CipherSuite, compress};
 
 /// Common configuration for a set of server sessions.
 ///
@@ -82,10 +83,8 @@ pub struct ServerConfig {
     /// Source of randomness and other crypto.
     pub(crate) provider: Arc<CryptoProvider>,
 
-    /// Ignore the client's ciphersuite order. Instead,
-    /// choose the top ciphersuite in the server list
-    /// which is supported by the client.
-    pub ignore_client_order: bool,
+    /// How to select a cipher suite to use for a TLS session.
+    pub cipher_suite_selector: &'static dyn CipherSuiteSelector,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
@@ -674,7 +673,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         let require_ems = !matches!(self.provider.fips(), FipsStatus::Unvalidated);
         Ok(ServerConfig {
             provider: self.provider,
-            ignore_client_order: false,
+            cipher_suite_selector: &DEFAULT_CIPHER_SUITE_SELECTOR,
             max_fragment_size: None,
             session_storage: handy::ServerSessionMemoryCache::new(256),
             ticketer: None,
@@ -694,4 +693,80 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             invalid_sni_policy: InvalidSniPolicy::default(),
         })
     }
+}
+
+/// A simple implementation of CipherSuiteSelector that balances client and server preferences.
+///
+/// If the server is configured to ignore the client's cipher suite ordering, but the first
+/// cipher suite in the client's preferred list uses ChaCha20, the server prioritizes ChaCha20
+/// cipher suites.
+#[derive(Debug)]
+struct DefaultCipherSuiteSelector;
+
+impl CipherSuiteSelector for DefaultCipherSuiteSelector {
+    fn select_tls12_cipher_suite(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Tls12CipherSuite],
+    ) -> Option<&'static Tls12CipherSuite> {
+        self.select_cipher_suite(client_suites, server_suites)
+    }
+
+    fn select_tls13_cipher_suite(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Tls13CipherSuite],
+    ) -> Option<&'static Tls13CipherSuite> {
+        self.select_cipher_suite(client_suites, server_suites)
+    }
+}
+
+impl DefaultCipherSuiteSelector {
+    fn select_cipher_suite<T: Suite>(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static T],
+    ) -> Option<&'static T> {
+        // Check whether the first cipher suite in the client's ordered list uses ChaCha20.
+        if client_suites
+            .first()
+            .is_some_and(|suite| suite.is_chacha20())
+        {
+            // First, look for a match among (only) the ChaCha20 ciphers supported by the server.
+            if let Some(suite) = server_suites
+                .iter()
+                .filter(|server_suite| server_suite.suite().is_chacha20())
+                .find(|server_suite| client_suites.contains(&server_suite.suite()))
+                .copied()
+            {
+                return Some(suite);
+            }
+        }
+
+        // Find the first cipher suite in the server's ordered list that
+        // also is in the client's list.
+        server_suites
+            .iter()
+            .find(|server_suite| client_suites.contains(&server_suite.suite()))
+            .copied()
+    }
+}
+
+static DEFAULT_CIPHER_SUITE_SELECTOR: DefaultCipherSuiteSelector = DefaultCipherSuiteSelector;
+
+/// A filter that chooses the cipher suite to use for a TLS session.
+pub trait CipherSuiteSelector: Debug + Send + Sync {
+    /// Choose a cipher suite, given the server's and client's order lists of supported options.
+    fn select_tls12_cipher_suite(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Tls12CipherSuite],
+    ) -> Option<&'static Tls12CipherSuite>;
+
+    /// Choose a cipher suite, given the server's and client's order lists of supported options.
+    fn select_tls13_cipher_suite(
+        &self,
+        client_suites: &[CipherSuite],
+        server_suites: &[&'static Tls13CipherSuite],
+    ) -> Option<&'static Tls13CipherSuite>;
 }

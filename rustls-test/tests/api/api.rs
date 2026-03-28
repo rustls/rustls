@@ -976,11 +976,10 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
         };
         assert_ne!(scs, scs_other);
 
-        let mut server_config = ServerConfig::builder(
+        let server_config = ServerConfig::builder(
             provider_with_suites(&provider::DEFAULT_PROVIDER, &[scs, scs_other]).into(),
         )
         .finish(kt);
-        server_config.ignore_client_order = true;
 
         let client_config = ClientConfig::builder(
             provider_with_suites(&provider::DEFAULT_PROVIDER, &[scs_other, scs]).into(),
