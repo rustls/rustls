@@ -316,11 +316,6 @@ impl Deframer {
     }
 
     #[inline]
-    pub(crate) fn discard_processed(&mut self) {
-        self.discard = self.processed;
-    }
-
-    #[inline]
     pub(crate) fn set_discard(&mut self, discard: usize) {
         self.discard = discard;
     }
