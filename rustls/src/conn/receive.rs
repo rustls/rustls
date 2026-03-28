@@ -229,6 +229,15 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
         *self.state = Ok(st);
         None
     }
+
+    pub(super) fn discard(&mut self) {
+        self.input
+            .discard(self.recv.deframer.take_discard());
+    }
+
+    pub(super) fn input(&mut self) -> &mut dyn TlsInputBuffer {
+        self.input
+    }
 }
 
 pub(crate) struct ReceivePath {
