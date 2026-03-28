@@ -153,8 +153,6 @@ impl ReceivePath {
 
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
     fn deframe<'b>(&mut self, buffer: &'b mut [u8]) -> Result<Option<Decrypted<'b>>, Error> {
-        let version_is_tls13 = matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3));
-
         let locator = Locator::new(buffer);
 
         let mut want_close_before_decrypt = false;
@@ -174,64 +172,10 @@ impl ReceivePath {
             }
 
             let (message, bounds) = loop {
-                let (message, bounds) = match self.deframer.deframe(buffer) {
-                    Some(Ok(Deframed { message, bounds })) => (message, bounds),
-                    Some(Err(err)) => return Err(err),
-                    None => return Ok(None),
-                };
-
-                let allowed_plaintext = match message.typ {
-                    // CCS messages are always plaintext.
-                    ContentType::ChangeCipherSpec => true,
-                    // Alerts are allowed to be plaintext if-and-only-if:
-                    // * The negotiated protocol version is TLS 1.3. - In TLS 1.2 it is unambiguous when
-                    //   keying changes based on the CCS message. Only TLS 1.3 requires these heuristics.
-                    // * We have not yet decrypted any messages from the peer - if we have we don't
-                    //   expect any plaintext.
-                    // * The payload size is indicative of a plaintext alert message.
-                    ContentType::Alert
-                        if version_is_tls13
-                            && !self.decrypt_state.has_decrypted()
-                            && message.payload.len() <= 2 =>
-                    {
-                        true
-                    }
-                    // In other circumstances, we expect all messages to be encrypted.
-                    _ => false,
-                };
-
-                if allowed_plaintext && !self.deframer.is_active() {
-                    break (
-                        Decrypted {
-                            plaintext: message.into_plain_message(),
-                            want_close_before_decrypt: false,
-                        },
-                        bounds,
-                    );
-                }
-
-                match self
-                    .decrypt_state
-                    .decrypt_incoming(message)
-                {
-                    // failed decryption during trial decryption is not allowed to be
-                    // interleaved with partial handshake data.
-                    Ok(None) if self.deframer.aligned().is_none() => {
-                        return Err(
-                            PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
-                        );
-                    }
-
-                    // failed decryption during trial decryption.
-                    Ok(None) => continue,
-
-                    Ok(Some(decrypted)) => {
-                        // After decryption, the payload is shorter
-                        let bounds = locator.locate(decrypted.plaintext.payload);
-                        break (decrypted, bounds);
-                    }
-
-                    Err(err) => return Err(err),
+                match self.deframe_decrypted(buffer, &locator)? {
+                    DeframeResult::Decrypted(decrypted, bounds) => break (decrypted, bounds),
+                    DeframeResult::DecryptionFailed => continue,
+                    DeframeResult::None => return Ok(None),
                 }
             };
 
@@ -285,6 +229,68 @@ impl ReceivePath {
             self.deframer
                 .input_message(message.version, bounds, buffer);
             self.deframer.coalesce(buffer)?;
+        }
+    }
+
+    fn deframe_decrypted<'b>(
+        &mut self,
+        buffer: &'b mut [u8],
+        locator: &Locator,
+    ) -> Result<DeframeResult<'b>, Error> {
+        let (message, bounds) = match self.deframer.deframe(buffer) {
+            Some(Ok(Deframed { message, bounds })) => (message, bounds),
+            Some(Err(err)) => return Err(err),
+            None => return Ok(DeframeResult::None),
+        };
+
+        let allowed_plaintext = match message.typ {
+            // CCS messages are always plaintext.
+            ContentType::ChangeCipherSpec => true,
+            // Alerts are allowed to be plaintext if-and-only-if:
+            // * The negotiated protocol version is TLS 1.3. - In TLS 1.2 it is unambiguous when
+            //   keying changes based on the CCS message. Only TLS 1.3 requires these heuristics.
+            // * We have not yet decrypted any messages from the peer - if we have we don't
+            //   expect any plaintext.
+            // * The payload size is indicative of a plaintext alert message.
+            ContentType::Alert
+                if matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+                    && !self.decrypt_state.has_decrypted()
+                    && message.payload.len() <= 2 =>
+            {
+                true
+            }
+            // In other circumstances, we expect all messages to be encrypted.
+            _ => false,
+        };
+
+        if allowed_plaintext && !self.deframer.is_active() {
+            return Ok(DeframeResult::Decrypted(
+                Decrypted {
+                    plaintext: message.into_plain_message(),
+                    want_close_before_decrypt: false,
+                },
+                bounds,
+            ));
+        }
+
+        match self
+            .decrypt_state
+            .decrypt_incoming(message)?
+        {
+            Some(decrypted) => {
+                // After decryption, the payload is shorter
+                let bounds = locator.locate(decrypted.plaintext.payload);
+                Ok(DeframeResult::Decrypted(decrypted, bounds))
+            }
+
+            // failed decryption during trial decryption is not allowed to be
+            // interleaved with partial handshake data.
+            None if self.deframer.aligned().is_none() => {
+                Err(PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into())
+            }
+
+            // failed decryption during trial decryption.
+            None => Ok(DeframeResult::DecryptionFailed),
         }
     }
 
@@ -412,6 +418,12 @@ impl ReceivePath {
 
         Err(err)
     }
+}
+
+enum DeframeResult<'b> {
+    Decrypted(Decrypted<'b>, Range<usize>),
+    DecryptionFailed,
+    None,
 }
 
 struct CaptureAppData<'a, 'j, 'm> {
