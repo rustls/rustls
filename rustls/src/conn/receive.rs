@@ -57,7 +57,6 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             }
         };
 
-        let mut plaintext = None;
         while st.wants_input() {
             let mut want_close_before_decrypt = false;
 
@@ -153,6 +152,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 }
             };
 
+            let mut plaintext = None;
             let mut output = CaptureAppData {
                 recv: self.recv,
                 other: &mut self.output,
