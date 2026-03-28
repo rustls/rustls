@@ -499,25 +499,14 @@ impl<Side: SideData> ConnectionCommon<Side> {
             return Err(ApiMisuse::ReceivedPlaintextBufferFull.into());
         }
 
-        loop {
-            let mut iter = MessageIter::new(buf, None, &mut self.core);
-            let payload = match iter.next() {
-                Some(Ok(payload)) => payload,
-                Some(Err(err)) => return Err(err),
-                None => break,
-            };
-
-            let payload = payload.reborrow(&Delocator::new(buf.slice_mut()));
+        let mut iter = MessageIter::new(buf, None, &mut self.core);
+        while let Some(result) = iter.next() {
+            let payload = result?;
+            let payload = payload.reborrow(&Delocator::new(iter.input().slice_mut()));
             self.buffers
                 .received_plaintext
                 .append(payload.into_vec());
-            buf.discard(
-                self.core
-                    .common
-                    .recv
-                    .deframer
-                    .take_discard(),
-            );
+            iter.discard();
         }
 
         // Release unsent buffered plaintext.
