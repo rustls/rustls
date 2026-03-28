@@ -8,8 +8,8 @@ use crate::common_state::{
     ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, Side, UnborrowedPayload,
     maybe_send_fatal_alert,
 };
-use crate::conn::StateMachine;
 use crate::conn::private::SideOutput;
+use crate::conn::{ConnectionCore, StateMachine};
 use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
@@ -20,65 +20,55 @@ use crate::msgs::{
 };
 use crate::quic::QuicOutput;
 
-pub(crate) struct ReceivePath {
-    side: Side,
-    pub(crate) decrypt_state: DecryptionState,
-    pub(crate) may_receive_application_data: bool,
-    /// If the peer has signaled end of stream.
-    pub(crate) has_received_close_notify: bool,
-    temper_counters: TemperCounters,
-    pub(crate) negotiated_version: Option<ProtocolVersion>,
-    pub(crate) deframer: Deframer,
-
-    /// We limit consecutive empty fragments to avoid a route for the peer to send
-    /// us significant but fruitless traffic.
-    seen_consecutive_empty_fragments: u8,
-
-    pub(crate) tls13_tickets_received: u32,
+pub(crate) struct MessageIter<'a, 'm, Side: SideData> {
+    input: &'m mut dyn TlsInputBuffer,
+    recv: &'a mut ReceivePath,
+    state: &'a mut Result<Side::State, Error>,
+    output: JoinOutput<'a>,
 }
 
-impl ReceivePath {
-    pub(crate) fn new(side: Side) -> Self {
+impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
+    pub(crate) fn new(
+        input: &'m mut dyn TlsInputBuffer,
+        quic: Option<&'a mut dyn QuicOutput>,
+        conn: &'a mut ConnectionCore<Side>,
+    ) -> Self {
         Self {
-            side,
-            decrypt_state: DecryptionState::new(),
-            may_receive_application_data: false,
-            has_received_close_notify: false,
-            temper_counters: TemperCounters::default(),
-            negotiated_version: None,
-            deframer: Deframer::default(),
-            seen_consecutive_empty_fragments: 0,
-            tls13_tickets_received: 0,
+            recv: &mut conn.common.recv,
+            input,
+            state: &mut conn.state,
+            output: JoinOutput {
+                outputs: &mut conn.common.outputs,
+                quic,
+                send: &mut conn.common.send,
+                side: &mut conn.side,
+            },
         }
     }
 
-    pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
-        &mut self,
-        input: &'m mut dyn TlsInputBuffer,
-        state: &mut Result<Side::State, Error>,
-        output: &mut JoinOutput<'a>,
-    ) -> Result<Option<UnborrowedPayload>, Error> {
-        let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
+    pub(crate) fn next(&mut self) -> Result<Option<UnborrowedPayload>, Error> {
+        let mut st = match mem::replace(self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
             Err(e) => {
-                *state = Err(e.clone());
+                *self.state = Err(e.clone());
                 return Err(e);
             }
         };
 
         let mut plaintext = None;
         while st.wants_input() {
-            let buffer = input.slice_mut();
+            let buffer = self.input.slice_mut();
             let locator = Locator::new(buffer);
             let mut want_close_before_decrypt = false;
 
             let res = 'deframe: loop {
                 // before processing any more of `buffer`, return any extant messages from `deframer`
-                if let Some(span) = self.deframer.complete_span() {
-                    let plaintext = self.deframer.message(span, buffer);
+                if let Some(span) = self.recv.deframer.complete_span() {
+                    let plaintext = self.recv.deframer.message(span, buffer);
 
                     // trial decryption finishes with the first handshake message after it started.
-                    self.decrypt_state
+                    self.recv
+                        .decrypt_state
                         .finish_trial_decryption();
 
                     break Ok(Some(Decrypted {
@@ -88,10 +78,13 @@ impl ReceivePath {
                 }
 
                 let (message, bounds) = loop {
-                    match self.deframe(buffer, &locator)? {
-                        DeframeResult::Decrypted(decrypted, bounds) => break (decrypted, bounds),
-                        DeframeResult::DecryptionFailed => continue,
-                        DeframeResult::None => return Ok(None),
+                    match self.recv.deframe(buffer, &locator) {
+                        Ok(DeframeResult::Decrypted(decrypted, bounds)) => {
+                            break (decrypted, bounds);
+                        }
+                        Ok(DeframeResult::DecryptionFailed) => continue,
+                        Ok(DeframeResult::None) => break 'deframe Ok(None),
+                        Err(e) => break 'deframe Err(e),
                     }
                 };
 
@@ -101,7 +94,7 @@ impl ReceivePath {
                     want_close_before_decrypt: _,
                 } = message;
 
-                if self.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+                if self.recv.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
                     // "Handshake messages MUST NOT be interleaved with other record
                     // types.  That is, if a handshake message is split over two or more
                     // records, there MUST NOT be any other records between them."
@@ -111,15 +104,19 @@ impl ReceivePath {
 
                 match message.payload.len() {
                     0 => {
-                        if self.seen_consecutive_empty_fragments
+                        if self
+                            .recv
+                            .seen_consecutive_empty_fragments
                             == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
                         {
                             break Err(PeerMisbehaved::TooManyEmptyFragments.into());
                         }
-                        self.seen_consecutive_empty_fragments += 1;
+                        self.recv
+                            .seen_consecutive_empty_fragments += 1;
                     }
                     _ => {
-                        self.seen_consecutive_empty_fragments = 0;
+                        self.recv
+                            .seen_consecutive_empty_fragments = 0;
                     }
                 };
 
@@ -134,7 +131,7 @@ impl ReceivePath {
 
                 if unborrowed.typ != ContentType::Handshake {
                     let message = unborrowed.reborrow(&Delocator::new(buffer));
-                    self.deframer.discard_processed();
+                    self.recv.deframer.discard_processed();
                     break Ok(Some(Decrypted {
                         plaintext: message,
                         want_close_before_decrypt,
@@ -142,16 +139,17 @@ impl ReceivePath {
                 }
 
                 let message = unborrowed.reborrow(&Delocator::new(buffer));
-                self.deframer
+                self.recv
+                    .deframer
                     .input_message(message.version, bounds, buffer);
-                if let Err(err) = self.deframer.coalesce(buffer) {
+                if let Err(err) = self.recv.deframer.coalesce(buffer) {
                     break 'deframe Err(err.into());
                 }
             };
 
             let mut output = CaptureAppData {
-                recv: self,
-                other: &mut *output,
+                recv: self.recv,
+                other: &mut self.output,
                 plaintext_locator: &locator,
                 received_plaintext: &mut plaintext,
                 _message_lifetime: PhantomData,
@@ -164,8 +162,9 @@ impl ReceivePath {
                     if let Error::DecryptError = e {
                         st.handle_decrypt_error();
                     }
-                    *state = Err(e.clone());
-                    input.discard(self.deframer.take_discard());
+                    *self.state = Err(e.clone());
+                    self.input
+                        .discard(self.recv.deframer.take_discard());
                     return Err(e);
                 }
             };
@@ -200,32 +199,68 @@ impl ReceivePath {
                 Ok(new) => st = new,
                 Err(e) => {
                     maybe_send_fatal_alert(output.other.send, &e);
-                    *state = Err(e.clone());
-                    input.discard(self.deframer.take_discard());
+                    *self.state = Err(e.clone());
+                    self.input
+                        .discard(self.recv.deframer.take_discard());
                     return Err(e);
                 }
             }
 
-            if self.has_received_close_notify {
+            if self.recv.has_received_close_notify {
                 // "Any data received after a closure alert has been received MUST be ignored."
                 // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
                 // This is data that has already been accepted in `read_tls`.
-                let entirety = input.slice_mut().len();
-                input.discard(entirety);
+                let entirety = self.input.slice_mut().len();
+                self.input.discard(entirety);
                 break;
             }
 
             if let Some(payload) = plaintext.take() {
-                *state = Ok(st);
+                *self.state = Ok(st);
                 return Ok(Some(payload));
             }
 
-            input.discard(self.deframer.take_discard());
+            self.input
+                .discard(self.recv.deframer.take_discard());
         }
 
-        input.discard(self.deframer.take_discard());
-        *state = Ok(st);
+        self.input
+            .discard(self.recv.deframer.take_discard());
+        *self.state = Ok(st);
         Ok(None)
+    }
+}
+
+pub(crate) struct ReceivePath {
+    side: Side,
+    pub(crate) decrypt_state: DecryptionState,
+    pub(crate) may_receive_application_data: bool,
+    /// If the peer has signaled end of stream.
+    pub(crate) has_received_close_notify: bool,
+    temper_counters: TemperCounters,
+    pub(crate) negotiated_version: Option<ProtocolVersion>,
+    pub(crate) deframer: Deframer,
+
+    /// We limit consecutive empty fragments to avoid a route for the peer to send
+    /// us significant but fruitless traffic.
+    seen_consecutive_empty_fragments: u8,
+
+    pub(crate) tls13_tickets_received: u32,
+}
+
+impl ReceivePath {
+    pub(crate) fn new(side: Side) -> Self {
+        Self {
+            side,
+            decrypt_state: DecryptionState::new(),
+            may_receive_application_data: false,
+            has_received_close_notify: false,
+            temper_counters: TemperCounters::default(),
+            negotiated_version: None,
+            deframer: Deframer::default(),
+            seen_consecutive_empty_fragments: 0,
+            tls13_tickets_received: 0,
+        }
     }
 
     fn deframe<'b>(
@@ -497,11 +532,11 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
     }
 }
 
-pub(super) struct JoinOutput<'a> {
-    pub(super) outputs: &'a mut ConnectionOutputs,
-    pub(super) quic: Option<&'a mut dyn QuicOutput>,
-    pub(super) send: &'a mut dyn SendOutput,
-    pub(super) side: &'a mut dyn SideOutput,
+struct JoinOutput<'a> {
+    outputs: &'a mut ConnectionOutputs,
+    quic: Option<&'a mut dyn QuicOutput>,
+    send: &'a mut dyn SendOutput,
+    side: &'a mut dyn SideOutput,
 }
 
 /// Tracking technically-allowed protocol actions

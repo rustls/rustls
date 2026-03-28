@@ -26,7 +26,7 @@ mod connection {
     use crate::ConnectionOutputs;
     use crate::client::{ClientConfig, ClientSide};
     use crate::common_state::{CommonState, Protocol};
-    use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
+    use crate::conn::{ConnectionCore, KeyingMaterialExporter, MessageIter, SideData};
     use crate::crypto::cipher::Payload;
     use crate::enums::ApplicationProtocol;
     use crate::error::{ApiMisuse, Error};
@@ -405,8 +405,14 @@ mod connection {
                 .recv
                 .deframer
                 .input_quic(self.deframer_buffer.filled_mut(), range)?;
-            self.core
-                .process_new_packets(&mut self.deframer_buffer, Some(&mut self.quic))?;
+
+            MessageIter::new(
+                &mut self.deframer_buffer,
+                Some(&mut self.quic),
+                &mut self.core,
+            )
+            .next()?;
+
             Ok(())
         }
 
