@@ -530,8 +530,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
         loop {
             let mut iter =
                 MessageIter::new(&mut self.buffers.deframer_buffer, None, &mut self.core);
-            let Some(payload) = iter.next()? else {
-                break;
+
+            let payload = match iter.next() {
+                Some(Ok(payload)) => payload,
+                Some(Err(err)) => return Err(err),
+                None => break,
             };
 
             let payload =

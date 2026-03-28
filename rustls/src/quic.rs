@@ -395,14 +395,16 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .deframer
             .input_quic(self.deframer_buffer.filled_mut(), range)?;
 
-        MessageIter::new(
+        let mut iter = MessageIter::new(
             &mut self.deframer_buffer,
             Some(&mut self.quic),
             &mut self.core,
-        )
-        .next()?;
+        );
 
-        Ok(())
+        match iter.next() {
+            Some(Ok(_)) | None => Ok(()),
+            Some(Err(e)) => Err(e),
+        }
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {

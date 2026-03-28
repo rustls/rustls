@@ -46,12 +46,12 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
         }
     }
 
-    pub(crate) fn next(&mut self) -> Result<Option<UnborrowedPayload>, Error> {
+    pub(crate) fn next(&mut self) -> Option<Result<UnborrowedPayload, Error>> {
         let mut st = match mem::replace(self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
             Err(e) => {
                 *self.state = Err(e.clone());
-                return Err(e);
+                return Some(Err(e));
             }
         };
 
@@ -165,7 +165,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                     *self.state = Err(e.clone());
                     self.input
                         .discard(self.recv.deframer.take_discard());
-                    return Err(e);
+                    return Some(Err(e));
                 }
             };
 
@@ -202,7 +202,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                     *self.state = Err(e.clone());
                     self.input
                         .discard(self.recv.deframer.take_discard());
-                    return Err(e);
+                    return Some(Err(e));
                 }
             }
 
@@ -217,7 +217,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
 
             if let Some(payload) = plaintext.take() {
                 *self.state = Ok(st);
-                return Ok(Some(payload));
+                return Some(Ok(payload));
             }
 
             self.input
@@ -227,7 +227,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
         self.input
             .discard(self.recv.deframer.take_discard());
         *self.state = Ok(st);
-        Ok(None)
+        None
     }
 }
 
