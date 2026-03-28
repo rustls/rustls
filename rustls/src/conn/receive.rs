@@ -61,12 +61,8 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             }
         };
 
-        let mut want_close_before_decrypt = false;
-        let Decrypted {
-            plaintext: msg,
-            want_close_before_decrypt,
-        } = loop {
-            // before processing any more of `buffer`, return any extant messages from `deframer`
+        // before processing any more of `buffer`, return any extant messages from `deframer`
+        let (message, want_close_before_decrypt) =
             if let Some(span) = self.recv.deframer.complete_span() {
                 let plaintext = self
                     .recv
@@ -78,93 +74,93 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                     .decrypt_state
                     .finish_trial_decryption();
 
-                break Decrypted {
-                    plaintext,
-                    want_close_before_decrypt,
-                };
-            }
-
-            let (message, bounds) = match self.recv.deframe(self.input, &self.locator) {
-                Ok(DeframeResult::Decrypted(message, bounds)) => (message, bounds),
-                Ok(DeframeResult::DecryptionFailed) => {
-                    *self.state = Ok(st);
-                    return Some(Ok(None));
-                }
-                Ok(DeframeResult::None) => {
-                    *self.state = Ok(st);
-                    return None;
-                }
-                Err(e) => return error::<Side>(e, Some(st), self.state, self.output.send),
-            };
-
-            want_close_before_decrypt = message.want_close_before_decrypt;
-            let Decrypted {
-                plaintext: message,
-                want_close_before_decrypt: _,
-            } = message;
-
-            if self.recv.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
-                // "Handshake messages MUST NOT be interleaved with other record
-                // types.  That is, if a handshake message is split over two or more
-                // records, there MUST NOT be any other records between them."
-                // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-                return error::<Side>(
-                    PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into(),
-                    Some(st),
-                    self.state,
-                    self.output.send,
-                );
-            }
-
-            match message.payload.len() {
-                0 => {
-                    if self
-                        .recv
-                        .seen_consecutive_empty_fragments
-                        == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
-                    {
-                        return error::<Side>(
-                            PeerMisbehaved::TooManyEmptyFragments.into(),
-                            Some(st),
-                            self.state,
-                            self.output.send,
-                        );
+                (plaintext, false)
+            } else {
+                let (message, bounds) = match self.recv.deframe(self.input, &self.locator) {
+                    Ok(DeframeResult::Decrypted(message, bounds)) => (message, bounds),
+                    Ok(DeframeResult::DecryptionFailed) => {
+                        *self.state = Ok(st);
+                        return Some(Ok(None));
                     }
-                    self.recv
-                        .seen_consecutive_empty_fragments += 1;
-                }
-                _ => {
-                    self.recv
-                        .seen_consecutive_empty_fragments = 0;
-                }
-            };
+                    Ok(DeframeResult::None) => {
+                        *self.state = Ok(st);
+                        return None;
+                    }
+                    Err(e) => return error::<Side>(e, Some(st), self.state, self.output.send),
+                };
 
-            // do an end-run around the borrow checker, converting `message` (containing
-            // a borrowed slice) to an unborrowed one (containing a `Range` into the
-            // same buffer).  the reborrow happens inside the branch that returns the
-            // message.
-            //
-            // is fixed by -Zpolonius
-            // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
-            let unborrowed = InboundUnborrowedMessage::unborrow(&self.locator, message);
-
-            if unborrowed.typ != ContentType::Handshake {
-                let message = unborrowed.reborrow(&Delocator::new(self.input));
-                self.recv.deframer.discard_processed();
-                break Decrypted {
+                let Decrypted {
                     plaintext: message,
                     want_close_before_decrypt,
-                };
-            }
+                } = message;
 
-            let message = unborrowed.reborrow(&Delocator::new(self.input));
-            self.recv
-                .deframer
-                .input_message(message.version, bounds, self.input);
-            if let Err(err) = self.recv.deframer.coalesce(self.input) {
-                return error::<Side>(err.into(), Some(st), self.state, self.output.send);
-            }
-        };
+                if self.recv.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+                    // "Handshake messages MUST NOT be interleaved with other record
+                    // types.  That is, if a handshake message is split over two or more
+                    // records, there MUST NOT be any other records between them."
+                    // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
+                    return error::<Side>(
+                        PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into(),
+                        Some(st),
+                        self.state,
+                        self.output.send,
+                    );
+                }
+
+                match message.payload.len() {
+                    0 => {
+                        if self
+                            .recv
+                            .seen_consecutive_empty_fragments
+                            == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
+                        {
+                            return error::<Side>(
+                                PeerMisbehaved::TooManyEmptyFragments.into(),
+                                Some(st),
+                                self.state,
+                                self.output.send,
+                            );
+                        }
+                        self.recv
+                            .seen_consecutive_empty_fragments += 1;
+                    }
+                    _ => {
+                        self.recv
+                            .seen_consecutive_empty_fragments = 0;
+                    }
+                };
+
+                // do an end-run around the borrow checker, converting `message` (containing
+                // a borrowed slice) to an unborrowed one (containing a `Range` into the
+                // same buffer).  the reborrow happens inside the branch that returns the
+                // message.
+                //
+                // is fixed by -Zpolonius
+                // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
+                let unborrowed = InboundUnborrowedMessage::unborrow(&self.locator, message);
+                match unborrowed.typ {
+                    ContentType::Handshake => {
+                        let message = unborrowed.reborrow(&Delocator::new(self.input));
+                        self.recv
+                            .deframer
+                            .input_message(message.version, bounds, self.input);
+                        return match self.recv.deframer.coalesce(self.input) {
+                            Ok(()) => {
+                                *self.state = Ok(st);
+                                Some(Ok(None))
+                            }
+                            Err(err) => {
+                                error::<Side>(err.into(), Some(st), self.state, self.output.send)
+                            }
+                        };
+                    }
+                    _ => {
+                        let message = unborrowed.reborrow(&Delocator::new(self.input));
+                        self.recv.deframer.discard_processed();
+                        (message, want_close_before_decrypt)
+                    }
+                }
+            };
 
         let mut plaintext = None;
         let mut output = CaptureAppData {
@@ -185,7 +181,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
         let hs_aligned = output.recv.deframer.aligned();
         let result = match output
             .recv
-            .receive_message(msg, hs_aligned, output.other.send)
+            .receive_message(message, hs_aligned, output.other.send)
         {
             Ok(Some(input)) => st.handle(input, &mut output),
             Ok(None) => Ok(st),
