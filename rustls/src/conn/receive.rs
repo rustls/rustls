@@ -62,7 +62,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
         };
 
         let mut want_close_before_decrypt = false;
-        let res = 'deframe: loop {
+        let opt_msg = 'deframe: loop {
             // before processing any more of `buffer`, return any extant messages from `deframer`
             if let Some(span) = self.recv.deframer.complete_span() {
                 let plaintext = self
@@ -75,10 +75,10 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                     .decrypt_state
                     .finish_trial_decryption();
 
-                break Ok(Some(Decrypted {
+                break Some(Decrypted {
                     plaintext,
                     want_close_before_decrypt,
-                }));
+                });
             }
 
             let (message, bounds) = loop {
@@ -90,8 +90,8 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                         break (decrypted, bounds);
                     }
                     Ok(DeframeResult::DecryptionFailed) => continue,
-                    Ok(DeframeResult::None) => break 'deframe Ok(None),
-                    Err(e) => break 'deframe Err(e),
+                    Ok(DeframeResult::None) => break 'deframe None,
+                    Err(e) => return error::<Side>(e, Some(st), self.state, self.output.send),
                 }
             };
 
@@ -106,7 +106,12 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
                 // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-                break Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
+                return error::<Side>(
+                    PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into(),
+                    Some(st),
+                    self.state,
+                    self.output.send,
+                );
             }
 
             match message.payload.len() {
@@ -116,7 +121,12 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                         .seen_consecutive_empty_fragments
                         == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
                     {
-                        break Err(PeerMisbehaved::TooManyEmptyFragments.into());
+                        return error::<Side>(
+                            PeerMisbehaved::TooManyEmptyFragments.into(),
+                            Some(st),
+                            self.state,
+                            self.output.send,
+                        );
                     }
                     self.recv
                         .seen_consecutive_empty_fragments += 1;
@@ -139,10 +149,10 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             if unborrowed.typ != ContentType::Handshake {
                 let message = unborrowed.reborrow(&Delocator::new(self.input));
                 self.recv.deframer.discard_processed();
-                break Ok(Some(Decrypted {
+                break Some(Decrypted {
                     plaintext: message,
                     want_close_before_decrypt,
-                }));
+                });
             }
 
             let message = unborrowed.reborrow(&Delocator::new(self.input));
@@ -150,7 +160,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 .deframer
                 .input_message(message.version, bounds, self.input);
             if let Err(err) = self.recv.deframer.coalesce(self.input) {
-                break 'deframe Err(err.into());
+                return error::<Side>(err.into(), Some(st), self.state, self.output.send);
             }
         };
 
@@ -163,27 +173,14 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             _message_lifetime: PhantomData,
         };
 
-        let opt_msg = match res {
-            Ok(opt_msg) => opt_msg,
-            Err(e) => {
-                maybe_send_fatal_alert(output.other.send, &e);
-                if let Error::DecryptError = e {
-                    st.handle_decrypt_error();
-                }
-                *self.state = Err(e.clone());
-                return Some(Err(e));
-            }
-        };
-
-        let Some(msg) = opt_msg else {
+        let Some(Decrypted {
+            plaintext: msg,
+            want_close_before_decrypt,
+        }) = opt_msg
+        else {
             *self.state = Ok(st);
             return None;
         };
-
-        let Decrypted {
-            plaintext: msg,
-            want_close_before_decrypt,
-        } = msg;
 
         if want_close_before_decrypt {
             output
@@ -204,11 +201,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
 
         match result {
             Ok(new) => st = new,
-            Err(e) => {
-                maybe_send_fatal_alert(output.other.send, &e);
-                *self.state = Err(e.clone());
-                return Some(Err(e));
-            }
+            Err(e) => return error::<Side>(e, None, self.state, output.other.send),
         }
 
         if self.recv.has_received_close_notify {
@@ -225,6 +218,24 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
         *self.state = Ok(st);
         Some(Ok(plaintext.take()))
     }
+}
+
+/// Handling for errors during message deframing.
+///
+/// This must be detached from `MessageIter` to avoid borrow conflicts.
+fn error<Side: SideData>(
+    e: Error,
+    state: Option<Side::State>,
+    result: &mut Result<Side::State, Error>,
+    send: &mut dyn SendOutput,
+) -> Option<Result<Option<UnborrowedPayload>, Error>> {
+    maybe_send_fatal_alert(send, &e);
+    if let (Some(mut state), Error::DecryptError) = (state, &e) {
+        state.handle_decrypt_error();
+    }
+
+    *result = Err(e.clone());
+    Some(Err(e))
 }
 
 pub(crate) struct ReceivePath {
