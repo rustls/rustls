@@ -401,10 +401,20 @@ impl<Side: SideData> ConnectionCommon<Side> {
             &mut self.core,
         );
 
-        match iter.next() {
+        let result = match iter.next() {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),
-        }
+        };
+
+        self.deframer_buffer.discard(
+            self.core
+                .common
+                .recv
+                .deframer
+                .take_discard(),
+        );
+
+        result
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
