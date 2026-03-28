@@ -48,184 +48,182 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
         }
     }
 
-    pub(crate) fn next(&mut self) -> Option<Result<UnborrowedPayload, Error>> {
+    pub(crate) fn next(&mut self) -> Option<Result<Option<UnborrowedPayload>, Error>> {
         let mut st = match mem::replace(self.state, Err(Error::HandshakeNotComplete)) {
-            Ok(state) => state,
+            Ok(state) if state.wants_input() => state,
+            Ok(state) => {
+                *self.state = Ok(state);
+                return None;
+            }
             Err(e) => {
                 *self.state = Err(e.clone());
                 return Some(Err(e));
             }
         };
 
-        while st.wants_input() {
-            let mut want_close_before_decrypt = false;
-
-            let res = 'deframe: loop {
-                // before processing any more of `buffer`, return any extant messages from `deframer`
-                if let Some(span) = self.recv.deframer.complete_span() {
-                    let plaintext = self
-                        .recv
-                        .deframer
-                        .message(span, self.input);
-
-                    // trial decryption finishes with the first handshake message after it started.
-                    self.recv
-                        .decrypt_state
-                        .finish_trial_decryption();
-
-                    break Ok(Some(Decrypted {
-                        plaintext,
-                        want_close_before_decrypt,
-                    }));
-                }
-
-                let (message, bounds) = loop {
-                    match self
-                        .recv
-                        .deframe(self.input, &self.locator)
-                    {
-                        Ok(DeframeResult::Decrypted(decrypted, bounds)) => {
-                            break (decrypted, bounds);
-                        }
-                        Ok(DeframeResult::DecryptionFailed) => continue,
-                        Ok(DeframeResult::None) => break 'deframe Ok(None),
-                        Err(e) => break 'deframe Err(e),
-                    }
-                };
-
-                want_close_before_decrypt = message.want_close_before_decrypt;
-                let Decrypted {
-                    plaintext: message,
-                    want_close_before_decrypt: _,
-                } = message;
-
-                if self.recv.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
-                    // "Handshake messages MUST NOT be interleaved with other record
-                    // types.  That is, if a handshake message is split over two or more
-                    // records, there MUST NOT be any other records between them."
-                    // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-                    break Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
-                }
-
-                match message.payload.len() {
-                    0 => {
-                        if self
-                            .recv
-                            .seen_consecutive_empty_fragments
-                            == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
-                        {
-                            break Err(PeerMisbehaved::TooManyEmptyFragments.into());
-                        }
-                        self.recv
-                            .seen_consecutive_empty_fragments += 1;
-                    }
-                    _ => {
-                        self.recv
-                            .seen_consecutive_empty_fragments = 0;
-                    }
-                };
-
-                // do an end-run around the borrow checker, converting `message` (containing
-                // a borrowed slice) to an unborrowed one (containing a `Range` into the
-                // same buffer).  the reborrow happens inside the branch that returns the
-                // message.
-                //
-                // is fixed by -Zpolonius
-                // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
-                let unborrowed = InboundUnborrowedMessage::unborrow(&self.locator, message);
-
-                if unborrowed.typ != ContentType::Handshake {
-                    let message = unborrowed.reborrow(&Delocator::new(self.input));
-                    self.recv.deframer.discard_processed();
-                    break Ok(Some(Decrypted {
-                        plaintext: message,
-                        want_close_before_decrypt,
-                    }));
-                }
-
-                let message = unborrowed.reborrow(&Delocator::new(self.input));
-                self.recv
+        let mut want_close_before_decrypt = false;
+        let res = 'deframe: loop {
+            // before processing any more of `buffer`, return any extant messages from `deframer`
+            if let Some(span) = self.recv.deframer.complete_span() {
+                let plaintext = self
+                    .recv
                     .deframer
-                    .input_message(message.version, bounds, self.input);
-                if let Err(err) = self.recv.deframer.coalesce(self.input) {
-                    break 'deframe Err(err.into());
-                }
-            };
+                    .message(span, self.input);
 
-            let mut plaintext = None;
-            let mut output = CaptureAppData {
-                recv: self.recv,
-                other: &mut self.output,
-                plaintext_locator: &self.locator,
-                received_plaintext: &mut plaintext,
-                _message_lifetime: PhantomData,
-            };
+                // trial decryption finishes with the first handshake message after it started.
+                self.recv
+                    .decrypt_state
+                    .finish_trial_decryption();
 
-            let opt_msg = match res {
-                Ok(opt_msg) => opt_msg,
-                Err(e) => {
-                    maybe_send_fatal_alert(output.other.send, &e);
-                    if let Error::DecryptError = e {
-                        st.handle_decrypt_error();
+                break Ok(Some(Decrypted {
+                    plaintext,
+                    want_close_before_decrypt,
+                }));
+            }
+
+            let (message, bounds) = loop {
+                match self
+                    .recv
+                    .deframe(self.input, &self.locator)
+                {
+                    Ok(DeframeResult::Decrypted(decrypted, bounds)) => {
+                        break (decrypted, bounds);
                     }
-                    *self.state = Err(e.clone());
-                    return Some(Err(e));
+                    Ok(DeframeResult::DecryptionFailed) => continue,
+                    Ok(DeframeResult::None) => break 'deframe Ok(None),
+                    Err(e) => break 'deframe Err(e),
                 }
             };
 
-            let Some(msg) = opt_msg else {
-                break;
-            };
-
+            want_close_before_decrypt = message.want_close_before_decrypt;
             let Decrypted {
-                plaintext: msg,
-                want_close_before_decrypt,
-            } = msg;
+                plaintext: message,
+                want_close_before_decrypt: _,
+            } = message;
 
-            if want_close_before_decrypt {
-                output
-                    .other
-                    .send
-                    .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
+            if self.recv.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+                // "Handshake messages MUST NOT be interleaved with other record
+                // types.  That is, if a handshake message is split over two or more
+                // records, there MUST NOT be any other records between them."
+                // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
+                break Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 
-            let hs_aligned = output.recv.deframer.aligned();
-            let result = match output
-                .recv
-                .receive_message(msg, hs_aligned, output.other.send)
-            {
-                Ok(Some(input)) => st.handle(input, &mut output),
-                Ok(None) => Ok(st),
-                Err(e) => Err(e),
+            match message.payload.len() {
+                0 => {
+                    if self
+                        .recv
+                        .seen_consecutive_empty_fragments
+                        == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
+                    {
+                        break Err(PeerMisbehaved::TooManyEmptyFragments.into());
+                    }
+                    self.recv
+                        .seen_consecutive_empty_fragments += 1;
+                }
+                _ => {
+                    self.recv
+                        .seen_consecutive_empty_fragments = 0;
+                }
             };
 
-            match result {
-                Ok(new) => st = new,
-                Err(e) => {
-                    maybe_send_fatal_alert(output.other.send, &e);
-                    *self.state = Err(e.clone());
-                    return Some(Err(e));
+            // do an end-run around the borrow checker, converting `message` (containing
+            // a borrowed slice) to an unborrowed one (containing a `Range` into the
+            // same buffer).  the reborrow happens inside the branch that returns the
+            // message.
+            //
+            // is fixed by -Zpolonius
+            // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
+            let unborrowed = InboundUnborrowedMessage::unborrow(&self.locator, message);
+
+            if unborrowed.typ != ContentType::Handshake {
+                let message = unborrowed.reborrow(&Delocator::new(self.input));
+                self.recv.deframer.discard_processed();
+                break Ok(Some(Decrypted {
+                    plaintext: message,
+                    want_close_before_decrypt,
+                }));
+            }
+
+            let message = unborrowed.reborrow(&Delocator::new(self.input));
+            self.recv
+                .deframer
+                .input_message(message.version, bounds, self.input);
+            if let Err(err) = self.recv.deframer.coalesce(self.input) {
+                break 'deframe Err(err.into());
+            }
+        };
+
+        let mut plaintext = None;
+        let mut output = CaptureAppData {
+            recv: self.recv,
+            other: &mut self.output,
+            plaintext_locator: &self.locator,
+            received_plaintext: &mut plaintext,
+            _message_lifetime: PhantomData,
+        };
+
+        let opt_msg = match res {
+            Ok(opt_msg) => opt_msg,
+            Err(e) => {
+                maybe_send_fatal_alert(output.other.send, &e);
+                if let Error::DecryptError = e {
+                    st.handle_decrypt_error();
                 }
+                *self.state = Err(e.clone());
+                return Some(Err(e));
             }
+        };
 
-            if self.recv.has_received_close_notify {
-                // "Any data received after a closure alert has been received MUST be ignored."
-                // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
-                // This is data that has already been accepted in `read_tls`.
-                self.recv
-                    .deframer
-                    .set_discard(self.input.len());
-                break;
-            }
+        let Some(msg) = opt_msg else {
+            *self.state = Ok(st);
+            return None;
+        };
 
-            if let Some(payload) = plaintext.take() {
-                *self.state = Ok(st);
-                return Some(Ok(payload));
+        let Decrypted {
+            plaintext: msg,
+            want_close_before_decrypt,
+        } = msg;
+
+        if want_close_before_decrypt {
+            output
+                .other
+                .send
+                .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
+        }
+
+        let hs_aligned = output.recv.deframer.aligned();
+        let result = match output
+            .recv
+            .receive_message(msg, hs_aligned, output.other.send)
+        {
+            Ok(Some(input)) => st.handle(input, &mut output),
+            Ok(None) => Ok(st),
+            Err(e) => Err(e),
+        };
+
+        match result {
+            Ok(new) => st = new,
+            Err(e) => {
+                maybe_send_fatal_alert(output.other.send, &e);
+                *self.state = Err(e.clone());
+                return Some(Err(e));
             }
         }
 
+        if self.recv.has_received_close_notify {
+            // "Any data received after a closure alert has been received MUST be ignored."
+            // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
+            // This is data that has already been accepted in `read_tls`.
+            self.recv
+                .deframer
+                .set_discard(self.input.len());
+            *self.state = Ok(st);
+            return None;
+        }
+
         *self.state = Ok(st);
-        None
+        Some(Ok(plaintext.take()))
     }
 }
 
