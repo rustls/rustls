@@ -88,7 +88,7 @@ impl ReceivePath {
                 }
 
                 let (message, bounds) = loop {
-                    match self.deframe_decrypted(buffer, &locator)? {
+                    match self.deframe(buffer, &locator)? {
                         DeframeResult::Decrypted(decrypted, bounds) => break (decrypted, bounds),
                         DeframeResult::DecryptionFailed => continue,
                         DeframeResult::None => return Ok(None),
@@ -228,7 +228,7 @@ impl ReceivePath {
         Ok(None)
     }
 
-    fn deframe_decrypted<'b>(
+    fn deframe<'b>(
         &mut self,
         buffer: &'b mut [u8],
         locator: &Locator,
