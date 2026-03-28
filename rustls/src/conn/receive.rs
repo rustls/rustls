@@ -21,6 +21,7 @@ use crate::msgs::{
 use crate::quic::QuicOutput;
 
 pub(crate) struct MessageIter<'a, 'm, Side: SideData> {
+    locator: Locator,
     pub(super) input: &'m mut [u8],
     recv: &'a mut ReceivePath,
     state: &'a mut Result<Side::State, Error>,
@@ -34,6 +35,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
         conn: &'a mut ConnectionCore<Side>,
     ) -> Self {
         Self {
+            locator: Locator::new(input),
             recv: &mut conn.common.recv,
             input,
             state: &mut conn.state,
@@ -57,7 +59,6 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
 
         let mut plaintext = None;
         while st.wants_input() {
-            let locator = Locator::new(self.input);
             let mut want_close_before_decrypt = false;
 
             let res = 'deframe: loop {
@@ -80,7 +81,10 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 }
 
                 let (message, bounds) = loop {
-                    match self.recv.deframe(self.input, &locator) {
+                    match self
+                        .recv
+                        .deframe(self.input, &self.locator)
+                    {
                         Ok(DeframeResult::Decrypted(decrypted, bounds)) => {
                             break (decrypted, bounds);
                         }
@@ -129,7 +133,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 //
                 // is fixed by -Zpolonius
                 // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
-                let unborrowed = InboundUnborrowedMessage::unborrow(&locator, message);
+                let unborrowed = InboundUnborrowedMessage::unborrow(&self.locator, message);
 
                 if unborrowed.typ != ContentType::Handshake {
                     let message = unborrowed.reborrow(&Delocator::new(self.input));
@@ -152,7 +156,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             let mut output = CaptureAppData {
                 recv: self.recv,
                 other: &mut self.output,
-                plaintext_locator: &locator,
+                plaintext_locator: &self.locator,
                 received_plaintext: &mut plaintext,
                 _message_lifetime: PhantomData,
             };
