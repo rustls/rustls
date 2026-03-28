@@ -501,13 +501,19 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
         let mut iter = MessageIter::new(buf, None, &mut self.core);
         while let Some(result) = iter.next() {
-            let payload = result?;
-            let payload = payload.reborrow(&Delocator::new(iter.input().slice_mut()));
+            let payload = result?.reborrow(&Delocator::new(iter.input().slice_mut()));
             self.buffers
                 .received_plaintext
                 .append(payload.into_vec());
-            iter.discard();
         }
+
+        buf.discard(
+            self.core
+                .common
+                .recv
+                .deframer
+                .take_discard(),
+        );
 
         // Release unsent buffered plaintext.
         if self.send.may_send_application_data

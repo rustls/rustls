@@ -282,11 +282,8 @@ impl Deframer {
         next_span: FragmentSpan,
         containing_buffer: &'b [u8],
     ) -> EncodedMessage<&'b [u8]> {
-        // if this is the last handshake message, then we'll end
-        // up with an empty `spans` and can discard the remainder
-        // of the input buffer.
         if self.spans.is_empty() {
-            self.discard += self.processed;
+            self.discard = self.processed;
         }
 
         EncodedMessage {
@@ -306,18 +303,26 @@ impl Deframer {
 
     #[inline]
     pub(crate) fn take_discard(&mut self) -> usize {
-        // the caller is about to discard `discard` bytes
-        // from the front of the buffer.  adjust `processed`
-        // down by the same amount.
-        self.processed = self
-            .processed
-            .saturating_sub(self.discard);
-        mem::take(&mut self.discard)
+        let discard = mem::take(&mut self.discard);
+        self.processed = self.processed.saturating_sub(discard);
+        for span in &mut self.spans {
+            span.bounds.start = span
+                .bounds
+                .start
+                .saturating_sub(discard);
+            span.bounds.end = span.bounds.end.saturating_sub(discard);
+        }
+        discard
     }
 
     #[inline]
     pub(crate) fn discard_processed(&mut self) {
         self.discard = self.processed;
+    }
+
+    #[inline]
+    pub(crate) fn set_discard(&mut self, discard: usize) {
+        self.discard = discard;
     }
 
     /// We are "aligned" if there is no partial fragments of a handshake message.

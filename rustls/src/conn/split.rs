@@ -221,6 +221,8 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             }));
         }
 
+        received_tls.discard(recv.deframer.take_discard());
+
         // `SendAdapter` records whether a send-side action may be needed after the above
         // receive-side processing.  If the sender was not locked no change could be made to it.
         if let SendAdapter::Locked { send_required, .. } = send_adapter {
