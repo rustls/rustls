@@ -412,10 +412,11 @@ mod connection {
                 &mut self.core,
             );
 
-            match iter.next() {
-                Some(Ok(_)) | None => Ok(()),
-                Some(Err(e)) => Err(e),
+            while let Some(result) = iter.next() {
+                let _ = result?;
             }
+
+            Ok(())
         }
 
         fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {

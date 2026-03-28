@@ -544,7 +544,10 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         let mut iter = MessageIter::new(&mut self.buffers.deframer_buffer, None, &mut self.core);
         while let Some(result) = iter.next() {
-            let payload = result?;
+            let Some(payload) = result? else {
+                continue;
+            };
+            
             let payload = payload.reborrow(&Delocator::new(iter.input().slice_mut()));
             self.buffers
                 .received_plaintext
