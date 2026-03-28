@@ -15,8 +15,8 @@ use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
-    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
-    HandshakeAlignedProof, Locator, Message, MessagePayload, TlsInputBuffer,
+    AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, HandshakeAlignedProof,
+    Locator, Message, MessagePayload, TlsInputBuffer,
 };
 use crate::quic::QuicOutput;
 
@@ -128,17 +128,8 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                     }
                 };
 
-                // do an end-run around the borrow checker, converting `message` (containing
-                // a borrowed slice) to an unborrowed one (containing a `Range` into the
-                // same buffer).  the reborrow happens inside the branch that returns the
-                // message.
-                //
-                // is fixed by -Zpolonius
-                // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
-                let unborrowed = InboundUnborrowedMessage::unborrow(&self.locator, message);
-                match unborrowed.typ {
+                match message.typ {
                     ContentType::Handshake => {
-                        let message = unborrowed.reborrow(&Delocator::new(buffer));
                         self.recv
                             .deframer
                             .input_message(message.version, bounds, buffer);
@@ -153,7 +144,6 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                         };
                     }
                     _ => {
-                        let message = unborrowed.reborrow(&Delocator::new(buffer));
                         self.recv.deframer.discard_processed();
                         (message, want_close_before_decrypt)
                     }
@@ -648,32 +638,6 @@ impl Input<'_> {
     pub(crate) fn check_aligned_handshake(&self) -> Result<HandshakeAlignedProof, Error> {
         self.aligned_handshake
             .ok_or_else(|| PeerMisbehaved::KeyEpochWithPendingFragment.into())
-    }
-}
-
-/// An [`EncodedMessage<Payload<'_>>`] which does not borrow its payload, but
-/// references a range that can later be borrowed.
-struct InboundUnborrowedMessage {
-    typ: ContentType,
-    version: ProtocolVersion,
-    bounds: Range<usize>,
-}
-
-impl InboundUnborrowedMessage {
-    fn unborrow(locator: &Locator, msg: EncodedMessage<&'_ [u8]>) -> Self {
-        Self {
-            typ: msg.typ,
-            version: msg.version,
-            bounds: locator.locate(msg.payload),
-        }
-    }
-
-    fn reborrow<'b>(self, delocator: &Delocator<'b>) -> EncodedMessage<&'b [u8]> {
-        EncodedMessage {
-            typ: self.typ,
-            version: self.version,
-            payload: delocator.slice_from_range(&self.bounds),
-        }
     }
 }
 
