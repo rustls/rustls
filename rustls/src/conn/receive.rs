@@ -84,21 +84,17 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 };
             }
 
-            let (message, bounds) = loop {
-                match self
-                    .recv
-                    .deframe(self.input, &self.locator)
-                {
-                    Ok(DeframeResult::Decrypted(decrypted, bounds)) => {
-                        break (decrypted, bounds);
-                    }
-                    Ok(DeframeResult::DecryptionFailed) => continue,
-                    Ok(DeframeResult::None) => {
-                        *self.state = Ok(st);
-                        return None;
-                    }
-                    Err(e) => return error::<Side>(e, Some(st), self.state, self.output.send),
+            let (message, bounds) = match self.recv.deframe(self.input, &self.locator) {
+                Ok(DeframeResult::Decrypted(message, bounds)) => (message, bounds),
+                Ok(DeframeResult::DecryptionFailed) => {
+                    *self.state = Ok(st);
+                    return Some(Ok(None));
                 }
+                Ok(DeframeResult::None) => {
+                    *self.state = Ok(st);
+                    return None;
+                }
+                Err(e) => return error::<Side>(e, Some(st), self.state, self.output.send),
             };
 
             want_close_before_decrypt = message.want_close_before_decrypt;
