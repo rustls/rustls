@@ -70,7 +70,84 @@ impl ReceivePath {
         while st.wants_input() {
             let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
-            let res = self.deframe(buffer);
+            let mut want_close_before_decrypt = false;
+
+            let res = 'deframe: loop {
+                // before processing any more of `buffer`, return any extant messages from `deframer`
+                if let Some(span) = self.deframer.complete_span() {
+                    let plaintext = self.deframer.message(span, buffer);
+
+                    // trial decryption finishes with the first handshake message after it started.
+                    self.decrypt_state
+                        .finish_trial_decryption();
+
+                    break Ok(Some(Decrypted {
+                        plaintext,
+                        want_close_before_decrypt,
+                    }));
+                }
+
+                let (message, bounds) = loop {
+                    match self.deframe_decrypted(buffer, &locator)? {
+                        DeframeResult::Decrypted(decrypted, bounds) => break (decrypted, bounds),
+                        DeframeResult::DecryptionFailed => continue,
+                        DeframeResult::None => return Ok(None),
+                    }
+                };
+
+                want_close_before_decrypt = message.want_close_before_decrypt;
+                let Decrypted {
+                    plaintext: message,
+                    want_close_before_decrypt: _,
+                } = message;
+
+                if self.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+                    // "Handshake messages MUST NOT be interleaved with other record
+                    // types.  That is, if a handshake message is split over two or more
+                    // records, there MUST NOT be any other records between them."
+                    // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
+                    break Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
+                }
+
+                match message.payload.len() {
+                    0 => {
+                        if self.seen_consecutive_empty_fragments
+                            == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
+                        {
+                            break Err(PeerMisbehaved::TooManyEmptyFragments.into());
+                        }
+                        self.seen_consecutive_empty_fragments += 1;
+                    }
+                    _ => {
+                        self.seen_consecutive_empty_fragments = 0;
+                    }
+                };
+
+                // do an end-run around the borrow checker, converting `message` (containing
+                // a borrowed slice) to an unborrowed one (containing a `Range` into the
+                // same buffer).  the reborrow happens inside the branch that returns the
+                // message.
+                //
+                // is fixed by -Zpolonius
+                // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
+                let unborrowed = InboundUnborrowedMessage::unborrow(&locator, message);
+
+                if unborrowed.typ != ContentType::Handshake {
+                    let message = unborrowed.reborrow(&Delocator::new(buffer));
+                    self.deframer.discard_processed();
+                    break Ok(Some(Decrypted {
+                        plaintext: message,
+                        want_close_before_decrypt,
+                    }));
+                }
+
+                let message = unborrowed.reborrow(&Delocator::new(buffer));
+                self.deframer
+                    .input_message(message.version, bounds, buffer);
+                if let Err(err) = self.deframer.coalesce(buffer) {
+                    break 'deframe Err(err.into());
+                }
+            };
 
             let mut output = CaptureAppData {
                 recv: self,
@@ -149,87 +226,6 @@ impl ReceivePath {
         input.discard(self.deframer.take_discard());
         *state = Ok(st);
         Ok(None)
-    }
-
-    /// Pull a message out of the deframer and send any messages that need to be sent as a result.
-    fn deframe<'b>(&mut self, buffer: &'b mut [u8]) -> Result<Option<Decrypted<'b>>, Error> {
-        let locator = Locator::new(buffer);
-
-        let mut want_close_before_decrypt = false;
-        loop {
-            // before processing any more of `buffer`, return any extant messages from `deframer`
-            if let Some(span) = self.deframer.complete_span() {
-                let plaintext = self.deframer.message(span, buffer);
-
-                // trial decryption finishes with the first handshake message after it started.
-                self.decrypt_state
-                    .finish_trial_decryption();
-
-                return Ok(Some(Decrypted {
-                    plaintext,
-                    want_close_before_decrypt,
-                }));
-            }
-
-            let (message, bounds) = loop {
-                match self.deframe_decrypted(buffer, &locator)? {
-                    DeframeResult::Decrypted(decrypted, bounds) => break (decrypted, bounds),
-                    DeframeResult::DecryptionFailed => continue,
-                    DeframeResult::None => return Ok(None),
-                }
-            };
-
-            want_close_before_decrypt = message.want_close_before_decrypt;
-            let Decrypted {
-                plaintext: message,
-                want_close_before_decrypt: _,
-            } = message;
-
-            if self.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
-                // "Handshake messages MUST NOT be interleaved with other record
-                // types.  That is, if a handshake message is split over two or more
-                // records, there MUST NOT be any other records between them."
-                // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-                return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
-            }
-
-            match message.payload.len() {
-                0 => {
-                    if self.seen_consecutive_empty_fragments
-                        == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
-                    {
-                        return Err(PeerMisbehaved::TooManyEmptyFragments.into());
-                    }
-                    self.seen_consecutive_empty_fragments += 1;
-                }
-                _ => {
-                    self.seen_consecutive_empty_fragments = 0;
-                }
-            };
-
-            // do an end-run around the borrow checker, converting `message` (containing
-            // a borrowed slice) to an unborrowed one (containing a `Range` into the
-            // same buffer).  the reborrow happens inside the branch that returns the
-            // message.
-            //
-            // is fixed by -Zpolonius
-            // https://github.com/rust-lang/rfcs/blob/master/text/2094-nll.md#problem-case-3-conditional-control-flow-across-functions
-            let unborrowed = InboundUnborrowedMessage::unborrow(&locator, message);
-
-            if unborrowed.typ != ContentType::Handshake {
-                let message = unborrowed.reborrow(&Delocator::new(buffer));
-                self.deframer.discard_processed();
-                return Ok(Some(Decrypted {
-                    plaintext: message,
-                    want_close_before_decrypt,
-                }));
-            }
-
-            let message = unborrowed.reborrow(&Delocator::new(buffer));
-            self.deframer
-                .input_message(message.version, bounds, buffer);
-            self.deframer.coalesce(buffer)?;
-        }
     }
 
     fn deframe_decrypted<'b>(
