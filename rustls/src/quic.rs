@@ -401,10 +401,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
             &mut self.core,
         );
 
-        let result = match iter.next() {
-            Some(Ok(_)) | None => Ok(()),
-            Some(Err(e)) => Err(e),
-        };
+        while let Some(result) = iter.next() {
+            let _ = result?;
+        }
 
         self.deframer_buffer.discard(
             self.core
@@ -414,7 +413,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 .take_discard(),
         );
 
-        result
+        Ok(())
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
