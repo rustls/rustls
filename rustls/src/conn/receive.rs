@@ -63,7 +63,10 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
 
         let buffer = self.input.slice_mut();
         let mut want_close_before_decrypt = false;
-        let opt_msg = 'deframe: loop {
+        let Decrypted {
+            plaintext: msg,
+            want_close_before_decrypt,
+        } = loop {
             // before processing any more of `buffer`, return any extant messages from `deframer`
             if let Some(span) = self.recv.deframer.complete_span() {
                 let plaintext = self.recv.deframer.message(span, buffer);
@@ -73,10 +76,10 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                     .decrypt_state
                     .finish_trial_decryption();
 
-                break Some(Decrypted {
+                break Decrypted {
                     plaintext,
                     want_close_before_decrypt,
-                });
+                };
             }
 
             let (message, bounds) = loop {
@@ -85,7 +88,10 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                         break (decrypted, bounds);
                     }
                     Ok(DeframeResult::DecryptionFailed) => continue,
-                    Ok(DeframeResult::None) => break 'deframe None,
+                    Ok(DeframeResult::None) => {
+                        *self.state = Ok(st);
+                        return None;
+                    }
                     Err(e) => return error::<Side>(e, Some(st), self.state, self.output.send),
                 }
             };
@@ -144,10 +150,10 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             if unborrowed.typ != ContentType::Handshake {
                 let message = unborrowed.reborrow(&Delocator::new(buffer));
                 self.recv.deframer.discard_processed();
-                break Some(Decrypted {
+                break Decrypted {
                     plaintext: message,
                     want_close_before_decrypt,
-                });
+                };
             }
 
             let message = unborrowed.reborrow(&Delocator::new(buffer));
@@ -166,15 +172,6 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             plaintext_locator: &self.locator,
             received_plaintext: &mut plaintext,
             _message_lifetime: PhantomData,
-        };
-
-        let Some(Decrypted {
-            plaintext: msg,
-            want_close_before_decrypt,
-        }) = opt_msg
-        else {
-            *self.state = Ok(st);
-            return None;
         };
 
         if want_close_before_decrypt {
