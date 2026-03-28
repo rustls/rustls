@@ -549,8 +549,8 @@ impl<Side: SideData> ConnectionCommon<Side> {
             self.buffers
                 .received_plaintext
                 .append(payload.into_vec());
-            iter.discard();
         }
+        drop(iter);
 
         // Release unsent buffered plaintext.
         if self.send.may_send_application_data

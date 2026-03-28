@@ -163,8 +163,6 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                         st.handle_decrypt_error();
                     }
                     *self.state = Err(e.clone());
-                    self.input
-                        .discard(self.recv.deframer.take_discard());
                     return Some(Err(e));
                 }
             };
@@ -200,8 +198,6 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 Err(e) => {
                     maybe_send_fatal_alert(output.other.send, &e);
                     *self.state = Err(e.clone());
-                    self.input
-                        .discard(self.recv.deframer.take_discard());
                     return Some(Err(e));
                 }
             }
@@ -211,7 +207,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
                 // This is data that has already been accepted in `read_tls`.
                 let entirety = self.input.slice_mut().len();
-                self.input.discard(entirety);
+                self.recv.deframer.set_discard(entirety);
                 break;
             }
 
@@ -219,24 +215,21 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 *self.state = Ok(st);
                 return Some(Ok(payload));
             }
-
-            self.input
-                .discard(self.recv.deframer.take_discard());
         }
 
-        self.input
-            .discard(self.recv.deframer.take_discard());
         *self.state = Ok(st);
         None
     }
 
-    pub(super) fn discard(&mut self) {
-        self.input
-            .discard(self.recv.deframer.take_discard());
-    }
-
     pub(super) fn input(&mut self) -> &mut dyn TlsInputBuffer {
         self.input
+    }
+}
+
+impl<Side: SideData> Drop for MessageIter<'_, '_, Side> {
+    fn drop(&mut self) {
+        let discard = self.recv.deframer.take_discard();
+        self.input.discard(discard);
     }
 }
 

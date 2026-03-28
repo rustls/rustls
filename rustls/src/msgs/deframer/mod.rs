@@ -320,6 +320,11 @@ impl Deframer {
         self.discard = self.processed;
     }
 
+    #[inline]
+    pub(crate) fn set_discard(&mut self, discard: usize) {
+        self.discard = discard;
+    }
+
     /// We are "aligned" if there is no partial fragments of a handshake message.
     pub(crate) fn aligned(&self) -> Option<HandshakeAlignedProof> {
         self.spans
