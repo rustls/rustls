@@ -11,7 +11,7 @@ use crate::common_state::{
 };
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{Delocator, Message, Random, TlsInputBuffer, VecInput};
+use crate::msgs::{Delocator, Message, Random, VecInput};
 use crate::quic::QuicOutput;
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -542,28 +542,14 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        loop {
-            let mut iter =
-                MessageIter::new(&mut self.buffers.deframer_buffer, None, &mut self.core);
-
-            let payload = match iter.next() {
-                Some(Ok(payload)) => payload,
-                Some(Err(err)) => return Err(err),
-                None => break,
-            };
-
-            let payload =
-                payload.reborrow(&Delocator::new(self.buffers.deframer_buffer.slice_mut()));
+        let mut iter = MessageIter::new(&mut self.buffers.deframer_buffer, None, &mut self.core);
+        while let Some(result) = iter.next() {
+            let payload = result?;
+            let payload = payload.reborrow(&Delocator::new(iter.input().slice_mut()));
             self.buffers
                 .received_plaintext
                 .append(payload.into_vec());
-            self.buffers.deframer_buffer.discard(
-                self.core
-                    .common
-                    .recv
-                    .deframer
-                    .take_discard(),
-            );
+            iter.discard();
         }
 
         // Release unsent buffered plaintext.
