@@ -547,7 +547,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             let Some(payload) = result? else {
                 continue;
             };
-            
+
             let payload = payload.reborrow(&Delocator::new(iter.input().slice_mut()));
             self.buffers
                 .received_plaintext
