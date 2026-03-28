@@ -8,7 +8,7 @@ use kernel::KernelConnection;
 use pki_types::FipsStatus;
 
 use crate::common_state::{
-    CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, UnborrowedPayload,
+    CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent,
 };
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
@@ -22,8 +22,7 @@ use crate::vecbuf::ChunkVecBuffer;
 pub mod kernel;
 
 mod receive;
-use receive::JoinOutput;
-pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
+pub(crate) use receive::{Input, MessageIter, ReceivePath, TrafficTemperCounters};
 
 mod send;
 use send::DEFAULT_BUFFER_LIMIT;
@@ -529,10 +528,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         loop {
-            let Some(payload) = self
-                .core
-                .process_new_packets(&mut self.buffers.deframer_buffer, None)?
-            else {
+            let mut iter =
+                MessageIter::new(&mut self.buffers.deframer_buffer, None, &mut self.core);
+            let Some(payload) = iter.next()? else {
                 break;
             };
 
@@ -751,24 +749,6 @@ impl<Side: SideData> ConnectionCore<Side> {
             side,
             common,
         }
-    }
-
-    #[inline]
-    pub(crate) fn process_new_packets<'a>(
-        &'a mut self,
-        buffer: &mut dyn TlsInputBuffer,
-        quic: Option<&'a mut dyn QuicOutput>,
-    ) -> Result<Option<UnborrowedPayload>, Error> {
-        let mut output = JoinOutput {
-            outputs: &mut self.common.outputs,
-            quic,
-            send: &mut self.common.send,
-            side: &mut self.side,
-        };
-
-        self.common
-            .recv
-            .process_new_packets::<Side>(buffer, &mut self.state, &mut output)
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
