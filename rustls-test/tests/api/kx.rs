@@ -416,8 +416,6 @@ fn test_server_rejects_clients_without_any_kx_groups() {
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_group_overlap() {
-    let mut client_input = VecInput::default();
-    let mut server_input = VecInput::default();
     for version_provider in ALL_VERSIONS {
         let (mut client, mut server) = make_pair_for_configs(
             make_client_config_with_kx_groups(
@@ -434,6 +432,9 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
             )
             .finish(KeyType::Rsa2048),
         );
+
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
         transfer(&mut client, &mut server_input);
         assert_eq!(
             server.process_new_packets(&mut server_input),
@@ -441,6 +442,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
                 PeerIncompatible::NoKxGroupsInCommon
             ))
         );
+
         transfer(&mut server, &mut client_input);
         assert_eq!(
             client.process_new_packets(&mut client_input),

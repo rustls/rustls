@@ -522,10 +522,20 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .input_quic(self.input.filled_mut(), range)?;
 
         let mut iter = MessageIter::new(&mut self.input, Some(&mut self.quic), &mut self.core);
-        match iter.next() {
+        let result = match iter.next() {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),
-        }
+        };
+
+        self.input.discard(
+            self.core
+                .common
+                .recv
+                .deframer
+                .take_discard(),
+        );
+
+        result
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
