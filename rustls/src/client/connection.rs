@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ops::Deref;
 use core::{fmt, mem};
@@ -6,27 +7,41 @@ use std::io;
 use pki_types::{FipsStatus, ServerName};
 
 use super::config::ClientConfig;
-use super::hs::ClientHelloInput;
-use crate::client::EchStatus;
+use super::hs::{ClientHelloInput, ClientState};
+use super::{ClientHandshake, ClientOutputs, ClientTraffic, EchStatus, SendEarlyData};
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader,
+    Buffers, Connection, ConnectionCore, IoState, KeyingMaterialExporter, PlaintextSink, Reader,
     SideCommonOutput, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
+use crate::crypto::cipher::OutboundPlain;
 use crate::enums::ApplicationProtocol;
-use crate::error::Error;
+use crate::error::{ApiMisuse, Error};
 use crate::log::trace;
 use crate::msgs::ClientExtensionsInput;
 use crate::quic::QuicOutput;
+use crate::state::{ReceiveTraffic, ReceiveTrafficState, SendTraffic};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
-    inner: ConnectionCommon<ClientSide>,
+    state: Result<InnerState, Error>,
+    err_outputs: Option<Box<ClientOutputs>>,
+    buffers: Buffers,
+    fips: FipsStatus,
+}
+
+enum InnerState {
+    Handshake(ClientHandshake),
+    Traffic {
+        send: Option<SendTraffic>,
+        receive: Option<ReceiveTraffic<ClientSide>>,
+        outputs: Box<ClientOutputs>,
+    },
 }
 
 impl fmt::Debug for ClientConnection {
@@ -37,6 +52,26 @@ impl fmt::Debug for ClientConnection {
 }
 
 impl ClientConnection {
+    fn new(state: ClientHandshake, fips: FipsStatus) -> Self {
+        // pump clienthello into outgoing buffers
+        let ClientHandshake::SendClientFlight(mut send) = state else {
+            unreachable!();
+        };
+
+        let mut buffers = Buffers::new();
+        while let Some(chunk) = send.take_data() {
+            buffers.sendable_tls.append(chunk);
+        }
+        let state = Ok(InnerState::Handshake(send.into_next()));
+
+        Self {
+            state,
+            err_outputs: None,
+            buffers,
+            fips,
+        }
+    }
+
     /// Returns an `io::Write` implementer you can write bytes to
     /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
     ///
@@ -56,16 +91,13 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
-        if self
-            .inner
-            .core
-            .side
-            .early_data
-            .is_enabled()
-        {
-            Some(WriteEarlyData::new(self))
-        } else {
-            None
+        let Ok(InnerState::Handshake(ClientHandshake::AwaitServerFlight(st))) = &mut self.state
+        else {
+            return None;
+        };
+        match st.try_send_early_data() {
+            Some(send) => Some(WriteEarlyData::new(send, &mut self.buffers)),
+            None => None,
         }
     }
 
@@ -75,103 +107,380 @@ impl ClientConnection {
     /// handshake then the server will not process the data.  This
     /// is not an error, but you may wish to resend the data.
     pub fn is_early_data_accepted(&self) -> bool {
-        self.inner.core.is_early_data_accepted()
-    }
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
+        match &self.state {
+            Ok(InnerState::Traffic { outputs, .. }) => outputs.early_data_was_accepted,
+            _ => false,
+        }
     }
 
     /// Return the connection's Encrypted Client Hello (ECH) status.
     pub fn ech_status(&self) -> EchStatus {
-        self.inner.core.side.ech_status
-    }
-
-    fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.inner
-            .core
-            .side
-            .early_data
-            .check_write(data.len())
-            .map(|sz| {
-                self.inner
-                    .send
-                    .send_early_plaintext(&data[..sz])
-            })
+        match &self.state {
+            Ok(InnerState::Handshake(st)) => st.ech_status(),
+            Ok(InnerState::Traffic { outputs, .. }) => outputs.ech_status,
+            Err(_) => match &self.err_outputs {
+                Some(o) => o.ech_status,
+                None => EchStatus::Rejected,
+            },
+        }
     }
 
     /// Returns the number of TLS1.3 tickets that have been received.
     pub fn tls13_tickets_received(&self) -> u32 {
-        self.inner
-            .core
-            .common
-            .recv
-            .tls13_tickets_received
+        match &self.state {
+            Ok(InnerState::Traffic { receive, .. }) => receive
+                .as_ref()
+                .map(|r| r.tls13_tickets_received())
+                .unwrap_or_default(),
+            _ => 0,
+        }
+    }
+
+    pub(crate) fn current_io_state(&self) -> IoState {
+        IoState {
+            tls_bytes_to_write: self.buffers.sendable_tls.len(),
+            plaintext_bytes_to_read: self.buffers.received_plaintext.len(),
+            peer_has_closed: self.has_received_close_notify(),
+        }
+    }
+
+    fn has_received_close_notify(&self) -> bool {
+        matches!(&self.state, Ok(InnerState::Traffic { receive: None, .. }))
+    }
+
+    fn write_or_buffer_appdata(&mut self, data: OutboundPlain<'_>) -> io::Result<usize> {
+        let Ok(InnerState::Traffic { send, .. }) = &mut self.state else {
+            return Ok(self
+                .buffers
+                .sendable_plaintext
+                .append_limited_copy(data));
+        };
+
+        let Some(s) = send else {
+            return Ok(0);
+        };
+        let len = data.len();
+
+        let len = self
+            .buffers
+            .sendable_tls
+            .apply_limit(len);
+        if len == 0 {
+            // Don't send empty fragments.
+            return Ok(0);
+        }
+
+        if let Ok(chunks) = s.write(data.split_at(len).0) {
+            for c in chunks {
+                self.buffers.sendable_tls.append(c);
+            }
+        }
+        while let Some(chunk) = s.take_data() {
+            self.buffers.sendable_tls.append(chunk);
+        }
+        Ok(len)
+    }
+
+    /// Act on a potential state transition from a handshake-related state to `new`.
+    fn post_handshake_state(&mut self, new: ClientHandshake) -> InnerState {
+        let ClientHandshake::Complete(traffic) = new else {
+            return InnerState::Handshake(new);
+        };
+
+        let ClientTraffic {
+            mut send,
+            receive,
+            outputs,
+        } = *traffic;
+
+        // Release unsent buffered plaintext.
+        while let Some(chunk) = self.buffers.sendable_plaintext.pop() {
+            let Ok(chunks) = send.write(chunk.as_slice().into()) else {
+                continue;
+            };
+            for c in chunks {
+                self.buffers.sendable_tls.append(c);
+            }
+        }
+
+        InnerState::Traffic {
+            send: Some(send),
+            receive: Some(receive),
+            outputs: Box::new(outputs),
+        }
     }
 }
 
 impl Connection for ClientConnection {
     fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        self.inner.read_tls(rd)
+        if self
+            .buffers
+            .received_plaintext
+            .is_full()
+        {
+            return Err(io::Error::other("received plaintext buffer full"));
+        }
+
+        if self.has_received_close_notify() {
+            return Ok(0);
+        }
+
+        let res = self.buffers.deframer_buffer.read(rd);
+        if let Ok(0) = res {
+            self.buffers.has_seen_eof = true;
+        }
+
+        res
     }
 
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.inner.write_tls(wr)
+        self.buffers.sendable_tls.write_to(wr)
     }
 
     fn wants_read(&self) -> bool {
-        self.inner.wants_read()
+        // We want to read more data all the time, except when we have unprocessed plaintext.
+        // This provides back-pressure to the TCP buffers. We also don't want to read more after
+        // the peer has sent us a close notification.
+        //
+        // In the handshake case we don't have readable plaintext before the handshake has
+        // completed, but also don't want to read if we still have sendable tls.
+        self.buffers
+            .received_plaintext
+            .is_empty()
+            && !self
+                .current_io_state()
+                .peer_has_closed()
+            && (!self.is_handshaking() || self.buffers.sendable_tls.is_empty())
     }
 
     fn wants_write(&self) -> bool {
-        self.inner.wants_write()
+        !self.buffers.sendable_tls.is_empty()
     }
 
     fn reader(&mut self) -> Reader<'_> {
-        self.inner.reader()
+        let has_received_close_notify = self.has_received_close_notify();
+        Reader {
+            received_plaintext: &mut self.buffers.received_plaintext,
+            // Are we done? i.e., have we processed all received messages, and received a
+            // close_notify to indicate that no new messages will arrive?
+            has_received_close_notify,
+            has_seen_eof: self.buffers.has_seen_eof,
+        }
     }
 
     fn writer(&mut self) -> Writer<'_> {
-        self.inner.writer()
+        Writer::new(self)
     }
 
     fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        self.inner.process_new_packets()
+        loop {
+            let state = match mem::replace(
+                &mut self.state,
+                Err(ApiMisuse::PreviousConnectionError.into()),
+            ) {
+                Ok(state) => state,
+                Err(e) => {
+                    self.state = Err(e.clone());
+                    return Err(e);
+                }
+            };
+
+            match state {
+                InnerState::Handshake(ClientHandshake::SendClientFlight(mut scf)) => {
+                    while let Some(chunk) = scf.take_data() {
+                        self.buffers.sendable_tls.append(chunk);
+                    }
+                    self.state = Ok(self.post_handshake_state(scf.into_next()));
+                }
+                InnerState::Handshake(ClientHandshake::AwaitServerFlight(asf)) => {
+                    if self.buffers.deframer_buffer.is_empty() {
+                        self.state = Ok(InnerState::Handshake(ClientHandshake::AwaitServerFlight(
+                            asf,
+                        )));
+                        break;
+                    }
+                    match asf.input_data(&mut self.buffers.deframer_buffer) {
+                        Ok(state) => {
+                            self.state = Ok(self.post_handshake_state(state));
+                            if matches!(
+                                self.state,
+                                Ok(InnerState::Handshake(ClientHandshake::AwaitServerFlight(_)))
+                            ) {
+                                break;
+                            }
+                        }
+                        Err((mut err, outputs)) => {
+                            while let Some(chunk) = err.take_tls_data() {
+                                self.buffers.sendable_tls.append(chunk);
+                            }
+
+                            self.state = Err(err.error.clone());
+                            self.err_outputs = Some(outputs);
+                            return Err(err.error);
+                        }
+                    };
+                }
+                InnerState::Handshake(st @ ClientHandshake::Complete(_)) => {
+                    self.state = Ok(self.post_handshake_state(st));
+                }
+                InnerState::Traffic {
+                    mut send,
+                    mut receive,
+                    outputs,
+                } => {
+                    let mut progress = true;
+
+                    while progress {
+                        progress = false;
+
+                        // Processed received data.
+                        if !self.buffers.deframer_buffer.is_empty() {
+                            let Some(recv) = receive.take() else {
+                                break;
+                            };
+                            match recv.read(&mut self.buffers.deframer_buffer) {
+                                Ok(ReceiveTrafficState::Available(received)) => {
+                                    progress = true;
+                                    self.buffers
+                                        .received_plaintext
+                                        .append(received.data.to_vec());
+                                    let (used, next) = received.into_next();
+                                    self.buffers
+                                        .deframer_buffer
+                                        .discard(used);
+                                    receive = Some(next);
+                                }
+                                Ok(ReceiveTrafficState::WakeSender(state)) => {
+                                    if let Some(send) = &mut send {
+                                        while let Some(chunk) = send.take_data() {
+                                            self.buffers.sendable_tls.append(chunk);
+                                        }
+                                    }
+                                    receive = Some(state.into_next());
+                                }
+                                Ok(ReceiveTrafficState::Await(state)) => receive = Some(state),
+                                Ok(ReceiveTrafficState::CloseNotify) => receive = None,
+                                Err(mut e) => {
+                                    while let Some(chunk) = e.take_tls_data() {
+                                        self.buffers.sendable_tls.append(chunk);
+                                    }
+                                    self.state = Err(e.error.clone());
+                                    return Err(e.error);
+                                }
+                            }
+                        }
+                    }
+
+                    self.state = Ok(InnerState::Traffic {
+                        send,
+                        receive,
+                        outputs,
+                    });
+                    break;
+                }
+            }
+        }
+
+        Ok(self.current_io_state())
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.inner.exporter()
+        match &mut self.state {
+            Ok(InnerState::Traffic { outputs, .. }) => outputs.take_exporter(),
+            _ => Err(Error::HandshakeNotComplete),
+        }
     }
 
     fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
+        let Ok(InnerState::Traffic {
+            send: Some(send),
+            receive: Some(receive),
+            outputs,
+        }) = self.state
+        else {
+            return Err(Error::HandshakeNotComplete);
+        };
+        Ok(ClientTraffic {
+            send,
+            receive,
+            outputs: *outputs,
+        }
+        .dangerous_into_kernel_connection()?
+        .0)
     }
 
     fn set_buffer_limit(&mut self, limit: Option<usize>) {
-        self.inner.set_buffer_limit(limit)
+        self.buffers
+            .sendable_plaintext
+            .set_limit(limit);
+        self.buffers
+            .sendable_tls
+            .set_limit(limit);
     }
 
     fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
-        self.inner
-            .set_plaintext_buffer_limit(limit)
+        self.buffers
+            .received_plaintext
+            .set_limit(limit);
     }
 
     fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-        self.inner.refresh_traffic_keys()
+        match &mut self.state {
+            Ok(InnerState::Traffic { send, .. }) => match send {
+                Some(s) => s.refresh_traffic_keys(),
+                None => Err(ApiMisuse::SendSideAlreadyClosed.into()),
+            },
+            _ => Err(Error::HandshakeNotComplete),
+        }
     }
 
     fn send_close_notify(&mut self) {
-        self.inner.send_close_notify();
+        let Ok(InnerState::Traffic { send, .. }) = &mut self.state else {
+            return;
+        };
+
+        let Some(send) = send.take() else {
+            return;
+        };
+
+        self.buffers
+            .sendable_tls
+            .append(send.close());
     }
 
     fn is_handshaking(&self) -> bool {
-        self.inner.is_handshaking()
+        !matches!(self.state, Ok(InnerState::Traffic { .. }))
     }
 
     fn fips(&self) -> FipsStatus {
-        self.inner.fips
+        self.fips
+    }
+}
+
+impl PlaintextSink for ClientConnection {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.write_or_buffer_appdata(buf.into())
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        let payload_owner: Vec<&[u8]>;
+        let payload = match bufs.len() {
+            0 => return Ok(0),
+            1 => OutboundPlain::Single(bufs[0].deref()),
+            _ => {
+                payload_owner = bufs
+                    .iter()
+                    .map(|io_slice| io_slice.deref())
+                    .collect();
+
+                OutboundPlain::new(&payload_owner)
+            }
+        };
+        self.write_or_buffer_appdata(payload)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -179,7 +488,11 @@ impl Deref for ClientConnection {
     type Target = ConnectionOutputs;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        match &self.state {
+            Ok(InnerState::Handshake(hs)) => hs.deref(),
+            Ok(InnerState::Traffic { outputs, .. }) => outputs,
+            Err(_) => self.err_outputs.as_ref().unwrap(),
+        }
     }
 }
 
@@ -201,26 +514,18 @@ impl ClientConnectionBuilder {
 
     /// Finalize the builder and create the `ClientConnection`.
     pub fn build(self) -> Result<ClientConnection, Error> {
+        let fips = self.config.fips();
+        Ok(ClientConnection::new(self.start_handshake()?, fips))
+    }
+
+    /// Finalize the builder and create a [`ClientHandshake`].
+    pub fn start_handshake(self) -> Result<ClientHandshake, Error> {
         let Self {
             config,
             name,
             alpn_protocols,
         } = self;
-
-        let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
-        let fips = config.fips();
-        Ok(ClientConnection {
-            inner: ConnectionCommon::new(
-                ConnectionCore::for_client(
-                    config,
-                    name,
-                    ClientExtensionsInput::from_alpn(alpn_protocols),
-                    None,
-                    Protocol::Tcp,
-                )?,
-                fips,
-            ),
-        })
+        ClientHandshake::new(config, name, alpn_protocols)
     }
 }
 
@@ -230,23 +535,19 @@ impl ClientConnectionBuilder {
 ///
 /// This type implements [`io::Write`].
 pub struct WriteEarlyData<'a> {
-    sess: &'a mut ClientConnection,
+    send: SendEarlyData<'a>,
+    buffers: &'a mut Buffers,
 }
 
 impl<'a> WriteEarlyData<'a> {
-    fn new(sess: &'a mut ClientConnection) -> Self {
-        WriteEarlyData { sess }
+    fn new(send: SendEarlyData<'a>, buffers: &'a mut Buffers) -> Self {
+        WriteEarlyData { send, buffers }
     }
 
     /// How many bytes you may send.  Writes will become short
     /// once this reaches zero.
     pub fn bytes_left(&self) -> usize {
-        self.sess
-            .inner
-            .core
-            .side
-            .early_data
-            .bytes_left()
+        self.send.bytes_left()
     }
 
     /// Returns the "early" exporter that can derive key material for use in early data
@@ -267,15 +568,20 @@ impl<'a> WriteEarlyData<'a> {
     /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
     /// [RFC8446 S7.5]: https://datatracker.ietf.org/doc/html/rfc8446#section-7.5
     /// [RFC8446 appendix E.5.1]: https://datatracker.ietf.org/doc/html/rfc8446#appendix-E.5.1
-    /// [`Connection::exporter()`]: crate::conn::Connection::exporter()
     pub fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
-        self.sess.inner.core.early_exporter()
+        self.send.early_exporter()
     }
 }
 
 impl io::Write for WriteEarlyData<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.sess.write_early_data(buf)
+        let Some((used, chunks)) = self.send.write(buf) else {
+            return Ok(0);
+        };
+        for c in chunks {
+            self.buffers.sendable_tls.append(c);
+        }
+        Ok(used)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -334,7 +640,7 @@ impl EarlyData {
         )
     }
 
-    fn is_accepted(&self) -> bool {
+    pub(super) fn is_accepted(&self) -> bool {
         matches!(
             self.state,
             EarlyDataState::Accepted | EarlyDataState::AcceptedFinished
@@ -371,7 +677,7 @@ impl EarlyData {
         }
     }
 
-    fn check_write(&mut self, sz: usize) -> io::Result<usize> {
+    pub(super) fn check_write(&mut self, sz: usize) -> io::Result<usize> {
         self.check_write_opt(sz)
             .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
     }
@@ -393,7 +699,7 @@ impl EarlyData {
         }
     }
 
-    fn bytes_left(&self) -> usize {
+    pub(super) fn bytes_left(&self) -> usize {
         self.left
     }
 }
@@ -409,7 +715,7 @@ enum EarlyDataState {
 }
 
 pub(crate) struct ClientConnectionData {
-    early_data: EarlyData,
+    pub(super) early_data: EarlyData,
     ech_status: EchStatus,
 }
 
@@ -419,6 +725,14 @@ impl ClientConnectionData {
             early_data: EarlyData::new(),
             ech_status: EchStatus::default(),
         }
+    }
+
+    pub(crate) fn early_data_is_enabled(&self) -> bool {
+        self.early_data.is_enabled()
+    }
+
+    pub(crate) fn ech_status(&self) -> EchStatus {
+        self.ech_status
     }
 }
 
@@ -431,7 +745,7 @@ impl crate::conn::SideData for ClientSide {}
 
 impl crate::conn::private::Side for ClientSide {
     type Data = ClientConnectionData;
-    type State = super::hs::ClientState;
+    type State = ClientState;
 }
 
 impl SideOutput for ClientConnectionData {

@@ -20,7 +20,7 @@ use crate::crypto::{
 use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
-use crate::msgs::ServerNamePayload;
+use crate::msgs::{ClientHelloPayload, ServerNamePayload};
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
 use crate::verify::{ClientVerifier, DistinguishedName, NoClientAuth};
@@ -434,6 +434,33 @@ impl<'a> ClientHello<'a> {
                 .client_hello
                 .named_groups
                 .as_deref(),
+        }
+    }
+
+    pub(super) fn new_from_payload(hello: &'a ClientHelloPayload) -> Self {
+        let server_name = hello
+            .server_name
+            .as_ref()
+            .and_then(ServerNamePayload::to_dns_name_normalized)
+            .map(Cow::Owned);
+        Self {
+            server_name,
+            signature_schemes: hello
+                .signature_schemes
+                .as_deref()
+                .unwrap_or_default(),
+            alpn: hello.protocols.as_ref(),
+            server_cert_types: hello
+                .server_certificate_types
+                .as_deref(),
+            client_cert_types: hello
+                .client_certificate_types
+                .as_deref(),
+            cipher_suites: &hello.cipher_suites,
+            certificate_authorities: hello
+                .certificate_authority_names
+                .as_deref(),
+            named_groups: hello.named_groups.as_deref(),
         }
     }
 
