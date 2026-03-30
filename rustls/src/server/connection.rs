@@ -117,12 +117,6 @@ impl ServerConnection {
         }
     }
 
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.core.dangerous_extract_secrets()
-    }
-
     fn current_io_state(&self) -> IoState {
         let common_state = &self.core.common;
         IoState {
