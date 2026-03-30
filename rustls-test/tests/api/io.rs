@@ -1611,78 +1611,72 @@ fn test_plaintext_buffer_limit(limit: Option<usize>, plaintext_limit: usize) {
 
     if let Some(limit) = limit {
         server.set_plaintext_buffer_limit(Some(limit));
+        client.set_plaintext_buffer_limit(Some(limit));
     }
 
     do_handshake(&mut client, &mut server);
 
-    // Fill the server's received plaintext buffer with 16k bytes
-    let client_buf = vec![0; plaintext_limit];
-    assert_eq!(
-        client
-            .writer()
-            .write(&client_buf)
-            .unwrap(),
-        plaintext_limit
-    );
-    let mut network_buf = Vec::with_capacity(plaintext_limit * 2);
-    let sent = dbg!(
-        client
-            .write_tls(&mut network_buf)
-            .unwrap()
-    );
-    let mut read = 0;
-    while read < sent {
-        let new = dbg!(
-            server
-                .read_tls(&mut &network_buf[read..sent])
+    for direction in [false, true] {
+        let (left, right): (&mut dyn Connection, &mut dyn Connection) = match direction {
+            false => (&mut client, &mut server),
+            true => (&mut server, &mut client),
+        };
+
+        // Fill the server's received plaintext buffer with 16k bytes
+        let write_buf = vec![0; plaintext_limit];
+        assert_eq!(left.writer().write(&write_buf).unwrap(), plaintext_limit);
+        let mut network_buf = Vec::with_capacity(plaintext_limit * 2);
+        let sent = dbg!(
+            left.write_tls(&mut network_buf)
                 .unwrap()
         );
-        if new == 4096 {
-            read += new;
-        } else {
-            break;
+        let mut read = 0;
+        while read < sent {
+            let new = dbg!(
+                right
+                    .read_tls(&mut &network_buf[read..sent])
+                    .unwrap()
+            );
+            if new == 4096 {
+                read += new;
+            } else {
+                break;
+            }
         }
-    }
-    server.process_new_packets().unwrap();
+        right.process_new_packets().unwrap();
 
-    // Send one more byte from client to server
-    assert_eq!(
-        client
-            .writer()
-            .write(&client_buf[..1])
-            .unwrap(),
-        1
-    );
-    let sent = dbg!(
-        client
-            .write_tls(&mut network_buf)
-            .unwrap()
-    );
+        // Send one more byte from client to server
+        assert_eq!(left.writer().write(&[1]).unwrap(), 1);
+        let sent = dbg!(
+            left.write_tls(&mut network_buf)
+                .unwrap()
+        );
 
-    // Get an error because the received plaintext buffer is full
-    assert_eq!(
-        format!(
-            "{:?}",
-            server
+        // Get an error because the received plaintext buffer is full
+        assert_eq!(
+            format!(
+                "{:?}",
+                right
+                    .read_tls(&mut &network_buf[..sent])
+                    .unwrap_err()
+            ),
+            "Custom { kind: Other, error: \"received plaintext buffer full\" }"
+        );
+
+        // Read out some of the plaintext
+        right
+            .reader()
+            .read_exact(&mut [0; 1])
+            .unwrap();
+
+        // Now there's room again in the plaintext buffer
+        assert_eq!(
+            right
                 .read_tls(&mut &network_buf[..sent])
-                .unwrap_err()
-        ),
-        "Custom { kind: Other, error: \"received plaintext buffer full\" }"
-    );
-
-    // Read out some of the plaintext
-    server
-        .reader()
-        .read_exact(&mut [0; 1])
-        .unwrap();
-
-    // Now there's room again in the plaintext buffer
-    assert_eq!(
-        server
-            .read_tls(&mut &network_buf[..sent])
-            .unwrap(),
-        sent
-    );
+                .unwrap(),
+            sent
+        );
+    }
 }
 
 #[test]
