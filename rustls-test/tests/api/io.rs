@@ -904,6 +904,44 @@ fn test_client_write_and_vectored_write_equivalence() {
     assert_eq!(bytes_sent_chunked, bytes_sent_contiguous);
 }
 
+#[test]
+fn test_write_vectored_degenerate_cases() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    do_handshake(&mut client, &mut server);
+
+    // empty writes accepted and ignored
+    assert_eq!(client.writer().write_vectored(&[]).ok(), Some(0));
+    assert_eq!(server.writer().write_vectored(&[]).ok(), Some(0));
+    assert_eq!(transfer(&mut client, &mut server), 0);
+    assert_eq!(transfer(&mut server, &mut client), 0);
+
+    // single writes equiv. normal writes
+    assert_eq!(
+        client
+            .writer()
+            .write_vectored(&[IoSlice::new(b"client")])
+            .ok(),
+        Some(6)
+    );
+    assert_eq!(
+        server
+            .writer()
+            .write_vectored(&[IoSlice::new(b"server")])
+            .ok(),
+        Some(6)
+    );
+    assert!(transfer(&mut client, &mut server) > 0);
+    assert!(transfer(&mut server, &mut client) > 0);
+    server.process_new_packets().unwrap();
+    client.process_new_packets().unwrap();
+
+    let mut buf = [0; 6];
+    assert_eq!(client.reader().read(&mut buf).unwrap(), 6);
+    assert_eq!(&buf, b"server");
+    assert_eq!(server.reader().read(&mut buf).unwrap(), 6);
+    assert_eq!(&buf, b"client");
+}
+
 struct FailsWrites {
     errkind: io::ErrorKind,
     after: usize,
