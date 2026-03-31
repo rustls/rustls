@@ -2105,6 +2105,32 @@ pub mod encoding {
         handshake_framing(HandshakeType::ClientHello, out)
     }
 
+    pub fn server_hello(
+        legacy_version: ProtocolVersion,
+        random: &[u8; 32],
+        session_id: &[u8],
+        cipher_suite: CipherSuite,
+        extensions: Vec<Extension>,
+    ) -> Vec<u8> {
+        let mut out = vec![];
+
+        out.extend_from_slice(&legacy_version.to_array());
+        out.extend_from_slice(random);
+        out.extend_from_slice(session_id);
+        out.extend_from_slice(&cipher_suite.to_array());
+        out.extend_from_slice(&[0x00]); // null compression
+
+        let mut exts = vec![];
+        for e in extensions {
+            exts.extend_from_slice(&e.typ.to_be_bytes());
+            exts.extend_from_slice(&(e.body.len() as u16).to_be_bytes());
+            exts.extend_from_slice(&e.body);
+        }
+
+        out.extend(len_u16(exts));
+        handshake_framing(HandshakeType::ServerHello, out)
+    }
+
     /// Apply handshake framing to `body`.
     ///
     /// This does not do fragmentation.
@@ -2182,11 +2208,19 @@ pub mod encoding {
             }
         }
 
+        pub fn new_alpn(body: &[u8]) -> Self {
+            Self {
+                typ: Self::ALPN,
+                body: len_u16(body.to_vec()),
+            }
+        }
+
         pub const ELLIPTIC_CURVES: u16 = 0x000a;
         pub const SIGNATURE_ALGORITHMS: u16 = 0x000d;
         pub const SUPPORTED_VERSIONS: u16 = 0x002b;
         pub const KEY_SHARE: u16 = 0x0033;
         pub const TRANSPORT_PARAMETERS: u16 = 0x0039;
+        pub const ALPN: u16 = 0x0010;
     }
 
     /// Return a full TLS message containing a fatal alert.

@@ -148,6 +148,42 @@ fn connection_level_alpn_protocols() {
     assert_eq!(client.alpn_protocol(), Some(&ApplicationProtocol::Http11));
 }
 
+#[test]
+fn server_selects_unoffered_alpn() {
+    let client_config = Arc::new(make_client_config(
+        KeyType::Rsa2048,
+        &provider::DEFAULT_PROVIDER,
+    ));
+    let mut client = client_config
+        .connect(server_name("localhost"))
+        .with_alpn(vec![ApplicationProtocol::Http11])
+        .build()
+        .unwrap();
+    client
+        .write_tls(&mut Vec::new())
+        .unwrap();
+    client
+        .read_tls(
+            &mut encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                encoding::server_hello(
+                    ProtocolVersion::TLSv1_2,
+                    &[b'a'; 32],
+                    &[0],
+                    CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                    vec![encoding::Extension::new_alpn(b"\x05blorp")],
+                ),
+            )
+            .as_slice(),
+        )
+        .unwrap();
+    assert_eq!(
+        client.process_new_packets().err(),
+        Some(PeerMisbehaved::SelectedUnofferedApplicationProtocol.into()),
+    );
+}
+
 fn version_test(
     client_versions: &[ProtocolVersion],
     server_versions: &[ProtocolVersion],
