@@ -11,7 +11,7 @@ use crate::conn::StateMachine;
 use crate::conn::private::SideOutput;
 use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
@@ -54,7 +54,7 @@ impl ReceivePath {
     pub(crate) fn process_recv_traffic<Side: SideData>(
         &mut self,
         input: &mut dyn TlsInputBuffer,
-        state: &mut Result<Side::State, Error>,
+        state: &mut Option<Side::State>,
         send: &mut dyn SendOutput,
     ) -> Result<Option<UnborrowedPayload>, Error> {
         self.process_new_packets::<Side, FinishOnAppData>(
@@ -72,15 +72,11 @@ impl ReceivePath {
     pub(super) fn process_new_packets<'a, 'm, Side: SideData, Finish: FinishCondition>(
         &mut self,
         input: &'m mut dyn TlsInputBuffer,
-        state: &mut Result<Side::State, Error>,
+        state: &mut Option<Side::State>,
         output: &mut JoinOutput<'a>,
     ) -> Result<Option<UnborrowedPayload>, Error> {
-        let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
-            Ok(state) => state,
-            Err(e) => {
-                *state = Err(e.clone());
-                return Err(e);
-            }
+        let Some(mut st) = mem::take(state) else {
+            return Err(ApiMisuse::PreviousConnectionError.into());
         };
 
         let mut plaintext = None;
@@ -105,7 +101,6 @@ impl ReceivePath {
                     if let Error::DecryptError = e {
                         st.handle_decrypt_error();
                     }
-                    *state = Err(e.clone());
                     input.discard(self.deframer.take_discard());
                     return Err(e);
                 }
@@ -141,7 +136,6 @@ impl ReceivePath {
                 Ok(new) => st = new,
                 Err(e) => {
                     maybe_send_fatal_alert(output.other.send, &e);
-                    *state = Err(e.clone());
                     input.discard(self.deframer.take_discard());
                     return Err(e);
                 }
@@ -157,7 +151,7 @@ impl ReceivePath {
             }
 
             if let Some(payload) = plaintext.take() {
-                *state = Ok(st);
+                *state = Some(st);
                 return Ok(Some(payload));
             }
 
@@ -165,7 +159,7 @@ impl ReceivePath {
         }
 
         input.discard(self.deframer.take_discard());
-        *state = Ok(st);
+        *state = Some(st);
         Ok(None)
     }
 

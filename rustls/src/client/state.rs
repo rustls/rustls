@@ -365,13 +365,14 @@ fn next_state(inner: Box<ConnectionCore<ClientSide>>) -> ClientHandshake {
     }
 
     match inner.state.as_ref() {
-        Ok(
+        Some(
             hs::ClientState::Tls12(tls12::Tls12State::Traffic(_))
             | hs::ClientState::Tls13(tls13::Tls13State::Traffic(_)),
         ) => ClientHandshake::Complete(inner.into()),
 
-        Ok(_) => ClientHandshake::AwaitServerFlight(AwaitServerFlight { inner }),
+        Some(_) => ClientHandshake::AwaitServerFlight(AwaitServerFlight { inner }),
 
-        Err(_) => panic!("TODO: withdraw error fusing in core.state"),
+        // indicates caller has swallowed an error
+        None => unreachable!(),
     }
 }

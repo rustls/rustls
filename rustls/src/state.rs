@@ -129,7 +129,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
         received_tls: &'a mut impl TlsInputBuffer,
     ) -> Result<ReceiveTrafficState<'a, Side>, ErrorWithAlert> {
         let mut send = SendAdapter::Unlocked(&self.send);
-        let mut state = Ok(self.state);
+        let mut state = Some(self.state);
         let received_plain =
             match self
                 .recv
@@ -140,7 +140,8 @@ impl<Side: SideData> ReceiveTraffic<Side> {
                     return Err(ErrorWithAlert::new(err, send.as_locked().deref_mut()));
                 }
             };
-        self.state = state?;
+        // safety: state consumed only on error.
+        self.state = state.unwrap();
 
         if let Some(unborrowed) = received_plain {
             let pending_discard = self.recv.deframer.take_discard();

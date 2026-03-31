@@ -520,7 +520,7 @@ impl IoState {
 }
 
 pub(crate) struct ConnectionCore<Side: SideData> {
-    pub(crate) state: Result<Side::State, Error>,
+    pub(crate) state: Option<Side::State>,
     pub(crate) side: Side::Data,
     pub(crate) common: CommonState,
 }
@@ -528,7 +528,7 @@ pub(crate) struct ConnectionCore<Side: SideData> {
 impl<Side: SideData> ConnectionCore<Side> {
     pub(crate) fn new(state: Side::State, side: Side::Data, common: CommonState) -> Self {
         Self {
-            state: Ok(state),
+            state: Some(state),
             side,
             common,
         }
