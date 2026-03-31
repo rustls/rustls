@@ -134,6 +134,7 @@ impl ExpectServerHello {
                     .selected_protocol
                     .as_ref()
                     .map(|s| s.as_ref()),
+                self.input.config.check_selected_alpn,
             )?;
         }
 
@@ -980,9 +981,10 @@ pub(super) fn process_alpn_protocol(
     output: &mut dyn Output<'_>,
     offered_protocols: &[ApplicationProtocol<'_>],
     selected: Option<&ApplicationProtocol<'_>>,
+    check_selected_offered: bool,
 ) -> Result<(), Error> {
     if let Some(alpn_protocol) = selected {
-        if !offered_protocols.contains(alpn_protocol) {
+        if check_selected_offered && !offered_protocols.contains(alpn_protocol) {
             return Err(PeerMisbehaved::SelectedUnofferedApplicationProtocol.into());
         }
     }

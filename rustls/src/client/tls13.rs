@@ -521,7 +521,12 @@ impl ExpectEncryptedExtensions {
             .selected_protocol
             .as_ref()
             .map(|protocol| protocol.as_ref());
-        process_alpn_protocol(output, &self.hello.alpn_protocols, selected_alpn)?;
+        process_alpn_protocol(
+            output,
+            &self.hello.alpn_protocols,
+            selected_alpn,
+            self.hs.config.check_selected_alpn,
+        )?;
 
         // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
         // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
