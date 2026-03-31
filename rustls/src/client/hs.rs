@@ -62,6 +62,14 @@ impl StateMachine for ClientState {
         true
     }
 
+    fn traffic(&self) -> bool {
+        matches!(
+            self,
+            Self::Tls12(tls12::Tls12State::Traffic(..))
+                | Self::Tls13(tls13::Tls13State::Traffic(..) | tls13::Tls13State::QuicTraffic(..))
+        )
+    }
+
     fn handle_decrypt_error(&mut self) {
         if let Self::Tls12(tls12::Tls12State::Finished(e)) = self {
             e.handle_decrypt_error();

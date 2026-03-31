@@ -29,7 +29,6 @@ pub(crate) struct SendPath {
 }
 
 impl SendPath {
-    #[expect(dead_code)]
     pub(crate) fn write_plaintext(
         &mut self,
         payload: OutboundPlain<'_>,
@@ -84,22 +83,6 @@ impl SendPath {
         Ok(self.write_fragments(fragments))
     }
 
-    pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
-        debug_assert!(self.encrypt_state.is_encrypting());
-
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(data.len());
-        if len == 0 {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        self.send_appdata_encrypt(data[..len].into())
-    }
-
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     fn send_msg_encrypt(&mut self, m: EncodedMessage<Payload<'_>>) {
@@ -109,23 +92,6 @@ impl SendPath {
         for m in iter {
             self.send_single_fragment(m);
         }
-    }
-
-    /// Like send_msg_encrypt, but operate on an appdata directly.
-    fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
-        let len = payload.len();
-        let iter = self
-            .message_fragmenter
-            .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                payload,
-            );
-        for m in iter {
-            self.send_single_fragment(m);
-        }
-
-        len
     }
 
     fn send_single_fragment(&mut self, m: EncodedMessage<OutboundPlain<'_>>) {
@@ -169,43 +135,6 @@ impl SendPath {
 
         let em = self.encrypt_state.encrypt_outgoing(m);
         self.queue_tls_message(em);
-    }
-
-    /// Send plaintext application data, fragmenting and
-    /// encrypting it as it goes out.
-    ///
-    /// If internal buffers are too small, this function will not accept
-    /// all the data.
-    pub(crate) fn buffer_plaintext(
-        &mut self,
-        payload: OutboundPlain<'_>,
-        sendable_plaintext: &mut ChunkVecBuffer,
-    ) -> usize {
-        self.perhaps_write_key_update();
-        if !self.may_send_application_data {
-            // If we haven't completed handshaking, buffer
-            // plaintext to send once we do.
-            return sendable_plaintext.append_limited_copy(payload);
-        }
-
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(payload.len());
-        if len == 0 {
-            // Don't send empty fragments.
-            return 0;
-        }
-
-        debug_assert!(self.encrypt_state.is_encrypting());
-        self.send_appdata_encrypt(payload.split_at(len).0)
-    }
-
-    pub(crate) fn send_buffered_plaintext(&mut self, plaintext: &mut ChunkVecBuffer) {
-        while let Some(buf) = plaintext.pop() {
-            self.send_appdata_encrypt(buf.as_slice().into());
-        }
     }
 
     pub(crate) fn start_outgoing_traffic(&mut self) {

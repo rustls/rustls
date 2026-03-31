@@ -276,8 +276,8 @@ impl ServerConnection {
     pub fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
         assert!(resumption_data.len() < 2usize.pow(15));
         match &mut self.inner.core.state {
-            Ok(st) => st.set_resumption_data(resumption_data),
-            Err(e) => Err(e.clone()),
+            Some(st) => st.set_resumption_data(resumption_data),
+            None => Err(ApiMisuse::PreviousConnectionError.into()),
         }
     }
 
