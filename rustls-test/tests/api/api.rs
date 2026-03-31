@@ -151,12 +151,27 @@ fn connection_level_alpn_protocols() {
 }
 
 #[test]
-fn server_selects_unoffered_alpn() {
-    let client_config = Arc::new(make_client_config(
-        KeyType::Rsa2048,
-        &provider::DEFAULT_PROVIDER,
-    ));
-    let mut client = client_config
+fn server_selects_unoffered_alpn_checked() {
+    let result = unoffered_alpn_test(true);
+    assert_eq!(
+        result.err(),
+        Some(PeerMisbehaved::SelectedUnofferedApplicationProtocol.into())
+    );
+}
+
+#[test]
+fn server_selects_unoffered_alpn_unchecked() {
+    let result = unoffered_alpn_test(false);
+    assert_ne!(
+        result.err(),
+        Some(PeerMisbehaved::SelectedUnofferedApplicationProtocol.into())
+    );
+}
+
+fn unoffered_alpn_test(check_selected_alpn: bool) -> Result<rustls::IoState, Error> {
+    let mut config = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
+    config.check_selected_alpn = check_selected_alpn;
+    let mut client = Arc::new(config)
         .connect(server_name("localhost"))
         .with_alpn(vec![ApplicationProtocol::Http11])
         .build()
@@ -180,10 +195,7 @@ fn server_selects_unoffered_alpn() {
             .as_slice(),
         )
         .unwrap();
-    assert_eq!(
-        client.process_new_packets().err(),
-        Some(PeerMisbehaved::SelectedUnofferedApplicationProtocol.into()),
-    );
+    client.process_new_packets()
 }
 
 fn version_test(

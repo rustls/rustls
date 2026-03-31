@@ -63,6 +63,11 @@ pub struct ClientConfig {
     /// If empty, no ALPN extension is sent.
     pub alpn_protocols: Vec<ApplicationProtocol<'static>>,
 
+    /// Whether to check the selected ALPN was offered.
+    ///
+    /// The default is true.
+    pub check_selected_alpn: bool,
+
     /// How and when the client can resume a previous session.
     ///
     /// # Sharing `resumption` between `ClientConfig`s
@@ -730,6 +735,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         let require_ems = !matches!(self.provider.fips(), FipsStatus::Unvalidated);
         Ok(ClientConfig {
             alpn_protocols: Vec::new(),
+            check_selected_alpn: true,
             resumption: Resumption::default(),
             max_fragment_size: None,
             enable_sni: true,
