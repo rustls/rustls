@@ -590,11 +590,12 @@ pub(super) fn process_alpn_protocol(
     common: &mut CommonState,
     offered_protocols: &[ProtocolName],
     selected: Option<&ProtocolName>,
+    check_selected_offered: bool,
 ) -> Result<(), Error> {
     common.alpn_protocol = selected.map(ToOwned::to_owned);
 
     if let Some(alpn_protocol) = &common.alpn_protocol {
-        if !offered_protocols.contains(alpn_protocol) {
+        if check_selected_offered && !offered_protocols.contains(alpn_protocol) {
             return Err(common.send_fatal_alert(
                 AlertDescription::IllegalParameter,
                 PeerMisbehaved::SelectedUnofferedApplicationProtocol,
@@ -743,6 +744,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     .selected_protocol
                     .as_ref()
                     .map(|s| s.as_ref()),
+                self.input.config.check_selected_alpn,
             )?;
         }
 

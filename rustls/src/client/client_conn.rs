@@ -166,6 +166,11 @@ pub struct ClientConfig {
     /// If empty, no ALPN extension is sent.
     pub alpn_protocols: Vec<Vec<u8>>,
 
+    /// Whether to check the selected ALPN was offered.
+    ///
+    /// The default is true.
+    pub check_selected_alpn: bool,
+
     /// How and when the client can resume a previous session.
     ///
     /// # Sharing `resumption` between `ClientConfig`s
