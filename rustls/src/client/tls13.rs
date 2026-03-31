@@ -506,6 +506,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             exts.selected_protocol
                 .as_ref()
                 .map(|protocol| protocol.as_ref()),
+            self.config.check_selected_alpn,
         )?;
         hs::process_client_cert_type_extension(
             cx.common,

@@ -1727,6 +1727,32 @@ pub mod encoding {
         handshake_framing(HandshakeType::ClientHello, out)
     }
 
+    pub fn server_hello(
+        legacy_version: ProtocolVersion,
+        random: &[u8; 32],
+        session_id: &[u8],
+        cipher_suite: CipherSuite,
+        extensions: Vec<Extension>,
+    ) -> Vec<u8> {
+        let mut out = vec![];
+
+        out.extend_from_slice(&legacy_version.to_array());
+        out.extend_from_slice(random);
+        out.extend_from_slice(session_id);
+        out.extend_from_slice(&cipher_suite.to_array());
+        out.extend_from_slice(&[0x00]); // null compression
+
+        let mut exts = vec![];
+        for e in extensions {
+            exts.extend_from_slice(&e.typ.to_array());
+            exts.extend_from_slice(&(e.body.len() as u16).to_be_bytes());
+            exts.extend_from_slice(&e.body);
+        }
+
+        out.extend(len_u16(exts));
+        handshake_framing(HandshakeType::ServerHello, out)
+    }
+
     /// Apply handshake framing to `body`.
     ///
     /// This does not do fragmentation.
@@ -1792,6 +1818,13 @@ pub mod encoding {
             Self {
                 typ: ExtensionType::KeyShare,
                 body: len_u16(share),
+            }
+        }
+
+        pub fn new_alpn(body: &[u8]) -> Self {
+            Self {
+                typ: ExtensionType::ALProtocolNegotiation,
+                body: len_u16(body.to_vec()),
             }
         }
     }
