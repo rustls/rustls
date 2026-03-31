@@ -110,8 +110,8 @@ impl ServerHandshake {
         };
 
         match state {
-            Ok(st) => st.set_resumption_data(data),
-            Err(err) => Err(err.clone()),
+            Some(st) => st.set_resumption_data(data),
+            None => Err(ApiMisuse::PreviousConnectionError.into()),
         }
     }
 }
@@ -217,8 +217,7 @@ impl AwaitClientFlight {
 
 /// We have received a `ClientHello` and it is time to choose a `ServerConfig` for this connection.
 pub struct ChooseConfig {
-    // invariant: `inner.state` is `Err(_)` with a meaningless error,
-    // it should be reinserted before further use.
+    // invariant: `inner.state` is `None` it should be reinserted before further use.
     inner: Box<ConnectionCore<ServerSide>>,
     choose_config: Box<hs::ChooseConfig>,
 }
@@ -283,7 +282,7 @@ impl ChooseConfig {
                 ));
             }
         };
-        self.inner.state = Ok(state);
+        self.inner.state = Some(state);
 
         Ok(ServerHandshake::SendServerFlight(SendServerFlight {
             inner: self.inner,
@@ -543,16 +542,15 @@ fn next_state(mut inner: Box<ConnectionCore<ServerSide>>) -> ServerHandshake {
     }
 
     match &inner.state {
-        Ok(
+        Some(
             hs::ServerState::Tls12(tls12::Tls12State::Traffic(_))
             | hs::ServerState::Tls13(tls13::Tls13State::Traffic(_)),
         ) => ServerHandshake::Complete(ServerTraffic::new(inner)),
 
-        Ok(hs::ServerState::ChooseConfig(_)) => {
-            let Ok(hs::ServerState::ChooseConfig(choose_config)) = core::mem::replace(
-                &mut inner.state,
-                Err(Error::Unreachable("restore state after ChooseConfig")),
-            ) else {
+        Some(hs::ServerState::ChooseConfig(_)) => {
+            let Some(hs::ServerState::ChooseConfig(choose_config)) =
+                core::mem::take(&mut inner.state)
+            else {
                 unreachable!();
             };
             ServerHandshake::ChooseConfig(ChooseConfig {
@@ -561,8 +559,9 @@ fn next_state(mut inner: Box<ConnectionCore<ServerSide>>) -> ServerHandshake {
             })
         }
 
-        Ok(_) => ServerHandshake::AwaitClientFlight(AwaitClientFlight { inner }),
+        Some(_) => ServerHandshake::AwaitClientFlight(AwaitClientFlight { inner }),
 
-        Err(_) => panic!("TODO: withdraw error fusing in core.state"),
+        // indicates caller has swallowed an error.
+        None => unreachable!(),
     }
 }
