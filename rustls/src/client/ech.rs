@@ -491,9 +491,10 @@ impl EchState {
             .add_message(&Self::server_hello_conf(server_hello, server_hello_encoded));
 
         // Derive a confirmation secret from the inner hello random and the confirmation transcript.
+        let conf_hash = confirmation_transcript.current_hash();
         let derived = ks.server_ech_confirmation_secret(
             self.inner_hello_random.0.as_ref(),
-            confirmation_transcript.current_hash(),
+            conf_hash,
         );
 
         // Check that first 8 digits of the derived secret match the last 8 digits of the original
@@ -614,7 +615,11 @@ impl EchState {
             extensions: Box::new(ClientExtensions::default()),
         };
 
-        inner_hello.order_seed = outer_hello.order_seed;
+        // Use a fixed order_seed (0) for the inner hello so that the server
+        // can reproduce the same encoding for the transcript hash.  The
+        // order_seed is not transmitted, so both sides must agree on it.
+        // The outer hello keeps its random seed (both sides see the wire bytes).
+        inner_hello.order_seed = 0;
 
         // The inner hello will always have an inner variant of the ECH extension added.
         // See Section 6.1 rule 4.
@@ -725,6 +730,13 @@ impl EchState {
         // Let N = 31 - ((L - 1) % 32) and add N bytes of padding.
         let padding_len = 31 - ((encoded_hello.len() + padding_len - 1) % 32);
         encoded_hello.extend(vec![0; padding_len]);
+
+        // Clear contiguous_extensions before building the transcript message.
+        // The contiguous_extensions field is only used for the ECH inner encoding
+        // (where compressed extensions must appear as a contiguous block).  For the
+        // standard encoding that goes into the transcript hash, all extensions go
+        // through the normal ordering path, which the server can reproduce.
+        inner_hello.contiguous_extensions = Vec::new();
 
         // Construct the inner hello message that will be used for the transcript.
         let inner_hello_msg = Message {

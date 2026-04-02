@@ -26,7 +26,7 @@ use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, HandshakeMessagePayload,
-    HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
+    HandshakePayload, KeyUpdateRequest, MessagePayload, NewSessionTicketPayloadTls13,
     PresharedKeyIdentity, Reader, SizedPayload,
 };
 use crate::server::hs::ExpectClientHello;
@@ -83,15 +83,19 @@ mod client_hello {
     use crate::enums::ApplicationProtocol;
     use crate::msgs::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
-        ChangeCipherSpecPayload, ClientHelloPayload, Compression, HandshakeAlignedProof,
-        HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random, ServerExtensions,
-        ServerExtensionsInput, ServerHelloPayload, SessionId, SizedPayload,
+        ChangeCipherSpecPayload, ClientHelloPayload, Compression, Encoding,
+        HandshakeAlignedProof, HandshakeMessagePayload, HelloRetryRequest,
+        HelloRetryRequestExtensions, KeyShareEntry, Message, MessagePayload, Random,
+        ServerEncryptedClientHello, ServerExtensions, ServerExtensionsInput, ServerHelloPayload,
+        SessionId, SizedPayload,
     };
     use crate::sealed::Sealed;
     use crate::server::Tls13ServerSessionValue;
+    use crate::server::ech::ServerEchState;
     use crate::server::hs::{ClientHelloInput, ExpectClientHello, ServerHandler, Tls13Extensions};
     use crate::tls13::key_schedule::{
         KeyScheduleEarlyServer, KeyScheduleHandshake, KeySchedulePreHandshake,
+        server_ech_confirmation_secret, server_ech_hrr_confirmation_secret,
     };
     use crate::verify::DigitallySignedStruct;
 
@@ -187,6 +191,7 @@ mod client_hello {
                     input.client_hello.session_id,
                     output,
                     kx_group.name(),
+                    &st.ech,
                 );
                 if !st.protocol.is_quic() {
                     emit_fake_ccs(output);
@@ -258,6 +263,7 @@ mod client_hello {
                 resuming.as_ref(),
                 &input.proof,
                 &st.config,
+                &st.ech,
             )?;
             if !st.done_retry && !st.protocol.is_quic() {
                 emit_fake_ccs(output);
@@ -291,6 +297,7 @@ mod client_hello {
                     .map(|(_, session)| session),
                 st.extra_exts,
                 &st.config,
+                st.ech_rejected,
             )?;
 
             let doing_client_auth = if full_handshake {
@@ -515,6 +522,12 @@ mod client_hello {
         ConstantTimeEq::ct_eq(real_binder.as_ref(), binder).into()
     }
 
+    /// The last eight bytes of the ServerHello's random within a handshake
+    /// message encoding.  Layout: HandshakeType (1) + length (3) +
+    /// legacy_version (2) + random[0..24] (24) = offset 30, length 8.
+    const SERVER_HELLO_ECH_CONFIRMATION_SPAN: core::ops::Range<usize> =
+        (1 + 3 + 2 + 24)..(1 + 3 + 2 + 32);
+
     fn emit_server_hello(
         transcript: &mut HandshakeHash,
         randoms: &ConnectionRandoms,
@@ -526,6 +539,7 @@ mod client_hello {
         resuming: Option<&(usize, Tls13ServerSessionValue<'_>)>,
         proof: &HandshakeAlignedProof,
         config: &ServerConfig,
+        ech: &Option<ServerEchState>,
     ) -> Result<KeyScheduleHandshake, Error> {
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
@@ -540,18 +554,28 @@ mod client_hello {
             ..Default::default()
         });
 
+        let server_hello_payload = ServerHelloPayload {
+            legacy_version: ProtocolVersion::TLSv1_2,
+            random: Random::from(randoms.server),
+            session_id: *session_id,
+            cipher_suite: suite.common.suite,
+            compression_method: Compression::Null,
+            extensions,
+        };
+
         let sh = Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::ServerHello(ServerHelloPayload {
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from(randoms.server),
-                    session_id: *session_id,
-                    cipher_suite: suite.common.suite,
-                    compression_method: Compression::Null,
-                    extensions,
-                }),
+                HandshakePayload::ServerHello(server_hello_payload),
             )),
+        };
+
+        // If ECH was accepted, patch the ServerHello random[24..32] with the
+        // ECH confirmation signal per RFC 9849 Section 7.2.
+        let sh = if let Some(ech_state) = ech.as_ref() {
+            patch_server_hello_ech_confirmation(sh, ech_state, suite, randoms, transcript)
+        } else {
+            sh
         };
 
         let client_hello_hash = transcript.hash_given(&[]);
@@ -601,6 +625,69 @@ mod client_hello {
         Ok(key_schedule)
     }
 
+    /// Patch a ServerHello message with the ECH confirmation signal.
+    ///
+    /// Computes the confirmation by forking the transcript, adding a zeroed
+    /// version of the ServerHello, and deriving the 8-byte signal from the
+    /// inner random.  Returns a new Message with patched encoding and random.
+    fn patch_server_hello_ech_confirmation(
+        sh: Message<'static>,
+        ech_state: &ServerEchState,
+        suite: &'static Tls13CipherSuite,
+        randoms: &ConnectionRandoms,
+        transcript: &HandshakeHash,
+    ) -> Message<'static> {
+        // Extract the handshake-level encoding from the constructed message.
+        let MessagePayload::Handshake {
+            encoded,
+            parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(shp)),
+        } = sh.payload
+        else {
+            unreachable!("emit_server_hello always produces a ServerHello")
+        };
+        let encoded = encoded.into_vec();
+
+        // Zero the last 8 bytes of the random for the confirmation transcript.
+        let mut conf_encoded = encoded.clone();
+        conf_encoded[SERVER_HELLO_ECH_CONFIRMATION_SPAN].fill(0x00);
+
+        // Fork the transcript, add the zeroed ServerHello, compute hash.
+        let mut conf_transcript = transcript.clone();
+        conf_transcript.add_message(&Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::Handshake {
+                encoded: Payload::Owned(conf_encoded),
+                parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(shp.clone())),
+            },
+        });
+
+        // Derive the 8-byte confirmation.
+        let conf_hash = conf_transcript.current_hash();
+        let confirmation = server_ech_confirmation_secret(
+            suite.hkdf_provider,
+            &ech_state.inner_random,
+            conf_hash,
+        );
+
+        // Patch the real encoding with the confirmation bytes.
+        let mut patched_encoded = encoded;
+        patched_encoded[SERVER_HELLO_ECH_CONFIRMATION_SPAN].copy_from_slice(&confirmation);
+
+        // Rebuild the ServerHello payload with patched random.
+        let mut patched_random = randoms.server;
+        patched_random[24..32].copy_from_slice(&confirmation);
+        let mut patched_shp = shp;
+        patched_shp.random = Random::from(patched_random);
+
+        Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::Handshake {
+                encoded: Payload::Owned(patched_encoded),
+                parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(patched_shp)),
+            },
+        }
+    }
+
     fn emit_fake_ccs(output: &mut dyn Output<'_>) {
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
@@ -615,7 +702,12 @@ mod client_hello {
         session_id: SessionId,
         output: &mut dyn Output<'_>,
         group: NamedGroup,
+        ech: &Option<ServerEchState>,
     ) {
+        // If ECH was accepted, include a placeholder ECH extension that will
+        // be replaced with the HRR confirmation signal.
+        let ech_ext = ech.as_ref().map(|_| Payload::new(vec![0u8; 8]));
+
         let req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id,
@@ -623,21 +715,73 @@ mod client_hello {
             extensions: HelloRetryRequestExtensions {
                 key_share: Some(group),
                 supported_versions: Some(ProtocolVersion::TLSv1_3),
+                encrypted_client_hello: ech_ext,
                 ..Default::default()
             },
         };
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::HelloRetryRequest(req),
-            )),
-        };
+        // If ECH was accepted, compute the HRR confirmation signal and patch
+        // the HRR; otherwise use the HRR as-is.
+        let m = ech.as_ref().map_or_else(
+            || Message {
+                version: ProtocolVersion::TLSv1_2,
+                payload: MessagePayload::handshake(HandshakeMessagePayload(
+                    HandshakePayload::HelloRetryRequest(req.clone()),
+                )),
+            },
+            |ech_state| {
+                patch_hrr_ech_confirmation(req.clone(), ech_state, suite, transcript)
+            },
+        );
 
         trace!("Requesting retry {m:?}");
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
         output.send_msg(m, false);
+    }
+
+    /// Compute the HRR ECH confirmation signal and return a patched HRR message.
+    fn patch_hrr_ech_confirmation(
+        req: HelloRetryRequest,
+        ech_state: &ServerEchState,
+        suite: &'static Tls13CipherSuite,
+        transcript: &HandshakeHash,
+    ) -> Message<'static> {
+        // Encode HRR with ECH extension zeroed for confirmation transcript.
+        let hmp = HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(req.clone()));
+        let mut conf_encoded = Vec::new();
+        hmp.payload_encode(&mut conf_encoded, Encoding::EchConfirmation);
+
+        let conf_m = Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::Handshake {
+                encoded: Payload::new(conf_encoded),
+                parsed: hmp,
+            },
+        };
+
+        // Fork transcript, add zeroed HRR, derive confirmation.
+        let mut conf_transcript = transcript.clone();
+        conf_transcript.rollup_for_hrr();
+        conf_transcript.add_message(&conf_m);
+
+        let confirmation = server_ech_hrr_confirmation_secret(
+            suite.hkdf_provider,
+            &ech_state.inner_random,
+            conf_transcript.current_hash(),
+        );
+
+        // Rebuild HRR with real confirmation bytes.
+        let mut patched_req = req;
+        patched_req.extensions.encrypted_client_hello =
+            Some(Payload::new(confirmation.to_vec()));
+
+        Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::HelloRetryRequest(patched_req),
+            )),
+        }
     }
 
     fn decide_if_early_data_allowed(
@@ -708,6 +852,7 @@ mod client_hello {
         resumedata: Option<&Tls13ServerSessionValue<'_>>,
         extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
+        ech_rejected: bool,
     ) -> Result<(Tls13Extensions, EarlyDataDecision), Error> {
         let (out, mut extensions) = Tls13Extensions::new(
             extra_exts,
@@ -728,6 +873,18 @@ mod client_hello {
         );
         if let EarlyDataDecision::Accepted { .. } = early_data {
             extensions.early_data_ack = Some(());
+        }
+
+        // If ECH was offered but rejected, include retry configs so the
+        // client can retry with a current ECH configuration.
+        if ech_rejected {
+            extensions.encrypted_client_hello_ack = Some(ServerEncryptedClientHello {
+                retry_configs: config
+                    .ech_keys
+                    .iter()
+                    .map(|k| k.config.clone())
+                    .collect(),
+            });
         }
 
         let ee = HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(extensions));

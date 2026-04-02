@@ -7,6 +7,7 @@ use core::marker::PhantomData;
 use pki_types::PrivateKeyDer;
 use pki_types::{DnsName, FipsStatus, UnixTime};
 
+use super::ech::ServerEchConfig;
 use super::hs::ClientHelloInput;
 use super::{ServerSessionKey, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
@@ -228,6 +229,19 @@ pub struct ServerConfig {
 
     /// Policy for how an invalid Server Name Indication (SNI) value from a client is handled.
     pub invalid_sni_policy: InvalidSniPolicy,
+
+    /// ECH key pairs for server-side Encrypted Client Hello (RFC 9849).
+    ///
+    /// If non-empty, the server will attempt to decrypt ECH-offering ClientHellos
+    /// using these keys. On success, the inner (real) ClientHello drives the
+    /// handshake. On failure, the outer ClientHello is used and retry configs
+    /// are sent in EncryptedExtensions so the client can retry.
+    ///
+    /// Multiple entries support key rotation: the server matches `config_id` and
+    /// `cipher_suite` from the client's ECH extension against each entry.
+    ///
+    /// Defaults to empty (no server-side ECH support).
+    pub ech_keys: Vec<ServerEchConfig>,
 }
 
 impl ServerConfig {
@@ -691,6 +705,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
             invalid_sni_policy: InvalidSniPolicy::default(),
+            ech_keys: Vec::new(),
         })
     }
 }

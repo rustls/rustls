@@ -27,7 +27,8 @@ use rustls::{
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
-    client::{EchConfig, EchGreaseConfig, EchMode},
+    ServerEchConfig,
+    client::{EchConfig, EchGreaseConfig, EchMode, EchStatus},
     pki_types::EchConfigListBytes,
 };
 #[cfg(feature = "aws-lc-rs")]
@@ -1759,4 +1760,60 @@ impl ServerCredentialResolver for ServerCheckSni {
         assert_eq!(client_hello.server_name().is_some(), self.expect_sni);
         Err(Error::NoSuitableCertificate)
     }
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_accepted_handshake() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+
+    let (server_ech_config, config_list) =
+        ServerEchConfig::generate(suite, 0x42, public_name, 64).unwrap();
+
+    // Server config with ECH key.
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_TLS13_PROVIDER);
+    server_config.ech_keys = vec![server_ech_config];
+    let server_config = Arc::new(server_config);
+
+    // Client config with matching ECH.
+    let client_ech_config = EchConfig::new(config_list, &[suite]).unwrap();
+    let client_config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
+        .with_ech(EchMode::Enable(client_ech_config))
+        .finish(KeyType::Rsa2048);
+    let client_config = Arc::new(client_config);
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    assert_eq!(client.ech_status(), EchStatus::Accepted);
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_not_offered_normal_handshake() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+
+    let (server_ech_config, _config_list) =
+        ServerEchConfig::generate(suite, 0x42, public_name, 64).unwrap();
+
+    // Server has ECH keys, but client does not offer ECH.
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_TLS13_PROVIDER);
+    server_config.ech_keys = vec![server_ech_config];
+    let server_config = Arc::new(server_config);
+
+    let client_config = Arc::new(make_client_config(
+        KeyType::Rsa2048,
+        &provider::DEFAULT_TLS13_PROVIDER,
+    ));
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    assert_eq!(client.ech_status(), EchStatus::NotOffered);
 }

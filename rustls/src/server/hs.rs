@@ -7,6 +7,7 @@ use core::fmt;
 use pki_types::DnsName;
 
 use super::config::{CipherSuiteSelector, VersionSuiteSelector};
+use super::ech::{EchDecryptResult, ServerEchState, try_decrypt_ech};
 use super::{ClientHello, CommonServerSessionValue, ServerConfig, tls12, tls13};
 use crate::SupportedCipherSuite;
 use crate::common_state::{Event, Output, OutputEvent, Protocol};
@@ -397,16 +398,50 @@ pub(crate) struct ChooseConfig {
 
 impl ChooseConfig {
     pub(crate) fn use_config(
-        self,
+        mut self,
         config: Arc<ServerConfig>,
         extra_exts: ServerExtensionsInput,
         output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
-        ExpectClientHello::new(config, extra_exts, self.resumption_data, self.protocol)
-            .with_input(ClientHelloInput::from_input(&self.client_hello)?, output)
+        // Attempt ECH decryption if the server has ECH keys configured.
+        let (ech_state, ech_rejected) = if !config.ech_keys.is_empty() {
+            let outer_encoded = match &self.client_hello.message.payload {
+                MessagePayload::Handshake { encoded, .. } => encoded.bytes().to_vec(),
+                MessagePayload::Alert(..)
+                | MessagePayload::HandshakeFlight(..)
+                | MessagePayload::ChangeCipherSpec(..)
+                | MessagePayload::ApplicationData(..) => {
+                    unreachable!("ClientHello is a Handshake message")
+                }
+            };
+            let outer_hello = self.client_hello_payload();
+            match try_decrypt_ech(outer_hello, &outer_encoded, &config.ech_keys, false) {
+                EchDecryptResult::Accepted {
+                    inner_message,
+                    state,
+                } => {
+                    // Replace the outer ClientHello with the decrypted inner one.
+                    self.client_hello.message = inner_message;
+                    (Some(state), false)
+                }
+                EchDecryptResult::Rejected => (None, true),
+                EchDecryptResult::NotOffered => (None, false),
+            }
+        } else {
+            (None, false)
+        };
+
+        let mut ech = ExpectClientHello::new(config, extra_exts, self.resumption_data, self.protocol);
+        ech.ech = ech_state;
+        ech.ech_rejected = ech_rejected;
+        ech.with_input(ClientHelloInput::from_input(&self.client_hello)?, output)
     }
 
     pub(crate) fn client_hello(&self) -> &ClientHelloPayload {
+        self.client_hello_payload()
+    }
+
+    fn client_hello_payload(&self) -> &ClientHelloPayload {
         match &self.client_hello.message.payload {
             MessagePayload::Handshake { parsed, .. } => match &parsed.0 {
                 HandshakePayload::ClientHello(ch) => ch,
@@ -439,6 +474,10 @@ pub(crate) struct ExpectClientHello {
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
     pub(super) send_tickets: usize,
+    /// Per-connection ECH state when the server accepted an ECH offer.
+    pub(super) ech: Option<ServerEchState>,
+    /// True if ECH was offered but decryption failed (triggers retry configs).
+    pub(super) ech_rejected: bool,
 }
 
 impl ExpectClientHello {
@@ -465,6 +504,8 @@ impl ExpectClientHello {
             using_ems: false,
             done_retry: false,
             send_tickets: 0,
+            ech: None,
+            ech_rejected: false,
         }
     }
 
@@ -717,10 +758,82 @@ impl ExpectClientHello {
 
 impl ExpectClientHello {
     pub(crate) fn handle<'m>(
-        self,
+        mut self,
         input: Input<'m>,
         output: &mut dyn Output<'_>,
     ) -> Result<ServerState, Error> {
+        // Attempt ECH decryption if the server has ECH keys configured.
+        if !self.config.ech_keys.is_empty() {
+            if self.done_retry {
+                // Second ClientHello after HRR: reuse the opener from the first.
+                if let Some(ech_state) = self.ech.as_mut() {
+                    let retry_encoded = match &input.message.payload {
+                        MessagePayload::Handshake { encoded, .. } => encoded.bytes().to_vec(),
+                        MessagePayload::Alert(..)
+                        | MessagePayload::HandshakeFlight(..)
+                        | MessagePayload::ChangeCipherSpec(..)
+                        | MessagePayload::ApplicationData(..) => {
+                            unreachable!("ClientHello is a Handshake message")
+                        }
+                    };
+                    let outer_hello_input = ClientHelloInput::from_input(&input)?;
+                    if let Some(inner_message) =
+                        super::ech::try_decrypt_ech_retry(
+                            outer_hello_input.client_hello,
+                            &retry_encoded,
+                            ech_state,
+                        )
+                    {
+                        let owned_input = Input {
+                            message: inner_message,
+                            aligned_handshake: input.aligned_handshake,
+                        };
+                        let ch_input = ClientHelloInput::from_input(&owned_input)?;
+                        return self.with_input(ch_input, output);
+                    }
+                    // ECH retry decryption failed; fall through with outer hello.
+                    self.ech = None;
+                    self.ech_rejected = true;
+                }
+            } else {
+                // Initial ClientHello: attempt fresh ECH decryption.
+                // Extract the raw handshake encoding for AAD computation.
+                let outer_encoded = match &input.message.payload {
+                    MessagePayload::Handshake { encoded, .. } => encoded.bytes().to_vec(),
+                    MessagePayload::Alert(..)
+                    | MessagePayload::HandshakeFlight(..)
+                    | MessagePayload::ChangeCipherSpec(..)
+                    | MessagePayload::ApplicationData(..) => {
+                        unreachable!("ClientHello is a Handshake message")
+                    }
+                };
+                let outer_hello_input = ClientHelloInput::from_input(&input)?;
+                match try_decrypt_ech(
+                    outer_hello_input.client_hello,
+                    &outer_encoded,
+                    &self.config.ech_keys,
+                    false,
+                ) {
+                    EchDecryptResult::Accepted {
+                        inner_message,
+                        state,
+                    } => {
+                        self.ech = Some(state);
+                        let owned_input = Input {
+                            message: inner_message,
+                            aligned_handshake: input.aligned_handshake,
+                        };
+                        let ch_input = ClientHelloInput::from_input(&owned_input)?;
+                        return self.with_input(ch_input, output);
+                    }
+                    EchDecryptResult::Rejected => {
+                        self.ech_rejected = true;
+                    }
+                    EchDecryptResult::NotOffered => {}
+                }
+            }
+        }
+
         let input = ClientHelloInput::from_input(&input)?;
         self.with_input(input, output)
     }

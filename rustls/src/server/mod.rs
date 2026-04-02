@@ -19,6 +19,9 @@ pub use config::{
     ServerConfig, ServerCredentialResolver, StoresServerSessions, WantsServerCert,
 };
 
+mod ech;
+pub use ech::ServerEchConfig;
+
 mod connection;
 pub use connection::{
     Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection, ServerSide,
