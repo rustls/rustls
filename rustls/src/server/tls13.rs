@@ -83,11 +83,10 @@ mod client_hello {
     use crate::enums::ApplicationProtocol;
     use crate::msgs::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
-        ChangeCipherSpecPayload, ClientHelloPayload, Compression, Encoding,
-        HandshakeAlignedProof, HandshakeMessagePayload, HelloRetryRequest,
-        HelloRetryRequestExtensions, KeyShareEntry, Message, MessagePayload, Random,
-        ServerEncryptedClientHello, ServerExtensions, ServerExtensionsInput, ServerHelloPayload,
-        SessionId, SizedPayload,
+        ChangeCipherSpecPayload, ClientHelloPayload, Compression, Encoding, HandshakeAlignedProof,
+        HandshakeMessagePayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry,
+        Message, MessagePayload, Random, ServerEncryptedClientHello, ServerExtensions,
+        ServerExtensionsInput, ServerHelloPayload, SessionId, SizedPayload,
     };
     use crate::sealed::Sealed;
     use crate::server::Tls13ServerSessionValue;
@@ -663,11 +662,8 @@ mod client_hello {
 
         // Derive the 8-byte confirmation.
         let conf_hash = conf_transcript.current_hash();
-        let confirmation = server_ech_confirmation_secret(
-            suite.hkdf_provider,
-            &ech_state.inner_random,
-            conf_hash,
-        );
+        let confirmation =
+            server_ech_confirmation_secret(suite.hkdf_provider, &ech_state.inner_random, conf_hash);
 
         // Patch the real encoding with the confirmation bytes.
         let mut patched_encoded = encoded;
@@ -706,7 +702,9 @@ mod client_hello {
     ) {
         // If ECH was accepted, include a placeholder ECH extension that will
         // be replaced with the HRR confirmation signal.
-        let ech_ext = ech.as_ref().map(|_| Payload::new(vec![0u8; 8]));
+        let ech_ext = ech
+            .as_ref()
+            .map(|_| Payload::new(vec![0u8; 8]));
 
         let req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
@@ -729,9 +727,7 @@ mod client_hello {
                     HandshakePayload::HelloRetryRequest(req.clone()),
                 )),
             },
-            |ech_state| {
-                patch_hrr_ech_confirmation(req.clone(), ech_state, suite, transcript)
-            },
+            |ech_state| patch_hrr_ech_confirmation(req.clone(), ech_state, suite, transcript),
         );
 
         trace!("Requesting retry {m:?}");
@@ -773,8 +769,9 @@ mod client_hello {
 
         // Rebuild HRR with real confirmation bytes.
         let mut patched_req = req;
-        patched_req.extensions.encrypted_client_hello =
-            Some(Payload::new(confirmation.to_vec()));
+        patched_req
+            .extensions
+            .encrypted_client_hello = Some(Payload::new(confirmation.to_vec()));
 
         Message {
             version: ProtocolVersion::TLSv1_2,

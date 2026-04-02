@@ -71,9 +71,7 @@ impl ServerEchConfig {
             };
 
             if contents.has_unknown_mandatory_extension() || contents.has_duplicate_extension() {
-                warn!(
-                    "ECH config has duplicate, or unknown mandatory extensions: {contents:?}",
-                );
+                warn!("ECH config has duplicate, or unknown mandatory extensions: {contents:?}",);
                 continue;
             }
 
@@ -128,9 +126,7 @@ impl ServerEchConfig {
             key_config: HpkeKeyConfig {
                 config_id,
                 kem_id: hpke_suite.kem,
-                public_key: SizedPayload::from(crate::crypto::cipher::Payload::new(
-                    public_key.0,
-                )),
+                public_key: SizedPayload::from(crate::crypto::cipher::Payload::new(public_key.0)),
                 symmetric_cipher_suites: vec![hpke_suite.sym],
             },
             maximum_name_length,
@@ -193,7 +189,7 @@ pub(crate) enum EchDecryptResult {
     /// ECH was offered and decryption succeeded.
     Accepted {
         /// The reconstructed inner ClientHello wrapped as a Message for transcript.
-        inner_message: Message<'static>,
+        inner_message: Box<Message<'static>>,
         /// Per-connection state to carry through the handshake.
         state: ServerEchState,
     },
@@ -244,15 +240,17 @@ pub(crate) fn try_decrypt_ech(
         let suite_matches = contents
             .key_config
             .symmetric_cipher_suites
-            .iter()
-            .any(|s| *s == ech_outer.cipher_suite);
+            .contains(&ech_outer.cipher_suite);
         if !suite_matches {
             continue;
         }
 
         let enc = EncapsulatedSecret(ech_outer.enc.bytes().to_vec());
         let info = key.hpke_info();
-        let Ok(mut opener) = key.suite.setup_opener(&enc, &info, &key.private_key) else {
+        let Ok(mut opener) = key
+            .suite
+            .setup_opener(&enc, &info, &key.private_key)
+        else {
             continue;
         };
 
@@ -271,7 +269,7 @@ pub(crate) fn try_decrypt_ech(
                 let inner_random = extract_random(&inner_message);
                 trace!("ECH decryption succeeded for config_id {config_id}");
                 EchDecryptResult::Accepted {
-                    inner_message,
+                    inner_message: Box::new(inner_message),
                     state: ServerEchState {
                         inner_random,
                         opener,
@@ -307,9 +305,8 @@ pub(crate) fn try_decrypt_ech_retry(
         .open(&aad, ech_outer.payload.bytes())
         .ok()
         .and_then(|plaintext| decode_inner_hello(&plaintext, outer_hello, true))
-        .map(|inner_message| {
-            state.inner_random = extract_random(&inner_message);
-            inner_message
+        .inspect(|inner_message| {
+            state.inner_random = extract_random(inner_message);
         })
 }
 
@@ -377,8 +374,7 @@ fn zero_ech_payload_in_encoding(ch_payload: &mut [u8], payload_len: usize) {
     // Scan extensions looking for type 0xfe0d.
     while pos + 4 <= ch_payload.len() {
         let ext_type = u16::from_be_bytes([ch_payload[pos], ch_payload[pos + 1]]);
-        let ext_len =
-            u16::from_be_bytes([ch_payload[pos + 2], ch_payload[pos + 3]]) as usize;
+        let ext_len = u16::from_be_bytes([ch_payload[pos + 2], ch_payload[pos + 3]]) as usize;
         let ext_data_start = pos + 4;
 
         if ext_type == 0xfe0d {
@@ -430,12 +426,22 @@ fn decode_inner_hello(
 
     // Expand compressed extensions: copy listed extension values from the
     // outer hello for each type in the OuterExtensions marker.
-    if let Some(compressed_types) = inner_hello.encrypted_client_hello_outer.take() {
+    // Per RFC 9849 Section 7.1, compressed extensions are inserted at the
+    // position of the OuterExtensions marker.  Setting contiguous_extensions
+    // ensures the standard encoding places them in the same position, so the
+    // transcript hash matches the client.
+    if let Some(compressed_types) = inner_hello
+        .encrypted_client_hello_outer
+        .take()
+    {
         for ext_type in &compressed_types {
             inner_hello
                 .extensions
                 .clone_one(&outer_hello.extensions, *ext_type);
         }
+        inner_hello
+            .extensions
+            .contiguous_extensions = compressed_types;
     }
 
     let version = if is_retry {
@@ -446,9 +452,9 @@ fn decode_inner_hello(
 
     Some(Message {
         version,
-        payload: MessagePayload::handshake(HandshakeMessagePayload(
-            HandshakePayload::ClientHello(inner_hello),
-        )),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
+            inner_hello,
+        ))),
     })
 }
 
@@ -468,7 +474,11 @@ fn parse_inner_hello_tolerant(r: &mut Reader<'_>) -> Option<ClientHelloPayload> 
         session_id: SessionId::read(r).ok()?,
         cipher_suites: Vec::<CipherSuite>::read(r).ok()?,
         compression_methods: Vec::<Compression>::read(r).ok()?,
-        extensions: Box::new(ClientExtensions::read(r).ok()?.into_owned()),
+        extensions: Box::new(
+            ClientExtensions::read(r)
+                .ok()?
+                .into_owned(),
+        ),
     })
 }
 

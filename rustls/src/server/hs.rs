@@ -421,7 +421,7 @@ impl ChooseConfig {
                     state,
                 } => {
                     // Replace the outer ClientHello with the decrypted inner one.
-                    self.client_hello.message = inner_message;
+                    self.client_hello.message = *inner_message;
                     (Some(state), false)
                 }
                 EchDecryptResult::Rejected => (None, true),
@@ -431,7 +431,8 @@ impl ChooseConfig {
             (None, false)
         };
 
-        let mut ech = ExpectClientHello::new(config, extra_exts, self.resumption_data, self.protocol);
+        let mut ech =
+            ExpectClientHello::new(config, extra_exts, self.resumption_data, self.protocol);
         ech.ech = ech_state;
         ech.ech_rejected = ech_rejected;
         ech.with_input(ClientHelloInput::from_input(&self.client_hello)?, output)
@@ -777,13 +778,11 @@ impl ExpectClientHello {
                         }
                     };
                     let outer_hello_input = ClientHelloInput::from_input(&input)?;
-                    if let Some(inner_message) =
-                        super::ech::try_decrypt_ech_retry(
-                            outer_hello_input.client_hello,
-                            &retry_encoded,
-                            ech_state,
-                        )
-                    {
+                    if let Some(inner_message) = super::ech::try_decrypt_ech_retry(
+                        outer_hello_input.client_hello,
+                        &retry_encoded,
+                        ech_state,
+                    ) {
                         let owned_input = Input {
                             message: inner_message,
                             aligned_handshake: input.aligned_handshake,
@@ -820,7 +819,7 @@ impl ExpectClientHello {
                     } => {
                         self.ech = Some(state);
                         let owned_input = Input {
-                            message: inner_message,
+                            message: *inner_message,
                             aligned_handshake: input.aligned_handshake,
                         };
                         let ch_input = ClientHelloInput::from_input(&owned_input)?;

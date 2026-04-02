@@ -492,10 +492,8 @@ impl EchState {
 
         // Derive a confirmation secret from the inner hello random and the confirmation transcript.
         let conf_hash = confirmation_transcript.current_hash();
-        let derived = ks.server_ech_confirmation_secret(
-            self.inner_hello_random.0.as_ref(),
-            conf_hash,
-        );
+        let derived =
+            ks.server_ech_confirmation_secret(self.inner_hello_random.0.as_ref(), conf_hash);
 
         // Check that first 8 digits of the derived secret match the last 8 digits of the original
         // server random. This match signals that the server accepted the ECH offer.
@@ -730,13 +728,6 @@ impl EchState {
         // Let N = 31 - ((L - 1) % 32) and add N bytes of padding.
         let padding_len = 31 - ((encoded_hello.len() + padding_len - 1) % 32);
         encoded_hello.extend(vec![0; padding_len]);
-
-        // Clear contiguous_extensions before building the transcript message.
-        // The contiguous_extensions field is only used for the ECH inner encoding
-        // (where compressed extensions must appear as a contiguous block).  For the
-        // standard encoding that goes into the transcript hash, all extensions go
-        // through the normal ordering path, which the server can reproduce.
-        inner_hello.contiguous_extensions = Vec::new();
 
         // Construct the inner hello message that will be used for the transcript.
         let inner_hello_msg = Message {
