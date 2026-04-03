@@ -5,7 +5,9 @@ use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::fmt::{self, Debug, Formatter};
 
-use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id};
+use pki_types::{
+    AlgorithmIdentifier, PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id,
+};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
 #[cfg(test)]
@@ -92,6 +94,175 @@ impl Debug for RsaSigningKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("RsaSigningKey")
             .finish_non_exhaustive()
+    }
+}
+
+/// A `SigningKey` for RSA-PSS with id-RSASSA-PSS key type.
+///
+/// This is used for certificates whose Subject Public Key Info specifies the
+/// id-RSASSA-PSS OID (1.2.840.113549.1.1.10) rather than rsaEncryption.
+/// It advertises the `rsa_pss_pss_*` TLS signature schemes (0x0809-0x080b)
+/// instead of the `rsa_pss_rsae_*` schemes (0x0804-0x0806).
+pub(super) struct RsaPssSigningKey {
+    key: Arc<RsaKeyPair>,
+    spki_alg_id: &'static AlgorithmIdentifier,
+    schemes: &'static [SignatureScheme],
+}
+
+impl RsaPssSigningKey {
+    fn to_signer(&self, scheme: SignatureScheme) -> RsaSigner {
+        let encoding: &dyn signature::RsaEncoding = match scheme {
+            SignatureScheme::RSA_PSS_PSS_SHA256 => &signature::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_PSS_SHA384 => &signature::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_PSS_SHA512 => &signature::RSA_PSS_SHA512,
+            _ => unreachable!(),
+        };
+
+        RsaSigner {
+            key: self.key.clone(),
+            scheme,
+            encoding,
+        }
+    }
+
+    /// Attempt to create an `RsaPssSigningKey` from a PKCS#8 key whose
+    /// AlgorithmIdentifier uses the id-RSASSA-PSS OID.
+    ///
+    /// Returns `None` if the key does not use the id-RSASSA-PSS OID or
+    /// if the parameters do not match a known hash algorithm.
+    pub(super) fn from_pkcs8(pkcs8: &[u8]) -> Option<Self> {
+        let (spki_alg_id, schemes) = match pkcs8_pss_hash(pkcs8)? {
+            PssHash::Sha256 => (
+                &alg_id::RSA_PSS_SHA256,
+                &[SignatureScheme::RSA_PSS_PSS_SHA256] as &[_],
+            ),
+            PssHash::Sha384 => (
+                &alg_id::RSA_PSS_SHA384,
+                &[SignatureScheme::RSA_PSS_PSS_SHA384] as &[_],
+            ),
+            PssHash::Sha512 => (
+                &alg_id::RSA_PSS_SHA512,
+                &[SignatureScheme::RSA_PSS_PSS_SHA512] as &[_],
+            ),
+        };
+
+        let key_pair = RsaKeyPair::from_pkcs8(pkcs8).ok()?;
+
+        Some(Self {
+            key: Arc::new(key_pair),
+            spki_alg_id,
+            schemes,
+        })
+    }
+}
+
+impl SigningKey for RsaPssSigningKey {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
+        self.schemes
+            .iter()
+            .find(|scheme| offered.contains(scheme))
+            .map(|&scheme| Box::new(self.to_signer(scheme)) as Box<dyn Signer>)
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        Some(public_key_to_spki(self.spki_alg_id, self.key.public_key()))
+    }
+}
+
+impl Debug for RsaPssSigningKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RsaPssSigningKey")
+            .finish_non_exhaustive()
+    }
+}
+
+/// The hash algorithm specified in an id-RSASSA-PSS AlgorithmIdentifier.
+enum PssHash {
+    Sha256,
+    Sha384,
+    Sha512,
+}
+
+/// The DER-encoded OID for id-RSASSA-PSS (1.2.840.113549.1.1.10).
+const OID_RSASSA_PSS: &[u8] = &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0a];
+
+/// Try to detect whether a PKCS#8 DER blob uses the id-RSASSA-PSS
+/// AlgorithmIdentifier. If so, determine the hash algorithm from the
+/// full AlgorithmIdentifier parameters by matching against the known
+/// `alg_id::RSA_PSS_SHA*` constants.
+fn pkcs8_pss_hash(pkcs8: &[u8]) -> Option<PssHash> {
+    let rest = read_tag(pkcs8, 0x30)?; // outer SEQUENCE
+    let rest = skip_element(rest)?; // skip version INTEGER
+    let alg_id_body = read_tag(rest, 0x30)?; // AlgorithmIdentifier SEQUENCE
+
+    // Check that the OID inside is id-RSASSA-PSS
+    let oid_body = read_tag(alg_id_body, 0x06)?; // OID tag
+    if oid_body.len() < OID_RSASSA_PSS.len() {
+        return None;
+    }
+    if &oid_body[..OID_RSASSA_PSS.len()] != OID_RSASSA_PSS {
+        return None;
+    }
+
+    // Match the full AlgorithmIdentifier TLV against known constants.
+    let alg_id_tlv = extract_element(rest)?;
+
+    if alg_id_tlv == alg_id::RSA_PSS_SHA256.as_ref() {
+        Some(PssHash::Sha256)
+    } else if alg_id_tlv == alg_id::RSA_PSS_SHA384.as_ref() {
+        Some(PssHash::Sha384)
+    } else if alg_id_tlv == alg_id::RSA_PSS_SHA512.as_ref() {
+        Some(PssHash::Sha512)
+    } else {
+        None
+    }
+}
+
+/// Read a DER tag byte and return the element's content (value bytes).
+fn read_tag(data: &[u8], expected_tag: u8) -> Option<&[u8]> {
+    let (tag, rest) = data.split_first()?;
+    if *tag != expected_tag {
+        return None;
+    }
+    let (len, content_start) = der_read_length(rest)?;
+    content_start.get(..len)
+}
+
+/// Extract a complete DER TLV element (tag + length + value) from the
+/// start of `data`.
+fn extract_element(data: &[u8]) -> Option<&[u8]> {
+    let (_tag, rest) = data.split_first()?;
+    let (len, content_start) = der_read_length(rest)?;
+    let header_len = data.len() - rest.len();
+    let total = header_len + len;
+    data.get(..total)
+        .filter(|_| content_start.len() >= len)
+}
+
+/// Skip one DER TLV element and return the remaining bytes.
+fn skip_element(data: &[u8]) -> Option<&[u8]> {
+    let (_tag, rest) = data.split_first()?;
+    let (len, content_start) = der_read_length(rest)?;
+    content_start.get(len..)
+}
+
+/// Parse a DER length and return (length_value, remaining_bytes).
+fn der_read_length(data: &[u8]) -> Option<(usize, &[u8])> {
+    let (&first, rest) = data.split_first()?;
+    if first < 0x80 {
+        Some((first as usize, rest))
+    } else {
+        let num_bytes = (first & 0x7f) as usize;
+        if num_bytes == 0 || num_bytes > 4 || rest.len() < num_bytes {
+            return None;
+        }
+        let mut len = 0usize;
+        for &b in &rest[..num_bytes] {
+            len = len
+                .checked_shl(8)?
+                .checked_add(b as usize)?;
+        }
+        Some((len, &rest[num_bytes..]))
     }
 }
 

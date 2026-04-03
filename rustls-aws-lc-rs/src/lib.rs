@@ -50,7 +50,7 @@ use rustls::{Tls12CipherSuite, Tls13CipherSuite};
 pub mod hpke;
 /// Using software keys for authentication.
 pub mod sign;
-use sign::{EcdsaSigner, Ed25519Signer, RsaSigningKey};
+use sign::{EcdsaSigner, Ed25519Signer, RsaPssSigningKey, RsaSigningKey};
 
 pub(crate) mod hash;
 pub(crate) mod hmac;
@@ -70,8 +70,9 @@ pub use verify::{
     RSA_PKCS1_2048_8192_SHA256_ABSENT_PARAMS, RSA_PKCS1_2048_8192_SHA384,
     RSA_PKCS1_2048_8192_SHA384_ABSENT_PARAMS, RSA_PKCS1_2048_8192_SHA512,
     RSA_PKCS1_2048_8192_SHA512_ABSENT_PARAMS, RSA_PKCS1_3072_8192_SHA384,
-    RSA_PSS_2048_8192_SHA256_LEGACY_KEY, RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-    RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+    RSA_PSS_2048_8192_SHA256_LEGACY_KEY, RSA_PSS_2048_8192_SHA256_PSS_KEY,
+    RSA_PSS_2048_8192_SHA384_LEGACY_KEY, RSA_PSS_2048_8192_SHA384_PSS_KEY,
+    RSA_PSS_2048_8192_SHA512_LEGACY_KEY, RSA_PSS_2048_8192_SHA512_PSS_KEY,
 };
 
 /// A `CryptoProvider` backed by aws-lc-rs that uses FIPS140-3-approved cryptography.
@@ -138,6 +139,14 @@ impl KeyProvider for AwsLcRs {
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Box<dyn SigningKey>, Error> {
+        // Try id-RSASSA-PSS keys before generic RSA, since RsaKeyPair::from_pkcs8
+        // accepts both OIDs and we need to distinguish them for scheme selection.
+        if let PrivateKeyDer::Pkcs8(ref pkcs8) = key_der {
+            if let Some(pss) = RsaPssSigningKey::from_pkcs8(pkcs8.secret_pkcs8_der()) {
+                return Ok(Box::new(pss));
+            }
+        }
+
         if let Ok(rsa) = RsaSigningKey::try_from(&key_der) {
             return Ok(Box::new(rsa));
         }
@@ -271,6 +280,9 @@ pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupported
         RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
         RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
         RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+        RSA_PSS_2048_8192_SHA256_PSS_KEY,
+        RSA_PSS_2048_8192_SHA384_PSS_KEY,
+        RSA_PSS_2048_8192_SHA512_PSS_KEY,
         RSA_PKCS1_2048_8192_SHA256,
         RSA_PKCS1_2048_8192_SHA384,
         RSA_PKCS1_2048_8192_SHA512,
@@ -304,6 +316,18 @@ pub static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = match WebPkiSupported
         (
             SignatureScheme::RSA_PSS_SHA256,
             &[RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
+        ),
+        (
+            SignatureScheme::RSA_PSS_PSS_SHA512,
+            &[RSA_PSS_2048_8192_SHA512_PSS_KEY],
+        ),
+        (
+            SignatureScheme::RSA_PSS_PSS_SHA384,
+            &[RSA_PSS_2048_8192_SHA384_PSS_KEY],
+        ),
+        (
+            SignatureScheme::RSA_PSS_PSS_SHA256,
+            &[RSA_PSS_2048_8192_SHA256_PSS_KEY],
         ),
         (
             SignatureScheme::RSA_PKCS1_SHA512,

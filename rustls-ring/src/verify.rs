@@ -20,6 +20,9 @@ pub static ALL_VERIFICATION_ALGS: &[&dyn SignatureVerificationAlgorithm] = &[
     RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
     RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
     RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+    RSA_PSS_2048_8192_SHA256_PSS_KEY,
+    RSA_PSS_2048_8192_SHA384_PSS_KEY,
+    RSA_PSS_2048_8192_SHA512_PSS_KEY,
 ];
 
 /// A `SignatureVerificationAlgorithm` implemented using *ring*.
@@ -199,6 +202,36 @@ pub static RSA_PSS_2048_8192_SHA512_LEGACY_KEY: &dyn SignatureVerificationAlgori
         signature_alg_id: alg_id::RSA_PSS_SHA512,
         verification_alg: &signature::RSA_PSS_2048_8192_SHA512,
     };
+
+/// RSA PSS signatures using SHA-256 for keys of 2048-8192 bits and of
+/// type id-RSASSA-PSS; see [RFC 4055 Section 1.2].
+///
+/// [RFC 4055 Section 1.2]: https://tools.ietf.org/html/rfc4055#section-1.2
+pub static RSA_PSS_2048_8192_SHA256_PSS_KEY: &dyn SignatureVerificationAlgorithm = &RingAlgorithm {
+    public_key_alg_id: alg_id::RSA_PSS_SHA256,
+    signature_alg_id: alg_id::RSA_PSS_SHA256,
+    verification_alg: &signature::RSA_PSS_2048_8192_SHA256,
+};
+
+/// RSA PSS signatures using SHA-384 for keys of 2048-8192 bits and of
+/// type id-RSASSA-PSS; see [RFC 4055 Section 1.2].
+///
+/// [RFC 4055 Section 1.2]: https://tools.ietf.org/html/rfc4055#section-1.2
+pub static RSA_PSS_2048_8192_SHA384_PSS_KEY: &dyn SignatureVerificationAlgorithm = &RingAlgorithm {
+    public_key_alg_id: alg_id::RSA_PSS_SHA384,
+    signature_alg_id: alg_id::RSA_PSS_SHA384,
+    verification_alg: &signature::RSA_PSS_2048_8192_SHA384,
+};
+
+/// RSA PSS signatures using SHA-512 for keys of 2048-8192 bits and of
+/// type id-RSASSA-PSS; see [RFC 4055 Section 1.2].
+///
+/// [RFC 4055 Section 1.2]: https://tools.ietf.org/html/rfc4055#section-1.2
+pub static RSA_PSS_2048_8192_SHA512_PSS_KEY: &dyn SignatureVerificationAlgorithm = &RingAlgorithm {
+    public_key_alg_id: alg_id::RSA_PSS_SHA512,
+    signature_alg_id: alg_id::RSA_PSS_SHA512,
+    verification_alg: &signature::RSA_PSS_2048_8192_SHA512,
+};
 
 /// ED25519 signatures according to RFC 8410
 pub static ED25519: &dyn SignatureVerificationAlgorithm = &RingAlgorithm {

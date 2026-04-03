@@ -381,6 +381,9 @@ enum_builder! {
         RSA_PSS_SHA512 => 0x0806,
         ED25519 => 0x0807,
         ED448 => 0x0808,
+        RSA_PSS_PSS_SHA256 => 0x0809,
+        RSA_PSS_PSS_SHA384 => 0x080a,
+        RSA_PSS_PSS_SHA512 => 0x080b,
         // https://datatracker.ietf.org/doc/html/draft-ietf-tls-mldsa-00#name-iana-considerations
         ML_DSA_44 => 0x0904,
         ML_DSA_65 => 0x0905,
@@ -397,7 +400,10 @@ impl SignatureScheme {
             | Self::RSA_PKCS1_SHA512
             | Self::RSA_PSS_SHA256
             | Self::RSA_PSS_SHA384
-            | Self::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
+            | Self::RSA_PSS_SHA512
+            | Self::RSA_PSS_PSS_SHA256
+            | Self::RSA_PSS_PSS_SHA384
+            | Self::RSA_PSS_PSS_SHA512 => SignatureAlgorithm::RSA,
             Self::ECDSA_SHA1_Legacy
             | Self::ECDSA_NISTP256_SHA256
             | Self::ECDSA_NISTP384_SHA384

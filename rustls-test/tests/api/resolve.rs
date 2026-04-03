@@ -193,6 +193,9 @@ fn server_cert_resolve_reduces_sigalgs_for_rsa_ciphersuite() {
             SignatureScheme::RSA_PSS_SHA512,
             SignatureScheme::RSA_PSS_SHA384,
             SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_PSS_SHA512,
+            SignatureScheme::RSA_PSS_PSS_SHA384,
+            SignatureScheme::RSA_PSS_PSS_SHA256,
             SignatureScheme::RSA_PKCS1_SHA512,
             SignatureScheme::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA256,
@@ -360,6 +363,9 @@ fn default_signature_schemes(version: ProtocolVersion) -> Vec<SignatureScheme> {
         SignatureScheme::RSA_PSS_SHA512,
         SignatureScheme::RSA_PSS_SHA384,
         SignatureScheme::RSA_PSS_SHA256,
+        SignatureScheme::RSA_PSS_PSS_SHA512,
+        SignatureScheme::RSA_PSS_PSS_SHA384,
+        SignatureScheme::RSA_PSS_PSS_SHA256,
     ]);
 
     if provider_is_aws_lc_rs() {
