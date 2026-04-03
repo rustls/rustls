@@ -2590,6 +2590,7 @@ dependencies = [
  "hex",
  "rustls 0.24.0-dev.0",
  "rustls-pki-types",
+ "rustls-provider-test",
  "rustls-test",
  "serde",
  "serde_json",
@@ -2733,6 +2734,7 @@ dependencies = [
  "rcgen",
  "rsa",
  "rustls 0.24.0-dev.0",
+ "rustls-provider-test",
  "rustls-util",
  "sha2",
  "signature",
@@ -2761,6 +2763,7 @@ dependencies = [
  "ring",
  "rustls 0.24.0-dev.0",
  "rustls-pki-types",
+ "rustls-provider-test",
  "rustls-test",
  "subtle",
 ]

@@ -485,6 +485,14 @@ impl WebPkiSupportedAlgorithms {
         self.mapping
     }
 
+    /// Accessor for the `all` field.
+    ///
+    /// These verification algorithms are used for building and verifying a certificate
+    /// chain.
+    pub fn chain_validation_algorithms(&self) -> &[&'static dyn SignatureVerificationAlgorithm] {
+        self.all
+    }
+
     /// Return the first item in `mapping` that matches `scheme`.
     #[cfg(feature = "webpki")]
     pub(crate) fn convert_scheme(
