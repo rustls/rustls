@@ -17,7 +17,10 @@ use rustls::crypto::{
     SignatureScheme, Signer, SigningKey,
 };
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
-use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
+use rustls::error::{
+    AlertDescription, ApiMisuse, CertificateError, EncryptedClientHelloError, Error,
+    PeerMisbehaved,
+};
 use rustls::server::{
     Acceptor, ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver,
 };
@@ -1817,3 +1820,468 @@ fn test_server_ech_not_offered_normal_handshake() {
 
     assert_eq!(client.ech_status(), EchStatus::NotOffered);
 }
+
+// ---------------------------------------------------------------------------
+// ECH coverage helpers: raw ECH config list byte construction
+// ---------------------------------------------------------------------------
+
+/// Encode a single V18 ECH config entry (version 0xfe0d) from components.
+#[cfg(feature = "aws-lc-rs")]
+fn encode_v18_ech_config(
+    config_id: u8,
+    kem_id: u16,
+    public_key: &[u8],
+    cipher_suites: &[(u16, u16)],
+    max_name_len: u8,
+    public_name: &str,
+    extensions: &[(u16, &[u8])],
+) -> Vec<u8> {
+    let mut contents = Vec::new();
+    // HpkeKeyConfig
+    contents.push(config_id);
+    contents.extend_from_slice(&kem_id.to_be_bytes());
+    contents.extend_from_slice(&(public_key.len() as u16).to_be_bytes());
+    contents.extend_from_slice(public_key);
+    let suites_byte_len = (cipher_suites.len() * 4) as u16;
+    contents.extend_from_slice(&suites_byte_len.to_be_bytes());
+    for &(kdf, aead) in cipher_suites {
+        contents.extend_from_slice(&kdf.to_be_bytes());
+        contents.extend_from_slice(&aead.to_be_bytes());
+    }
+    // maximum_name_length + public_name
+    contents.push(max_name_len);
+    contents.push(public_name.len() as u8);
+    contents.extend_from_slice(public_name.as_bytes());
+    // Extensions
+    let mut ext_bytes = Vec::new();
+    for &(etype, edata) in extensions {
+        ext_bytes.extend_from_slice(&etype.to_be_bytes());
+        ext_bytes.extend_from_slice(&(edata.len() as u16).to_be_bytes());
+        ext_bytes.extend_from_slice(edata);
+    }
+    contents.extend_from_slice(&(ext_bytes.len() as u16).to_be_bytes());
+    contents.extend_from_slice(&ext_bytes);
+
+    // Version (0xfe0d) + u16 length + contents
+    let mut entry = Vec::new();
+    entry.extend_from_slice(&0xfe0du16.to_be_bytes());
+    entry.extend_from_slice(&(contents.len() as u16).to_be_bytes());
+    entry.extend_from_slice(&contents);
+    entry
+}
+
+/// Wrap one or more raw config entries into an ECH config list (u16 length prefix).
+#[cfg(feature = "aws-lc-rs")]
+fn encode_ech_config_list(entries: &[Vec<u8>]) -> EchConfigListBytes<'static> {
+    let total: usize = entries.iter().map(|e| e.len()).sum();
+    let mut list = Vec::with_capacity(2 + total);
+    list.extend_from_slice(&(total as u16).to_be_bytes());
+    for entry in entries {
+        list.extend_from_slice(entry);
+    }
+    EchConfigListBytes::from(list)
+}
+
+// ---------------------------------------------------------------------------
+// ServerEchConfig::new() construction tests
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_config_new_invalid_config_list() {
+    use rustls::crypto::hpke::HpkePrivateKey;
+
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let private_key = HpkePrivateKey::from(vec![0u8; 32]);
+
+    let invalid_config_list = EchConfigListBytes::from(vec![0xff, 0xff]);
+    let result = ServerEchConfig::new(invalid_config_list, private_key, &[suite]);
+    assert!(matches!(
+        result,
+        Err(Error::InvalidEncryptedClientHello(
+            EncryptedClientHelloError::InvalidConfigList
+        ))
+    ));
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_config_new_no_compatible_suite() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+
+    let (_, private_key) = suite.generate_key_pair().unwrap();
+    let (_, config_list) =
+        ServerEchConfig::generate(suite, 0x42, public_name, 64).unwrap();
+
+    let result = ServerEchConfig::new(config_list, private_key, &[]);
+    assert!(matches!(
+        result,
+        Err(Error::InvalidEncryptedClientHello(
+            EncryptedClientHelloError::NoCompatibleConfig
+        ))
+    ));
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_config_new_unknown_version_skipped() {
+    use rustls::crypto::hpke::HpkePrivateKey;
+
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let hpke_suite = suite.suite();
+
+    // Unknown version entry: version=0xFFFF, 4 bytes of opaque data.
+    let unknown_entry = {
+        let mut e = Vec::new();
+        e.extend_from_slice(&0xFFFFu16.to_be_bytes());
+        e.extend_from_slice(&4u16.to_be_bytes());
+        e.extend_from_slice(&[0u8; 4]);
+        e
+    };
+
+    // Valid V18 entry using the same KEM/KDF/AEAD as the suite.
+    let valid_entry = encode_v18_ech_config(
+        0x42,
+        hpke_suite.kem.0,
+        &[0x04; 65],
+        &[(hpke_suite.sym.kdf_id.0, hpke_suite.sym.aead_id.0)],
+        64,
+        "public.example.com",
+        &[],
+    );
+
+    let config_list = encode_ech_config_list(&[unknown_entry, valid_entry]);
+    let private_key = HpkePrivateKey::from(vec![0u8; 32]);
+    let result = ServerEchConfig::new(config_list, private_key, &[suite]);
+    result.unwrap();
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_config_new_mandatory_extension_skipped() {
+    use rustls::crypto::hpke::HpkePrivateKey;
+
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let hpke_suite = suite.suite();
+
+    // V18 config with a mandatory unknown extension (high bit set = 0x8000).
+    let entry = encode_v18_ech_config(
+        0x42,
+        hpke_suite.kem.0,
+        &[0x04; 65],
+        &[(hpke_suite.sym.kdf_id.0, hpke_suite.sym.aead_id.0)],
+        64,
+        "public.example.com",
+        &[(0x8000, &[0x01])],
+    );
+
+    let config_list = encode_ech_config_list(&[entry]);
+    let private_key = HpkePrivateKey::from(vec![0u8; 32]);
+    let result = ServerEchConfig::new(config_list, private_key, &[suite]);
+    assert!(matches!(
+        result,
+        Err(Error::InvalidEncryptedClientHello(
+            EncryptedClientHelloError::NoCompatibleConfig
+        ))
+    ));
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_config_new_duplicate_extension_skipped() {
+    use rustls::crypto::hpke::HpkePrivateKey;
+
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let hpke_suite = suite.suite();
+
+    // V18 config with two extensions of the same type.
+    let entry = encode_v18_ech_config(
+        0x42,
+        hpke_suite.kem.0,
+        &[0x04; 65],
+        &[(hpke_suite.sym.kdf_id.0, hpke_suite.sym.aead_id.0)],
+        64,
+        "public.example.com",
+        &[(0x0001, &[]), (0x0001, &[])],
+    );
+
+    let config_list = encode_ech_config_list(&[entry]);
+    let private_key = HpkePrivateKey::from(vec![0u8; 32]);
+    let result = ServerEchConfig::new(config_list, private_key, &[suite]);
+    assert!(matches!(
+        result,
+        Err(Error::InvalidEncryptedClientHello(
+            EncryptedClientHelloError::NoCompatibleConfig
+        ))
+    ));
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_config_new_export_only_aead_skipped() {
+    use rustls::crypto::hpke::HpkePrivateKey;
+
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let hpke_suite = suite.suite();
+
+    // V18 config with EXPORT_ONLY AEAD (0xFFFF) first, then valid AES_128_GCM.
+    let entry = encode_v18_ech_config(
+        0x42,
+        hpke_suite.kem.0,
+        &[0x04; 65],
+        &[
+            (hpke_suite.sym.kdf_id.0, 0xFFFF), // EXPORT_ONLY: tag_len() -> None
+            (hpke_suite.sym.kdf_id.0, hpke_suite.sym.aead_id.0),
+        ],
+        64,
+        "public.example.com",
+        &[],
+    );
+
+    let config_list = encode_ech_config_list(&[entry]);
+    let private_key = HpkePrivateKey::from(vec![0u8; 32]);
+    let result = ServerEchConfig::new(config_list, private_key, &[suite]);
+    result.unwrap();
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_config_new_roundtrip() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+
+    let (_, config_list) =
+        ServerEchConfig::generate(suite, 0x42, public_name, 64).unwrap();
+    let (_, private_key) = suite.generate_key_pair().unwrap();
+    let result = ServerEchConfig::new(config_list, private_key, &[suite]);
+    result.unwrap();
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_config_debug() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+    let (config, _) =
+        ServerEchConfig::generate(suite, 0x42, public_name, 64).unwrap();
+    let debug = format!("{config:?}");
+    assert!(debug.contains("ServerEchConfig"));
+    assert!(debug.contains("[redacted]"));
+}
+
+// ---------------------------------------------------------------------------
+// Full handshake ECH tests
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_rejected_mismatched_config() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+
+    let (server_ech_config, _server_config_list) =
+        ServerEchConfig::generate(suite, 0x42, public_name.clone(), 64).unwrap();
+    let (_other_ech_config, client_config_list) =
+        ServerEchConfig::generate(suite, 0x42, public_name, 64).unwrap();
+
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_TLS13_PROVIDER);
+    server_config.ech_keys = vec![server_ech_config];
+    let server_config = Arc::new(server_config);
+
+    let client_ech_config = EchConfig::new(client_config_list, &[suite]).unwrap();
+    let client_config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
+        .with_ech(EchMode::Enable(client_ech_config))
+        .finish(KeyType::Rsa2048);
+    let client_config = Arc::new(client_config);
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    let err = do_handshake_until_error(&mut client, &mut server);
+
+    assert!(matches!(err, Err(ErrorFromPeer::Client(Error::RejectedEch(_)))));
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_accepted_with_hello_retry_request() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+
+    let (server_ech_config, config_list) =
+        ServerEchConfig::generate(suite, 0x42, public_name, 64).unwrap();
+
+    let mut server_config = ServerConfig::builder(
+        CryptoProvider {
+            kx_groups: Cow::Owned(vec![provider::kx_group::X25519]),
+            ..provider::DEFAULT_TLS13_PROVIDER.clone()
+        }
+        .into(),
+    )
+    .finish(KeyType::Rsa2048);
+    server_config.ech_keys = vec![server_ech_config];
+    let server_config = Arc::new(server_config);
+
+    let client_ech_config = EchConfig::new(config_list, &[suite]).unwrap();
+    let client_config = ClientConfig::builder(
+        CryptoProvider {
+            kx_groups: Cow::Owned(vec![
+                provider::kx_group::SECP384R1,
+                provider::kx_group::X25519,
+            ]),
+            ..provider::DEFAULT_TLS13_PROVIDER.clone()
+        }
+        .into(),
+    )
+    .with_ech(EchMode::Enable(client_ech_config))
+    .finish(KeyType::Rsa2048);
+    let client_config = Arc::new(client_config);
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    assert_eq!(client.ech_status(), EchStatus::Accepted);
+    assert_eq!(
+        client.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
+    );
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_rejected_with_hello_retry_request() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+
+    let (server_ech_config, _server_config_list) =
+        ServerEchConfig::generate(suite, 0x42, public_name.clone(), 64).unwrap();
+    let (_other_ech_config, client_config_list) =
+        ServerEchConfig::generate(suite, 0x42, public_name, 64).unwrap();
+
+    let mut server_config = ServerConfig::builder(
+        CryptoProvider {
+            kx_groups: Cow::Owned(vec![provider::kx_group::X25519]),
+            ..provider::DEFAULT_TLS13_PROVIDER.clone()
+        }
+        .into(),
+    )
+    .finish(KeyType::Rsa2048);
+    server_config.ech_keys = vec![server_ech_config];
+    let server_config = Arc::new(server_config);
+
+    let client_ech_config = EchConfig::new(client_config_list, &[suite]).unwrap();
+    let client_config = ClientConfig::builder(
+        CryptoProvider {
+            kx_groups: Cow::Owned(vec![
+                provider::kx_group::SECP384R1,
+                provider::kx_group::X25519,
+            ]),
+            ..provider::DEFAULT_TLS13_PROVIDER.clone()
+        }
+        .into(),
+    )
+    .with_ech(EchMode::Enable(client_ech_config))
+    .finish(KeyType::Rsa2048);
+    let client_config = Arc::new(client_config);
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    let err = do_handshake_until_error(&mut client, &mut server);
+
+    assert!(matches!(err, Err(ErrorFromPeer::Client(Error::RejectedEch(_)))));
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_accepted_multiple_keys() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+
+    // Server has two ECH keys with different config_ids.
+    let (key_a, _) =
+        ServerEchConfig::generate(suite, 0x01, public_name.clone(), 64).unwrap();
+    let (key_b, config_list_b) =
+        ServerEchConfig::generate(suite, 0x02, public_name, 64).unwrap();
+
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider::DEFAULT_TLS13_PROVIDER);
+    server_config.ech_keys = vec![key_a, key_b];
+    let server_config = Arc::new(server_config);
+
+    // Client uses config_list from key B (config_id=0x02).
+    // Server will skip key A (config_id mismatch) and match key B.
+    let client_ech_config = EchConfig::new(config_list_b, &[suite]).unwrap();
+    let client_config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
+        .with_ech(EchMode::Enable(client_ech_config))
+        .finish(KeyType::Rsa2048);
+    let client_config = Arc::new(client_config);
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    assert_eq!(client.ech_status(), EchStatus::Accepted);
+}
+
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn test_server_ech_not_offered_with_hello_retry_request() {
+    let suite = ALL_SUPPORTED_SUITES[0];
+    let public_name = DnsName::try_from("public.example.com")
+        .unwrap()
+        .to_owned();
+
+    let (server_ech_config, _) =
+        ServerEchConfig::generate(suite, 0x42, public_name, 64).unwrap();
+
+    // Server has ECH keys and only accepts X25519 (forces HRR).
+    let mut server_config = ServerConfig::builder(
+        CryptoProvider {
+            kx_groups: Cow::Owned(vec![provider::kx_group::X25519]),
+            ..provider::DEFAULT_TLS13_PROVIDER.clone()
+        }
+        .into(),
+    )
+    .finish(KeyType::Rsa2048);
+    server_config.ech_keys = vec![server_ech_config];
+    let server_config = Arc::new(server_config);
+
+    // Client does NOT offer ECH but offers secp384r1 first to trigger HRR.
+    let client_config = ClientConfig::builder(
+        CryptoProvider {
+            kx_groups: Cow::Owned(vec![
+                provider::kx_group::SECP384R1,
+                provider::kx_group::X25519,
+            ]),
+            ..provider::DEFAULT_TLS13_PROVIDER.clone()
+        }
+        .into(),
+    )
+    .finish(KeyType::Rsa2048);
+    let client_config = Arc::new(client_config);
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    assert_eq!(client.ech_status(), EchStatus::NotOffered);
+    assert_eq!(
+        client.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
+    );
+}
+
+// Note: Acceptor + ECH tests are omitted because the Acceptor flow has a
+// pre-existing bug where recv.negotiated_version is not set during
+// into_connection(), causing client CCS to be rejected. The ECH paths in
+// ChooseConfig::use_config() mirror those in ExpectClientHello::handle()
+// and will be testable once the Acceptor CCS bug is fixed.
