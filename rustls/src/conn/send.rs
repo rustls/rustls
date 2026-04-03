@@ -87,8 +87,11 @@ impl SendPath {
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.encrypt_state.is_encrypting());
 
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
+        // This limit is applied to plaintext length, but the sendable_tls buffer
+        // receives ciphertext. The slight mismatch is acceptable because the
+        // buffer limit is a coarse backpressure mechanism, not a wire-size
+        // guarantee. The per-record wire-size guarantee comes from the
+        // MessageFragmenter, which accounts for encryption overhead.
         let len = self
             .sendable_tls
             .apply_limit(data.len());
@@ -188,8 +191,11 @@ impl SendPath {
             return sendable_plaintext.append_limited_copy(payload);
         }
 
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
+        // This limit is applied to plaintext length, but the sendable_tls buffer
+        // receives ciphertext. The slight mismatch is acceptable because the
+        // buffer limit is a coarse backpressure mechanism, not a wire-size
+        // guarantee. The per-record wire-size guarantee comes from the
+        // MessageFragmenter, which accounts for encryption overhead.
         let len = self
             .sendable_tls
             .apply_limit(payload.len());
@@ -330,8 +336,11 @@ impl SendOutput for SendPath {
     }
 
     fn set_encrypter(&mut self, encrypter: Box<dyn MessageEncrypter>, max_messages: u64) {
+        let overhead = encrypter.encrypted_payload_len(0);
         self.encrypt_state
             .set_message_encrypter(encrypter, max_messages);
+        self.message_fragmenter
+            .set_encryption_overhead(overhead);
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {

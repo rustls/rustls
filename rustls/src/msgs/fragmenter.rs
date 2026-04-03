@@ -7,13 +7,22 @@ pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
 pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
 
 pub(crate) struct MessageFragmenter {
+    /// Maximum plaintext bytes per fragment, after subtracting all overhead
+    /// from the user's wire-size budget.
     max_frag: usize,
+    /// The user-configured wire-size budget (record header + plaintext + encryption overhead).
+    /// `None` means "use the maximum allowable size".
+    configured_max_fragment_size: Option<usize>,
+    /// Bytes added by encryption (AEAD tag, TLS 1.3 content type byte, etc.).
+    encryption_overhead: usize,
 }
 
 impl Default for MessageFragmenter {
     fn default() -> Self {
         Self {
             max_frag: MAX_FRAGMENT_LEN,
+            configured_max_fragment_size: None,
+            encryption_overhead: 0,
         }
     }
 }
@@ -55,8 +64,9 @@ impl MessageFragmenter {
 
     /// Set the maximum fragment size that will be produced.
     ///
-    /// This includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
-    /// up to 10 bytes long.
+    /// This includes all overhead: the TLS record header and encryption overhead
+    /// are subtracted to determine the maximum plaintext per fragment. Once
+    /// encryption begins, the resulting TLS records will not exceed this size.
     ///
     /// A `max_fragment_size` of `None` sets the highest allowable fragment size.
     ///
@@ -65,12 +75,34 @@ impl MessageFragmenter {
         &mut self,
         max_fragment_size: Option<usize>,
     ) -> Result<(), Error> {
-        self.max_frag = match max_fragment_size {
-            Some(sz @ 32..=MAX_FRAGMENT_SIZE) => sz - PACKET_OVERHEAD,
-            None => MAX_FRAGMENT_LEN,
+        match max_fragment_size {
+            Some(sz @ 32..=MAX_FRAGMENT_SIZE) => {
+                self.configured_max_fragment_size = Some(sz);
+            }
+            None => {
+                self.configured_max_fragment_size = None;
+            }
             _ => return Err(Error::BadMaxFragmentSize),
         };
+        self.recalculate_max_frag();
         Ok(())
+    }
+
+    /// Update the encryption overhead and recalculate the effective fragment size.
+    ///
+    /// Called when the cipher suite is negotiated or rekeyed.
+    pub(crate) fn set_encryption_overhead(&mut self, overhead: usize) {
+        self.encryption_overhead = overhead;
+        self.recalculate_max_frag();
+    }
+
+    fn recalculate_max_frag(&mut self) {
+        self.max_frag = match self.configured_max_fragment_size {
+            Some(sz) => sz.saturating_sub(PACKET_OVERHEAD + self.encryption_overhead),
+            None => MAX_FRAGMENT_LEN,
+        };
+        // Ensure we never produce zero-length fragments.
+        self.max_frag = self.max_frag.max(1);
     }
 }
 
