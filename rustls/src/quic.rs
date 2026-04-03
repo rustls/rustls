@@ -15,8 +15,8 @@ use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::ApplicationProtocol;
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{
-    ClientExtensionsInput, Message, MessagePayload, ServerExtensionsInput, TransportParameters,
-    VecInput,
+    ClientExtensionsInput, Message, MessagePayload, ServerExtensionsInput, TlsInputBuffer,
+    TransportParameters, VecInput,
 };
 use crate::server::{ServerConfig, ServerSide};
 use crate::suites::SupportedCipherSuite;
@@ -396,7 +396,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .input_quic(self.deframer_buffer.filled_mut(), range)?;
 
         let mut iter = MessageIter::new(
-            &mut self.deframer_buffer,
+            self.deframer_buffer.slice_mut(),
             Some(&mut self.quic),
             &mut self.core,
         );

@@ -12,7 +12,7 @@ use crate::common_state::{
 };
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{Delocator, Message, Random, VecInput};
+use crate::msgs::{Delocator, Message, Random, TlsInputBuffer, VecInput};
 use crate::quic::QuicOutput;
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
@@ -527,14 +527,20 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
     #[inline]
     pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        let mut iter = MessageIter::new(&mut self.buffers.deframer_buffer, None, &mut self.core);
+        let mut iter = MessageIter::new(
+            self.buffers.deframer_buffer.slice_mut(),
+            None,
+            &mut self.core,
+        );
+
         while let Some(result) = iter.next() {
             let payload = result?;
-            let payload = payload.reborrow(&Delocator::new(iter.input().slice_mut()));
+            let payload = payload.reborrow(&Delocator::new(iter.input));
             self.buffers
                 .received_plaintext
                 .append(payload.into_vec());
         }
+        
         self.buffers.deframer_buffer.discard(
             self.core
                 .common

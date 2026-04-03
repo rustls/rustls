@@ -16,12 +16,12 @@ use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
-    HandshakeAlignedProof, Locator, Message, MessagePayload, TlsInputBuffer,
+    HandshakeAlignedProof, Locator, Message, MessagePayload,
 };
 use crate::quic::QuicOutput;
 
 pub(crate) struct MessageIter<'a, 'm, Side: SideData> {
-    input: &'m mut dyn TlsInputBuffer,
+    pub(super) input: &'m mut [u8],
     recv: &'a mut ReceivePath,
     state: &'a mut Result<Side::State, Error>,
     output: JoinOutput<'a>,
@@ -29,7 +29,7 @@ pub(crate) struct MessageIter<'a, 'm, Side: SideData> {
 
 impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
     pub(crate) fn new(
-        input: &'m mut dyn TlsInputBuffer,
+        input: &'m mut [u8],
         quic: Option<&'a mut dyn QuicOutput>,
         conn: &'a mut ConnectionCore<Side>,
     ) -> Self {
@@ -57,14 +57,16 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
 
         let mut plaintext = None;
         while st.wants_input() {
-            let buffer = self.input.slice_mut();
-            let locator = Locator::new(buffer);
+            let locator = Locator::new(self.input);
             let mut want_close_before_decrypt = false;
 
             let res = 'deframe: loop {
                 // before processing any more of `buffer`, return any extant messages from `deframer`
                 if let Some(span) = self.recv.deframer.complete_span() {
-                    let plaintext = self.recv.deframer.message(span, buffer);
+                    let plaintext = self
+                        .recv
+                        .deframer
+                        .message(span, self.input);
 
                     // trial decryption finishes with the first handshake message after it started.
                     self.recv
@@ -78,7 +80,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 }
 
                 let (message, bounds) = loop {
-                    match self.recv.deframe(buffer, &locator) {
+                    match self.recv.deframe(self.input, &locator) {
                         Ok(DeframeResult::Decrypted(decrypted, bounds)) => {
                             break (decrypted, bounds);
                         }
@@ -130,7 +132,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 let unborrowed = InboundUnborrowedMessage::unborrow(&locator, message);
 
                 if unborrowed.typ != ContentType::Handshake {
-                    let message = unborrowed.reborrow(&Delocator::new(buffer));
+                    let message = unborrowed.reborrow(&Delocator::new(self.input));
                     self.recv.deframer.discard_processed();
                     break Ok(Some(Decrypted {
                         plaintext: message,
@@ -138,11 +140,11 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                     }));
                 }
 
-                let message = unborrowed.reborrow(&Delocator::new(buffer));
+                let message = unborrowed.reborrow(&Delocator::new(self.input));
                 self.recv
                     .deframer
-                    .input_message(message.version, bounds, buffer);
-                if let Err(err) = self.recv.deframer.coalesce(buffer) {
+                    .input_message(message.version, bounds, self.input);
+                if let Err(err) = self.recv.deframer.coalesce(self.input) {
                     break 'deframe Err(err.into());
                 }
             };
@@ -206,8 +208,9 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 // "Any data received after a closure alert has been received MUST be ignored."
                 // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
                 // This is data that has already been accepted in `read_tls`.
-                let entirety = self.input.slice_mut().len();
-                self.recv.deframer.set_discard(entirety);
+                self.recv
+                    .deframer
+                    .set_discard(self.input.len());
                 break;
             }
 
@@ -219,10 +222,6 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
 
         *self.state = Ok(st);
         None
-    }
-
-    pub(super) fn input(&mut self) -> &mut dyn TlsInputBuffer {
-        self.input
     }
 }
 
