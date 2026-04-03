@@ -76,11 +76,11 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
 
                 (plaintext, false)
             } else {
-                let (message, bounds) = match self
+                let (decrypted, bounds) = match self
                     .recv
                     .deframe(self.input, &self.locator)
                 {
-                    Ok(DeframeResult::Decrypted(message, bounds)) => (message, bounds),
+                    Ok(DeframeResult::Decrypted { decrypted, bounds }) => (decrypted, bounds),
                     Ok(DeframeResult::DecryptionFailed) => {
                         *self.state = Ok(st);
                         return Some(Ok(None));
@@ -95,7 +95,7 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 let Decrypted {
                     plaintext: message,
                     want_close_before_decrypt,
-                } = message;
+                } = decrypted;
 
                 if self.recv.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
                     // "Handshake messages MUST NOT be interleaved with other record
@@ -281,13 +281,13 @@ impl ReceivePath {
         };
 
         if allowed_plaintext && !self.deframer.is_active() {
-            return Ok(DeframeResult::Decrypted(
-                Decrypted {
+            return Ok(DeframeResult::Decrypted {
+                decrypted: Decrypted {
                     plaintext: message.into_plain_message(),
                     want_close_before_decrypt: false,
                 },
                 bounds,
-            ));
+            });
         }
 
         match self
@@ -297,7 +297,7 @@ impl ReceivePath {
             Some(decrypted) => {
                 // After decryption, the payload is shorter
                 let bounds = locator.locate(decrypted.plaintext.payload);
-                Ok(DeframeResult::Decrypted(decrypted, bounds))
+                Ok(DeframeResult::Decrypted { decrypted, bounds })
             }
 
             // failed decryption during trial decryption is not allowed to be
@@ -438,7 +438,10 @@ impl ReceivePath {
 }
 
 enum DeframeResult<'b> {
-    Decrypted(Decrypted<'b>, Range<usize>),
+    Decrypted {
+        decrypted: Decrypted<'b>,
+        bounds: Range<usize>,
+    },
     DecryptionFailed,
     None,
 }
