@@ -146,7 +146,11 @@ impl RsaPssSigningKey {
             ),
         };
 
-        let key_pair = RsaKeyPair::from_pkcs8(pkcs8).ok()?;
+        // ring's RsaKeyPair::from_pkcs8 only accepts the rsaEncryption OID,
+        // so we extract the raw RSAPrivateKey from the PKCS#8 OCTET STRING
+        // and use from_der instead.
+        let raw_key = pkcs8_private_key_bytes(pkcs8)?;
+        let key_pair = RsaKeyPair::from_der(raw_key).ok()?;
 
         Some(Self {
             key: Arc::new(key_pair),
@@ -204,18 +208,35 @@ fn pkcs8_pss_hash(pkcs8: &[u8]) -> Option<PssHash> {
         return None;
     }
 
-    // Match the full AlgorithmIdentifier TLV against known constants.
-    let alg_id_tlv = extract_element(rest)?;
-
-    if alg_id_tlv == alg_id::RSA_PSS_SHA256.as_ref() {
+    // Match the AlgorithmIdentifier SEQUENCE contents against known
+    // constants.  The `alg_id::RSA_PSS_SHA*` constants store the inner
+    // content of the AlgorithmIdentifier SEQUENCE (OID + parameters),
+    // not the outer SEQUENCE TLV wrapper.
+    if alg_id_body == alg_id::RSA_PSS_SHA256.as_ref() {
         Some(PssHash::Sha256)
-    } else if alg_id_tlv == alg_id::RSA_PSS_SHA384.as_ref() {
+    } else if alg_id_body == alg_id::RSA_PSS_SHA384.as_ref() {
         Some(PssHash::Sha384)
-    } else if alg_id_tlv == alg_id::RSA_PSS_SHA512.as_ref() {
+    } else if alg_id_body == alg_id::RSA_PSS_SHA512.as_ref() {
         Some(PssHash::Sha512)
     } else {
         None
     }
+}
+
+/// Extract the raw private key bytes from a PKCS#8 structure.
+///
+/// ```text
+/// SEQUENCE {
+///   INTEGER { version }
+///   SEQUENCE { AlgorithmIdentifier }
+///   OCTET STRING { private key }
+/// }
+/// ```
+fn pkcs8_private_key_bytes(pkcs8: &[u8]) -> Option<&[u8]> {
+    let rest = read_tag(pkcs8, 0x30)?; // outer SEQUENCE
+    let rest = skip_element(rest)?; // skip version INTEGER
+    let rest = skip_element(rest)?; // skip AlgorithmIdentifier SEQUENCE
+    read_tag(rest, 0x04) // OCTET STRING containing private key
 }
 
 /// Read a DER tag byte and return the element's content (value bytes).
@@ -226,17 +247,6 @@ fn read_tag(data: &[u8], expected_tag: u8) -> Option<&[u8]> {
     }
     let (len, content_start) = der_read_length(rest)?;
     content_start.get(..len)
-}
-
-/// Extract a complete DER TLV element (tag + length + value) from the
-/// start of `data`.
-fn extract_element(data: &[u8]) -> Option<&[u8]> {
-    let (_tag, rest) = data.split_first()?;
-    let (len, content_start) = der_read_length(rest)?;
-    let header_len = data.len() - rest.len();
-    let total = header_len + len;
-    data.get(..total)
-        .filter(|_| content_start.len() >= len)
 }
 
 /// Skip one DER TLV element and return the remaining bytes.
@@ -792,6 +802,126 @@ mod tests {
         ] {
             k.choose_scheme(&[*scheme]).unwrap();
         }
+    }
+
+    #[test]
+    fn can_load_rsa_pss_sha256_pkcs8() {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../rustls/src/testdata/rsa2048psskey.sha256.pkcs8.der")[..],
+        ));
+        let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
+        assert_eq!(format!("{k:?}"), "RsaPssSigningKey { .. }");
+        assert!(k.public_key().is_some());
+    }
+
+    #[test]
+    fn can_sign_rsa_pss_sha256() {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../rustls/src/testdata/rsa2048psskey.sha256.pkcs8.der")[..],
+        ));
+
+        let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
+
+        assert!(
+            k.choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
+                .is_none()
+        );
+        assert!(
+            k.choose_scheme(&[SignatureScheme::RSA_PSS_SHA256])
+                .is_none()
+        );
+
+        let s = k
+            .choose_scheme(&[SignatureScheme::RSA_PSS_PSS_SHA256])
+            .unwrap();
+        assert_eq!(
+            format!("{s:?}"),
+            "RsaSigner { scheme: RSA_PSS_PSS_SHA256, .. }"
+        );
+        assert_eq!(s.scheme(), SignatureScheme::RSA_PSS_PSS_SHA256);
+        assert_eq!(s.sign(b"hello").unwrap().len(), 256);
+    }
+
+    #[test]
+    fn can_sign_rsa_pss_sha384() {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../rustls/src/testdata/rsa2048psskey.sha384.pkcs8.der")[..],
+        ));
+
+        let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
+
+        assert!(
+            k.choose_scheme(&[SignatureScheme::RSA_PSS_PSS_SHA256])
+                .is_none()
+        );
+        let s = k
+            .choose_scheme(&[SignatureScheme::RSA_PSS_PSS_SHA384])
+            .unwrap();
+        assert_eq!(s.scheme(), SignatureScheme::RSA_PSS_PSS_SHA384);
+        assert_eq!(s.sign(b"hello").unwrap().len(), 256);
+    }
+
+    #[test]
+    fn can_sign_rsa_pss_sha512() {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../rustls/src/testdata/rsa2048psskey.sha512.pkcs8.der")[..],
+        ));
+
+        let k = load_key(&DEFAULT_PROVIDER, key.clone_key()).unwrap();
+
+        assert!(
+            k.choose_scheme(&[SignatureScheme::RSA_PSS_PSS_SHA256])
+                .is_none()
+        );
+        let s = k
+            .choose_scheme(&[SignatureScheme::RSA_PSS_PSS_SHA512])
+            .unwrap();
+        assert_eq!(s.scheme(), SignatureScheme::RSA_PSS_PSS_SHA512);
+        assert_eq!(s.sign(b"hello").unwrap().len(), 256);
+    }
+
+    #[test]
+    fn pss_from_pkcs8_returns_none_for_regular_rsa() {
+        let key =
+            include_bytes!("../../rustls/src/testdata/rsa2048key.pkcs8.der");
+        assert!(RsaPssSigningKey::from_pkcs8(&key[..]).is_none());
+    }
+
+    #[test]
+    fn pkcs8_pss_hash_rejects_garbage() {
+        assert!(pkcs8_pss_hash(&[]).is_none());
+        assert!(pkcs8_pss_hash(&[0x01, 0x02]).is_none());
+        assert!(pkcs8_pss_hash(b"not a valid pkcs8 key").is_none());
+    }
+
+    #[test]
+    fn der_helpers_reject_empty_input() {
+        assert!(read_tag(&[], 0x30).is_none());
+        assert!(skip_element(&[]).is_none());
+        assert!(der_read_length(&[]).is_none());
+    }
+
+    #[test]
+    fn der_read_length_short_form() {
+        let data = [0x05, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE];
+        let (len, rest) = der_read_length(&data).unwrap();
+        assert_eq!(len, 5);
+        assert_eq!(rest, &[0xAA, 0xBB, 0xCC, 0xDD, 0xEE]);
+    }
+
+    #[test]
+    fn der_read_length_long_form() {
+        // 0x82, 0x01, 0x00 => length = 256
+        let data = [0x82, 0x01, 0x00];
+        let (len, rest) = der_read_length(&data).unwrap();
+        assert_eq!(len, 256);
+        assert!(rest.is_empty());
+    }
+
+    #[test]
+    fn der_read_length_rejects_indefinite() {
+        // 0x80 means indefinite length, which we reject
+        assert!(der_read_length(&[0x80]).is_none());
     }
 
     #[test]
