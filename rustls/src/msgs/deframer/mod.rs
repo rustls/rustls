@@ -15,10 +15,13 @@ pub(crate) use buffers::{Delocator, Locator, TlsInputBuffer, VecInput};
 pub fn fuzz_deframer(data: &[u8]) {
     let mut buf = data.to_vec();
     let mut deframer = Deframer::default();
-    while let Some(result) = deframer.deframe(&mut buf) {
+    let mut prev = 0;
+
+    while let Some(result) = deframer.deframe(&mut buf[prev..]) {
         if result.is_err() {
             break;
         }
+        prev = deframer.processed;
     }
 
     assert!(deframer.processed() <= buf.len());
@@ -50,7 +53,7 @@ pub(crate) struct Deframer {
 
 impl Deframer {
     pub(crate) fn deframe<'a>(&mut self, buf: &'a mut [u8]) -> Option<Result<Deframed<'a>, Error>> {
-        let mut reader = Reader::new(buf.get(self.processed..)?);
+        let mut reader = Reader::new(buf);
 
         let (typ, version, len) = match read_opaque_message_header(&mut reader) {
             Ok(header) => header,
@@ -70,10 +73,10 @@ impl Deframer {
 
         // we now have a TLS header and body on the front of `self.buf`.  remove
         // it from the front.
-        let end = self.processed + HEADER_SIZE + len as usize;
+        let end = HEADER_SIZE + len as usize;
         let head = buf.get_mut(..end)?;
-        let bounds = self.processed..end;
-        self.processed = end;
+        let bounds = 0..end;
+        self.processed += end;
 
         Some(Ok(Deframed {
             message: EncodedMessage {
@@ -552,28 +555,31 @@ mod tests {
     #[test]
     fn handshake_flight() {
         // intended to be a realistic example
-        let mut input = include_bytes!("../../testdata/handshake-test.1.bin").to_vec();
+        let mut buffer = include_bytes!("../../testdata/handshake-test.1.bin").to_vec();
+        let mut input = buffer.as_mut_slice();
 
         let mut deframer = Deframer::default();
-        while let Some(result) = deframer.deframe(&mut input) {
+        let mut prev = 0;
+        while let Some(result) = deframer.deframe(input) {
             let Deframed { message, bounds } = result.unwrap();
             let plain = message.into_plain_message();
             std::println!("message {plain:?}");
-
             deframer.input_message(
                 plain.version,
-                bounds.start + HEADER_SIZE..bounds.end,
-                &input,
+                prev + bounds.start + HEADER_SIZE..prev + bounds.end,
+                &buffer,
             );
+            input = &mut buffer[deframer.processed..];
+            prev = deframer.processed;
         }
 
         deframer
-            .coalesce(&mut input[..])
+            .coalesce(&mut buffer[..])
             .unwrap();
 
         for _ in 0..4 {
             let span = deframer.complete_span().unwrap();
-            let msg = deframer.message(span, &input[..]);
+            let msg = deframer.message(span, &buffer[..]);
             assert!(matches!(
                 msg,
                 EncodedMessage {
@@ -585,7 +591,7 @@ mod tests {
         }
 
         let span = deframer.complete_span().unwrap();
-        let msg = deframer.message(span, &input[..]);
+        let msg = deframer.message(span, &buffer[..]);
         assert!(matches!(
             msg,
             EncodedMessage {
@@ -596,8 +602,8 @@ mod tests {
 
         let discard = deframer.take_discard();
         assert_eq!(discard, 4280);
-        input.drain(0..discard);
-        assert!(input.is_empty());
+        buffer.drain(0..discard);
+        assert!(buffer.is_empty());
     }
 
     #[test]
@@ -646,7 +652,6 @@ mod tests {
 
         assert_eq!(message.typ, ContentType::ApplicationData);
         assert_eq!(bounds.end, 6);
-        assert!(deframer.deframe(&mut buffer).is_none());
     }
 
     #[test]
@@ -655,9 +660,10 @@ mod tests {
             0x16, 0x03, 0x03, 0x00, 0x01, 0x00, 0x17, 0x03, 0x03, 0x00, 0x01, 0x00,
         ];
         let mut deframer = Deframer::default();
+        let input = buffer.as_mut_slice();
 
         let Deframed { message, bounds } = deframer
-            .deframe(&mut buffer)
+            .deframe(input)
             .unwrap()
             .unwrap();
 
@@ -665,13 +671,12 @@ mod tests {
         assert_eq!(bounds.end, 6);
 
         let Deframed { message, bounds } = deframer
-            .deframe(&mut buffer)
+            .deframe(&mut input[6..])
             .unwrap()
             .unwrap();
 
         assert_eq!(message.typ, ContentType::ApplicationData);
-        assert_eq!(bounds.end, 12);
-        assert!(deframer.deframe(&mut buffer).is_none());
+        assert_eq!(bounds.end, 6);
     }
 
     #[test]
@@ -727,15 +732,20 @@ mod tests {
         buffer.extend(client_hello);
         buffer.extend(client_hello);
         buffer.extend(client_hello);
+        let mut input = buffer.as_mut_slice();
+
         let mut deframer = Deframer::default();
         let mut count = 0;
         let mut end = 0;
-
-        while let Some(result) = deframer.deframe(&mut buffer) {
-            let Deframed { message, bounds } = result.unwrap();
+        while let Some(result) = deframer.deframe(input) {
+            let Deframed { message, bounds: _ } = result.unwrap();
             assert_eq!(ContentType::Handshake, message.typ);
             count += 1;
-            end = bounds.end;
+
+            let tmp = mem::take(&mut input);
+            let (_, rest) = tmp.split_at_mut(deframer.processed - end);
+            input = rest;
+            end = deframer.processed;
         }
 
         assert_eq!(count, 3);

@@ -76,9 +76,10 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
 
                 (plaintext, false)
             } else {
+                let offset = self.recv.deframer.processed();
                 let (decrypted, bounds) = match self
                     .recv
-                    .deframe(self.input, &self.locator)
+                    .deframe(&mut self.input[offset..], &self.locator)
                 {
                     Ok(DeframeResult::Decrypted { decrypted, bounds }) => (decrypted, bounds),
                     Ok(DeframeResult::DecryptionFailed) => {
