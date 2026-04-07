@@ -77,11 +77,13 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                 (plaintext, false)
             } else {
                 let offset = self.recv.deframer.processed();
-                let (decrypted, bounds) = match self
+                match self
                     .recv
                     .deframe(&mut self.input[offset..], &self.locator)
                 {
-                    Ok(DeframeResult::Decrypted { decrypted, bounds }) => (decrypted, bounds),
+                    Ok(DeframeResult::Decrypted { decrypted, bounds: _ }) => {
+                        (decrypted.plaintext, decrypted.want_close_before_decrypt)
+                    }
                     Ok(DeframeResult::DecryptionFailed) => {
                         *self.state = Ok(st);
                         return Some(Ok(None));
@@ -91,65 +93,6 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
                         return None;
                     }
                     Err(e) => return error::<Side>(e, Some(st), self.state, self.output.send),
-                };
-
-                let Decrypted {
-                    plaintext: message,
-                    want_close_before_decrypt,
-                } = decrypted;
-
-                if self.recv.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
-                    // "Handshake messages MUST NOT be interleaved with other record
-                    // types.  That is, if a handshake message is split over two or more
-                    // records, there MUST NOT be any other records between them."
-                    // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-                    return error::<Side>(
-                        PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into(),
-                        Some(st),
-                        self.state,
-                        self.output.send,
-                    );
-                }
-
-                match message.payload.len() {
-                    0 => {
-                        if self
-                            .recv
-                            .seen_consecutive_empty_fragments
-                            == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
-                        {
-                            return error::<Side>(
-                                PeerMisbehaved::TooManyEmptyFragments.into(),
-                                Some(st),
-                                self.state,
-                                self.output.send,
-                            );
-                        }
-                        self.recv
-                            .seen_consecutive_empty_fragments += 1;
-                    }
-                    _ => {
-                        self.recv
-                            .seen_consecutive_empty_fragments = 0;
-                    }
-                };
-
-                match message.typ {
-                    ContentType::Handshake => {
-                        self.recv
-                            .deframer
-                            .input_message(message.version, bounds, self.input);
-                        return match self.recv.deframer.coalesce(self.input) {
-                            Ok(()) => {
-                                *self.state = Ok(st);
-                                Some(Ok(None))
-                            }
-                            Err(err) => {
-                                error::<Side>(err.into(), Some(st), self.state, self.output.send)
-                            }
-                        };
-                    }
-                    _ => (message, want_close_before_decrypt),
                 }
             };
 
@@ -281,34 +224,80 @@ impl ReceivePath {
             _ => false,
         };
 
-        if allowed_plaintext && !self.deframer.is_active() {
-            return Ok(DeframeResult::Decrypted {
-                decrypted: Decrypted {
+        let (decrypted, bounds) = if allowed_plaintext && !self.deframer.is_active() {
+            (
+                Decrypted {
                     plaintext: message.into_plain_message(),
                     want_close_before_decrypt: false,
                 },
                 bounds,
-            });
+            )
+        } else {
+            match self
+                .decrypt_state
+                .decrypt_incoming(message)?
+            {
+                Some(decrypted) => {
+                    // After decryption, the payload is shorter
+                    let bounds = locator.locate(decrypted.plaintext.payload);
+                    (decrypted, bounds)
+                }
+
+                // failed decryption during trial decryption is not allowed to be
+                // interleaved with partial handshake data.
+                None if self.deframer.aligned().is_none() => {
+                    return Err(
+                        PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
+                    );
+                }
+
+                // failed decryption during trial decryption.
+                None => return Ok(DeframeResult::DecryptionFailed),
+            }
+        };
+
+        let Decrypted {
+            plaintext: message,
+            want_close_before_decrypt,
+        } = decrypted;
+
+        if self.deframer.aligned().is_none() && message.typ != ContentType::Handshake {
+            // "Handshake messages MUST NOT be interleaved with other record
+            // types.  That is, if a handshake message is split over two or more
+            // records, there MUST NOT be any other records between them."
+            // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
+            return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
         }
 
-        match self
-            .decrypt_state
-            .decrypt_incoming(message)?
-        {
-            Some(decrypted) => {
-                // After decryption, the payload is shorter
-                let bounds = locator.locate(decrypted.plaintext.payload);
-                Ok(DeframeResult::Decrypted { decrypted, bounds })
+        match message.payload.len() {
+            0 => {
+                if self.seen_consecutive_empty_fragments == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
+                {
+                    return Err(PeerMisbehaved::TooManyEmptyFragments.into());
+                }
+                self.seen_consecutive_empty_fragments += 1;
             }
-
-            // failed decryption during trial decryption is not allowed to be
-            // interleaved with partial handshake data.
-            None if self.deframer.aligned().is_none() => {
-                Err(PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into())
+            _ => {
+                self.seen_consecutive_empty_fragments = 0;
             }
+        };
 
-            // failed decryption during trial decryption.
-            None => Ok(DeframeResult::DecryptionFailed),
+        match message.typ {
+            ContentType::Handshake => {
+                self.deframer
+                    .input_message(message.version, bounds, buffer);
+                match self.deframer.coalesce(buffer) {
+                    Ok(()) => Ok(DeframeResult::None),
+                    Err(err) => Err(err.into()),
+                }
+            }
+            _ => Ok(DeframeResult::Decrypted {
+                decrypted: Decrypted {
+                    plaintext: message,
+                    want_close_before_decrypt,
+                },
+                bounds,
+            }),
         }
     }
 
