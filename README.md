@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="460" height="300" src="https://raw.githubusercontent.com/rustls/rustls/main/admin/rustls-logo-web.png">
+  <img width="512" src="https://raw.githubusercontent.com/rustls/rustls/main/admin/logo/rustls.svg">
 </p>
 
 <p align="center">
