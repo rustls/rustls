@@ -69,7 +69,7 @@ graviola = "0.3"
 hashbrown = { version = "0.16", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
 hickory-resolver = { version = "0.25", features = ["https-aws-lc-rs", "webpki-roots"] }
-hmac = "0.12"
+hmac = "0.13"
 hpke-rs = "0.6"
 hpke-rs-crypto = "0.6"
 hpke-rs-rust-crypto = "0.6"
