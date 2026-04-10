@@ -1,7 +1,8 @@
 #![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
-use std::prelude::v1::*;
-use std::vec;
 
 use pki_types::{CertificateDer, ServerName};
 
