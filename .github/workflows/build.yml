@@ -72,7 +72,7 @@ jobs:
         if: runner.os == 'MacOS'
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.1"
+          go-version: "stable"
 
       - name: cargo build (debug; default features)
         run: cargo build --locked
@@ -188,8 +188,7 @@ jobs:
       - name: Install golang toolchain
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26"
-          cache: false
+          go-version: "stable"
 
       - name: Run test suite (ring)
         working-directory: bogo
