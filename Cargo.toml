@@ -61,7 +61,7 @@ crabgrind = "0.2"
 criterion = "0.8"
 env_logger = "0.11"
 graviola = "0.3"
-hashbrown = { version = "0.16", default-features = false, features = ["default-hasher", "inline-more"] }
+hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
 hickory-resolver = { version = "0.25", features = ["https-aws-lc-rs", "webpki-roots"] }
 hpke-rs = "0.6"
