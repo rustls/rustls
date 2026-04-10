@@ -151,23 +151,6 @@ pub use crate::suites::CipherSuiteCommon;
 /// - **Authentication key loading** - see [`KeyProvider::load_private_key()`] and
 ///   [`SigningKey`].
 ///
-/// # Example code
-///
-/// See custom [`provider-example/`] for a full client and server example that uses
-/// cryptography from the [`RustCrypto`] and [`dalek-cryptography`] projects.
-///
-/// ```shell
-/// $ cargo run --example client | head -3
-/// Current ciphersuite: TLS13_CHACHA20_POLY1305_SHA256
-/// HTTP/1.1 200 OK
-/// Content-Type: text/html; charset=utf-8
-/// Content-Length: 19899
-/// ```
-///
-/// [`provider-example/`]: https://github.com/rustls/rustls/tree/main/provider-example/
-/// [`RustCrypto`]: https://github.com/RustCrypto
-/// [`dalek-cryptography`]: https://github.com/dalek-cryptography
-///
 /// # FIPS-approved cryptography
 ///
 /// Each element of a `CryptoProvider` may be implemented using FIPS-approved cryptography,

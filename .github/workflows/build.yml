@@ -98,16 +98,6 @@ jobs:
           cargo build --locked --lib -p rustls-ring --no-default-features
           cargo build --locked --lib -p rustls-aws-lc-rs --no-default-features --features aws-lc-sys
 
-
-      - name: cargo build (debug; rustls-provider-example)
-        run: cargo build --locked -p rustls-provider-example
-
-      - name: cargo build (debug; rustls-provider-example lib in no-std mode)
-        run: cargo build --locked -p rustls-provider-example --no-default-features
-
-      - name: cargo test (debug; rustls-provider-example; all features)
-        run: cargo test --locked --all-features -p rustls-provider-example
-
       - name: cargo build (debug; rustls-provider-test)
         run: cargo build --locked -p rustls-provider-test
 
