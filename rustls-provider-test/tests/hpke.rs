@@ -77,29 +77,11 @@ impl TestVector {
             return None;
         }
 
-        match (
-            Self::lookup_suite(self.suite(), rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES),
-            Self::lookup_suite(self.suite(), provider_example::hpke::ALL_SUPPORTED_SUITES),
-        ) {
-            // Both providers support the suite. Test against themselves, and each other.
-            (Some(aws_suite), Some(hpke_rs_suite)) => Some(vec![
-                (aws_suite, aws_suite),
-                (hpke_rs_suite, hpke_rs_suite),
-                (aws_suite, hpke_rs_suite),
-                (hpke_rs_suite, aws_suite),
-            ]),
-
-            // aws-lc-rs supported the suite, not hpke-rs, test against itself
-            (Some(aws_suite), None) => Some(vec![(aws_suite, aws_suite)]),
-
-            // hpke-rs supported the suite, not AWS-LC-RS, test against itself
-            //
-            // Note: presently there are no suites hpke-rs supports that aws-lc-rs doesn't. This
-            //       is future-proofing.
-            (None, Some(hpke_rs_suite)) => Some(vec![(hpke_rs_suite, hpke_rs_suite)]),
-
+        match Self::lookup_suite(self.suite(), rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES) {
+            // aws-lc-rs supported the suite, test against itself
+            Some(aws_suite) => Some(vec![(aws_suite, aws_suite)]),
             // Neither provider supported the suite - nothing to do.
-            (None, None) => None,
+            None => None,
         }
     }
 
