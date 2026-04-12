@@ -2,7 +2,7 @@
 name = "rustls-post-quantum"
 version = "0.3.0-alpha.0"
 edition = "2021"
-rust-version = "1.79"
+rust-version = "1.85"
 license = "Apache-2.0 OR ISC OR MIT"
 readme = "README.md"
 description = "Experimental support for post-quantum key exchange in rustls"

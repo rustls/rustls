@@ -2,7 +2,7 @@
 name = "rustls-aws-lc-rs"
 version = "0.1.0-dev.0"
 edition = "2021"
-rust-version = "1.83"
+rust-version = "1.85"
 license = "Apache-2.0 OR ISC OR MIT"
 description = "An aws-lc-based crypto provider for rustls."
 homepage = "https://github.com/rustls/rustls"
