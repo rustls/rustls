@@ -114,7 +114,7 @@ Specific threats (non-exhaustive):
 
 - Integer overflow or underflow in length fields,
 - Buffer over-read during fragment reassembly,
-- Infinite loops, 
+- Infinite loops,
 - Reachable loops with inappropriate and attacker-controlled complexity, with significant amplification,
 - Reachable panics,
 - Authentication bypass,
@@ -138,7 +138,7 @@ Mitigations:
 ### Boundary: cryptography provider
 
 All items under the `CryptoProvider` and associated interfaces are external to the core `rustls`
-library, but overall secure operation is contingent on their correct implementation. Specific 
+library, but overall secure operation is contingent on their correct implementation. Specific
 responsibilities are delegated through this interface (non-exhaustive):
 
 - random material generation
@@ -173,7 +173,7 @@ that is unlikely to arise by accident — will be treated as normal bug reports.
 
 Specific threats (non-exhaustive):
 
-- Accidental or inadvertent disabling of essential security controls such as 
+- Accidental or inadvertent disabling of essential security controls such as
   hostname verification or certificate chain validation.
 - Accidental or inadvertent exposure of secret key material outside the library.
 - Reachable panics from normal sequences of API calls.
