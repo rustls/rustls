@@ -55,8 +55,6 @@ can replace all cryptography dependencies of rustls.  This is a route to being p
 to a wider set of architectures and environments, or compliance requirements.  See the
 [`crypto::CryptoProvider`] documentation for more details.
 
-Rustls requires Rust 1.83 or later.
-
 [`crypto::CryptoProvider`]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html
 
 ### Cryptography providers

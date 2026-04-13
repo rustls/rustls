@@ -18,8 +18,6 @@
 //! to a wider set of architectures and environments, or compliance requirements.  See the
 //! [`crypto::CryptoProvider`] documentation for more details.
 //!
-//! Rustls requires Rust 1.83 or later.
-//!
 //! [`crypto::CryptoProvider`]: crate::crypto::CryptoProvider
 //!
 //! ### Cryptography providers
