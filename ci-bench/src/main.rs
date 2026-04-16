@@ -694,7 +694,7 @@ impl ClientSideStepper<'_> {
 
         let mut cfg = match params.auth_key {
             AuthKeySource::KeyType(key_type) => {
-                let mut root_store = RootCertStore::empty();
+                let mut root_store = RootCertStore::with_capacity(1);
                 root_store
                     .add(key_type.ca_cert())
                     .unwrap();
