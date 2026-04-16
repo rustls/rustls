@@ -35,11 +35,12 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 
 use clap::Parser;
-use hickory_resolver::config::ResolverConfig;
-use hickory_resolver::name_server::TokioConnectionProvider;
+use hickory_resolver::config::{CLOUDFLARE, GOOGLE, ResolverConfig};
+use hickory_resolver::net::NetError;
+use hickory_resolver::net::runtime::TokioRuntimeProvider;
 use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
-use hickory_resolver::{ResolveError, Resolver, TokioResolver};
+use hickory_resolver::{Resolver, TokioResolver};
 use log::trace;
 use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::hpke::Hpke;
@@ -63,14 +64,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         (false, None) => {
             // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
-            let resolver_config = if args.use_cloudflare_dns {
-                ResolverConfig::cloudflare_https()
-            } else {
-                ResolverConfig::google_https()
-            };
+            let resolver_config = ResolverConfig::https(match args.use_cloudflare_dns {
+                true => &CLOUDFLARE,
+                false => &GOOGLE,
+            });
+
             lookup_ech_configs(
-                &Resolver::builder_with_config(resolver_config, TokioConnectionProvider::default())
-                    .build(),
+                &Resolver::builder_with_config(resolver_config, TokioRuntimeProvider::default())
+                    .build()?,
                 &args.inner_hostname,
                 args.port,
             )
@@ -230,7 +231,7 @@ async fn lookup_ech_configs(
     resolver: &TokioResolver,
     domain: &str,
     port: u16,
-) -> Result<Vec<EchConfigListBytes<'static>>, ResolveError> {
+) -> Result<Vec<EchConfigListBytes<'static>>, NetError> {
     // For non-standard ports, lookup the ECHConfig using port-prefix naming
     // See: https://datatracker.ietf.org/doc/html/rfc9460#section-9.1
     let qname_to_lookup = match port {
@@ -243,13 +244,13 @@ async fn lookup_ech_configs(
         .await?;
 
     let mut ech_config_lists = Vec::new();
-    for r in lookup.record_iter() {
-        let RData::HTTPS(svcb) = r.data() else {
+    for r in lookup.answers() {
+        let RData::HTTPS(svcb) = &r.data else {
             continue;
         };
 
         ech_config_lists.extend(
-            svcb.svc_params()
+            svcb.svc_params
                 .iter()
                 .find_map(|sp| match sp {
                     (SvcParamKey::EchConfigList, SvcParamValue::EchConfigList(e)) => {
