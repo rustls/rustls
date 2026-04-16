@@ -982,7 +982,7 @@ impl Options {
             "-wait-for-debugger" => {
                 #[cfg(windows)]
                 {
-                    panic("-wait-for-debugger not supported on Windows");
+                    panic!("-wait-for-debugger not supported on Windows");
                 }
                 #[cfg(unix)]
                 {
