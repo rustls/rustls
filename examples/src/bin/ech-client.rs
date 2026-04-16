@@ -56,14 +56,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let server_ech_configs = match (args.grease, args.ech_config) {
         (true, Some(_)) => return Err("cannot specify both --grease and --ech-config".into()),
-        (true, None) => {
-            Vec::new() // Force the use of the GREASE ext by skipping ECH config lookup
-        }
-        (false, Some(path)) => {
-            vec![read_ech(&path)?]
-        }
+        // Force the use of the GREASE ext by skipping ECH config lookup
+        (true, None) => Vec::new(),
+        (false, Some(path)) => vec![read_ech(&path)?],
+        // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
         (false, None) => {
-            // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
             let resolver_config = ResolverConfig::https(match args.use_cloudflare_dns {
                 true => &CLOUDFLARE,
                 false => &GOOGLE,
