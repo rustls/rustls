@@ -162,6 +162,9 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         self,
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
     ) -> ClientConfig {
+        #[cfg(feature = "tls12")]
+        let require_ems = self.provider.fips();
+
         ClientConfig {
             provider: self.provider,
             alpn_protocols: Vec::new(),
@@ -176,7 +179,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             enable_secret_extraction: false,
             enable_early_data: false,
             #[cfg(feature = "tls12")]
-            require_ems: cfg!(feature = "fips"),
+            require_ems,
             time_provider: self.time_provider,
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),

@@ -1,7 +1,8 @@
 /*! # Using rustls with FIPS-approved cryptography
 
-To use FIPS-approved cryptography with rustls, you should take
-these actions:
+To use FIPS-approved cryptography with rustls, you should
+utilize a FIPS-approved `CryptoProvider`.
+rustls ships with one using `aws-lc-rs`, take these actions to make use of it:
 
 ## 1. Enable the `fips` crate feature for rustls.
 
