@@ -2003,7 +2003,7 @@ fn client_cert_resolve_server_added_hint() {
         // Create a verifier that adds the extra_name as a hint subject in addition to the ones
         // from the root cert store.
         let verifier = webpki_client_verifier_builder(get_client_root_store(*key_type), &provider)
-            .add_root_hint_subjects([DistinguishedName::from(extra_name.clone())].into_iter());
+            .add_root_hint_subjects([DistinguishedName::from(extra_name.clone())]);
         let server_config = make_server_config_with_client_verifier(*key_type, verifier, &provider);
         test_client_cert_resolve(*key_type, server_config.into(), expected_hint_subjects);
     }
