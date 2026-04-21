@@ -229,7 +229,8 @@ pub struct ClientConfig {
     /// If set to `true`, requires the server to support the extended
     /// master secret extraction method defined in [RFC 7627].
     ///
-    /// The default is `true` if the `fips` crate feature is enabled,
+    /// The default is `true` if the configured [`CryptoProvider`] is
+    /// FIPS-compliant (i.e., [`CryptoProvider::fips()`] returns `true`),
     /// `false` otherwise.
     ///
     /// It must be set to `true` to meet FIPS requirement mentioned in section
