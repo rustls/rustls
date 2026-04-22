@@ -145,6 +145,7 @@ mod client {
 }
 
 mod server {
+    #![allow(clippy::std_instead_of_core)] // awaits core::io::ErrorKind in stable (1.97)
     use std::io::{self, ErrorKind, Read, Write};
     use std::net::TcpListener;
     use std::sync::Arc;
