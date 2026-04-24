@@ -103,66 +103,64 @@ impl SendPath {
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     fn send_msg_encrypt(&mut self, m: EncodedMessage<Payload<'_>>) {
-        let iter = self
-            .message_fragmenter
-            .fragment_message(&m);
-        for m in iter {
-            self.send_single_fragment(m);
-        }
+        self.send_messages(
+            self.message_fragmenter
+                .fragment_message(&m),
+        );
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
     fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
         let len = payload.len();
-        let iter = self
-            .message_fragmenter
-            .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                payload,
-            );
-        for m in iter {
-            self.send_single_fragment(m);
-        }
-
+        self.send_messages(
+            self.message_fragmenter
+                .fragment_payload(
+                    ContentType::ApplicationData,
+                    ProtocolVersion::TLSv1_2,
+                    payload,
+                ),
+        );
         len
     }
 
-    fn send_single_fragment(&mut self, m: EncodedMessage<OutboundPlain<'_>>) {
-        if m.typ == ContentType::Alert {
-            // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            let em = self.encrypt_state.encrypt_outgoing(m);
-            self.queue_tls_message(em);
-            return;
-        }
-
-        match self
-            .encrypt_state
-            .next_pre_encrypt_action()
-        {
-            PreEncryptAction::Nothing => {}
-
-            // Close connection once we start to run out of sequence space.
-            PreEncryptAction::RefreshOrClose => {
-                match self.negotiated_version {
-                    // driven by caller, as we don't have the `State` here
-                    Some(ProtocolVersion::TLSv1_3) => self.refresh_traffic_keys_pending = true,
-                    _ => {
-                        error!(
-                            "traffic keys exhausted, closing connection to prevent security failure"
-                        );
-                        self.send_close_notify();
-                        return;
-                    }
-                }
+    /// Encrypt and queue a single fragment.
+    fn send_messages<'a>(&mut self, iter: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>) {
+        for m in iter {
+            if m.typ == ContentType::Alert {
+                // Alerts are always sendable -- never quashed by a PreEncryptAction.
+                let em = self.encrypt_state.encrypt_outgoing(m);
+                self.queue_tls_message(em);
+                continue;
             }
 
-            // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
-            PreEncryptAction::Refuse => return,
-        };
+            match self
+                .encrypt_state
+                .next_pre_encrypt_action()
+            {
+                PreEncryptAction::Nothing => {}
 
-        let em = self.encrypt_state.encrypt_outgoing(m);
-        self.queue_tls_message(em);
+                // Close connection once we start to run out of sequence space.
+                PreEncryptAction::RefreshOrClose => {
+                    match self.negotiated_version {
+                        // driven by caller, as we don't have the `State` here
+                        Some(ProtocolVersion::TLSv1_3) => self.refresh_traffic_keys_pending = true,
+                        _ => {
+                            error!(
+                                "traffic keys exhausted, closing connection to prevent security failure"
+                            );
+                            self.send_close_notify();
+                            continue;
+                        }
+                    }
+                }
+
+                // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
+                PreEncryptAction::Refuse => continue,
+            };
+
+            let em = self.encrypt_state.encrypt_outgoing(m);
+            self.queue_tls_message(em);
+        }
     }
 
     /// Send plaintext application data, fragmenting and
