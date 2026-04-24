@@ -81,7 +81,15 @@ impl SendPath {
                 payload,
             );
 
-        Ok(self.write_fragments(fragments))
+        for m in fragments {
+            self.sendable_tls.append(
+                self.encrypt_state
+                    .encrypt_outgoing(m)
+                    .encode(),
+            );
+        }
+
+        Ok(self.sendable_tls.take())
     }
 
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
@@ -247,22 +255,6 @@ impl SendPath {
         if let Some(message) = self.queued_key_update_message.take() {
             self.sendable_tls.append(message);
         }
-    }
-
-    fn write_fragments<'a>(
-        &mut self,
-        fragments: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>,
-    ) -> Vec<Vec<u8>> {
-        for m in fragments {
-            let em = self
-                .encrypt_state
-                .encrypt_outgoing(m)
-                .encode();
-
-            self.sendable_tls.append(em);
-        }
-
-        self.sendable_tls.take()
     }
 
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
