@@ -137,9 +137,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut sock = TcpStream::connect(sock_addr)?;
         let mut tls = Stream::new(&mut conn, &mut sock);
 
+        // Trim a leading '/' from the user-supplied path so we never emit a request line
+        // like `GET //foo HTTP/1.1`.
+        let path = args.path.trim_start_matches('/');
         let request = format!(
-            "GET /{} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
-            args.path,
+            "GET /{path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
             args.host
                 .as_ref()
                 .unwrap_or(&args.inner_hostname),
