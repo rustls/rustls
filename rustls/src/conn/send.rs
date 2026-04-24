@@ -94,26 +94,6 @@ impl SendPath {
         );
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        let encoded = EncodedMessage::from(m);
-        if must_encrypt {
-            self.send_messages(
-                self.message_fragmenter
-                    .fragment_message(&encoded),
-            );
-            return;
-        }
-
-        let iter = self
-            .message_fragmenter
-            .fragment_message(&encoded);
-        self.perhaps_write_key_update();
-        for m in iter {
-            self.sendable_tls
-                .append(m.to_unencrypted_opaque().encode());
-        }
-    }
-
     /// Like send_msg_encrypt, but operate on an appdata directly.
     fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
         let len = payload.len();
@@ -299,7 +279,23 @@ impl SendOutput for SendPath {
 
     /// Send a raw TLS message, fragmenting it if needed.
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        self.send_msg(m, must_encrypt);
+        let encoded = EncodedMessage::from(m);
+        if must_encrypt {
+            self.send_messages(
+                self.message_fragmenter
+                    .fragment_message(&encoded),
+            );
+            return;
+        }
+
+        let iter = self
+            .message_fragmenter
+            .fragment_message(&encoded);
+        self.perhaps_write_key_update();
+        for m in iter {
+            self.sendable_tls
+                .append(m.to_unencrypted_opaque().encode());
+        }
     }
 }
 
