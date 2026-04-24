@@ -34,7 +34,7 @@ impl EncryptionState {
         &mut self,
         plain: EncodedMessage<OutboundPlain<'_>>,
     ) -> EncodedMessage<OutboundOpaque> {
-        assert!(self.next_pre_encrypt_action() != Some(PreEncryptAction::Refuse));
+        assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
         let seq = self.write_seq;
         self.write_seq += 1;
         self.message_encrypter
@@ -56,10 +56,6 @@ impl EncryptionState {
             write_seq_max: min(SEQ_SOFT_LIMIT, max_messages),
             write_seq: 0,
         };
-    }
-
-    pub(crate) fn next_pre_encrypt_action(&self) -> Option<PreEncryptAction> {
-        self.pre_encrypt_action(0)
     }
 
     /// Return a remedial action when we are near to encrypting too many messages.
