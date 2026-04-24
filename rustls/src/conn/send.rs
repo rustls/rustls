@@ -100,6 +100,41 @@ impl SendPath {
         self.send_appdata_encrypt(data[..len].into())
     }
 
+    pub(crate) fn send_close_notify(&mut self) {
+        if self.has_sent_close_notify {
+            return;
+        }
+        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
+        self.has_sent_close_notify = true;
+        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
+    }
+
+    pub(crate) fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
+        match level {
+            AlertLevel::Fatal if self.has_sent_fatal_alert => return,
+            AlertLevel::Fatal => self.has_sent_fatal_alert = true,
+            _ => {}
+        };
+        self.send_msg(
+            Message::build_alert(level, desc),
+            self.encrypt_state.is_encrypting(),
+        );
+    }
+
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+        if !must_encrypt {
+            let msg = &m.into();
+            let iter = self
+                .message_fragmenter
+                .fragment_message(msg);
+            for m in iter {
+                self.queue_tls_message(m.to_unencrypted_opaque());
+            }
+        } else {
+            self.send_msg_encrypt(m.into());
+        }
+    }
+
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     fn send_msg_encrypt(&mut self, m: EncodedMessage<Payload<'_>>) {
@@ -211,41 +246,6 @@ impl SendPath {
     fn perhaps_write_key_update(&mut self) {
         if let Some(message) = self.queued_key_update_message.take() {
             self.sendable_tls.append(message);
-        }
-    }
-
-    pub(crate) fn send_close_notify(&mut self) {
-        if self.has_sent_close_notify {
-            return;
-        }
-        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-        self.has_sent_close_notify = true;
-        self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
-    }
-
-    pub(crate) fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
-        match level {
-            AlertLevel::Fatal if self.has_sent_fatal_alert => return,
-            AlertLevel::Fatal => self.has_sent_fatal_alert = true,
-            _ => {}
-        };
-        self.send_msg(
-            Message::build_alert(level, desc),
-            self.encrypt_state.is_encrypting(),
-        );
-    }
-
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        if !must_encrypt {
-            let msg = &m.into();
-            let iter = self
-                .message_fragmenter
-                .fragment_message(msg);
-            for m in iter {
-                self.queue_tls_message(m.to_unencrypted_opaque());
-            }
-        } else {
-            self.send_msg_encrypt(m.into());
         }
     }
 
