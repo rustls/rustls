@@ -2,8 +2,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::crypto::cipher::{
-    EncodedMessage, EncryptionState, MessageEncrypter, OutboundOpaque, OutboundPlain, Payload,
-    PreEncryptAction,
+    EncodedMessage, EncryptionState, MessageEncrypter, OutboundPlain, Payload, PreEncryptAction,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
@@ -101,8 +100,10 @@ impl SendPath {
             let iter = self
                 .message_fragmenter
                 .fragment_message(msg);
+            self.perhaps_write_key_update();
             for m in iter {
-                self.queue_tls_message(m.to_unencrypted_opaque());
+                self.sendable_tls
+                    .append(m.to_unencrypted_opaque().encode());
             }
         } else {
             self.send_msg_encrypt(m.into());
@@ -143,8 +144,12 @@ impl SendPath {
                 return;
             }
 
-            let em = self.encrypt_state.encrypt_outgoing(m);
-            self.queue_tls_message(em);
+            self.perhaps_write_key_update();
+            self.sendable_tls.append(
+                self.encrypt_state
+                    .encrypt_outgoing(m)
+                    .encode(),
+            );
         }
     }
 
@@ -218,12 +223,6 @@ impl SendPath {
     pub(crate) fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
         debug_assert!(self.encrypt_state.is_encrypting());
-    }
-
-    // Put m into sendable_tls for writing.
-    fn queue_tls_message(&mut self, m: EncodedMessage<OutboundOpaque>) {
-        self.perhaps_write_key_update();
-        self.sendable_tls.append(m.encode());
     }
 
     fn perhaps_write_key_update(&mut self) {
