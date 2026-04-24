@@ -51,8 +51,8 @@ impl SendPath {
                 .encrypt_state
                 .pre_encrypt_action(f as u64)
             {
-                PreEncryptAction::Nothing => {}
-                PreEncryptAction::RefreshOrClose => match self.negotiated_version {
+                None => {}
+                Some(PreEncryptAction::RefreshOrClose) => match self.negotiated_version {
                     Some(ProtocolVersion::TLSv1_3) => {
                         // driven by caller, as we don't have the `State` here
                         self.refresh_traffic_keys_pending = true;
@@ -65,7 +65,7 @@ impl SendPath {
                         return Err(Error::EncryptError);
                     }
                 },
-                PreEncryptAction::Refuse => {
+                Some(PreEncryptAction::Refuse) => {
                     return Err(Error::EncryptError);
                 }
             }
@@ -137,10 +137,10 @@ impl SendPath {
                 .encrypt_state
                 .next_pre_encrypt_action()
             {
-                PreEncryptAction::Nothing => {}
+                None => {}
 
                 // Close connection once we start to run out of sequence space.
-                PreEncryptAction::RefreshOrClose => {
+                Some(PreEncryptAction::RefreshOrClose) => {
                     match self.negotiated_version {
                         // driven by caller, as we don't have the `State` here
                         Some(ProtocolVersion::TLSv1_3) => self.refresh_traffic_keys_pending = true,
@@ -155,7 +155,7 @@ impl SendPath {
                 }
 
                 // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
-                PreEncryptAction::Refuse => return,
+                Some(PreEncryptAction::Refuse) => return,
             };
 
             let em = self.encrypt_state.encrypt_outgoing(m);

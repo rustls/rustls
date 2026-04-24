@@ -34,7 +34,7 @@ impl EncryptionState {
         &mut self,
         plain: EncodedMessage<OutboundPlain<'_>>,
     ) -> EncodedMessage<OutboundOpaque> {
-        assert!(self.next_pre_encrypt_action() != PreEncryptAction::Refuse);
+        assert!(self.next_pre_encrypt_action() != Some(PreEncryptAction::Refuse));
         let seq = self.write_seq;
         self.write_seq += 1;
         self.message_encrypter
@@ -58,7 +58,7 @@ impl EncryptionState {
         };
     }
 
-    pub(crate) fn next_pre_encrypt_action(&self) -> PreEncryptAction {
+    pub(crate) fn next_pre_encrypt_action(&self) -> Option<PreEncryptAction> {
         self.pre_encrypt_action(0)
     }
 
@@ -66,11 +66,11 @@ impl EncryptionState {
     ///
     /// `add` is added to the current sequence number.  `add` as `0` means
     /// "the next message processed by `encrypt_outgoing`"
-    pub(crate) fn pre_encrypt_action(&self, add: u64) -> PreEncryptAction {
+    pub(crate) fn pre_encrypt_action(&self, add: u64) -> Option<PreEncryptAction> {
         match self.write_seq.saturating_add(add) {
-            v if v == self.write_seq_max => PreEncryptAction::RefreshOrClose,
-            SEQ_HARD_LIMIT.. => PreEncryptAction::Refuse,
-            _ => PreEncryptAction::Nothing,
+            v if v == self.write_seq_max => Some(PreEncryptAction::RefreshOrClose),
+            SEQ_HARD_LIMIT.. => Some(PreEncryptAction::Refuse),
+            _ => None,
         }
     }
 
@@ -224,9 +224,6 @@ pub(crate) struct Decrypted<'a> {
 
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum PreEncryptAction {
-    /// No action is needed before calling `encrypt_outgoing`
-    Nothing,
-
     /// A `key_update` request should be sent ASAP.
     ///
     /// If that is not possible (for example, the connection is TLS1.2), a `close_notify`
