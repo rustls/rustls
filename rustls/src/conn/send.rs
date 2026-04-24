@@ -43,7 +43,7 @@ impl SendPath {
             .fragment_payload(
                 ContentType::ApplicationData,
                 ProtocolVersion::TLSv1_2,
-                payload.clone(),
+                payload,
             );
 
         for f in 0..fragments.len() {
@@ -72,15 +72,6 @@ impl SendPath {
         }
 
         self.perhaps_write_key_update();
-
-        let fragments = self
-            .message_fragmenter
-            .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
-                payload,
-            );
-
         for m in fragments {
             self.sendable_tls.append(
                 self.encrypt_state
