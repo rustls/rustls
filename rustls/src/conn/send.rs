@@ -149,13 +149,13 @@ impl SendPath {
                                 "traffic keys exhausted, closing connection to prevent security failure"
                             );
                             self.send_close_notify();
-                            continue;
+                            return;
                         }
                     }
                 }
 
                 // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
-                PreEncryptAction::Refuse => continue,
+                PreEncryptAction::Refuse => return,
             };
 
             let em = self.encrypt_state.encrypt_outgoing(m);
