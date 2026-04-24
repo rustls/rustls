@@ -133,10 +133,7 @@ impl SendPath {
                 continue;
             }
 
-            match self
-                .encrypt_state
-                .next_pre_encrypt_action()
-            {
+            match self.encrypt_state.pre_encrypt_action(0) {
                 None => {}
 
                 // Close connection once we start to run out of sequence space.
