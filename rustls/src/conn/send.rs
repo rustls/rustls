@@ -43,28 +43,7 @@ impl SendPath {
             );
 
         for f in 0..fragments.len() {
-            match self
-                .encrypt_state
-                .pre_encrypt_action(f as u64)
-            {
-                None => {}
-                Some(PreEncryptAction::RefreshOrClose) => match self.negotiated_version {
-                    Some(ProtocolVersion::TLSv1_3) => {
-                        // driven by caller, as we don't have the `State` here
-                        self.refresh_traffic_keys_pending = true;
-                    }
-                    _ => {
-                        error!(
-                            "traffic keys exhausted, closing connection to prevent security failure"
-                        );
-                        self.send_close_notify();
-                        return Err(Error::EncryptError);
-                    }
-                },
-                Some(PreEncryptAction::Refuse) => {
-                    return Err(Error::EncryptError);
-                }
-            }
+            self.preflight_encrypt(f)?;
         }
 
         self.perhaps_write_key_update();
@@ -159,37 +138,43 @@ impl SendPath {
         iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
     ) {
         for m in iter {
-            if m.typ == ContentType::Alert {
-                // Alerts are always sendable -- never quashed by a PreEncryptAction.
-                let em = self.encrypt_state.encrypt_outgoing(m);
-                self.queue_tls_message(em);
-                continue;
+            // Alerts are always sendable -- never quashed by a PreEncryptAction.
+            if m.typ != ContentType::Alert && self.preflight_encrypt(0).is_err() {
+                return;
             }
-
-            match self.encrypt_state.pre_encrypt_action(0) {
-                None => {}
-
-                // Close connection once we start to run out of sequence space.
-                Some(PreEncryptAction::RefreshOrClose) => {
-                    match self.negotiated_version {
-                        // driven by caller, as we don't have the `State` here
-                        Some(ProtocolVersion::TLSv1_3) => self.refresh_traffic_keys_pending = true,
-                        _ => {
-                            error!(
-                                "traffic keys exhausted, closing connection to prevent security failure"
-                            );
-                            self.send_close_notify();
-                            return;
-                        }
-                    }
-                }
-
-                // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
-                Some(PreEncryptAction::Refuse) => return,
-            };
 
             let em = self.encrypt_state.encrypt_outgoing(m);
             self.queue_tls_message(em);
+        }
+    }
+
+    fn preflight_encrypt(&mut self, n: usize) -> Result<(), Error> {
+        match self
+            .encrypt_state
+            .pre_encrypt_action(n as u64)
+        {
+            None => Ok(()),
+
+            // Close connection once we start to run out of sequence space.
+            Some(PreEncryptAction::RefreshOrClose) => {
+                match self.negotiated_version {
+                    // driven by caller, as we don't have the `State` here
+                    Some(ProtocolVersion::TLSv1_3) => {
+                        self.refresh_traffic_keys_pending = true;
+                        Ok(())
+                    }
+                    _ => {
+                        error!(
+                            "traffic keys exhausted, closing connection to prevent security failure"
+                        );
+                        self.send_close_notify();
+                        Err(Error::EncryptError)
+                    }
+                }
+            }
+
+            // Refuse to wrap counter at all costs. This is basically untestable unfortunately.
+            Some(PreEncryptAction::Refuse) => Err(Error::EncryptError),
         }
     }
 
