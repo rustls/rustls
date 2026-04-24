@@ -106,17 +106,11 @@ impl SendPath {
                     .append(m.to_unencrypted_opaque().encode());
             }
         } else {
-            self.send_msg_encrypt(m.into());
+            self.send_messages(
+                self.message_fragmenter
+                    .fragment_message(&m.into()),
+            );
         }
-    }
-
-    /// Fragment `m`, encrypt the fragments, and then queue
-    /// the encrypted fragments for sending.
-    fn send_msg_encrypt(&mut self, m: EncodedMessage<Payload<'_>>) {
-        self.send_messages(
-            self.message_fragmenter
-                .fragment_message(&m),
-        );
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
