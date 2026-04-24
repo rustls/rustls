@@ -34,10 +34,6 @@ impl SendPath {
         &mut self,
         payload: OutboundPlain<'_>,
     ) -> Result<Vec<Vec<u8>>, Error> {
-        if payload.is_empty() {
-            return Ok(self.sendable_tls.take());
-        }
-
         let fragments = self
             .message_fragmenter
             .fragment_payload(
