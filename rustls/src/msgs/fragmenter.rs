@@ -29,7 +29,7 @@ impl MessageFragmenter {
     pub(crate) fn fragment_message<'a>(
         &self,
         msg: &'a EncodedMessage<Payload<'_>>,
-    ) -> impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>> + 'a {
+    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + 'a {
         self.fragment_payload(msg.typ, msg.version, msg.payload.bytes().into())
     }
 

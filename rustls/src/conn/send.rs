@@ -158,7 +158,10 @@ impl SendPath {
     }
 
     /// Encrypt and queue a single fragment.
-    fn send_messages<'a>(&mut self, iter: impl Iterator<Item = EncodedMessage<OutboundPlain<'a>>>) {
+    fn send_messages<'a>(
+        &mut self,
+        iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
+    ) {
         for m in iter {
             if m.typ == ContentType::Alert {
                 // Alerts are always sendable -- never quashed by a PreEncryptAction.
