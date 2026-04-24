@@ -95,21 +95,22 @@ impl SendPath {
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        if !must_encrypt {
-            let msg = &m.into();
-            let iter = self
-                .message_fragmenter
-                .fragment_message(msg);
-            self.perhaps_write_key_update();
-            for m in iter {
-                self.sendable_tls
-                    .append(m.to_unencrypted_opaque().encode());
-            }
-        } else {
+        let encoded = EncodedMessage::from(m);
+        if must_encrypt {
             self.send_messages(
                 self.message_fragmenter
-                    .fragment_message(&m.into()),
+                    .fragment_message(&encoded),
             );
+            return;
+        }
+
+        let iter = self
+            .message_fragmenter
+            .fragment_message(&encoded);
+        self.perhaps_write_key_update();
+        for m in iter {
+            self.sendable_tls
+                .append(m.to_unencrypted_opaque().encode());
         }
     }
 
