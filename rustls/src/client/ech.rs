@@ -705,7 +705,7 @@ impl EchState {
         let max_name_len = usize::from(self.maximum_name_length);
         let max_name_len = if max_name_len > 0 { max_name_len } else { 255 };
 
-        let padding_len = match &self.inner_name {
+        let name_padding_len = match &self.inner_name {
             ServerName::DnsName(name) => {
                 // name.len() = D
                 // max(0, L - D)
@@ -715,10 +715,11 @@ impl EchState {
             // "This is the length of a "server_name" extension with an L-byte name."
             _ => max_name_len + 9,
         };
+        encoded_hello.extend(iter::repeat_n(0, name_padding_len));
 
         // Let L be the length of the EncodedClientHelloInner with all the padding computed so far
         // Let N = 31 - ((L - 1) % 32) and add N bytes of padding.
-        let padding_len = 31 - ((encoded_hello.len() + padding_len - 1) % 32);
+        let padding_len = 31 - ((encoded_hello.len() - 1) % 32);
         encoded_hello.extend(iter::repeat_n(0, padding_len));
 
         // Construct the inner hello message that will be used for the transcript.
