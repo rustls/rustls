@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::iter;
 
 use pki_types::{DnsName, EchConfigListBytes, ServerName};
 use subtle::ConstantTimeEq;
@@ -697,7 +698,7 @@ impl EchState {
         // Let L be the length of the EncodedClientHelloInner with all the padding computed so far
         // Let N = 31 - ((L - 1) % 32) and add N bytes of padding.
         let padding_len = 31 - ((encoded_hello.len() + padding_len - 1) % 32);
-        encoded_hello.extend(vec![0; padding_len]);
+        encoded_hello.extend(iter::repeat(0).take(padding_len));
 
         // Construct the inner hello message that will be used for the transcript.
         let inner_hello_msg = Message {
