@@ -709,7 +709,7 @@ impl EchState {
             Some(ServerNamePayload::SingleDnsName(name)) => {
                 // name.len() = D
                 // max(0, L - D)
-                core::cmp::max(0, max_name_len.saturating_sub(name.as_ref().len()))
+                Ord::max(0, max_name_len.saturating_sub(name.as_ref().len()))
             }
             // L + 9
             // "This is the length of a "server_name" extension with an L-byte name."
