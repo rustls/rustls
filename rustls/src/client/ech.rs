@@ -701,23 +701,19 @@ impl EchState {
 
         // Calculate padding
         // max_name_len = L
-        let max_name_len = self.maximum_name_length;
+        let max_name_len = usize::from(self.maximum_name_length);
         let max_name_len = if max_name_len > 0 { max_name_len } else { 255 };
 
         let padding_len = match &self.inner_name {
             ServerName::DnsName(name) => {
                 // name.len() = D
                 // max(0, L - D)
-                core::cmp::max(
-                    0,
-                    max_name_len.saturating_sub(name.as_ref().len() as u8) as usize,
-                )
+                core::cmp::max(0, max_name_len.saturating_sub(name.as_ref().len()))
             }
             _ => {
                 // L + 9
                 // "This is the length of a "server_name" extension with an L-byte name."
-                // We widen to usize here to avoid overflowing u8 + u8.
-                max_name_len as usize + 9
+                max_name_len + 9
             }
         };
 
