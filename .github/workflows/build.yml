@@ -64,10 +64,6 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/setup-nasm@v1
 
-      - name: Install ninja-build tool for aws-lc-fips-sys on Windows
-        if: runner.os == 'Windows'
-        uses: seanmiddleditch/gha-setup-ninja@v6
-
       - name: Install golang for aws-lc-fips-sys on macos
         if: runner.os == 'MacOS'
         uses: actions/setup-go@v6
