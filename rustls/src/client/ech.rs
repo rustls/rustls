@@ -705,8 +705,8 @@ impl EchState {
         let max_name_len = usize::from(self.maximum_name_length);
         let max_name_len = if max_name_len > 0 { max_name_len } else { 255 };
 
-        let name_padding_len = match &self.inner_name {
-            ServerName::DnsName(name) => {
+        let name_padding_len = match &inner_hello.server_name {
+            Some(ServerNamePayload::SingleDnsName(name)) => {
                 // name.len() = D
                 // max(0, L - D)
                 core::cmp::max(0, max_name_len.saturating_sub(name.as_ref().len()))
@@ -924,6 +924,27 @@ mod tests {
         for inner_name_len in 1..251 {
             assert_eq!(
                 inner_hello_encoding_for_name(dns_name_of_len(inner_name_len), true).len(),
+                base_inner_len,
+                "all inner hello lengths must be invariant wrt inner name length"
+            );
+        }
+    }
+
+    #[test]
+    fn inner_client_hello_length_does_not_leak_length_of_omitted_inner_name() {
+        let base_inner_len = inner_hello_encoding_for_name(dns_name_of_len(1), false).len();
+        assert!(
+            base_inner_len % 32 == 0,
+            "inner hello length must be 32-byte padded"
+        );
+        assert!(
+            base_inner_len >= 256,
+            "inner hello must include maximum_name_length bytes of padding"
+        );
+
+        for inner_name_len in 1..251 {
+            assert_eq!(
+                inner_hello_encoding_for_name(dns_name_of_len(inner_name_len), false).len(),
                 base_inner_len,
                 "all inner hello lengths must be invariant wrt inner name length"
             );
