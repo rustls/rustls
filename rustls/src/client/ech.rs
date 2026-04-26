@@ -710,11 +710,9 @@ impl EchState {
                 // max(0, L - D)
                 core::cmp::max(0, max_name_len.saturating_sub(name.as_ref().len()))
             }
-            _ => {
-                // L + 9
-                // "This is the length of a "server_name" extension with an L-byte name."
-                max_name_len + 9
-            }
+            // L + 9
+            // "This is the length of a "server_name" extension with an L-byte name."
+            _ => max_name_len + 9,
         };
 
         // Let L be the length of the EncodedClientHelloInner with all the padding computed so far
