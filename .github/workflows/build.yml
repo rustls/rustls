@@ -34,6 +34,8 @@ jobs:
           - nightly
         os:
           - ubuntu-latest
+          # aka ubuntu-latest-arm
+          - ubuntu-24.04-arm
           - windows-latest
           - macos-latest
         exclude:
