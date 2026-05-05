@@ -269,8 +269,8 @@ mod tests {
             ),
         ];
         for t in testcases {
-            std::println!("webpki: {:?}", &t.0);
-            std::println!("rustls: {:?}", &t.1);
+            std::println!("webpki: {:?}", t.0);
+            std::println!("rustls: {:?}", t.1);
             assert_eq!(crl_error(t.0.clone()), t.1);
         }
 

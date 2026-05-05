@@ -386,7 +386,7 @@ impl ExpectCertificateStatus {
 
         trace!(
             "Server stapled OCSP response is {:?}",
-            &server_cert_ocsp_response
+            server_cert_ocsp_response
         );
 
         let server_cert = ServerCertDetails::new(self.server_cert_chain, server_cert_ocsp_response);

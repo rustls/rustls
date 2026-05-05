@@ -119,7 +119,7 @@ impl Extend<TrustAnchor<'static>> for RootCertStore {
 impl fmt::Debug for RootCertStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RootCertStore")
-            .field("roots", &format!("({} roots)", &self.roots.len()))
+            .field("roots", &format!("({} roots)", self.roots.len()))
             .finish()
     }
 }
