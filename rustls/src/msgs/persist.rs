@@ -5,6 +5,7 @@ use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
 use crate::client::ResolvesClientCert;
+use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
@@ -225,6 +226,15 @@ pub struct ClientSessionCommon {
     server_cert_chain: Arc<CertificateChain<'static>>,
     server_cert_verifier: Weak<dyn ServerCertVerifier>,
     client_creds: Weak<dyn ResolvesClientCert>,
+    /// Set when this value was reconstructed from a `Codec::read` (i.e. loaded from
+    /// a disk-backed `ClientSessionStore`). In that case we have no live `Arc` to
+    /// the original verifier / client-cert resolver, so the `Weak::ptr_eq` check in
+    /// `compatible_config` would always fail and resumption would silently downgrade
+    /// to a fresh handshake. When `true`, `compatible_config` skips the ptr-equality
+    /// checks; the caller is responsible for ensuring the configured verifier is
+    /// equivalent to the one that produced the ticket. See `crates/vendor/rustls`
+    /// in the workspace for the disk-resumption rationale.
+    pub(crate) from_disk: bool,
 }
 
 impl ClientSessionCommon {
@@ -245,6 +255,7 @@ impl ClientSessionCommon {
             server_cert_chain: Arc::new(server_cert_chain),
             server_cert_verifier: Arc::downgrade(server_cert_verifier),
             client_creds: Arc::downgrade(client_creds),
+            from_disk: false,
         }
     }
 
@@ -253,6 +264,11 @@ impl ClientSessionCommon {
         server_cert_verifier: &Arc<dyn ServerCertVerifier>,
         client_creds: &Arc<dyn ResolvesClientCert>,
     ) -> bool {
+        if self.from_disk {
+            // Disk-loaded sessions can't carry a live verifier/resolver `Arc`, so
+            // the ptr_eq check would always fail. Trust the caller's configuration.
+            return true;
+        }
         let same_verifier = Weak::ptr_eq(
             &Arc::downgrade(server_cert_verifier),
             &self.server_cert_verifier,
@@ -446,6 +462,188 @@ impl ServerSessionValue {
     }
 }
 
+// --- Disk-resumption Codec impls ---
+//
+// These power crate-external `ClientSessionStore` implementations that persist
+// rustls session tickets to disk (e.g. sled-backed). Upstream rustls deliberately
+// does not provide encode/decode for `Tls{12,13}ClientSessionValue`, so this
+// vendored fork adds them.
+//
+// Wire format is internal — the only contract is round-trip stability within a
+// single rustls build. A magic byte / format version SHOULD be wrapped around
+// these by the caller (see `nitro-native-client::network::session_store`).
+
+/// Look up a `&'static Tls13CipherSuite` matching `id` from the process-default
+/// `CryptoProvider`. Returns `None` if no matching TLS 1.3 suite is registered.
+fn lookup_tls13_suite(id: CipherSuite) -> Option<&'static Tls13CipherSuite> {
+    let provider = CryptoProvider::get_default()?;
+    for cs in &provider.cipher_suites {
+        if let Some(t13) = cs.tls13() {
+            if t13.common.suite == id {
+                return Some(t13);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(feature = "tls12")]
+fn lookup_tls12_suite(id: CipherSuite) -> Option<&'static Tls12CipherSuite> {
+    let provider = CryptoProvider::get_default()?;
+    for cs in &provider.cipher_suites {
+        if let crate::suites::SupportedCipherSuite::Tls12(t12) = cs {
+            if t12.common.suite == id {
+                return Some(t12);
+            }
+        }
+    }
+    None
+}
+
+impl Codec<'_> for ClientSessionCommon {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        // ticket: PayloadU16 (length-prefixed bytes)
+        self.ticket.encode(bytes);
+        // secret: PayloadU8 (length-prefixed bytes; wrapped in Zeroizing on the
+        // value side, but the bytes-on-the-wire are identical)
+        self.secret.encode(bytes);
+        self.epoch.encode(bytes);
+        self.lifetime_secs.encode(bytes);
+        // server_cert_chain: Arc<CertificateChain<'static>>; CertificateChain has
+        // a Codec impl that emits a vec-of-CertificateDer with the appropriate
+        // length prefix per-cert.
+        self.server_cert_chain.encode(bytes);
+        // server_cert_verifier and client_creds are Weak<dyn Trait> — not
+        // serializable. They are reconstructed as `Weak::new()` on read, and
+        // `compatible_config` short-circuits to `true` when `from_disk == true`.
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let ticket = PayloadU16::read(r)?;
+        let secret = PayloadU8::read(r)?;
+        let epoch = u64::read(r)?;
+        let lifetime_secs = u32::read(r)?;
+        let server_cert_chain = CertificateChain::read(r)?.into_owned();
+        Ok(Self {
+            ticket: Arc::new(ticket),
+            secret: Zeroizing::new(secret),
+            epoch,
+            lifetime_secs,
+            server_cert_chain: Arc::new(server_cert_chain),
+            // No live Arc to weak-reference; placeholder.
+            server_cert_verifier: Weak::<DummyVerifier>::new(),
+            client_creds: Weak::<DummyResolver>::new(),
+            from_disk: true,
+        })
+    }
+}
+
+impl Codec<'_> for Tls13ClientSessionValue {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        // suite identifier (u16) — looked up at decode time from the process-default
+        // CryptoProvider's cipher_suites table.
+        self.suite.common.suite.encode(bytes);
+        self.age_add.encode(bytes);
+        self.max_early_data_size.encode(bytes);
+        self.common.encode(bytes);
+        self.quic_params.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let suite_id = CipherSuite::read(r)?;
+        let suite = lookup_tls13_suite(suite_id)
+            .ok_or(InvalidMessage::UnknownProtocolVersion)?;
+        let age_add = u32::read(r)?;
+        let max_early_data_size = u32::read(r)?;
+        let common = ClientSessionCommon::read(r)?;
+        let quic_params = PayloadU16::read(r)?;
+        Ok(Self {
+            suite,
+            age_add,
+            max_early_data_size,
+            common,
+            quic_params,
+        })
+    }
+}
+
+#[cfg(feature = "tls12")]
+impl Codec<'_> for Tls12ClientSessionValue {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.suite.common.suite.encode(bytes);
+        self.session_id.encode(bytes);
+        (u8::from(self.extended_ms)).encode(bytes);
+        self.common.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let suite_id = CipherSuite::read(r)?;
+        let suite = lookup_tls12_suite(suite_id)
+            .ok_or(InvalidMessage::UnknownProtocolVersion)?;
+        let session_id = SessionId::read(r)?;
+        let extended_ms = u8::read(r)? == 1;
+        let common = ClientSessionCommon::read(r)?;
+        Ok(Self {
+            suite,
+            session_id,
+            extended_ms,
+            common,
+        })
+    }
+}
+
+// Sealed marker types used only to build a `Weak<dyn Trait>::new()` of the right
+// shape at decode time. They never get upgraded — the placeholder Weak always
+// resolves to `None`.
+#[derive(Debug)]
+struct DummyVerifier;
+impl ServerCertVerifier for DummyVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &pki_types::CertificateDer<'_>,
+        _intermediates: &[pki_types::CertificateDer<'_>],
+        _server_name: &pki_types::ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> Result<crate::client::danger::ServerCertVerified, crate::Error> {
+        Err(crate::Error::General("DummyVerifier".into()))
+    }
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &pki_types::CertificateDer<'_>,
+        _dss: &crate::DigitallySignedStruct,
+    ) -> Result<crate::client::danger::HandshakeSignatureValid, crate::Error> {
+        Err(crate::Error::General("DummyVerifier".into()))
+    }
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &pki_types::CertificateDer<'_>,
+        _dss: &crate::DigitallySignedStruct,
+    ) -> Result<crate::client::danger::HandshakeSignatureValid, crate::Error> {
+        Err(crate::Error::General("DummyVerifier".into()))
+    }
+    fn supported_verify_schemes(&self) -> Vec<crate::SignatureScheme> {
+        Vec::new()
+    }
+}
+
+#[derive(Debug)]
+struct DummyResolver;
+impl ResolvesClientCert for DummyResolver {
+    fn resolve(
+        &self,
+        _root_hint_subjects: &[&[u8]],
+        _sigschemes: &[crate::SignatureScheme],
+    ) -> Option<Arc<crate::sign::CertifiedKey>> {
+        None
+    }
+    fn has_certs(&self) -> bool {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -488,5 +686,122 @@ mod tests {
         let mut rd = Reader::init(&bytes);
         let ssv = ServerSessionValue::read(&mut rd).unwrap();
         assert_eq!(ssv.get_encoding(), bytes);
+    }
+
+    /// Round-trip a TLS 1.3 client session value through the disk-resumption
+    /// Codec impls. Requires the process-default CryptoProvider to be installed;
+    /// the test installs ring's provider if no other has been registered.
+    #[cfg(all(feature = "std", feature = "ring"))]
+    #[test]
+    fn tls13_client_session_value_roundtrip() {
+        use std::sync::Once;
+        static INSTALL: Once = Once::new();
+        INSTALL.call_once(|| {
+            let _ = crate::crypto::ring::default_provider().install_default();
+        });
+
+        let provider = CryptoProvider::get_default().expect("default provider");
+        let suite = provider
+            .cipher_suites
+            .iter()
+            .find_map(|cs| cs.tls13())
+            .expect("at least one TLS1.3 suite");
+
+        // Build via the (private) constructor with throwaway verifier/resolver Arcs.
+        let verifier: Arc<dyn ServerCertVerifier> = Arc::new(DummyVerifier);
+        let resolver: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolver);
+        let cert_chain = CertificateChain(alloc::vec![
+            pki_types::CertificateDer::from(alloc::vec![1u8, 2, 3, 4, 5])
+        ]);
+        let mut value = Tls13ClientSessionValue::new(
+            suite,
+            Arc::new(PayloadU16::new(alloc::vec![0xAA, 0xBB, 0xCC, 0xDD])),
+            &[7u8; 32],
+            cert_chain.clone(),
+            &verifier,
+            &resolver,
+            UnixTime::since_unix_epoch(core::time::Duration::from_secs(1_700_000_000)),
+            7 * 24 * 60 * 60,
+            0xCAFEBABE,
+            0x1234,
+        );
+        value.set_quic_params(&[0xDE, 0xAD, 0xBE, 0xEF]);
+
+        let mut buf = alloc::vec::Vec::new();
+        value.encode(&mut buf);
+
+        let mut r = Reader::init(&buf);
+        let decoded = Tls13ClientSessionValue::read(&mut r).expect("read tls13 value");
+
+        assert_eq!(decoded.suite.common.suite, suite.common.suite);
+        assert_eq!(decoded.age_add, 0xCAFEBABE);
+        assert_eq!(decoded.max_early_data_size, 0x1234);
+        assert_eq!(decoded.common.ticket.0, alloc::vec![0xAA, 0xBB, 0xCC, 0xDD]);
+        assert_eq!(decoded.common.secret.0, alloc::vec![7u8; 32]);
+        assert_eq!(decoded.common.epoch, 1_700_000_000);
+        assert_eq!(decoded.common.lifetime_secs, 7 * 24 * 60 * 60);
+        assert_eq!(decoded.quic_params(), alloc::vec![0xDE, 0xAD, 0xBE, 0xEF]);
+        assert!(decoded.common.from_disk);
+
+        // compatible_config must accept any verifier/resolver for disk-loaded values.
+        let v2: Arc<dyn ServerCertVerifier> = Arc::new(DummyVerifier);
+        let r2: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolver);
+        assert!(decoded.common.compatible_config(&v2, &r2));
+    }
+
+    #[cfg(all(feature = "std", feature = "ring", feature = "tls12"))]
+    #[test]
+    fn tls12_client_session_value_roundtrip() {
+        use std::sync::Once;
+        static INSTALL: Once = Once::new();
+        INSTALL.call_once(|| {
+            let _ = crate::crypto::ring::default_provider().install_default();
+        });
+
+        let provider = CryptoProvider::get_default().expect("default provider");
+        let suite = provider
+            .cipher_suites
+            .iter()
+            .find_map(|cs| match cs {
+                crate::suites::SupportedCipherSuite::Tls12(s) => Some(*s),
+                _ => None,
+            });
+
+        let suite = match suite {
+            Some(s) => s,
+            None => return, // no TLS 1.2 suite registered — skip
+        };
+
+        let verifier: Arc<dyn ServerCertVerifier> = Arc::new(DummyVerifier);
+        let resolver: Arc<dyn ResolvesClientCert> = Arc::new(DummyResolver);
+        let cert_chain = CertificateChain(alloc::vec![
+            pki_types::CertificateDer::from(alloc::vec![9u8, 8, 7, 6])
+        ]);
+        let session_id = SessionId::read(&mut Reader::init(&[
+            4u8, 0xDE, 0xAD, 0xBE, 0xEF,
+        ]))
+        .unwrap();
+        let value = Tls12ClientSessionValue::new(
+            suite,
+            session_id,
+            Arc::new(PayloadU16::new(alloc::vec![0x11, 0x22])),
+            &[3u8; 48],
+            cert_chain.clone(),
+            &verifier,
+            &resolver,
+            UnixTime::since_unix_epoch(core::time::Duration::from_secs(1_700_000_001)),
+            3 * 24 * 60 * 60,
+            true,
+        );
+        let mut buf = alloc::vec::Vec::new();
+        value.encode(&mut buf);
+        let mut r = Reader::init(&buf);
+        let decoded = Tls12ClientSessionValue::read(&mut r).expect("read tls12 value");
+        assert_eq!(decoded.suite.common.suite, suite.common.suite);
+        assert!(decoded.extended_ms);
+        assert_eq!(decoded.common.epoch, 1_700_000_001);
+        assert_eq!(decoded.common.lifetime_secs, 3 * 24 * 60 * 60);
+        assert_eq!(decoded.common.secret.0, alloc::vec![3u8; 48]);
+        assert!(decoded.common.from_disk);
     }
 }
