@@ -348,6 +348,7 @@ pub(crate) mod async_io {
     }
 }
 
+#[allow(clippy::std_instead_of_core)] // awaits core::io::Cursor in stable (1.97)
 pub(crate) mod transport {
     //! Custom functions to interact between rustls clients and a servers.
     //!

@@ -187,6 +187,7 @@ mod feat_zlib_rs {
 #[cfg(feature = "zlib")]
 pub use feat_zlib_rs::{ZLIB_COMPRESSOR, ZLIB_DECOMPRESSOR};
 
+#[allow(clippy::std_instead_of_core)] // awaits core::io::Cursor (1.97) in crate MSRV
 #[cfg(feature = "brotli")]
 mod feat_brotli {
     use std::io::{Cursor, Write};
