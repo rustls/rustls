@@ -263,6 +263,42 @@ mod tests {
     }
 
     #[test]
+    fn append_empty_chunk_is_no_op() {
+        let mut cvb = ChunkVecBuffer::new(None);
+        assert_eq!(cvb.append(Vec::new()), 0);
+        assert!(cvb.is_empty());
+        assert_eq!(cvb.len(), 0);
+        assert_eq!(cvb.pop(), None);
+    }
+
+    #[test]
+    fn read_into_zero_length_buf() {
+        let mut cvb = ChunkVecBuffer::new(None);
+        cvb.append(b"data".to_vec());
+        assert_eq!(cvb.read(&mut []).unwrap(), 0);
+        assert_eq!(cvb.len(), 4);
+        assert!(!cvb.is_empty());
+    }
+
+    #[test]
+    fn consume_exactly_len_bytes_empties_buffer() {
+        let mut cvb = ChunkVecBuffer::new(None);
+        cvb.append(b"hello".to_vec());
+        let mut buf = [0u8; 5];
+        assert_eq!(cvb.read(&mut buf).unwrap(), 5);
+        assert_eq!(&buf, b"hello");
+        assert!(cvb.is_empty());
+        assert_eq!(cvb.len(), 0);
+        assert_eq!(cvb.read(&mut buf).unwrap(), 0);
+    }
+
+    #[test]
+    fn pop_on_empty_buffer() {
+        let mut cvb = ChunkVecBuffer::new(None);
+        assert_eq!(cvb.pop(), None);
+    }
+
+    #[test]
     fn every_possible_chunk_interleaving() {
         let input = (0..=0xffu8)
             .cycle()
