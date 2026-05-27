@@ -14,12 +14,14 @@ use rustls::enums::{ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::{ClientConfig, Connection, ServerConfig, ServerConnection};
+use rustls::server::Acceptor;
+use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection};
 use rustls_test::{
     ClientConfigExt, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo, check_fill_buf,
     check_fill_buf_err, check_read, check_read_and_close, check_read_err, do_handshake, encoding,
-    make_client_config, make_client_config_with_auth, make_disjoint_suite_configs, make_pair,
-    make_pair_for_arc_configs, make_pair_for_configs, make_server_config,
+    make_client_config, make_client_config_with_auth, make_client_config_with_kx_groups,
+    make_disjoint_suite_configs, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
+    make_server_config, make_server_config_with_kx_groups,
     make_server_config_with_mandatory_client_auth, server_name, transfer, transfer_eof,
 };
 use rustls_util::{Stream, StreamOwned, complete_io};
@@ -1463,8 +1465,6 @@ fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
 
 #[test]
 fn test_acceptor() {
-    use rustls::server::Acceptor;
-
     let provider = provider::DEFAULT_PROVIDER;
     let client_config = Arc::new(make_client_config(KeyType::Ed25519, &provider));
     let mut client = client_config
@@ -1578,9 +1578,53 @@ fn test_acceptor() {
 }
 
 #[test]
-fn test_acceptor_rejected_handshake() {
-    use rustls::server::Acceptor;
+fn test_acceptor_continues_tls13_hrr_with_compatibility_ccs() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let client_config = Arc::new(make_client_config_with_kx_groups(
+        KeyType::Rsa2048,
+        vec![provider::kx_group::SECP384R1, provider::kx_group::X25519],
+        &provider,
+    ));
+    let mut client = client_config
+        .connect(server_name("localhost"))
+        .build()
+        .unwrap();
 
+    let mut client_hello = Vec::new();
+    client
+        .write_tls(&mut client_hello)
+        .unwrap();
+
+    let server_config = Arc::new(make_server_config_with_kx_groups(
+        KeyType::Rsa2048,
+        vec![provider::kx_group::X25519],
+        &provider,
+    ));
+    let mut acceptor = Acceptor::default();
+    acceptor
+        .read_tls(&mut client_hello.as_slice())
+        .unwrap();
+
+    let accepted = acceptor.accept().unwrap().unwrap();
+    let mut server = accepted
+        .into_connection(server_config)
+        .unwrap();
+
+    do_handshake(&mut client, &mut server);
+
+    assert_eq!(
+        client.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
+    );
+    assert_eq!(
+        server.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
+    );
+    assert_eq!(server.protocol_version(), Some(ProtocolVersion::TLSv1_3));
+}
+
+#[test]
+fn test_acceptor_rejected_handshake() {
     let client_config =
         ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into()).finish(KeyType::Ed25519);
     let mut client = Arc::new(client_config)
