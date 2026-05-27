@@ -844,6 +844,10 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
     }
 
     fn output(&mut self, ev: OutputEvent<'_>) {
+        if let OutputEvent::ProtocolVersion(ver) = ev {
+            self.common.recv.negotiated_version = Some(ver);
+            self.common.send.negotiated_version(ver);
+        }
         self.common.outputs.handle(ev);
     }
 
