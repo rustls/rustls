@@ -992,17 +992,19 @@ pub enum PeerMisbehaved {
     EarlyDataAttemptedInSecondClientHello,
     EarlyDataExtensionWithoutResumption,
     EarlyDataOfferedWithVariedCipherSuite,
+    EchHrrDecryptionFailed,
+    EchHrrMismatch,
     HandshakeHashVariedAfterRetry,
     /// Received an alert with an undefined level and the given [`AlertDescription`]
     IllegalAlertLevel(u8, AlertDescription),
     IllegalHelloRetryRequestWithEmptyCookie,
+    IllegalHelloRetryRequestWithInvalidEch,
     IllegalHelloRetryRequestWithNoChanges,
     IllegalHelloRetryRequestWithOfferedGroup,
     IllegalHelloRetryRequestWithUnofferedCipherSuite,
     IllegalHelloRetryRequestWithUnofferedNamedGroup,
     IllegalHelloRetryRequestWithUnsupportedVersion,
     IllegalHelloRetryRequestWithWrongSessionId,
-    IllegalHelloRetryRequestWithInvalidEch,
     IllegalMiddleboxChangeCipherSpec,
     IllegalTlsInnerPlaintext,
     /// Received a warning alert with the given [`AlertDescription`]
@@ -1010,12 +1012,16 @@ pub enum PeerMisbehaved {
     IncorrectBinder,
     IncorrectFinished,
     InvalidCertCompression,
-    InvalidMaxEarlyDataSize,
+    InvalidEchClientHelloInner,
+    InvalidEchOuterExtension,
+    InvalidEchPadding,
     InvalidKeyShare,
+    InvalidMaxEarlyDataSize,
     KeyEpochWithPendingFragment,
     KeyUpdateReceivedInQuicConnection,
     MessageInterleavedWithHandshakeMessage,
     MissingBinderInPskExtension,
+    MissingEchExtension,
     MissingKeyShare,
     MissingPskModesExtension,
     MissingQuicTransportParameters,
@@ -1030,9 +1036,9 @@ pub enum PeerMisbehaved {
     RefusedToFollowHelloRetryRequest,
     RejectedEarlyDataInterleavedWithHandshakeMessage,
     ResumptionAttemptedWithVariedEms,
+    ResumptionOfferedWithIncompatibleCipherSuite,
     ResumptionOfferedWithVariedCipherSuite,
     ResumptionOfferedWithVariedEms,
-    ResumptionOfferedWithIncompatibleCipherSuite,
     SelectedDifferentCipherSuiteAfterRetry,
     SelectedInvalidPsk,
     SelectedTls12UsingTls13VersionExtension,
@@ -1046,20 +1052,20 @@ pub enum PeerMisbehaved {
     ServerHelloMustOfferUncompressedEcPoints,
     ServerNameDifferedOnRetry,
     ServerNameMustContainOneHostName,
-    SignedKxWithWrongAlgorithm,
     SignedHandshakeWithUnadvertisedSigScheme,
-    TooManyEmptyFragments,
+    SignedKxWithWrongAlgorithm,
     TooManyConsecutiveHandshakeMessagesAfterHandshake,
+    TooManyEmptyFragments,
     TooManyRenegotiationRequests,
     TooManyWarningAlertsReceived,
     TooMuchEarlyDataReceived,
     UnexpectedCleartextExtension,
     UnsolicitedCertExtension,
+    UnsolicitedEchExtension,
     UnsolicitedEncryptedExtension,
     UnsolicitedSctList,
     UnsolicitedServerHelloExtension,
     WrongGroupForKeyShare,
-    UnsolicitedEchExtension,
 }
 
 impl From<PeerMisbehaved> for AlertDescription {
@@ -1078,14 +1084,15 @@ impl From<PeerMisbehaved> for AlertDescription {
 
             PeerMisbehaved::IllegalWarningAlert(_) => Self::DecodeError,
 
-            PeerMisbehaved::IncorrectBinder | PeerMisbehaved::IncorrectFinished => {
-                Self::DecryptError
-            }
+            PeerMisbehaved::EchHrrDecryptionFailed
+            | PeerMisbehaved::IncorrectBinder
+            | PeerMisbehaved::IncorrectFinished => Self::DecryptError,
 
             PeerMisbehaved::InvalidCertCompression
             | PeerMisbehaved::SelectedUnofferedCertCompression => Self::BadCertificate,
 
-            PeerMisbehaved::MissingKeyShare
+            PeerMisbehaved::MissingEchExtension
+            | PeerMisbehaved::MissingKeyShare
             | PeerMisbehaved::MissingPskModesExtension
             | PeerMisbehaved::MissingQuicTransportParameters => Self::MissingExtension,
 
