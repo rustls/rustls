@@ -244,7 +244,7 @@ impl OkmBlock {
         tag
     }
 
-    /// Maximum supported HMAC tag size: supports up to SHA512.
+    /// Maximum supported OKM block size: supports up to SHA512.
     pub const MAX_LEN: usize = 64;
 }
 
