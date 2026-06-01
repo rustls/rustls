@@ -5,14 +5,13 @@ use core::ops::Range;
 use super::SendOutput;
 use crate::SideData;
 use crate::common_state::{
-    ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, Side, UnborrowedPayload,
-    maybe_send_fatal_alert,
+    ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::conn::StateMachine;
 use crate::conn::private::SideOutput;
 use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{AlertDescription, Error, PeerMisbehaved};
+use crate::error::{AlertDescription, ApiMisuse, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
@@ -52,22 +51,37 @@ impl ReceivePath {
         }
     }
 
-    pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
+    pub(crate) fn process_recv_traffic<Side: SideData>(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        state: &mut Option<Side::State>,
+        send: &mut dyn SendOutput,
+    ) -> Result<Option<UnborrowedPayload>, Error> {
+        self.process_new_packets::<Side, FinishOnAppData>(
+            input,
+            state,
+            &mut JoinOutput {
+                outputs: &mut Discard,
+                quic: None,
+                send,
+                side: &mut Discard,
+            },
+        )
+    }
+
+    pub(super) fn process_new_packets<'a, 'm, Side: SideData, Finish: FinishCondition>(
         &mut self,
         input: &'m mut dyn TlsInputBuffer,
-        state: &mut Result<Side::State, Error>,
+        state: &mut Option<Side::State>,
         output: &mut JoinOutput<'a>,
     ) -> Result<Option<UnborrowedPayload>, Error> {
-        let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
-            Ok(state) => state,
-            Err(e) => {
-                *state = Err(e.clone());
-                return Err(e);
-            }
+        let Some(mut st) = mem::take(state) else {
+            return Err(ApiMisuse::PreviousConnectionError.into());
         };
 
         let mut plaintext = None;
-        while st.wants_input() {
+
+        while st.wants_input() && !Finish::is_done(&st) {
             let buffer = input.slice_mut();
             let locator = Locator::new(buffer);
             let res = self.deframe(buffer);
@@ -87,7 +101,6 @@ impl ReceivePath {
                     if let Error::DecryptError = e {
                         st.handle_decrypt_error();
                     }
-                    *state = Err(e.clone());
                     input.discard(self.deframer.take_discard());
                     return Err(e);
                 }
@@ -123,7 +136,6 @@ impl ReceivePath {
                 Ok(new) => st = new,
                 Err(e) => {
                     maybe_send_fatal_alert(output.other.send, &e);
-                    *state = Err(e.clone());
                     input.discard(self.deframer.take_discard());
                     return Err(e);
                 }
@@ -139,7 +151,7 @@ impl ReceivePath {
             }
 
             if let Some(payload) = plaintext.take() {
-                *state = Ok(st);
+                *state = Some(st);
                 return Ok(Some(payload));
             }
 
@@ -147,7 +159,7 @@ impl ReceivePath {
         }
 
         input.discard(self.deframer.take_discard());
-        *state = Ok(st);
+        *state = Some(st);
         Ok(None)
     }
 
@@ -414,22 +426,42 @@ impl ReceivePath {
     }
 }
 
-struct CaptureAppData<'a, 'j, 'm> {
-    recv: &'a mut ReceivePath,
-    other: &'a mut JoinOutput<'j>,
+pub(super) trait FinishCondition {
+    fn is_done<S: StateMachine>(state: &S) -> bool;
+}
+
+pub(super) struct FinishOnAppData;
+
+impl FinishCondition for FinishOnAppData {
+    fn is_done<S: StateMachine>(_state: &S) -> bool {
+        false
+    }
+}
+
+pub(super) struct FinishHandshake;
+
+impl FinishCondition for FinishHandshake {
+    fn is_done<S: StateMachine>(state: &S) -> bool {
+        state.traffic()
+    }
+}
+
+pub(crate) struct CaptureAppData<'a, 'j, 'm> {
+    pub(crate) recv: &'a mut ReceivePath,
+    pub(crate) other: &'a mut JoinOutput<'j>,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
     /// `received_plaintext` for in-place decryption.
-    plaintext_locator: &'a Locator,
+    pub(crate) plaintext_locator: &'a Locator,
     /// Unborrowed received plaintext data
     ///
     /// Set if plaintext data was received.
     ///
     /// Plaintext data may be reborrowed using a [`Delocator`] which was
     /// initialized from the same slice as `plaintext_locator`.
-    received_plaintext: &'a mut Option<UnborrowedPayload>,
-    _message_lifetime: PhantomData<&'m ()>,
+    pub(crate) received_plaintext: &'a mut Option<UnborrowedPayload>,
+    pub(crate) _message_lifetime: PhantomData<&'m ()>,
 }
 
 impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
@@ -489,11 +521,21 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
     }
 }
 
-pub(super) struct JoinOutput<'a> {
-    pub(super) outputs: &'a mut ConnectionOutputs,
-    pub(super) quic: Option<&'a mut dyn QuicOutput>,
-    pub(super) send: &'a mut dyn SendOutput,
-    pub(super) side: &'a mut dyn SideOutput,
+pub(crate) struct JoinOutput<'a> {
+    pub(crate) outputs: &'a mut dyn ConnectionOutput,
+    pub(crate) quic: Option<&'a mut dyn QuicOutput>,
+    pub(crate) send: &'a mut dyn SendOutput,
+    pub(crate) side: &'a mut dyn SideOutput,
+}
+
+struct Discard;
+
+impl ConnectionOutput for Discard {
+    fn handle(&mut self, _ev: OutputEvent<'_>) {}
+}
+
+impl SideOutput for Discard {
+    fn emit(&mut self, _ev: Event<'_>) {}
 }
 
 /// Tracking technically-allowed protocol actions

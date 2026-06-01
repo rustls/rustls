@@ -11,13 +11,14 @@ use crate::crypto::Identity;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::SupportedKxGroup;
 use crate::enums::{ApplicationProtocol, ProtocolVersion};
-use crate::error::{AlertDescription, Error};
+use crate::error::{AlertDescription, ApiMisuse, Error};
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
     AlertLevel, Codec, Delocator, HandshakeMessagePayload, Locator, Message, MessagePayload,
 };
-use crate::quic::{self, QuicOutput};
+use crate::quic::QuicOutput;
 use crate::suites::SupportedCipherSuite;
+use crate::{KeyingMaterialExporter, quic};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -158,6 +159,13 @@ impl ConnectionOutputs {
         self.handshake_kind
     }
 
+    pub(crate) fn take_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+        match self.exporter.take() {
+            Some(inner) => Ok(KeyingMaterialExporter { inner }),
+            None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
+        }
+    }
+
     pub(super) fn into_kernel_parts(self) -> Option<(ProtocolVersion, SupportedCipherSuite)> {
         let Self {
             negotiated_version,
@@ -194,6 +202,29 @@ impl ConnectionOutput for ConnectionOutputs {
                 self.negotiated_version = Some(ver);
             }
         }
+    }
+}
+
+impl fmt::Debug for ConnectionOutputs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            negotiated_version,
+            handshake_kind,
+            suite,
+            negotiated_kx_group,
+            alpn_protocol,
+            peer_identity,
+            exporter: _,
+            early_exporter: _,
+        } = self;
+        f.debug_struct("ConnectionOutputs")
+            .field("negotiated_version", negotiated_version)
+            .field("handshake_kind", handshake_kind)
+            .field("suite", suite)
+            .field("negotiated_kx_group", negotiated_kx_group)
+            .field("alpn_protocol", alpn_protocol)
+            .field("peer_identity", peer_identity)
+            .finish_non_exhaustive()
     }
 }
 

@@ -3,7 +3,6 @@ use core::ops::Range;
 use std::io;
 
 #[derive(Default, Debug)]
-#[expect(unreachable_pub)]
 pub struct VecInput {
     /// Buffer of data read from the socket, in the process of being parsed into messages.
     ///
@@ -110,6 +109,10 @@ impl VecInput {
     pub(crate) fn filled(&self) -> &[u8] {
         &self.buf[..self.used]
     }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.used == 0
+    }
 }
 
 impl TlsInputBuffer for VecInput {
@@ -124,7 +127,6 @@ impl TlsInputBuffer for VecInput {
 
 /// A borrowed version of [`VecInput`] that tracks discard operations
 #[derive(Debug)]
-#[expect(unreachable_pub)]
 pub struct SliceInput<'a> {
     // a fully initialized buffer that will be deframed
     buf: &'a mut [u8],
@@ -132,7 +134,6 @@ pub struct SliceInput<'a> {
     discard: usize,
 }
 
-#[expect(dead_code, unreachable_pub)]
 impl<'a> SliceInput<'a> {
     pub fn new(buf: &'a mut [u8]) -> Self {
         Self { buf, discard: 0 }
@@ -155,7 +156,6 @@ impl TlsInputBuffer for SliceInput<'_> {
 }
 
 /// An abstraction over received data buffers (either owned or borrowed)
-#[expect(unreachable_pub)]
 pub trait TlsInputBuffer {
     /// Return the buffer which contains the received data.
     ///

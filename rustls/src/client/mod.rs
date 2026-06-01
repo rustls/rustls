@@ -47,6 +47,12 @@ pub(crate) use tls12::TLS12_HANDLER;
 mod tls13;
 pub(crate) use tls13::TLS13_HANDLER;
 
+mod state;
+pub use state::{
+    AwaitServerFlight, ClientHandshake, ClientOutputs, ClientTraffic, SendClientFlight,
+    SendEarlyData,
+};
+
 /// Dangerous configuration that should be audited and used with extreme care.
 pub mod danger {
     pub use super::config::danger::{DangerousClientConfig, DangerousClientConfigBuilder};
