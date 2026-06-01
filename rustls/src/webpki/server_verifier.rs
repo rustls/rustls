@@ -173,7 +173,7 @@ impl WebPkiServerVerifier {
     ///
     /// * `roots` is the set of trust anchors to trust for issuing server certs.
     /// * `crls` are a vec of owned certificate revocation lists (CRLs) to use for
-    ///   client certificate validation.
+    ///   server certificate validation.
     /// * `revocation_check_depth` controls which certificates have their revocation status checked
     ///   when `crls` are provided.
     /// * `unknown_revocation_policy` controls how certificates with an unknown revocation status
