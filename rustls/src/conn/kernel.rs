@@ -209,7 +209,7 @@ impl KernelConnection<ClientSide> {
 }
 
 pub(crate) trait KernelState: Send + Sync {
-    /// Update the traffic secret for the specified direction on the connection.
+    /// Update the traffic secret for the receive (decrypt) direction on the connection.
     fn update_rx_secret(&mut self) -> Result<ConnectionTrafficSecrets, Error>;
 
     /// Handle a new session ticket.
