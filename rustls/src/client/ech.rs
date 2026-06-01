@@ -837,7 +837,7 @@ impl EchState {
 const SERVER_HELLO_ECH_CONFIRMATION_SPAN: core::ops::Range<usize> =
     (1 + 3 + 2 + 24)..(1 + 3 + 2 + 32);
 
-/// Returned from EchState::check_acceptance when the server has accepted the ECH offer.
+/// Returned from EchState::confirm_acceptance when the server has accepted the ECH offer.
 ///
 /// Holds the state required to continue the handshake with the inner hello from the ECH offer.
 pub(crate) struct EchAccepted {
