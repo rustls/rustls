@@ -284,7 +284,7 @@ impl ServerConfig {
         }
     }
 
-    /// Return the crypto provider used to construct this client configuration.
+    /// Return the crypto provider used to construct this server configuration.
     pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
         &self.provider
     }
