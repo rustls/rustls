@@ -833,7 +833,7 @@ pub trait CipherSuiteSelector: Debug + Send + Sync {
     /// mutually supported cipher suite could be agreed on.
     fn select_tls13_cipher_suite(
         &self,
-        server: &mut dyn Iterator<Item = &'static Tls13CipherSuite>,
+        client: &mut dyn Iterator<Item = &'static Tls13CipherSuite>,
         server: &[&'static Tls13CipherSuite],
     ) -> Option<&'static Tls13CipherSuite>;
 }
