@@ -174,7 +174,7 @@ impl EncodedMessage<OutboundOpaque> {
 
 /// A collection of borrowed plaintext slices.
 ///
-/// Warning: OutboundChunks does not guarantee that the simplest variant is used.
+/// Warning: [`OutboundPlain`] does not guarantee that the simplest variant is used.
 /// Multiple can hold non fragmented or empty payloads.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
@@ -316,7 +316,7 @@ impl OutboundOpaque {
         self.0.extend_from_slice(slice)
     }
 
-    /// Append bytes from an `OutboundChunks`.
+    /// Append bytes from an [`OutboundPlain`].
     pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
         chunks.copy_to_vec(&mut self.0)
     }
