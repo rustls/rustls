@@ -468,7 +468,7 @@ impl<'a> Reader<'a> {
 
     /// Borrow an array of `N` bytes from the buffer.
     ///
-    /// If there are not enough bytes remaining to take the length `None` is returned instead
+    /// If there are not enough bytes remaining `Err(InvalidMessage::MissingData)` is returned instead.
     pub(crate) fn take_array<const N: usize>(
         &mut self,
         ty: &'static str,
