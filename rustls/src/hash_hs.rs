@@ -118,8 +118,7 @@ impl HandshakeHash {
         self
     }
 
-    /// Get the hash value if we were to hash `extra` too,
-    /// using hash function `hash`.
+    /// Get the hash value if we were to hash `extra` too.
     pub(crate) fn hash_given(&self, extra: &[u8]) -> hash::Output {
         let mut ctx = self.ctx.fork();
         ctx.update(extra);
