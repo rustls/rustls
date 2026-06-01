@@ -21,7 +21,7 @@ impl TicketRotator {
     /// Creates a new `TicketRotator`, which rotates through sub-ticketers
     /// based on the passage of time.
     ///
-    /// `lifetime` is in seconds, and is how long the current ticketer
+    /// `lifetime` is how long the current ticketer
     /// is used to generate new tickets.  Tickets are accepted for no
     /// longer than twice this duration.  This means a given ticket will
     /// be usable for at least one `lifetime`, and at most two `lifetime`s
