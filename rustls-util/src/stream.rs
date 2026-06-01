@@ -1,3 +1,4 @@
+#![allow(clippy::std_instead_of_core)] // awaits core::io::IoSlice in stable (1.98)
 use std::io::{BufRead, IoSlice, Read, Result, Write};
 
 use rustls::Connection;

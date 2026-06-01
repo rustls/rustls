@@ -1,6 +1,7 @@
 //! Tests around IO, buffering, and data management.
 
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
+#![allow(clippy::std_instead_of_core)] // awaits core::io::IoSlice in stable (1.98)
 
 use core::fmt::Debug;
 use std::borrow::Cow;
