@@ -1203,7 +1203,7 @@ pub enum CertRevocationListError {
     /// The CRL had a bad signature from its issuer.
     BadSignature,
 
-    /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
+    /// The CRL's signature was made with an unsupported algorithm.
     UnsupportedSignatureAlgorithm {
         /// The signature algorithm OID that was unsupported.
         signature_algorithm_id: Vec<u8>,
