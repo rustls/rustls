@@ -413,25 +413,20 @@ impl Codec<'_> for () {
 /// Trait for implementing encoding and decoding functionality
 /// on something.
 pub(crate) trait Codec<'a>: Debug + Sized {
-    /// Function for encoding itself by appending itself to
-    /// the provided vec of bytes.
+    /// Encode self by appending to `bytes`.
     fn encode(&self, bytes: &mut Vec<u8>);
 
-    /// Function for decoding itself from the provided reader
-    /// will return Some if the decoding was successful or
-    /// None if it was not.
+    /// Decode self from the provided [`Reader`].
     fn read(_: &mut Reader<'a>) -> Result<Self, InvalidMessage>;
 
-    /// Convenience function for encoding the implementation
-    /// into a vec and returning it
+    /// Convenience function for [`Codec::encode()`] into a vec.
     fn get_encoding(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         self.encode(&mut bytes);
         bytes
     }
 
-    /// Function for wrapping a call to the read function in
-    /// a Reader for the slice of bytes provided
+    /// Convenience function for [`Codec::read()`] from a slice.
     ///
     /// Returns `Err(InvalidMessage::ExcessData(_))` if
     /// `Self::read` does not read the entirety of `bytes`.
