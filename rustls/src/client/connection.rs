@@ -78,12 +78,6 @@ impl ClientConnection {
         self.inner.core.is_early_data_accepted()
     }
 
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
-    }
-
     /// Return the connection's Encrypted Client Hello (ECH) status.
     pub fn ech_status(&self) -> EchStatus {
         self.inner.core.side.ech_status
