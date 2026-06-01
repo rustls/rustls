@@ -121,12 +121,6 @@ impl ServerConnection {
             None
         }
     }
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
-    }
 }
 
 impl Connection for ServerConnection {
