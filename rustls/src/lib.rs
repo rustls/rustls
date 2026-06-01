@@ -281,7 +281,7 @@
 //!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
 //!   contain secret key data, and so are safe to archive without affecting session security.
 //!
-//! - `webpki` (enabled by default): make the rustls crate depend on the `rustls-wepbki` crate, which
+//! - `webpki` (enabled by default): make the rustls crate depend on the `rustls-webpki` crate, which
 //!   is used by default to provide built-in certificate verification.  Without this feature, users must
 //!   provide certificate verification themselves.
 //!
