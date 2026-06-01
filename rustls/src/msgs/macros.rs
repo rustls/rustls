@@ -154,9 +154,9 @@ macro_rules! extension_struct {
         }
 
         impl<'a> $struct_name$(<$struct_lt>)* {
-            /// Reads one extension typ, length and body from `r`.
+            /// Reads one extension type, length and body from `r`.
             ///
-            /// Unhandled extensions (according to `read_extension_body()` are inserted into `unknown_extensions`)
+            /// The `unknown` callback is invoked for extensions not handled by `read_extension_body()`.
             fn read_one(
                 &mut self,
                 r: &mut Reader<'a>,
