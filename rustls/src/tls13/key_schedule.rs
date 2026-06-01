@@ -330,7 +330,8 @@ impl KeyScheduleHandshakeStart {
         client_random: &[u8; 32],
         output: &mut dyn Output<'_>,
     ) -> KeyScheduleHandshake {
-        // Use an empty handshake hash for the initial handshake.
+        // Derive the handshake traffic secrets from the transcript hash of
+        // ClientHello..ServerHello (passed in as `hs_hash`).
         let client_secret = self.ks.derive_logged_secret(
             SecretKind::ClientHandshakeTrafficSecret,
             hs_hash.as_ref(),
