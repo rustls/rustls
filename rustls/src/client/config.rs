@@ -256,10 +256,9 @@ impl ClientConfig {
         &self.domain.client_auth_cert_resolver
     }
 
-    /// Return the resolver for this client configuration.
+    /// Return the verifier for this client configuration.
     ///
-    /// This is the object that determines which credentials to use for client
-    /// authentication.
+    /// This is the object that determines how server certificates are verified.
     pub fn verifier(&self) -> &Arc<dyn verify::ServerVerifier> {
         &self.domain.verifier
     }
