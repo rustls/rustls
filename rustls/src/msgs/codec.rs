@@ -463,7 +463,7 @@ impl<'a> Reader<'a> {
 
     /// Attempts to create a new Reader on a sub section of this
     /// readers bytes by taking a slice of the provided `length`
-    /// will return None if there is not enough bytes
+    /// will return `Err(InvalidMessage::MessageTooShort)` if there is not enough bytes
     pub(crate) fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
         match self.take(length) {
             Some(bytes) => Ok(Reader::new(bytes)),
