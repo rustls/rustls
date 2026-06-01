@@ -418,8 +418,8 @@ pub(crate) trait Codec<'a>: Debug + Sized {
     fn encode(&self, bytes: &mut Vec<u8>);
 
     /// Function for decoding itself from the provided reader
-    /// will return Some if the decoding was successful or
-    /// None if it was not.
+    /// will return `Ok` if the decoding was successful or
+    /// `Err(InvalidMessage)` if it was not.
     fn read(_: &mut Reader<'a>) -> Result<Self, InvalidMessage>;
 
     /// Convenience function for encoding the implementation
