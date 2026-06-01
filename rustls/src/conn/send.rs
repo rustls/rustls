@@ -108,7 +108,7 @@ impl SendPath {
         len
     }
 
-    /// Encrypt and queue a single fragment.
+    /// Encrypt and queue each fragment in `iter`.
     fn send_messages<'a>(
         &mut self,
         iter: impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>>,
