@@ -48,7 +48,7 @@ impl ServerVerifierBuilder {
         }
     }
 
-    /// Verify the revocation state of presented client certificates against the provided
+    /// Verify the revocation state of presented server certificates against the provided
     /// certificate revocation lists (CRLs). Calling `with_crls` multiple times appends the
     /// given CRLs to the existing collection.
     pub fn with_crls(
