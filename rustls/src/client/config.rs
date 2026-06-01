@@ -36,7 +36,7 @@ use crate::{DistinguishedName, DynHasher, KeyLog, compress, verify};
 /// (the rustls-native-certs crate is often used for this) may take on the order of a few hundred
 /// milliseconds.
 ///
-/// These must be created via the [`ClientConfig::builder()`] or [`ClientConfig::builder()`]
+/// These must be created via the [`ClientConfig::builder()`] or [`ClientConfig::builder_with_details()`]
 /// function.
 ///
 /// Note that using [`ConfigBuilder<ClientConfig, WantsVersions>::with_ech()`] will produce a common
