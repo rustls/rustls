@@ -634,8 +634,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 
     /// Choose how to verify server certificates using a webpki verifier.
     ///
-    /// See [`webpki::WebPkiServerVerifier::builder`] and
-    /// [`webpki::WebPkiServerVerifier::builder`] for more information.
+    /// See [`webpki::WebPkiServerVerifier::builder`] for more information.
     #[cfg(feature = "webpki")]
     pub fn with_webpki_verifier(
         self,
