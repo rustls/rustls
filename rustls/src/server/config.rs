@@ -32,7 +32,7 @@ use crate::{KeyLog, NoKeyLog, Tls12CipherSuite, Tls13CipherSuite, compress};
 /// from the operating system to add to the [`RootCertStore`] passed to a `ClientVerifier`
 /// builder may take on the order of a few hundred milliseconds.
 ///
-/// These must be created via the [`ServerConfig::builder()`] or [`ServerConfig::builder()`]
+/// These must be created via the [`ServerConfig::builder()`] or [`ServerConfig::builder_with_details()`]
 /// function.
 ///
 /// # Defaults
