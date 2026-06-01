@@ -17,7 +17,7 @@ use crate::webpki::verify::{
 };
 use crate::webpki::{VerifierBuilderError, parse_crls, verify_server_name};
 #[cfg(doc)]
-use crate::{ConfigBuilder, ServerConfig, crypto};
+use crate::{ClientConfig, ConfigBuilder, crypto};
 use crate::{DynHasher, Error, RootCertStore};
 
 /// A builder for configuring a `webpki` server certificate verifier.
@@ -106,8 +106,8 @@ impl ServerVerifierBuilder {
     /// signature verification algorithms is used, controlled by the selected [`crypto::CryptoProvider`].
     ///
     /// Once built, the provided `Arc<dyn ServerVerifier>` can be used with a Rustls
-    /// [`ServerConfig`] to configure client certificate validation using
-    /// [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
+    /// [`ClientConfig`] to configure server certificate validation using
+    /// [`with_webpki_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_webpki_verifier].
     ///
     /// # Errors
     /// This function will return a [`VerifierBuilderError`] if:
