@@ -212,7 +212,7 @@ pub enum HandshakeKind {
     /// A full handshake.
     ///
     /// This is the typical TLS connection initiation process when resumption is
-    /// not yet unavailable, and the initial `ClientHello` was accepted by the server.
+    /// not available, and the initial `ClientHello` was accepted by the server.
     Full,
 
     /// A full TLS1.3 handshake, with an extra round-trip for a `HelloRetryRequest`.
