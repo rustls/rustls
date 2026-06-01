@@ -294,7 +294,7 @@ impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
 
 /// A payload buffer with space reserved at the front for a TLS message header.
 ///
-/// `EncodedMessage<OutboundOpaque>` is named `TLSPlaintext` in the standard.
+/// `EncodedMessage<OutboundOpaque>` is named `TLSCiphertext` in the standard.
 ///
 /// This outbound type owns all memory for its interior parts.
 /// It results from encryption and is used for io write.
