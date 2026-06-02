@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug};
+use core::mem;
 use core::ops::{Deref, DerefMut};
 
 use pki_types::{DnsName, FipsStatus, ServerName};
@@ -9,7 +10,7 @@ use pki_types::{DnsName, FipsStatus, ServerName};
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
-use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
+use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideCommonOutput, SideData};
 use crate::crypto::cipher::{AeadKey, EncodedMessage, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
@@ -18,7 +19,7 @@ use crate::msgs::{
     ClientExtensionsInput, Message, MessagePayload, ServerExtensionsInput, TransportParameters,
     VecInput,
 };
-use crate::server::{ServerConfig, ServerSide};
+use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide, ServerState};
 use crate::suites::SupportedCipherSuite;
 use crate::sync::Arc;
 use crate::tls13::Tls13CipherSuite;
@@ -341,6 +342,134 @@ impl Deref for ServerConnection {
 impl Debug for ServerConnection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("quic::ServerConnection")
+            .finish_non_exhaustive()
+    }
+}
+
+/// A QUIC server-side acceptor.
+///
+/// `Acceptor` allows callers to choose a [`ServerConfig`] after reading the
+/// [`ClientHello`] of an incoming QUIC connection.
+pub struct Acceptor {
+    inner: Option<ConnectionCommon<ServerSide>>,
+}
+
+impl Acceptor {
+    /// Make a new QUIC acceptor.
+    pub fn new(version: Version) -> Self {
+        Self {
+            inner: Some(ConnectionCommon::new(
+                ConnectionCore::for_acceptor(Protocol::Quic(version)),
+                FipsStatus::Unvalidated,
+                Quic {
+                    version,
+                    ..Quic::default()
+                },
+            )),
+        }
+    }
+
+    /// Consume unencrypted TLS handshake data.
+    ///
+    /// The plaintext should be ordered QUIC CRYPTO stream data for one encryption level.
+    ///
+    /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
+    pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+        match &mut self.inner {
+            Some(conn) => conn.read_hs(plaintext),
+            None => Err(ApiMisuse::AcceptorPolledAfterCompletion.into()),
+        }
+    }
+
+    /// Check if a `ClientHello` message has been received.
+    ///
+    /// Returns `Ok(None)` if the complete `ClientHello` has not yet been received.
+    /// Supply more handshake data with [`Acceptor::read_hs()`] and call this function again.
+    ///
+    /// Returns `Ok(Some(accepted))` if the connection has been accepted. Call
+    /// [`Accepted::into_connection()`] to continue. Do not call this function again.
+    pub fn accept(&mut self) -> Result<Option<Accepted>, Error> {
+        let Some(mut connection) = self.inner.take() else {
+            return Err(ApiMisuse::AcceptorPolledAfterCompletion.into());
+        };
+
+        const MISUSED: Error = Error::Unreachable("Accepted misused state");
+        let state = mem::replace(&mut connection.core.state, Err(MISUSED))?;
+
+        Ok(match state {
+            ServerState::ChooseConfig(choose_config) => Some(Accepted {
+                connection,
+                choose_config,
+            }),
+            state => {
+                connection.core.state = Ok(state);
+                self.inner = Some(connection);
+                None
+            }
+        })
+    }
+}
+
+/// Represents a `ClientHello` message received through the [`Acceptor`].
+///
+/// Contains the state required to resume the connection through
+/// [`Accepted::into_connection()`].
+pub struct Accepted {
+    // invariant: `connection.core.state` is `Err(_)` and requires restoring
+    connection: ConnectionCommon<ServerSide>,
+    choose_config: Box<ChooseConfig>,
+}
+
+impl Accepted {
+    /// Get the [`ClientHello`] for this connection.
+    pub fn client_hello(&self) -> ClientHello<'_> {
+        self.choose_config.client_hello()
+    }
+
+    /// Convert the [`Accepted`] into a [`ServerConnection`].
+    ///
+    /// Takes the state returned from [`Acceptor::accept()`], the [`ServerConfig`]
+    /// that should be used for the session, and the TLS-encoded QUIC transport
+    /// parameters to send. Returns an error if configuration-dependent validation
+    /// of the received `ClientHello` message fails.
+    pub fn into_connection(
+        mut self,
+        config: Arc<ServerConfig>,
+        params: Vec<u8>,
+    ) -> Result<ServerConnection, Error> {
+        check_server_config(&config)?;
+        self.connection
+            .core
+            .common
+            .send
+            .set_max_fragment_size(config.max_fragment_size)?;
+        self.connection.fips = config.fips();
+
+        let exts = ServerExtensionsInput {
+            transport_parameters: Some(match self.connection.quic.version {
+                Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
+            }),
+        };
+        let mut output = SideCommonOutput {
+            side: &mut self.connection.core.side,
+            quic: Some(&mut self.connection.quic),
+            common: &mut self.connection.core.common,
+        };
+
+        self.connection.core.state =
+            Ok(self
+                .choose_config
+                .use_config(config, exts, &mut output)?);
+
+        Ok(ServerConnection {
+            inner: self.connection,
+        })
+    }
+}
+
+impl Debug for Accepted {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("quic::Accepted")
             .finish_non_exhaustive()
     }
 }

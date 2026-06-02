@@ -242,6 +242,248 @@ fn test_quic_handshake() {
 }
 
 #[test]
+fn test_quic_acceptor() {
+    let kt = KeyType::Rsa2048;
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let mut client_config = make_client_config(kt, &provider);
+    client_config.alpn_protocols = vec![b"h3".into()];
+    let client_config = Arc::new(client_config);
+    let mut server_config = make_server_config(kt, &provider);
+    server_config.alpn_protocols = vec![b"h3".into()];
+    let server_config = Arc::new(server_config);
+    let client_fips = client_config.fips();
+    let server_fips = server_config.fips();
+    let client_params = &b"client params"[..];
+    let server_params = &b"server params"[..];
+
+    let mut client = quic::ClientConnection::new(
+        client_config,
+        quic::Version::V1,
+        server_name("localhost"),
+        client_params.into(),
+    )
+    .unwrap();
+    assert_eq!(client.fips(), client_fips);
+
+    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
+    assert!(acceptor.accept().unwrap().is_none());
+
+    let mut client_initial = Vec::new();
+    assert!(
+        client
+            .write_hs(&mut client_initial)
+            .is_none()
+    );
+    assert!(client_initial.len() > 8);
+
+    acceptor
+        .read_hs(&client_initial[..8])
+        .unwrap();
+    assert!(acceptor.accept().unwrap().is_none());
+
+    acceptor
+        .read_hs(&client_initial[8..])
+        .unwrap();
+    let accepted = acceptor.accept().unwrap().unwrap();
+    assert_eq!(
+        acceptor.accept().err(),
+        Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
+    );
+    assert_eq!(
+        acceptor.read_hs(&[]).err(),
+        Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
+    );
+    {
+        let client_hello = accepted.client_hello();
+        assert_eq!(
+            client_hello
+                .server_name()
+                .unwrap()
+                .as_ref(),
+            "localhost"
+        );
+        assert_eq!(
+            client_hello
+                .alpn()
+                .unwrap()
+                .collect::<Vec<_>>(),
+            vec![b"h3".as_slice()]
+        );
+    }
+
+    let mut server = accepted
+        .into_connection(server_config, server_params.into())
+        .unwrap();
+    assert_eq!(server.fips(), server_fips);
+    assert_eq!(server.quic_transport_parameters(), Some(client_params));
+
+    step(&mut server, &mut client)
+        .unwrap()
+        .unwrap();
+    step(&mut client, &mut server)
+        .unwrap()
+        .unwrap();
+    step(&mut server, &mut client)
+        .unwrap()
+        .unwrap();
+    step(&mut client, &mut server)
+        .unwrap()
+        .unwrap();
+
+    assert!(!client.is_handshaking());
+    assert!(!server.is_handshaking());
+    assert_eq!(client.quic_transport_parameters(), Some(server_params));
+}
+
+#[test]
+fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
+    let kt = KeyType::Rsa2048;
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let mut client_config = make_client_config(kt, &provider);
+    client_config.alpn_protocols = vec![b"h3".into()];
+    let client_config = Arc::new(client_config);
+
+    let mut h3_server_config = make_server_config(kt, &provider);
+    h3_server_config.alpn_protocols = vec![b"h3".into()];
+    let h3_server_config = Arc::new(h3_server_config);
+
+    let mut incompatible_server_config = make_server_config(kt, &provider);
+    incompatible_server_config.alpn_protocols = vec![b"hq-interop".into()];
+    let incompatible_server_config = Arc::new(incompatible_server_config);
+
+    let client_params = &b"client params"[..];
+    let server_params = &b"server params"[..];
+
+    let mut client = quic::ClientConnection::new(
+        client_config,
+        quic::Version::V1,
+        server_name("localhost"),
+        client_params.into(),
+    )
+    .unwrap();
+
+    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
+    let mut client_initial = Vec::new();
+    assert!(
+        client
+            .write_hs(&mut client_initial)
+            .is_none()
+    );
+
+    acceptor
+        .read_hs(&client_initial)
+        .unwrap();
+    let accepted = acceptor.accept().unwrap().unwrap();
+
+    let selected_config = {
+        let client_hello = accepted.client_hello();
+        assert_eq!(
+            client_hello
+                .server_name()
+                .map(|name| name.as_ref()),
+            Some("localhost")
+        );
+        assert_eq!(
+            client_hello
+                .alpn()
+                .unwrap()
+                .collect::<Vec<_>>(),
+            vec![b"h3".as_slice()]
+        );
+
+        match client_hello
+            .server_name()
+            .map(|name| name.as_ref())
+        {
+            Some("localhost") => h3_server_config,
+            _ => incompatible_server_config,
+        }
+    };
+
+    let mut server = accepted
+        .into_connection(selected_config, server_params.into())
+        .unwrap();
+
+    step(&mut server, &mut client)
+        .unwrap()
+        .unwrap();
+    step(&mut client, &mut server)
+        .unwrap()
+        .unwrap();
+    step(&mut server, &mut client)
+        .unwrap()
+        .unwrap();
+    step(&mut client, &mut server)
+        .unwrap()
+        .unwrap();
+
+    assert!(!client.is_handshaking());
+    assert!(!server.is_handshaking());
+    assert_eq!(client.quic_transport_parameters(), Some(server_params));
+    assert_eq!(server.quic_transport_parameters(), Some(client_params));
+}
+
+#[test]
+fn test_quic_acceptor_invalid_early_data_size() {
+    let kt = KeyType::Ed25519;
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let client_config = Arc::new(make_client_config(kt, &provider));
+    let mut server_config = make_server_config(kt, &provider);
+    server_config.max_early_data_size = 5;
+    let client_params = &b"client params"[..];
+
+    let mut client = quic::ClientConnection::new(
+        client_config,
+        quic::Version::V1,
+        server_name("localhost"),
+        client_params.into(),
+    )
+    .unwrap();
+
+    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
+    let mut client_initial = Vec::new();
+    assert!(
+        client
+            .write_hs(&mut client_initial)
+            .is_none()
+    );
+
+    acceptor
+        .read_hs(&client_initial)
+        .unwrap();
+    let accepted = acceptor.accept().unwrap().unwrap();
+
+    assert_eq!(
+        accepted
+            .into_connection(Arc::new(server_config), b"server params".to_vec())
+            .err(),
+        Some(ApiMisuse::QuicRestrictsMaxEarlyDataSize.into())
+    );
+}
+
+#[test]
+fn test_quic_acceptor_read_error_is_terminal() {
+    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
+
+    let err = acceptor
+        .read_hs(&encoding::handshake_framing(
+            rustls::enums::HandshakeType::ClientHello,
+            vec![0x00; 32],
+        ))
+        .err()
+        .unwrap();
+    assert_eq!(err, InvalidMessage::MissingData("Random").into());
+    assert_eq!(
+        acceptor.accept().err(),
+        Some(InvalidMessage::MissingData("Random").into())
+    );
+    assert_eq!(
+        acceptor.accept().err(),
+        Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
+    );
+}
+
+#[test]
 fn test_quic_rejects_missing_alpn() {
     let client_params = &b"client params"[..];
     let server_params = &b"server params"[..];

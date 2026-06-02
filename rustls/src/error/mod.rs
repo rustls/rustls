@@ -1395,9 +1395,11 @@ pub enum ApiMisuse {
     /// [`KeyingMaterialExporter::derive()`]: crate::KeyingMaterialExporter::derive()
     ExporterOutputZeroLength,
 
-    /// [`Acceptor::accept()`][] called after it yielded a connection.
+    /// A server [`Acceptor::accept()`][] or QUIC [`quic::Acceptor::accept()`][] called after it
+    /// yielded a connection.
     ///
     /// [`Acceptor::accept()`]: crate::server::Acceptor::accept()
+    /// [`quic::Acceptor::accept()`]: crate::quic::Acceptor::accept()
     AcceptorPolledAfterCompletion,
 
     /// Incorrect sample length provided to [`quic::HeaderProtectionKey::encrypt_in_place()`][]
