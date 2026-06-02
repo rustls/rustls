@@ -549,7 +549,7 @@ impl ExpectClientHello {
             })
             .collect::<Vec<_>>();
 
-        let mut sig_schemes = input.sig_schemes.clone();
+        let mut sig_schemes = input.sig_schemes.to_owned();
         if T::VERSION == ProtocolVersion::TLSv1_2 {
             sig_schemes.retain(|scheme| {
                 client_suites
@@ -752,7 +752,7 @@ pub(crate) trait ServerHandler<T>: fmt::Debug + Sealed + Send + Sync {
 pub(crate) struct ClientHelloInput<'a> {
     pub(super) message: &'a Message<'a>,
     pub(super) client_hello: &'a ClientHelloPayload,
-    pub(super) sig_schemes: &'a Vec<SignatureScheme>,
+    pub(super) sig_schemes: &'a [SignatureScheme],
     pub(super) proof: HandshakeAlignedProof,
 }
 
@@ -784,7 +784,7 @@ impl<'a> ClientHelloInput<'a> {
 
         let sig_schemes = client_hello
             .signature_schemes
-            .as_ref()
+            .as_deref()
             .ok_or(PeerIncompatible::SignatureAlgorithmsExtensionRequired)?;
 
         Ok(ClientHelloInput {
