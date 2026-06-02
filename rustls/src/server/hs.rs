@@ -565,7 +565,7 @@ impl ExpectClientHello {
             .config
             .cert_resolver
             .resolve(&ClientHello::new(
-                &input,
+                input.client_hello,
                 &sig_schemes,
                 sni.as_ref(),
                 T::VERSION,
