@@ -234,40 +234,21 @@ mod sni_resolver {
             let rscsni = ServerNameResolver::new();
             assert!(
                 rscsni
-                    .resolve(&ClientHello {
-                        server_name: None,
-                        signature_schemes: &[],
-                        alpn: None,
-                        server_cert_types: None,
-                        client_cert_types: None,
-                        cipher_suites: &[],
-                        certificate_authorities: None,
-                        named_groups: None,
-                    })
+                    .resolve(&ClientHello::empty())
                     .is_err()
             );
         }
 
         #[test]
         fn test_server_name_resolver_handles_unknown_name() {
-            let rscsni = ServerNameResolver::new();
-            let name = DnsName::try_from("hello.com")
+            let server_name = DnsName::try_from("hello.com")
                 .unwrap()
                 .to_owned();
-            assert!(
-                rscsni
-                    .resolve(&ClientHello {
-                        server_name: Some(Cow::Borrowed(&name)),
-                        signature_schemes: &[],
-                        alpn: None,
-                        server_cert_types: None,
-                        client_cert_types: None,
-                        cipher_suites: &[],
-                        certificate_authorities: None,
-                        named_groups: None,
-                    })
-                    .is_err()
-            );
+            let mut ch = ClientHello::empty();
+            ch.server_name = Some(Cow::Borrowed(&server_name));
+
+            let rscsni = ServerNameResolver::new();
+            assert!(rscsni.resolve(&ch).is_err());
         }
     }
 }
