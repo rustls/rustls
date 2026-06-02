@@ -87,6 +87,7 @@ fn test_quic_handshake() {
         client_params.into(),
     )
     .unwrap();
+    assert_eq!(client.fips(), client_config.fips());
 
     let mut server = quic::ServerConnection::new(
         server_config.clone(),
@@ -94,6 +95,7 @@ fn test_quic_handshake() {
         server_params.into(),
     )
     .unwrap();
+    assert_eq!(server.fips(), server_config.fips());
 
     let client_initial = step(&mut client, &mut server).unwrap();
     assert!(client_initial.is_none());
