@@ -30,7 +30,7 @@ pub use handy::ServerNameResolver;
 pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
 
 mod hs;
-pub(crate) use hs::ServerHandler;
+pub(crate) use hs::{ChooseConfig, ServerHandler, ServerState};
 
 mod tls12;
 pub(crate) use tls12::TLS12_HANDLER;
