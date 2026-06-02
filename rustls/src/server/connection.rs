@@ -1,4 +1,3 @@
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
@@ -20,7 +19,7 @@ use crate::crypto;
 use crate::crypto::cipher::Payload;
 use crate::error::{ApiMisuse, Error, ErrorWithAlert};
 use crate::log::trace;
-use crate::msgs::{ServerExtensionsInput, ServerNamePayload};
+use crate::msgs::ServerExtensionsInput;
 use crate::server::hs::{ChooseConfig, ExpectClientHello, ReadClientHello, ServerState};
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -423,14 +422,7 @@ pub struct Accepted {
 impl Accepted {
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
-        let client_hello = self.choose_config.client_hello();
-        let server_name = client_hello
-            .server_name
-            .as_ref()
-            .and_then(ServerNamePayload::to_dns_name_normalized)
-            .map(Cow::Owned);
-
-        let ch = ClientHello::new(client_hello, None, server_name, None);
+        let ch = self.choose_config.client_hello();
         trace!("Accepted::client_hello(): {ch:#?}");
         ch
     }
