@@ -213,21 +213,7 @@ impl ServerConnection {
         version: Version,
         params: Vec<u8>,
     ) -> Result<Self, Error> {
-        let suites = &config.provider.tls13_cipher_suites;
-        if suites.is_empty() {
-            return Err(ApiMisuse::QuicRequiresTls13Support.into());
-        }
-
-        if !suites
-            .iter()
-            .any(|scs| scs.quic.is_some())
-        {
-            return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
-        }
-
-        if config.max_early_data_size != 0 && config.max_early_data_size != 0xffff_ffff {
-            return Err(ApiMisuse::QuicRestrictsMaxEarlyDataSize.into());
-        }
+        check_server_config(&config)?;
 
         let exts = ServerExtensionsInput {
             transport_parameters: Some(match version {
@@ -344,6 +330,26 @@ impl Debug for ServerConnection {
         f.debug_struct("quic::ServerConnection")
             .finish_non_exhaustive()
     }
+}
+
+fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
+    let suites = &config.provider.tls13_cipher_suites;
+    if suites.is_empty() {
+        return Err(ApiMisuse::QuicRequiresTls13Support.into());
+    }
+
+    if !suites
+        .iter()
+        .any(|scs| scs.quic.is_some())
+    {
+        return Err(ApiMisuse::NoQuicCompatibleCipherSuites.into());
+    }
+
+    if config.max_early_data_size != 0 && config.max_early_data_size != 0xffff_ffff {
+        return Err(ApiMisuse::QuicRestrictsMaxEarlyDataSize.into());
+    }
+
+    Ok(())
 }
 
 /// A shared interface for QUIC connections.
