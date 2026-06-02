@@ -401,6 +401,20 @@ pub struct ClientHello<'a> {
 }
 
 impl<'a> ClientHello<'a> {
+    #[cfg(test)]
+    pub(super) fn empty() -> Self {
+        Self {
+            server_name: None,
+            signature_schemes: &[],
+            alpn: None,
+            server_cert_types: None,
+            client_cert_types: None,
+            cipher_suites: &[],
+            certificate_authorities: None,
+            named_groups: None,
+        }
+    }
+
     pub(super) fn new(
         payload: &'a ClientHelloPayload,
         signature_schemes: Option<&'a [SignatureScheme]>,
