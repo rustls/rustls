@@ -1,4 +1,4 @@
-use alloc::borrow::ToOwned;
+use alloc::borrow::{Cow, ToOwned};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
@@ -566,9 +566,9 @@ impl ExpectClientHello {
             .cert_resolver
             .resolve(&ClientHello::new(
                 input.client_hello,
-                &sig_schemes,
-                sni.as_ref(),
-                T::VERSION,
+                Some(&sig_schemes),
+                sni.as_ref().map(Cow::Borrowed),
+                Some(T::VERSION),
             ))?;
         self.sni = sni;
 
