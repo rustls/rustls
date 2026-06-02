@@ -429,26 +429,8 @@ impl Accepted {
             .as_ref()
             .and_then(ServerNamePayload::to_dns_name_normalized)
             .map(Cow::Owned);
-        let ch = ClientHello {
-            server_name,
-            signature_schemes: client_hello
-                .signature_schemes
-                .as_deref()
-                .unwrap_or_default(),
-            alpn: client_hello.protocols.as_ref(),
-            server_cert_types: client_hello
-                .server_certificate_types
-                .as_deref(),
-            client_cert_types: client_hello
-                .client_certificate_types
-                .as_deref(),
-            cipher_suites: &client_hello.cipher_suites,
-            certificate_authorities: client_hello
-                .certificate_authority_names
-                .as_deref(),
-            named_groups: client_hello.named_groups.as_deref(),
-        };
 
+        let ch = ClientHello::new(client_hello, None, server_name, None);
         trace!("Accepted::client_hello(): {ch:#?}");
         ch
     }

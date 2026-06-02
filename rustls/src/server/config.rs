@@ -403,13 +403,18 @@ pub struct ClientHello<'a> {
 impl<'a> ClientHello<'a> {
     pub(super) fn new(
         payload: &'a ClientHelloPayload,
-        signature_schemes: &'a [SignatureScheme],
-        sni: Option<&'a DnsName<'static>>,
-        version: ProtocolVersion,
+        signature_schemes: Option<&'a [SignatureScheme]>,
+        server_name: Option<Cow<'a, DnsName<'a>>>,
+        version: Option<ProtocolVersion>,
     ) -> Self {
         Self {
-            server_name: sni.map(Cow::Borrowed),
-            signature_schemes,
+            server_name,
+            signature_schemes: signature_schemes.unwrap_or_else(|| {
+                payload
+                    .signature_schemes
+                    .as_deref()
+                    .unwrap_or_default()
+            }),
             alpn: payload.protocols.as_ref(),
             server_cert_types: payload
                 .server_certificate_types
@@ -420,7 +425,7 @@ impl<'a> ClientHello<'a> {
             cipher_suites: &payload.cipher_suites,
             // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
             certificate_authorities: match version {
-                ProtocolVersion::TLSv1_2 => None,
+                Some(ProtocolVersion::TLSv1_2) => None,
                 _ => payload
                     .certificate_authority_names
                     .as_deref(),
