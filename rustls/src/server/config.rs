@@ -7,7 +7,6 @@ use core::marker::PhantomData;
 use pki_types::PrivateKeyDer;
 use pki_types::{DnsName, FipsStatus, UnixTime};
 
-use super::hs::ClientHelloInput;
 use super::{ServerSessionKey, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 #[cfg(doc)]
@@ -20,7 +19,7 @@ use crate::crypto::{
 use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
-use crate::msgs::ServerNamePayload;
+use crate::msgs::{ClientHelloPayload, ServerNamePayload};
 use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
@@ -403,7 +402,7 @@ pub struct ClientHello<'a> {
 
 impl<'a> ClientHello<'a> {
     pub(super) fn new(
-        input: &'a ClientHelloInput<'a>,
+        payload: &'a ClientHelloPayload,
         signature_schemes: &'a [SignatureScheme],
         sni: Option<&'a DnsName<'static>>,
         version: ProtocolVersion,
@@ -411,28 +410,22 @@ impl<'a> ClientHello<'a> {
         Self {
             server_name: sni.map(Cow::Borrowed),
             signature_schemes,
-            alpn: input.client_hello.protocols.as_ref(),
-            server_cert_types: input
-                .client_hello
+            alpn: payload.protocols.as_ref(),
+            server_cert_types: payload
                 .server_certificate_types
                 .as_deref(),
-            client_cert_types: input
-                .client_hello
+            client_cert_types: payload
                 .client_certificate_types
                 .as_deref(),
-            cipher_suites: &input.client_hello.cipher_suites,
+            cipher_suites: &payload.cipher_suites,
             // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
             certificate_authorities: match version {
                 ProtocolVersion::TLSv1_2 => None,
-                _ => input
-                    .client_hello
+                _ => payload
                     .certificate_authority_names
                     .as_deref(),
             },
-            named_groups: input
-                .client_hello
-                .named_groups
-                .as_deref(),
+            named_groups: payload.named_groups.as_deref(),
         }
     }
 
