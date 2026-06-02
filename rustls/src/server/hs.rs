@@ -406,14 +406,22 @@ impl ChooseConfig {
             .with_input(ClientHelloInput::from_input(&self.client_hello)?, output)
     }
 
-    pub(crate) fn client_hello(&self) -> &ClientHelloPayload {
-        match &self.client_hello.message.payload {
+    pub(crate) fn client_hello(&self) -> ClientHello<'_> {
+        let client_hello = match &self.client_hello.message.payload {
             MessagePayload::Handshake { parsed, .. } => match &parsed.0 {
                 HandshakePayload::ClientHello(ch) => ch,
                 _ => unreachable!(),
             },
             _ => unreachable!(),
-        }
+        };
+
+        let server_name = client_hello
+            .server_name
+            .as_ref()
+            .and_then(ServerNamePayload::to_dns_name_normalized)
+            .map(Cow::Owned);
+
+        ClientHello::new(client_hello, None, server_name, None)
     }
 
     fn set_resumption_data(&mut self, resumption_data: &[u8]) -> Result<(), Error> {
