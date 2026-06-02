@@ -1,9 +1,9 @@
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt;
 use core::fmt::{Debug, Formatter};
 use core::ops::Deref;
+use core::{fmt, mem};
 use std::io;
 
 use pki_types::{DnsName, FipsStatus};
@@ -302,22 +302,22 @@ impl Acceptor {
             return Err(AcceptedAlert::from_error(e, connection.core.common.send));
         }
 
-        let Ok(ServerState::ChooseConfig(_)) = connection.core.state else {
-            self.inner = Some(connection);
-            return Ok(None);
-        };
-
-        let Ok(ServerState::ChooseConfig(choose_config)) = core::mem::replace(
-            &mut connection.core.state,
-            Err(Error::Unreachable("Accepted misused state")),
-        ) else {
-            unreachable!(); // checked in previous block
-        };
-
-        Ok(Some(Accepted {
-            connection,
-            choose_config,
-        }))
+        const MISUSED: Error = Error::Unreachable("Accepted misused state");
+        match mem::replace(&mut connection.core.state, Err(MISUSED)) {
+            Ok(ServerState::ChooseConfig(choose_config)) => Ok(Some(Accepted {
+                connection,
+                choose_config,
+            })),
+            Ok(state) => {
+                connection.core.state = Ok(state);
+                self.inner = Some(connection);
+                Ok(None)
+            }
+            Err(e) => Err((
+                e.clone(),
+                AcceptedAlert::from_error(e, connection.core.common.send).1,
+            )),
+        }
     }
 }
 
