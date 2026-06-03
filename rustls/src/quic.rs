@@ -88,7 +88,6 @@ impl ClientConnection {
         params: Vec<u8>,
         alpn_protocols: Vec<ApplicationProtocol<'static>>,
     ) -> Result<Self, Error> {
-        let fips = config.fips();
         let suites = &config.provider().tls13_cipher_suites;
         if suites.is_empty() {
             return Err(ApiMisuse::QuicRequiresTls13Support.into());
@@ -123,7 +122,7 @@ impl ClientConnection {
         )?;
 
         Ok(Self {
-            inner: ConnectionCommon::new(inner, fips, quic),
+            inner: ConnectionCommon::new(inner, quic),
         })
     }
 
@@ -221,8 +220,6 @@ impl ServerConnection {
         params: Vec<u8>,
     ) -> Result<Self, Error> {
         check_server_config(&config)?;
-        let fips = config.fips();
-
         let exts = ServerExtensionsInput {
             transport_parameters: Some(match version {
                 Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
@@ -232,7 +229,6 @@ impl ServerConnection {
         let core = ConnectionCore::for_server(config, exts, Protocol::Quic(version))?;
         let inner = ConnectionCommon::new(
             core,
-            fips,
             Quic {
                 version,
                 ..Quic::default()
@@ -360,7 +356,6 @@ impl Acceptor {
         Self {
             inner: Some(ConnectionCommon::new(
                 ConnectionCore::for_acceptor(Protocol::Quic(version)),
-                FipsStatus::Unvalidated,
                 Quic {
                     version,
                     ..Quic::default()
@@ -497,16 +492,14 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
 /// A shared interface for QUIC connections.
 struct ConnectionCommon<Side: SideData> {
     core: ConnectionCore<Side>,
-    fips: FipsStatus,
     deframer_buffer: VecInput,
     quic: Quic,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
-    fn new(core: ConnectionCore<Side>, fips: FipsStatus, quic: Quic) -> Self {
+    fn new(core: ConnectionCore<Side>, quic: Quic) -> Self {
         Self {
             core,
-            fips,
             deframer_buffer: VecInput::default(),
             quic,
         }

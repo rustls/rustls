@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
 
-use pki_types::DnsName;
+use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
 use crate::conn::{Exporter, ReceivePath, SendOutput, SendPath};
@@ -24,14 +24,16 @@ pub struct CommonState {
     pub(crate) outputs: ConnectionOutputs,
     pub(crate) send: SendPath,
     pub(crate) recv: ReceivePath,
+    pub(crate) fips: FipsStatus,
 }
 
 impl CommonState {
-    pub(crate) fn new(side: Side) -> Self {
+    pub(crate) fn new(side: Side, fips: FipsStatus) -> Self {
         Self {
             outputs: ConnectionOutputs::default(),
             send: SendPath::default(),
             recv: ReceivePath::new(side),
+            fips,
         }
     }
 
