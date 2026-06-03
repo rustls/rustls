@@ -7,14 +7,17 @@ use std::io::{self, BufRead, Read};
 use kernel::KernelConnection;
 use pki_types::FipsStatus;
 
+use crate::ServerConfig;
 use crate::common_state::{
     CommonState, ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, UnborrowedPayload,
 };
 use crate::error::{ApiMisuse, Error};
 use crate::kernel::KernelState;
-use crate::msgs::{Delocator, Message, Random, TlsInputBuffer, VecInput};
+use crate::msgs::{Delocator, Message, Random, ServerExtensionsInput, TlsInputBuffer, VecInput};
 use crate::quic::QuicOutput;
+use crate::server::{ChooseConfig, ServerSide};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
+use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -827,6 +830,30 @@ impl<Side: SideData> ConnectionCore<Side> {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
         }
+    }
+}
+
+impl ConnectionCore<ServerSide> {
+    pub(crate) fn accepted(
+        &mut self,
+        choose: Box<ChooseConfig>,
+        exts: ServerExtensionsInput,
+        quic: Option<&mut dyn QuicOutput>,
+        config: Arc<ServerConfig>,
+    ) -> Result<(), Error> {
+        self.common
+            .send
+            .set_max_fragment_size(config.max_fragment_size)?;
+        self.common.fips = config.fips();
+
+        let mut output = SideCommonOutput {
+            side: &mut self.side,
+            quic,
+            common: &mut self.common,
+        };
+
+        self.state = Ok(choose.use_config(config, exts, &mut output)?);
+        Ok(())
     }
 }
 

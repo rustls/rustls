@@ -10,7 +10,7 @@ use pki_types::{DnsName, FipsStatus, ServerName};
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
-use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideCommonOutput, SideData};
+use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
 use crate::crypto::cipher::{AeadKey, EncodedMessage, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
@@ -433,28 +433,17 @@ impl Accepted {
         params: Vec<u8>,
     ) -> Result<ServerConnection, Error> {
         check_server_config(&config)?;
-        self.connection
-            .core
-            .common
-            .send
-            .set_max_fragment_size(config.max_fragment_size)?;
-        self.connection.fips = config.fips();
 
-        let exts = ServerExtensionsInput {
-            transport_parameters: Some(match self.connection.quic.version {
-                Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
-            }),
-        };
-        let mut output = SideCommonOutput {
-            side: &mut self.connection.core.side,
-            quic: Some(&mut self.connection.quic),
-            common: &mut self.connection.core.common,
-        };
-
-        self.connection.core.state =
-            Ok(self
-                .choose_config
-                .use_config(config, exts, &mut output)?);
+        self.connection.core.accepted(
+            self.choose_config,
+            ServerExtensionsInput {
+                transport_parameters: Some(match self.connection.quic.version {
+                    Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
+                }),
+            },
+            Some(&mut self.connection.quic),
+            config,
+        )?;
 
         Ok(ServerConnection {
             inner: self.connection,
