@@ -11,8 +11,7 @@ use super::config::{ClientHello, ServerConfig};
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendPath,
-    SideCommonOutput, Writer,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendPath, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -431,41 +430,22 @@ impl Accepted {
         mut self,
         config: Arc<ServerConfig>,
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
-        if let Err(err) = self
-            .connection
-            .send
-            .set_max_fragment_size(config.max_fragment_size)
-        {
-            // We have a connection here, but it won't contain an alert since the error
-            // is with the fragment size configured in the `ServerConfig`.
-            return Err((err, AcceptedAlert::empty()));
-        }
-        self.connection.fips = config.fips();
-
-        let mut output = SideCommonOutput {
-            side: &mut self.connection.core.side,
-            quic: None,
-            common: &mut self.connection.core.common,
-        };
-
-        let state = match self.choose_config.use_config(
-            config,
+        let result = self.connection.core.accepted(
+            self.choose_config,
             ServerExtensionsInput::default(),
-            &mut output,
-        ) {
-            Ok(state) => state,
-            Err(err) => {
-                return Err(AcceptedAlert::from_error(
-                    err,
-                    self.connection.core.common.send,
-                ));
-            }
-        };
-        self.connection.core.state = Ok(state);
+            None,
+            config,
+        );
 
-        Ok(ServerConnection {
-            inner: self.connection,
-        })
+        match result {
+            Ok(()) => Ok(ServerConnection {
+                inner: self.connection,
+            }),
+            Err(e) => Err((
+                e.clone(),
+                AcceptedAlert::from_error(e, self.connection.core.common.send).1,
+            )),
+        }
     }
 }
 
