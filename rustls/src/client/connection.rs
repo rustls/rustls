@@ -202,18 +202,14 @@ impl ClientConnectionBuilder {
         } = self;
 
         let alpn_protocols = alpn_protocols.unwrap_or_else(|| config.alpn_protocols.clone());
-        let fips = config.fips();
         Ok(ClientConnection {
-            inner: ConnectionCommon::new(
-                ConnectionCore::for_client(
-                    config,
-                    name,
-                    ClientExtensionsInput::from_alpn(alpn_protocols),
-                    None,
-                    Protocol::Tcp,
-                )?,
-                fips,
-            ),
+            inner: ConnectionCommon::new(ConnectionCore::for_client(
+                config,
+                name,
+                ClientExtensionsInput::from_alpn(alpn_protocols),
+                None,
+                Protocol::Tcp,
+            )?),
         })
     }
 }
@@ -285,7 +281,7 @@ impl ConnectionCore<ClientSide> {
         quic: Option<&mut dyn QuicOutput>,
         protocol: Protocol,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client);
+        let mut common_state = CommonState::new(Side::Client, config.fips());
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;

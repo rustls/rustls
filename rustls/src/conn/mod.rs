@@ -513,15 +513,13 @@ impl ConnectionRandoms {
 /// [`SideData`]. This is used to store side-specific data.
 pub(crate) struct ConnectionCommon<Side: SideData> {
     pub(crate) core: ConnectionCore<Side>,
-    pub(crate) fips: FipsStatus,
     buffers: Buffers,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
-    pub(crate) fn new(core: ConnectionCore<Side>, fips: FipsStatus) -> Self {
+    pub(crate) fn new(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
-            fips,
             buffers: Buffers::new(),
         }
     }

@@ -37,16 +37,12 @@ impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
-        let fips = config.fips();
         Ok(Self {
-            inner: ConnectionCommon::new(
-                ConnectionCore::for_server(
-                    config,
-                    ServerExtensionsInput::default(),
-                    Protocol::Tcp,
-                )?,
-                fips,
-            ),
+            inner: ConnectionCommon::new(ConnectionCore::for_server(
+                config,
+                ServerExtensionsInput::default(),
+                Protocol::Tcp,
+            )?),
         })
     }
 
@@ -254,10 +250,9 @@ impl Default for Acceptor {
     /// Return an empty Acceptor, ready to receive bytes from a new client connection.
     fn default() -> Self {
         Self {
-            inner: Some(ConnectionCommon::new(
-                ConnectionCore::for_acceptor(Protocol::Tcp),
-                FipsStatus::Unvalidated,
-            )),
+            inner: Some(ConnectionCommon::new(ConnectionCore::for_acceptor(
+                Protocol::Tcp,
+            ))),
         }
     }
 }
@@ -539,7 +534,7 @@ impl ConnectionCore<ServerSide> {
         extra_exts: ServerExtensionsInput,
         protocol: Protocol,
     ) -> Result<Self, Error> {
-        let mut common = CommonState::new(Side::Server);
+        let mut common = CommonState::new(Side::Server, config.fips());
         common
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
@@ -560,7 +555,7 @@ impl ConnectionCore<ServerSide> {
         Self::new(
             ReadClientHello::new(protocol).into(),
             ServerConnectionData::default(),
-            CommonState::new(Side::Server),
+            CommonState::new(Side::Server, FipsStatus::Unvalidated),
         )
     }
 }
