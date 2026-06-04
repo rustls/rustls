@@ -32,6 +32,9 @@ mod send;
 use send::DEFAULT_BUFFER_LIMIT;
 pub(crate) use send::{SendOutput, SendPath};
 
+pub(crate) mod split;
+use split::SplitConnection;
+
 use crate::crypto::cipher::OutboundPlain;
 
 /// A trait generalizing over buffered client or server connections.
@@ -621,6 +624,20 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 .has_received_close_notify,
         }
     }
+
+    pub(crate) fn split(self) -> Result<SplitConnection<Side>, Error> {
+        // `SplitConnection` cannot be used to progress a handshake.
+        if self.is_handshaking() {
+            return Err(ApiMisuse::SplitDuringHandshake.into());
+        }
+
+        // We are about to drop `Buffers`
+        if !self.buffers.is_empty() {
+            return Err(ApiMisuse::SplitWithPendingBuffers.into());
+        }
+
+        SplitConnection::try_from(self.core)
+    }
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
@@ -697,6 +714,12 @@ impl Buffers {
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             has_seen_eof: false,
         }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.received_plaintext.is_empty()
+            && self.deframer_buffer.filled().is_empty()
+            && self.sendable_plaintext.is_empty()
     }
 }
 

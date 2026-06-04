@@ -363,7 +363,7 @@ impl Tls12AeadAlgorithm for Aead {
     }
 }
 
-struct Tls13Cipher;
+pub(crate) struct Tls13Cipher;
 
 impl MessageEncrypter for Tls13Cipher {
     fn encrypt(

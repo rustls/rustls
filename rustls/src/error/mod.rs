@@ -1509,6 +1509,18 @@ pub enum ApiMisuse {
     ///
     /// [`KernelConnection::update_tx_secret()`]: crate::conn::kernel::KernelConnection::update_tx_secret()
     KeyUpdateNotAvailableForTls12,
+
+    /// [`ClientConnection::split()`] or [`ServerConnection::split()`] called during handshake.
+    ///
+    /// [`ServerConnection::split()`]: crate::server::ServerConnection::split()
+    /// [`ClientConnection::split()`]: crate::client::ClientConnection::split()
+    SplitDuringHandshake,
+
+    /// [`ClientConnection::split()`] or [`ServerConnection::split()`] called with pending plaintext or TLS data.
+    ///
+    /// [`ServerConnection::split()`]: crate::server::ServerConnection::split()
+    /// [`ClientConnection::split()`]: crate::client::ClientConnection::split()
+    SplitWithPendingBuffers,
 }
 
 impl fmt::Display for ApiMisuse {

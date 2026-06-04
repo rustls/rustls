@@ -10,6 +10,7 @@ use super::hs::ClientHelloInput;
 use crate::client::EchStatus;
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
+use crate::conn::split::SplitConnection;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader,
     SideCommonOutput, SideData, Writer,
@@ -37,6 +38,25 @@ impl fmt::Debug for ClientConnection {
 }
 
 impl ClientConnection {
+    /// Split a post-handshake connection into a [`SplitConnection`].
+    ///
+    /// This allows the two directions (transmit and receive) of the connection to be progressed
+    /// separately (including by different threads, which would allow dedicating a CPU core for each
+    /// direction rather than one per connection; this can dramatically improve performance for
+    /// full-duplex protocols).
+    ///
+    /// It also separates out the [`ConnectionOutputs`] which gives the application direct control
+    /// of how long this is kept.
+    ///
+    /// This fails if:
+    ///
+    /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
+    /// - there is any buffered application data.  Check with [`Connection::reader()`].
+    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write_tls()`].
+    pub fn split(self) -> Result<SplitConnection<ClientSide>, Error> {
+        self.inner.split()
+    }
+
     /// Returns an `io::Write` implementer you can write bytes to
     /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
     ///

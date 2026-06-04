@@ -387,6 +387,15 @@ pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind};
 pub use crate::conn::{
     Connection, IoState, KeyingMaterialExporter, Reader, SideData, Writer, kernel,
 };
+/// Types related to "split" mode.
+///
+/// See [`split::SplitConnection`] for more information.
+pub mod split {
+    pub use crate::conn::split::{
+        FlushSender, ReceiveTraffic, ReceiveTrafficState, ReceivedApplicationData, SendTraffic,
+        SplitConnection,
+    };
+}
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::msgs::{SliceInput, TlsInputBuffer, VecInput};
