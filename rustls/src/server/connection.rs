@@ -10,6 +10,7 @@ use pki_types::{DnsName, FipsStatus};
 use super::config::{ClientHello, ServerConfig};
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
+use crate::conn::split::SplitConnection;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendPath,
     SideData, Writer,
@@ -44,6 +45,25 @@ impl ServerConnection {
                 Protocol::Tcp,
             )?),
         })
+    }
+
+    /// Split a post-handshake connection into a [`SplitConnection`].
+    ///
+    /// This allows the two directions (transmit and receive) of the connection to be progressed
+    /// separately (including by different threads, which would allow dedicating a CPU core for each
+    /// direction rather than one per connection; this can dramatically improve performance for
+    /// full-duplex protocols).
+    ///
+    /// It also separates out the [`ConnectionOutputs`] which gives the application direct control
+    /// of how long this is kept.
+    ///
+    /// This fails if:
+    ///
+    /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
+    /// - there is any buffered application data.  Check with [`Connection::reader()`].
+    /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write_tls()`].
+    pub fn split(self) -> Result<SplitConnection<ServerSide>, Error> {
+        self.inner.split()
     }
 
     /// Retrieves the server name, if any, used to select the certificate and

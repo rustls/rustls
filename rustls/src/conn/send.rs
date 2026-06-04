@@ -66,7 +66,7 @@ impl SendPath {
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
-    fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
+    pub(crate) fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
         let len = payload.len();
         self.send_messages(
             self.message_fragmenter

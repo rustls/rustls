@@ -5,8 +5,7 @@ use core::ops::Range;
 use super::SendOutput;
 use crate::SideData;
 use crate::common_state::{
-    ConnectionOutput, ConnectionOutputs, Event, Output, OutputEvent, Side, UnborrowedPayload,
-    maybe_send_fatal_alert,
+    ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
 use crate::conn::StateMachine;
 use crate::conn::private::SideOutput;
@@ -50,6 +49,24 @@ impl ReceivePath {
             seen_consecutive_empty_fragments: 0,
             tls13_tickets_received: 0,
         }
+    }
+
+    pub(crate) fn process_recv_traffic<Side: SideData>(
+        &mut self,
+        input: &mut dyn TlsInputBuffer,
+        state: &mut Result<Side::State, Error>,
+        send: &mut dyn SendOutput,
+    ) -> Result<Option<UnborrowedPayload>, Error> {
+        self.process_new_packets::<Side>(
+            input,
+            state,
+            &mut JoinOutput {
+                outputs: &mut Discard,
+                quic: None,
+                send,
+                side: &mut Discard,
+            },
+        )
     }
 
     pub(super) fn process_new_packets<'a, 'm, Side: SideData>(
@@ -504,10 +521,20 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
 }
 
 pub(super) struct JoinOutput<'a> {
-    pub(super) outputs: &'a mut ConnectionOutputs,
+    pub(super) outputs: &'a mut dyn ConnectionOutput,
     pub(super) quic: Option<&'a mut dyn QuicOutput>,
     pub(super) send: &'a mut dyn SendOutput,
     pub(super) side: &'a mut dyn SideOutput,
+}
+
+struct Discard;
+
+impl ConnectionOutput for Discard {
+    fn handle(&mut self, _ev: OutputEvent<'_>) {}
+}
+
+impl SideOutput for Discard {
+    fn emit(&mut self, _ev: Event<'_>) {}
 }
 
 /// Tracking technically-allowed protocol actions
