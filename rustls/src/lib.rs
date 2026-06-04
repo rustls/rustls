@@ -389,6 +389,7 @@ pub use crate::conn::{
 };
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
+pub use crate::msgs::{SliceInput, TlsInputBuffer, VecInput};
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
 };
