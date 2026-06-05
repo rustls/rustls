@@ -71,13 +71,8 @@ impl ClientConnection {
         name: ServerName<'static>,
         params: Vec<u8>,
     ) -> Result<Self, Error> {
-        Self::new_with_alpn(
-            config.clone(),
-            quic_version,
-            name,
-            params,
-            config.alpn_protocols.clone(),
-        )
+        let alpn_protocols = config.alpn_protocols.clone();
+        Self::new_with_alpn(config, quic_version, name, params, alpn_protocols)
     }
 
     /// Make a new QUIC ClientConnection with custom ALPN protocols.
