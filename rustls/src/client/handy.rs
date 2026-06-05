@@ -104,7 +104,7 @@ mod cache {
             self.servers
                 .lock()
                 .unwrap()
-                .get_or_insert_default_and_edit(key.clone(), |data| data.tls12 = Some(value));
+                .get_or_insert_default_and_edit(key, |data| data.tls12 = Some(value));
         }
 
         fn tls12_session(&self, key: &ClientSessionKey<'_>) -> Option<Tls12Session> {
@@ -127,7 +127,7 @@ mod cache {
             self.servers
                 .lock()
                 .unwrap()
-                .get_or_insert_default_and_edit(key.clone(), |data| {
+                .get_or_insert_default_and_edit(key, |data| {
                     if data.tls13.len() == data.tls13.capacity() {
                         data.tls13.pop_front();
                     }
