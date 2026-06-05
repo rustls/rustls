@@ -132,7 +132,7 @@ impl EchConfig {
     ) -> Result<EchState, Error> {
         EchState::new(
             self,
-            server_name.clone(),
+            server_name,
             protocol,
             !config
                 .resolver()
