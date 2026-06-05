@@ -1,3 +1,4 @@
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
@@ -150,7 +151,7 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     /// Note that this is only applicable to TLS 1.3.
     ///
     /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
-    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+    fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
         None
     }
 }
@@ -200,7 +201,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
     /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.3.2
     /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
-    fn root_hint_subjects(&self) -> &[DistinguishedName];
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]>;
 
     /// Verify the end-entity certificate `end_entity` is valid, acceptable,
     /// and chains to at least one of the trust anchors trusted by
@@ -288,7 +289,7 @@ impl ClientCertVerifier for NoClientAuth {
         false
     }
 
-    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
         unimplemented!();
     }
 

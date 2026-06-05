@@ -1331,8 +1331,8 @@ impl ClientCertVerifier for MockClientVerifier {
         self.mandatory
     }
 
-    fn root_hint_subjects(&self) -> &[DistinguishedName] {
-        &self.subjects
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
+        Arc::from(self.subjects)
     }
 
     fn verify_client_cert(

@@ -353,8 +353,8 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         }
     }
 
-    fn root_hint_subjects(&self) -> &[DistinguishedName] {
-        &self.root_hint_subjects
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
+        Arc::from(self.root_hint_subjects.clone())
     }
 
     fn verify_client_cert(
