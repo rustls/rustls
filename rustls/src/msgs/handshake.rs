@@ -723,7 +723,7 @@ impl<'a> CertificatePayloadTls13<'a> {
                         .chain(iter::repeat(None)),
                 )
                 .map(|(cert, ocsp)| {
-                    let mut e = CertificateEntry::new(cert.clone());
+                    let mut e = CertificateEntry::new(cert);
                     if let Some(ocsp) = ocsp {
                         e.extensions.status = Some(CertificateStatus::new(ocsp));
                     }
