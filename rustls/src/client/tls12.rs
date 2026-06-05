@@ -1135,6 +1135,7 @@ impl ExpectFinished {
             .then(|| st.secrets.extract_secrets(Side::Client));
 
         output.output(OutputEvent::PeerIdentity(st.peer_identity));
+        output.output(OutputEvent::ExtendedMasterSecret(st.hs.using_ems));
         output.output(OutputEvent::Exporter(st.secrets.into_exporter()));
         output.start_traffic();
 
