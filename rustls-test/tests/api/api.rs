@@ -824,6 +824,32 @@ fn test_tls13_exporter() {
 }
 
 #[test]
+fn test_extended_master_secret_reporting() {
+    // TLS 1.2: rustls always offers the Extended Master Secret extension, so a
+    // rustls<->rustls 1.2 handshake negotiates it and reports `Some(true)` on
+    // both ends.
+    let provider = provider::DEFAULT_TLS12_PROVIDER;
+    let client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    assert_eq!(client.extended_master_secret(), None);
+    assert_eq!(server.extended_master_secret(), None);
+    do_handshake(&mut client, &mut server);
+    assert_eq!(client.extended_master_secret(), Some(true));
+    assert_eq!(server.extended_master_secret(), Some(true));
+
+    // TLS 1.3 has no Extended Master Secret extension (the property is intrinsic
+    // to its key schedule), so it is reported as `None`.
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let client_config = make_client_config(KeyType::Rsa2048, &provider);
+    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+    assert_eq!(client.extended_master_secret(), None);
+    assert_eq!(server.extended_master_secret(), None);
+}
+
+#[test]
 fn test_tls13_exporter_maximum_output_length() {
     let provider = provider::DEFAULT_TLS13_PROVIDER;
     let client_config = make_client_config(KeyType::EcdsaP256, &provider);

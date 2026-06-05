@@ -1041,6 +1041,7 @@ impl ExpectFinished {
                     .extract_secrets(Side::Server)
             });
 
+        output.output(OutputEvent::ExtendedMasterSecret(self.hs.using_ems));
         output.output(OutputEvent::Exporter(self.secrets.into_exporter()));
         output.start_traffic();
 

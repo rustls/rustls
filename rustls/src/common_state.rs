@@ -97,6 +97,7 @@ pub struct ConnectionOutputs {
     negotiated_kx_group: Option<&'static dyn SupportedKxGroup>,
     alpn_protocol: Option<ApplicationProtocol<'static>>,
     peer_identity: Option<Identity<'static>>,
+    extended_master_secret: Option<bool>,
     pub(crate) exporter: Option<Box<dyn Exporter>>,
     pub(crate) early_exporter: Option<Box<dyn Exporter>>,
 }
@@ -150,6 +151,17 @@ impl ConnectionOutputs {
         self.negotiated_version
     }
 
+    /// Whether the Extended Master Secret extension was negotiated.
+    ///
+    /// Returns:
+    /// - `None` until the handshake reaches the point where this is known.
+    /// - `None` for TLS 1.3, where the extension does not apply.
+    /// - `Some(true) for TLS 1.2 if the extension was negotiated.
+    /// - `Some(false) otherwise.
+    pub fn extended_master_secret(&self) -> Option<bool> {
+        self.extended_master_secret
+    }
+
     /// Which kind of handshake was performed.
     ///
     /// This tells you whether the handshake was a resumption or not.
@@ -183,6 +195,7 @@ impl ConnectionOutput for ConnectionOutputs {
             OutputEvent::CipherSuite(suite) => self.suite = Some(suite),
             OutputEvent::EarlyExporter(exporter) => self.early_exporter = Some(exporter),
             OutputEvent::Exporter(exporter) => self.exporter = Some(exporter),
+            OutputEvent::ExtendedMasterSecret(ems) => self.extended_master_secret = Some(ems),
             OutputEvent::HandshakeKind(hk) => {
                 assert!(self.handshake_kind.is_none());
                 self.handshake_kind = Some(hk);
@@ -278,6 +291,7 @@ pub(crate) enum OutputEvent<'a> {
     CipherSuite(SupportedCipherSuite),
     EarlyExporter(Box<dyn Exporter>),
     Exporter(Box<dyn Exporter>),
+    ExtendedMasterSecret(bool),
     HandshakeKind(HandshakeKind),
     KeyExchangeGroup(&'static dyn SupportedKxGroup),
     PeerIdentity(Identity<'static>),
