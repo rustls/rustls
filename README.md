@@ -12,10 +12,10 @@ Rustls is used in production at many organizations and projects. We aim to maint
 reasonable API surface stability but the API may evolve as we make changes to accommodate
 new features or performance improvements.
 
-We have a [roadmap](ROADMAP.md) for our future plans. We also have [benchmarks](BENCHMARKING.md) to
+We have a [roadmap](https://github.com/rustls/rustls/blob/main/ROADMAP.md) for our future plans. We also have [benchmarks](https://github.com/rustls/rustls/blob/main/BENCHMARKING.md) to
 prevent performance regressions and to let you evaluate rustls on your target hardware.
 
-If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
+If you'd like to help out, please see [CONTRIBUTING.md](https://github.com/rustls/rustls/blob/main/CONTRIBUTING.md).
 
 [![Build Status](https://github.com/rustls/rustls/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/rustls/rustls/actions/workflows/build.yml?query=branch%3Amain)
 [![Coverage Status (codecov.io)](https://codecov.io/gh/rustls/rustls/branch/main/graph/badge.svg)](https://codecov.io/gh/rustls/rustls/)
