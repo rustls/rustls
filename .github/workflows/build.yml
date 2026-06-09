@@ -309,7 +309,7 @@ jobs:
         run: ./admin/coverage --lcov --output-path final.info
 
       - name: Report to codecov.io
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: final.info
           token: ${{ secrets.CODECOV_TOKEN }}
