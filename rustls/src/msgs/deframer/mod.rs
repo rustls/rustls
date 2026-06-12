@@ -306,7 +306,7 @@ impl Deframer {
     }
 
     #[inline]
-    pub(crate) fn processed(&self) -> usize {
+    fn processed(&self) -> usize {
         self.processed
     }
 }

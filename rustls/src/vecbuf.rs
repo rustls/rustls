@@ -10,7 +10,7 @@ use crate::crypto::cipher::OutboundPlain;
 ///
 /// This avoids extra copies when appending a new byte vector,
 /// at the expense of more complexity when reading out.
-pub(crate) struct ChunkVecBuffer {
+pub(super) struct ChunkVecBuffer {
     /// How many bytes have been consumed in the first chunk.
     ///
     /// Invariant: zero if `chunks.is_empty()`
@@ -24,7 +24,7 @@ pub(crate) struct ChunkVecBuffer {
 }
 
 impl ChunkVecBuffer {
-    pub(crate) fn new(limit: Option<usize>) -> Self {
+    pub(super) fn new(limit: Option<usize>) -> Self {
         Self {
             prefix_used: 0,
             chunks: VecDeque::new(),
@@ -39,17 +39,17 @@ impl ChunkVecBuffer {
     /// data is not an error.
     ///
     /// A [`None`] limit is interpreted as no limit.
-    pub(crate) fn set_limit(&mut self, new_limit: Option<usize>) {
+    pub(super) fn set_limit(&mut self, new_limit: Option<usize>) {
         self.limit = new_limit;
     }
 
     /// If we're empty
-    pub(crate) fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.chunks.is_empty()
     }
 
     /// How many bytes we're storing
-    pub(crate) fn len(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.chunks
             .iter()
             .fold(0usize, |acc, chunk| acc + chunk.len())
@@ -57,7 +57,7 @@ impl ChunkVecBuffer {
     }
 
     /// Take and append the given `bytes`.
-    pub(crate) fn append(&mut self, bytes: Vec<u8>) -> usize {
+    pub(super) fn append(&mut self, bytes: Vec<u8>) -> usize {
         let len = bytes.len();
 
         if !bytes.is_empty() {
@@ -74,7 +74,7 @@ impl ChunkVecBuffer {
     /// Take one of the chunks from this object.
     ///
     /// This function returns `None` if the object `is_empty`.
-    pub(crate) fn pop(&mut self) -> Option<Vec<u8>> {
+    pub(super) fn pop(&mut self) -> Option<Vec<u8>> {
         let mut first = self.chunks.pop_front();
 
         if let Some(first) = &mut first {
@@ -87,20 +87,20 @@ impl ChunkVecBuffer {
     }
 
     /// Inspect the first chunk from this object.
-    pub(crate) fn peek(&self) -> Option<&[u8]> {
+    pub(super) fn peek(&self) -> Option<&[u8]> {
         self.chunks
             .front()
             .map(|ch| ch.as_slice())
     }
 
-    pub(crate) fn take(&mut self) -> Vec<Vec<u8>> {
+    pub(super) fn take(&mut self) -> Vec<Vec<u8>> {
         if self.chunks.is_empty() {
             return Vec::new();
         }
         mem::take(&mut self.chunks).into()
     }
 
-    pub(crate) fn take_one_vec(&mut self) -> Vec<u8> {
+    pub(super) fn take_one_vec(&mut self) -> Vec<u8> {
         let Some(mut first) = self.chunks.pop_front() else {
             return Vec::new();
         };
@@ -114,7 +114,7 @@ impl ChunkVecBuffer {
 }
 
 impl ChunkVecBuffer {
-    pub(crate) fn is_full(&self) -> bool {
+    pub(super) fn is_full(&self) -> bool {
         self.limit
             .map(|limit| self.len() >= limit)
             .unwrap_or_default()
@@ -122,7 +122,7 @@ impl ChunkVecBuffer {
 
     /// Append a copy of `bytes`, perhaps a prefix if
     /// we're near the limit.
-    pub(crate) fn append_limited_copy(&mut self, payload: OutboundPlain<'_>) -> usize {
+    pub(super) fn append_limited_copy(&mut self, payload: OutboundPlain<'_>) -> usize {
         let take = self.apply_limit(payload.len());
         self.append(payload.split_at(take).0.to_vec());
         take
@@ -131,7 +131,7 @@ impl ChunkVecBuffer {
     /// For a proposed append of `len` bytes, how many
     /// bytes should we actually append to adhere to the
     /// currently set `limit`?
-    pub(crate) fn apply_limit(&self, len: usize) -> usize {
+    pub(super) fn apply_limit(&self, len: usize) -> usize {
         let Some(limit) = self.limit else {
             return len;
         };
@@ -142,7 +142,7 @@ impl ChunkVecBuffer {
 
     /// Read data out of this object, writing it into `buf`
     /// and returning how many bytes were written there.
-    pub(crate) fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    pub(super) fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut offs = 0;
 
         while offs < buf.len() && !self.is_empty() {
@@ -155,7 +155,7 @@ impl ChunkVecBuffer {
         Ok(offs)
     }
 
-    pub(crate) fn consume_first_chunk(&mut self, used: usize) {
+    pub(super) fn consume_first_chunk(&mut self, used: usize) {
         // this backs (infallible) `BufRead::consume`, where `used` is
         // user-supplied.
         assert!(
@@ -190,7 +190,7 @@ impl ChunkVecBuffer {
     }
 
     /// Read data out of this object, passing it `wr`
-    pub(crate) fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
+    pub(super) fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         if self.is_empty() {
             return Ok(0);
         }
@@ -221,7 +221,7 @@ impl ChunkVecBuffer {
     }
 
     /// Returns the first contiguous chunk of data, or None if empty.
-    pub(crate) fn chunk(&self) -> Option<&[u8]> {
+    pub(super) fn chunk(&self) -> Option<&[u8]> {
         self.chunks
             .front()
             .map(|chunk| &chunk[self.prefix_used..])

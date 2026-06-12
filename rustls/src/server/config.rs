@@ -192,7 +192,7 @@ pub struct ServerConfig {
     pub require_ems: bool,
 
     /// Provides the current system time
-    pub time_provider: Arc<dyn TimeProvider>,
+    time_provider: Arc<dyn TimeProvider>,
 
     /// How to compress the server's certificate chain.
     ///
@@ -289,7 +289,7 @@ impl ServerConfig {
         &self.provider
     }
 
-    pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
+    pub(super) fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.provider.supports_version(v)
     }
 
@@ -389,15 +389,15 @@ pub trait ServerCredentialResolver: Debug + Send + Sync {
 pub struct ClientHello<'a> {
     pub(super) server_name: Option<Cow<'a, DnsName<'a>>>,
     pub(super) signature_schemes: &'a [SignatureScheme],
-    pub(super) alpn: Option<&'a Vec<ApplicationProtocol<'a>>>,
-    pub(super) server_cert_types: Option<&'a [CertificateType]>,
-    pub(super) client_cert_types: Option<&'a [CertificateType]>,
-    pub(super) cipher_suites: &'a [CipherSuite],
+    alpn: Option<&'a Vec<ApplicationProtocol<'a>>>,
+    server_cert_types: Option<&'a [CertificateType]>,
+    client_cert_types: Option<&'a [CertificateType]>,
+    cipher_suites: &'a [CipherSuite],
     /// The [certificate_authorities] extension, if it was sent by the client.
     ///
     /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
-    pub(super) certificate_authorities: Option<&'a [DistinguishedName]>,
-    pub(super) named_groups: Option<&'a [NamedGroup]>,
+    certificate_authorities: Option<&'a [DistinguishedName]>,
+    named_groups: Option<&'a [NamedGroup]>,
 }
 
 impl<'a> ClientHello<'a> {

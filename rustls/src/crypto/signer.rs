@@ -195,12 +195,12 @@ impl Hash for Credentials {
 #[derive(Debug)]
 pub struct SelectedCredential {
     /// The certificate chain or raw public key.
-    pub identity: Arc<Identity<'static>>,
+    pub(crate) identity: Arc<Identity<'static>>,
     /// The signing key matching the `identity`.
-    pub signer: Box<dyn Signer>,
+    pub(crate) signer: Box<dyn Signer>,
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
-    pub ocsp: Option<Arc<[u8]>>,
+    pub(crate) ocsp: Option<Arc<[u8]>>,
 }
 
 /// A peer's identity, depending on the negotiated certificate type.
@@ -256,7 +256,7 @@ impl<'a> Identity<'a> {
     }
 
     /// Convert this `PeerIdentity` into an owned version.
-    pub fn into_owned(self) -> Identity<'static> {
+    pub(crate) fn into_owned(self) -> Identity<'static> {
         match self {
             Self::X509(id) => Identity::X509(id.into_owned()),
             Self::RawPublicKey(spki) => Identity::RawPublicKey(spki.into_owned()),
@@ -279,7 +279,7 @@ impl<'a> Identity<'a> {
     }
 
     /// Get the public key of this identity as a `SignerPublicKey`.
-    pub fn as_signer(&self) -> SignerPublicKey<'_> {
+    pub(crate) fn as_signer(&self) -> SignerPublicKey<'_> {
         match self {
             Self::X509(cert) => SignerPublicKey::X509(&cert.end_entity),
             Self::RawPublicKey(spki) => SignerPublicKey::RawPublicKey(spki),
@@ -362,7 +362,7 @@ impl<'a> CertificateIdentity<'a> {
     }
 
     /// Convert this `CertificateIdentity` into an owned version.
-    pub fn into_owned(self) -> CertificateIdentity<'static> {
+    fn into_owned(self) -> CertificateIdentity<'static> {
         CertificateIdentity {
             end_entity: self.end_entity.into_owned(),
             intermediates: self
@@ -433,7 +433,7 @@ pub trait Signer: Debug + Send + Sync {
 
 /// Convert a public key and algorithm identifier into [`SubjectPublicKeyInfoDer`].
 ///
-/// In the returned encoding, `alg_id` is used as the `algorithm` field, and `public_key` is
+/// In the returned encoding, `alg_id` is used as the `algorithm` field, and `lic_key` is
 /// wrapped inside an ASN.1 `BIT STRING` and then used as the `subjectPublicKey` field.
 pub fn public_key_to_spki(
     alg_id: &AlgorithmIdentifier,

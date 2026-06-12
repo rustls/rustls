@@ -37,7 +37,7 @@ macro_rules! require_handshake_msg_move(
   )
 );
 
-pub(crate) fn inappropriate_message(
+pub(super) fn inappropriate_message(
     payload: &MessagePayload<'_>,
     content_types: &[ContentType],
 ) -> Error {
@@ -51,7 +51,7 @@ pub(crate) fn inappropriate_message(
     }
 }
 
-pub(crate) fn inappropriate_handshake_message(
+pub(super) fn inappropriate_handshake_message(
     payload: &MessagePayload<'_>,
     content_types: &[ContentType],
     handshake_types: &[HandshakeType],

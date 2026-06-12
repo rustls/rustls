@@ -10,7 +10,7 @@ use crate::enums::ProtocolVersion;
 use crate::error::Error;
 
 /// Implementation of `HkdfExpander` via `hmac::Key`.
-pub struct HkdfExpanderUsingHmac(Box<dyn hmac::Key>);
+struct HkdfExpanderUsingHmac(Box<dyn hmac::Key>);
 
 impl HkdfExpanderUsingHmac {
     fn expand_unchecked(&self, info: &[&[u8]], output: &mut [u8]) {
@@ -150,7 +150,7 @@ pub trait Hkdf: Send + Sync {
     /// `HKDF-Extract(salt, shared_secret)` where `shared_secret` is the result of a key exchange.
     ///
     /// Custom implementations should complete the key exchange by calling
-    /// `kx.complete(peer_pub_key)` and then using this as the input keying material to
+    /// `kx.complete(peer__key)` and then using this as the input keying material to
     /// `HKDF-Extract`.
     ///
     /// A `salt` of `None` should be treated as a sequence of `HashLen` zero bytes.

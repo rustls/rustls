@@ -8,7 +8,7 @@ use crate::enums::ProtocolVersion;
 use crate::suites::{CipherSuiteCommon, Suite, SupportedCipherSuite};
 use crate::version::Tls13Version;
 
-pub(crate) mod key_schedule;
+pub(super) mod key_schedule;
 
 /// A TLS 1.3 cipher suite supported by rustls.
 #[expect(clippy::exhaustive_structs)]
@@ -54,7 +54,7 @@ pub struct Tls13CipherSuite {
 
 impl Tls13CipherSuite {
     /// Can a session using suite self resume from suite prev?
-    pub fn can_resume_from(&self, prev: &'static Self) -> Option<&'static Self> {
+    pub(super) fn can_resume_from(&self, prev: &'static Self) -> Option<&'static Self> {
         (prev.common.hash_provider.algorithm() == self.common.hash_provider.algorithm())
             .then_some(prev)
     }
@@ -77,12 +77,6 @@ impl Tls13CipherSuite {
             Some(quic) => Ord::min(status, quic.fips()),
             None => status,
         }
-    }
-
-    /// Returns a `quic::Suite` for the ciphersuite, if supported.
-    pub fn quic_suite(&'static self) -> Option<crate::quic::Suite> {
-        self.quic
-            .map(|quic| crate::quic::Suite { suite: self, quic })
     }
 }
 
@@ -137,16 +131,16 @@ impl fmt::Debug for Tls13CipherSuite {
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_client_verify_message(handshake_hash: &hash::Output) -> VerifyMessage {
+pub(super) fn construct_client_verify_message(handshake_hash: &hash::Output) -> VerifyMessage {
     VerifyMessage::new(handshake_hash, CLIENT_CONSTANT)
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_server_verify_message(handshake_hash: &hash::Output) -> VerifyMessage {
+pub(super) fn construct_server_verify_message(handshake_hash: &hash::Output) -> VerifyMessage {
     VerifyMessage::new(handshake_hash, SERVER_CONSTANT)
 }
 
-pub(crate) struct VerifyMessage {
+pub(super) struct VerifyMessage {
     buf: [u8; MAX_VERIFY_MSG],
     used: usize,
 }

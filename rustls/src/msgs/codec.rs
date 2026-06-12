@@ -13,7 +13,7 @@ use crate::error::InvalidMessage;
 #[derive(Clone, Eq, PartialEq)]
 pub(crate) struct SizedPayload<'a, L, C: Cardinality = MaybeEmpty> {
     pub(crate) inner: Payload<'a>,
-    pub(crate) _marker: PhantomData<(L, C)>,
+    _marker: PhantomData<(L, C)>,
 }
 
 impl<'a, L, C: Cardinality> SizedPayload<'a, L, C> {
@@ -24,7 +24,7 @@ impl<'a, L, C: Cardinality> SizedPayload<'a, L, C> {
         }
     }
 
-    pub(crate) fn into_vec(self) -> Vec<u8> {
+    pub(super) fn into_vec(self) -> Vec<u8> {
         self.inner.into_owned().into_vec()
     }
 
@@ -214,13 +214,13 @@ impl TlsListElement for SubjectPublicKeyInfoDer<'_> {
 ///
 /// All uses _MUST_ exhaust the iterator, as errors may be delayed
 /// until the last element.
-pub(crate) struct TlsListIter<'a, T: Codec<'a> + TlsListElement + Debug> {
+pub(super) struct TlsListIter<'a, T: Codec<'a> + TlsListElement + Debug> {
     sub: Reader<'a>,
     _t: PhantomData<T>,
 }
 
 impl<'a, T: Codec<'a> + TlsListElement + Debug> TlsListIter<'a, T> {
-    pub(crate) fn new(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+    pub(super) fn new(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let len = T::SIZE_LEN.read(r)?;
         let sub = r.sub(len)?;
         Ok(Self {
@@ -264,8 +264,8 @@ impl<'a, T: Codec<'a> + TlsListElement + Debug> Codec<'a> for Vec<T> {
 }
 
 /// Tracks encoding a length-delimited structure in a single pass.
-pub(crate) struct LengthPrefixedBuffer<'a> {
-    pub(crate) buf: &'a mut Vec<u8>,
+pub(super) struct LengthPrefixedBuffer<'a> {
+    pub(super) buf: &'a mut Vec<u8>,
     len_offset: usize,
     size_len: ListLength,
 }
@@ -275,7 +275,7 @@ impl<'a> LengthPrefixedBuffer<'a> {
     ///
     /// After this, the body of the length-delimited structure should be appended to `LengthPrefixedBuffer::buf`.
     /// The length header is corrected in `LengthPrefixedBuffer::drop`.
-    pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> Self {
+    pub(super) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> Self {
         let len_offset = buf.len();
         buf.extend(match size_len {
             ListLength::NonZeroU8 { .. } => &[0xff][..],
@@ -351,7 +351,7 @@ impl Codec<'_> for u16 {
 
 // Make a distinct type for u24, even though it's a u32 underneath
 #[derive(Debug, Copy, Clone)]
-pub struct U24(pub u32);
+pub(crate) struct U24(pub(super) u32);
 
 #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
 impl From<U24> for usize {
@@ -464,7 +464,7 @@ impl<'a> Reader<'a> {
     /// Attempts to create a new Reader on a sub section of this
     /// readers bytes by taking a slice of the provided `length`
     /// will return `Err(InvalidMessage::MessageTooShort)` if there is not enough bytes
-    pub(crate) fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
+    pub(super) fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
         match self.take(length) {
             Some(bytes) => Ok(Reader::new(bytes)),
             None => Err(InvalidMessage::MessageTooShort),
@@ -503,7 +503,7 @@ impl<'a> Reader<'a> {
         mem::take(&mut self.buffer)
     }
 
-    pub(crate) fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
+    pub(super) fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
         match self.any_left() {
             true => Err(InvalidMessage::TrailingData(name)),
             false => Ok(()),
@@ -516,7 +516,7 @@ impl<'a> Reader<'a> {
     }
 
     /// Number of bytes that are still able to be read.
-    pub(crate) fn left(&self) -> usize {
+    pub(super) fn left(&self) -> usize {
         self.buffer.len()
     }
 }
@@ -558,7 +558,7 @@ pub(crate) enum ListLength {
 }
 
 impl ListLength {
-    pub(crate) fn read(&self, r: &mut Reader<'_>) -> Result<usize, InvalidMessage> {
+    pub(super) fn read(&self, r: &mut Reader<'_>) -> Result<usize, InvalidMessage> {
         Ok(match self {
             Self::NonZeroU8 { empty_error } => match usize::from(u8::read(r)?) {
                 0 => return Err(*empty_error),

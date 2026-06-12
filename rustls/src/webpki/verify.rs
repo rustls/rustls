@@ -53,7 +53,7 @@ pub fn verify_server_name(
 /// Wrapper around internal representation of a parsed certificate.
 ///
 /// This is used in order to avoid parsing twice when specifying custom verification
-pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
+pub struct ParsedCertificate<'a>(pub(super) webpki::EndEntityCert<'a>);
 
 impl ParsedCertificate<'_> {
     /// Get the parsed certificate's SubjectPublicKeyInfo (SPKI)
@@ -162,7 +162,7 @@ pub fn verify_tls13_signature(
 /// and differs only in providing a `Option<webpki::RevocationOptions>` argument. We
 /// can't include this argument in `verify_identity_signed_by_trust_anchor` because
 /// it will leak the webpki types into Rustls' public API.
-pub(crate) fn verify_identity_signed_by_trust_anchor_impl(
+pub(super) fn verify_identity_signed_by_trust_anchor_impl(
     cert: &ParsedCertificate<'_>,
     roots: &RootCertStore,
     intermediates: &[CertificateDer<'_>],

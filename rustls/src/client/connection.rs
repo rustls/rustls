@@ -181,9 +181,9 @@ impl Deref for ClientConnection {
 ///
 /// Create one with [`ClientConfig::connect()`].
 pub struct ClientConnectionBuilder {
-    pub(crate) config: Arc<ClientConfig>,
-    pub(crate) name: ServerName<'static>,
-    pub(crate) alpn_protocols: Option<Vec<ApplicationProtocol<'static>>>,
+    pub(super) config: Arc<ClientConfig>,
+    pub(super) name: ServerName<'static>,
+    pub(super) alpn_protocols: Option<Vec<ApplicationProtocol<'static>>>,
 }
 
 impl ClientConnectionBuilder {
@@ -304,7 +304,7 @@ impl ConnectionCore<ClientSide> {
     }
 }
 
-pub(super) struct EarlyData {
+struct EarlyData {
     state: EarlyDataState,
     left: usize,
 }
@@ -353,7 +353,7 @@ impl EarlyData {
         self.state = EarlyDataState::Accepted;
     }
 
-    pub(super) fn finished(&mut self) {
+    fn finished(&mut self) {
         trace!("EarlyData finished");
         self.state = match self.state {
             EarlyDataState::Accepted => EarlyDataState::AcceptedFinished,

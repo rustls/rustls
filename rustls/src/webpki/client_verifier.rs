@@ -40,10 +40,7 @@ pub struct ClientVerifierBuilder {
 }
 
 impl ClientVerifierBuilder {
-    pub(crate) fn new(
-        roots: Arc<RootCertStore>,
-        supported_algs: WebPkiSupportedAlgorithms,
-    ) -> Self {
+    fn new(roots: Arc<RootCertStore>, supported_algs: WebPkiSupportedAlgorithms) -> Self {
         let root_hint_subjects = roots.subjects();
         Self {
             roots,
@@ -300,7 +297,7 @@ impl WebPkiClientVerifier {
     /// * `anonymous_policy` controls whether client authentication is required, or if anonymous
     ///   clients can connect.
     /// * `supported_algs` specifies which signature verification algorithms should be used.
-    pub(crate) fn new(
+    fn new(
         roots: Arc<RootCertStore>,
         root_hint_subjects: Arc<[DistinguishedName]>,
         crls: Vec<CertRevocationList<'static>>,
@@ -400,7 +397,7 @@ impl ClientVerifier for WebPkiClientVerifier {
 
 /// Controls how the [WebPkiClientVerifier] handles anonymous clients.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AnonymousClientPolicy {
+enum AnonymousClientPolicy {
     /// Clients that do not present a client certificate are allowed.
     Allow,
     /// Clients that do not present a client certificate are denied.

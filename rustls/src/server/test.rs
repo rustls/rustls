@@ -449,7 +449,7 @@ impl ActiveKeyExchange for ActiveFakeFfdhe {
     }
 
     fn pub_key(&self) -> &[u8] {
-        b"ActiveFakeFfdhe pub key"
+        b"ActiveFakeFfdhe  key"
     }
 
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {

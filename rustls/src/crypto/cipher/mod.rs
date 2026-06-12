@@ -293,8 +293,8 @@ impl Nonce {
     }
 
     /// Return the nonce length.
-    #[expect(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
+    #[cfg(test)]
+    fn len(&self) -> usize {
         self.len
     }
 }

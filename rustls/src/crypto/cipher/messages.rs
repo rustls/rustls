@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::{Deref, DerefMut, Range};
 
-use crate::crypto::cipher::EncryptionState;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_opaque_message_header};
@@ -21,7 +20,8 @@ pub struct EncodedMessage<P> {
 
 impl<P> EncodedMessage<P> {
     /// Create a new `EncodedMessage` with the given fields.
-    pub fn new(typ: ContentType, version: ProtocolVersion, payload: P) -> Self {
+    #[cfg(test)]
+    pub(super) fn new(typ: ContentType, version: ProtocolVersion, payload: P) -> Self {
         Self {
             typ,
             version,
@@ -50,7 +50,7 @@ impl<'a> EncodedMessage<Payload<'a>> {
     }
 
     /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
-    pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
+    pub(crate) fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
         EncodedMessage {
             typ: self.typ,
             version: self.version,
@@ -68,7 +68,8 @@ impl<'a> EncodedMessage<Payload<'a>> {
     }
 
     /// Convert into an owned `EncodedMessage<Plain<'static>>`.
-    pub fn into_owned(self) -> Self {
+    #[cfg(test)]
+    pub(crate) fn into_owned(self) -> Self {
         Self {
             typ: self.typ,
             version: self.version,
@@ -153,11 +154,6 @@ impl EncodedMessage<OutboundPlain<'_>> {
             payload,
         }
     }
-
-    #[expect(dead_code)]
-    pub(crate) fn encoded_len(&self, record_layer: &EncryptionState) -> usize {
-        HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
-    }
 }
 
 impl EncodedMessage<OutboundOpaque> {
@@ -225,7 +221,7 @@ impl<'a> OutboundPlain<'a> {
     }
 
     /// Append all bytes to a vector
-    pub fn copy_to_vec(&self, vec: &mut Vec<u8>) {
+    fn copy_to_vec(&self, vec: &mut Vec<u8>) {
         match *self {
             Self::Single(chunk) => vec.extend_from_slice(chunk),
             Self::Multiple { chunks, start, end } => {
@@ -442,11 +438,11 @@ impl<'a> InboundOpaque<'a> {
             .0;
     }
 
-    pub(crate) fn into_inner(self) -> &'a mut [u8] {
+    fn into_inner(self) -> &'a mut [u8] {
         self.0
     }
 
-    pub(crate) fn pop(&mut self) -> Option<u8> {
+    fn pop(&mut self) -> Option<u8> {
         if self.is_empty() {
             return None;
         }

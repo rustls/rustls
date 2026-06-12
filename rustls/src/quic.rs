@@ -560,20 +560,20 @@ impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
 }
 
 #[derive(Default)]
-pub(crate) struct Quic {
-    pub(crate) version: Version,
+struct Quic {
+    version: Version,
     /// QUIC transport parameters received from the peer during the handshake
-    pub(crate) params: Option<Vec<u8>>,
-    pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub(crate) early_secret: Option<OkmBlock>,
-    pub(crate) hs_secrets: Option<Secrets>,
-    pub(crate) traffic_secrets: Option<Secrets>,
+    params: Option<Vec<u8>>,
+    hs_queue: VecDeque<(bool, Vec<u8>)>,
+    early_secret: Option<OkmBlock>,
+    hs_secrets: Option<Secrets>,
+    traffic_secrets: Option<Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
-    pub(crate) returned_traffic_keys: bool,
+    returned_traffic_keys: bool,
 }
 
 impl Quic {
-    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         if let MessagePayload::Alert(_) = m.payload {
             // alerts are sent out-of-band in QUIC mode
             return;
@@ -592,7 +592,7 @@ impl Quic {
             .push_back((must_encrypt, bytes));
     }
 
-    pub(crate) fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
+    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
         while let Some((_, msg)) = self.hs_queue.pop_front() {
             buf.extend_from_slice(&msg);
             if let Some(&(true, _)) = self.hs_queue.front() {
@@ -675,7 +675,7 @@ impl QuicOutput for Quic {
     }
 }
 
-pub(crate) trait QuicOutput {
+pub(super) trait QuicOutput {
     fn transport_parameters(&mut self, params: Vec<u8>);
 
     fn early_secret(&mut self, secret: Option<OkmBlock>);
@@ -705,9 +705,9 @@ pub(crate) trait QuicOutput {
 #[derive(Clone)]
 pub struct Secrets {
     /// Secret used to encrypt packets transmitted by the client
-    pub(crate) client: OkmBlock,
+    client: OkmBlock,
     /// Secret used to encrypt packets transmitted by the server
-    pub(crate) server: OkmBlock,
+    server: OkmBlock,
     /// Cipher suite used with these secrets
     suite: &'static Tls13CipherSuite,
     quic: &'static dyn Algorithm,
@@ -716,7 +716,7 @@ pub struct Secrets {
 }
 
 impl Secrets {
-    pub(crate) fn new(
+    fn new(
         client: OkmBlock,
         server: OkmBlock,
         suite: &'static Tls13CipherSuite,
@@ -741,7 +741,7 @@ impl Secrets {
         keys
     }
 
-    pub(crate) fn update(&mut self) {
+    fn update(&mut self) {
         self.client = hkdf_expand_label_block(
             self.suite
                 .hkdf_provider
@@ -778,7 +778,7 @@ pub struct DirectionalKeys {
 }
 
 impl DirectionalKeys {
-    pub(crate) fn new(
+    fn new(
         suite: &'static Tls13CipherSuite,
         quic: &'static dyn Algorithm,
         secret: &OkmBlock,
@@ -1159,7 +1159,7 @@ impl Version {
     }
 
     /// Key derivation label for packet keys.
-    pub(crate) fn packet_key_label(&self) -> &'static [u8] {
+    fn packet_key_label(&self) -> &'static [u8] {
         match self {
             Self::V1 => b"quic key",
             Self::V2 => b"quicv2 key",
@@ -1167,7 +1167,7 @@ impl Version {
     }
 
     /// Key derivation label for packet "IV"s.
-    pub(crate) fn packet_iv_label(&self) -> &'static [u8] {
+    fn packet_iv_label(&self) -> &'static [u8] {
         match self {
             Self::V1 => b"quic iv",
             Self::V2 => b"quicv2 iv",
@@ -1175,7 +1175,7 @@ impl Version {
     }
 
     /// Key derivation for header keys.
-    pub(crate) fn header_key_label(&self) -> &'static [u8] {
+    fn header_key_label(&self) -> &'static [u8] {
         match self {
             Self::V1 => b"quic hp",
             Self::V2 => b"quicv2 hp",

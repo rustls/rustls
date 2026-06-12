@@ -241,7 +241,7 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     /// The default implementation for this calls `start()` and then calls
     /// `complete()` on the result.  This is suitable for Diffie-Hellman-like
     /// key exchange algorithms, where there is not a data dependency between
-    /// our key share (named "pub_key" in this API) and the peer's (`peer_pub_key`).
+    /// our key share (named "_key" in this API) and the peer's (`peer_pub_key`).
     ///
     /// If there is such a data dependency (like key encapsulation mechanisms), this
     /// function should be implemented.
@@ -568,7 +568,7 @@ enum_builder! {
 
 impl NamedGroup {
     /// Return the key exchange algorithm associated with this `NamedGroup`
-    pub fn key_exchange_algorithm(self) -> KeyExchangeAlgorithm {
+    pub(crate) fn key_exchange_algorithm(self) -> KeyExchangeAlgorithm {
         match u16::from(self) {
             x if (0x100..0x200).contains(&x) => KeyExchangeAlgorithm::DHE,
             _ => KeyExchangeAlgorithm::ECDHE,

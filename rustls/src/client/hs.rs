@@ -93,7 +93,7 @@ pub(crate) struct ExpectServerHello {
     // If this is `None` then we do not support early data.
     pub(super) early_data_key_schedule: Option<(KeyScheduleEarlyClient, bool)>,
     pub(super) offered_key_share: Option<GroupAndKeyShare>,
-    pub(super) suite: Option<SupportedCipherSuite>,
+    suite: Option<SupportedCipherSuite>,
     pub(super) ech_state: Option<EchState>,
     pub(super) ech_status: EchStatus,
     pub(super) done_retry: bool,
@@ -405,7 +405,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-pub(crate) struct ClientHelloInput {
+pub(super) struct ClientHelloInput {
     pub(super) config: Arc<ClientConfig>,
     pub(super) resuming: Option<Retrieved<ClientSessionValue>>,
     pub(super) random: Random,
@@ -414,7 +414,7 @@ pub(crate) struct ClientHelloInput {
     pub(super) protocol: Protocol,
     pub(super) session_id: SessionId,
     pub(super) session_key: ClientSessionKey<'static>,
-    pub(super) prev_ech_ext: Option<EncryptedClientHello>,
+    prev_ech_ext: Option<EncryptedClientHello>,
 }
 
 impl ClientHelloInput {

@@ -13,26 +13,23 @@ use crate::vecbuf::ChunkVecBuffer;
 
 /// The data path from us to the peer.
 pub(crate) struct SendPath {
-    pub(crate) encrypt_state: EncryptionState,
+    pub(super) encrypt_state: EncryptionState,
     pub(crate) may_send_application_data: bool,
-    pub(crate) may_send_half_rtt_data: bool,
+    may_send_half_rtt_data: bool,
     has_sent_fatal_alert: bool,
     /// If we signaled end of stream.
-    pub(crate) has_sent_close_notify: bool,
+    has_sent_close_notify: bool,
     message_fragmenter: MessageFragmenter,
     pub(crate) sendable_tls: ChunkVecBuffer,
     queued_key_update_message: Option<Vec<u8>>,
-    pub(crate) refresh_traffic_keys_pending: bool,
+    refresh_traffic_keys_pending: bool,
     negotiated_version: Option<ProtocolVersion>,
-    pub(crate) tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
+    pub(super) tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
 }
 
 impl SendPath {
     #[expect(dead_code)]
-    pub(crate) fn write_plaintext(
-        &mut self,
-        payload: OutboundPlain<'_>,
-    ) -> Result<Vec<Vec<u8>>, Error> {
+    fn write_plaintext(&mut self, payload: OutboundPlain<'_>) -> Result<Vec<Vec<u8>>, Error> {
         let fragments = self
             .message_fragmenter
             .fragment_payload(
@@ -82,7 +79,7 @@ impl SendPath {
         self.send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
     }
 
-    pub(crate) fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
+    fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
         match level {
             AlertLevel::Fatal if self.has_sent_fatal_alert => return,
             AlertLevel::Fatal => self.has_sent_fatal_alert = true,
@@ -163,7 +160,7 @@ impl SendPath {
     ///
     /// If internal buffers are too small, this function will not accept
     /// all the data.
-    pub(crate) fn buffer_plaintext(
+    pub(super) fn buffer_plaintext(
         &mut self,
         payload: OutboundPlain<'_>,
         sendable_plaintext: &mut ChunkVecBuffer,
@@ -189,13 +186,13 @@ impl SendPath {
         self.send_appdata_encrypt(payload.split_at(len).0)
     }
 
-    pub(crate) fn send_buffered_plaintext(&mut self, plaintext: &mut ChunkVecBuffer) {
+    pub(super) fn send_buffered_plaintext(&mut self, plaintext: &mut ChunkVecBuffer) {
         while let Some(buf) = plaintext.pop() {
             self.send_appdata_encrypt(buf.as_slice().into());
         }
     }
 
-    pub(crate) fn start_outgoing_traffic(&mut self) {
+    pub(super) fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
         debug_assert!(self.encrypt_state.is_encrypting());
     }
@@ -211,7 +208,7 @@ impl SendPath {
             .set_max_fragment_size(new)
     }
 
-    pub(crate) fn ensure_key_update_queued(&mut self) {
+    fn ensure_key_update_queued(&mut self) {
         if self.queued_key_update_message.is_some() {
             return;
         }
@@ -230,13 +227,13 @@ impl SendPath {
     }
 
     /// Trigger a `refresh_traffic_keys` if required.
-    pub(crate) fn maybe_refresh_traffic_keys(&mut self) {
+    pub(super) fn maybe_refresh_traffic_keys(&mut self) {
         if self.refresh_traffic_keys_pending {
             let _ = self.refresh_traffic_keys();
         }
     }
 
-    pub(crate) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+    pub(super) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
         let ks = self.tls13_key_schedule.take();
 
         let Some(mut ks) = ks else {

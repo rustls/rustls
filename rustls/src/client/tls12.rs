@@ -35,7 +35,7 @@ use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
 
 #[expect(private_interfaces)]
-pub(crate) enum Tls12State {
+pub(super) enum Tls12State {
     Certificate(Box<ExpectCertificate>),
     CertificateStatusOrServerKx(Box<ExpectCertificateStatusOrServerKx>),
     ServerKx(Box<ExpectServerKx>),
@@ -48,7 +48,7 @@ pub(crate) enum Tls12State {
 }
 
 impl Tls12State {
-    pub(crate) fn handle<'m>(
+    pub(super) fn handle<'m>(
         self,
         input: Input<'m>,
         output: &mut dyn Output<'m>,

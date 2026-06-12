@@ -26,8 +26,7 @@ use crate::sync::Arc;
 use crate::{ConnectionTrafficSecrets, Error, Tls12CipherSuite, Tls13CipherSuite};
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for testing only.
-#[cfg_attr(not(doc), expect(unreachable_pub))]
-pub const TEST_PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {
+pub(crate) const TEST_PROVIDER: crypto::CryptoProvider = crypto::CryptoProvider {
     tls12_cipher_suites: Cow::Borrowed(&[TLS_TEST_SUITE]),
     tls13_cipher_suites: Cow::Borrowed(&[TLS13_TEST_SUITE]),
     kx_groups: Cow::Borrowed(&[KEY_EXCHANGE_GROUP]),
@@ -165,7 +164,7 @@ mod hash_impl {
 
     pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &Sha256Hmac;
 
-    pub(super) struct Sha256Hmac;
+    struct Sha256Hmac;
 
     impl hmac::Hmac for Sha256Hmac {
         fn with_key(&self, key: &[u8]) -> Box<dyn hmac::Key> {
@@ -204,7 +203,7 @@ mod hash_impl {
 
     pub(crate) const FAKE_HASH: &dyn hash::Hash = &Hash;
 
-    pub(super) struct Hash;
+    struct Hash;
 
     impl hash::Hash for Hash {
         fn start(&self) -> Box<dyn hash::Context> {
@@ -246,7 +245,7 @@ mod hash_impl {
 
     pub(crate) const FAKE_HMAC: &dyn hmac::Hmac = &Hmac;
 
-    pub(super) struct Hmac;
+    struct Hmac;
 
     impl hmac::Hmac for Hmac {
         fn with_key(&self, _key: &[u8]) -> Box<dyn hmac::Key> {

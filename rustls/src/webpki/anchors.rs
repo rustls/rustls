@@ -92,12 +92,12 @@ impl RootCertStore {
     }
 
     /// Return true if there are no certificates.
-    pub fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Say how many certificates are in the container.
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.roots.len()
     }
 }

@@ -34,10 +34,7 @@ pub struct ServerVerifierBuilder {
 }
 
 impl ServerVerifierBuilder {
-    pub(crate) fn new(
-        roots: Arc<RootCertStore>,
-        supported_algs: WebPkiSupportedAlgorithms,
-    ) -> Self {
+    fn new(roots: Arc<RootCertStore>, supported_algs: WebPkiSupportedAlgorithms) -> Self {
         Self {
             roots,
             crls: Vec::new(),
@@ -180,7 +177,7 @@ impl WebPkiServerVerifier {
     ///   are handled when `crls` are provided.
     /// * `supported` is the set of supported algorithms that will be used for
     ///   certificate verification and TLS handshake signature verification.
-    pub(crate) fn new(
+    fn new(
         roots: impl Into<Arc<RootCertStore>>,
         crls: Vec<CertRevocationList<'static>>,
         revocation_check_depth: RevocationCheckDepth,

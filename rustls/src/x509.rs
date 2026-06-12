@@ -3,12 +3,12 @@
 use alloc::vec::Vec;
 
 /// Prepend stuff to `bytes` to put it in a DER SEQUENCE.
-pub(crate) fn wrap_in_sequence(bytes: &[u8]) -> Vec<u8> {
+pub(super) fn wrap_in_sequence(bytes: &[u8]) -> Vec<u8> {
     asn1_wrap(DER_SEQUENCE_TAG, bytes, &[])
 }
 
 /// Prepend stuff to `bytes` to put it in a DER BIT STRING.
-pub(crate) fn wrap_in_bit_string(bytes: &[u8]) -> Vec<u8> {
+pub(super) fn wrap_in_bit_string(bytes: &[u8]) -> Vec<u8> {
     asn1_wrap(DER_BIT_STRING_TAG, &[0u8], bytes)
 }
 

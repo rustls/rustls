@@ -132,7 +132,7 @@ impl AsRef<[u8]> for ApplicationProtocol<'_> {
 enum_builder! {
     /// The `HandshakeType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    pub struct HandshakeType(pub u8);
+    pub struct HandshakeType(pub(super)  u8);
 
     enum HandshakeTypeName {
         HelloRequest => 0x00,
@@ -161,9 +161,9 @@ enum_builder! {
 enum_builder! {
     /// The `ContentType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
-    pub struct ContentType(pub u8);
+    pub struct ContentType(pub(super)  u8);
 
-    pub(crate) enum ContentTypeName {
+    pub(super)  enum ContentTypeName {
         ChangeCipherSpec => 0x14,
         Alert => 0x15,
         Handshake => 0x16,
@@ -210,7 +210,7 @@ enum_builder! {
     ///
     /// [RFC 6091 Section 5]: <https://datatracker.ietf.org/doc/html/rfc6091#section-5>
     /// [RFC 7250 Section 7]: <https://datatracker.ietf.org/doc/html/rfc7250#section-7>
-    pub struct CertificateType(pub u8);
+    pub struct CertificateType(pub(super)  u8);
 
     enum CertificateTypeName {
         X509 => 0x00,
@@ -230,7 +230,7 @@ enum_builder! {
     /// Specified in [RFC 9849 Section 5].
     ///
     /// [RFC 9849 Section 5]: <https://datatracker.ietf.org/doc/html/rfc9849#section-5>
-    pub struct EchClientHelloType(pub u8);
+    pub(super)  struct EchClientHelloType( u8);
 
     enum EchClientHelloTypeName {
         ClientHelloOuter => 0,

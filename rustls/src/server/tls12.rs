@@ -46,7 +46,7 @@ pub(crate) enum Tls12State {
 }
 
 impl Tls12State {
-    pub(crate) fn handle<'m>(
+    pub(super) fn handle<'m>(
         self,
         input: Input<'m>,
         output: &mut dyn Output<'m>,
@@ -933,7 +933,7 @@ fn emit_finished(
     output.send_msg(f, true);
 }
 
-pub(super) struct ExpectFinished {
+struct ExpectFinished {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
     peer_identity: Option<Identity<'static>>,

@@ -3,8 +3,8 @@ use crate::crypto::cipher::{EncodedMessage, OutboundPlain, Payload};
 use crate::enums::{ContentType, ProtocolVersion};
 
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
-pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
-pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
+const PACKET_OVERHEAD: usize = 1 + 2 + 2;
+const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
 
 pub(crate) struct MessageFragmenter {
     max_frag: usize,

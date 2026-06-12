@@ -45,7 +45,7 @@ impl ClientHelloPayload {
         bytes
     }
 
-    pub(crate) fn payload_encode(&self, bytes: &mut Vec<u8>, purpose: Encoding) {
+    fn payload_encode(&self, bytes: &mut Vec<u8>, purpose: Encoding) {
         self.client_version.encode(bytes);
         self.random.encode(bytes);
 
@@ -243,7 +243,7 @@ extension_struct! {
 }
 
 impl ClientExtensions<'_> {
-    pub(crate) fn into_owned(self) -> ClientExtensions<'static> {
+    fn into_owned(self) -> ClientExtensions<'static> {
         let Self {
             server_name,
             certificate_status_request,
@@ -443,14 +443,14 @@ impl Codec<'_> for EncryptedClientHello {
 pub(crate) struct EncryptedClientHelloOuter {
     /// The cipher suite used to encrypt ClientHelloInner. Must match a value from
     /// ECHConfigContents.cipher_suites list.
-    pub cipher_suite: HpkeSymmetricCipherSuite,
+    pub(crate) cipher_suite: HpkeSymmetricCipherSuite,
     /// The ECHConfigContents.key_config.config_id for the chosen ECHConfig.
-    pub config_id: u8,
+    pub(crate) config_id: u8,
     /// The HPKE encapsulated key, used by servers to decrypt the corresponding payload field.
     /// This field is empty in a ClientHelloOuter sent in response to a HelloRetryRequest.
-    pub enc: SizedPayload<'static, u16, MaybeEmpty>,
+    pub(crate) enc: SizedPayload<'static, u16, MaybeEmpty>,
     /// The serialized and encrypted ClientHelloInner structure, encrypted using HPKE.
-    pub payload: SizedPayload<'static, u16, NonEmpty>,
+    pub(crate) payload: SizedPayload<'static, u16, NonEmpty>,
 }
 
 impl Codec<'_> for EncryptedClientHelloOuter {
@@ -484,7 +484,7 @@ pub(crate) enum ServerNamePayload<'a> {
 }
 
 impl ServerNamePayload<'_> {
-    pub(super) fn into_owned(self) -> ServerNamePayload<'static> {
+    fn into_owned(self) -> ServerNamePayload<'static> {
         match self {
             Self::SingleDnsName(d) => ServerNamePayload::SingleDnsName(d.to_owned()),
             Self::IpAddress => ServerNamePayload::IpAddress,
@@ -603,7 +603,7 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum HostNamePayload {
+enum HostNamePayload {
     HostName(DnsName<'static>),
     IpAddress(SizedPayload<'static, u16, NonEmpty>),
     Invalid(SizedPayload<'static, u16, NonEmpty>),
@@ -669,8 +669,8 @@ impl CertificateStatusRequest {
 
 #[derive(Clone, Debug)]
 pub(crate) struct OcspCertificateStatusRequest {
-    pub(crate) responder_ids: Vec<ResponderId>,
-    pub(crate) extensions: SizedPayload<'static, u16, MaybeEmpty>,
+    responder_ids: Vec<ResponderId>,
+    extensions: SizedPayload<'static, u16, MaybeEmpty>,
 }
 
 impl Codec<'_> for OcspCertificateStatusRequest {
@@ -688,7 +688,7 @@ impl Codec<'_> for OcspCertificateStatusRequest {
     }
 }
 
-wrapped_payload!(pub(crate) struct ResponderId, SizedPayload<u16, MaybeEmpty>,);
+wrapped_payload!( struct ResponderId, SizedPayload<u16, MaybeEmpty>,);
 
 /// RFC6066: `ResponderID responder_id_list<0..2^16-1>;`
 impl TlsListElement for ResponderId {

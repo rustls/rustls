@@ -318,7 +318,7 @@ pub struct DigitallySignedStruct {
 }
 
 impl DigitallySignedStruct {
-    pub(crate) fn new(scheme: SignatureScheme, sig: Vec<u8>) -> Self {
+    pub(super) fn new(scheme: SignatureScheme, sig: Vec<u8>) -> Self {
         Self {
             scheme,
             sig: SizedPayload::from(Payload::new(sig)),

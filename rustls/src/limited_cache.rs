@@ -13,7 +13,7 @@ use crate::hash_map::{Entry, HashMap};
 /// storage.
 ///
 /// This is inefficient: it stores keys twice.
-pub(crate) struct LimitedCache<K, V> {
+pub(super) struct LimitedCache<K, V> {
     map: HashMap<K, V>,
 
     // first item is the oldest key
@@ -22,14 +22,14 @@ pub(crate) struct LimitedCache<K, V> {
 
 impl<K: Eq + Hash + Clone + Debug, V> LimitedCache<K, V> {
     /// Create a new LimitedCache with the given rough capacity.
-    pub(crate) fn new(capacity_order_of_magnitude: usize) -> Self {
+    pub(super) fn new(capacity_order_of_magnitude: usize) -> Self {
         Self {
             map: HashMap::with_capacity(capacity_order_of_magnitude),
             oldest: VecDeque::with_capacity(capacity_order_of_magnitude),
         }
     }
 
-    pub(crate) fn insert(&mut self, k: K, v: V) {
+    pub(super) fn insert(&mut self, k: K, v: V) {
         let inserted_new_item = match self.map.entry(k) {
             Entry::Occupied(mut old) => {
                 // Note: does not freshen entry in `oldest`
@@ -53,21 +53,21 @@ impl<K: Eq + Hash + Clone + Debug, V> LimitedCache<K, V> {
         }
     }
 
-    pub(crate) fn get_mut<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<&mut V>
+    pub(super) fn get_mut<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
     {
         self.map.get_mut(k)
     }
 
-    pub(crate) fn get<Q: Hash + Eq + ?Sized>(&self, k: &Q) -> Option<&V>
+    pub(super) fn get<Q: Hash + Eq + ?Sized>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
     {
         self.map.get(k)
     }
 
-    pub(crate) fn remove<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<V>
+    pub(super) fn remove<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<V>
     where
         K: Borrow<Q>,
     {
@@ -87,7 +87,7 @@ impl<K: Eq + Hash + Clone + Debug, V> LimitedCache<K, V> {
 }
 
 impl<K: Eq + Hash + Clone + Debug, V: Default> LimitedCache<K, V> {
-    pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
+    pub(super) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
         let inserted_new_item = match self.map.entry(k) {
             Entry::Occupied(value) => {
                 edit(value.into_mut());

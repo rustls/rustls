@@ -771,7 +771,7 @@ const FAKE_HYBRID: &FakeHybrid = &FakeHybrid {
 const FAKE_KX_GROUP: &dyn SupportedKxGroup = &FakeKeyExchangeGroup(NamedGroup(0xfe01));
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct FakeHybrid {
+struct FakeHybrid {
     name: NamedGroup,
     classical: NamedGroup,
 }

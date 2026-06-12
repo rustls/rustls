@@ -59,7 +59,7 @@ pub struct KernelConnection<Side> {
 }
 
 impl<Side> KernelConnection<Side> {
-    pub(crate) fn new(
+    pub(super) fn new(
         state: Box<dyn KernelState>,
         outputs: ConnectionOutputs,
         tls13_key_schedule: Option<Box<KeyScheduleTrafficSend>>,
