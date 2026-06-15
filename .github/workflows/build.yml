@@ -5,13 +5,13 @@ permissions:
 
 on:
   push:
-    branches: ['main', 'rel-*', 'ci/*']
+    branches: ["main", "rel-*", "ci/*"]
     tags:
-    - '**'
+      - "**"
   pull_request:
   merge_group:
   schedule:
-    - cron: '0 18 * * *'
+    - cron: "0 18 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -284,7 +284,6 @@ jobs:
         with:
           config: .github/typos.toml
 
-
   coverage:
     name: Measure coverage
     runs-on: ubuntu-24.04-arm64-4x
@@ -394,7 +393,7 @@ jobs:
 
   format:
     name: Format
-    runs-on: ubuntu-24.04-arm64-4x
+    runs-on: ubuntu-24.04-arm64-8x
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6
@@ -413,7 +412,7 @@ jobs:
 
   format-unstable:
     name: Format (unstable)
-    runs-on: ubuntu-24.04-arm64-4x
+    runs-on: windows-11-arm64-8x
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6
@@ -434,7 +433,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-24.04-arm64-4x
+    runs-on: ubuntu-26.04-arm64-8x
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6
@@ -525,9 +524,9 @@ jobs:
 
       - name: Use ${{ env.VERSION }}
         run: |
-         path=$(pwd)/$VERSION/built/
-         echo "$path/bin" >> $GITHUB_PATH
-         echo "LD_LIBRARY_PATH=$path/lib" >> $GITHUB_ENV
+          path=$(pwd)/$VERSION/built/
+          echo "$path/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=$path/lib" >> $GITHUB_ENV
 
       - name: openssl version
         run: openssl version
@@ -541,5 +540,5 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
-    - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@v6
+      - uses: EmbarkStudios/cargo-deny-action@v2
