@@ -60,7 +60,7 @@ clap = { version = "4.3.21", features = ["derive", "env"] }
 crabgrind = "0.2"
 criterion = "0.8"
 env_logger = "0.11"
-graviola = "0.3"
+graviola = "0.4"
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
 hickory-resolver = { version = "0.26", features = ["https-aws-lc-rs", "webpki-roots"] }
@@ -81,7 +81,7 @@ regex = "1"
 ring = "0.17"
 rustc-hash = "2"
 rustls-fuzzing-provider = { path = "rustls-fuzzing-provider/" }
-rustls-graviola = { version = "0.3" }
+rustls-graviola = { version = "0.4" }
 rustls-test = { path = "rustls-test/", default-features = false }
 rustls-util = { path = "rustls-util/" }
 serde = { version = "1", features = ["derive"] }
