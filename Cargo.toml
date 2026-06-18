@@ -67,7 +67,7 @@ hickory-resolver = { version = "0.26", features = ["https-aws-lc-rs", "webpki-ro
 hpke-rs = "0.6"
 hpke-rs-crypto = "0.6"
 hpke-rs-rust-crypto = "0.6"
-itertools = "0.14"
+itertools = "0.15"
 log = { version = "0.4.8" }
 macro_rules_attribute = "0.2"
 mio = { version = "1", features = ["net", "os-poll"] }
