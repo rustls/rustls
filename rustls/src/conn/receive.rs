@@ -107,6 +107,15 @@ impl ReceivePath {
                     .other
                     .send
                     .send_alert(AlertLevel::Warning, AlertDescription::CloseNotify);
+            } else if msg.payload.is_empty()
+                && matches!(msg.typ, ContentType::Handshake | ContentType::Alert)
+            {
+                // <https://datatracker.ietf.org/doc/html/rfc8446#section-5.4>
+                output
+                    .other
+                    .send
+                    .send_alert(AlertLevel::Fatal, AlertDescription::UnexpectedMessage);
+                return Err(PeerMisbehaved::EmptyFragment.into());
             }
 
             let hs_aligned = output.recv.deframer.aligned();
