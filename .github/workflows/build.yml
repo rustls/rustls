@@ -120,7 +120,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.85"
+          toolchain: "1.96"
 
       - run: cargo check --locked --lib --all-features -p rustls
 
