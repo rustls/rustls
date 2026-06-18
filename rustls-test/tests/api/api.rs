@@ -564,6 +564,39 @@ fn test_tls13_late_plaintext_alert() {
 }
 
 #[test]
+fn server_rejects_empty_post_handshake_alert_fragment() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    client_config.enable_secret_extraction = true;
+    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    // Encrypt and send an alert record whose (decrypted) fragment is empty.
+    // Per RFC 8446 section 5.4, empty handshake and alert fragments must be rejected.
+    let mut raw_client = RawTls::new_client(client);
+    raw_client.encrypt_and_send(
+        &EncodedMessage {
+            typ: ContentType::Alert,
+            version: ProtocolVersion::TLSv1_3,
+            payload: Payload::new(vec![]),
+        },
+        &mut server,
+    );
+    assert_eq!(
+        server.process_new_packets(),
+        Err(PeerMisbehaved::EmptyFragment.into())
+    );
+
+    // The server signals the misbehavior with a fatal unexpected_message alert.
+    raw_client.receive_and_decrypt(&mut server, |m| {
+        assert_eq!(m.typ, ContentType::Alert);
+        assert_eq!(m.payload, &[2, AlertDescription::UnexpectedMessage.into()]);
+    });
+}
+
+#[test]
 fn client_error_is_sticky() {
     let (mut client, _) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     client
