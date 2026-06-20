@@ -53,7 +53,7 @@ jobs:
           - os: ${{ github.event_name == 'merge_group' && 'macos-latest' }}
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -114,7 +114,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -129,7 +129,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -170,7 +170,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -205,7 +205,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -232,7 +232,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -260,7 +260,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -291,7 +291,7 @@ jobs:
     if: github.event_name != 'merge_group'
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -320,7 +320,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -364,7 +364,7 @@ jobs:
           - aarch64-linux-android
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -385,7 +385,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -397,7 +397,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Install rust toolchain
@@ -416,7 +416,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Install rust nightly toolchain
@@ -437,7 +437,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -456,7 +456,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -476,7 +476,7 @@ jobs:
     runs-on: ubuntu-24.04-arm64-4x
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Install rust toolchain
@@ -499,7 +499,7 @@ jobs:
       VERSION: openssl-3.4.0
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -541,5 +541,5 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: EmbarkStudios/cargo-deny-action@v2
