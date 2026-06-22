@@ -480,26 +480,6 @@ jobs:
           components: clippy
       - run: ./admin/clippy -- --deny warnings
 
-  clippy-nightly:
-    name: Clippy (Nightly)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Install valgrind
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y valgrind
-
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy
-      # Do not deny warnings, as nightly clippy sometimes has false negatives.
-      - run: ./admin/clippy
-
   check-external-types:
     name: Validate external types appearing in public API
     runs-on: ubuntu-latest
