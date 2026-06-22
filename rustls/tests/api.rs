@@ -421,7 +421,7 @@ fn check_read_buf(reader: &mut dyn io::Read, bytes: &[u8]) {
     use std::mem::MaybeUninit;
 
     let mut buf = [MaybeUninit::<u8>::uninit(); 128];
-    let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
+    let mut buf: BorrowedBuf<'_, u8> = buf.as_mut_slice().into();
     reader.read_buf(buf.unfilled()).unwrap();
     assert_eq!(buf.filled(), bytes);
 }
@@ -432,7 +432,7 @@ fn check_read_buf_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
     use std::mem::MaybeUninit;
 
     let mut buf = [MaybeUninit::<u8>::uninit(); 1];
-    let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
+    let mut buf: BorrowedBuf<'_, u8> = buf.as_mut_slice().into();
     let err = reader
         .read_buf(buf.unfilled())
         .unwrap_err();

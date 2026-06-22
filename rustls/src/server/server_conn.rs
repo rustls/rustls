@@ -623,7 +623,7 @@ mod connection {
         }
 
         #[cfg(read_buf)]
-        fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
+        fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_, u8>) -> io::Result<()> {
             self.early_data.read_buf(cursor)
         }
     }
@@ -1167,7 +1167,7 @@ impl EarlyDataState {
     }
 
     #[cfg(read_buf)]
-    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
+    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_, u8>) -> io::Result<()> {
         match self {
             Self::Accepted { received, .. } => received.read_buf(cursor),
             _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
@@ -1276,7 +1276,7 @@ mod tests {
         use core::io::BorrowedBuf;
 
         let mut buf = [0u8; 5];
-        let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
+        let mut buf: BorrowedBuf<'_, u8> = buf.as_mut_slice().into();
         assert_eq!(
             format!("{:?}", EarlyDataState::default().read_buf(buf.unfilled())),
             "Err(Kind(BrokenPipe))"
