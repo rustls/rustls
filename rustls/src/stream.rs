@@ -82,7 +82,7 @@ where
     }
 
     #[cfg(read_buf)]
-    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> Result<()> {
+    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_, u8>) -> Result<()> {
         self.prepare_read()?;
         self.conn.reader().read_buf(cursor)
     }
@@ -225,7 +225,7 @@ where
     }
 
     #[cfg(read_buf)]
-    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> Result<()> {
+    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_, u8>) -> Result<()> {
         self.as_stream().read_buf(cursor)
     }
 }
