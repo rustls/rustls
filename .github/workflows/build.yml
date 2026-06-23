@@ -109,6 +109,12 @@ jobs:
       - name: cargo package --all-features -p rustls
         run: cargo package --all-features -p rustls
 
+      - name: cargo build (32-bit i686; cheap crossbuild test)
+        if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
+        run: |
+            rustup target add i686-unknown-linux-gnu
+            cargo build -p rustls --target i686-unknown-linux-gnu
+
   msrv:
     name: MSRV
     runs-on: ubuntu-24.04-arm64-8x
