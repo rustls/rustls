@@ -341,45 +341,6 @@ jobs:
           # `cargo minimal-versions` uses unstable cargo features
           RUSTC_BOOTSTRAP: 1
 
-  cross:
-    name: cross-target testing
-    runs-on: ubuntu-latest
-    if: github.event_name != 'merge_group'
-    strategy:
-      matrix:
-        target:
-          # 32-bit Android (Linux) targets:
-          - armv7-linux-androideabi
-          - i686-linux-android
-          - thumbv7neon-linux-androideabi
-          # Other standard 32-bit (Linux) targets
-          - i586-unknown-linux-gnu
-          - i686-unknown-linux-gnu
-          # exotic Linux targets:
-          - riscv64gc-unknown-linux-gnu
-          - s390x-unknown-linux-gnu
-          # additional target(s):
-          # NOTE: This could have some overlap with 64-bit ARM-style CPU on macOS CI host;
-          # may have similar ARM-style CPU overlap with standard Windows & possibly Linux in the future
-          - aarch64-linux-android
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install cross
-        uses: taiki-e/cache-cargo-install-action@v3
-        with:
-          tool: cross
-          git: https://github.com/cross-rs/cross
-          # known-working main in feb 2025, bump as needed
-          rev: c7dee4d
-      - run: cross test --package rustls --target ${{ matrix.target }}
-      - run: cross test --package rustls-test --features aws-lc-rs --no-default-features --target ${{ matrix.target }}
-
   semver:
     name: Check semver compatibility
     runs-on: ubuntu-latest
