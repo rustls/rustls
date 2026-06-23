@@ -153,21 +153,12 @@ The MIO client example program is named `tlsclient-mio`.
 Some sample runs:
 
 ```
-$ cargo run --bin tlsclient-mio -- --http mozilla-modern.badssl.com
+$ cargo run --bin tlsclient-mio -- --http jbp.io
 HTTP/1.1 200 OK
-Server: nginx/1.6.2 (Ubuntu)
-Date: Wed, 01 Jun 2016 18:44:00 GMT
-Content-Type: text/html
-Content-Length: 644
+Date: Tue, 23 Jun 2026 16:13:40 GMT
+Content-Type: text/html; charset=utf-8
+Connection: close
 (...)
-```
-
-or
-
-```
-$ cargo run --bin tlsclient-mio -- --http expired.badssl.com
-TLS error: InvalidCertificate(Expired)
-Connection closed
 ```
 
 Run `cargo run --bin tlsclient-mio -- --help` for more options.
