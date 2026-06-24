@@ -156,8 +156,8 @@ impl ConnectionOutputs {
     /// Returns:
     /// - `None` until the handshake reaches the point where this is known.
     /// - `None` for TLS 1.3, where the extension does not apply.
-    /// - `Some(true) for TLS 1.2 if the extension was negotiated.
-    /// - `Some(false) otherwise.
+    /// - `Some(true)` for TLS 1.2 if the extension was negotiated.
+    /// - `Some(false)` otherwise.
     pub fn extended_master_secret(&self) -> Option<bool> {
         self.extended_master_secret
     }
