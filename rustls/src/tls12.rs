@@ -100,7 +100,7 @@ impl Suite for Tls12CipherSuite {
     ///
     /// All TLS1.2 suites support TCP-TLS. No TLS1.2 suites support QUIC.
     fn usable_for_protocol(&self, proto: Protocol) -> bool {
-        matches!(proto, Protocol::Tcp)
+        matches!(proto, Protocol::Tcp | Protocol::Udp)
     }
 
     /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.

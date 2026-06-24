@@ -10,7 +10,7 @@ use crate::conn::{Exporter, ReceivePath, SendOutput, SendPath};
 use crate::crypto::Identity;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::SupportedKxGroup;
-use crate::enums::{ApplicationProtocol, ProtocolVersion};
+use crate::enums::{ApplicationProtocol, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
 use crate::hash_hs::HandshakeHash;
 use crate::msgs::{
@@ -28,11 +28,11 @@ pub struct CommonState {
 }
 
 impl CommonState {
-    pub(crate) fn new(side: Side, fips: FipsStatus) -> Self {
+    pub(crate) fn new(side: Side, fips: FipsStatus, protocol: Protocol) -> Self {
         Self {
             outputs: ConnectionOutputs::default(),
-            send: SendPath::default(),
-            recv: ReceivePath::new(side),
+            send: SendPath::new(protocol),
+            recv: ReceivePath::new(side, protocol),
             fips,
         }
     }
@@ -258,7 +258,7 @@ pub(crate) trait Output<'m> {
 
     fn output(&mut self, ev: OutputEvent<'_>);
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, is_retry_req: bool);
 
     fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
         None
@@ -366,44 +366,63 @@ pub(crate) enum Protocol {
     Tcp,
     /// QUIC, standardized in RFC9001
     Quic(quic::Version),
+    /// Datagram TLS, standardized in RFC6347 (1.2) and RFC9147 (1.3)
+    Udp,
 }
 
 impl Protocol {
     pub(crate) fn is_quic(&self) -> bool {
         matches!(self, Self::Quic(_))
     }
+
+    pub(crate) fn is_dtls(&self) -> bool {
+        matches!(self, Self::Udp)
+    }
+
+    pub(crate) fn wire_protocol_version(&self) -> ProtocolVersion {
+        match self {
+            Self::Tcp | Self::Quic(_) => ProtocolVersion::TLSv1_2,
+            Self::Udp => ProtocolVersion::DTLSv1_2,
+        }
+    }
 }
 
 pub(crate) struct HandshakeFlight<'a, const TLS13: bool> {
     pub(crate) transcript: &'a mut HandshakeHash,
-    body: Vec<u8>,
+    /// The handshake type and encoded payload of each handshake message in the
+    /// flight.
+    handshake_messages: Vec<(HandshakeType, Vec<u8>)>,
+    is_dtls: bool,
 }
 
 impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
-    pub(crate) fn new(transcript: &'a mut HandshakeHash) -> Self {
+    pub(crate) fn new(transcript: &'a mut HandshakeHash, is_dtls: bool) -> Self {
         Self {
             transcript,
-            body: Vec::new(),
+            handshake_messages: Vec::new(),
+            is_dtls,
         }
     }
 
     pub(crate) fn add(&mut self, hs: HandshakeMessagePayload<'_>) {
-        let start_len = self.body.len();
-        hs.encode(&mut self.body);
-        self.transcript
-            .add(&self.body[start_len..]);
+        let encoded = hs.get_encoding();
+        self.transcript.add(&encoded);
+        self.handshake_messages
+            .push((hs.0.handshake_type(), encoded));
     }
 
     pub(crate) fn finish(self, output: &mut dyn Output<'_>) {
         let m = Message {
-            version: match TLS13 {
-                true => ProtocolVersion::TLSv1_3,
-                false => ProtocolVersion::TLSv1_2,
+            version: match (TLS13, self.is_dtls) {
+                (true, true) => ProtocolVersion::DTLSv1_3,
+                (true, false) => ProtocolVersion::TLSv1_3,
+                (false, true) => ProtocolVersion::DTLSv1_2,
+                (false, false) => ProtocolVersion::TLSv1_2,
             },
-            payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
+            payload: MessagePayload::HandshakeFlight(self.handshake_messages),
         };
 
-        output.send_msg(m, TLS13);
+        output.send_msg(m, TLS13, false);
     }
 }
 

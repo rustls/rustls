@@ -281,7 +281,7 @@ impl ConnectionCore<ClientSide> {
         quic: Option<&mut dyn QuicOutput>,
         protocol: Protocol,
     ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client, config.fips());
+        let mut common_state = CommonState::new(Side::Client, config.fips(), protocol);
         common_state
             .send
             .set_max_fragment_size(config.max_fragment_size)?;
@@ -417,7 +417,11 @@ impl ClientConnectionData {
 #[derive(Debug)]
 pub struct ClientSide;
 
-impl crate::conn::SideData for ClientSide {}
+impl crate::conn::SideData for ClientSide {
+    fn label() -> &'static str {
+        "client"
+    }
+}
 
 impl crate::conn::private::Side for ClientSide {
     type Data = ClientConnectionData;

@@ -355,6 +355,7 @@ pub mod compress;
 mod conn;
 /// Crypto provider interface.
 pub mod crypto;
+pub mod datagram;
 pub mod error;
 mod hash_hs;
 mod limited_cache;
@@ -389,6 +390,7 @@ pub use crate::conn::{
 };
 pub use crate::error::Error;
 pub use crate::key_log::{KeyLog, NoKeyLog};
+pub use crate::msgs::EpochAndSequence;
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
 };

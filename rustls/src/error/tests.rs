@@ -8,8 +8,10 @@ use super::{
     AlertDescription, CertRevocationListError, Error, ErrorWithAlert, InconsistentKeys,
     InvalidMessage, OtherError, UnixTime,
 };
-use crate::conn::SendPath;
+use crate::common_state::Protocol;
+use crate::conn::{SendOutput, SendPath};
 use crate::crypto::GetRandomFailed;
+use crate::enums::ProtocolVersion;
 use crate::msgs::test_enum8_display;
 
 #[test]
@@ -316,7 +318,9 @@ fn time_error_mapping() {
 
 #[test]
 fn error_with_alert() {
-    let mut e = ErrorWithAlert::new(Error::NoApplicationProtocol, &mut SendPath::default());
+    let mut send_path = SendPath::new(Protocol::Tcp);
+    send_path.negotiated_version(ProtocolVersion::TLSv1_2);
+    let mut e = ErrorWithAlert::new(Error::NoApplicationProtocol, &mut send_path);
     assert_eq!(
         std::format!("{e:?}"),
         "ErrorWithAlert { error: NoApplicationProtocol, data: 7, .. }"

@@ -4,12 +4,13 @@ use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, Nonce,
-    OutboundOpaque, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
+    AeadKey, EncodedMessage, EncodingContext, InboundOpaque, Iv, MessageDecrypter,
+    MessageEncrypter, Nonce, OutboundOpaque, OutboundPlain, Tls13AeadAlgorithm,
+    UnsupportedOperationError, make_tls13_aad,
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
-use rustls::enums::{ContentType, ProtocolVersion};
+use rustls::enums::ContentType;
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite};
@@ -221,11 +222,16 @@ struct AeadMessageDecrypter {
 impl MessageEncrypter for AeadMessageEncrypter {
     fn encrypt(
         &mut self,
+        encoding_context: EncodingContext,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(
+            encoding_context.header_size(msg.version),
+            total_len,
+            encoding_context,
+        );
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(total_len));
@@ -238,9 +244,7 @@ impl MessageEncrypter for AeadMessageEncrypter {
 
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
-            // Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
-            // protocol version, see https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-            version: ProtocolVersion::TLSv1_2,
+            version: msg.version,
             payload,
         })
     }
@@ -282,11 +286,16 @@ struct GcmMessageEncrypter {
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(
         &mut self,
+        encoding_context: EncodingContext,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(
+            encoding_context.header_size(msg.version),
+            total_len,
+            encoding_context,
+        );
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls13_aad(total_len));
@@ -299,7 +308,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
 
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
-            version: ProtocolVersion::TLSv1_2,
+            version: msg.version,
             payload,
         })
     }
