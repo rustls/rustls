@@ -138,6 +138,16 @@ pub struct ClientConfig {
     /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
     pub require_ems: bool,
 
+    /// Request a specific number of TLS 1.3 session tickets from the server
+    /// via the [RFC 9149] `ticket_request` extension.
+    ///
+    /// Set to `None` to disable sending the extension (the default).
+    ///
+    /// The extension is not sent when resumption is disabled.
+    ///
+    /// [RFC 9149]: https://datatracker.ietf.org/doc/html/rfc9149
+    pub send_ticket_request: Option<TicketRequest>,
+
     /// Items that affect the fundamental security properties of a connection.
     pub(super) domain: SecurityDomain,
 
@@ -605,6 +615,36 @@ pub enum Tls12Resumption {
     SessionIdOrTickets,
 }
 
+/// Number of TLS 1.3 session tickets to request via the [RFC 9149]
+/// `ticket_request` extension.
+///
+/// [RFC 9149]: https://datatracker.ietf.org/doc/html/rfc9149
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TicketRequest {
+    /// Tickets desired when the server negotiates a new connection.
+    ///
+    /// RFC 9149 recommends setting this to the desired number of tickets
+    /// and `resumption_count` to 0 for initial connections.
+    pub new_session_count: u8,
+
+    /// Tickets desired when the server resumes using a presented ticket.
+    ///
+    /// A value of 1 is a good default for primed caches. Clients racing
+    /// multiple connections may want a higher value.
+    pub resumption_count: u8,
+}
+
+impl TicketRequest {
+    /// Create a new `TicketRequest` with the given counts.
+    pub fn new(new_session_count: u8, resumption_count: u8) -> Self {
+        Self {
+            new_session_count,
+            resumption_count,
+        }
+    }
+}
+
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify server certificates.
     ///
@@ -741,6 +781,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             enable_secret_extraction: false,
             enable_early_data: false,
             require_ems,
+            send_ticket_request: None,
             domain: SecurityDomain::new(
                 self.provider,
                 client_auth_cert_resolver,

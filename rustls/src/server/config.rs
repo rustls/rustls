@@ -19,7 +19,7 @@ use crate::crypto::{
 use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
-use crate::msgs::{ClientHelloPayload, ServerNamePayload};
+use crate::msgs::{ClientHelloPayload, ClientTicketRequest, ServerNamePayload};
 use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
@@ -171,7 +171,8 @@ pub struct ServerConfig {
     /// Because TLS1.3 tickets are single-use, this allows
     /// a client to perform multiple resumptions.
     ///
-    /// See [`Tls13Tickets`] for details.
+    /// See [`Tls13Tickets`] for the meaning of the default and maximum
+    /// counts.
     pub send_tls13_tickets: Tls13Tickets,
 
     /// If set to `true`, requires the client to support the extended
@@ -306,6 +307,22 @@ pub struct Tls13Tickets {
 
     /// Upper bound on the number of tickets sent.
     pub max: usize,
+}
+
+impl Tls13Tickets {
+    pub(super) fn resolve(&self, requested: Option<&ClientTicketRequest>, resuming: bool) -> usize {
+        match requested {
+            Some(req) => {
+                let n = usize::from(if resuming {
+                    req.resumption_count
+                } else {
+                    req.new_session_count
+                });
+                Ord::min(n, self.max)
+            }
+            None => self.default,
+        }
+    }
 }
 
 impl Default for Tls13Tickets {

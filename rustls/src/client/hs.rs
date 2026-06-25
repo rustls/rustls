@@ -27,9 +27,9 @@ use crate::kernel::KernelState;
 use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
-    ClientSessionTicket, Compression, EncryptedClientHello, ExtensionType, HandshakeMessagePayload,
-    HandshakePayload, HelloRetryRequest, KeyShareEntry, Message, MessagePayload,
-    PskKeyExchangeModes, Random, ServerHelloPayload, ServerNamePayload, SessionId,
+    ClientSessionTicket, ClientTicketRequest, Compression, EncryptedClientHello, ExtensionType,
+    HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, KeyShareEntry, Message,
+    MessagePayload, PskKeyExchangeModes, Random, ServerHelloPayload, ServerNamePayload, SessionId,
     SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 use crate::sealed::Sealed;
@@ -664,6 +664,13 @@ fn emit_client_hello_for_retry(
             psk_dhe: true,
             psk: false,
         });
+
+        if let Some(ticket_req) = &config.send_ticket_request {
+            exts.ticket_request = Some(ClientTicketRequest {
+                new_session_count: ticket_req.new_session_count,
+                resumption_count: ticket_req.resumption_count,
+            });
+        }
     }
 
     input.hello.offered_cert_compression =

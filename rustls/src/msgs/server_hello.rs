@@ -20,6 +20,24 @@ use crate::crypto::hpke::{HpkeKem, HpkeSymmetricCipherSuite};
 use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::InvalidMessage;
 
+/// RFC 9149: ServerTicketRequestHint extension payload.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ServerTicketRequestHint {
+    pub(crate) expected_count: u8,
+}
+
+impl Codec<'_> for ServerTicketRequestHint {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.expected_count.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            expected_count: u8::read(r)?,
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ServerHelloPayload {
     pub(crate) legacy_version: ProtocolVersion,
@@ -154,6 +172,10 @@ extension_struct! {
         ExtensionType::EarlyData =>
             pub(crate) early_data_ack: Option<()>,
 
+        /// Ticket request hint (RFC9149)
+        ExtensionType::TicketRequest =>
+            pub(crate) ticket_request: Option<ServerTicketRequestHint>,
+
         /// Encrypted inner client hello response (RFC 9849)
         ExtensionType::EncryptedClientHello =>
             pub(crate) encrypted_client_hello_ack: Option<ServerEncryptedClientHello>,
@@ -179,6 +201,7 @@ impl ServerExtensions<'_> {
             selected_version,
             transport_parameters,
             early_data_ack,
+            ticket_request,
             encrypted_client_hello_ack,
             unknown_extensions,
         } = self;
@@ -197,6 +220,7 @@ impl ServerExtensions<'_> {
             selected_version,
             transport_parameters: transport_parameters.map(|x| x.into_owned()),
             early_data_ack,
+            ticket_request,
             encrypted_client_hello_ack,
             unknown_extensions,
         }

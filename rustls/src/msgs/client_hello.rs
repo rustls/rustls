@@ -28,6 +28,27 @@ use crate::log::warn;
 use crate::msgs::enums::ServerNameType;
 use crate::verify::DistinguishedName;
 
+/// RFC 9149: ClientTicketRequest extension payload.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ClientTicketRequest {
+    pub(crate) new_session_count: u8,
+    pub(crate) resumption_count: u8,
+}
+
+impl Codec<'_> for ClientTicketRequest {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.new_session_count.encode(bytes);
+        self.resumption_count.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            new_session_count: u8::read(r)?,
+            resumption_count: u8::read(r)?,
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ClientHelloPayload {
     pub(crate) client_version: ProtocolVersion,
@@ -222,6 +243,10 @@ extension_struct! {
         ExtensionType::TransportParameters =>
             pub(crate) transport_parameters: Option<Payload<'a>>,
 
+        /// Ticket request (RFC9149)
+        ExtensionType::TicketRequest =>
+            pub(crate) ticket_request: Option<ClientTicketRequest>,
+
         /// Secure renegotiation (RFC5746)
         ExtensionType::RenegotiationInfo =>
             pub(crate) renegotiation_info: Option<SizedPayload<'a, u8>>,
@@ -264,6 +289,7 @@ impl ClientExtensions<'_> {
             certificate_authority_names,
             key_shares,
             transport_parameters,
+            ticket_request,
             renegotiation_info,
             encrypted_client_hello,
             encrypted_client_hello_outer,
@@ -294,6 +320,7 @@ impl ClientExtensions<'_> {
             certificate_authority_names,
             key_shares,
             transport_parameters: transport_parameters.map(|x| x.into_owned()),
+            ticket_request,
             renegotiation_info: renegotiation_info.map(|x| x.into_owned()),
             encrypted_client_hello,
             encrypted_client_hello_outer,

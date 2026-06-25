@@ -8,7 +8,7 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 
 use pki_types::FipsStatus;
-use rustls::client::Resumption;
+use rustls::client::{Resumption, TicketRequest};
 use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{CertificateIdentity, Identity};
 use rustls::enums::ProtocolVersion;
@@ -18,7 +18,8 @@ use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnec
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt,
     do_handshake, do_handshake_until_error, make_client_config, make_client_config_with_auth,
-    make_pair, make_pair_for_arc_configs, make_pair_for_configs, make_server_config, transfer,
+    make_client_config_with_kx_groups, make_pair, make_pair_for_arc_configs, make_pair_for_configs,
+    make_server_config, make_server_config_with_kx_groups, transfer,
     webpki_server_verifier_builder,
 };
 
@@ -764,4 +765,161 @@ impl rustls::server::StoresServerSessions for ServerStorage {
     fn can_cache(&self) -> bool {
         true
     }
+}
+
+#[test]
+fn tls13_ticket_request_new_vs_resumed() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let shared_storage = Arc::new(ClientStorage::new());
+
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    client_config.resumption = Resumption::store(shared_storage.clone());
+    client_config.send_ticket_request = Some(TicketRequest::new(3, 1));
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    // default is 2, but the client may request up to 5
+    server_config.send_tls13_tickets = Tls13Tickets { default: 2, max: 5 };
+    let server_config = Arc::new(server_config);
+
+    // new connection: client requests 3 (above the default of 2, below the max of 5)
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+    let ops = shared_storage.ops_and_reset();
+    let ticket_inserts = ops
+        .iter()
+        .filter(|op| matches!(op, ClientStorageOp::InsertTls13Ticket(_)))
+        .count();
+    assert_eq!(ticket_inserts, 3);
+
+    // resumed connection: server sends resumption_count (1)
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+
+    let ops = shared_storage.ops_and_reset();
+    let ticket_inserts = ops
+        .iter()
+        .filter(|op| matches!(op, ClientStorageOp::InsertTls13Ticket(_)))
+        .count();
+    assert_eq!(ticket_inserts, 1);
+}
+
+#[test]
+fn tls13_ticket_request_zero_means_no_tickets() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let shared_storage = Arc::new(ClientStorage::new());
+
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    client_config.resumption = Resumption::store(shared_storage.clone());
+    client_config.send_ticket_request = Some(TicketRequest::new(0, 0));
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    // server would send 5 by default, but the client requests 0
+    server_config.send_tls13_tickets = Tls13Tickets { default: 5, max: 5 };
+    let server_config = Arc::new(server_config);
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+    let ops = shared_storage.ops_and_reset();
+    let ticket_inserts = ops
+        .iter()
+        .filter(|op| matches!(op, ClientStorageOp::InsertTls13Ticket(_)))
+        .count();
+    assert_eq!(ticket_inserts, 0);
+}
+
+#[test]
+fn tls13_ticket_request_capped_by_server() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let shared_storage = Arc::new(ClientStorage::new());
+
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    client_config.resumption = Resumption::store(shared_storage.clone());
+    client_config.send_ticket_request = Some(TicketRequest::new(10, 10));
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    // client requests 10, but the server's max is 3
+    server_config.send_tls13_tickets = Tls13Tickets { default: 2, max: 3 };
+    let server_config = Arc::new(server_config);
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+    let ops = shared_storage.ops_and_reset();
+    let ticket_inserts = ops
+        .iter()
+        .filter(|op| matches!(op, ClientStorageOp::InsertTls13Ticket(_)))
+        .count();
+    assert_eq!(ticket_inserts, 3);
+}
+
+#[test]
+fn tls13_ticket_request_not_sent_when_none() {
+    let provider = provider::DEFAULT_TLS13_PROVIDER;
+    let shared_storage = Arc::new(ClientStorage::new());
+
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
+    client_config.resumption = Resumption::store(shared_storage.clone());
+    client_config.send_ticket_request = None;
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
+    server_config.send_tls13_tickets = Tls13Tickets { default: 4, max: 8 };
+    let server_config = Arc::new(server_config);
+
+    // without the extension, server uses its default (4), not the max (8)
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+    let ops = shared_storage.ops_and_reset();
+    let ticket_inserts = ops
+        .iter()
+        .filter(|op| matches!(op, ClientStorageOp::InsertTls13Ticket(_)))
+        .count();
+    assert_eq!(ticket_inserts, 4);
+}
+
+#[test]
+fn tls13_ticket_request_survives_hello_retry_request() {
+    let provider = provider::DEFAULT_PROVIDER;
+    let shared_storage = Arc::new(ClientStorage::new());
+
+    // client offers secp384r1 first, server only accepts x25519 -> triggers HRR
+    let mut client_config = make_client_config_with_kx_groups(
+        KeyType::Rsa2048,
+        vec![provider::kx_group::SECP384R1, provider::kx_group::X25519],
+        &provider,
+    );
+    client_config.resumption = Resumption::store(shared_storage.clone());
+    client_config.send_ticket_request = Some(TicketRequest::new(2, 1));
+    let client_config = Arc::new(client_config);
+
+    let server_config = Arc::new(make_server_config_with_kx_groups(
+        KeyType::Rsa2048,
+        vec![provider::kx_group::X25519],
+        &provider,
+    ));
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+    assert_eq!(
+        client.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
+    );
+
+    let ops = shared_storage.ops_and_reset();
+    let ticket_inserts = ops
+        .iter()
+        .filter(|op| matches!(op, ClientStorageOp::InsertTls13Ticket(_)))
+        .count();
+    assert_eq!(ticket_inserts, 2);
 }
