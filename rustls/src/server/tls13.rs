@@ -232,7 +232,7 @@ mod client_hello {
                 st.send_tickets = 0;
                 resuming = None;
             } else {
-                st.send_tickets = st.config.send_tls13_tickets;
+                st.send_tickets = st.config.send_tls13_tickets.default;
             }
 
             if let Some((_, session)) = &resuming {

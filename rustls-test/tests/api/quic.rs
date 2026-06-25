@@ -10,6 +10,7 @@ use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
 use rustls::quic::{self, Connection, Side};
+use rustls::server::Tls13Tickets;
 use rustls_test::{
     ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
 };
@@ -689,7 +690,7 @@ fn test_quic_resumption_data_basic() {
             .ticketer()
             .unwrap(),
     );
-    server_config.send_tls13_tickets = 2;
+    server_config.send_tls13_tickets = Tls13Tickets { default: 2, max: 2 };
     let server_config = Arc::new(server_config);
 
     let mut server =
@@ -742,7 +743,7 @@ fn test_quic_resumption_data_0rtt() {
             .ticketer()
             .unwrap(),
     );
-    server_config.send_tls13_tickets = 2;
+    server_config.send_tls13_tickets = Tls13Tickets { default: 2, max: 2 };
     let server_config = Arc::new(server_config);
 
     // QUIC 0-RTT parameters to store in resumption data
