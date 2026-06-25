@@ -11,7 +11,7 @@ use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, Resumption, Tls12Resumption};
-use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
+use crate::crypto::cipher::{EncodedMessage, EncodingContext, MessageEncrypter, Payload};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::FakeKeyExchangeGroup;
 use crate::crypto::tls13::OkmBlock;
@@ -199,8 +199,12 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         )),
     };
 
-    conn.read_tls(&mut hrr.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut hrr
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
     assert_eq!(
         conn.process_new_packets().unwrap_err(),
         PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into()
@@ -240,8 +244,12 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             },
         ))),
     };
-    conn.read_tls(&mut sh.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut sh
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
 
     assert_eq!(
         conn.process_new_packets(),
@@ -314,8 +322,12 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
             },
         ))),
     };
-    conn.read_tls(&mut sh.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut sh
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
     conn.process_new_packets().unwrap();
 
     let cert = Message {
@@ -324,8 +336,12 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
             CertificateChain(vec![CertificateDer::from(&b"does not matter"[..])]),
         ))),
     };
-    conn.read_tls(&mut cert.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut cert
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
     conn.process_new_packets().unwrap();
 
     let server_kx = Message {
@@ -348,8 +364,12 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
             )),
         )),
     };
-    conn.read_tls(&mut server_kx.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut server_kx
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
     conn.process_new_packets().unwrap();
 
     let server_done = Message {
@@ -358,8 +378,12 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
             HandshakePayload::ServerHelloDone,
         )),
     };
-    conn.read_tls(&mut server_done.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut server_done
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
     conn.process_new_packets().unwrap();
 
     assert!(
@@ -517,8 +541,12 @@ fn client_requiring_rpk_receives_server_ee(
             },
         ))),
     };
-    conn.read_tls(&mut sh.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut sh
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
     conn.process_new_packets().unwrap();
 
     let ee = Message {
@@ -530,7 +558,11 @@ fn client_requiring_rpk_receives_server_ee(
 
     let mut encrypter = fake_server_crypto.server_handshake_encrypter();
     let enc_ee = encrypter
-        .encrypt(EncodedMessage::<Payload<'_>>::from(ee).borrow_outbound(), 0)
+        .encrypt(
+            EncodingContext::default(),
+            EncodedMessage::<Payload<'_>>::from(ee).borrow_outbound(),
+            0,
+        )
         .unwrap();
     conn.read_tls(&mut enc_ee.encode().as_slice())
         .unwrap();

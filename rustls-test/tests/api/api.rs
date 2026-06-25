@@ -577,6 +577,7 @@ fn server_rejects_empty_post_handshake_alert_fragment() {
     // Per RFC 8446 section 5.4, empty handshake and alert fragments must be rejected.
     let mut raw_client = RawTls::new_client(client);
     raw_client.encrypt_and_send(
+        false,
         &EncodedMessage {
             typ: ContentType::Alert,
             version: ProtocolVersion::TLSv1_3,
@@ -1496,7 +1497,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
             vec![],
         )),
     };
-    raw_server.encrypt_and_send(&msg, &mut client);
+    raw_server.encrypt_and_send(true, &msg, &mut client);
     let err = client
         .process_new_packets()
         .unwrap_err();
@@ -1523,7 +1524,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
 
     let msg = EncodedMessage {
         typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_3,
+        version: ProtocolVersion::TLSv1_2,
         payload: Payload::new(encoding::handshake_framing(
             HandshakeType::HelloRequest,
             vec![],
@@ -1531,7 +1532,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     };
 
     // one is allowed (and elicits a warning alert)
-    raw_server.encrypt_and_send(&msg, &mut client);
+    raw_server.encrypt_and_send(false, &msg, &mut client);
     client.process_new_packets().unwrap();
     raw_server.receive_and_decrypt(&mut client, |m| {
         assert_eq!(m.version, ProtocolVersion::TLSv1_2);
@@ -1540,7 +1541,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     });
 
     // second is fatal
-    raw_server.encrypt_and_send(&msg, &mut client);
+    raw_server.encrypt_and_send(false, &msg, &mut client);
     assert_eq!(
         client
             .process_new_packets()
@@ -1566,7 +1567,7 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
         version: ProtocolVersion::TLSv1_3,
         payload: Payload::new(encoding::basic_client_hello(vec![])),
     };
-    raw_client.encrypt_and_send(&msg, &mut server);
+    raw_client.encrypt_and_send(false, &msg, &mut server);
     let err = server
         .process_new_packets()
         .unwrap_err();

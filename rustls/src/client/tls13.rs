@@ -474,6 +474,7 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Out
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
+        false,
     );
 }
 
@@ -1267,7 +1268,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn
     };
 
     transcript.add_message(&m);
-    output.send_msg(m, true);
+    output.send_msg(m, true, false);
 }
 
 struct ExpectFinished {

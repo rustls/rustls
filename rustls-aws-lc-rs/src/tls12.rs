@@ -3,9 +3,9 @@ use alloc::boxed::Box;
 use aws_lc_rs::{aead, tls_prf};
 use pki_types::FipsStatus;
 use rustls::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    NONCE_LEN, Nonce, OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, UnsupportedOperationError,
-    make_tls12_aad,
+    AeadKey, EncodedMessage, EncodingContext, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter,
+    MessageEncrypter, NONCE_LEN, Nonce, OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm,
+    UnsupportedOperationError, make_tls12_aad,
 };
 use rustls::crypto::kx::{ActiveKeyExchange, KeyExchangeAlgorithm, SharedSecret};
 use rustls::crypto::tls12::{Prf, PrfSecret};
@@ -304,11 +304,12 @@ impl MessageDecrypter for GcmMessageDecrypter {
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(
         &mut self,
+        encoding_context: EncodingContext,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(msg.version, encoding_context, total_len);
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).to_array()?);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
@@ -390,11 +391,12 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     fn encrypt(
         &mut self,
+        encoding_context: EncodingContext,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
     ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        let mut payload = OutboundOpaque::with_capacity(msg.version, encoding_context, total_len);
 
         let nonce =
             aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).to_array()?);

@@ -258,7 +258,7 @@ pub(crate) trait Output<'m> {
 
     fn output(&mut self, ev: OutputEvent<'_>);
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool);
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, is_retry_req: bool);
 
     fn quic(&mut self) -> Option<&mut dyn QuicOutput> {
         None
@@ -403,7 +403,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
             payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
         };
 
-        output.send_msg(m, TLS13);
+        output.send_msg(m, TLS13, false);
     }
 }
 
