@@ -463,7 +463,7 @@ jobs:
     name: Run openssl-tests
     runs-on: ubuntu-24.04-arm64-8x
     env:
-      VERSION: openssl-3.4.0
+      VERSION: openssl-4.0.1
     steps:
       - name: Checkout sources
         uses: actions/checkout@v7
