@@ -478,7 +478,7 @@ jobs:
         id: cache-openssl
         with:
           path: ${{ env.VERSION }}
-          key: ${{ env.VERSION }}
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ env.VERSION }}
 
       - name: Fetch and build ${{ env.VERSION }}
         if: steps.cache-openssl.outputs.cache-hit != 'true'
