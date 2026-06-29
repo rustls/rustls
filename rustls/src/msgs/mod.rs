@@ -140,7 +140,7 @@ pub mod fuzzing {
 
         //println!("msg = {:#?}", m);
         let enc = EncodedMessage::<Payload<'_>>::from(msg)
-            .into_unencrypted_opaque(EncodingContext::default())
+            .into_unencrypted_opaque(EncodingContext::default().preserve_version(true))
             .encode();
         //println!("data = {:?}", &data[..rdr.used()]);
         assert_eq!(enc, data[..data.len() - rdr.left()]);
