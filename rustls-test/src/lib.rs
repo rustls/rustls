@@ -1351,10 +1351,7 @@ impl RawTls {
         let data = self
             .encrypter
             .encrypt(
-                EncodingContext {
-                    is_initial_handshake,
-                    ..Default::default()
-                },
+                EncodingContext::default().is_initial_handshake(is_initial_handshake),
                 msg.borrow_outbound(),
                 self.enc_seq,
             )

@@ -385,7 +385,7 @@ impl OutboundOpaque {
 
 impl AsRef<[u8]> for OutboundOpaque {
     fn as_ref(&self) -> &[u8] {
-        &&self.payload[HEADER_SIZE..]
+        &self.payload[HEADER_SIZE..]
     }
 }
 
@@ -510,9 +510,11 @@ impl DerefMut for InboundOpaque<'_> {
 }
 
 /// Contextual information for encoding messages.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct EncodingContext {
-    /// Whether this message is the initial handshake message, e.g., not a retry.
+    /// Whether this message is the initial handshake message, e.g., not a
+    /// retry.
     pub is_initial_handshake: bool,
     /// Whether to preserve the version in the EncodedMessage instead of
     /// downgrading for compatibility. This will only be used in tests loading
@@ -521,6 +523,18 @@ pub struct EncodingContext {
 }
 
 impl EncodingContext {
+    /// Set this context's `is_initial_handshake` value.
+    pub fn is_initial_handshake(mut self, is: bool) -> Self {
+        self.is_initial_handshake = is;
+        self
+    }
+
+    /// Set this context's `preserve_version` value.
+    pub fn preserve_version(mut self, preserve: bool) -> Self {
+        self.preserve_version = preserve;
+        self
+    }
+
     /// The size of the record layer header for this message.
     // version parameter is not yet used, but it will matter when we need to
     // distinguish between TLS and DTLS 1.2 and DTLS 1.3, so we wire it up now
@@ -528,15 +542,6 @@ impl EncodingContext {
     fn header_size(&self, _version: ProtocolVersion) -> usize {
         // TLS 1.2 and 1.3 messages use a full record header
         HEADER_SIZE
-    }
-}
-
-impl Default for EncodingContext {
-    fn default() -> Self {
-        Self {
-            is_initial_handshake: false,
-            preserve_version: false,
-        }
     }
 }
 
