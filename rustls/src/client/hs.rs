@@ -830,7 +830,8 @@ fn emit_client_hello_for_retry(
     trace!("Sending ClientHello {ch:#?}");
 
     transcript_buffer.add_message(&ch);
-    output.send_msg(ch, false, retryreq.is_some());
+
+    output.send_msg(ch, false, retryreq.is_none());
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_data_key_schedule =
