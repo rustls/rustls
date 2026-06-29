@@ -102,7 +102,8 @@ mod handshake_test;
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
     use super::{Codec, EncodedMessage, Message, MessageFragmenter, Payload, Reader};
-    use crate::{crypto::cipher::EncodingContext, server::ServerSessionValue};
+    use crate::crypto::cipher::EncodingContext;
+    use crate::server::ServerSessionValue;
 
     pub fn fuzz_fragmenter(data: &[u8]) {
         let mut rdr = Reader::new(data);
