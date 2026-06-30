@@ -74,7 +74,7 @@ mio = { version = "1", features = ["net", "os-poll"] }
 num-bigint = "0.4.4"
 once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
 openssl = "0.10"
-pki-types = { package = "rustls-pki-types", version = "1.14", features = ["alloc"] }
+pki-types = { package = "rustls-pki-types", version = "1.15", features = ["alloc"] }
 rayon = "1.7"
 rcgen = { version = "0.14.4", features = ["pem", "aws_lc_rs"], default-features = false }
 regex = "1"
