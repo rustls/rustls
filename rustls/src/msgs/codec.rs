@@ -350,8 +350,12 @@ impl Codec<'_> for u16 {
 }
 
 // Make a distinct type for u24, even though it's a u32 underneath
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct U24(pub u32);
+
+impl U24 {
+    pub(crate) const MAX: u32 = 0xff_ffff;
+}
 
 #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
 impl From<U24> for usize {
@@ -381,6 +385,22 @@ impl Codec<'_> for u32 {
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         r.take_array("u32")
             .map(|&[a, b, c, d]| Self::from_be_bytes([a, b, c, d]))
+    }
+}
+
+/// A 48 bit unsigned integer.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct U48(pub u64);
+
+impl Codec<'_> for U48 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let be_bytes = u64::to_be_bytes(self.0);
+        bytes.extend_from_slice(&be_bytes[2..]);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        r.take_array("u48")
+            .map(|&[a, b, c, d, e, f]| Self(u64::from_be_bytes([0, 0, a, b, c, d, e, f])))
     }
 }
 

@@ -38,10 +38,10 @@ pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 mod handy;
 pub use handy::ClientSessionMemoryCache;
 
-mod hs;
+pub(crate) mod hs;
 pub(crate) use hs::ClientHandler;
 
-mod tls12;
+pub(crate) mod tls12;
 pub(crate) use tls12::TLS12_HANDLER;
 
 mod tls13;

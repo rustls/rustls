@@ -97,10 +97,10 @@ impl Suite for Tls13CipherSuite {
 
     /// Does this suite support the `proto` protocol?
     ///
-    /// All TLS1.3 suites support TCP-TLS. QUIC support is conditional on `quic` slot.
+    /// All TLS1.3 suites support TCP-TLS and DTLS. QUIC support is conditional on `quic` slot.
     fn usable_for_protocol(&self, proto: Protocol) -> bool {
         match proto {
-            Protocol::Tcp => true,
+            Protocol::Tcp | Protocol::Udp => true,
             Protocol::Quic(_) => self.quic.is_some(),
         }
     }

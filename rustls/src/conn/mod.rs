@@ -876,13 +876,13 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
         self.common.outputs.handle(ev);
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, is_retry_req: bool) {
         match self.quic() {
             Some(quic) => quic.send_msg(m, must_encrypt),
             None => self
                 .common
                 .send
-                .send_msg(m, must_encrypt),
+                .send_msg(m, must_encrypt, is_retry_req),
         }
     }
 
@@ -913,7 +913,10 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 
 /// Data specific to the peer's side (client or server).
 #[expect(private_bounds)]
-pub trait SideData: private::Side {}
+pub trait SideData: private::Side {
+    /// Label identifying this side. Useful for debugging.
+    fn label() -> &'static str;
+}
 
 pub(crate) mod private {
     use super::*;

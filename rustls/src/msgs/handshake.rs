@@ -138,6 +138,15 @@ impl AsRef<[u8]> for SessionId {
     }
 }
 
+impl From<[u8; 32]> for SessionId {
+    fn from(value: [u8; 32]) -> Self {
+        Self {
+            data: value,
+            len: 32,
+        }
+    }
+}
+
 impl fmt::Debug for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         hex(f, &self.data[..self.len])

@@ -31,10 +31,14 @@
 //!
 //! <https://langsec.org/ForWantOfANail-h2hc2014.pdf>
 
+use core::cmp::min_by_key;
+
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::crypto::cipher::{EncodedMessage, MessageError, Payload};
+#[cfg(test)]
+use crate::crypto::cipher::EncodingContext;
+use crate::crypto::cipher::{EncodedMessage, MessageError, OutboundOpaque, Payload};
 use crate::enums::{ContentType, ContentTypeName, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
 use crate::verify::DigitallySignedStruct;
@@ -52,13 +56,14 @@ pub(crate) use client_hello::{
 mod codec;
 pub(crate) use codec::{
     CERTIFICATE_MAX_SIZE_LIMIT, Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
-    TlsListElement, hex, put_u16, put_u64,
+    TlsListElement, U48, hex, put_u16, put_u64,
 };
 use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
 pub(crate) use deframer::{
-    Deframed, Deframer, Delocator, HandshakeAlignedProof, Locator, TlsInputBuffer, VecInput,
+    Deframed, Deframer, Delocator, HandshakeAlignedProof, Locator, SliceInput, TlsInputBuffer,
+    VecInput,
 };
 
 mod enums;
@@ -100,7 +105,7 @@ mod handshake_test;
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
     use super::{Codec, EncodedMessage, Message, MessageFragmenter, Payload, Reader};
-    use crate::server::ServerSessionValue;
+    use crate::{crypto::cipher::EncodingContext, server::ServerSessionValue};
 
     pub fn fuzz_fragmenter(data: &[u8]) {
         let mut rdr = Reader::new(data);
@@ -137,7 +142,7 @@ pub mod fuzzing {
 
         //println!("msg = {:#?}", m);
         let enc = EncodedMessage::<Payload<'_>>::from(msg)
-            .into_unencrypted_opaque()
+            .into_unencrypted_opaque(EncodingContext::default())
             .encode();
         //println!("data = {:?}", &data[..rdr.used()]);
         assert_eq!(enc, data[..data.len() - rdr.left()]);
@@ -156,7 +161,7 @@ pub(crate) struct Message<'a> {
     pub payload: MessagePayload<'a>,
 }
 
-impl Message<'_> {
+impl<'a> Message<'a> {
     pub(crate) fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
         Self {
             version: ProtocolVersion::TLSv1_2,
@@ -194,9 +199,9 @@ impl Message<'_> {
     }
 
     #[cfg(test)]
-    pub(crate) fn into_wire_bytes(self) -> Vec<u8> {
-        EncodedMessage::<Payload<'_>>::from(self)
-            .into_unencrypted_opaque()
+    pub(crate) fn into_wire_bytes(self, encoding_context: &EncodingContext) -> Vec<u8> {
+        EncodedMessage::from(self)
+            .into_unencrypted_opaque(encoding_context.clone())
             .encode()
     }
 
@@ -230,9 +235,16 @@ impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
     }
 }
 
+pub(crate) struct MessageHeader {
+    pub(crate) typ: ContentType,
+    pub(crate) version: ProtocolVersion,
+    pub(crate) epoch_and_sequence: Option<EpochAndSequence>,
+    pub(crate) len: u16,
+}
+
 pub(crate) fn read_opaque_message_header(
     r: &mut Reader<'_>,
-) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
+) -> Result<MessageHeader, MessageError> {
     let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
     // Don't accept any new content-types.
     if ContentTypeName::try_from(typ).is_err() {
@@ -240,10 +252,17 @@ pub(crate) fn read_opaque_message_header(
     }
 
     let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
-    // Accept only versions 0x03XX for any XX.
-    if version.0 & 0xff00 != 0x0300 {
+    // Accept only versions 0x03XX (TLS) or 0xfe (DTLS) for any XX
+    let allowed_version_high_bytes = [0x0300, 0xfe00].as_slice();
+    if !allowed_version_high_bytes.contains(&(version.0 & 0xff00)) {
         return Err(MessageError::UnknownProtocolVersion);
     }
+
+    let epoch_and_sequence = if version.is_datagram_tls() {
+        Some(EpochAndSequence::read(r).map_err(|_| MessageError::TooShortForHeader)?)
+    } else {
+        None
+    };
 
     let len = u16::read(r).map_err(|_| MessageError::TooShortForHeader)?;
 
@@ -259,7 +278,12 @@ pub(crate) fn read_opaque_message_header(
         return Err(MessageError::MessageTooLarge);
     }
 
-    Ok((typ, version, len))
+    Ok(MessageHeader {
+        typ,
+        version,
+        epoch_and_sequence,
+        len,
+    })
 }
 
 #[non_exhaustive]
@@ -271,8 +295,9 @@ pub(crate) enum MessagePayload<'a> {
         parsed: HandshakeMessagePayload<'a>,
         encoded: Payload<'a>,
     },
-    // (potentially) multiple handshake messages, unparsed
-    HandshakeFlight(Payload<'a>),
+    // (potentially) multiple handshake messages, of various handshake types,
+    // encoded
+    HandshakeFlight(Vec<(HandshakeType, Vec<u8>)>),
     ChangeCipherSpec(ChangeCipherSpecPayload),
     ApplicationData(Payload<'a>),
 }
@@ -282,7 +307,11 @@ impl<'a> MessagePayload<'a> {
         match self {
             Self::Alert(x) => x.encode(bytes),
             Self::Handshake { encoded, .. } => bytes.extend(encoded.bytes()),
-            Self::HandshakeFlight(x) => bytes.extend(x.bytes()),
+            Self::HandshakeFlight(encoded) => {
+                for (_, encoded) in encoded {
+                    bytes.extend(encoded)
+                }
+            }
             Self::ChangeCipherSpec(x) => x.encode(bytes),
             Self::ApplicationData(x) => x.encode(bytes),
         }
@@ -320,7 +349,7 @@ impl<'a> MessagePayload<'a> {
     pub(crate) fn content_type(&self) -> ContentType {
         match self {
             Self::Alert(_) => ContentType::Alert,
-            Self::Handshake { .. } | Self::HandshakeFlight(_) => ContentType::Handshake,
+            Self::Handshake { .. } | Self::HandshakeFlight { .. } => ContentType::Handshake,
             Self::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
             Self::ApplicationData(_) => ContentType::ApplicationData,
         }
@@ -334,7 +363,7 @@ impl<'a> MessagePayload<'a> {
                 parsed: parsed.into_owned(),
                 encoded: encoded.into_owned(),
             },
-            HandshakeFlight(x) => HandshakeFlight(x.into_owned()),
+            HandshakeFlight(x) => HandshakeFlight(x),
             ChangeCipherSpec(x) => ChangeCipherSpec(x),
             ApplicationData(x) => ApplicationData(x.into_owned()),
         }
@@ -381,6 +410,10 @@ impl<'a> HandshakeMessagePayload<'a> {
     ) -> Result<Self, InvalidMessage> {
         let typ = HandshakeType::read(r)?;
         let len = U24::read(r)?.0 as usize;
+        if vers.is_datagram_tls() {
+            // Skip the DTLS seq and fragment fields, which are no longer meaningful
+            let _ = r.take(DTLS_HANDSHAKE_HEADER_EXTRA);
+        }
         let mut sub = r.sub(len)?;
 
         let payload = match typ {
@@ -403,7 +436,9 @@ impl<'a> HandshakeMessagePayload<'a> {
                     HandshakePayload::ServerHello(shp)
                 }
             }
-            HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
+            HandshakeType::Certificate
+                if vers == ProtocolVersion::TLSv1_3 || vers == ProtocolVersion::DTLSv1_3 =>
+            {
                 let p = CertificatePayloadTls13::read(&mut sub)?;
                 HandshakePayload::CertificateTls13(p)
             }
@@ -421,7 +456,9 @@ impl<'a> HandshakeMessagePayload<'a> {
             HandshakeType::ClientKeyExchange => {
                 HandshakePayload::ClientKeyExchange(Payload::read(&mut sub))
             }
-            HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
+            HandshakeType::CertificateRequest
+                if vers == ProtocolVersion::TLSv1_3 || vers == ProtocolVersion::DTLSv1_3 =>
+            {
                 let p = CertificateRequestPayloadTls13::read(&mut sub)?;
                 HandshakePayload::CertificateRequestTls13(p)
             }
@@ -435,7 +472,9 @@ impl<'a> HandshakeMessagePayload<'a> {
             HandshakeType::CertificateVerify => {
                 HandshakePayload::CertificateVerify(DigitallySignedStruct::read(&mut sub)?)
             }
-            HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
+            HandshakeType::NewSessionTicket
+                if vers == ProtocolVersion::TLSv1_3 || vers == ProtocolVersion::DTLSv1_3 =>
+            {
                 let p = NewSessionTicketPayloadTls13::read(&mut sub)?;
                 HandshakePayload::NewSessionTicketTls13(p)
             }
@@ -686,8 +725,354 @@ impl Codec<'_> for ChangeCipherSpecPayload {
     }
 }
 
-/// Content type, version and size.
+/// Epoch and sequence numbers used in [Datagram TLS 1.2][1] and [1.3][2].
+///
+/// [1]: https://datatracker.ietf.org/doc/html/rfc6347#section-4.1
+/// [2]: https://datatracker.ietf.org/doc/html/rfc9147#section-4
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EpochAndSequence {
+    /// The epoch number.
+    pub epoch: u16,
+    /// The sequence number of the record within the epoch. This is actually a 48-bit integer.
+    pub sequence_number: U48,
+}
+
+impl EpochAndSequence {
+    /// A new DTLS epoch and sequence number.
+    pub fn new(epoch: u16, seq: u64) -> Self {
+        if seq > 0xffff_ffff_ffff {
+            panic!("sequence number too large");
+        }
+
+        Self {
+            epoch,
+            sequence_number: U48(seq),
+        }
+    }
+
+    /// Concatenate the epoch and sequence number into a 64 bit sequence number suitable for use in
+    /// AEAD or MAC.
+    pub fn as_sequence_number(self) -> u64 {
+        u64::from(self.epoch).unbounded_shl(48) + self.sequence_number.0
+    }
+
+    /// Decompose a 64 bit sequence number into DTLS epoch and sequence numbers.
+    pub fn from_sequence_number(seq: u64) -> Self {
+        let epoch = (seq & 0xffff_0000_0000_0000) >> 48;
+        assert!(epoch <= u16::MAX as u64);
+
+        Self {
+            epoch: epoch as u16,
+            sequence_number: U48(seq & 0x0000_ffff_ffff_ffff),
+        }
+    }
+
+    /// Add the provided increment to the sequence number. Panics if the resulting sequence number
+    /// is too big for a 48 bit integer.
+    pub(crate) fn add_sequence_increment(&self, increment: u64) -> Self {
+        let new_sequence = self
+            .sequence_number
+            .0
+            .checked_add(increment)
+            .unwrap();
+
+        Self::new(self.epoch, new_sequence)
+    }
+}
+
+impl Codec<'_> for EpochAndSequence {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.epoch.encode(bytes);
+        self.sequence_number.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let epoch = u16::read(r)?;
+        let sequence_number = U48::read(r)?;
+
+        Ok(Self {
+            epoch,
+            sequence_number,
+        })
+    }
+}
+
+/// Fragment of a DTLS handshake message used in [Datagram TLS 1.2][1] and [1.3][2].
+///
+/// [1]: https://datatracker.ietf.org/doc/html/rfc6347#section-4.2.2
+/// [2]: https://datatracker.ietf.org/doc/html/rfc9147#section-5.2
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DtlsHandshakeFragment<'a> {
+    pub(crate) msg_type: HandshakeType,
+    /// Total length of the message this is a fragment of. The value will be the same in all
+    /// fragments of a given message.
+    pub(crate) length: U24,
+    /// Sequence number of the message this is a fragment of. The value will be the same in all
+    /// fragments of a given message.
+    pub(crate) message_seq: u16,
+    /// The offset into the original message where this fragment begins. Equivalently, the sum of
+    /// the lengths of all previous fragments.
+    pub(crate) fragment_offset: U24,
+    /// The length of this fragment.
+    pub(crate) fragment_length: U24,
+    /// The fragment. Its length must be equal to `fragment_length`.
+    pub(crate) fragment: Payload<'a>,
+}
+
+impl<'a> Codec<'a> for DtlsHandshakeFragment<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.msg_type.encode(bytes);
+        self.length.encode(bytes);
+        self.message_seq.encode(bytes);
+        self.fragment_offset.encode(bytes);
+        self.fragment_length.encode(bytes);
+        self.fragment.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let msg_type = HandshakeType::read(r)?;
+        let length = U24::read(r)?;
+        let message_seq = u16::read(r)?;
+        let fragment_offset = U24::read(r)?;
+        let fragment_len = U24::read(r)?;
+        let fragment = Payload::Borrowed(
+            r.take(fragment_len.into())
+                .ok_or_else(|| InvalidMessage::MessageTooShort)?,
+        );
+
+        Ok(Self {
+            msg_type,
+            length,
+            message_seq,
+            fragment_offset,
+            fragment_length: fragment_len,
+            fragment,
+        })
+    }
+}
+
+/// DTLS 1.3 unified record header, specified in [RFC 9157 section 4][1].
+///
+/// The first byte of the unified header is a bitfield describing the remainder of the
+/// header:
+///
+///  0 1 2 3 4 5 6 7
+/// +-+-+-+-+-+-+-+-+
+/// |0|0|1|C|S|L|E E|
+/// +-+-+-+-+-+-+-+-+
+///
+///
+/// The first three bits are 001 to distinguish from content type fields of records in other
+/// protocols.
+/// "C" bit indicates whether the connection ID is present in the header. Its length will have
+/// previously been negotiated during the handshake.
+/// "S" bit indicates size of the sequence number.
+/// "L" bit indicates whether length is present.
+/// "EE" bits are low two bits of the epoch of the encrypted message.
+///
+/// [1]: https://datatracker.ietf.org/doc/html/rfc9147#section-4
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct UnifiedHeader {
+    /// An absent connection ID is represented by an empty `Vec`.
+    // TODO: implement connection IDs. We assume them to be 0 length/absent for now.
+    connection_id: Vec<u8>,
+    epoch_and_sequence: EpochAndSequence,
+    length: Option<u16>,
+}
+
+impl UnifiedHeader {
+    const FIXED_BITS: u8 = 0b0010_0000;
+    const FIXED_BITS_MASK: u8 = 0b1110_0000;
+    const C_BIT_MASK: u8 = 0b0001_0000;
+    const S_BIT_MASK: u8 = 0b0000_1000;
+    const L_BIT_MASK: u8 = 0b0000_0100;
+    const EE_BITS_MASK: u8 = 0b0000_0011;
+
+    pub(crate) fn is_unified_header(byte: u8) -> bool {
+        byte & Self::FIXED_BITS_MASK == Self::FIXED_BITS
+    }
+
+    pub(crate) fn from_encoded_message(message: &EncodedMessage<OutboundOpaque>) -> Self {
+        let epoch_and_sequence = message
+            .payload
+            .encoding_context()
+            .epoch_and_sequence
+            .unwrap();
+        // truncate epoch to 2 bits
+        let epoch_low_bits = epoch_and_sequence.epoch & 0b11;
+        // truncate sequence number to 16 bits
+        // TODO(timg): truncate to 8 if it fits?
+        let sequence_number = epoch_and_sequence.sequence_number.0 & 0xffff;
+        Self {
+            connection_id: Vec::new(),
+            epoch_and_sequence: EpochAndSequence::new(epoch_low_bits, sequence_number),
+
+            length: Some(message.payload.as_ref().len() as u16),
+        }
+    }
+
+    pub(crate) fn encoded_length(&self) -> usize {
+        Self::header_length(
+            self.epoch_and_sequence
+                .sequence_number
+                .0,
+        )
+    }
+
+    /// Compute the encoded length of the unified header given the sequnce number, since that value
+    /// can be encoded as either 1 or 2 bytes.
+    pub(crate) fn header_length(sequence_number: u64) -> usize {
+        1 + // bitmask
+            0 + // Assume no connection IDs for now
+            Self::sequence_number_size(sequence_number) + // 1 or 2 bytes for seq
+            // TODO(timg): should we always include length when we send?
+            2
+    }
+
+    /// Encoded size of the sequence number. Smaller values may be encoded in 1 byte.
+    fn sequence_number_size(sequence_number: u64) -> usize {
+        if sequence_number <= u8::MAX as u64 {
+            1
+        } else {
+            2
+        }
+    }
+
+    pub(crate) fn encode(&self, bytes: &mut Vec<u8>) {
+        let sequence_number = self
+            .epoch_and_sequence
+            .sequence_number
+            .0;
+        let mut header = Vec::with_capacity(
+            1 + // bitmask
+            self.connection_id.len() + // Connection ID, may be 0
+            Self::sequence_number_size(sequence_number) +
+            if self.length.is_some() {2} else {0}, // length, if present
+        );
+
+        // Reserve a byte for the bitmask
+        header.push(0);
+
+        let mut bitmask = Self::FIXED_BITS;
+
+        if self.connection_id.len() > 0 {
+            panic!("connection ID should always be empty for now");
+            // bitmask |= Self::C_BIT_MASK;
+            // header.extend(self.connection_id);
+        }
+
+        if Self::sequence_number_size(sequence_number) == 2 {
+            bitmask |= Self::S_BIT_MASK;
+            (sequence_number as u16).encode(&mut header);
+        } else {
+            debug_assert!(sequence_number <= u8::MAX as u64);
+            (sequence_number as u8).encode(&mut header);
+        }
+        if let Some(length) = self.length {
+            bitmask |= Self::L_BIT_MASK;
+            length.encode(&mut header);
+        }
+
+        debug_assert!(self.epoch_and_sequence.epoch <= Self::EE_BITS_MASK as u16);
+        bitmask |= self.epoch_and_sequence.epoch as u8;
+
+        header[0] = bitmask;
+
+        bytes.extend(header);
+    }
+
+    fn read(
+        r: &mut Reader<'_>,
+        latest_epoch_and_sequence: EpochAndSequence,
+    ) -> Result<Self, InvalidMessage> {
+        let bitfield = u8::read(r)?;
+
+        if bitfield & Self::FIXED_BITS_MASK != Self::FIXED_BITS {
+            return Err(InvalidMessage::InvalidDtls13UnifiedHeader);
+        }
+
+        if bitfield & Self::C_BIT_MASK > 0 {
+            panic!("connection ID should never be set for now");
+            // TODO: handle connection ID properly. How do we figure out how long it should be, and
+            // how do we smuggle that information into a call to `Codec::read`?
+        }
+
+        let long_seq = bitfield & Self::S_BIT_MASK > 0;
+        let truncated_sequence_number = if long_seq {
+            // bit set: 2 byte seq
+            u16::read(r)?
+        } else {
+            // bit clear: 1 byte seq
+            u8::read(r)? as u16
+        };
+
+        // Reconstruct the sequence number based on the truncated sequence number in a DTLS 1.3
+        // unified header, per [RFC 9147, section 4.2.2][1]:
+        //
+        // > [I]mplementations SHOULD reconstruct the sequence number by computing the full
+        // > sequence number which is numerically closest to one plus the sequence number of
+        // > the highest successfully deprotected record in the current epoch.
+        //
+        // [1]: https://datatracker.ietf.org/doc/html/rfc9147#section-4.2.2
+        let latest_seq = latest_epoch_and_sequence
+            .sequence_number
+            .0;
+        // First candidate: clear low bits of highest sequence we've seen and OR in the truncated
+        // sequence number
+        let reconstructed_seq_0: u64 = latest_seq
+            & if long_seq {
+                0xffff_ffff_ffff_0000
+            } else {
+                0xffff_ffff_ffff_ff00
+            }
+            | truncated_sequence_number as u64;
+        // Second candidate: flip the first bit to the left of the truncated portion
+        let reconstructed_seq_1 = reconstructed_seq_0 ^ if long_seq { 0x1_ffff } else { 0x0100 };
+        // Use whichever is closest to latest_seq+1
+        let sequence_number = min_by_key(reconstructed_seq_0, reconstructed_seq_1, |v| {
+            v.abs_diff(latest_seq + 1)
+        });
+
+        let length = if bitfield & Self::L_BIT_MASK > 0 {
+            Some(u16::read(r)?)
+        } else {
+            None
+        };
+
+        // Infer the 16 bit epoch based on the low bits in the header and most recently seen epoch.
+        let epoch_low_bits = bitfield & Self::EE_BITS_MASK;
+        let epoch_and_sequence = EpochAndSequence::new(
+            latest_epoch_and_sequence.epoch | (epoch_low_bits as u16),
+            sequence_number,
+        );
+
+        Ok(Self {
+            connection_id: Vec::new(),
+            length,
+            epoch_and_sequence,
+        })
+    }
+}
+
+/// Length of the header on a TLS record. Content type (1 byte), version (2 bytes) and size (2
+/// bytes).
 pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
+
+/// Length of the header on a DTLS 1.2 record. TLS header size plus epoch (2 bytes) and sequence
+/// number (6 bytes).
+pub(crate) const DTLS_12_HEADER_SIZE: usize = HEADER_SIZE + 2 + 6;
+
+/// Length of the header on a handshake message. Does not include the record layer header. Handshake
+/// type (1 byte) and length (3 bytes).
+pub(crate) const HANDSHAKE_HEADER_SIZE: usize = 1 + 3;
+
+/// Extra fields in the handshake header for DTLS: message sequence (2 bytes), fragment offset (3
+/// bytes) and fragment length (3 bytes).
+pub(crate) const DTLS_HANDSHAKE_HEADER_EXTRA: usize = 2 + 3 + 3;
+
+/// Length of the header on a DTLS handshake message. Does not include the record layer header.
+pub(crate) const DTLS_HANDSHAKE_HEADER_SIZE: usize =
+    HANDSHAKE_HEADER_SIZE + DTLS_HANDSHAKE_HEADER_EXTRA;
 
 /// Maximum message payload size.
 /// That's 2^14 payload bytes and a 2KB allowance for ciphertext overheads.
@@ -730,9 +1115,11 @@ mod tests {
                 continue;
             };
 
-            let enc = EncodedMessage::<Payload<'_>>::from(msg)
-                .into_unencrypted_opaque()
-                .encode();
+            let enc = msg.into_wire_bytes(&EncodingContext {
+                payload_is_encrypted: true,
+                preserve_version: true,
+                ..Default::default()
+            });
             assert_eq!(bytes.to_vec(), enc);
             assert_eq!(bytes[..bytes.len() - rd.left()].to_vec(), enc);
         }
@@ -816,7 +1203,11 @@ mod tests {
     fn into_wire_format() {
         // Message::into_wire_bytes() include both message-level and handshake-level headers
         assert_eq!(
-            Message::build_key_update_request().into_wire_bytes(),
+            Message::build_key_update_request().into_wire_bytes(&EncodingContext {
+                payload_is_encrypted: true,
+                preserve_version: true,
+                ..Default::default()
+            }),
             &[0x16, 0x3, 0x4, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
         );
     }
@@ -832,7 +1223,11 @@ mod tests {
             let out = EncodedMessage {
                 typ: m.typ,
                 version: m.version,
-                payload: OutboundOpaque::from(m.payload.bytes()),
+                payload: OutboundOpaque::from_byte_slice(
+                    HEADER_SIZE,
+                    m.payload.bytes(),
+                    EncodingContext::default(),
+                ),
             }
             .encode();
             assert!(!out.is_empty());
