@@ -84,7 +84,7 @@ impl PublicTag {
     /// Build a tag by copying a byte slice.
     ///
     /// The slice can be up to [`Tag::MAX_LEN`] bytes in length.
-    pub(crate) fn new(bytes: &[u8]) -> Self {
+    fn new(bytes: &[u8]) -> Self {
         let mut tag = Self {
             buf: [0u8; Tag::MAX_LEN],
             used: bytes.len(),

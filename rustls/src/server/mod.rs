@@ -13,7 +13,7 @@ pub use crate::webpki::{
     ClientVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
 };
 
-pub(crate) mod config;
+mod config;
 pub use config::{
     CipherSuiteSelector, ClientHello, InvalidSniPolicy, PreferClientOrder, PreferServerOrder,
     ServerConfig, ServerCredentialResolver, StoresServerSessions, WantsServerCert,
@@ -24,7 +24,7 @@ pub use connection::{
     Accepted, AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection, ServerSide,
 };
 
-pub(crate) mod handy;
+mod handy;
 #[cfg(feature = "webpki")]
 pub use handy::ServerNameResolver;
 pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
@@ -80,17 +80,17 @@ impl<'a> Codec<'a> for ServerSessionValue<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct CommonServerSessionValue<'a> {
-    pub(crate) creation_time_sec: u64,
-    pub(crate) sni: Option<DnsName<'a>>,
-    pub(crate) cipher_suite: CipherSuite,
-    pub(crate) peer_identity: Option<Identity<'a>>,
-    pub(crate) alpn: Option<ApplicationProtocol<'a>>,
-    pub(crate) application_data: SizedPayload<'a, u16, MaybeEmpty>,
+struct CommonServerSessionValue<'a> {
+    creation_time_sec: u64,
+    sni: Option<DnsName<'a>>,
+    cipher_suite: CipherSuite,
+    peer_identity: Option<Identity<'a>>,
+    alpn: Option<ApplicationProtocol<'a>>,
+    application_data: SizedPayload<'a, u16, MaybeEmpty>,
 }
 
 impl<'a> CommonServerSessionValue<'a> {
-    pub(crate) fn new(
+    fn new(
         sni: Option<&DnsName<'a>>,
         cipher_suite: CipherSuite,
         peer_identity: Option<Identity<'a>>,
@@ -121,7 +121,7 @@ impl<'a> CommonServerSessionValue<'a> {
         }
     }
 
-    pub(crate) fn can_resume(&self, suite: CipherSuite, sni: Option<&DnsName<'_>>) -> bool {
+    fn can_resume(&self, suite: CipherSuite, sni: Option<&DnsName<'_>>) -> bool {
         // The RFCs underspecify what happens if we try to resume to
         // an unoffered/varying suite.  We merely don't resume in weird cases.
         //
@@ -201,7 +201,7 @@ pub struct ServerSessionKey<'a> {
 }
 
 impl<'a> ServerSessionKey<'a> {
-    pub(crate) fn new(inner: &'a [u8]) -> Self {
+    fn new(inner: &'a [u8]) -> Self {
         Self { inner }
     }
 }

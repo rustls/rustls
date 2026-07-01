@@ -615,7 +615,7 @@ impl<'a> Deref for CertificateChain<'a> {
 extension_struct! {
     pub(crate) struct CertificateExtensions<'a> {
         ExtensionType::StatusRequest =>
-            pub(crate) status: Option<CertificateStatus<'a>>,
+            pub(super)  status: Option<CertificateStatus<'a>>,
     }
 }
 
@@ -654,7 +654,7 @@ impl<'a> Codec<'a> for CertificateExtensions<'a> {
 
 #[derive(Debug)]
 pub(crate) struct CertificateEntry<'a> {
-    pub(crate) cert: CertificateDer<'a>,
+    pub(super) cert: CertificateDer<'a>,
     pub(crate) extensions: CertificateExtensions<'a>,
 }
 
@@ -673,7 +673,7 @@ impl<'a> Codec<'a> for CertificateEntry<'a> {
 }
 
 impl<'a> CertificateEntry<'a> {
-    pub(crate) fn new(cert: CertificateDer<'a>) -> Self {
+    fn new(cert: CertificateDer<'a>) -> Self {
         Self {
             cert,
             extensions: CertificateExtensions::default(),
@@ -928,11 +928,11 @@ pub(crate) struct ServerDhParams {
     /// RFC5246: `opaque dh_g<1..2^16-1>;`
     pub(crate) dh_g: SizedPayload<'static, u16, NonEmpty>,
     /// RFC5246: `opaque dh_Ys<1..2^16-1>;`
-    pub(crate) dh_ys: SizedPayload<'static, u16, NonEmpty>,
+    pub(super) dh_ys: SizedPayload<'static, u16, NonEmpty>,
 }
 
 impl ServerDhParams {
-    pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
+    fn new(kx: &dyn ActiveKeyExchange) -> Self {
         let Some(params) = kx.ffdhe_group() else {
             panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group());
         };
@@ -1011,7 +1011,7 @@ pub(crate) struct ServerKeyExchange {
 }
 
 impl ServerKeyExchange {
-    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
+    fn encode(&self, buf: &mut Vec<u8>) {
         self.params.encode(buf);
         self.dss.encode(buf);
     }
@@ -1296,7 +1296,7 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
 #[derive(Clone, Debug)]
 pub(crate) struct CertificateStatus<'a> {
     /// `opaque OCSPResponse<1..2^24-1>;`
-    pub(crate) ocsp_response: SizedPayload<'a, U24, NonEmpty>,
+    pub(super) ocsp_response: SizedPayload<'a, U24, NonEmpty>,
 }
 
 impl<'a> Codec<'a> for CertificateStatus<'a> {
@@ -1328,7 +1328,7 @@ impl<'a> CertificateStatus<'a> {
         self.ocsp_response.into_vec()
     }
 
-    pub(crate) fn into_owned(self) -> CertificateStatus<'static> {
+    pub(super) fn into_owned(self) -> CertificateStatus<'static> {
         CertificateStatus {
             ocsp_response: self.ocsp_response.into_owned(),
         }

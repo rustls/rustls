@@ -3,8 +3,10 @@
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::fmt;
+#[cfg(test)]
+use core::mem;
 use core::ops::Deref;
-use core::{fmt, mem};
 use std::time::SystemTimeError;
 
 use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
@@ -1310,8 +1312,6 @@ pub enum EncryptedClientHelloError {
     InvalidConfigList,
     /// No compatible ECH configuration.
     NoCompatibleConfig,
-    /// The client configuration has server name indication (SNI) disabled.
-    SniRequired,
 }
 
 /// The server rejected the request to enable Encrypted Client Hello (ECH)
@@ -1565,9 +1565,9 @@ pub use other_error::OtherError;
 
 /// An [`Error`] along with the (possibly encrypted) alert to send to
 /// the peer.
-pub struct ErrorWithAlert {
+pub(crate) struct ErrorWithAlert {
     /// The error
-    pub error: Error,
+    pub(crate) error: Error,
     pub(crate) data: Vec<u8>,
 }
 
@@ -1583,7 +1583,8 @@ impl ErrorWithAlert {
     /// Consume any pending TLS data.
     ///
     /// The returned buffer will contain the alert, if one is to be sent.
-    pub fn take_tls_data(&mut self) -> Option<Vec<u8>> {
+    #[cfg(test)]
+    fn take_tls_data(&mut self) -> Option<Vec<u8>> {
         match self.data.is_empty() {
             true => None,
             false => Some(mem::take(&mut self.data)),

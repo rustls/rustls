@@ -304,10 +304,10 @@ impl Codec<'_> for EchConfigPayload {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct EchConfigContents {
-    pub key_config: HpkeKeyConfig,
-    pub maximum_name_length: u8,
-    pub public_name: DnsName<'static>,
-    pub extensions: Vec<EchConfigExtension>,
+    pub(crate) key_config: HpkeKeyConfig,
+    pub(crate) maximum_name_length: u8,
+    pub(crate) public_name: DnsName<'static>,
+    pub(crate) extensions: Vec<EchConfigExtension>,
 }
 
 impl EchConfigContents {
@@ -356,11 +356,11 @@ impl Codec<'_> for EchConfigContents {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HpkeKeyConfig {
-    pub config_id: u8,
-    pub kem_id: HpkeKem,
+    pub(crate) config_id: u8,
+    pub(crate) kem_id: HpkeKem,
     /// RFC 9849: `opaque HpkePublicKey<1..2^16-1>;`
-    pub public_key: SizedPayload<'static, u16, NonEmpty>,
-    pub symmetric_cipher_suites: Vec<HpkeSymmetricCipherSuite>,
+    pub(crate) public_key: SizedPayload<'static, u16, NonEmpty>,
+    pub(crate) symmetric_cipher_suites: Vec<HpkeSymmetricCipherSuite>,
 }
 
 impl Codec<'_> for HpkeKeyConfig {
@@ -388,7 +388,7 @@ pub(crate) enum EchConfigExtension {
 }
 
 impl EchConfigExtension {
-    pub(crate) fn ext_type(&self) -> ExtensionType {
+    fn ext_type(&self) -> ExtensionType {
         match self {
             Self::Unknown(r) => r.typ,
         }
@@ -426,8 +426,8 @@ impl TlsListElement for EchConfigExtension {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct UnknownExtension {
-    pub(crate) typ: ExtensionType,
-    pub(crate) payload: Payload<'static>,
+    typ: ExtensionType,
+    payload: Payload<'static>,
 }
 
 impl UnknownExtension {

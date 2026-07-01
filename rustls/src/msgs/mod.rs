@@ -43,40 +43,40 @@ use crate::verify::DigitallySignedStruct;
 mod macros;
 
 mod client_hello;
-pub(crate) use client_hello::{
+pub(super) use client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
     EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder, PresharedKeyIdentity,
     PresharedKeyOffer, PskKeyExchangeModes, ServerNamePayload,
 };
 
 mod codec;
-pub(crate) use codec::{
+pub(super) use codec::{
     CERTIFICATE_MAX_SIZE_LIMIT, Codec, ListLength, MaybeEmpty, NonEmpty, Reader, SizedPayload,
     TlsListElement, hex, put_u16, put_u64,
 };
 use codec::{LengthPrefixedBuffer, U24};
 
 mod deframer;
-pub(crate) use deframer::{
+pub(super) use deframer::{
     Deframed, Deframer, Delocator, HandshakeAlignedProof, Locator, TlsInputBuffer, VecInput,
 };
 
 mod enums;
 #[cfg(test)]
-pub(crate) use enums::ECCurveType;
+pub(super) use enums::ECCurveType;
 #[cfg(test)]
-pub(crate) use enums::tests::{test_enum8, test_enum8_display, test_enum16};
-pub(crate) use enums::{
+pub(super) use enums::tests::{test_enum8, test_enum8_display, test_enum16};
+pub(super) use enums::{
     AlertLevel, AlertLevelName, ClientCertificateType, Compression, ExtensionType, KeyUpdateRequest,
 };
 
 mod fragmenter;
-pub(crate) use fragmenter::{MAX_FRAGMENT_LEN, MessageFragmenter};
+pub(super) use fragmenter::{MAX_FRAGMENT_LEN, MessageFragmenter};
 
 #[macro_use]
 mod handshake;
 use handshake::HELLO_RETRY_REQUEST_RANDOM;
-pub(crate) use handshake::{
+pub(super) use handshake::{
     ALL_KEY_EXCHANGE_ALGORITHMS, CertificateChain, CertificatePayloadTls13,
     CertificateRequestExtensions, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, ClientDhParams, ClientEcdhParams, ClientExtensionsInput,
@@ -87,10 +87,10 @@ pub(crate) use handshake::{
     SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 #[cfg(test)]
-pub(crate) use handshake::{EcParameters, NewSessionTicketExtensions, ServerEcdhParams};
+pub(super) use handshake::{EcParameters, NewSessionTicketExtensions, ServerEcdhParams};
 
 mod server_hello;
-pub(crate) use server_hello::{
+pub(super) use server_hello::{
     EchConfigContents, EchConfigPayload, HpkeKeyConfig, ServerExtensions, ServerHelloPayload,
 };
 
@@ -151,13 +151,13 @@ pub mod fuzzing {
 
 /// A message with decoded payload
 #[derive(Debug)]
-pub(crate) struct Message<'a> {
-    pub version: ProtocolVersion,
-    pub payload: MessagePayload<'a>,
+pub(super) struct Message<'a> {
+    pub(super) version: ProtocolVersion,
+    pub(super) payload: MessagePayload<'a>,
 }
 
 impl Message<'_> {
-    pub(crate) fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
+    pub(super) fn build_alert(level: AlertLevel, desc: AlertDescription) -> Self {
         Self {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::Alert(AlertMessagePayload {
@@ -167,7 +167,7 @@ impl Message<'_> {
         }
     }
 
-    pub(crate) fn build_key_update_notify() -> Self {
+    pub(super) fn build_key_update_notify() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -176,7 +176,7 @@ impl Message<'_> {
         }
     }
 
-    pub(crate) fn build_key_update_request() -> Self {
+    pub(super) fn build_key_update_request() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -185,7 +185,7 @@ impl Message<'_> {
         }
     }
 
-    pub(crate) fn into_owned(self) -> Message<'static> {
+    pub(super) fn into_owned(self) -> Message<'static> {
         let Self { version, payload } = self;
         Message {
             version,
@@ -194,13 +194,13 @@ impl Message<'_> {
     }
 
     #[cfg(test)]
-    pub(crate) fn into_wire_bytes(self) -> Vec<u8> {
+    pub(super) fn into_wire_bytes(self) -> Vec<u8> {
         EncodedMessage::<Payload<'_>>::from(self)
             .into_unencrypted_opaque()
             .encode()
     }
 
-    pub(crate) fn handshake_type(&self) -> Option<HandshakeType> {
+    pub(super) fn handshake_type(&self) -> Option<HandshakeType> {
         match &self.payload {
             MessagePayload::Handshake { parsed, .. } => Some(parsed.0.handshake_type()),
             _ => None,
@@ -230,7 +230,7 @@ impl<'a> TryFrom<&'a EncodedMessage<Payload<'a>>> for Message<'a> {
     }
 }
 
-pub(crate) fn read_opaque_message_header(
+pub(super) fn read_opaque_message_header(
     r: &mut Reader<'_>,
 ) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
     let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
@@ -264,7 +264,7 @@ pub(crate) fn read_opaque_message_header(
 
 #[non_exhaustive]
 #[derive(Debug)]
-pub(crate) enum MessagePayload<'a> {
+pub(super) enum MessagePayload<'a> {
     Alert(AlertMessagePayload),
     // one handshake message, parsed
     Handshake {
@@ -278,7 +278,7 @@ pub(crate) enum MessagePayload<'a> {
 }
 
 impl<'a> MessagePayload<'a> {
-    pub(crate) fn encode(&self, bytes: &mut Vec<u8>) {
+    pub(super) fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Self::Alert(x) => x.encode(bytes),
             Self::Handshake { encoded, .. } => bytes.extend(encoded.bytes()),
@@ -288,14 +288,14 @@ impl<'a> MessagePayload<'a> {
         }
     }
 
-    pub(crate) fn handshake(parsed: HandshakeMessagePayload<'a>) -> Self {
+    pub(super) fn handshake(parsed: HandshakeMessagePayload<'a>) -> Self {
         Self::Handshake {
             encoded: Payload::new(parsed.get_encoding()),
             parsed,
         }
     }
 
-    pub(crate) fn new(
+    fn new(
         typ: ContentType,
         vers: ProtocolVersion,
         payload: &'a [u8],
@@ -317,7 +317,7 @@ impl<'a> MessagePayload<'a> {
         }
     }
 
-    pub(crate) fn content_type(&self) -> ContentType {
+    pub(super) fn content_type(&self) -> ContentType {
         match self {
             Self::Alert(_) => ContentType::Alert,
             Self::Handshake { .. } | Self::HandshakeFlight(_) => ContentType::Handshake,
@@ -326,7 +326,7 @@ impl<'a> MessagePayload<'a> {
         }
     }
 
-    pub(crate) fn into_owned(self) -> MessagePayload<'static> {
+    fn into_owned(self) -> MessagePayload<'static> {
         use MessagePayload::*;
         match self {
             Alert(x) => Alert(x),
@@ -362,7 +362,7 @@ impl From<Message<'_>> for EncodedMessage<Payload<'_>> {
 }
 
 #[derive(Debug)]
-pub(crate) struct HandshakeMessagePayload<'a>(pub(crate) HandshakePayload<'a>);
+pub(super) struct HandshakeMessagePayload<'a>(pub(super) HandshakePayload<'a>);
 
 impl<'a> Codec<'a> for HandshakeMessagePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -375,10 +375,7 @@ impl<'a> Codec<'a> for HandshakeMessagePayload<'a> {
 }
 
 impl<'a> HandshakeMessagePayload<'a> {
-    pub(crate) fn read_version(
-        r: &mut Reader<'a>,
-        vers: ProtocolVersion,
-    ) -> Result<Self, InvalidMessage> {
+    fn read_version(r: &mut Reader<'a>, vers: ProtocolVersion) -> Result<Self, InvalidMessage> {
         let typ = HandshakeType::read(r)?;
         let len = U24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
@@ -472,14 +469,14 @@ impl<'a> HandshakeMessagePayload<'a> {
             .map(|_| Self(payload))
     }
 
-    pub(crate) fn encoding_for_binder_signing(&self) -> Vec<u8> {
+    pub(super) fn encoding_for_binder_signing(&self) -> Vec<u8> {
         let mut ret = self.get_encoding();
         let ret_len = ret.len() - self.total_binder_length();
         ret.truncate(ret_len);
         ret
     }
 
-    pub(crate) fn total_binder_length(&self) -> usize {
+    pub(super) fn total_binder_length(&self) -> usize {
         match &self.0 {
             HandshakePayload::ClientHello(ch) => match &ch.preshared_key_offer {
                 Some(offer) => {
@@ -495,7 +492,7 @@ impl<'a> HandshakeMessagePayload<'a> {
         }
     }
 
-    pub(crate) fn payload_encode(&self, bytes: &mut Vec<u8>, encoding: Encoding) {
+    pub(super) fn payload_encode(&self, bytes: &mut Vec<u8>, encoding: Encoding) {
         // output type, length, and encoded payload
         self.0
             .wire_handshake_type()
@@ -522,17 +519,17 @@ impl<'a> HandshakeMessagePayload<'a> {
         }
     }
 
-    pub(crate) fn build_handshake_hash(hash: &[u8]) -> Self {
+    pub(super) fn build_handshake_hash(hash: &[u8]) -> Self {
         Self(HandshakePayload::MessageHash(Payload::new(hash.to_vec())))
     }
 
-    pub(crate) fn into_owned(self) -> HandshakeMessagePayload<'static> {
+    fn into_owned(self) -> HandshakeMessagePayload<'static> {
         HandshakeMessagePayload(self.0.into_owned())
     }
 }
 
 #[derive(Debug)]
-pub(crate) enum HandshakePayload<'a> {
+pub(super) enum HandshakePayload<'a> {
     HelloRequest,
     ClientHello(ClientHelloPayload),
     ServerHello(ServerHelloPayload),
@@ -584,7 +581,7 @@ impl HandshakePayload<'_> {
         }
     }
 
-    pub(crate) fn handshake_type(&self) -> HandshakeType {
+    pub(super) fn handshake_type(&self) -> HandshakeType {
         use self::HandshakePayload::*;
         match self {
             HelloRequest => HandshakeType::HelloRequest,
@@ -648,9 +645,9 @@ impl HandshakePayload<'_> {
 }
 
 #[derive(Debug)]
-pub(crate) struct AlertMessagePayload {
-    pub level: AlertLevel,
-    pub description: AlertDescription,
+pub(super) struct AlertMessagePayload {
+    pub(super) level: AlertLevel,
+    pub(super) description: AlertDescription,
 }
 
 impl Codec<'_> for AlertMessagePayload {
@@ -668,7 +665,7 @@ impl Codec<'_> for AlertMessagePayload {
 }
 
 #[derive(Debug)]
-pub(crate) struct ChangeCipherSpecPayload;
+pub(super) struct ChangeCipherSpecPayload;
 
 impl Codec<'_> for ChangeCipherSpecPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -687,11 +684,11 @@ impl Codec<'_> for ChangeCipherSpecPayload {
 }
 
 /// Content type, version and size.
-pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
+pub(super) const HEADER_SIZE: usize = 1 + 2 + 2;
 
 /// Maximum message payload size.
 /// That's 2^14 payload bytes and a 2KB allowance for ciphertext overheads.
-pub(crate) const MAX_PAYLOAD: u16 = 16_384 + 2048;
+const MAX_PAYLOAD: u16 = 16_384 + 2048;
 
 #[cfg(test)]
 mod tests {

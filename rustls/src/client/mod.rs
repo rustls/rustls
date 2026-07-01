@@ -59,20 +59,20 @@ pub mod danger {
 #[cfg(test)]
 mod test;
 
-pub(crate) struct Retrieved<T> {
-    pub(crate) value: T,
+struct Retrieved<T> {
+    value: T,
     retrieved_at: UnixTime,
 }
 
 impl<T> Retrieved<T> {
-    pub(crate) fn new(value: T, retrieved_at: UnixTime) -> Self {
+    fn new(value: T, retrieved_at: UnixTime) -> Self {
         Self {
             value,
             retrieved_at,
         }
     }
 
-    pub(crate) fn map<M>(&self, f: impl FnOnce(&T) -> Option<&M>) -> Option<Retrieved<&M>> {
+    fn map<M>(&self, f: impl FnOnce(&T) -> Option<&M>) -> Option<Retrieved<&M>> {
         Some(Retrieved {
             value: f(&self.value)?,
             retrieved_at: self.retrieved_at,
@@ -81,7 +81,7 @@ impl<T> Retrieved<T> {
 }
 
 impl Retrieved<&Tls13Session> {
-    pub(crate) fn obfuscated_ticket_age(&self) -> u32 {
+    fn obfuscated_ticket_age(&self) -> u32 {
         let age_secs = self
             .retrieved_at
             .as_secs()
@@ -92,7 +92,7 @@ impl Retrieved<&Tls13Session> {
 }
 
 impl<T: Deref<Target = ClientSessionCommon>> Retrieved<T> {
-    pub(crate) fn has_expired(&self) -> bool {
+    fn has_expired(&self) -> bool {
         let common = &*self.value;
         common.lifetime != Duration::ZERO
             && common
@@ -115,9 +115,9 @@ impl<T> Deref for Retrieved<T> {
 pub struct Tls13Session {
     suite: &'static Tls13CipherSuite,
     secret: Zeroizing<SizedPayload<'static, u8>>,
-    pub(crate) age_add: u32,
+    age_add: u32,
     max_early_data_size: u32,
-    pub(crate) common: ClientSessionCommon,
+    common: ClientSessionCommon,
     quic_params: SizedPayload<'static, u16, MaybeEmpty>,
 }
 
@@ -142,7 +142,7 @@ impl Tls13Session {
         })
     }
 
-    pub(crate) fn new(
+    fn new(
         ticket: &NewSessionTicketPayloadTls13,
         input: Tls13ClientSessionInput,
         secret: &[u8],
@@ -205,21 +205,21 @@ impl Deref for Tls13Session {
 
 /// A "template" for future TLS1.3 client session values.
 #[derive(Clone)]
-pub(crate) struct Tls13ClientSessionInput {
-    pub(crate) suite: &'static Tls13CipherSuite,
-    pub(crate) peer_identity: Identity<'static>,
-    pub(crate) quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
+struct Tls13ClientSessionInput {
+    suite: &'static Tls13CipherSuite,
+    peer_identity: Identity<'static>,
+    quic_params: Option<SizedPayload<'static, u16, MaybeEmpty>>,
 }
 
 /// A stored TLS 1.2 client session value.
 #[derive(Debug, Clone)]
 pub struct Tls12Session {
     suite: &'static Tls12CipherSuite,
-    pub(crate) session_id: SessionId,
+    session_id: SessionId,
     master_secret: Zeroizing<[u8; 48]>,
     extended_ms: bool,
     #[doc(hidden)]
-    pub(crate) common: ClientSessionCommon,
+    common: ClientSessionCommon,
 }
 
 impl Tls12Session {
@@ -246,7 +246,7 @@ impl Tls12Session {
         })
     }
 
-    pub(crate) fn new(
+    fn new(
         suite: &'static Tls12CipherSuite,
         session_id: SessionId,
         ticket: Arc<SizedPayload<'static, u16, MaybeEmpty>>,
@@ -292,14 +292,14 @@ impl Deref for Tls12Session {
 /// Common data for stored client sessions.
 #[derive(Debug, Clone)]
 pub struct ClientSessionCommon {
-    pub(crate) ticket: Arc<SizedPayload<'static, u16>>,
-    pub(crate) epoch: u64,
+    ticket: Arc<SizedPayload<'static, u16>>,
+    epoch: u64,
     lifetime: Duration,
     peer_identity: Arc<Identity<'static>>,
 }
 
 impl ClientSessionCommon {
-    pub(crate) fn new(
+    fn new(
         ticket: Arc<SizedPayload<'static, u16>>,
         time_now: UnixTime,
         lifetime: Duration,
@@ -313,11 +313,11 @@ impl ClientSessionCommon {
         }
     }
 
-    pub(crate) fn peer_identity(&self) -> &Identity<'static> {
+    fn peer_identity(&self) -> &Identity<'static> {
         &self.peer_identity
     }
 
-    pub(crate) fn ticket(&self) -> &[u8] {
+    fn ticket(&self) -> &[u8] {
         (*self.ticket).bytes()
     }
 }

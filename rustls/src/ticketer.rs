@@ -12,7 +12,7 @@ use crate::error::Error;
 /// 'previous' ticketer.  It creates a new ticketer every so
 /// often, demoting the current ticketer.
 pub struct TicketRotator {
-    pub(crate) generator: fn() -> Result<Box<dyn TicketProducer>, Error>,
+    generator: fn() -> Result<Box<dyn TicketProducer>, Error>,
     lifetime: Duration,
     state: RwLock<TicketRotatorState>,
 }
@@ -101,10 +101,7 @@ impl TicketRotator {
     ///
     /// For efficiency, this is also responsible for locking the state rwlock
     /// and returning it for read.
-    pub(crate) fn maybe_roll(
-        &self,
-        now: Instant,
-    ) -> Option<RwLockReadGuard<'_, TicketRotatorState>> {
+    fn maybe_roll(&self, now: Instant) -> Option<RwLockReadGuard<'_, TicketRotatorState>> {
         // Fast, common, & read-only path in case we do not need to switch
         // to the next ticketer yet
         {
@@ -169,7 +166,7 @@ impl core::fmt::Debug for TicketRotator {
 }
 
 #[derive(Debug)]
-pub(crate) struct TicketRotatorState {
+struct TicketRotatorState {
     current: Option<Generation>,
     previous: Option<Generation>,
 }

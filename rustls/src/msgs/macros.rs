@@ -23,7 +23,7 @@ macro_rules! enum_builder {
         /// If a known value does not exist for a value you need, you can simply create it locally:
         ///
         /// ```no_compile
-        #[doc = concat!("pub const MyValue: ", stringify!($struct_name), " = ", stringify!($struct_name), "(123);")]
+        #[doc = concat!(" const MyValue: ", stringify!($struct_name), " = ", stringify!($struct_name), "(123);")]
         /// ```
         ///
         /// The [`Debug`][core::fmt::Debug] impl for this type also looks up and pretty-prints
@@ -265,7 +265,7 @@ macro_rules! extension_struct {
 
             /// Remove the extension identified by `typ` from `self`.
             #[allow(dead_code)]
-            pub(crate) fn clear(&mut self, typ: ExtensionType) {
+             fn clear(&mut self, typ: ExtensionType) {
                 match typ {
                     $(
                         $item_id => self.$item_slot = None,

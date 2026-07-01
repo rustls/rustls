@@ -21,16 +21,16 @@ use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::vecbuf::ChunkVecBuffer;
 
-// pub so that it can be re-exported from the crate root
+//  so that it can be re-exported from the crate root
 pub mod kernel;
 
 mod receive;
 use receive::JoinOutput;
-pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
+pub(super) use receive::{Input, ReceivePath, TrafficTemperCounters};
 
 mod send;
 use send::DEFAULT_BUFFER_LIMIT;
-pub(crate) use send::{SendOutput, SendPath};
+pub(super) use send::{SendOutput, SendPath};
 
 use crate::crypto::cipher::OutboundPlain;
 
@@ -240,9 +240,9 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
 
 /// A structure that implements [`std::io::Read`] for reading plaintext.
 pub struct Reader<'a> {
-    pub(super) received_plaintext: &'a mut ChunkVecBuffer,
-    pub(super) has_received_close_notify: bool,
-    pub(super) has_seen_eof: bool,
+    received_plaintext: &'a mut ChunkVecBuffer,
+    has_received_close_notify: bool,
+    has_seen_eof: bool,
 }
 
 impl<'a> Reader<'a> {
@@ -346,7 +346,7 @@ impl<'a> Writer<'a> {
     ///
     /// This is not an external interface.  Get one of these objects
     /// from [`Connection::writer`].
-    pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Self {
+    fn new(sink: &'a mut dyn PlaintextSink) -> Self {
         Writer { sink }
     }
 }
@@ -379,7 +379,7 @@ impl io::Write for Writer<'_> {
 ///
 /// [`ServerConnection`]: crate::ServerConnection
 /// [`ClientConnection`]: crate::ClientConnection
-pub(crate) trait PlaintextSink {
+trait PlaintextSink {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
     fn flush(&mut self) -> io::Result<()>;
@@ -426,7 +426,7 @@ impl<Side: SideData> PlaintextSink for ConnectionCommon<Side> {
 
 /// An object of this type can export keying material.
 pub struct KeyingMaterialExporter {
-    pub(crate) inner: Box<dyn Exporter>,
+    inner: Box<dyn Exporter>,
 }
 
 impl KeyingMaterialExporter {
@@ -479,7 +479,7 @@ impl Debug for KeyingMaterialExporter {
 ///
 /// There are several such internal implementations, depending on the context
 /// and protocol version.
-pub(crate) trait Exporter: Send + Sync {
+pub(super) trait Exporter: Send + Sync {
     /// Fills in `output` with derived keying material.
     ///
     /// This is deterministic depending on a base secret (implicit in `self`),
@@ -490,13 +490,13 @@ pub(crate) trait Exporter: Send + Sync {
 }
 
 #[derive(Debug)]
-pub(crate) struct ConnectionRandoms {
-    pub(crate) client: [u8; 32],
-    pub(crate) server: [u8; 32],
+pub(super) struct ConnectionRandoms {
+    pub(super) client: [u8; 32],
+    pub(super) server: [u8; 32],
 }
 
 impl ConnectionRandoms {
-    pub(crate) fn new(client: Random, server: Random) -> Self {
+    pub(super) fn new(client: Random, server: Random) -> Self {
         Self {
             client: client.0,
             server: server.0,
@@ -514,13 +514,13 @@ impl ConnectionRandoms {
 ///
 /// This object is generic over the `Side` type parameter, which must implement the marker trait
 /// [`SideData`]. This is used to store side-specific data.
-pub(crate) struct ConnectionCommon<Side: SideData> {
-    pub(crate) core: ConnectionCore<Side>,
+pub(super) struct ConnectionCommon<Side: SideData> {
+    pub(super) core: ConnectionCore<Side>,
     buffers: Buffers,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
-    pub(crate) fn new(core: ConnectionCore<Side>) -> Self {
+    pub(super) fn new(core: ConnectionCore<Side>) -> Self {
         Self {
             core,
             buffers: Buffers::new(),
@@ -528,7 +528,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     #[inline]
-    pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
+    pub(super) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         loop {
             let Some(payload) = self
                 .core
@@ -567,7 +567,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         Ok(self.current_io_state())
     }
 
-    pub(crate) fn wants_read(&self) -> bool {
+    pub(super) fn wants_read(&self) -> bool {
         // We want to read more data all the time, except when we have unprocessed plaintext.
         // This provides back-pressure to the TCP buffers. We also don't want to read more after
         // the peer has sent us a close notification.
@@ -581,37 +581,37 @@ impl<Side: SideData> ConnectionCommon<Side> {
             && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
     }
 
-    pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+    pub(super) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         self.core.exporter()
     }
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     /// Should be used with care as it exposes secret key material.
-    pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+    pub(super) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         self.core.dangerous_extract_secrets()
     }
 
-    pub(crate) fn set_buffer_limit(&mut self, limit: Option<usize>) {
+    pub(super) fn set_buffer_limit(&mut self, limit: Option<usize>) {
         self.buffers
             .sendable_plaintext
             .set_limit(limit);
         self.send.sendable_tls.set_limit(limit);
     }
 
-    pub(crate) fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
+    pub(super) fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
         self.buffers
             .received_plaintext
             .set_limit(limit);
     }
 
-    pub(crate) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+    pub(super) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
         self.core
             .common
             .send
             .refresh_traffic_keys()
     }
 
-    pub(crate) fn current_io_state(&self) -> IoState {
+    fn current_io_state(&self) -> IoState {
         let common_state = &self.core.common;
         IoState {
             tls_bytes_to_write: common_state.send.sendable_tls.len(),
@@ -625,7 +625,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
 impl<Side: SideData> ConnectionCommon<Side> {
     /// Returns an object that allows reading plaintext.
-    pub(crate) fn reader(&mut self) -> Reader<'_> {
+    pub(super) fn reader(&mut self) -> Reader<'_> {
         let common = &mut self.core.common;
         let has_received_close_notify = common.recv.has_received_close_notify;
         Reader {
@@ -638,11 +638,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     /// Returns an object that allows writing plaintext.
-    pub(crate) fn writer(&mut self) -> Writer<'_> {
+    pub(super) fn writer(&mut self) -> Writer<'_> {
         Writer::new(self)
     }
 
-    pub(crate) fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error> {
+    pub(super) fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error> {
         if self
             .buffers
             .received_plaintext
@@ -662,7 +662,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         res
     }
 
-    pub(crate) fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+    pub(super) fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
         self.send.sendable_tls.write_to(wr)
     }
 }
@@ -682,11 +682,11 @@ impl<Side: SideData> DerefMut for ConnectionCommon<Side> {
 }
 
 /// Common items for buffered, std::io-using connections.
-pub(crate) struct Buffers {
+struct Buffers {
     deframer_buffer: VecInput,
-    pub(crate) received_plaintext: ChunkVecBuffer,
-    pub(crate) sendable_plaintext: ChunkVecBuffer,
-    pub(crate) has_seen_eof: bool,
+    received_plaintext: ChunkVecBuffer,
+    sendable_plaintext: ChunkVecBuffer,
+    has_seen_eof: bool,
 }
 
 impl Buffers {
@@ -739,14 +739,14 @@ impl IoState {
     }
 }
 
-pub(crate) struct ConnectionCore<Side: SideData> {
-    pub(crate) state: Result<Side::State, Error>,
-    pub(crate) side: Side::Data,
-    pub(crate) common: CommonState,
+pub(super) struct ConnectionCore<Side: SideData> {
+    pub(super) state: Result<Side::State, Error>,
+    pub(super) side: Side::Data,
+    pub(super) common: CommonState,
 }
 
 impl<Side: SideData> ConnectionCore<Side> {
-    pub(crate) fn new(state: Side::State, side: Side::Data, common: CommonState) -> Self {
+    pub(super) fn new(state: Side::State, side: Side::Data, common: CommonState) -> Self {
         Self {
             state: Ok(state),
             side,
@@ -755,7 +755,7 @@ impl<Side: SideData> ConnectionCore<Side> {
     }
 
     #[inline]
-    pub(crate) fn process_new_packets<'a>(
+    pub(super) fn process_new_packets<'a>(
         &'a mut self,
         buffer: &mut dyn TlsInputBuffer,
         quic: Option<&'a mut dyn QuicOutput>,
@@ -772,13 +772,13 @@ impl<Side: SideData> ConnectionCore<Side> {
             .process_new_packets::<Side>(buffer, &mut self.state, &mut output)
     }
 
-    pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+    fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         Ok(self
             .dangerous_into_kernel_connection()?
             .0)
     }
 
-    pub(crate) fn dangerous_into_kernel_connection(
+    fn dangerous_into_kernel_connection(
         mut self,
     ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
         if self.common.is_handshaking() {
@@ -792,7 +792,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         )
     }
 
-    pub(crate) fn from_parts_into_kernel_connection(
+    fn from_parts_into_kernel_connection(
         send: &mut SendPath,
         recv: ReceivePath,
         outputs: ConnectionOutputs,
@@ -817,7 +817,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         Ok((secrets, external))
     }
 
-    pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+    pub(super) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self.common.exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None if self.common.is_handshaking() => Err(Error::HandshakeNotComplete),
@@ -825,7 +825,7 @@ impl<Side: SideData> ConnectionCore<Side> {
         }
     }
 
-    pub(crate) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
+    pub(super) fn early_exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
         match self.common.early_exporter.take() {
             Some(inner) => Ok(KeyingMaterialExporter { inner }),
             None => Err(ApiMisuse::ExporterAlreadyUsed.into()),
@@ -834,7 +834,7 @@ impl<Side: SideData> ConnectionCore<Side> {
 }
 
 impl ConnectionCore<ServerSide> {
-    pub(crate) fn accepted(
+    pub(super) fn accepted(
         &mut self,
         choose: Box<ChooseConfig>,
         exts: ServerExtensionsInput,
@@ -857,10 +857,10 @@ impl ConnectionCore<ServerSide> {
     }
 }
 
-pub(crate) struct SideCommonOutput<'a, 'q> {
-    pub(crate) side: &'a mut dyn SideOutput,
-    pub(crate) quic: Option<&'q mut dyn QuicOutput>,
-    pub(crate) common: &'a mut CommonState,
+pub(super) struct SideCommonOutput<'a, 'q> {
+    pub(super) side: &'a mut dyn SideOutput,
+    pub(super) quic: Option<&'q mut dyn QuicOutput>,
+    pub(super) common: &'a mut CommonState,
 }
 
 impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
@@ -915,7 +915,7 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 #[expect(private_bounds)]
 pub trait SideData: private::Side {}
 
-pub(crate) mod private {
+pub(super) mod private {
     use super::*;
 
     pub(crate) trait Side: Debug {
@@ -932,7 +932,7 @@ pub(crate) mod private {
 
 use private::SideOutput;
 
-pub(crate) trait StateMachine: Sized {
+pub(super) trait StateMachine: Sized {
     fn handle<'m>(self, input: Input<'m>, output: &mut dyn Output<'m>) -> Result<Self, Error>;
     fn wants_input(&self) -> bool;
     fn handle_decrypt_error(&mut self);

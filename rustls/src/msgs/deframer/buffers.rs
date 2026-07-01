@@ -3,8 +3,7 @@ use core::ops::Range;
 use std::io;
 
 #[derive(Default, Debug)]
-#[expect(unreachable_pub)]
-pub struct VecInput {
+pub(crate) struct VecInput {
     /// Buffer of data read from the socket, in the process of being parsed into messages.
     ///
     /// For buffer size management, checkout out the [`VecInput::prepare_read()`] method.
@@ -16,7 +15,7 @@ pub struct VecInput {
 
 impl VecInput {
     /// Discard `taken` bytes from the start of our buffer.
-    pub(crate) fn discard(&mut self, taken: usize) {
+    fn discard(&mut self, taken: usize) {
         if taken < self.used {
             /* Before:
              * +----------+----------+----------+
@@ -124,22 +123,21 @@ impl TlsInputBuffer for VecInput {
 
 /// A borrowed version of [`VecInput`] that tracks discard operations
 #[derive(Debug)]
-#[expect(unreachable_pub)]
-pub struct SliceInput<'a> {
+struct SliceInput<'a> {
     // a fully initialized buffer that will be deframed
     buf: &'a mut [u8],
     // number of bytes to discard from the front of `buf` at a later time
     discard: usize,
 }
 
-#[expect(dead_code, unreachable_pub)]
+#[expect(dead_code)]
 impl<'a> SliceInput<'a> {
-    pub fn new(buf: &'a mut [u8]) -> Self {
+    fn new(buf: &'a mut [u8]) -> Self {
         Self { buf, discard: 0 }
     }
 
     /// Returns how many bytes were consumed at the start of the original buffer.
-    pub fn into_used(self) -> usize {
+    fn into_used(self) -> usize {
         self.discard
     }
 }
@@ -155,8 +153,7 @@ impl TlsInputBuffer for SliceInput<'_> {
 }
 
 /// An abstraction over received data buffers (either owned or borrowed)
-#[expect(unreachable_pub)]
-pub trait TlsInputBuffer {
+pub(crate) trait TlsInputBuffer {
     /// Return the buffer which contains the received data.
     ///
     /// If no data is available, return the empty slice.
@@ -184,18 +181,18 @@ pub trait TlsInputBuffer {
 }
 
 /// Reordering the underlying buffer based on ranges.
-pub(crate) struct Coalescer<'b> {
+pub(super) struct Coalescer<'b> {
     slice: &'b mut [u8],
 }
 
 impl<'b> Coalescer<'b> {
     #[inline]
-    pub(crate) fn new(slice: &'b mut [u8]) -> Self {
+    pub(super) fn new(slice: &'b mut [u8]) -> Self {
         Self { slice }
     }
 
     #[inline]
-    pub(crate) fn copy_within(&mut self, from: Range<usize>, to: Range<usize>) {
+    pub(super) fn copy_within(&mut self, from: Range<usize>, to: Range<usize>) {
         debug_assert!(from.len() == to.len());
         debug_assert!(self.slice.get(from.clone()).is_some());
         debug_assert!(self.slice.get(to.clone()).is_some());
@@ -203,7 +200,7 @@ impl<'b> Coalescer<'b> {
     }
 
     #[inline]
-    pub(crate) fn delocator(self) -> Delocator<'b> {
+    pub(super) fn delocator(self) -> Delocator<'b> {
         Delocator::new(self.slice)
     }
 }
@@ -255,7 +252,7 @@ impl Locator {
     }
 
     #[inline]
-    pub(crate) fn fully_contains(&self, slice: &[u8]) -> bool {
+    fn fully_contains(&self, slice: &[u8]) -> bool {
         let bounds = slice.as_ptr_range();
         bounds.start >= self.bounds.start && bounds.end <= self.bounds.end
     }

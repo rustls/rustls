@@ -55,7 +55,7 @@ pub(crate) enum Tls13State {
 }
 
 impl Tls13State {
-    pub(crate) fn handle<'m>(
+    pub(super) fn handle<'m>(
         self,
         input: Input<'m>,
         output: &mut dyn Output<'m>,
@@ -412,7 +412,7 @@ mod client_hello {
     impl Sealed for Handler {}
 
     #[derive(PartialEq)]
-    pub(super) enum EarlyDataDecision {
+    enum EarlyDataDecision {
         Disabled,
         RequestedButRejected,
         Accepted { max_length: u32 },

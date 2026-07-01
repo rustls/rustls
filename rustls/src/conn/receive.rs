@@ -25,9 +25,9 @@ pub(crate) struct ReceivePath {
     pub(crate) decrypt_state: DecryptionState,
     pub(crate) may_receive_application_data: bool,
     /// If the peer has signaled end of stream.
-    pub(crate) has_received_close_notify: bool,
+    pub(super) has_received_close_notify: bool,
     temper_counters: TemperCounters,
-    pub(crate) negotiated_version: Option<ProtocolVersion>,
+    pub(super) negotiated_version: Option<ProtocolVersion>,
     pub(crate) deframer: Deframer,
 
     /// We limit consecutive empty fragments to avoid a route for the peer to send
@@ -306,7 +306,7 @@ impl ReceivePath {
     ///
     /// Otherwise the caller must present the returned `Input` to the state machine to
     /// progress the connection.
-    pub(crate) fn receive_message<'a>(
+    fn receive_message<'a>(
         &mut self,
         msg: EncodedMessage<&'a [u8]>,
         aligned_handshake: Option<HandshakeAlignedProof>,

@@ -67,17 +67,6 @@ pub struct Tls12CipherSuite {
 }
 
 impl Tls12CipherSuite {
-    /// Resolve the set of supported [`SignatureScheme`]s from the
-    /// offered signature schemes.  If we return an empty
-    /// set, the handshake terminates.
-    pub fn resolve_sig_schemes(&self, offered: &[SignatureScheme]) -> Vec<SignatureScheme> {
-        self.sign
-            .iter()
-            .filter(|pref| offered.contains(pref))
-            .copied()
-            .collect()
-    }
-
     /// Return the FIPS validation status of this implementation.
     ///
     /// This is the combination of the constituent parts of the cipher suite.
@@ -144,8 +133,8 @@ impl fmt::Debug for Tls12CipherSuite {
 }
 
 /// TLS1.2 per-connection keying material
-pub(crate) struct ConnectionSecrets {
-    pub(crate) randoms: ConnectionRandoms,
+pub(super) struct ConnectionSecrets {
+    pub(super) randoms: ConnectionRandoms,
     suite: &'static Tls12CipherSuite,
     master_secret: Zeroizing<[u8; 48]>,
 
@@ -156,7 +145,7 @@ pub(crate) struct ConnectionSecrets {
 }
 
 impl ConnectionSecrets {
-    pub(crate) fn from_key_exchange(
+    pub(super) fn from_key_exchange(
         kx: Box<dyn ActiveKeyExchange>,
         peer_pub_key: &[u8],
         ems_seed: Option<hash::Output>,
@@ -197,7 +186,7 @@ impl ConnectionSecrets {
         })
     }
 
-    pub(crate) fn new_resume(
+    pub(super) fn new_resume(
         randoms: ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
         master_secret: &[u8; 48],
@@ -214,7 +203,7 @@ impl ConnectionSecrets {
 
     /// Make a `MessageCipherPair` based on the given supported ciphersuite `self.suite`,
     /// and the session's `secrets`.
-    pub(crate) fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
+    pub(super) fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
         // Make a key block, and chop it up.
         // Note: we don't implement any ciphersuites with nonzero mac_key_len.
         let key_block = self.make_key_block();
@@ -266,11 +255,11 @@ impl ConnectionSecrets {
         Zeroizing::new(out)
     }
 
-    pub(crate) fn suite(&self) -> &'static Tls12CipherSuite {
+    pub(super) fn suite(&self) -> &'static Tls12CipherSuite {
         self.suite
     }
 
-    pub(crate) fn master_secret(&self) -> &[u8; 48] {
+    pub(super) fn master_secret(&self) -> &[u8; 48] {
         &self.master_secret
     }
 
@@ -286,7 +275,7 @@ impl ConnectionSecrets {
         out
     }
 
-    pub(crate) fn client_verify_data(
+    pub(super) fn client_verify_data(
         &self,
         handshake_hash: &hash::Output,
         proof: &HandshakeAlignedProof,
@@ -294,7 +283,7 @@ impl ConnectionSecrets {
         self.make_verify_data(handshake_hash, b"client finished", proof)
     }
 
-    pub(crate) fn server_verify_data(
+    pub(super) fn server_verify_data(
         &self,
         handshake_hash: &hash::Output,
         proof: &HandshakeAlignedProof,
@@ -302,7 +291,7 @@ impl ConnectionSecrets {
         self.make_verify_data(handshake_hash, b"server finished", proof)
     }
 
-    pub(crate) fn into_exporter(self) -> Box<dyn Exporter> {
+    pub(super) fn into_exporter(self) -> Box<dyn Exporter> {
         let Self {
             randoms,
             master_secret_prf,
@@ -315,7 +304,7 @@ impl ConnectionSecrets {
         })
     }
 
-    pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
+    pub(super) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         // Make a key block, and chop it up
         let key_block = self.make_key_block();
         let shape = self.suite.aead_alg.key_block_shape();
@@ -344,7 +333,7 @@ impl ConnectionSecrets {
     }
 }
 
-pub(crate) struct Tls12Exporter {
+struct Tls12Exporter {
     randoms: ConnectionRandoms,
     master_secret_prf: Box<dyn PrfSecret>,
 }
@@ -400,7 +389,7 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 
 type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
-pub(crate) fn decode_kx_params<'a, T: KxDecode<'a>>(
+pub(super) fn decode_kx_params<'a, T: KxDecode<'a>>(
     kx_algorithm: KeyExchangeAlgorithm,
     kx_params: &'a [u8],
 ) -> Result<T, Error> {
@@ -412,7 +401,7 @@ pub(crate) fn decode_kx_params<'a, T: KxDecode<'a>>(
     }
 }
 
-pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
+pub(super) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
 #[cfg(test)]
 mod tests {

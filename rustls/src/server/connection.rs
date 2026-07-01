@@ -29,7 +29,7 @@ use crate::vecbuf::ChunkVecBuffer;
 /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
 /// Read data from the peer using the `io::Read` trait implementation.
 pub struct ServerConnection {
-    pub(super) inner: ConnectionCommon<ServerSide>,
+    inner: ConnectionCommon<ServerSide>,
 }
 
 impl ServerConnection {
@@ -321,14 +321,14 @@ impl Acceptor {
 pub struct AcceptedAlert(ChunkVecBuffer);
 
 impl AcceptedAlert {
-    pub(super) fn from_error(error: Error, mut send: SendPath) -> (Error, Self) {
+    fn from_error(error: Error, mut send: SendPath) -> (Error, Self) {
         let ErrorWithAlert { error, data } = ErrorWithAlert::new(error, &mut send);
         let mut output = ChunkVecBuffer::new(None);
         output.append(data);
         (error, Self(output))
     }
 
-    pub(super) fn empty() -> Self {
+    fn empty() -> Self {
         Self(ChunkVecBuffer::new(None))
     }
 
@@ -457,7 +457,7 @@ impl Debug for Accepted {
 }
 
 #[derive(Default)]
-pub(super) enum EarlyDataState {
+enum EarlyDataState {
     #[default]
     New,
     Accepted {

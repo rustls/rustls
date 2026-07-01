@@ -46,7 +46,7 @@ impl Output {
     }
 
     /// Maximum supported hash output size: supports up to SHA512.
-    pub const MAX_LEN: usize = 64;
+    pub(crate) const MAX_LEN: usize = 64;
 }
 
 impl AsRef<[u8]> for Output {

@@ -51,7 +51,7 @@ use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerifi
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto};
 
 #[expect(private_interfaces)]
-pub(crate) enum Tls13State {
+pub(super) enum Tls13State {
     EncryptedExtensions(Box<ExpectEncryptedExtensions>),
     CertificateOrCompressedCertificateOrCertReq(
         Box<ExpectCertificateOrCompressedCertificateOrCertReq>,
@@ -66,7 +66,7 @@ pub(crate) enum Tls13State {
 }
 
 impl Tls13State {
-    pub(crate) fn handle<'m>(
+    pub(super) fn handle<'m>(
         self,
         input: Input<'m>,
         output: &mut dyn Output<'m>,

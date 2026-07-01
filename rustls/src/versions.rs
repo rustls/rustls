@@ -1,4 +1,3 @@
-use crate::enums::ProtocolVersion;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
@@ -14,16 +13,6 @@ pub enum SupportedProtocolVersion {
     TLS12(&'static Tls12Version),
     /// The TLS1.3 protocol version.
     TLS13(&'static Tls13Version),
-}
-
-impl SupportedProtocolVersion {
-    /// The TLS enumeration naming this version.
-    pub const fn version(&self) -> ProtocolVersion {
-        match self {
-            Self::TLS12(_) => ProtocolVersion::TLSv1_2,
-            Self::TLS13(_) => ProtocolVersion::TLSv1_3,
-        }
-    }
 }
 
 impl PartialEq for SupportedProtocolVersion {

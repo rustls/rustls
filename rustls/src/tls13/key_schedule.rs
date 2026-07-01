@@ -987,7 +987,7 @@ impl KeyScheduleSuite {
         self.suite
             .hkdf_provider
             .hmac_sign(&hmac_key, hs_hash.as_ref())
-            // this is published in the handshake, in the Finished message or PSK binder
+            // this is lished in the handshake, in the Finished message or PSK binder
             .into_public()
     }
 
@@ -1099,7 +1099,7 @@ pub(crate) fn hkdf_expand_label_aead_key(
 }
 
 /// [HKDF-Expand-Label] where the output is an IV.
-pub(crate) fn hkdf_expand_label_iv(
+fn hkdf_expand_label_iv(
     expander: &dyn HkdfExpander,
     label: &[u8],
     context: &[u8],

@@ -60,7 +60,7 @@ pub trait Prf: Send + Sync {
     /// to compute the PRF, writing the result into `output`.
     ///
     /// The caller guarantees that `label`, `seed` are non-empty. The caller makes no
-    /// guarantees about the contents of `peer_pub_key`. It must be validated by
+    /// guarantees about the contents of `peer__key`. It must be validated by
     /// [`ActiveKeyExchange::complete`].
     fn for_key_exchange(
         &self,

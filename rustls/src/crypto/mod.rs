@@ -52,7 +52,7 @@ pub(crate) mod test_provider;
 pub(crate) use test_provider::TEST_PROVIDER;
 #[cfg(doc)]
 #[doc(hidden)]
-pub use test_provider::TEST_PROVIDER;
+use test_provider::TEST_PROVIDER;
 #[cfg(all(test, any(target_arch = "aarch64", target_arch = "x86_64")))]
 pub(crate) use test_provider::TLS13_TEST_SUITE;
 
@@ -121,7 +121,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// # use std::sync::Arc;
 /// # mod fictitious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 ///
-/// pub fn provider() -> rustls::crypto::CryptoProvider {
+/// fn provider() -> rustls::crypto::CryptoProvider {
 /// # let DEFAULT_PROVIDER = panic!();
 ///   rustls::crypto::CryptoProvider {
 ///     key_provider: &HsmKeyLoader,

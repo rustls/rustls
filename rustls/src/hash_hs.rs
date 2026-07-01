@@ -11,13 +11,13 @@ use crate::msgs::{Codec, HandshakeAlignedProof, HandshakeMessagePayload, Message
 /// During the handshake, we may restart the transcript due to a HelloRetryRequest, reverting
 /// from the `HandshakeHash` to a `HandshakeHashBuffer` again.
 #[derive(Clone)]
-pub(crate) struct HandshakeHashBuffer {
+pub(super) struct HandshakeHashBuffer {
     buffer: Vec<u8>,
     client_auth_enabled: bool,
 }
 
 impl HandshakeHashBuffer {
-    pub(crate) fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             buffer: Vec::new(),
             client_auth_enabled: false,
@@ -26,12 +26,12 @@ impl HandshakeHashBuffer {
 
     /// We might be doing client auth, so need to keep a full
     /// log of the handshake.
-    pub(crate) fn set_client_auth_enabled(&mut self) {
+    pub(super) fn set_client_auth_enabled(&mut self) {
         self.client_auth_enabled = true;
     }
 
     /// Hash/buffer a handshake message.
-    pub(crate) fn add_message(&mut self, m: &Message<'_>) {
+    pub(super) fn add_message(&mut self, m: &Message<'_>) {
         match &m.payload {
             MessagePayload::Handshake { encoded, .. } => self.add_raw(encoded.bytes()),
             MessagePayload::HandshakeFlight(payload) => self.add_raw(payload.bytes()),
@@ -45,7 +45,7 @@ impl HandshakeHashBuffer {
     }
 
     /// Get the hash value if we were to hash `extra` too.
-    pub(crate) fn hash_given(
+    pub(super) fn hash_given(
         &self,
         provider: &'static dyn hash::Hash,
         extra: &[u8],
@@ -57,7 +57,7 @@ impl HandshakeHashBuffer {
     }
 
     /// We now know what hash function the verify_data will use.
-    pub(crate) fn start_hash(self, provider: &'static dyn hash::Hash) -> HandshakeHash {
+    pub(super) fn start_hash(self, provider: &'static dyn hash::Hash) -> HandshakeHash {
         let mut ctx = provider.start();
         ctx.update(&self.buffer);
         HandshakeHash {
@@ -78,7 +78,7 @@ impl HandshakeHashBuffer {
 ///
 /// For client auth, we also need to buffer all the messages.
 /// This is disabled in cases where client auth is not possible.
-pub(crate) struct HandshakeHash {
+pub(super) struct HandshakeHash {
     provider: &'static dyn hash::Hash,
     ctx: Box<dyn hash::Context>,
 
@@ -89,12 +89,12 @@ pub(crate) struct HandshakeHash {
 impl HandshakeHash {
     /// We decided not to do client auth after all, so discard
     /// the transcript.
-    pub(crate) fn abandon_client_auth(&mut self) {
+    pub(super) fn abandon_client_auth(&mut self) {
         self.client_auth = None;
     }
 
     /// Hash/buffer a handshake message.
-    pub(crate) fn add_message(&mut self, m: &Message<'_>) -> &mut Self {
+    pub(super) fn add_message(&mut self, m: &Message<'_>) -> &mut Self {
         match &m.payload {
             MessagePayload::Handshake { encoded, .. } => self.add_raw(encoded.bytes()),
             MessagePayload::HandshakeFlight(payload) => self.add_raw(payload.bytes()),
@@ -103,7 +103,7 @@ impl HandshakeHash {
     }
 
     /// Hash/buffer an encoded handshake message.
-    pub(crate) fn add(&mut self, bytes: &[u8]) {
+    pub(super) fn add(&mut self, bytes: &[u8]) {
         self.add_raw(bytes);
     }
 
@@ -119,13 +119,13 @@ impl HandshakeHash {
     }
 
     /// Get the hash value if we were to hash `extra` too.
-    pub(crate) fn hash_given(&self, extra: &[u8]) -> hash::Output {
+    pub(super) fn hash_given(&self, extra: &[u8]) -> hash::Output {
         let mut ctx = self.ctx.fork();
         ctx.update(extra);
         ctx.finish()
     }
 
-    pub(crate) fn into_hrr_buffer(self, _proof: &HandshakeAlignedProof) -> HandshakeHashBuffer {
+    pub(super) fn into_hrr_buffer(self, _proof: &HandshakeAlignedProof) -> HandshakeHashBuffer {
         let old_hash = self.ctx.finish();
         let old_handshake_hash_msg =
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
@@ -139,7 +139,7 @@ impl HandshakeHash {
     /// Take the current hash value, and encapsulate it in a
     /// 'handshake_hash' handshake message.  Start this hash
     /// again, with that message at the front.
-    pub(crate) fn rollup_for_hrr(&mut self) {
+    pub(super) fn rollup_for_hrr(&mut self) {
         let ctx = &mut self.ctx;
 
         let old_ctx = mem::replace(ctx, self.provider.start());
@@ -151,19 +151,19 @@ impl HandshakeHash {
     }
 
     /// Get the current hash value.
-    pub(crate) fn current_hash(&self) -> hash::Output {
+    pub(super) fn current_hash(&self) -> hash::Output {
         self.ctx.fork_finish()
     }
 
     /// Takes this object's buffer containing all handshake messages
     /// so far.  This method only works once; it resets the buffer
     /// to empty.
-    pub(crate) fn take_handshake_buf(&mut self) -> Option<Vec<u8>> {
+    pub(super) fn take_handshake_buf(&mut self) -> Option<Vec<u8>> {
         self.client_auth.take()
     }
 
     /// The hashing algorithm
-    pub(crate) fn algorithm(&self) -> HashAlgorithm {
+    pub(super) fn algorithm(&self) -> HashAlgorithm {
         self.provider.algorithm()
     }
 }

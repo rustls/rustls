@@ -139,7 +139,7 @@ pub struct ClientConfig {
     pub require_ems: bool,
 
     /// Items that affect the fundamental security properties of a connection.
-    pub(super) domain: SecurityDomain,
+    domain: SecurityDomain,
 
     /// How to decompress the server's certificate chain.
     ///
@@ -450,7 +450,7 @@ impl CredentialRequest<'_> {
 /// fields therefore should not be mutated, but an entire object created
 /// through [`Self::new`] for any edits.
 #[derive(Clone, Debug)]
-pub(super) struct SecurityDomain {
+struct SecurityDomain {
     /// Provides the current system time
     time_provider: Arc<dyn TimeProvider>,
 
@@ -467,7 +467,7 @@ pub(super) struct SecurityDomain {
 }
 
 impl SecurityDomain {
-    pub(crate) fn new(
+    fn new(
         provider: Arc<CryptoProvider>,
         client_auth_cert_resolver: Arc<dyn ClientCredentialResolver + 'static>,
         verifier: Arc<dyn verify::ServerVerifier + 'static>,
