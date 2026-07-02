@@ -12,7 +12,7 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader,
-    SideCommonOutput, Writer,
+    SideCommonOutput, SideData, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -417,7 +417,7 @@ impl ClientConnectionData {
 #[derive(Debug)]
 pub struct ClientSide;
 
-impl crate::conn::SideData for ClientSide {}
+impl SideData for ClientSide {}
 
 impl crate::conn::private::Side for ClientSide {
     type Data = ClientConnectionData;
