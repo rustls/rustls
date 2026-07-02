@@ -142,6 +142,11 @@ impl ReceivePath {
                 // "Any data received after a closure alert has been received MUST be ignored."
                 // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
                 // This is data that has already been accepted in `read_tls`.
+
+                // First, discard actually-processed bytes.
+                input.discard(self.deframer.take_discard());
+
+                // Then the rest of any input data.
                 let entirety = input.slice_mut().len();
                 input.discard(entirety);
                 break;
