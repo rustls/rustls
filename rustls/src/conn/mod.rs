@@ -603,7 +603,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
         self.buffers
             .sendable_plaintext
             .set_limit(limit);
-        self.sendable_tls.set_limit(limit);
     }
 
     pub(crate) fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {

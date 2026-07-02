@@ -65,17 +65,12 @@ impl SendContext<'_> {
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.send.encrypt_state.is_encrypting());
 
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(data.len());
-        if len == 0 {
+        if data.is_empty() {
             // Don't send empty fragments.
             return 0;
         }
 
-        self.send_appdata_encrypt(data[..len].into())
+        self.send_appdata_encrypt(data.into())
     }
 
     pub(crate) fn send_close_notify(&mut self) {
@@ -183,18 +178,13 @@ impl SendContext<'_> {
             return sendable_plaintext.append_limited_copy(payload);
         }
 
-        // Limit on `sendable_tls` should apply to encrypted data but is enforced
-        // for plaintext data instead which does not include cipher+record overhead.
-        let len = self
-            .sendable_tls
-            .apply_limit(payload.len());
-        if len == 0 {
+        if payload.is_empty() {
             // Don't send empty fragments.
             return 0;
         }
 
         debug_assert!(self.send.encrypt_state.is_encrypting());
-        self.send_appdata_encrypt(payload.split_at(len).0)
+        self.send_appdata_encrypt(payload)
     }
 
     pub(crate) fn send_buffered_plaintext(&mut self, plaintext: &mut ChunkVecBuffer) {
