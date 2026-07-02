@@ -56,10 +56,11 @@ fn split_pairwise() {
             .map(|kxg| kxg.name()),
     );
 
-    let flight = client_send.write(b"client to server".as_slice().into());
+    let mut flight = Vec::new();
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
     server_recv = check_receive_all(
         server_recv,
-        single(flight),
+        flight,
         ExpectData {
             expected: b"client to server",
             then: ExpectReadMore,
@@ -67,10 +68,11 @@ fn split_pairwise() {
     )
     .unwrap();
 
-    let flight = server_send.write(b"server to client".as_slice().into());
+    let mut flight = Vec::new();
+    server_send.write(b"server to client".as_slice().into(), &mut flight);
     client_recv = check_receive_all(
         client_recv,
-        single(flight),
+        flight,
         ExpectData {
             expected: b"server to client",
             then: ExpectReadMore,
@@ -78,8 +80,13 @@ fn split_pairwise() {
     )
     .unwrap();
 
-    check_receive_all(server_recv, single(client_send.close()), ExpectCloseNotify);
-    check_receive_all(client_recv, single(server_send.close()), ExpectCloseNotify);
+    let mut flight = Vec::new();
+    client_send.close(&mut flight);
+    check_receive_all(server_recv, flight, ExpectCloseNotify);
+
+    let mut flight = Vec::new();
+    server_send.close(&mut flight);
+    check_receive_all(client_recv, flight, ExpectCloseNotify);
 }
 
 #[test]
@@ -99,8 +106,8 @@ fn split_incremental() {
         outputs: _,
     } = server.split().unwrap();
 
-    let flight = client_send.write(b"client to server".as_slice().into());
-    let flight = single(flight);
+    let mut flight = Vec::new();
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
 
     // messages are not consumed until they are fully provided.
     for ll in 1..flight.len() - 1 {
@@ -182,32 +189,36 @@ fn key_update() {
         ..
     } = server.split().unwrap();
 
+    let mut flight = Vec::new();
     client_send
-        .refresh_traffic_keys()
+        .refresh_traffic_keys(&mut flight)
         .unwrap();
+    client_send.take_data(&mut flight);
     server_recv = check_receive_all(
         server_recv,
-        single(client_send.take_data()),
+        flight,
         ExpectFlushSender {
             then: ExpectReadMore,
         },
     )
     .unwrap();
 
-    let flight = server_send.write(b"server to client".as_slice().into());
+    let mut flight = Vec::new();
+    server_send.write(b"server to client".as_slice().into(), &mut flight);
     check_receive_all(
         client_recv,
-        flight.concat(),
+        flight,
         ExpectData {
             expected: b"server to client",
             then: ExpectReadMore,
         },
     );
 
-    let flight = client_send.write(b"client to server".as_slice().into());
+    let mut flight = Vec::new();
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
     check_receive_all(
         server_recv,
-        single(flight),
+        flight,
         ExpectData {
             expected: b"client to server",
             then: ExpectReadMore,
@@ -232,13 +243,14 @@ fn key_update_alongside_data() {
 
     // arrange a flight that contains a key-update followed by application data.
     // both the application data and `FlushSender` should be emitted.
+    let mut flight = Vec::new();
     client_send
-        .refresh_traffic_keys()
+        .refresh_traffic_keys(&mut flight)
         .unwrap();
-    let flight = client_send.write(b"client to server".as_slice().into());
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
     check_receive_all(
         server_recv,
-        flight.concat(),
+        flight,
         ExpectData {
             expected: b"client to server",
             then: ExpectFlushSender {
@@ -263,9 +275,9 @@ fn close_alongside_data() {
         ..
     } = server.split().unwrap();
 
-    let mut flight = client_send.write(b"client to server".as_slice().into());
-    flight.extend(client_send.close());
-    let mut flight = flight.concat();
+    let mut flight = Vec::new();
+    client_send.write(b"client to server".as_slice().into(), &mut flight);
+    client_send.close(&mut flight);
     flight.extend(b"rubbish");
 
     // receive of appdata does not consume subsequent data
@@ -404,10 +416,4 @@ impl ConsumeReceiveState for ExpectCloseNotify {
             other => panic!("unexpected state for ExpectCloseNotify: got {other:?}"),
         }
     }
-}
-
-#[track_caller]
-fn single(mut flight: Vec<Vec<u8>>) -> Vec<u8> {
-    assert_eq!(flight.len(), 1);
-    flight.remove(0)
 }
