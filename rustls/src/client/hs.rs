@@ -817,18 +817,7 @@ fn emit_client_hello_for_retry(
     };
 
     let ch = Message {
-        version: match retryreq {
-            // <https://datatracker.ietf.org/doc/html/rfc8446#section-5.1>:
-            // "This value MUST be set to 0x0303 for all records generated
-            //  by a TLS 1.3 implementation ..."
-            Some(_) => ProtocolVersion::TLSv1_2,
-            // "... other than an initial ClientHello (i.e., one not
-            // generated after a HelloRetryRequest), where it MAY also be
-            // 0x0301 for compatibility purposes"
-            //
-            // (retryreq == None means we're in the "initial ClientHello" case)
-            None => ProtocolVersion::TLSv1_0,
-        },
+        version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::handshake(chp),
     };
 
@@ -841,7 +830,8 @@ fn emit_client_hello_for_retry(
     trace!("Sending ClientHello {ch:#?}");
 
     transcript_buffer.add_message(&ch);
-    output.send_msg(ch, false);
+
+    output.send_msg(ch, false, retryreq.is_none());
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_data_key_schedule =

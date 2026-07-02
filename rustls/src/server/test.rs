@@ -10,7 +10,7 @@ use super::{
     Tls13ServerSessionValue,
 };
 use crate::conn::{Connection, Input};
-use crate::crypto::cipher::FakeAead;
+use crate::crypto::cipher::{EncodingContext, FakeAead};
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
 use crate::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
@@ -167,7 +167,11 @@ fn select_cipher_suite(
             client_hello,
         ))),
     };
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())?;
+    conn.read_tls(
+        &mut ch
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )?;
     conn.process_new_packets()?;
 
     let mut flight = vec![];
@@ -207,8 +211,12 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             ch,
         ))),
     };
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut ch
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
 
     assert_eq!(
         conn.process_new_packets(),
@@ -290,8 +298,12 @@ fn server_chooses_ffdhe_group_for_client_hello(
             client_hello,
         ))),
     };
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut ch
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
     conn.process_new_packets().unwrap();
 
     let mut flight = vec![];
@@ -334,8 +346,12 @@ fn test_server_requiring_rpk_client_rejects_x509_client() {
     };
 
     let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut ch
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
     assert_eq!(
         conn.process_new_packets().unwrap_err(),
         PeerIncompatible::IncorrectCertificateTypeExtension.into(),
@@ -358,8 +374,12 @@ fn test_rpk_only_server_rejects_x509_only_client() {
     };
 
     let mut conn = ServerConnection::new(Arc::new(server_config)).unwrap();
-    conn.read_tls(&mut ch.into_wire_bytes().as_slice())
-        .unwrap();
+    conn.read_tls(
+        &mut ch
+            .into_wire_bytes(EncodingContext::default())
+            .as_slice(),
+    )
+    .unwrap();
 
     assert_eq!(
         conn.process_new_packets().unwrap_err(),

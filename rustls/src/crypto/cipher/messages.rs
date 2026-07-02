@@ -13,7 +13,8 @@ use crate::msgs::{Codec, HEADER_SIZE, MAX_FRAGMENT_LEN, Reader, hex, read_opaque
 pub struct EncodedMessage<P> {
     /// The content type of this message.
     pub typ: ContentType,
-    /// The protocol version of this message.
+    /// The protocol version of this message. The actual protocol version that
+    /// gts encoded on the wire may differ.
     pub version: ProtocolVersion,
     /// The payload of this message.
     pub payload: P,
@@ -50,11 +51,18 @@ impl<'a> EncodedMessage<Payload<'a>> {
     }
 
     /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
-    pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
+    pub fn into_unencrypted_opaque(
+        self,
+        encoding_context: EncodingContext,
+    ) -> EncodedMessage<OutboundOpaque> {
         EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: OutboundOpaque::from(self.payload.bytes()),
+            payload: OutboundOpaque::from_byte_slice(
+                self.version,
+                encoding_context,
+                self.payload.bytes(),
+            ),
         }
     }
 
@@ -144,8 +152,12 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
 }
 
 impl EncodedMessage<OutboundPlain<'_>> {
-    pub(crate) fn to_unencrypted_opaque(&self) -> EncodedMessage<OutboundOpaque> {
-        let mut payload = OutboundOpaque::with_capacity(self.payload.len());
+    pub(crate) fn to_unencrypted_opaque(
+        &self,
+        encoding_context: EncodingContext,
+    ) -> EncodedMessage<OutboundOpaque> {
+        let mut payload =
+            OutboundOpaque::with_capacity(self.version, encoding_context, self.payload.len());
         payload.extend_from_chunks(&self.payload);
         EncodedMessage {
             typ: self.typ,
@@ -164,9 +176,28 @@ impl EncodedMessage<OutboundOpaque> {
     /// Encode this message to a vector of bytes.
     pub fn encode(self) -> Vec<u8> {
         let length = self.payload.len() as u16;
-        let mut encoded_payload = self.payload.0;
+        let mut encoded_payload = self.payload.payload;
         encoded_payload[0] = self.typ.into();
-        encoded_payload[1..3].copy_from_slice(&self.version.to_array());
+
+        let encoded_version = match (
+            self.payload
+                .encoding_context
+                .preserve_version,
+            self.payload
+                .encoding_context
+                .is_initial_handshake,
+        ) {
+            (true, _) => self.version,
+            // <https://datatracker.ietf.org/doc/html/rfc8446#section-5.1>:
+            // "This value MUST be set to 0x0303 for all records generated
+            //  by a TLS 1.3 implementation ..."
+            (false, false) => ProtocolVersion::TLSv1_2,
+            // "... other than an initial ClientHello (i.e., one not
+            // generated after a HelloRetryRequest), where it MAY also be
+            // 0x0301 for compatibility purposes"
+            (false, true) => ProtocolVersion::TLSv1_0,
+        };
+        encoded_payload[1..3].copy_from_slice(&encoded_version.to_array());
         encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
         encoded_payload
     }
@@ -299,68 +330,74 @@ impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
 /// This outbound type owns all memory for its interior parts.
 /// It results from encryption and is used for io write.
 #[derive(Clone, Debug)]
-pub struct OutboundOpaque(Vec<u8>);
+pub struct OutboundOpaque {
+    /// Amount of space reserved for the record header.
+    header_size: usize,
+    /// Encoded payload of the record.
+    payload: Vec<u8>,
+    /// Contextual information needed to encode the record.
+    encoding_context: EncodingContext,
+}
 
 impl OutboundOpaque {
     /// Create a new value with the given payload capacity.
     ///
     /// (The actual capacity of the returned value will be at least `HEADER_SIZE + capacity`.)
-    pub fn with_capacity(capacity: usize) -> Self {
-        let mut prefixed_payload = Vec::with_capacity(HEADER_SIZE + capacity);
-        prefixed_payload.resize(HEADER_SIZE, 0);
-        Self(prefixed_payload)
+    pub fn with_capacity(
+        version: ProtocolVersion,
+        encoding_context: EncodingContext,
+        capacity: usize,
+    ) -> Self {
+        let header_size = encoding_context.header_size(version);
+        let mut prefixed_payload = Vec::with_capacity(header_size + capacity);
+        prefixed_payload.resize(header_size, 0);
+        Self {
+            header_size,
+            payload: prefixed_payload,
+            encoding_context,
+        }
+    }
+
+    pub(crate) fn from_byte_slice(
+        version: ProtocolVersion,
+        encoding_context: EncodingContext,
+        content: &[u8],
+    ) -> Self {
+        let mut value = Self::with_capacity(version, encoding_context, content.len());
+        value.payload.extend(content);
+        value
     }
 
     /// Append bytes from a slice.
     pub fn extend_from_slice(&mut self, slice: &[u8]) {
-        self.0.extend_from_slice(slice)
+        self.payload.extend_from_slice(slice)
     }
 
     /// Append bytes from an `OutboundPlain`.
     pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
-        chunks.copy_to_vec(&mut self.0)
-    }
-
-    /// Truncate the payload to the given length (plus header).
-    pub fn truncate(&mut self, len: usize) {
-        self.0.truncate(len + HEADER_SIZE)
+        chunks.copy_to_vec(&mut self.payload)
     }
 
     fn len(&self) -> usize {
-        self.0.len() - HEADER_SIZE
+        self.payload.len() - self.header_size
     }
 }
 
 impl AsRef<[u8]> for OutboundOpaque {
     fn as_ref(&self) -> &[u8] {
-        &self.0[HEADER_SIZE..]
+        &self.payload[HEADER_SIZE..]
     }
 }
 
 impl AsMut<[u8]> for OutboundOpaque {
     fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.0[HEADER_SIZE..]
+        &mut self.payload[HEADER_SIZE..]
     }
 }
 
 impl<'a> Extend<&'a u8> for OutboundOpaque {
     fn extend<T: IntoIterator<Item = &'a u8>>(&mut self, iter: T) {
-        self.0.extend(iter)
-    }
-}
-
-impl From<&[u8]> for OutboundOpaque {
-    fn from(content: &[u8]) -> Self {
-        let mut payload = Vec::with_capacity(HEADER_SIZE + content.len());
-        payload.extend(&[0u8; HEADER_SIZE]);
-        payload.extend(content);
-        Self(payload)
-    }
-}
-
-impl<const N: usize> From<&[u8; N]> for OutboundOpaque {
-    fn from(content: &[u8; N]) -> Self {
-        Self::from(&content[..])
+        self.payload.extend(iter)
     }
 }
 
@@ -469,6 +506,42 @@ impl Deref for InboundOpaque<'_> {
 impl DerefMut for InboundOpaque<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
+    }
+}
+
+/// Contextual information for encoding messages.
+#[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
+pub struct EncodingContext {
+    /// Whether this message is the initial handshake message, e.g., not a
+    /// retry.
+    pub is_initial_handshake: bool,
+    /// Whether to preserve the version in the EncodedMessage instead of
+    /// downgrading for compatibility. This will only be used in tests loading
+    /// messages from test vectors.
+    pub preserve_version: bool,
+}
+
+impl EncodingContext {
+    /// Set this context's `is_initial_handshake` value.
+    pub fn is_initial_handshake(mut self, is: bool) -> Self {
+        self.is_initial_handshake = is;
+        self
+    }
+
+    /// Set this context's `preserve_version` value.
+    pub fn preserve_version(mut self, preserve: bool) -> Self {
+        self.preserve_version = preserve;
+        self
+    }
+
+    /// The size of the record layer header for this message.
+    // version parameter is not yet used, but it will matter when we need to
+    // distinguish between TLS and DTLS 1.2 and DTLS 1.3, so we wire it up now
+    // <https://github.com/rustls/rustls/issues/40>
+    fn header_size(&self, _version: ProtocolVersion) -> usize {
+        // TLS 1.2 and 1.3 messages use a full record header
+        HEADER_SIZE
     }
 }
 

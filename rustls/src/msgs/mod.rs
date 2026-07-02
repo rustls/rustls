@@ -34,6 +34,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+#[cfg(test)]
+use crate::crypto::cipher::EncodingContext;
 use crate::crypto::cipher::{EncodedMessage, MessageError, Payload};
 use crate::enums::{ContentType, ContentTypeName, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, InvalidMessage};
@@ -99,6 +101,7 @@ mod handshake_test;
 pub mod fuzzing {
     pub use super::deframer::fuzz_deframer;
     use super::{Codec, EncodedMessage, Message, MessageFragmenter, Payload, Reader};
+    use crate::crypto::cipher::EncodingContext;
     use crate::server::ServerSessionValue;
 
     pub fn fuzz_fragmenter(data: &[u8]) {
@@ -136,7 +139,7 @@ pub mod fuzzing {
 
         //println!("msg = {:#?}", m);
         let enc = EncodedMessage::<Payload<'_>>::from(msg)
-            .into_unencrypted_opaque()
+            .into_unencrypted_opaque(EncodingContext::default().preserve_version(true))
             .encode();
         //println!("data = {:?}", &data[..rdr.used()]);
         assert_eq!(enc, data[..data.len() - rdr.left()]);
@@ -193,9 +196,9 @@ impl Message<'_> {
     }
 
     #[cfg(test)]
-    pub(crate) fn into_wire_bytes(self) -> Vec<u8> {
+    pub(crate) fn into_wire_bytes(self, encoding_context: EncodingContext) -> Vec<u8> {
         EncodedMessage::<Payload<'_>>::from(self)
-            .into_unencrypted_opaque()
+            .into_unencrypted_opaque(encoding_context)
             .encode()
     }
 
@@ -700,7 +703,7 @@ mod tests {
     use std::{format, fs, println};
 
     use super::*;
-    use crate::crypto::cipher::OutboundOpaque;
+    use crate::crypto::cipher::{EncodingContext, OutboundOpaque};
     use crate::error::AlertDescription;
 
     #[test]
@@ -730,7 +733,10 @@ mod tests {
             };
 
             let enc = EncodedMessage::<Payload<'_>>::from(msg)
-                .into_unencrypted_opaque()
+                .into_unencrypted_opaque(EncodingContext {
+                    preserve_version: true,
+                    ..Default::default()
+                })
                 .encode();
             assert_eq!(bytes.to_vec(), enc);
             assert_eq!(bytes[..bytes.len() - rd.left()].to_vec(), enc);
@@ -815,7 +821,10 @@ mod tests {
     fn into_wire_format() {
         // Message::into_wire_bytes() include both message-level and handshake-level headers
         assert_eq!(
-            Message::build_key_update_request().into_wire_bytes(),
+            Message::build_key_update_request().into_wire_bytes(EncodingContext {
+                preserve_version: true,
+                ..Default::default()
+            }),
             &[0x16, 0x3, 0x4, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
         );
     }
@@ -831,7 +840,11 @@ mod tests {
             let out = EncodedMessage {
                 typ: m.typ,
                 version: m.version,
-                payload: OutboundOpaque::from(m.payload.bytes()),
+                payload: OutboundOpaque::from_byte_slice(
+                    m.version,
+                    EncodingContext::default(),
+                    m.payload.bytes(),
+                ),
             }
             .encode();
             assert!(!out.is_empty());

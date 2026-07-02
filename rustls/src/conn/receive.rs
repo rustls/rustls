@@ -476,13 +476,13 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
         self.other.outputs.handle(ev);
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, is_retry_req: bool) {
         match self.other.quic.as_deref_mut() {
             Some(quic) => quic.send_msg(m, must_encrypt),
             None => self
                 .other
                 .send
-                .send_msg(m, must_encrypt),
+                .send_msg(m, must_encrypt, is_retry_req),
         }
     }
 

@@ -558,7 +558,7 @@ mod client_hello {
 
         trace!("sending server hello {sh:?}");
         transcript.add_message(&sh);
-        output.send_msg(sh, false);
+        output.send_msg(sh, false, false);
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some((_, psk)) = resuming {
@@ -606,7 +606,7 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
-        output.send_msg(m, false);
+        output.send_msg(m, false, false);
     }
 
     fn emit_hello_retry_request(
@@ -637,7 +637,7 @@ mod client_hello {
         trace!("Requesting retry {m:?}");
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
-        output.send_msg(m, false);
+        output.send_msg(m, false, false);
     }
 
     fn decide_if_early_data_allowed(
