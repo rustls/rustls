@@ -11,7 +11,8 @@ use super::config::{ClientHello, ServerConfig};
 use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event, Protocol, Side};
 use crate::conn::private::SideOutput;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendPath, Writer,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendPath,
+    SideData, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -577,7 +578,7 @@ impl SideOutput for ServerConnectionData {
 #[derive(Debug)]
 pub struct ServerSide;
 
-impl crate::conn::SideData for ServerSide {}
+impl SideData for ServerSide {}
 
 impl crate::conn::private::Side for ServerSide {
     type Data = ServerConnectionData;
