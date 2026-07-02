@@ -1677,8 +1677,10 @@ impl<C: Connection> io::Read for OtherSession<'_, C> {
 }
 
 impl<C: Connection> io::Write for OtherSession<'_, C> {
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        unreachable!()
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.buffer.push(data.to_vec());
+        self.flush()?;
+        Ok(data.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {

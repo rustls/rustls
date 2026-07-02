@@ -92,25 +92,6 @@ impl ChunkVecBuffer {
             .front()
             .map(|ch| ch.as_slice())
     }
-
-    pub(crate) fn take(&mut self) -> Vec<Vec<u8>> {
-        if self.chunks.is_empty() {
-            return Vec::new();
-        }
-        mem::take(&mut self.chunks).into()
-    }
-
-    pub(crate) fn take_one_vec(&mut self) -> Vec<u8> {
-        let Some(mut first) = self.chunks.pop_front() else {
-            return Vec::new();
-        };
-
-        while let Some(chunk) = self.chunks.pop_front() {
-            first.extend_from_slice(&chunk);
-        }
-
-        first
-    }
 }
 
 impl ChunkVecBuffer {

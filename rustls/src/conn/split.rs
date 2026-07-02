@@ -1,7 +1,8 @@
 use alloc::boxed::Box;
+use alloc::vec;
 use alloc::vec::Vec;
-use core::fmt;
 use core::ops::{DerefMut, Range};
+use core::{fmt, mem};
 use std::sync::MutexGuard;
 
 use crate::client::ClientSide;
@@ -14,20 +15,19 @@ use crate::lock::Mutex;
 use crate::msgs::{AlertLevel, Delocator, Message, TlsInputBuffer};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::vecbuf::ChunkVecBuffer;
 use crate::{ConnectionOutputs, Error, SideData};
 
 /// A [`SendPath`] paired with an output buffer.
 pub(crate) struct SendInner {
     pub(crate) path: SendPath,
-    pub(crate) sendable_tls: ChunkVecBuffer,
+    pub(crate) buffer: Vec<u8>,
 }
 
 impl SendInner {
     fn context(&mut self) -> SendContext<'_> {
         SendContext {
             send: &mut self.path,
-            sendable_tls: &mut self.sendable_tls,
+            sendable_tls: &mut self.buffer,
         }
     }
 }
@@ -53,7 +53,7 @@ impl<Side: SideData> TryFrom<ConnectionCore<Side>> for SplitConnection<Side> {
     fn try_from(conn: ConnectionCore<Side>) -> Result<Self, Error> {
         let send = Arc::new(Mutex::new(SendInner {
             path: conn.common.send,
-            sendable_tls: conn.common.sendable_tls,
+            buffer: conn.common.sendable_tls,
         }));
         let state = conn.state?;
 
@@ -88,7 +88,7 @@ impl SendTraffic {
         inner
             .context()
             .send_appdata_encrypt(application_data);
-        inner.sendable_tls.take()
+        wrap_single(mem::take(&mut inner.buffer))
     }
 
     /// Conclude sending traffic by sending a `close_notify` alert.
@@ -120,7 +120,7 @@ impl SendTraffic {
         inner
             .context()
             .maybe_refresh_traffic_keys();
-        inner.sendable_tls.take()
+        wrap_single(mem::take(&mut inner.buffer))
     }
 
     /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
@@ -161,6 +161,13 @@ impl fmt::Debug for SendTraffic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("SendTraffic")
             .finish_non_exhaustive()
+    }
+}
+
+fn wrap_single(single: Vec<u8>) -> Vec<Vec<u8>> {
+    match single.is_empty() {
+        true => Vec::new(),
+        false => vec![single],
     }
 }
 
@@ -247,7 +254,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             pending_flush_sender,
         };
 
-        if core::mem::take(&mut rt.pending_flush_sender) {
+        if mem::take(&mut rt.pending_flush_sender) {
             return Ok(ReceiveTrafficState::FlushSender(FlushSender { rt }));
         }
 
@@ -382,7 +389,7 @@ impl<Side: SideData> ReceivedApplicationData<'_, Side> {
         self.received_tls
             .discard(self.pending_discard);
 
-        if core::mem::take(&mut self.rt.pending_flush_sender) {
+        if mem::take(&mut self.rt.pending_flush_sender) {
             return ReceiveTrafficState::FlushSender(FlushSender { rt: self.rt });
         }
 
@@ -453,7 +460,7 @@ impl<'a> SendAdapter<'a> {
         let state = self.as_locked(may_send).deref_mut();
         SendContext {
             send: &mut state.path,
-            sendable_tls: &mut state.sendable_tls,
+            sendable_tls: &mut state.buffer,
         }
     }
 }
@@ -524,7 +531,7 @@ mod tests {
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {
         let mut send = SendInner {
             path: SendPath::default(),
-            sendable_tls: ChunkVecBuffer::new(None),
+            buffer: Vec::new(),
         };
         send.context()
             .set_encrypter(Box::new(Tls13Cipher), 1234);

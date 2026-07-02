@@ -1588,7 +1588,7 @@ impl ErrorWithAlert {
         maybe_send_fatal_alert(send, &error);
         Self {
             error,
-            data: send.sendable_tls.take_one_vec(),
+            data: mem::take(send.sendable_tls),
         }
     }
 

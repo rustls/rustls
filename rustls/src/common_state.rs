@@ -6,7 +6,7 @@ use core::ops::{Deref, DerefMut, Range};
 use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
-use crate::conn::{DEFAULT_BUFFER_LIMIT, Exporter, ReceivePath, SendContext, SendOutput, SendPath};
+use crate::conn::{Exporter, ReceivePath, SendContext, SendOutput, SendPath};
 use crate::crypto::Identity;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::SupportedKxGroup;
@@ -18,13 +18,12 @@ use crate::msgs::{
 };
 use crate::quic::{self, QuicOutput};
 use crate::suites::SupportedCipherSuite;
-use crate::vecbuf::ChunkVecBuffer;
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) outputs: ConnectionOutputs,
     pub(crate) send: SendPath,
-    pub(crate) sendable_tls: ChunkVecBuffer,
+    pub(crate) sendable_tls: Vec<u8>,
     pub(crate) recv: ReceivePath,
     pub(crate) fips: FipsStatus,
 }
@@ -34,7 +33,7 @@ impl CommonState {
         Self {
             outputs: ConnectionOutputs::default(),
             send: SendPath::default(),
-            sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            sendable_tls: Vec::new(),
             recv: ReceivePath::new(side),
             fips,
         }

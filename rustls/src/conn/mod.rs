@@ -684,10 +684,13 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     pub(crate) fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+        // extremely inefficient!
+        let len = wr.write(&self.core.common.sendable_tls)?;
         self.core
             .common
             .sendable_tls
-            .write_to(wr)
+            .drain(..len);
+        Ok(len)
     }
 }
 

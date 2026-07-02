@@ -1,4 +1,5 @@
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use core::time::Duration;
 use std::{println, vec};
 
@@ -11,7 +12,6 @@ use super::{
 use crate::conn::{SendContext, SendPath};
 use crate::crypto::GetRandomFailed;
 use crate::msgs::test_enum8_display;
-use crate::vecbuf::ChunkVecBuffer;
 
 #[test]
 fn certificate_error_equality() {
@@ -318,7 +318,7 @@ fn time_error_mapping() {
 #[test]
 fn error_with_alert() {
     let mut path = SendPath::default();
-    let mut sendable_tls = ChunkVecBuffer::new(None);
+    let mut sendable_tls = Vec::new();
     let mut e = ErrorWithAlert::new(
         Error::NoApplicationProtocol,
         &mut SendContext {

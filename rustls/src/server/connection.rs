@@ -354,7 +354,7 @@ impl AcceptedAlert {
     pub(super) fn from_error(
         error: Error,
         mut send: SendPath,
-        mut sendable_tls: ChunkVecBuffer,
+        mut sendable_tls: Vec<u8>,
     ) -> (Error, Self) {
         let ErrorWithAlert { error, data } = ErrorWithAlert::new(
             error,

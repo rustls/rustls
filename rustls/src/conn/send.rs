@@ -58,7 +58,7 @@ impl Default for SendPath {
 /// Pairs a [`SendPath`] with the buffer it emits encoded TLS records into.
 pub(crate) struct SendContext<'a> {
     pub(crate) send: &'a mut SendPath,
-    pub(crate) sendable_tls: &'a mut ChunkVecBuffer,
+    pub(crate) sendable_tls: &'a mut Vec<u8>,
 }
 
 impl SendContext<'_> {
@@ -121,7 +121,7 @@ impl SendContext<'_> {
             }
 
             self.perhaps_write_key_update();
-            self.sendable_tls.append(
+            self.sendable_tls.extend(
                 self.send
                     .encrypt_state
                     .encrypt_outgoing(m)
@@ -199,7 +199,7 @@ impl SendContext<'_> {
             .queued_key_update_message
             .take()
         {
-            self.sendable_tls.append(message);
+            self.sendable_tls.extend(message);
         }
     }
 
@@ -294,7 +294,7 @@ impl SendOutput for SendContext<'_> {
         self.perhaps_write_key_update();
         for m in iter {
             self.sendable_tls
-                .append(m.to_unencrypted_opaque().encode());
+                .extend(m.to_unencrypted_opaque().encode());
         }
     }
 }
