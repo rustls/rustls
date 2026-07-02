@@ -1,12 +1,12 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt;
 use core::ops::{DerefMut, Range};
+use core::{fmt, mem};
 use std::sync::MutexGuard;
 
 use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
-use crate::conn::{ConnectionCore, ReceivePath, SendOutput, SendPath};
+use crate::conn::{ConnectionCore, ReceivePath, SendContext, SendOutput, SendPath};
 use crate::crypto::cipher::{MessageEncrypter, OutboundPlain};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
@@ -15,6 +15,16 @@ use crate::msgs::{AlertLevel, Delocator, Message, TlsInputBuffer};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::{ConnectionOutputs, Error, SideData};
+
+/// A [`SendPath`] paired with an output buffer.
+///
+/// The buffer is used for collating sendable data produced as the result of receive-side
+/// actions.  The buffer is emptied into the caller's buffer on each actual [`SendTraffic`]
+/// operation.
+pub(crate) struct SendInner {
+    pub(crate) path: SendPath,
+    pub(crate) pending_buffer: Vec<u8>,
+}
 
 /// A post-handshake connection which has been split by direction.
 ///
@@ -35,7 +45,10 @@ impl<Side: SideData> TryFrom<ConnectionCore<Side>> for SplitConnection<Side> {
     type Error = Error;
 
     fn try_from(conn: ConnectionCore<Side>) -> Result<Self, Error> {
-        let send = Arc::new(Mutex::new(conn.common.send));
+        let send = Arc::new(Mutex::new(SendInner {
+            path: conn.common.send,
+            pending_buffer: conn.common.sendable_tls,
+        }));
         let state = conn.state?;
 
         Ok(Self {
@@ -54,31 +67,38 @@ impl<Side: SideData> TryFrom<ConnectionCore<Side>> for SplitConnection<Side> {
 /// The send-side of a connection, after a successful handshake.
 ///
 /// You can use this object to send data to the peer.
-pub struct SendTraffic(pub(crate) Arc<Mutex<SendPath>>);
+pub struct SendTraffic(pub(crate) Arc<Mutex<SendInner>>);
 
 impl SendTraffic {
     /// Write application data to the peer.
     ///
-    /// The TLS data to send to the peer is returned. This data should then
+    /// The TLS data to send to the peer is appended onto `output`. This data should then
     /// be communicated to the peer, in order.
-    pub fn write(&mut self, application_data: OutboundPlain<'_>) -> Vec<Vec<u8>> {
+    pub fn write(&mut self, application_data: OutboundPlain<'_>, output: &mut Vec<u8>) {
         let mut inner = self.0.lock().unwrap();
-        inner.maybe_refresh_traffic_keys();
-        inner.send_appdata_encrypt(application_data);
-        inner.sendable_tls.take()
+        output.extend(mem::take(&mut inner.pending_buffer));
+        let mut ctx = SendContext {
+            send: &mut inner.path,
+            sendable_tls: output,
+        };
+        ctx.maybe_refresh_traffic_keys();
+        ctx.send_appdata_encrypt(application_data);
     }
 
     /// Conclude sending traffic by sending a `close_notify` alert.
     ///
-    /// The alert is written into a Vec which is returned along with any pending data.
+    /// Any pending data is appended onto `output`, followed by the alert itself.
     /// This data should then be communicated to the peer.
     ///
     /// This is the final possible operation with a [`SendTraffic`].
-    pub fn close(mut self) -> Vec<Vec<u8>> {
+    pub fn close(self, output: &mut Vec<u8>) {
         let mut inner = self.0.lock().unwrap();
-        inner.send_close_notify();
-        drop(inner);
-        self.take_data()
+        output.extend(mem::take(&mut inner.pending_buffer));
+        SendContext {
+            send: &mut inner.path,
+            sendable_tls: output,
+        }
+        .send_close_notify();
     }
 
     /// Obtain any pending data to write to the peer.
@@ -87,15 +107,19 @@ impl SendTraffic {
     /// so there is no need to call this function if you have recently written data
     /// using this.
     ///
-    /// The TLS data to send to the peer is returned. This data should then
+    /// The TLS data to send to the peer is appended onto `output`. This data should then
     /// be communicated to the peer.
     ///
     /// This is useful to handle a [`ReceiveTrafficState::FlushSender`] event, but
     /// where you don't have any plaintext to send.
-    pub fn take_data(&mut self) -> Vec<Vec<u8>> {
+    pub fn take_data(&mut self, output: &mut Vec<u8>) {
         let mut inner = self.0.lock().unwrap();
-        inner.maybe_refresh_traffic_keys();
-        inner.sendable_tls.take()
+        output.extend(mem::take(&mut inner.pending_buffer));
+        SendContext {
+            send: &mut inner.path,
+            sendable_tls: output,
+        }
+        .maybe_refresh_traffic_keys();
     }
 
     /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
@@ -123,11 +147,14 @@ impl SendTraffic {
     /// Note that other implementations (including rustls) may enforce limits on
     /// the number of `key_update` messages allowed on a given connection to prevent
     /// denial of service. Therefore, this should be called sparingly.
-    pub fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-        self.0
-            .lock()
-            .unwrap()
-            .refresh_traffic_keys()
+    pub fn refresh_traffic_keys(&mut self, output: &mut Vec<u8>) -> Result<(), Error> {
+        let mut inner = self.0.lock().unwrap();
+        output.extend(mem::take(&mut inner.pending_buffer));
+        SendContext {
+            send: &mut inner.path,
+            sendable_tls: output,
+        }
+        .refresh_traffic_keys()
     }
 }
 
@@ -144,7 +171,7 @@ impl fmt::Debug for SendTraffic {
 pub struct ReceiveTraffic<Side: SideData> {
     pub(crate) state: Side::State,
     pub(crate) recv: ReceivePath,
-    pub(crate) send: Arc<Mutex<SendPath>>,
+    pub(crate) send: Arc<Mutex<SendInner>>,
     pub(crate) pending_flush_sender: bool,
 }
 
@@ -178,12 +205,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             match recv.process_recv_traffic::<Side>(received_tls, &mut state, &mut send_adapter) {
                 Ok(received_plain) => received_plain,
                 Err(err) => {
-                    return Err(ErrorWithAlert::new(
-                        err,
-                        send_adapter
-                            .as_locked(false)
-                            .deref_mut(),
-                    ));
+                    return Err(ErrorWithAlert::new(err, &mut send_adapter.context(false)));
                 }
             };
         // nb. state consumed only on error.
@@ -226,7 +248,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             pending_flush_sender,
         };
 
-        if core::mem::take(&mut rt.pending_flush_sender) {
+        if mem::take(&mut rt.pending_flush_sender) {
             return Ok(ReceiveTrafficState::FlushSender(FlushSender { rt }));
         }
 
@@ -361,7 +383,7 @@ impl<Side: SideData> ReceivedApplicationData<'_, Side> {
         self.received_tls
             .discard(self.pending_discard);
 
-        if core::mem::take(&mut self.rt.pending_flush_sender) {
+        if mem::take(&mut self.rt.pending_flush_sender) {
             return ReceiveTrafficState::FlushSender(FlushSender { rt: self.rt });
         }
 
@@ -402,15 +424,15 @@ impl<Side: SideData> FlushSender<Side> {
 /// a sequence of sent messages is not interleaved with others from another
 /// thread.
 enum SendAdapter<'a> {
-    Unlocked(&'a Mutex<SendPath>),
+    Unlocked(&'a Mutex<SendInner>),
     Locked {
-        guard: MutexGuard<'a, SendPath>,
+        guard: MutexGuard<'a, SendInner>,
         send_required: bool,
     },
 }
 
 impl<'a> SendAdapter<'a> {
-    fn as_locked<'b>(&'b mut self, may_send: bool) -> &'b mut MutexGuard<'a, SendPath> {
+    fn as_locked<'b>(&'b mut self, may_send: bool) -> &'b mut MutexGuard<'a, SendInner> {
         if let Self::Unlocked(m) = self {
             *self = Self::Locked {
                 guard: m.lock().unwrap(),
@@ -427,42 +449,50 @@ impl<'a> SendAdapter<'a> {
         *send_required |= may_send;
         guard
     }
+
+    fn context<'b>(&'b mut self, may_send: bool) -> SendContext<'b> {
+        let state = self.as_locked(may_send).deref_mut();
+        SendContext {
+            send: &mut state.path,
+            sendable_tls: &mut state.pending_buffer,
+        }
+    }
 }
 
 impl SendOutput for SendAdapter<'_> {
     fn negotiated_version(&mut self, version: ProtocolVersion) {
-        self.as_locked(false)
+        self.context(false)
             .negotiated_version(version);
     }
 
     fn ensure_key_update_queued(&mut self) {
         // waking the sender here is a policy decision to encourage timely execution of
         // the write-side key update, it is not strictly required at a protocol level.
-        self.as_locked(true)
+        self.context(true)
             .ensure_key_update_queued();
     }
 
     fn set_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>, max_messages: u64) {
-        self.as_locked(false)
+        self.context(false)
             .set_encrypter(cipher, max_messages);
     }
 
     fn update_key_schedule(&mut self, schedule: Box<KeyScheduleTrafficSend>) {
-        self.as_locked(false)
+        self.context(false)
             .update_key_schedule(schedule);
     }
 
     fn send_alert(&mut self, level: AlertLevel, desc: AlertDescription) {
-        self.as_locked(true)
+        self.context(true)
             .send_alert(level, desc)
     }
 
     fn start_traffic(&mut self) {
-        self.as_locked(false).start_traffic();
+        self.context(false).start_traffic();
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
-        self.as_locked(true)
+        self.context(true)
             .send_msg(m, must_encrypt)
     }
 }
@@ -493,8 +523,15 @@ mod tests {
     }
 
     fn send_flag_for(f: impl FnOnce(&mut SendAdapter<'_>)) -> bool {
-        let mut send = SendPath::default();
-        send.set_encrypter(Box::new(Tls13Cipher), 1234);
+        let mut send = SendInner {
+            path: SendPath::default(),
+            pending_buffer: Vec::new(),
+        };
+        SendContext {
+            send: &mut send.path,
+            sendable_tls: &mut send.pending_buffer,
+        }
+        .set_encrypter(Box::new(Tls13Cipher), 1234);
 
         let send = Mutex::new(send);
 

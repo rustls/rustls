@@ -167,35 +167,6 @@ fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
 }
 
 #[test]
-fn server_respects_buffer_limit_post_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-
-    // this test will vary in behaviour depending on the default suites
-    do_handshake(&mut client, &mut server);
-    server.set_buffer_limit(Some(48));
-
-    assert_eq!(
-        server
-            .writer()
-            .write(b"01234567890123456789")
-            .unwrap(),
-        20
-    );
-    assert_eq!(
-        server
-            .writer()
-            .write(b"01234567890123456789")
-            .unwrap(),
-        6
-    );
-
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
-
-    check_read(&mut client.reader(), b"01234567890123456789012345");
-}
-
-#[test]
 fn client_respects_buffer_limit_pre_handshake() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
 
@@ -245,34 +216,6 @@ fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
     server.process_new_packets().unwrap();
 
     check_read(&mut server.reader(), b"01234567890123456789012345678901");
-}
-
-#[test]
-fn client_respects_buffer_limit_post_handshake() {
-    let (mut client, mut server) = make_pair(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
-
-    do_handshake(&mut client, &mut server);
-    client.set_buffer_limit(Some(48));
-
-    assert_eq!(
-        client
-            .writer()
-            .write(b"01234567890123456789")
-            .unwrap(),
-        20
-    );
-    assert_eq!(
-        client
-            .writer()
-            .write(b"01234567890123456789")
-            .unwrap(),
-        6
-    );
-
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-
-    check_read(&mut server.reader(), b"01234567890123456789012345");
 }
 
 #[test]

@@ -29,8 +29,7 @@ use receive::JoinOutput;
 pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
 
 mod send;
-use send::DEFAULT_BUFFER_LIMIT;
-pub(crate) use send::{SendOutput, SendPath};
+pub(crate) use send::{DEFAULT_BUFFER_LIMIT, SendContext, SendOutput, SendPath};
 
 pub(crate) mod split;
 use split::SplitConnection;
@@ -393,9 +392,12 @@ impl<Side: SideData> PlaintextSink for ConnectionCommon<Side> {
         let len = self
             .core
             .common
-            .send
+            .send_context()
             .buffer_plaintext(buf.into(), &mut self.buffers.sendable_plaintext);
-        self.send.maybe_refresh_traffic_keys();
+        self.core
+            .common
+            .send_context()
+            .maybe_refresh_traffic_keys();
         Ok(len)
     }
 
@@ -416,9 +418,12 @@ impl<Side: SideData> PlaintextSink for ConnectionCommon<Side> {
         let len = self
             .core
             .common
-            .send
+            .send_context()
             .buffer_plaintext(payload, &mut self.buffers.sendable_plaintext);
-        self.send.maybe_refresh_traffic_keys();
+        self.core
+            .common
+            .send_context()
+            .maybe_refresh_traffic_keys();
         Ok(len)
     }
 
@@ -563,7 +568,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
         {
             self.core
                 .common
-                .send
+                .send_context()
                 .send_buffered_plaintext(&mut self.buffers.sendable_plaintext);
         }
 
@@ -581,7 +586,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .received_plaintext
             .is_empty()
             && !self.recv.has_received_close_notify
-            && (self.send.may_send_application_data || self.send.sendable_tls.is_empty())
+            && (self.send.may_send_application_data || self.sendable_tls.is_empty())
     }
 
     pub(crate) fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
@@ -598,7 +603,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
         self.buffers
             .sendable_plaintext
             .set_limit(limit);
-        self.send.sendable_tls.set_limit(limit);
     }
 
     pub(crate) fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
@@ -610,14 +614,14 @@ impl<Side: SideData> ConnectionCommon<Side> {
     pub(crate) fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
         self.core
             .common
-            .send
+            .send_context()
             .refresh_traffic_keys()
     }
 
     pub(crate) fn current_io_state(&self) -> IoState {
         let common_state = &self.core.common;
         IoState {
-            tls_bytes_to_write: common_state.send.sendable_tls.len(),
+            tls_bytes_to_write: common_state.sendable_tls.len(),
             plaintext_bytes_to_read: self.buffers.received_plaintext.len(),
             peer_has_closed: common_state
                 .recv
@@ -680,7 +684,13 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     pub(crate) fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.send.sendable_tls.write_to(wr)
+        // extremely inefficient!
+        let len = wr.write(&self.core.common.sendable_tls)?;
+        self.core
+            .common
+            .sendable_tls
+            .drain(..len);
+        Ok(len)
     }
 }
 
@@ -783,10 +793,14 @@ impl<Side: SideData> ConnectionCore<Side> {
         buffer: &mut dyn TlsInputBuffer,
         quic: Option<&'a mut dyn QuicOutput>,
     ) -> Result<Option<UnborrowedPayload>, Error> {
+        let mut send = SendContext {
+            send: &mut self.common.send,
+            sendable_tls: &mut self.common.sendable_tls,
+        };
         let mut output = JoinOutput {
             outputs: &mut self.common.outputs,
             quic,
-            send: &mut self.common.send,
+            send: &mut send,
             side: &mut self.side,
         };
 
@@ -807,6 +821,9 @@ impl<Side: SideData> ConnectionCore<Side> {
         if self.common.is_handshaking() {
             return Err(Error::HandshakeNotComplete);
         }
+        if !self.common.sendable_tls.is_empty() {
+            return Err(ApiMisuse::SecretExtractionWithPendingSendableData.into());
+        }
         Self::from_parts_into_kernel_connection(
             &mut self.common.send,
             self.common.recv,
@@ -821,10 +838,6 @@ impl<Side: SideData> ConnectionCore<Side> {
         outputs: ConnectionOutputs,
         state: Side::State,
     ) -> Result<(ExtractedSecrets, KernelConnection<Side>), Error> {
-        if !send.sendable_tls.is_empty() {
-            return Err(ApiMisuse::SecretExtractionWithPendingSendableData.into());
-        }
-
         let read_seq = recv.decrypt_state.read_seq();
         let write_seq = send.encrypt_state.write_seq();
 
@@ -872,7 +885,12 @@ impl ConnectionCore<ServerSide> {
         let mut output = SideCommonOutput {
             side: &mut self.side,
             quic,
-            common: &mut self.common,
+            send: SendContext {
+                send: &mut self.common.send,
+                sendable_tls: &mut self.common.sendable_tls,
+            },
+            recv: &mut self.common.recv,
+            outputs: &mut self.common.outputs,
         };
 
         self.state = Ok(choose.use_config(config, exts, &mut output)?);
@@ -883,7 +901,9 @@ impl ConnectionCore<ServerSide> {
 pub(crate) struct SideCommonOutput<'a, 'q> {
     pub(crate) side: &'a mut dyn SideOutput,
     pub(crate) quic: Option<&'q mut dyn QuicOutput>,
-    pub(crate) common: &'a mut CommonState,
+    pub(crate) send: SendContext<'a>,
+    pub(crate) recv: &'a mut ReceivePath,
+    pub(crate) outputs: &'a mut ConnectionOutputs,
 }
 
 impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
@@ -893,19 +913,16 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
 
     fn output(&mut self, ev: OutputEvent<'_>) {
         if let OutputEvent::ProtocolVersion(ver) = ev {
-            self.common.recv.negotiated_version = Some(ver);
-            self.common.send.negotiated_version(ver);
+            self.recv.negotiated_version = Some(ver);
+            self.send.negotiated_version(ver);
         }
-        self.common.outputs.handle(ev);
+        self.outputs.handle(ev);
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         match self.quic() {
             Some(quic) => quic.send_msg(m, must_encrypt),
-            None => self
-                .common
-                .send
-                .send_msg(m, must_encrypt),
+            None => self.send.send_msg(m, must_encrypt),
         }
     }
 
@@ -917,20 +934,16 @@ impl<'q> Output<'_> for SideCommonOutput<'_, 'q> {
     }
 
     fn start_traffic(&mut self) {
-        self.common
-            .recv
-            .may_receive_application_data = true;
-        self.common
-            .send
-            .start_outgoing_traffic();
+        self.recv.may_receive_application_data = true;
+        self.send.send.start_outgoing_traffic();
     }
 
     fn receive(&mut self) -> &mut ReceivePath {
-        &mut self.common.recv
+        self.recv
     }
 
     fn send(&mut self) -> &mut dyn SendOutput {
-        &mut self.common.send
+        &mut self.send
     }
 }
 

@@ -12,8 +12,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendPath,
-    SideData, Writer,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendContext,
+    SendPath, SideData, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -313,7 +313,11 @@ impl Acceptor {
         };
 
         if let Err(e) = connection.process_new_packets() {
-            return Err(AcceptedAlert::from_error(e, connection.core.common.send));
+            return Err(AcceptedAlert::from_error(
+                e,
+                connection.core.common.send,
+                connection.core.common.sendable_tls,
+            ));
         }
 
         const MISUSED: Error = Error::Unreachable("Accepted misused state");
@@ -329,7 +333,12 @@ impl Acceptor {
             }
             Err(e) => Err((
                 e.clone(),
-                AcceptedAlert::from_error(e, connection.core.common.send).1,
+                AcceptedAlert::from_error(
+                    e,
+                    connection.core.common.send,
+                    connection.core.common.sendable_tls,
+                )
+                .1,
             )),
         }
     }
@@ -342,8 +351,18 @@ impl Acceptor {
 pub struct AcceptedAlert(ChunkVecBuffer);
 
 impl AcceptedAlert {
-    pub(super) fn from_error(error: Error, mut send: SendPath) -> (Error, Self) {
-        let ErrorWithAlert { error, data } = ErrorWithAlert::new(error, &mut send);
+    pub(super) fn from_error(
+        error: Error,
+        mut send: SendPath,
+        mut sendable_tls: Vec<u8>,
+    ) -> (Error, Self) {
+        let ErrorWithAlert { error, data } = ErrorWithAlert::new(
+            error,
+            &mut SendContext {
+                send: &mut send,
+                sendable_tls: &mut sendable_tls,
+            },
+        );
         let mut output = ChunkVecBuffer::new(None);
         output.append(data);
         (error, Self(output))
@@ -464,7 +483,12 @@ impl Accepted {
             }),
             Err(e) => Err((
                 e.clone(),
-                AcceptedAlert::from_error(e, self.connection.core.common.send).1,
+                AcceptedAlert::from_error(
+                    e,
+                    self.connection.core.common.send,
+                    self.connection.core.common.sendable_tls,
+                )
+                .1,
             )),
         }
     }
