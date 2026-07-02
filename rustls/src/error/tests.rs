@@ -8,9 +8,10 @@ use super::{
     AlertDescription, CertRevocationListError, Error, ErrorWithAlert, InconsistentKeys,
     InvalidMessage, OtherError, UnixTime,
 };
-use crate::conn::SendPath;
+use crate::conn::{SendContext, SendPath};
 use crate::crypto::GetRandomFailed;
 use crate::msgs::test_enum8_display;
+use crate::vecbuf::ChunkVecBuffer;
 
 #[test]
 fn certificate_error_equality() {
@@ -316,7 +317,15 @@ fn time_error_mapping() {
 
 #[test]
 fn error_with_alert() {
-    let mut e = ErrorWithAlert::new(Error::NoApplicationProtocol, &mut SendPath::default());
+    let mut path = SendPath::default();
+    let mut sendable_tls = ChunkVecBuffer::new(None);
+    let mut e = ErrorWithAlert::new(
+        Error::NoApplicationProtocol,
+        &mut SendContext {
+            send: &mut path,
+            sendable_tls: &mut sendable_tls,
+        },
+    );
     assert_eq!(
         std::format!("{e:?}"),
         "ErrorWithAlert { error: NoApplicationProtocol, data: 7, .. }"

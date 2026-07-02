@@ -12,7 +12,7 @@ use pki_types::{AlgorithmIdentifier, EchConfigListBytes, ServerName, UnixTime};
 use webpki::ExtendedKeyUsage;
 
 use crate::common_state::maybe_send_fatal_alert;
-use crate::conn::SendPath;
+use crate::conn::SendContext;
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{CipherSuite, GetRandomFailed, InconsistentKeys};
 use crate::enums::{ContentType, HandshakeType};
@@ -1584,11 +1584,11 @@ pub struct ErrorWithAlert {
 }
 
 impl ErrorWithAlert {
-    pub(crate) fn new(error: Error, send_path: &mut SendPath) -> Self {
-        maybe_send_fatal_alert(send_path, &error);
+    pub(crate) fn new(error: Error, send: &mut SendContext<'_>) -> Self {
+        maybe_send_fatal_alert(send, &error);
         Self {
             error,
-            data: send_path.sendable_tls.take_one_vec(),
+            data: send.sendable_tls.take_one_vec(),
         }
     }
 

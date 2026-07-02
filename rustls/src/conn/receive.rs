@@ -73,7 +73,7 @@ impl ReceivePath {
         &mut self,
         input: &'m mut dyn TlsInputBuffer,
         state: &mut Result<Side::State, Error>,
-        output: &mut JoinOutput<'a>,
+        output: &mut JoinOutput<'a, '_>,
     ) -> Result<Option<UnborrowedPayload>, Error> {
         let mut st = match mem::replace(state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
@@ -445,9 +445,9 @@ impl ReceivePath {
     }
 }
 
-struct CaptureAppData<'a, 'j, 'm> {
+struct CaptureAppData<'a, 'j, 's, 'm> {
     recv: &'a mut ReceivePath,
-    other: &'a mut JoinOutput<'j>,
+    other: &'a mut JoinOutput<'j, 's>,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
@@ -463,7 +463,7 @@ struct CaptureAppData<'a, 'j, 'm> {
     _message_lifetime: PhantomData<&'m ()>,
 }
 
-impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
+impl<'m> Output<'m> for CaptureAppData<'_, '_, '_, 'm> {
     fn emit(&mut self, ev: Event<'_>) {
         self.other.side.emit(ev)
     }
@@ -520,10 +520,10 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
     }
 }
 
-pub(super) struct JoinOutput<'a> {
+pub(super) struct JoinOutput<'a, 's> {
     pub(super) outputs: &'a mut dyn ConnectionOutput,
     pub(super) quic: Option<&'a mut dyn QuicOutput>,
-    pub(super) send: &'a mut dyn SendOutput,
+    pub(super) send: &'s mut dyn SendOutput,
     pub(super) side: &'a mut dyn SideOutput,
 }
 

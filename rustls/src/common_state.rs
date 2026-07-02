@@ -6,7 +6,7 @@ use core::ops::{Deref, DerefMut, Range};
 use pki_types::{DnsName, FipsStatus};
 
 use crate::client::EchStatus;
-use crate::conn::{Exporter, ReceivePath, SendOutput, SendPath};
+use crate::conn::{DEFAULT_BUFFER_LIMIT, Exporter, ReceivePath, SendContext, SendOutput, SendPath};
 use crate::crypto::Identity;
 use crate::crypto::cipher::Payload;
 use crate::crypto::kx::SupportedKxGroup;
@@ -18,11 +18,13 @@ use crate::msgs::{
 };
 use crate::quic::{self, QuicOutput};
 use crate::suites::SupportedCipherSuite;
+use crate::vecbuf::ChunkVecBuffer;
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) outputs: ConnectionOutputs,
     pub(crate) send: SendPath,
+    pub(crate) sendable_tls: ChunkVecBuffer,
     pub(crate) recv: ReceivePath,
     pub(crate) fips: FipsStatus,
 }
@@ -32,8 +34,17 @@ impl CommonState {
         Self {
             outputs: ConnectionOutputs::default(),
             send: SendPath::default(),
+            sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             recv: ReceivePath::new(side),
             fips,
+        }
+    }
+
+    /// Pair the [`SendPath`] with its output buffer for an emit operation.
+    pub(crate) fn send_context(&mut self) -> SendContext<'_> {
+        SendContext {
+            send: &mut self.send,
+            sendable_tls: &mut self.sendable_tls,
         }
     }
 
@@ -41,7 +52,7 @@ impl CommonState {
     ///
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn wants_write(&self) -> bool {
-        !self.send.sendable_tls.is_empty()
+        !self.sendable_tls.is_empty()
     }
 
     /// Queues a `close_notify` warning alert to be sent in the next
@@ -52,7 +63,7 @@ impl CommonState {
     ///
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn send_close_notify(&mut self) {
-        self.send.send_close_notify()
+        self.send_context().send_close_notify()
     }
 
     /// Returns true if the connection is currently performing the TLS handshake.

@@ -13,7 +13,7 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, IoState, KeyingMaterialExporter, Reader,
-    SideCommonOutput, SideData, Writer,
+    SendContext, SideCommonOutput, SideData, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -111,7 +111,9 @@ impl ClientConnection {
             .check_write(data.len())
             .map(|sz| {
                 self.inner
-                    .send
+                    .core
+                    .common
+                    .send_context()
                     .send_early_plaintext(&data[..sz])
             })
     }
@@ -310,7 +312,12 @@ impl ConnectionCore<ClientSide> {
         let mut output = SideCommonOutput {
             side: &mut data,
             quic,
-            common: &mut common_state,
+            send: SendContext {
+                send: &mut common_state.send,
+                sendable_tls: &mut common_state.sendable_tls,
+            },
+            recv: &mut common_state.recv,
+            outputs: &mut common_state.outputs,
         };
 
         let input = ClientHelloInput::new(name, &extra_exts, protocol, &mut output, config)?;
