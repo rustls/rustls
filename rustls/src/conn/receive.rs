@@ -7,15 +7,15 @@ use crate::SideData;
 use crate::common_state::{
     ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
 };
-use crate::conn::StateMachine;
 use crate::conn::private::SideOutput;
+use crate::conn::{StateMachine, TlsInputBuffer};
 use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
 use crate::msgs::{
     AlertLevel, AlertLevelName, AlertMessagePayload, Deframed, Deframer, Delocator,
-    HandshakeAlignedProof, Locator, Message, MessagePayload, TlsInputBuffer,
+    HandshakeAlignedProof, Locator, Message, MessagePayload,
 };
 use crate::quic::QuicOutput;
 

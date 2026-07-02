@@ -6,12 +6,12 @@ use std::sync::MutexGuard;
 
 use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
-use crate::conn::{ConnectionCore, ReceivePath, SendOutput, SendPath};
+use crate::conn::{ConnectionCore, ReceivePath, SendOutput, SendPath, TlsInputBuffer};
 use crate::crypto::cipher::{MessageEncrypter, OutboundPlain};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
 use crate::lock::Mutex;
-use crate::msgs::{AlertLevel, Delocator, Message, TlsInputBuffer};
+use crate::msgs::{AlertLevel, Delocator, Message};
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
 use crate::{ConnectionOutputs, Error, SideData};

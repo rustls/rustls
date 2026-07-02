@@ -37,7 +37,9 @@ use crate::verify::{
     HandshakeSignatureValid, PeerVerified, ServerIdentity, ServerVerifier,
     SignatureVerificationInput,
 };
-use crate::{Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore};
+use crate::{
+    Connection, DigitallySignedStruct, DistinguishedName, KeyLog, RootCertStore, VecInput,
+};
 
 #[test]
 fn tls12_client_session_value_roundtrip() {
@@ -199,10 +201,12 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         )),
     };
 
-    conn.read_tls(&mut hrr.into_wire_bytes().as_slice())
+    let mut buf = VecInput::default();
+    buf.read(&mut hrr.into_wire_bytes().as_slice())
         .unwrap();
     assert_eq!(
-        conn.process_new_packets().unwrap_err(),
+        conn.process_new_packets(&mut buf)
+            .unwrap_err(),
         PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into()
     );
 }
@@ -240,11 +244,12 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
             },
         ))),
     };
-    conn.read_tls(&mut sh.into_wire_bytes().as_slice())
+    let mut buf = VecInput::default();
+    buf.read(&mut sh.into_wire_bytes().as_slice())
         .unwrap();
 
     assert_eq!(
-        conn.process_new_packets(),
+        conn.process_new_packets(&mut buf),
         Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into())
     );
 }
@@ -314,9 +319,11 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
             },
         ))),
     };
-    conn.read_tls(&mut sh.into_wire_bytes().as_slice())
+    let mut buf = VecInput::default();
+    buf.read(&mut sh.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets().unwrap();
+    conn.process_new_packets(&mut buf)
+        .unwrap();
 
     let cert = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -324,9 +331,10 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
             CertificateChain(vec![CertificateDer::from(&b"does not matter"[..])]),
         ))),
     };
-    conn.read_tls(&mut cert.into_wire_bytes().as_slice())
+    buf.read(&mut cert.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets().unwrap();
+    conn.process_new_packets(&mut buf)
+        .unwrap();
 
     let server_kx = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -348,9 +356,10 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
             )),
         )),
     };
-    conn.read_tls(&mut server_kx.into_wire_bytes().as_slice())
+    buf.read(&mut server_kx.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets().unwrap();
+    conn.process_new_packets(&mut buf)
+        .unwrap();
 
     let server_done = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -358,9 +367,10 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
             HandshakePayload::ServerHelloDone,
         )),
     };
-    conn.read_tls(&mut server_done.into_wire_bytes().as_slice())
+    buf.read(&mut server_done.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets().unwrap();
+    conn.process_new_packets(&mut buf)
+        .unwrap();
 
     assert!(
         verifier
@@ -517,9 +527,11 @@ fn client_requiring_rpk_receives_server_ee(
             },
         ))),
     };
-    conn.read_tls(&mut sh.into_wire_bytes().as_slice())
+    let mut buf = VecInput::default();
+    buf.read(&mut sh.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets().unwrap();
+    conn.process_new_packets(&mut buf)
+        .unwrap();
 
     let ee = Message {
         version: ProtocolVersion::TLSv1_3,
@@ -532,10 +544,14 @@ fn client_requiring_rpk_receives_server_ee(
     let enc_ee = encrypter
         .encrypt(EncodedMessage::<Payload<'_>>::from(ee).borrow_outbound(), 0)
         .unwrap();
-    conn.read_tls(&mut enc_ee.encode().as_slice())
+    buf.read(&mut enc_ee.encode().as_slice())
         .unwrap();
 
-    assert_eq!(conn.process_new_packets().map(|_| ()), expected);
+    assert_eq!(
+        conn.process_new_packets(&mut buf)
+            .map(|_| ()),
+        expected
+    );
 }
 
 fn client_credentials(provider: &CryptoProvider) -> Credentials {

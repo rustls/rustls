@@ -10,14 +10,13 @@ use pki_types::{DnsName, FipsStatus, ServerName};
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
-use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData};
+use crate::conn::{ConnectionCore, KeyingMaterialExporter, SideData, VecInput};
 use crate::crypto::cipher::{AeadKey, EncodedMessage, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::{ApplicationProtocol, ContentType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error};
 use crate::msgs::{
     ClientExtensionsInput, Message, MessagePayload, ServerExtensionsInput, TransportParameters,
-    VecInput,
 };
 use crate::server::{ChooseConfig, ClientHello, ServerConfig, ServerSide, ServerState};
 use crate::suites::SupportedCipherSuite;

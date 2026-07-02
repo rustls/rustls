@@ -1,125 +1,6 @@
-use alloc::vec::Vec;
 use core::ops::Range;
-use std::io;
 
-#[derive(Default, Debug)]
-pub struct VecInput {
-    /// Buffer of data read from the socket, in the process of being parsed into messages.
-    ///
-    /// For buffer size management, checkout out the [`VecInput::prepare_read()`] method.
-    buf: Vec<u8>,
-
-    /// What size prefix of `buf` is used.
-    used: usize,
-}
-
-impl VecInput {
-    /// Discard `taken` bytes from the start of our buffer.
-    pub(crate) fn discard(&mut self, taken: usize) {
-        if taken < self.used {
-            /* Before:
-             * +----------+----------+----------+
-             * | taken    | pending  |xxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ taken    ^ self.used
-             *
-             * After:
-             * +----------+----------+----------+
-             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ self.used
-             */
-
-            self.buf
-                .copy_within(taken..self.used, 0);
-            self.used -= taken;
-        } else if taken >= self.used {
-            self.used = 0;
-        }
-    }
-
-    pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[..self.used]
-    }
-
-    /// Read some bytes from `rd`, and add them to the buffer.
-    pub(crate) fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        if let Err(err) = self.prepare_read() {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, err));
-        }
-
-        // Try to do the largest reads possible. Note that if
-        // we get a message with a length field out of range here,
-        // we do a zero length read.  That looks like an EOF to
-        // the next layer up, which is fine.
-        let new_bytes = rd.read(&mut self.buf[self.used..])?;
-        self.used += new_bytes;
-        Ok(new_bytes)
-    }
-
-    /// Resize the internal `buf` if necessary for reading more bytes.
-    fn prepare_read(&mut self) -> Result<(), &'static str> {
-        /// TLS allows for handshake messages of up to 16MB.  We
-        /// restrict that to 64KB to limit potential for denial-of-
-        /// service.
-        const MAX_HANDSHAKE_SIZE: usize = 0xffff;
-
-        const READ_SIZE: usize = 4096;
-
-        // We allow a maximum of 64k of buffered data. Given that the first read of such a
-        // payload will only ever be 4k bytes, the next time we come around here we allow a
-        // larger buffer size. Once the large message and any following handshake messages in
-        // the same flight have been consumed, `pop()` will call `discard()` to reset `used`.
-        // At this point, the buffer resizing logic below should reduce the buffer size.
-        if self.used >= MAX_HANDSHAKE_SIZE {
-            return Err("message buffer full");
-        }
-
-        // If we can and need to increase the buffer size to allow a 4k read, do so. After
-        // dealing with a large handshake message (exceeding `MAX_HANDSHAKE_SIZE`),
-        // make sure to reduce the buffer size again (large messages should be rare).
-        // Also, reduce the buffer size if there are neither full nor partial messages in it,
-        // which usually means that the other side suspended sending data.
-        let need_capacity = Ord::min(MAX_HANDSHAKE_SIZE, self.used + READ_SIZE);
-        if need_capacity > self.buf.len() {
-            self.buf.resize(need_capacity, 0);
-        } else if self.used == 0 || self.buf.len() > MAX_HANDSHAKE_SIZE {
-            self.buf.resize(need_capacity, 0);
-            self.buf.shrink_to(need_capacity);
-        }
-
-        Ok(())
-    }
-
-    /// Append `bytes` to the end of this buffer.
-    ///
-    /// Return a `Range` saying where it went.
-    pub(crate) fn extend(&mut self, bytes: &[u8]) -> Range<usize> {
-        let len = bytes.len();
-        let start = self.used;
-        let end = start + len;
-        if self.buf.len() < end {
-            self.buf.resize(end, 0);
-        }
-        self.buf[start..end].copy_from_slice(bytes);
-        self.used += len;
-        Range { start, end }
-    }
-
-    pub(crate) fn filled(&self) -> &[u8] {
-        &self.buf[..self.used]
-    }
-}
-
-impl TlsInputBuffer for VecInput {
-    fn slice_mut(&mut self) -> &mut [u8] {
-        self.filled_mut()
-    }
-
-    fn discard(&mut self, num_bytes: usize) {
-        self.discard(num_bytes)
-    }
-}
+use crate::conn::TlsInputBuffer;
 
 /// A borrowed version of [`VecInput`] that tracks discard operations
 #[derive(Debug)]
@@ -128,11 +9,20 @@ pub struct SliceInput<'a> {
     buf: &'a mut [u8],
     // number of bytes to discard from the front of `buf` at a later time
     discard: usize,
+    /// Whether we've seen a 0-byte read.
+    has_seen_eof: bool,
+    /// Whether a CloseNotify alert has been seen.
+    received_close_notify: bool,
 }
 
 impl<'a> SliceInput<'a> {
     pub fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, discard: 0 }
+        Self {
+            buf,
+            discard: 0,
+            has_seen_eof: false,
+            received_close_notify: false,
+        }
     }
 
     /// Returns how many bytes were consumed at the start of the original buffer.
@@ -149,34 +39,14 @@ impl TlsInputBuffer for SliceInput<'_> {
     fn discard(&mut self, num_bytes: usize) {
         self.discard += num_bytes;
     }
-}
 
-/// An abstraction over received data buffers (either owned or borrowed)
-pub trait TlsInputBuffer {
-    /// Return the buffer which contains the received data.
-    ///
-    /// If no data is available, return the empty slice.
-    ///
-    /// This is mutable, because the buffer is used for in-place decryption
-    /// and coalescing of TLS records.  Coalescing of TLS records can happen
-    /// incrementally over multiple calls into rustls.  As a result the
-    /// contents of this buffer must not be altered except to add new bytes
-    /// at the end.
-    fn slice_mut(&mut self) -> &mut [u8];
+    fn received_close_notify(&mut self) {
+        self.received_close_notify = true;
+    }
 
-    /// Discard `num_bytes` from the front of the buffer returned by `slice_mut()`.
-    ///
-    /// Multiple calls to `discard()` are cumulative, rather than "last wins".  In
-    /// other words, `discard(1)` followed by `discard(1)` gives the same result
-    /// as `discard(2)`.
-    ///
-    /// The next call to `slice_mut()` must reflect all previous `discard()`s. In
-    /// other words, if `slice_mut()` returns slice `[p..q]`, it should then
-    /// return `[p+n..q]` after `discard(n)`.
-    ///
-    /// Rustls guarantees it will not `discard()` more bytes than are returned
-    /// from `slice_mut()`.
-    fn discard(&mut self, num_bytes: usize);
+    fn has_seen_eof(&self) -> bool {
+        self.has_seen_eof
+    }
 }
 
 /// Reordering the underlying buffer based on ranges.

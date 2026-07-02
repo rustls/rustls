@@ -1,7 +1,7 @@
 #![allow(clippy::std_instead_of_core)] // awaits core::io::IoSlice in stable (1.98)
 use std::io::{BufRead, IoSlice, Read, Result, Write};
 
-use rustls::Connection;
+use rustls::{Connection, VecInput};
 
 use crate::complete_io;
 
@@ -21,6 +21,9 @@ pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
 
     /// The underlying transport, like a socket
     pub sock: &'a mut T,
+
+    /// The input buffer
+    pub buf: &'a mut VecInput,
 }
 
 impl<'a, C, T> Stream<'a, C, T>
@@ -30,19 +33,19 @@ where
 {
     /// Make a new Stream using the Connection `conn` and socket-like object
     /// `sock`.  This does not fail and does no IO.
-    pub fn new(conn: &'a mut C, sock: &'a mut T) -> Self {
-        Self { conn, sock }
+    pub fn new(buf: &'a mut VecInput, conn: &'a mut C, sock: &'a mut T) -> Self {
+        Self { conn, sock, buf }
     }
 
     /// If we're handshaking, complete all the IO for that.
     /// If we have data to write, write it all.
     fn complete_prior_io(&mut self) -> Result<()> {
         if self.conn.is_handshaking() {
-            complete_io(self.sock, self.conn)?;
+            complete_io(self.sock, self.buf, self.conn)?;
         }
 
         if self.conn.wants_write() {
-            complete_io(self.sock, self.conn)?;
+            complete_io(self.sock, self.buf, self.conn)?;
         }
 
         Ok(())
@@ -56,7 +59,7 @@ where
         // needed to get more plaintext, which we must do if EOF has not been
         // hit.
         while self.conn.wants_read() {
-            if complete_io(self.sock, self.conn)?.0 == 0 {
+            if complete_io(self.sock, self.buf, self.conn)?.0 == 0 {
                 break;
             }
         }
@@ -92,6 +95,7 @@ where
         Stream {
             conn: self.conn,
             sock: self.sock,
+            buf: self.buf,
         }
         .fill_buf()
     }
@@ -114,7 +118,7 @@ where
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = complete_io(self.sock, self.conn);
+        let _ = complete_io(self.sock, self.buf, self.conn);
 
         Ok(len)
     }
@@ -130,7 +134,7 @@ where
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
         // Callers will learn of permanent errors on the next call.
-        let _ = complete_io(self.sock, self.conn);
+        let _ = complete_io(self.sock, self.buf, self.conn);
 
         Ok(len)
     }
@@ -140,7 +144,7 @@ where
 
         self.conn.writer().flush()?;
         if self.conn.wants_write() {
-            complete_io(self.sock, self.conn)?;
+            complete_io(self.sock, self.buf, self.conn)?;
         }
         Ok(())
     }
@@ -162,6 +166,9 @@ pub struct StreamOwned<C: Sized, T: Read + Write + Sized> {
 
     /// The underlying transport, like a socket
     pub sock: T,
+
+    /// The input buffer
+    pub buf: VecInput,
 }
 
 impl<C, T> StreamOwned<C, T>
@@ -175,7 +182,11 @@ where
     /// This is the same as `Stream::new` except `conn` and `sock` are
     /// moved into the StreamOwned.
     pub fn new(conn: C, sock: T) -> Self {
-        Self { conn, sock }
+        Self {
+            conn,
+            sock,
+            buf: VecInput::default(),
+        }
     }
 
     /// Get a reference to the underlying socket
@@ -203,6 +214,7 @@ where
         Stream {
             conn: &mut self.conn,
             sock: &mut self.sock,
+            buf: &mut self.buf,
         }
     }
 }
