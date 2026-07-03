@@ -390,6 +390,7 @@ pub use crate::conn::{
 ///
 /// See [`split::SplitConnection`] for more information.
 pub mod split {
+    pub use crate::conn::WrittenInto;
     pub use crate::conn::split::{
         FlushSender, ReceiveTraffic, ReceiveTrafficState, ReceivedApplicationData, SendTraffic,
         SplitConnection,

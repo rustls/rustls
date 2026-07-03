@@ -7,7 +7,9 @@ use std::sync::MutexGuard;
 use super::receive::{Discard, JoinOutput};
 use crate::client::ClientSide;
 use crate::common_state::UnborrowedPayload;
-use crate::conn::{ConnectionCore, MessageIter, ReceivePath, SendOutput, SendPath, TlsInputBuffer};
+use crate::conn::{
+    ConnectionCore, MessageIter, ReceivePath, SendOutput, SendPath, TlsInputBuffer, WrittenInto,
+};
 use crate::crypto::cipher::{MessageEncrypter, OutboundPlain};
 use crate::enums::ProtocolVersion;
 use crate::error::{AlertDescription, ErrorWithAlert};
@@ -67,6 +69,33 @@ impl SendTraffic {
         inner.maybe_refresh_traffic_keys();
         inner.send_appdata_encrypt(application_data);
         inner.sendable_tls.take()
+    }
+
+    /// Write application data to the peer, encrypting directly into `out`.
+    ///
+    /// Unlike [`SendTraffic::write()`], this does not allocate or buffer
+    /// internally. Encrypted records are written straight into the caller's
+    /// buffer, along with any internally-queued records (such as a pending
+    /// `key_update`).
+    ///
+    /// Records are written while `out` has space for them. The returned
+    /// [`WrittenInto`] indicates how much of `application_data` was consumed and
+    /// how many bytes were written to `out`. Once the written bytes have been
+    /// communicated to the peer, call again with the unconsumed remainder of
+    /// `application_data`.
+    ///
+    /// There is deliberately no way to ask how large `out` needs to be:
+    /// the receive half of the connection shares the send state and may
+    /// queue records concurrently, so any such answer could be stale
+    /// before it was used. Instead, loop on the returned [`WrittenInto`].
+    pub fn write_tls_into(
+        &mut self,
+        application_data: OutboundPlain<'_>,
+        out: &mut [u8],
+    ) -> Result<WrittenInto, Error> {
+        let mut inner = self.0.lock().unwrap();
+        inner.maybe_refresh_traffic_keys();
+        inner.write_appdata_into(application_data, out)
     }
 
     /// Conclude sending traffic by sending a `close_notify` alert.

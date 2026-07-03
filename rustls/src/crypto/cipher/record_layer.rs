@@ -33,34 +33,56 @@ impl EncryptionState {
     /// `plain` is a TLS message we'd like to send.  This function
     /// panics if the requisite keying material hasn't been established yet.
     pub(crate) fn encrypt_outgoing(&mut self, plain: EncodedMessage<OutboundPlain<'_>>) -> Vec<u8> {
+        let needed = HEADER_SIZE + self.encrypted_len(plain.payload.len());
+        let mut record = vec![0u8; needed];
+        let written = self.encrypt_outgoing_into(plain, &mut record);
+        record.truncate(written);
+        record
+    }
+
+    /// Encrypt a TLS message directly into `out`, returning the encoded
+    /// record's length.
+    ///
+    /// The record, header included, is written to the front of `out`,
+    /// which must be at least `HEADER_SIZE` plus
+    /// [`Self::encrypted_len()`](Self::encrypted_len) bytes long.
+    ///
+    /// This function panics if the requisite keying material hasn't been
+    /// established yet.
+    pub(crate) fn encrypt_outgoing_into(
+        &mut self,
+        plain: EncodedMessage<OutboundPlain<'_>>,
+        out: &mut [u8],
+    ) -> usize {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
         let encrypter = self.message_encrypter.as_mut().unwrap();
 
         let seq = self.write_seq;
         self.write_seq += 1;
 
-        let needed = HEADER_SIZE + encrypter.encrypted_payload_len(plain.payload.len());
-        let mut record = vec![0u8; needed];
-        let out_ptr = record.as_ptr();
+        #[cfg(debug_assertions)]
+        let (out_ptr, out_len) = (out.as_ptr(), out.len());
         let encrypted = encrypter
-            .encrypt(plain, seq, &mut record[HEADER_SIZE..])
+            .encrypt(plain, seq, &mut out[HEADER_SIZE..])
             .unwrap();
 
-        // `MessageEncrypter::encrypt()` requires the returned payload to be
-        // the written prefix of the passed-in buffer. Try to catch misbehaving
-        // implementations in debug mode. In release builds a violation would corrupt
-        // the sent stream.
-        debug_assert_eq!(
-            encrypted.payload.as_ptr(),
-            out_ptr.wrapping_add(HEADER_SIZE)
-        );
-        debug_assert!(encrypted.payload.len() <= needed - HEADER_SIZE);
+        #[cfg(debug_assertions)]
+        {
+            // `MessageEncrypter::encrypt()` requires the returned payload to be
+            // the written prefix of the passed-in buffer. Try to catch misbehaving
+            // implementations in debug mode. In release builds a violation would corrupt
+            // the sent stream.
+            debug_assert_eq!(
+                encrypted.payload.as_ptr(),
+                out_ptr.wrapping_add(HEADER_SIZE)
+            );
+            debug_assert!(encrypted.payload.len() <= out_len - HEADER_SIZE);
+        }
 
         let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
-        record.truncate(HEADER_SIZE + len);
         debug_assert!(len <= usize::from(u16::MAX));
-        record[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
-        record
+        out[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
+        HEADER_SIZE + len
     }
 
     /// Set and start using the given `MessageEncrypter` for future outgoing

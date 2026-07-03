@@ -7,7 +7,7 @@
 use std::io::{Cursor, Write};
 
 use rustls::error::{AlertDescription, ApiMisuse, InvalidMessage};
-use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SplitConnection};
+use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SplitConnection, WrittenInto};
 use rustls::{Connection, Error, SideData, SliceInput, VecInput};
 use rustls_test::{KeyType, do_handshake, make_pair};
 
@@ -125,6 +125,112 @@ fn split_incremental() {
         flight,
         ExpectData {
             expected: b"client to server",
+            then: ExpectReadMore,
+        },
+    );
+}
+
+#[test]
+fn split_write_tls_into() {
+    let (mut client, mut server) =
+        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
+    do_handshake(
+        &mut client_input,
+        &mut client,
+        &mut server_input,
+        &mut server,
+    );
+
+    let SplitConnection {
+        send: mut client_send,
+        ..
+    } = client.split().unwrap();
+    let SplitConnection {
+        receive: server_recv,
+        ..
+    } = server.split().unwrap();
+
+    let mut out = [0u8; 128];
+    let written = client_send
+        .write_tls_into(b"client to server".as_slice().into(), &mut out)
+        .unwrap();
+    assert_eq!(written.plaintext_consumed, b"client to server".len());
+    assert!(written.tls_written > b"client to server".len());
+
+    check_receive_all(
+        server_recv,
+        out[..written.tls_written].to_vec(),
+        ExpectData {
+            expected: b"client to server",
+            then: ExpectReadMore,
+        },
+    );
+}
+
+#[test]
+fn split_write_tls_into_limited_space() {
+    let (mut client, mut server) =
+        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
+    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
+    do_handshake(
+        &mut client_input,
+        &mut client,
+        &mut server_input,
+        &mut server,
+    );
+
+    let SplitConnection {
+        send: mut client_send,
+        ..
+    } = client.split().unwrap();
+    let SplitConnection {
+        receive: server_recv,
+        ..
+    } = server.split().unwrap();
+
+    let data = vec![0x42u8; 20_000];
+
+    // nothing fits in a buffer smaller than one record
+    let mut tiny = [0u8; 32];
+    let WrittenInto {
+        plaintext_consumed,
+        tls_written,
+        ..
+    } = client_send
+        .write_tls_into(data.as_slice().into(), &mut tiny)
+        .unwrap();
+    assert_eq!(plaintext_consumed, 0);
+    assert_eq!(tls_written, 0);
+
+    // one max-size record fits; the second fragment must wait
+    let mut out = vec![0u8; 16_384 + 128];
+    let first = client_send
+        .write_tls_into(data.as_slice().into(), &mut out)
+        .unwrap();
+    assert_eq!(first.plaintext_consumed, 16_384);
+
+    let server_recv = check_receive_all(
+        server_recv,
+        out[..first.tls_written].to_vec(),
+        ExpectData {
+            expected: &data[..16_384],
+            then: ExpectReadMore,
+        },
+    )
+    .unwrap();
+
+    // the remainder is consumed by a second call
+    let second = client_send
+        .write_tls_into((&data[first.plaintext_consumed..]).into(), &mut out)
+        .unwrap();
+    assert_eq!(second.plaintext_consumed, 20_000 - 16_384);
+
+    check_receive_all(
+        server_recv,
+        out[..second.tls_written].to_vec(),
+        ExpectData {
+            expected: &data[16_384..],
             then: ExpectReadMore,
         },
     );

@@ -29,6 +29,7 @@ pub use receive::{SliceInput, TlsInputBuffer, VecInput};
 
 mod send;
 use send::DEFAULT_BUFFER_LIMIT;
+pub use send::WrittenInto;
 pub(crate) use send::{SendOutput, SendPath};
 
 pub(crate) mod split;
