@@ -10,7 +10,6 @@ use crate::msgs::{HEADER_SIZE, read_opaque_message_header};
 
 mod buffers;
 use buffers::Coalescer;
-pub use buffers::SliceInput;
 pub(crate) use buffers::{Delocator, Locator};
 
 pub fn fuzz_deframer(data: &[u8]) {

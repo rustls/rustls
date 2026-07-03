@@ -26,7 +26,7 @@ pub mod kernel;
 mod receive;
 use receive::JoinOutput;
 pub(crate) use receive::{Input, ReceivePath, TrafficTemperCounters};
-pub use receive::{TlsInputBuffer, VecInput};
+pub use receive::{SliceInput, TlsInputBuffer, VecInput};
 
 mod send;
 use send::DEFAULT_BUFFER_LIMIT;
