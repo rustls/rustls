@@ -136,8 +136,8 @@ pub mod fuzzing {
 
         //println!("msg = {:#?}", m);
         let enc = EncodedMessage::<Payload<'_>>::from(msg)
-            .into_unencrypted_opaque()
-            .encode();
+            .borrow_outbound()
+            .to_unencrypted_bytes();
         //println!("data = {:?}", &data[..rdr.used()]);
         assert_eq!(enc, data[..data.len() - rdr.left()]);
     }
@@ -195,8 +195,8 @@ impl Message<'_> {
     #[cfg(test)]
     pub(crate) fn into_wire_bytes(self) -> Vec<u8> {
         EncodedMessage::<Payload<'_>>::from(self)
-            .into_unencrypted_opaque()
-            .encode()
+            .borrow_outbound()
+            .to_unencrypted_bytes()
     }
 
     pub(crate) fn handshake_type(&self) -> Option<HandshakeType> {
@@ -698,7 +698,6 @@ mod tests {
     use std::{format, fs, println};
 
     use super::*;
-    use crate::crypto::cipher::OutboundOpaque;
     use crate::error::AlertDescription;
 
     #[test]
@@ -728,8 +727,8 @@ mod tests {
             };
 
             let enc = EncodedMessage::<Payload<'_>>::from(msg)
-                .into_unencrypted_opaque()
-                .encode();
+                .borrow_outbound()
+                .to_unencrypted_bytes();
             assert_eq!(bytes.to_vec(), enc);
             assert_eq!(bytes[..bytes.len() - rd.left()].to_vec(), enc);
         }
@@ -826,12 +825,9 @@ mod tests {
         while r.any_left() {
             let m = EncodedMessage::<Payload<'_>>::read(&mut r).unwrap();
 
-            let out = EncodedMessage {
-                typ: m.typ,
-                version: m.version,
-                payload: OutboundOpaque::from_byte_slice(m.payload.bytes()),
-            }
-            .encode();
+            let out = m
+                .borrow_outbound()
+                .to_unencrypted_bytes();
             assert!(!out.is_empty());
 
             Message::try_from(&m).unwrap();

@@ -126,7 +126,7 @@ mod tests {
         assert_eq!(&m.version, version);
         assert_eq!(m.payload.to_vec(), bytes);
 
-        let buf = m.to_unencrypted_opaque().encode();
+        let buf = m.to_unencrypted_bytes();
 
         assert_eq!(total_len, buf.len());
     }

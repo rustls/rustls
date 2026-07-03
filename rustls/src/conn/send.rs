@@ -261,7 +261,7 @@ impl SendOutput for SendPath {
         self.perhaps_write_key_update();
         for m in iter {
             self.sendable_tls
-                .append(m.to_unencrypted_opaque().encode());
+                .append(m.to_unencrypted_bytes());
         }
     }
 }

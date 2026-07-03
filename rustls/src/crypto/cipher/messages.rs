@@ -49,15 +49,6 @@ impl<'a> EncodedMessage<Payload<'a>> {
         })
     }
 
-    /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
-    pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
-        EncodedMessage {
-            typ: self.typ,
-            version: self.version,
-            payload: OutboundOpaque::from_byte_slice(self.payload.bytes()),
-        }
-    }
-
     /// Borrow as an [`EncodedMessage<OutboundPlain<'a>>`].
     pub fn borrow_outbound(&'a self) -> EncodedMessage<OutboundPlain<'a>> {
         EncodedMessage {
@@ -144,34 +135,20 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
 }
 
 impl EncodedMessage<OutboundPlain<'_>> {
-    pub(crate) fn to_unencrypted_opaque(&self) -> EncodedMessage<OutboundOpaque> {
-        let mut payload = OutboundOpaque::with_capacity(self.payload.len());
-        payload.extend_from_chunks(&self.payload);
-        EncodedMessage {
-            typ: self.typ,
-            version: self.version,
-            payload,
-        }
+    /// Encode this message into its unencrypted wire representation, including
+    /// its record header.
+    pub(crate) fn to_unencrypted_bytes(&self) -> Vec<u8> {
+        let len = self.payload.len();
+        debug_assert!(len <= usize::from(u16::MAX));
+        let mut buf = Vec::with_capacity(HEADER_SIZE + len);
+        buf.extend_from_slice(&encode_record_header(self.typ, self.version, len as u16));
+        self.payload.copy_to_vec(&mut buf);
+        buf
     }
 
     #[expect(dead_code)]
     pub(crate) fn encoded_len(&self, record_layer: &EncryptionState) -> usize {
         HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
-    }
-}
-
-impl EncodedMessage<OutboundOpaque> {
-    /// Encode this message to a vector of bytes.
-    pub fn encode(self) -> Vec<u8> {
-        let length = self.payload.len();
-        debug_assert!(length <= usize::from(u16::MAX));
-        let mut encoded_payload = self.payload.payload;
-        encoded_payload[..HEADER_SIZE].copy_from_slice(&encode_record_header(
-            self.typ,
-            self.version,
-            length as u16,
-        ));
-        encoded_payload
     }
 }
 
@@ -363,74 +340,6 @@ impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
     }
 }
 
-/// A payload buffer with space reserved at the front for a TLS message header.
-///
-/// `EncodedMessage<OutboundOpaque>` is named `TLSCiphertext` in the standard.
-///
-/// This outbound type owns all memory for its interior parts.
-/// It is usually, but not always, encrypted and is used for io write.
-#[derive(Clone, Debug)]
-pub struct OutboundOpaque {
-    /// Encoded payload of the record.
-    payload: Vec<u8>,
-}
-
-impl OutboundOpaque {
-    /// Create a new value with the given payload capacity.
-    ///
-    /// (The actual capacity of the returned value will be at least `HEADER_SIZE + capacity`.)
-    pub fn with_capacity(capacity: usize) -> Self {
-        let mut payload = Vec::with_capacity(HEADER_SIZE + capacity);
-        payload.resize(HEADER_SIZE, 0);
-        Self { payload }
-    }
-
-    /// Create a new value containing the given bytes. The capacity will be
-    /// sufficient for `content` plus the record header.
-    pub(crate) fn from_byte_slice(content: &[u8]) -> Self {
-        let mut value = Self::with_capacity(content.len());
-        value.payload.extend(content);
-        value
-    }
-
-    /// Append bytes from a slice.
-    pub fn extend_from_slice(&mut self, slice: &[u8]) {
-        self.payload.extend_from_slice(slice)
-    }
-
-    /// Append bytes from an `OutboundPlain`.
-    pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
-        chunks.copy_to_vec(&mut self.payload)
-    }
-
-    /// Truncate the payload to the given length (plus header).
-    pub fn truncate(&mut self, len: usize) {
-        self.payload.truncate(len + HEADER_SIZE)
-    }
-
-    fn len(&self) -> usize {
-        self.payload.len() - HEADER_SIZE
-    }
-}
-
-impl AsRef<[u8]> for OutboundOpaque {
-    fn as_ref(&self) -> &[u8] {
-        &self.payload[HEADER_SIZE..]
-    }
-}
-
-impl AsMut<[u8]> for OutboundOpaque {
-    fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.payload[HEADER_SIZE..]
-    }
-}
-
-impl<'a> Extend<&'a u8> for OutboundOpaque {
-    fn extend<T: IntoIterator<Item = &'a u8>>(&mut self, iter: T) {
-        self.payload.extend(iter)
-    }
-}
-
 /// A fixed-size buffer into which a [`MessageEncrypter`][] writes an encrypted message payload.
 ///
 /// This wraps the output buffer passed to [`MessageEncrypter::encrypt()`][], tracking how
@@ -512,8 +421,9 @@ impl AsMut<[u8]> for EncryptBuffer<'_> {
 /// An externally length'd payload
 ///
 /// When encountered in an [`EncodedMessage`], it represents a plaintext payload. It can be
-/// decrypted from an [`InboundOpaque`] or encrypted into an [`OutboundOpaque`],
-/// and it is also used for joining and fragmenting.
+/// decrypted from an [`InboundOpaque`] or encrypted by a
+/// [`MessageEncrypter`](crate::crypto::cipher::MessageEncrypter), and it is also used for
+/// joining and fragmenting.
 #[non_exhaustive]
 #[derive(Clone, Eq, PartialEq)]
 pub enum Payload<'a> {
