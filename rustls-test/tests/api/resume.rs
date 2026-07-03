@@ -12,7 +12,7 @@ use rustls::crypto::kx::NamedGroup;
 use rustls::crypto::{CertificateIdentity, Identity};
 use rustls::enums::ProtocolVersion;
 use rustls::error::{ApiMisuse, Error, PeerMisbehaved};
-use rustls::server::ServerSessionKey;
+use rustls::server::{ServerSessionKey, Tls13Tickets};
 use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, VecInput};
 use rustls_test::{
     ClientConfigExt, ClientStorage, ClientStorageOp, ErrorFromPeer, KeyType, ServerConfigExt,
@@ -296,7 +296,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     let client_config = Arc::new(client_config);
 
     let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
-    server_config.send_tls13_tickets = 5;
+    server_config.send_tls13_tickets = Tls13Tickets { default: 5, max: 5 };
     let server_config = Arc::new(server_config);
 
     let mut client_input = VecInput::default();

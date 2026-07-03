@@ -44,7 +44,7 @@ use rustls::pki_types::{
 use rustls::server::danger::{ClientIdentity, ClientVerifier, SignatureVerificationInput};
 use rustls::server::{
     self, ClientHello, PreferClientOrder, PreferServerOrder, ServerConfig, ServerConnection,
-    ServerSessionKey, WebPkiClientVerifier,
+    ServerSessionKey, Tls13Tickets, WebPkiClientVerifier,
 };
 use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, VecInput, compress};
 use rustls_aws_lc_rs::hpke;
@@ -1685,7 +1685,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
     cfg.max_fragment_size = opts.max_fragment;
-    cfg.send_tls13_tickets = 1;
+    cfg.send_tls13_tickets = Tls13Tickets { default: 1, max: 1 };
     cfg.require_ems = opts.require_ems;
     cfg.cipher_suite_selector = match opts.server_preference {
         true => &PreferServerOrder,

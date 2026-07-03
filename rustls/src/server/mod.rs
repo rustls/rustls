@@ -16,7 +16,7 @@ pub use crate::webpki::{
 pub(crate) mod config;
 pub use config::{
     CipherSuiteSelector, ClientHello, InvalidSniPolicy, PreferClientOrder, PreferServerOrder,
-    ServerConfig, ServerCredentialResolver, StoresServerSessions, WantsServerCert,
+    ServerConfig, ServerCredentialResolver, StoresServerSessions, Tls13Tickets, WantsServerCert,
 };
 
 mod connection;
