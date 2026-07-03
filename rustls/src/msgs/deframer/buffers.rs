@@ -1,37 +1,5 @@
 use core::ops::Range;
 
-use crate::conn::TlsInputBuffer;
-
-/// A borrowed version of [`VecInput`] that tracks discard operations
-#[derive(Debug)]
-pub struct SliceInput<'a> {
-    // a fully initialized buffer that will be deframed
-    buf: &'a mut [u8],
-    // number of bytes to discard from the front of `buf` at a later time
-    discard: usize,
-}
-
-impl<'a> SliceInput<'a> {
-    pub fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, discard: 0 }
-    }
-
-    /// Returns how many bytes were consumed at the start of the original buffer.
-    pub fn into_used(self) -> usize {
-        self.discard
-    }
-}
-
-impl TlsInputBuffer for SliceInput<'_> {
-    fn slice_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[self.discard..]
-    }
-
-    fn discard(&mut self, num_bytes: usize) {
-        self.discard += num_bytes;
-    }
-}
-
 /// Reordering the underlying buffer based on ranges.
 pub(crate) struct Coalescer<'b> {
     slice: &'b mut [u8],
