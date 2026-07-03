@@ -45,8 +45,8 @@ mod macros;
 mod client_hello;
 pub(crate) use client_hello::{
     CertificateStatusRequest, ClientExtensions, ClientHelloPayload, ClientSessionTicket,
-    EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder, PresharedKeyIdentity,
-    PresharedKeyOffer, PskKeyExchangeModes, ServerNamePayload,
+    ClientTicketRequest, EncryptedClientHello, EncryptedClientHelloOuter, PresharedKeyBinder,
+    PresharedKeyIdentity, PresharedKeyOffer, PskKeyExchangeModes, ServerNamePayload,
 };
 
 mod codec;
@@ -90,6 +90,7 @@ pub(crate) use handshake::{EcParameters, NewSessionTicketExtensions, ServerEcdhP
 mod server_hello;
 pub(crate) use server_hello::{
     EchConfigContents, EchConfigPayload, HpkeKeyConfig, ServerExtensions, ServerHelloPayload,
+    ServerTicketRequestHint,
 };
 
 #[cfg(test)]
