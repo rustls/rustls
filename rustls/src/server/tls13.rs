@@ -27,7 +27,7 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, Codec, HandshakeMessagePayload,
     HandshakePayload, KeyUpdateRequest, Message, MessagePayload, NewSessionTicketPayloadTls13,
-    PresharedKeyIdentity, Reader, SizedPayload,
+    PresharedKeyIdentity, Reader, ServerTicketRequestHint, SizedPayload,
 };
 use crate::server::hs::ExpectClientHello;
 use crate::suites::PartiallyExtractedSecrets;
@@ -232,7 +232,13 @@ mod client_hello {
                 st.send_tickets = 0;
                 resuming = None;
             } else {
-                st.send_tickets = st.config.send_tls13_tickets.default;
+                st.send_tickets = st.config.send_tls13_tickets.resolve(
+                    input
+                        .client_hello
+                        .ticket_request
+                        .as_ref(),
+                    resuming.is_some(),
+                );
             }
 
             if let Some((_, session)) = &resuming {
@@ -291,6 +297,7 @@ mod client_hello {
                     .map(|(_, session)| session),
                 st.extra_exts,
                 &st.config,
+                st.send_tickets,
             )?;
 
             let doing_client_auth = if full_handshake {
@@ -708,6 +715,7 @@ mod client_hello {
         resumedata: Option<&Tls13ServerSessionValue<'_>>,
         extra_exts: ServerExtensionsInput,
         config: &ServerConfig,
+        send_tickets: usize,
     ) -> Result<(Tls13Extensions, EarlyDataDecision), Error> {
         let (out, mut extensions) = Tls13Extensions::new(
             extra_exts,
@@ -717,6 +725,12 @@ mod client_hello {
             output,
             config,
         )?;
+
+        if hello.ticket_request.is_some() {
+            extensions.ticket_request = Some(ServerTicketRequestHint {
+                expected_count: Ord::min(send_tickets, u8::MAX as usize) as u8,
+            });
+        }
 
         let early_data = decide_if_early_data_allowed(
             output,

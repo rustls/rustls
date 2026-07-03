@@ -19,7 +19,7 @@ use crate::crypto::{
 use crate::crypto::{Credentials, Identity, SingleCredential};
 use crate::enums::{ApplicationProtocol, CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
-use crate::msgs::{ClientHelloPayload, ServerNamePayload};
+use crate::msgs::{ClientHelloPayload, ClientTicketRequest, ServerNamePayload};
 use crate::suites::Suite;
 use crate::sync::Arc;
 use crate::time_provider::{DefaultTimeProvider, TimeProvider};
@@ -307,6 +307,22 @@ pub struct Tls13Tickets {
 
     /// Upper bound on the number of tickets sent.
     pub max: usize,
+}
+
+impl Tls13Tickets {
+    pub(super) fn resolve(&self, requested: Option<&ClientTicketRequest>, resuming: bool) -> usize {
+        let Some(req) = requested else {
+            return self.default;
+        };
+
+        Ord::min(
+            usize::from(match resuming {
+                true => req.resumption_count,
+                false => req.new_session_count,
+            }),
+            self.max,
+        )
+    }
 }
 
 impl Default for Tls13Tickets {
