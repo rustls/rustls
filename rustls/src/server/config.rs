@@ -45,7 +45,7 @@ use crate::{KeyLog, NoKeyLog, Tls12CipherSuite, Tls13CipherSuite, compress};
 ///   implementation.
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
-/// * [`ServerConfig::send_tls13_tickets`]: 2 tickets are sent.
+/// * [`ServerConfig::send_tls13_tickets`]: 2 tickets are sent, with a maximum of 2.
 /// * [`ServerConfig::cert_compressors`]: depends on the crate features, see [`compress::default_cert_compressors()`].
 /// * [`ServerConfig::cert_compression_cache`]: caches the most recently used 4 compressions
 /// * [`ServerConfig::cert_decompressors`]: depends on the crate features, see [`compress::default_cert_decompressors()`].
@@ -171,11 +171,9 @@ pub struct ServerConfig {
     /// Because TLS1.3 tickets are single-use, this allows
     /// a client to perform multiple resumptions.
     ///
-    /// The default is 2.
-    ///
-    /// If this is 0, no tickets are sent and clients will not be able to
-    /// do any resumption.
-    pub send_tls13_tickets: usize,
+    /// See [`Tls13Tickets`] for the meaning of the default and maximum
+    /// counts.
+    pub send_tls13_tickets: Tls13Tickets,
 
     /// If set to `true`, requires the client to support the extended
     /// master secret extraction method defined in [RFC 7627].
@@ -297,6 +295,23 @@ impl ServerConfig {
         self.time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
+    }
+}
+
+/// How many TLS 1.3 session tickets the server sends after a handshake.
+#[expect(clippy::exhaustive_structs)]
+#[derive(Clone, Copy, Debug)]
+pub struct Tls13Tickets {
+    /// Tickets sent when the client does not request a specific number.
+    pub default: usize,
+
+    /// Upper bound on the number of tickets sent.
+    pub max: usize,
+}
+
+impl Default for Tls13Tickets {
+    fn default() -> Self {
+        Self { default: 2, max: 2 }
     }
 }
 
@@ -696,7 +711,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             enable_secret_extraction: false,
             max_early_data_size: 0,
             send_half_rtt_data: false,
-            send_tls13_tickets: 2,
+            send_tls13_tickets: Tls13Tickets::default(),
             require_ems,
             time_provider: self.time_provider,
             cert_compressors: compress::default_cert_compressors().to_vec(),
