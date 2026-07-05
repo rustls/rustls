@@ -642,7 +642,7 @@ dependencies = [
  "asn1-rs",
  "displaydoc",
  "nom",
- "num-bigint",
+ "num-bigint 0.4.6",
  "num-traits",
  "rusticata-macros",
 ]
@@ -1400,6 +1400,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1960,7 +1970,7 @@ version = "0.0.1"
 dependencies = [
  "asn1",
  "base64",
- "num-bigint",
+ "num-bigint 0.5.1",
  "once_cell",
  "openssl",
  "rustls 0.24.0-dev.0",
@@ -2023,7 +2033,7 @@ dependencies = [
  "env_logger",
  "log",
  "macro_rules_attribute",
- "num-bigint",
+ "num-bigint 0.5.1",
  "rustls 0.24.0-dev.0",
  "rustls-aws-lc-rs",
  "rustls-pki-types",
