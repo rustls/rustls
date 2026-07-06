@@ -704,7 +704,7 @@ fn emit_client_hello_for_retry(
     // If this is a second client hello we're constructing in response to an HRR, and
     // we've rejected ECH or sent GREASE ECH, then we need to carry forward the
     // exact same ECH extension we used in the first hello.
-    if matches!(ech_status, EchStatus::Rejected | EchStatus::Grease) & retryreq.is_some() {
+    if matches!(ech_status, EchStatus::Rejected | EchStatus::Grease) && retryreq.is_some() {
         if let Some(prev_ech_ext) = input.prev_ech_ext.take() {
             exts.encrypted_client_hello = Some(prev_ech_ext);
         }
