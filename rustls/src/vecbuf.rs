@@ -2,7 +2,6 @@ use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::mem;
 use std::io;
-use std::io::Read;
 
 use crate::crypto::cipher::OutboundPlain;
 
@@ -142,17 +141,19 @@ impl ChunkVecBuffer {
 
     /// Read data out of this object, writing it into `buf`
     /// and returning how many bytes were written there.
-    pub(crate) fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    pub(crate) fn read(&mut self, buf: &mut [u8]) -> usize {
         let mut offs = 0;
 
         while offs < buf.len() && !self.is_empty() {
-            let used = (&self.chunks[0][self.prefix_used..]).read(&mut buf[offs..])?;
+            let chunk = &self.chunks[0][self.prefix_used..];
+            let used = Ord::min(chunk.len(), buf.len() - offs);
+            buf[offs..offs + used].copy_from_slice(&chunk[..used]);
 
             self.consume(used);
             offs += used;
         }
 
-        Ok(offs)
+        offs
     }
 
     pub(crate) fn consume_first_chunk(&mut self, used: usize) {
@@ -244,7 +245,7 @@ mod tests {
         assert_eq!(cvb.append_limited_copy(b"world"[..].into()), 0);
 
         let mut buf = [0u8; 12];
-        assert_eq!(cvb.read(&mut buf).unwrap(), 12);
+        assert_eq!(cvb.read(&mut buf), 12);
         assert_eq!(buf.to_vec(), b"helloworldhe".to_vec());
     }
 
@@ -255,11 +256,11 @@ mod tests {
         assert!(!cvb.is_empty());
         for expect in b"test fixture data" {
             let mut byte = [0];
-            assert_eq!(cvb.read(&mut byte).unwrap(), 1);
+            assert_eq!(cvb.read(&mut byte), 1);
             assert_eq!(byte[0], *expect);
         }
 
-        assert_eq!(cvb.read(&mut [0]).unwrap(), 0);
+        assert_eq!(cvb.read(&mut [0]), 0);
     }
 
     #[test]
@@ -281,11 +282,11 @@ mod tests {
                 let mut buf = vec![0u8; output_chunk_len];
 
                 for expect in input.chunks(output_chunk_len) {
-                    assert_eq!(expect.len(), cvb.read(&mut buf).unwrap());
+                    assert_eq!(expect.len(), cvb.read(&mut buf));
                     assert_eq!(expect, &buf[..expect.len()]);
                 }
 
-                assert_eq!(cvb.read(&mut [0]).unwrap(), 0);
+                assert_eq!(cvb.read(&mut [0]), 0);
             }
         }
     }
@@ -302,7 +303,7 @@ mod benchmarks {
         b.iter(|| {
             let mut cvb = ChunkVecBuffer::new(None);
             cvb.append(vec![0u8; 16_384]);
-            assert_eq!(1, cvb.read(&mut [0u8]).unwrap());
+            assert_eq!(1, cvb.read(&mut [0u8]));
         });
     }
 
@@ -312,7 +313,7 @@ mod benchmarks {
             let mut cvb = ChunkVecBuffer::new(None);
             cvb.append(vec![0u8; 16_384]);
             loop {
-                if let Ok(0) = cvb.read(&mut [0u8]) {
+                if cvb.read(&mut [0u8]) == 0 {
                     break;
                 }
             }
@@ -324,8 +325,8 @@ mod benchmarks {
         b.iter(|| {
             let mut cvb = ChunkVecBuffer::new(None);
             cvb.append(vec![0u8; 16_384]);
-            assert_eq!(8192, cvb.read(&mut [0u8; 8192]).unwrap());
-            assert_eq!(8192, cvb.read(&mut [0u8; 8192]).unwrap());
+            assert_eq!(8192, cvb.read(&mut [0u8; 8192]));
+            assert_eq!(8192, cvb.read(&mut [0u8; 8192]));
         });
     }
 
@@ -334,7 +335,7 @@ mod benchmarks {
         b.iter(|| {
             let mut cvb = ChunkVecBuffer::new(None);
             cvb.append(vec![0u8; 16_384]);
-            assert_eq!(16_384, cvb.read(&mut [0u8; 16_384]).unwrap());
+            assert_eq!(16_384, cvb.read(&mut [0u8; 16_384]));
         });
     }
 }
