@@ -350,6 +350,18 @@ expect every user will need. The canonical example of such types are
 is rare and most new types should be exported only from the module in which they
 are defined.
 
+### Comments
+
+Crate items should have descriptive doccomments on them. These are required for
+any publicly exposed items.
+
+All comments (doccomment or not) should be wrapped to 100 columns.
+
+In addition to the conventions above, all doccomments should conform to
+[Appendix A of Rust RFC 1574][1574-A].
+
+[1574-A]: https://rust-lang.github.io/rfcs/1574-more-api-documentation-conventions.html#appendix-a-full-conventions-text
+
 ### Misc
 
 #### Numeric literals
