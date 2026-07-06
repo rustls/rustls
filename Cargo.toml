@@ -106,6 +106,7 @@ lto = true
 alloc_instead_of_core = "warn"
 cloned_instead_of_copied = "warn"
 manual_let_else = "warn"
+needless_bitwise_bool = "warn"
 needless_collect = "warn"
 needless_pass_by_ref_mut = "warn"
 or_fun_call = "warn"
