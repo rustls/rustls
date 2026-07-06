@@ -70,6 +70,31 @@ impl ChunkVecBuffer {
         len
     }
 
+    pub(crate) fn take(&mut self) -> Vec<Vec<u8>> {
+        if self.chunks.is_empty() {
+            return Vec::new();
+        }
+
+        let mut chunks = Vec::from(mem::take(&mut self.chunks));
+        // slice off `prefix_used` if needed (uncommon)
+        let prefix = mem::take(&mut self.prefix_used);
+        chunks[0].drain(0..prefix);
+        chunks
+    }
+
+    pub(crate) fn take_one_vec(&mut self) -> Vec<u8> {
+        // `pop()` slices off `prefix_used`
+        let Some(mut first) = self.pop() else {
+            return Vec::new();
+        };
+
+        while let Some(chunk) = self.chunks.pop_front() {
+            first.extend_from_slice(&chunk);
+        }
+
+        first
+    }
+
     /// Take one of the chunks from this object.
     ///
     /// This function returns `None` if the object `is_empty`.
@@ -90,25 +115,6 @@ impl ChunkVecBuffer {
         self.chunks
             .front()
             .map(|ch| ch.as_slice())
-    }
-
-    pub(crate) fn take(&mut self) -> Vec<Vec<u8>> {
-        if self.chunks.is_empty() {
-            return Vec::new();
-        }
-        mem::take(&mut self.chunks).into()
-    }
-
-    pub(crate) fn take_one_vec(&mut self) -> Vec<u8> {
-        let Some(mut first) = self.chunks.pop_front() else {
-            return Vec::new();
-        };
-
-        while let Some(chunk) = self.chunks.pop_front() {
-            first.extend_from_slice(&chunk);
-        }
-
-        first
     }
 }
 
@@ -247,6 +253,23 @@ mod tests {
         let mut buf = [0u8; 12];
         assert_eq!(cvb.read(&mut buf), 12);
         assert_eq!(buf.to_vec(), b"helloworldhe".to_vec());
+    }
+
+    #[test]
+    fn take_slices_off_consumed_prefix() {
+        let mut cvb = ChunkVecBuffer::new(None);
+        cvb.append(b"hello".to_vec());
+        cvb.append(b"world".to_vec());
+        assert_eq!(cvb.read(&mut [0u8; 3]), 3);
+        assert_eq!(cvb.take(), [b"lo".to_vec(), b"world".to_vec()]);
+        assert_eq!(cvb.len(), 0);
+
+        let mut cvb = ChunkVecBuffer::new(None);
+        cvb.append(b"hello".to_vec());
+        cvb.append(b"world".to_vec());
+        assert_eq!(cvb.read(&mut [0u8; 3]), 3);
+        assert_eq!(cvb.take_one_vec(), b"loworld");
+        assert_eq!(cvb.len(), 0);
     }
 
     #[test]
