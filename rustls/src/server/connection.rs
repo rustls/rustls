@@ -13,7 +13,7 @@ use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
     Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendPath,
-    SideData, Writer,
+    SideData, TlsInputBuffer, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -139,10 +139,6 @@ impl ServerConnection {
 }
 
 impl Connection for ServerConnection {
-    fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        self.inner.read_tls(rd)
-    }
-
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
         self.inner.write_tls(wr)
     }
@@ -163,8 +159,11 @@ impl Connection for ServerConnection {
         self.inner.writer()
     }
 
-    fn process_new_packets(&mut self) -> Result<crate::IoState, Error> {
-        self.inner.process_new_packets()
+    fn process_new_packets(
+        &mut self,
+        buf: &mut dyn TlsInputBuffer,
+    ) -> Result<crate::IoState, Error> {
+        self.inner.process_new_packets(buf)
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
@@ -278,21 +277,6 @@ impl Default for Acceptor {
 }
 
 impl Acceptor {
-    /// Read TLS content from `rd`.
-    ///
-    /// Returns an error if this `Acceptor` has already yielded an [`Accepted`]. For more details,
-    /// refer to [`Connection::read_tls()`].
-    ///
-    /// [`Connection::read_tls()`]: crate::Connection::read_tls
-    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        match &mut self.inner {
-            Some(conn) => conn.read_tls(rd),
-            None => Err(io::Error::other(
-                "acceptor cannot read after successful acceptance",
-            )),
-        }
-    }
-
     /// Check if a `ClientHello` message has been received.
     ///
     /// Returns `Ok(None)` if the complete `ClientHello` has not yet been received.
@@ -304,7 +288,10 @@ impl Acceptor {
     /// Returns `Err((err, alert))` if an error occurred. If an alert is returned, the
     /// application should call `alert.write()` to send the alert to the client. It should
     /// not call `accept()` again.
-    pub fn accept(&mut self) -> Result<Option<Accepted>, (Error, AcceptedAlert)> {
+    pub fn accept(
+        &mut self,
+        buf: &mut dyn TlsInputBuffer,
+    ) -> Result<Option<Accepted>, (Error, AcceptedAlert)> {
         let Some(mut connection) = self.inner.take() else {
             return Err((
                 ApiMisuse::AcceptorPolledAfterCompletion.into(),
@@ -312,7 +299,7 @@ impl Acceptor {
             ));
         };
 
-        if let Err(e) = connection.process_new_packets() {
+        if let Err(e) = connection.process_new_packets(buf) {
             return Err(AcceptedAlert::from_error(e, connection.core.common.send));
         }
 

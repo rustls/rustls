@@ -292,7 +292,7 @@ mod tests {
         CertificateParams, CertifiedIssuer, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
     };
     use rustls::crypto::Identity;
-    use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection};
+    use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection, VecInput};
     use rustls_test::do_handshake;
 
     use super::*;
@@ -336,7 +336,14 @@ mod tests {
         .build()
         .unwrap();
 
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
-        do_handshake(&mut client, &mut server);
+        do_handshake(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
     }
 }

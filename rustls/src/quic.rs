@@ -475,7 +475,7 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
 /// A shared interface for QUIC connections.
 struct ConnectionCommon<Side: SideData> {
     core: ConnectionCore<Side>,
-    deframer_buffer: VecInput,
+    input: VecInput,
     quic: Quic,
 }
 
@@ -483,7 +483,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     fn new(core: ConnectionCore<Side>, quic: Quic) -> Self {
         Self {
             core,
-            deframer_buffer: VecInput::default(),
+            input: VecInput::default(),
             quic,
         }
     }
@@ -514,7 +514,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
     }
 
     fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        let range = self.deframer_buffer.extend(plaintext);
+        let range = self.input.extend(plaintext);
 
         let deframer = &mut self.core.common.recv.deframer;
         deframer.add_processed(range.len());
@@ -522,7 +522,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             EncodedMessage {
                 typ: ContentType::Handshake,
                 version: ProtocolVersion::TLSv1_3,
-                payload: &self.deframer_buffer.filled()[range.start..range.end],
+                payload: &self.input.filled()[range.start..range.end],
             },
             range,
         );
@@ -531,10 +531,10 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .common
             .recv
             .deframer
-            .coalesce(self.deframer_buffer.filled_mut())?;
+            .coalesce(self.input.filled_mut())?;
 
         self.core
-            .process_new_packets(&mut self.deframer_buffer, Some(&mut self.quic))?;
+            .process_new_packets(&mut self.input, Some(&mut self.quic))?;
 
         Ok(())
     }

@@ -168,6 +168,7 @@ impl ReceivePath {
                 // Then the rest of any input data.
                 let entirety = input.slice_mut().len();
                 input.discard(entirety);
+                input.received_close_notify();
                 break;
             }
 
@@ -683,6 +684,12 @@ pub struct VecInput {
 
     /// What size prefix of `buf` is used.
     used: usize,
+
+    /// Whether we've seen a 0-byte read.
+    has_seen_eof: bool,
+
+    /// Whether a CloseNotify alert has been seen.
+    received_close_notify: bool,
 }
 
 impl VecInput {
@@ -715,8 +722,10 @@ impl VecInput {
     }
 
     /// Read some bytes from `rd`, and add them to the buffer.
-    pub(crate) fn read(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
-        if let Err(err) = self.prepare_read() {
+    pub fn read(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
+        if self.received_close_notify {
+            return Ok(0);
+        } else if let Err(err) = self.prepare_read() {
             return Err(io::Error::new(io::ErrorKind::InvalidData, err));
         }
 
@@ -725,6 +734,10 @@ impl VecInput {
         // we do a zero length read.  That looks like an EOF to
         // the next layer up, which is fine.
         let new_bytes = rd.read(&mut self.buf[self.used..])?;
+        if new_bytes == 0 {
+            self.has_seen_eof = true;
+        }
+
         self.used += new_bytes;
         Ok(new_bytes)
     }
@@ -791,6 +804,14 @@ impl TlsInputBuffer for VecInput {
     fn discard(&mut self, num_bytes: usize) {
         self.discard(num_bytes)
     }
+
+    fn received_close_notify(&mut self) {
+        self.received_close_notify = true;
+    }
+
+    fn has_seen_eof(&self) -> bool {
+        self.has_seen_eof
+    }
 }
 
 /// A borrowed version of [`VecInput`] that tracks discard operations
@@ -800,12 +821,21 @@ pub struct SliceInput<'a> {
     buf: &'a mut [u8],
     // number of bytes to discard from the front of `buf` at a later time
     discard: usize,
+    /// Whether we've seen a 0-byte read.
+    has_seen_eof: bool,
+    /// Whether a CloseNotify alert has been seen.
+    received_close_notify: bool,
 }
 
 impl<'a> SliceInput<'a> {
     /// Create a new [`SliceInput`] from a mutable slice of bytes.
     pub fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, discard: 0 }
+        Self {
+            buf,
+            discard: 0,
+            has_seen_eof: false,
+            received_close_notify: false,
+        }
     }
 
     /// Returns how many bytes were consumed at the start of the original buffer.
@@ -821,6 +851,14 @@ impl TlsInputBuffer for SliceInput<'_> {
 
     fn discard(&mut self, num_bytes: usize) {
         self.discard += num_bytes;
+    }
+
+    fn received_close_notify(&mut self) {
+        self.received_close_notify = true;
+    }
+
+    fn has_seen_eof(&self) -> bool {
+        self.has_seen_eof
     }
 }
 
@@ -850,6 +888,16 @@ pub trait TlsInputBuffer {
     /// Rustls guarantees it will not `discard()` more bytes than are returned
     /// from `slice_mut()`.
     fn discard(&mut self, num_bytes: usize);
+
+    /// Signal that the connection has received a TLS `close_notify` alert.
+    ///
+    /// The buffer should not accept any more data, because the peer has closed the connection.
+    fn received_close_notify(&mut self);
+
+    /// Whether the buffer has seen a TCP EOF.
+    ///
+    /// This is not a TCP-level event, but it is signalled to the TLS state via the input buffer.
+    fn has_seen_eof(&self) -> bool;
 }
 
 /// cf. BoringSSL's `kMaxEmptyRecords`

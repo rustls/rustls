@@ -6,7 +6,7 @@ extern crate rustls;
 use std::io;
 use std::sync::Arc;
 
-use rustls::{ClientConfig, Connection};
+use rustls::{ClientConfig, Connection, VecInput};
 
 fuzz_target!(|data: &[u8]| {
     let _ = env_logger::try_init();
@@ -24,9 +24,13 @@ fuzz_target!(|data: &[u8]| {
         .unwrap();
 
     let mut stream = io::Cursor::new(data);
+    let mut input = VecInput::default();
     loop {
-        let rd = client.read_tls(&mut stream);
-        if client.process_new_packets().is_err() {
+        let rd = input.read(&mut stream);
+        if client
+            .process_new_packets(&mut input)
+            .is_err()
+        {
             break;
         }
 

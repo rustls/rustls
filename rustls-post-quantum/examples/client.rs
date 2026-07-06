@@ -11,6 +11,9 @@ use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 
+use rustls::VecInput;
+use rustls_util::Stream;
+
 fn main() {
     env_logger::init();
 
@@ -32,7 +35,8 @@ fn main() {
         .build()
         .unwrap();
     let mut sock = TcpStream::connect("pq.cloudflareresearch.com:443").unwrap();
-    let mut tls = rustls_util::Stream::new(&mut conn, &mut sock);
+    let mut input = VecInput::default();
+    let mut tls = Stream::new(&mut input, &mut conn, &mut sock);
     tls.write_all(
         concat!(
             "GET /cdn-cgi/trace HTTP/1.0\r\n",

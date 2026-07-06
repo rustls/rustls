@@ -46,7 +46,7 @@ use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
-use rustls::{ClientConfig, Connection, RootCertStore};
+use rustls::{ClientConfig, Connection, RootCertStore, VecInput};
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls_util::{KeyLogFile, Stream};
 
@@ -135,7 +135,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .next()
             .ok_or("cannot resolve hostname")?;
         let mut sock = TcpStream::connect(sock_addr)?;
-        let mut tls = Stream::new(&mut conn, &mut sock);
+        let mut input = VecInput::default();
+        let mut tls = Stream::new(&mut input, &mut conn, &mut sock);
 
         // Trim a leading '/' from the user-supplied path so we never emit a request line
         // like `GET //foo HTTP/1.1`.
