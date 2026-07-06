@@ -550,7 +550,7 @@ impl Read for Reader<'_> {
     /// You may learn the number of bytes available at any time by inspecting
     /// the return of [`Connection::process_new_packets()`].
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = self.received_plaintext.read(buf)?;
+        let len = self.received_plaintext.read(buf);
         if len > 0 || buf.is_empty() {
             return Ok(len);
         }

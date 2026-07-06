@@ -508,7 +508,7 @@ impl EarlyDataState {
 
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            Self::Accepted { received, .. } => received.read(buf),
+            Self::Accepted { received, .. } => Ok(received.read(buf)),
             _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
         }
     }
