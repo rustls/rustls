@@ -114,10 +114,9 @@
 //!
 //! ### Rustls provides encrypted pipes
 //! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
-//! on the left (via the [`read_tls()`] and [`write_tls()`] methods) and then read/write the
+//! on the left (via a [`TlsInputBuffer`] and [`write_tls()`] methods) and then read/write the
 //! plaintext on the right:
 //!
-//! [`read_tls()`]: Connection::read_tls
 //! [`write_tls()`]: Connection::write_tls
 //!
 //! ```text
@@ -234,14 +233,15 @@
 //! #   panic!();
 //! # }
 //! use std::io;
-//! use rustls::Connection;
+//! use rustls::{Connection, VecInput};
 //!
 //! client.writer().write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
 //! let mut socket = connect("example.com", 443);
+//! let mut input = VecInput::default();
 //! loop {
 //!   if client.wants_read() && socket.ready_for_read() {
-//!     client.read_tls(&mut socket).unwrap();
-//!     client.process_new_packets().unwrap();
+//!     input.read(&mut socket).unwrap();
+//!     client.process_new_packets(&mut input).unwrap();
 //!
 //!     let mut plaintext = Vec::new();
 //!     client.reader().read_to_end(&mut plaintext).unwrap();

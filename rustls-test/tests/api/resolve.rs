@@ -14,7 +14,7 @@ use rustls::error::{CertificateError, Error, PeerMisbehaved};
 use rustls::server::{ClientHello, ServerCredentialResolver, ServerNameResolver};
 use rustls::{
     ClientConfig, Connection, DistinguishedName, ServerConfig, ServerConnection,
-    SupportedCipherSuite,
+    SupportedCipherSuite, VecInput,
 };
 use rustls_test::{
     ClientConfigExt, ErrorFromPeer, KeyType, ServerCheckCertResolve,
@@ -43,8 +43,15 @@ fn server_cert_resolve_with_sni() {
             .build()
             .unwrap();
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
 
-        let err = do_handshake_until_error(&mut client, &mut server);
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -74,7 +81,14 @@ fn server_cert_resolve_with_alpn() {
             .unwrap();
 
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
-        let err = do_handshake_until_error(&mut client, &mut server);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -101,7 +115,14 @@ fn server_cert_resolve_with_named_groups() {
         });
 
         let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-        let err = do_handshake_until_error(&mut client, &mut server);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -126,8 +147,15 @@ fn client_trims_terminating_dot() {
             .build()
             .unwrap();
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
 
-        let err = do_handshake_until_error(&mut client, &mut server);
+        let err = do_handshake_until_error(
+            &mut client_input,
+            &mut client,
+            &mut server_input,
+            &mut server,
+        );
         assert_eq!(
             err.err(),
             Some(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -158,8 +186,15 @@ fn check_sigalgs_reduced_by_ciphersuite(
         .build()
         .unwrap();
     let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
 
-    let err = do_handshake_until_error(&mut client, &mut server);
+    let err = do_handshake_until_error(
+        &mut client_input,
+        &mut client,
+        &mut server_input,
+        &mut server,
+    );
     assert_eq!(
         Some(ErrorFromPeer::Server(Error::NoSuitableCertificate)),
         err.err()
@@ -240,7 +275,14 @@ fn client_with_sni_disabled_does_not_send_sni() {
                 .unwrap();
 
             let mut server = ServerConnection::new(server_config.clone()).unwrap();
-            let err = do_handshake_until_error(&mut client, &mut server);
+            let mut client_input = VecInput::default();
+            let mut server_input = VecInput::default();
+            let err = do_handshake_until_error(
+                &mut client_input,
+                &mut client,
+                &mut server_input,
+                &mut server,
+            );
             dbg!(&err);
             assert_eq!(
                 err.err(),
@@ -340,9 +382,16 @@ fn test_client_cert_resolve(
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+        let mut client_input = VecInput::default();
+        let mut server_input = VecInput::default();
 
         assert_eq!(
-            do_handshake_until_error(&mut client, &mut server),
+            do_handshake_until_error(
+                &mut client_input,
+                &mut client,
+                &mut server_input,
+                &mut server
+            ),
             Err(ErrorFromPeer::Server(Error::PeerMisbehaved(
                 PeerMisbehaved::NoCertificatesPresented
             )))
@@ -447,10 +496,11 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
             .build()
             .unwrap();
 
+        let mut server_input = VecInput::default();
         assert_eq!(None, server.server_name());
-        transfer(&mut client, &mut server);
+        transfer(&mut client, &mut server_input);
         assert_eq!(
-            server.process_new_packets(),
+            server.process_new_packets(&mut server_input),
             Err(Error::NoSuitableCertificate)
         );
         assert_eq!(
@@ -482,7 +532,14 @@ fn sni_resolver_works() {
         .connect(server_name("localhost"))
         .build()
         .unwrap();
-    let err = do_handshake_until_error(&mut client1, &mut server1);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let err = do_handshake_until_error(
+        &mut client_input,
+        &mut client1,
+        &mut server_input,
+        &mut server1,
+    );
     assert_eq!(err, Ok(()));
 
     let mut server2 = ServerConnection::new(server_config).unwrap();
@@ -490,7 +547,14 @@ fn sni_resolver_works() {
         .connect(server_name("notlocalhost"))
         .build()
         .unwrap();
-    let err = do_handshake_until_error(&mut client2, &mut server2);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let err = do_handshake_until_error(
+        &mut client_input,
+        &mut client2,
+        &mut server_input,
+        &mut server2,
+    );
     assert_eq!(
         err,
         Err(ErrorFromPeer::Server(Error::NoSuitableCertificate))
@@ -546,7 +610,14 @@ fn sni_resolver_lower_cases_configured_names() {
         .connect(server_name("localhost"))
         .build()
         .unwrap();
-    let err = do_handshake_until_error(&mut client1, &mut server1);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let err = do_handshake_until_error(
+        &mut client_input,
+        &mut client1,
+        &mut server_input,
+        &mut server1,
+    );
     assert_eq!(err, Ok(()));
 }
 
@@ -575,7 +646,14 @@ fn sni_resolver_lower_cases_queried_names() {
         .connect(server_name("LOCALHOST"))
         .build()
         .unwrap();
-    let err = do_handshake_until_error(&mut client1, &mut server1);
+    let mut client_input = VecInput::default();
+    let mut server_input = VecInput::default();
+    let err = do_handshake_until_error(
+        &mut client_input,
+        &mut client1,
+        &mut server_input,
+        &mut server1,
+    );
     assert_eq!(err, Ok(()));
 }
 

@@ -46,7 +46,7 @@ use rustls::server::{
     self, ClientHello, PreferClientOrder, PreferServerOrder, ServerConfig, ServerConnection,
     ServerSessionKey, WebPkiClientVerifier,
 };
-use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, compress};
+use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, VecInput, compress};
 use rustls_aws_lc_rs::hpke;
 
 pub fn main() {
@@ -154,6 +154,7 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
     conn.write_all(&opts.shim_id.to_le_bytes())
         .unwrap();
 
+    let mut input = VecInput::default();
     loop {
         if !sent_message && (opts.queue_data || (opts.queue_data_on_resume && count > 0)) {
             if !opts
@@ -162,7 +163,13 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
             {
                 flush(&mut sess, &mut conn);
                 for message_size_estimate in &opts.queue_early_data_after_received_messages {
-                    read_n_bytes(opts, &mut sess, &mut conn, *message_size_estimate);
+                    read_n_bytes(
+                        opts,
+                        &mut input,
+                        &mut sess,
+                        &mut conn,
+                        *message_size_estimate,
+                    );
                 }
                 println!("now ready for early data");
             }
@@ -188,7 +195,7 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
         }
 
         if sess.wants_read() {
-            read_all_bytes(opts, &mut sess, &mut conn);
+            read_all_bytes(opts, &mut input, &mut sess, &mut conn);
         }
 
         if opts.side == Side::Server && opts.enable_early_data {
@@ -414,37 +421,69 @@ fn server(conn: &mut dyn Any) -> &mut ServerConnection {
         .unwrap()
 }
 
-fn read_n_bytes(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream, n: usize) {
+fn read_n_bytes(
+    opts: &Options,
+    input: &mut VecInput,
+    sess: &mut impl Connection,
+    conn: &mut net::TcpStream,
+    n: usize,
+) {
     let mut bytes = [0u8; MAX_MESSAGE_SIZE];
     match conn.read(&mut bytes[..n]) {
         Ok(count) => {
             println!("read {count:?} bytes");
-            sess.read_tls(&mut io::Cursor::new(&mut bytes[..count]))
+            input
+                .read(&mut io::Cursor::new(&mut bytes[..count]))
                 .expect("read_tls not expected to fail reading from buffer");
         }
         Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
         Err(err) => panic!("invalid read: {err}"),
     };
 
-    after_read(opts, sess, conn);
+    after_read(opts, input, sess, conn);
 }
 
-fn read_all_bytes(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream) {
-    match sess.read_tls(conn) {
+fn read_all_bytes(
+    opts: &Options,
+    input: &mut VecInput,
+    sess: &mut impl Connection,
+    conn: &mut net::TcpStream,
+) {
+    match input.read(conn) {
         Ok(_) => {}
         Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
         Err(err) => panic!("invalid read: {err}"),
     };
 
-    after_read(opts, sess, conn);
+    after_read(opts, input, sess, conn);
 }
 
-fn after_read(opts: &Options, sess: &mut impl Connection, conn: &mut net::TcpStream) {
-    if let Err(err) = sess.process_new_packets() {
+fn after_read(
+    opts: &Options,
+    input: &mut VecInput,
+    sess: &mut impl Connection,
+    conn: &mut net::TcpStream,
+) {
+    //dbg!("process new packets", input.slice_mut().len());
+    if let Err(err) = sess.process_new_packets(input) {
+        //dbg!(&err);
         flush(sess, conn); /* send any alerts before exiting */
         orderly_close(conn);
         handle_err(opts, err);
     }
+    /*
+    let mut plaintext = [0u8; MAX_MESSAGE_SIZE];
+    let mut reader = sess.reader();
+    loop {
+        match reader.read(&mut plaintext) {
+            Ok(0) => break,
+            Ok(read) => {
+                dbg!(read);
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
+            Err(err) => panic!("invalid plaintext read: {err:?}"),
+        }
+    }*/
 }
 
 fn flush(sess: &mut impl Connection, conn: &mut net::TcpStream) {
