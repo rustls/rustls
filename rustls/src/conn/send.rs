@@ -91,8 +91,10 @@ impl SendPath {
             }
 
             self.perhaps_write_key_update();
-            self.sendable_tls
-                .append(self.encrypt_state.encrypt_outgoing(m));
+            let record = self
+                .encrypt_state
+                .encrypt_outgoing(m, self.sendable_tls.take_spare());
+            self.sendable_tls.append(record);
         }
     }
 
@@ -241,7 +243,7 @@ impl SendPath {
         let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
         self.queued_key_update_message = Some(
             self.encrypt_state
-                .encrypt_outgoing(message.borrow_outbound()),
+                .encrypt_outgoing(message.borrow_outbound(), Vec::new()),
         );
 
         if let Some(mut ks) = self.tls13_key_schedule.take() {
@@ -329,7 +331,7 @@ impl Default for SendPath {
             has_sent_fatal_alert: false,
             has_sent_close_notify: false,
             message_fragmenter: MessageFragmenter::default(),
-            sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            sendable_tls: ChunkVecBuffer::new_recycling(Some(DEFAULT_BUFFER_LIMIT)),
             queued_key_update_message: None,
             refresh_traffic_keys_pending: false,
             negotiated_version: None,

@@ -20,6 +20,15 @@ pub(crate) struct ChunkVecBuffer {
 
     /// The total upper limit (in bytes) of this object.
     limit: Option<usize>,
+
+    /// Fully-consumed chunks retained for reuse via `take_spare()`.
+    ///
+    /// `None` means recycling is disabled and spent chunks are freed.
+    /// Retention is opt-in (via `new_recycling()`) because it only pays
+    /// off for a buffer whose owner takes chunks back out, i.e. the send
+    /// path's `sendable_tls`. Elsewhere it would hold dead memory for
+    /// the connection's lifetime.
+    spare: Option<Vec<Vec<u8>>>,
 }
 
 impl ChunkVecBuffer {
@@ -28,7 +37,38 @@ impl ChunkVecBuffer {
             prefix_used: 0,
             chunks: VecDeque::new(),
             limit,
+            spare: None,
         }
+    }
+
+    /// Like `new()`, but fully-consumed chunks are retained and can be
+    /// reused via `take_spare()`.
+    ///
+    /// The total capacity retained this way is bounded by `limit`. The
+    /// `ChunkVecBuffer` never holds more spare capacity than it is allowed
+    /// to hold queued data. An unlimited buffer retains every spent chunk,
+    /// so its spare capacity is bounded by its peak queued size.
+    ///
+    /// Since chunks are only spent by being consumed, retained chunks only
+    /// ever contain data that has already been written to the wire.
+    pub(crate) fn new_recycling(limit: Option<usize>) -> Self {
+        Self {
+            prefix_used: 0,
+            chunks: VecDeque::new(),
+            limit,
+            spare: Some(Vec::new()),
+        }
+    }
+
+    /// Take a previously-spent chunk for reuse, if one is available.
+    ///
+    /// The returned vector has unspecified length and contents. Callers
+    /// must resize it and overwrite its contents before use.
+    pub(crate) fn take_spare(&mut self) -> Vec<u8> {
+        self.spare
+            .as_mut()
+            .and_then(|spare| spare.pop())
+            .unwrap_or_default()
     }
 
     /// Sets the upper limit on how many bytes this
@@ -184,9 +224,11 @@ impl ChunkVecBuffer {
         while let Some(buf) = self.chunks.front() {
             if self.prefix_used < buf.len() {
                 return;
-            } else {
-                self.prefix_used -= buf.len();
-                self.chunks.pop_front();
+            }
+
+            self.prefix_used -= buf.len();
+            if let Some(spent) = self.chunks.pop_front() {
+                self.recycle(spent);
             }
         }
 
@@ -194,6 +236,26 @@ impl ChunkVecBuffer {
             self.prefix_used, 0,
             "attempted to `ChunkVecBuffer::consume` more than available"
         );
+    }
+
+    /// Retain `spent` for reuse via `take_spare()`, if recycling is enabled and there is capacity
+    /// relative to the limit.
+    fn recycle(&mut self, spent: Vec<u8>) {
+        let Some(spare) = &mut self.spare else {
+            return;
+        };
+
+        if let Some(limit) = self.limit {
+            let retained = spare
+                .iter()
+                .map(|chunk| chunk.capacity())
+                .sum::<usize>();
+            if retained + spent.capacity() > limit {
+                return;
+            }
+        }
+
+        spare.push(spent);
     }
 
     /// Read data out of this object, passing it `wr`
@@ -253,6 +315,41 @@ mod tests {
         let mut buf = [0u8; 12];
         assert_eq!(cvb.read(&mut buf), 12);
         assert_eq!(buf.to_vec(), b"helloworldhe".to_vec());
+    }
+
+    #[test]
+    fn recycling_retains_spent_chunks() {
+        let mut cvb = ChunkVecBuffer::new_recycling(None);
+        assert!(cvb.take_spare().is_empty());
+
+        cvb.append(b"first".to_vec());
+        cvb.append(b"second".to_vec());
+        let mut buf = [0u8; 11];
+        assert_eq!(cvb.read(&mut buf), 11);
+
+        // spent chunks are returned most-recently-spent first, unaltered
+        assert_eq!(cvb.take_spare(), b"second");
+        assert_eq!(cvb.take_spare(), b"first");
+        assert!(cvb.take_spare().is_empty());
+
+        // no retention without recycling enabled
+        let mut cvb = ChunkVecBuffer::new(None);
+        cvb.append(b"first".to_vec());
+        assert_eq!(cvb.read(&mut buf), 5);
+        assert!(cvb.take_spare().is_empty());
+    }
+
+    #[test]
+    fn recycling_bounded_by_limit() {
+        let mut cvb = ChunkVecBuffer::new_recycling(Some(8));
+        cvb.append(vec![1u8; 6]);
+        cvb.append(vec![2u8; 6]);
+        let mut buf = [0u8; 12];
+        assert_eq!(cvb.read(&mut buf), 12);
+
+        // only the first spent chunk fits under the 8-byte cap
+        assert_eq!(cvb.take_spare(), vec![1u8; 6]);
+        assert!(cvb.take_spare().is_empty());
     }
 
     #[test]
