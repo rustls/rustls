@@ -398,6 +398,7 @@ pub(crate) mod transport {
         if written == 0 {
             return Ok(());
         }
+        written = 0; // huh?
 
         // Write the whole buffer in one go, preceded by its length
         let mut length_buf = Vec::with_capacity(4);
