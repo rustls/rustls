@@ -114,21 +114,22 @@
 //!
 //! ### Rustls provides encrypted pipes
 //! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
-//! on the left (via a [`TlsInputBuffer`] and [`write_tls()`] methods) and then read/write the
-//! plaintext on the right:
+//! on the left (via the [`TlsInputBuffer`] supplied to [`process_new_packets()`], and [`write_tls()`] methods)
+//! and then read/write the plaintext on the right:
 //!
 //! [`write_tls()`]: Connection::write_tls
+//! [`process_new_packets()`]: Connection::process_new_packets
 //!
 //! ```text
 //!          TLS                                   Plaintext
 //!          ===                                   =========
-//!     read_tls()      +-----------------------+      reader() as io::Read
-//!                     |                       |
-//!           +--------->   ClientConnection    +--------->
-//!                     |          or           |
-//!           <---------+   ServerConnection    <---------+
-//!                     |                       |
-//!     write_tls()     +-----------------------+      writer() as io::Write
+//!  process_new_packets()  +-----------------------+      reader() as io::Read
+//!                         |                       |
+//!               +--------->   ClientConnection    +--------->
+//!                         |          or           |
+//!               <---------+   ServerConnection    <---------+
+//!                         |                       |
+//!         write_tls()     +-----------------------+      writer() as io::Write
 //! ```
 //!
 //! ### Rustls takes care of server certificate verification
@@ -189,18 +190,15 @@
 //! ```
 //!
 //! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields
-//! true, you should call `client.read_tls()` when the underlying connection has data.
+//! true, you should call `client.process_new_packets()` with the data from the underlying connection.
 //! Likewise, if `client.wants_write()` yields true, you should call `client.write_tls()`
 //! when the underlying connection is able to send data.  You should continue doing this
 //! as long as the connection is valid.
 //!
-//! The return types of `read_tls()` and `write_tls()` only tell you if the IO worked.  No
-//! parsing or processing of the TLS messages is done.  After each `read_tls()` you should
-//! therefore call `client.process_new_packets()` which parses and processes the messages.
-//! Any error returned from `process_new_packets` is fatal to the connection, and will tell you
-//! why.  For example, if the server's certificate is expired `process_new_packets` will
+//! Any error returned from `process_new_packets()` is fatal to the connection, and will tell you
+//! why.  For example, if the server's certificate is expired `process_new_packets()` will
 //! return `Err(InvalidCertificate(Expired))`.  From this point on,
-//! `process_new_packets` will not do any new work and will return that error continually.
+//! `process_new_packets()` will not do any new work and will return that error continually.
 //!
 //! You can extract newly received data by calling `client.reader()` (which implements the
 //! `io::Read` trait).  You can send data to the peer by calling `client.writer()` (which
