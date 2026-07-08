@@ -235,29 +235,40 @@ impl Debug for ServerConnection {
 /// # ) -> std::sync::Arc<rustls::ServerConfig> {
 /// #     unimplemented!();
 /// # }
-/// # #[allow(unused_variables)]
-/// # fn main() {
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use rustls::server::{Acceptor, ServerConfig};
-/// let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+///
+/// let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
 /// let mut input = rustls::VecInput::default();
+///
 /// for stream in listener.incoming() {
-///     let mut stream = stream.unwrap();
+///     let mut stream = stream?;
 ///     let mut acceptor = Acceptor::default();
 ///     let accepted = loop {
-///         input.read(&mut stream).unwrap();
-///         if let Some(accepted) = acceptor.accept(&mut input).unwrap() {
-///             break accepted;
-///         }
+///         input.read(&mut stream)?;
+///         match acceptor.accept(&mut input) {
+///             Ok(Some(accepted)) => break accepted,
+///             Ok(None) => continue,
+///             Err((err, mut alert)) => {
+///                 alert.write(&mut stream)?;
+///                 return Err(Box::new(err));
+///             }
+///         };
 ///     };
 ///
 ///     // For some user-defined choose_server_config:
 ///     let config = choose_server_config(accepted.client_hello());
-///     let conn = accepted
-///         .into_connection(config)
-///         .unwrap();
+///     let conn = match accepted.into_connection(config) {
+///         Ok(conn) => conn,
+///         Err((err, mut alert)) => {
+///             alert.write(&mut stream)?;
+///             return Err(Box::new(err));
+///         }
+///     };
 ///
 ///     // Proceed with handling the ServerConnection.
 /// }
+/// #   Ok(())
 /// # }
 /// ```
 pub struct Acceptor {
