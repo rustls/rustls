@@ -434,7 +434,7 @@ fn read_n_bytes(
             println!("read {count:?} bytes");
             input
                 .read(&mut io::Cursor::new(&mut bytes[..count]))
-                .expect("read_tls not expected to fail reading from buffer");
+                .expect("failed reading from buffer");
         }
         Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
         Err(err) => panic!("invalid read: {err}"),
