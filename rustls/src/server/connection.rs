@@ -230,7 +230,6 @@ impl Debug for ServerConnection {
 /// # Example
 ///
 /// ```no_run
-/// # #[cfg(feature = "aws-lc-rs")] {
 /// # fn choose_server_config(
 /// #     _: rustls::server::ClientHello,
 /// # ) -> std::sync::Arc<rustls::ServerConfig> {
@@ -240,12 +239,13 @@ impl Debug for ServerConnection {
 /// # fn main() {
 /// use rustls::server::{Acceptor, ServerConfig};
 /// let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+/// let mut input = rustls::VecInput::default();
 /// for stream in listener.incoming() {
 ///     let mut stream = stream.unwrap();
 ///     let mut acceptor = Acceptor::default();
 ///     let accepted = loop {
-///         acceptor.read_tls(&mut stream).unwrap();
-///         if let Some(accepted) = acceptor.accept().unwrap() {
+///         input.read(&mut stream).unwrap();
+///         if let Some(accepted) = acceptor.accept(&mut input).unwrap() {
 ///             break accepted;
 ///         }
 ///     };
@@ -258,7 +258,6 @@ impl Debug for ServerConnection {
 ///
 ///     // Proceed with handling the ServerConnection.
 /// }
-/// # }
 /// # }
 /// ```
 pub struct Acceptor {
