@@ -19,7 +19,7 @@ pub use crate::stream::{Stream, StreamOwned};
 ///   the handshake is complete.
 /// - Otherwise, if [`wants_write()`] is true, [`write_tls()`] is invoked
 ///   until it is all written.
-/// - Otherwise, if [`wants_read()`] is true, [`read_tls()`] is invoked
+/// - Otherwise, if [`wants_read()`] is true, [`VecInput::read()`] is invoked
 ///   once.
 ///
 /// The return value is the number of bytes read from and written
@@ -30,11 +30,10 @@ pub use crate::stream::{Stream, StreamOwned};
 /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
 ///
 /// [`is_handshaking()`]: rustls::CommonState::is_handshaking
-/// [`wants_read()`]: rustls::CommonState::wants_read
-/// [`wants_write()`]: rustls::CommonState::wants_write
-/// [`write_tls()`]: rustls::ConnectionCommon::write_tls
-/// [`read_tls()`]: rustls::ConnectionCommon::read_tls
-/// [`process_new_packets()`]: rustls::ConnectionCommon::process_new_packets
+/// [`wants_read()`]: rustls::Connection::wants_read
+/// [`wants_write()`]: rustls::Connection::wants_write
+/// [`write_tls()`]: rustls::Connection::write_tls
+/// [`process_new_packets()`]: rustls::Connection::process_new_packets
 pub fn complete_io(
     io: &mut (impl io::Read + io::Write),
     input: &mut VecInput,
