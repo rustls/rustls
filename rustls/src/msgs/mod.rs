@@ -831,7 +831,7 @@ mod tests {
             let out = EncodedMessage {
                 typ: m.typ,
                 version: m.version,
-                payload: OutboundOpaque::from(m.payload.bytes()),
+                payload: OutboundOpaque::from_byte_slice(m.payload.bytes()),
             }
             .encode();
             assert!(!out.is_empty());

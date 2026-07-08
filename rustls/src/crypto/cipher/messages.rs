@@ -54,7 +54,7 @@ impl<'a> EncodedMessage<Payload<'a>> {
         EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: OutboundOpaque::from(self.payload.bytes()),
+            payload: OutboundOpaque::from_byte_slice(self.payload.bytes()),
         }
     }
 
@@ -164,7 +164,7 @@ impl EncodedMessage<OutboundOpaque> {
     /// Encode this message to a vector of bytes.
     pub fn encode(self) -> Vec<u8> {
         let length = self.payload.len() as u16;
-        let mut encoded_payload = self.payload.0;
+        let mut encoded_payload = self.payload.payload;
         encoded_payload[0] = self.typ.into();
         encoded_payload[1..3].copy_from_slice(&self.version.to_array());
         encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
@@ -297,70 +297,66 @@ impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
 /// `EncodedMessage<OutboundOpaque>` is named `TLSCiphertext` in the standard.
 ///
 /// This outbound type owns all memory for its interior parts.
-/// It results from encryption and is used for io write.
+/// It is usually, but not always, encrypted and is used for io write.
 #[derive(Clone, Debug)]
-pub struct OutboundOpaque(Vec<u8>);
+pub struct OutboundOpaque {
+    /// Encoded payload of the record.
+    payload: Vec<u8>,
+}
 
 impl OutboundOpaque {
     /// Create a new value with the given payload capacity.
     ///
     /// (The actual capacity of the returned value will be at least `HEADER_SIZE + capacity`.)
     pub fn with_capacity(capacity: usize) -> Self {
-        let mut prefixed_payload = Vec::with_capacity(HEADER_SIZE + capacity);
-        prefixed_payload.resize(HEADER_SIZE, 0);
-        Self(prefixed_payload)
+        let mut payload = Vec::with_capacity(HEADER_SIZE + capacity);
+        payload.resize(HEADER_SIZE, 0);
+        Self { payload }
+    }
+
+    /// Create a new value containing the given bytes. The capacity will be
+    /// sufficient for `content` plus the record header.
+    pub(crate) fn from_byte_slice(content: &[u8]) -> Self {
+        let mut value = Self::with_capacity(content.len());
+        value.payload.extend(content);
+        value
     }
 
     /// Append bytes from a slice.
     pub fn extend_from_slice(&mut self, slice: &[u8]) {
-        self.0.extend_from_slice(slice)
+        self.payload.extend_from_slice(slice)
     }
 
     /// Append bytes from an `OutboundPlain`.
     pub fn extend_from_chunks(&mut self, chunks: &OutboundPlain<'_>) {
-        chunks.copy_to_vec(&mut self.0)
+        chunks.copy_to_vec(&mut self.payload)
     }
 
     /// Truncate the payload to the given length (plus header).
     pub fn truncate(&mut self, len: usize) {
-        self.0.truncate(len + HEADER_SIZE)
+        self.payload.truncate(len + HEADER_SIZE)
     }
 
     fn len(&self) -> usize {
-        self.0.len() - HEADER_SIZE
+        self.payload.len() - HEADER_SIZE
     }
 }
 
 impl AsRef<[u8]> for OutboundOpaque {
     fn as_ref(&self) -> &[u8] {
-        &self.0[HEADER_SIZE..]
+        &self.payload[HEADER_SIZE..]
     }
 }
 
 impl AsMut<[u8]> for OutboundOpaque {
     fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.0[HEADER_SIZE..]
+        &mut self.payload[HEADER_SIZE..]
     }
 }
 
 impl<'a> Extend<&'a u8> for OutboundOpaque {
     fn extend<T: IntoIterator<Item = &'a u8>>(&mut self, iter: T) {
-        self.0.extend(iter)
-    }
-}
-
-impl From<&[u8]> for OutboundOpaque {
-    fn from(content: &[u8]) -> Self {
-        let mut payload = Vec::with_capacity(HEADER_SIZE + content.len());
-        payload.extend(&[0u8; HEADER_SIZE]);
-        payload.extend(content);
-        Self(payload)
-    }
-}
-
-impl<const N: usize> From<&[u8; N]> for OutboundOpaque {
-    fn from(content: &[u8; N]) -> Self {
-        Self::from(&content[..])
+        self.payload.extend(iter)
     }
 }
 
