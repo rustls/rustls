@@ -96,9 +96,11 @@ jobs:
 
       - name: cargo build (debug; no-std)
         run: |
-          cargo build --locked --lib -p rustls $(admin/all-features-except std,brotli rustls)
-          cargo build --locked --lib -p rustls-ring --no-default-features
-          cargo build --locked --lib -p rustls-aws-lc-rs --no-default-features --features aws-lc-sys
+          cargo check --locked --lib -p rustls $(admin/all-features-except std,brotli rustls)
+          cargo check --locked --lib -p rustls-util
+          cargo check --locked --lib -p rustls-ring --no-default-features
+          cargo check --locked --lib -p rustls-aws-lc-rs --no-default-features --features aws-lc-sys
+          cargo check --locked --lib -p rustls-post-quantum
 
       - name: cargo build (debug; rustls-provider-test)
         run: cargo build --locked -p rustls-provider-test
@@ -146,9 +148,11 @@ jobs:
 
       - name: cargo build (debug; default features)
         run: |
-          cargo build --locked -p rustls
-          cargo build --locked -p rustls-ring
-          cargo build --locked -p rustls-aws-lc-rs
+          cargo check --locked -p rustls
+          cargo check --locked -p rustls-util
+          cargo check --locked -p rustls-ring
+          cargo check --locked -p rustls-aws-lc-rs
+          cargo check --locked -p rustls-post-quantum
 
       - name: cargo test (debug; default features)
         run: cargo test --locked
@@ -159,8 +163,10 @@ jobs:
       - name: cargo test (debug; no default features)
         run: |
           cargo test --locked -p rustls --no-default-features
+          cargo test --locked -p rustls-util
           cargo test --locked -p rustls-ring --no-default-features
           cargo test --locked -p rustls-aws-lc-rs --no-default-features --features aws-lc-sys
+          cargo test --locked -p rustls-post-quantum
 
       - name: cargo test (debug; no default features; std)
         run: |
@@ -274,8 +280,13 @@ jobs:
         # use nightly to mirror docs.rs
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: cargo doc (rustls; all features)
-        run: cargo doc --locked --all-features --no-deps --document-private-items --package rustls
+      - name: cargo doc (all public crates; all features)
+        run: |
+            cargo doc --locked --all-features --no-deps --document-private-items --package rustls
+            cargo doc --locked --all-features --no-deps --document-private-items --package rustls-util
+            cargo doc --locked --all-features --no-deps --document-private-items --package rustls-ring
+            cargo doc --locked --all-features --no-deps --document-private-items --package rustls-aws-lc-rs
+            cargo doc --locked --all-features --no-deps --document-private-items --package rustls-post-quantum
         env:
           RUSTDOCFLAGS: -Dwarnings
 
