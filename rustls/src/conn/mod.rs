@@ -45,23 +45,18 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// (after encoding and encryption).
     ///
     /// After this function returns, the connection buffer may not yet be fully flushed. The
-    /// [`Connection::wants_write()`] function can be used to check if the output buffer is
+    /// [`Self::wants_write()`] function can be used to check if the output buffer is
     /// empty.
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error>;
 
-    /// Returns true if the caller should call [`Connection::process_new_packets()`] as soon
-    /// as possible.
+    /// Returns true if the caller should call [`Self::process_new_packets()`] as soon as possible.
     ///
-    /// If there is pending plaintext data to read with [`Connection::reader()`],
+    /// If there is pending plaintext data to read with [`Self::reader()`],
     /// this returns false.  If your application respects this mechanism,
     /// only one full TLS message will be buffered by rustls.
-    ///
-    /// [`Connection::reader`]: crate::Connection::reader
     fn wants_read(&self) -> bool;
 
-    /// Returns true if the caller should call [`Connection::write_tls`] as soon as possible.
-    ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    /// Returns true if the caller should call [`Self::write_tls()`] as soon as possible.
     fn wants_write(&self) -> bool;
 
     /// Returns an object that allows reading plaintext.
@@ -75,16 +70,14 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// Errors from this function relate to TLS protocol errors, and
     /// are fatal to the connection.  Future calls after an error will do
     /// no new work and will return the same error. After an error is
-    /// received from [`process_new_packets()`], you should not continue to fill up the buffer.
-    /// However, you may call the other methods on the connection, including `write`,
-    /// `send_close_notify`, and `write_tls`. Most likely you will want to
-    /// call `write_tls` to send any alerts queued by the error and then
+    /// received from this function, you should not continue to fill up the buffer.
+    /// However, you may call the other methods on the connection, including [`Self::writer()`],
+    /// [`Self::send_close_notify()`], and [`Self::write_tls()`]. Most likely you will want to
+    /// call [`Self::write_tls()`] to send any alerts queued by the error and then
     /// close the underlying connection.
     ///
     /// Success from this function comes with some sundry state data
     /// about the connection.
-    ///
-    /// [`process_new_packets()`]: Connection::process_new_packets
     fn process_new_packets(&mut self, buf: &mut dyn TlsInputBuffer) -> Result<IoState, Error>;
 
     /// Returns an object that can derive key material from the agreed connection secrets.
@@ -96,7 +89,7 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// This function will error:
     ///
     /// - if called prior to the handshake completing; (check with
-    ///   [`Connection::is_handshaking()`] first).
+    ///   [`Self::is_handshaking()`] first).
     /// - if called more than once per connection.
     ///
     /// [RFC5705]: https://datatracker.ietf.org/doc/html/rfc5705
@@ -110,7 +103,7 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// Sets a limit on the internal buffers used to buffer
     /// unsent plaintext (prior to completing the TLS handshake)
     /// and unsent TLS records.  This limit acts only on application
-    /// data written through [`Connection::writer`].
+    /// data written through [`Self::writer()`].
     ///
     /// By default the limit is 64KB.  The limit can be set
     /// at any time, even if the current buffer use is higher.
@@ -121,8 +114,8 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// memory usage.
     ///
     /// For illustration: `Some(1)` means a limit of one byte applies:
-    /// [`Connection::writer`] will accept only one byte, encrypt it and
-    /// add a TLS header.  Once this is sent via [`Connection::write_tls`],
+    /// [`Self::writer()`] will accept only one byte, encrypt it and
+    /// add a TLS header.  Once this is sent via [`Self::write_tls()`],
     /// another byte may be sent.
     ///
     /// # Internal write-direction buffering
@@ -130,7 +123,7 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     ///
     /// ## Buffering of unsent plaintext data prior to handshake completion
     ///
-    /// Calls to [`Connection::writer`] before or during the handshake
+    /// Calls to [`Self::writer()`] before or during the handshake
     /// are buffered (up to the limit specified here).  Once the
     /// handshake completes this data is encrypted and the resulting
     /// TLS records are added to the outgoing buffer.
@@ -140,21 +133,17 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// This buffer is used to store TLS records that rustls needs to
     /// send to the peer.  It is used in these two circumstances:
     ///
-    /// - by [`Connection::process_new_packets`] when a handshake or alert
+    /// - by [`Self::process_new_packets()`] when a handshake or alert
     ///   TLS record needs to be sent.
-    /// - by [`Connection::writer`] post-handshake: the plaintext is
+    /// - by [`Self::writer()`] post-handshake: the plaintext is
     ///   encrypted and the resulting TLS record is buffered.
     ///
-    /// This buffer is emptied by [`Connection::write_tls`].
-    ///
-    /// [`Connection::writer`]: crate::Connection::writer
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
-    /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
+    /// This buffer is emptied by [`Self::write_tls()`].
     fn set_buffer_limit(&mut self, limit: Option<usize>);
 
     /// Sets a limit on the internal buffers used to buffer decoded plaintext.
     ///
-    /// See [`Self::set_buffer_limit`] for more information on how limits are applied.
+    /// See [`Self::set_buffer_limit()`] for more information on how limits are applied.
     fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>);
 
     /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
@@ -166,9 +155,9 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     ///
     /// Note that this process does not happen synchronously: this call just
     /// arranges that the `key_update` message will be included in the next
-    /// `write_tls` output.
+    /// [`Self::write_tls()`] output.
     ///
-    /// This fails with `Error::HandshakeNotComplete` if called before the initial
+    /// This fails with [`Error::HandshakeNotComplete`] if called before the initial
     /// handshake is complete, or if a version prior to TLS1.3 is negotiated.
     ///
     /// # Usage advice
@@ -185,22 +174,18 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// a connection will be idle for a long period.
     fn refresh_traffic_keys(&mut self) -> Result<(), Error>;
 
-    /// Queues a `close_notify` warning alert to be sent in the next
-    /// [`Connection::write_tls`] call.  This informs the peer that the
-    /// connection is being closed.
+    /// Queues a `close_notify` warning alert to be sent in the next [`Self::write_tls`] call.
+    ///
+    /// This informs the peer that the connection is being closed.
     ///
     /// Does nothing if any `close_notify` or fatal alert was already sent.
-    ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
     fn send_close_notify(&mut self);
 
     /// Returns true if the connection is currently performing the TLS handshake.
     ///
     /// During this time plaintext written to the connection is buffered in memory. After
-    /// [`Connection::process_new_packets()`] has been called, this might start to return `false`
+    /// [`Self::process_new_packets()`] has been called, this might start to return `false`
     /// while the final handshake packets still need to be extracted from the connection's buffers.
-    ///
-    /// [`Connection::process_new_packets()`]: crate::Connection::process_new_packets
     fn is_handshaking(&self) -> bool;
 
     /// Return the FIPS validation status of the connection.
@@ -272,7 +257,7 @@ impl Read for Reader<'_> {
     /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
     ///
     /// You may learn the number of bytes available at any time by inspecting
-    /// the return of [`Connection::process_new_packets`].
+    /// the return of [`Connection::process_new_packets()`].
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let len = self.received_plaintext.read(buf)?;
         if len > 0 || buf.is_empty() {
@@ -320,22 +305,20 @@ impl<'a> Writer<'a> {
     /// Create a new Writer.
     ///
     /// This is not an external interface.  Get one of these objects
-    /// from [`Connection::writer`].
+    /// from [`Connection::writer()`].
     pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Self {
         Writer { sink }
     }
 }
 
 impl io::Write for Writer<'_> {
-    /// Send the plaintext `buf` to the peer, encrypting
-    /// and authenticating it.  Once this function succeeds
-    /// you should call [`Connection::write_tls`] which will output the
-    /// corresponding TLS records.
+    /// Send the plaintext `buf` to the peer, encrypting and authenticating it.
     ///
-    /// This function buffers plaintext sent before the
-    /// TLS handshake completes, and sends it as soon
-    /// as it can.  See [`Connection::set_buffer_limit()`] to control
-    /// the size of this buffer.
+    /// Once this function succeeds you should call [`Connection::write_tls()`] which will output
+    /// the corresponding TLS records.
+    ///
+    /// This function buffers plaintext sent before the TLS handshake completes, and sends it as soon
+    /// as it can.  See [`Connection::set_buffer_limit()`] to control the size of this buffer.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.sink.write(buf)
     }
@@ -683,10 +666,8 @@ impl Buffers {
     }
 }
 
-/// Values of this structure are returned from [`Connection::process_new_packets`]
+/// Values of this structure are returned from [`Connection::process_new_packets()`]
 /// and tell the caller the current I/O state of the TLS connection.
-///
-/// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
 #[derive(Debug, Eq, PartialEq)]
 pub struct IoState {
     tls_bytes_to_write: usize,
@@ -695,28 +676,25 @@ pub struct IoState {
 }
 
 impl IoState {
-    /// How many bytes could be written by [`Connection::write_tls`] if called
-    /// right now.  A non-zero value implies [`CommonState::wants_write`].
+    /// How many bytes could be written by [`Connection::write_tls()`] if called right now.
     ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    /// A non-zero value implies [`CommonState::wants_write()`].
     pub fn tls_bytes_to_write(&self) -> usize {
         self.tls_bytes_to_write
     }
 
-    /// How many plaintext bytes could be obtained via [`std::io::Read`]
-    /// without further I/O.
+    /// How many plaintext bytes could be obtained via [`std::io::Read`] without further I/O.
     pub fn plaintext_bytes_to_read(&self) -> usize {
         self.plaintext_bytes_to_read
     }
 
-    /// True if the peer has sent us a close_notify alert.  This is
-    /// the TLS mechanism to securely half-close a TLS connection,
-    /// and signifies that the peer will not send any further data
-    /// on this connection.
+    /// True if the peer has sent us a close_notify alert.
     ///
-    /// This is also signalled via returning `Ok(0)` from
-    /// [`std::io::Read`], after all the received bytes have been
-    /// retrieved.
+    /// This is the TLS mechanism to securely half-close a TLS connection, and signifies that
+    /// the peer will not send any further data on this connection.
+    ///
+    /// This is also signalled via returning `Ok(0)` from [`std::io::Read`], after all the
+    /// received bytes have been retrieved.
     pub fn peer_has_closed(&self) -> bool {
         self.peer_has_closed
     }
