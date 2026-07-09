@@ -11,7 +11,7 @@ use crate::common_state::{
 };
 use crate::conn::private::SideOutput;
 use crate::conn::{ConnectionCore, StateMachine};
-use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload};
+use crate::crypto::cipher::{Decrypted, DecryptionState, EncodedMessage, Payload, VersionEncoding};
 use crate::enums::{ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{AlertDescription, Error, PeerMisbehaved};
 use crate::log::{trace, warn};
@@ -512,13 +512,13 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
         self.other.outputs.handle(ev);
     }
 
-    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool, ve: VersionEncoding) {
         match self.other.quic.as_deref_mut() {
             Some(quic) => quic.send_msg(m, must_encrypt),
             None => self
                 .other
                 .send
-                .send_msg(m, must_encrypt),
+                .send_msg(m, must_encrypt, ve),
         }
     }
 

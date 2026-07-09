@@ -14,6 +14,8 @@ pub struct EncodedMessage<P> {
     /// The content type of this message.
     pub typ: ContentType,
     /// The protocol version of this message.
+    ///
+    /// The actual protocol version that gets encoded on the wire may differ.
     pub version: ProtocolVersion,
     /// The payload of this message.
     pub payload: P,
@@ -169,7 +171,23 @@ impl EncodedMessage<OutboundOpaque> {
         let length = self.payload.len() as u16;
         let mut encoded_payload = self.payload.payload;
         encoded_payload[0] = self.typ.into();
-        encoded_payload[1..3].copy_from_slice(&self.version.to_array());
+
+        let encoded_version = match self
+            .payload
+            .encoding_context
+            .version_encoding
+        {
+            VersionEncoding::TestVectors => self.version,
+            // <https://datatracker.ietf.org/doc/html/rfc8446#section-5.1>:
+            // "This value MUST be set to 0x0303 for all records generated
+            //  by a TLS 1.3 implementation ..."
+            VersionEncoding::Compatible => ProtocolVersion::TLSv1_2,
+            // "... other than an initial ClientHello (i.e., one not
+            // generated after a HelloRetryRequest), where it MAY also be
+            // 0x0301 for compatibility purposes"
+            VersionEncoding::InitialClientHello => ProtocolVersion::TLSv1_0,
+        };
+        encoded_payload[1..3].copy_from_slice(&encoded_version.to_array());
         encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
         encoded_payload
     }
@@ -306,7 +324,7 @@ pub struct OutboundOpaque {
     /// Encoded payload of the record.
     payload: Vec<u8>,
     /// Contextual information needed to encode the record.
-    _encoding_context: EncodingContext,
+    encoding_context: EncodingContext,
 }
 
 impl OutboundOpaque {
@@ -318,7 +336,7 @@ impl OutboundOpaque {
         payload.resize(HEADER_SIZE, 0);
         Self {
             payload,
-            _encoding_context: cx,
+            encoding_context: cx,
         }
     }
 
@@ -477,10 +495,45 @@ impl DerefMut for InboundOpaque<'_> {
 }
 
 /// Contextual information for encoding messages.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub struct EncodingContext {
-    // empty for now!
+    /// How to encode the protocol version.
+    version_encoding: VersionEncoding,
+}
+
+impl EncodingContext {
+    /// Create an `EncodingContext`.
+    pub fn new(ve: VersionEncoding) -> Self {
+        Self {
+            version_encoding: ve,
+        }
+    }
+}
+
+/// How to encode a [`ProtocolVersion`] when encoding an [`EncodedMessage`].
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub enum VersionEncoding {
+    /// Encode the message without changing anything.
+    ///
+    /// This preserves whatever version is in the enclosing `EncodedMessage`. This is intended for
+    /// use in tests that load encoded messages from test vectors and want them preserved
+    /// byte-for-byte.
+    TestVectors,
+    /// Encode the message as an initial `ClientHello`.
+    ///
+    /// Protocol version 1.0 is used, regardless of the original message's version ([1]).
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
+    InitialClientHello,
+    /// Use the backward compatible protocol version.
+    ///
+    /// For example, if the `version` value of the enclosing [`EncodedMessage`] is
+    /// `ProtocolVersion::TLSv1_3`, `ProtocolVersion::TLSv1_2` is used instead ([1]).
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
+    Compatible,
 }
 
 /// Decode a TLS1.3 `TLSInnerPlaintext` encoding.
@@ -624,6 +677,31 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn encoded_message_encoding_version() {
+        let encoded_message = EncodedMessage {
+            typ: ContentType::Handshake,
+            version: ProtocolVersion::TLSv1_3,
+            payload: Payload::new(vec![0, 1, 2, 3, 4]),
+        };
+
+        for (ve, expect) in [
+            (VersionEncoding::TestVectors, ProtocolVersion::TLSv1_3),
+            (
+                VersionEncoding::InitialClientHello,
+                ProtocolVersion::TLSv1_0,
+            ),
+            (VersionEncoding::Compatible, ProtocolVersion::TLSv1_2),
+        ] {
+            let encoded = encoded_message
+                .clone()
+                .into_unencrypted_opaque(EncodingContext::new(ve))
+                .encode();
+            let decoded = EncodedMessage::<Payload<'_>>::read(&mut Reader::new(&encoded)).unwrap();
+            assert_eq!(decoded.version, expect);
         }
     }
 }

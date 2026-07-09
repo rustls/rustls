@@ -20,7 +20,7 @@ use crate::common_state::{
 };
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input, TrafficTemperCounters};
-use crate::crypto::cipher::Payload;
+use crate::crypto::cipher::{Payload, VersionEncoding};
 use crate::crypto::hash::Hash;
 use crate::crypto::kx::{ActiveKeyExchange, HybridKeyExchange, SharedSecret, StartedKeyExchange};
 use crate::crypto::{Identity, SelectedCredential, SignatureScheme, Signer};
@@ -470,10 +470,11 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, output: &mut dyn Out
 
     output.send_msg(
         Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
+        VersionEncoding::Compatible,
     );
 }
 
@@ -1267,7 +1268,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, output: &mut dyn
     };
 
     transcript.add_message(&m);
-    output.send_msg(m, true);
+    output.send_msg(m, true, VersionEncoding::Compatible);
 }
 
 struct ExpectFinished {

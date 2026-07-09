@@ -10,7 +10,7 @@ use rustls::crypto::cipher::{
 };
 use rustls::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use rustls::crypto::{self, CipherSuite};
-use rustls::enums::{ContentType, ProtocolVersion};
+use rustls::enums::ContentType;
 use rustls::error::Error;
 use rustls::version::TLS13_VERSION;
 use rustls::{CipherSuiteCommon, ConnectionTrafficSecrets, Tls13CipherSuite};
@@ -240,9 +240,7 @@ impl MessageEncrypter for AeadMessageEncrypter {
 
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
-            // Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
-            // protocol version, see https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-            version: ProtocolVersion::TLSv1_2,
+            version: msg.version,
             payload,
         })
     }
@@ -302,7 +300,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
 
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
-            version: ProtocolVersion::TLSv1_2,
+            version: msg.version,
             payload,
         })
     }

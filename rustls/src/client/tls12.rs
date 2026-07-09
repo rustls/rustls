@@ -15,7 +15,7 @@ use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{HandshakeKind, Output, OutputEvent, Side};
 use crate::conn::kernel::KernelState;
 use crate::conn::{ConnectionRandoms, Input};
-use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload};
+use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Payload, VersionEncoding};
 use crate::crypto::kx::KeyExchangeAlgorithm;
 use crate::crypto::{Identity, Signer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
@@ -481,7 +481,7 @@ fn emit_certificate(
     };
 
     transcript.add_message(&cert);
-    output.send_msg(cert, false);
+    output.send_msg(cert, false, VersionEncoding::Compatible);
 }
 
 fn emit_client_kx(
@@ -510,7 +510,7 @@ fn emit_client_kx(
     };
 
     transcript.add_message(&ckx);
-    output.send_msg(ckx, false);
+    output.send_msg(ckx, false, VersionEncoding::Compatible);
 }
 
 fn emit_certverify(
@@ -534,7 +534,7 @@ fn emit_certverify(
     };
 
     transcript.add_message(&m);
-    output.send_msg(m, false);
+    output.send_msg(m, false, VersionEncoding::Compatible);
     Ok(())
 }
 
@@ -545,6 +545,7 @@ fn emit_ccs(output: &mut dyn Output<'_>) {
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         },
         false,
+        VersionEncoding::Compatible,
     );
 }
 
@@ -566,7 +567,7 @@ fn emit_finished(
     };
 
     transcript.add_message(&f);
-    output.send_msg(f, true);
+    output.send_msg(f, true, VersionEncoding::Compatible);
 }
 
 struct ServerKxDetails {

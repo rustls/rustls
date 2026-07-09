@@ -13,7 +13,7 @@ use crate::suites::ConnectionTrafficSecrets;
 mod messages;
 pub use messages::{
     EncodedMessage, EncodingContext, InboundOpaque, MessageError, OutboundOpaque, OutboundPlain,
-    Payload,
+    Payload, VersionEncoding,
 };
 
 mod record_layer;

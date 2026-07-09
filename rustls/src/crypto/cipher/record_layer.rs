@@ -3,7 +3,7 @@ use core::cmp::min;
 
 use crate::crypto::cipher::{
     EncodedMessage, EncodingContext, InboundOpaque, MessageDecrypter, MessageEncrypter,
-    OutboundOpaque, OutboundPlain,
+    OutboundOpaque, OutboundPlain, VersionEncoding,
 };
 use crate::error::Error;
 use crate::log::trace;
@@ -40,7 +40,11 @@ impl EncryptionState {
         self.message_encrypter
             .as_mut()
             .unwrap()
-            .encrypt(plain, seq, EncodingContext::default())
+            .encrypt(
+                plain,
+                seq,
+                EncodingContext::new(VersionEncoding::Compatible),
+            )
             .unwrap()
     }
 

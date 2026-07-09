@@ -77,7 +77,7 @@ mod client_hello {
     use super::*;
     use crate::common_state::{EarlyDataEvent, Protocol};
     use crate::compress::CertCompressor;
-    use crate::crypto::cipher::Payload;
+    use crate::crypto::cipher::{Payload, VersionEncoding};
     use crate::crypto::kx::SupportedKxGroup;
     use crate::crypto::{SelectedCredential, Signer};
     use crate::enums::ApplicationProtocol;
@@ -548,7 +548,7 @@ mod client_hello {
         });
 
         let sh = Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
                 HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
@@ -565,7 +565,7 @@ mod client_hello {
 
         trace!("sending server hello {sh:?}");
         transcript.add_message(&sh);
-        output.send_msg(sh, false);
+        output.send_msg(sh, false, VersionEncoding::Compatible);
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some((_, psk)) = resuming {
@@ -610,10 +610,10 @@ mod client_hello {
 
     fn emit_fake_ccs(output: &mut dyn Output<'_>) {
         let m = Message {
-            version: ProtocolVersion::TLSv1_2,
+            version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
         };
-        output.send_msg(m, false);
+        output.send_msg(m, false, VersionEncoding::Compatible);
     }
 
     fn emit_hello_retry_request(
@@ -644,7 +644,7 @@ mod client_hello {
         trace!("Requesting retry {m:?}");
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
-        output.send_msg(m, false);
+        output.send_msg(m, false, VersionEncoding::Compatible);
     }
 
     fn decide_if_early_data_allowed(

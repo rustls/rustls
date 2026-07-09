@@ -5,7 +5,7 @@ use core::ops::Deref;
 
 use crate::common_state::{Output, Protocol, Side};
 use crate::conn::{Exporter, ReceivePath, SendOutput};
-use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
+use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm, VersionEncoding};
 use crate::crypto::kx::SharedSecret;
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{hash, hmac};
@@ -687,7 +687,11 @@ impl KeyScheduleTrafficSend {
     }
 
     pub(crate) fn request_key_update_and_update_encrypter(&mut self, send: &mut dyn SendOutput) {
-        send.send_msg(Message::build_key_update_request(), true);
+        send.send_msg(
+            Message::build_key_update_request(),
+            true,
+            VersionEncoding::Compatible,
+        );
         let secret = self.ks.derive_next(&self.current);
         self.ks.set_encrypter(&secret, send);
         self.current = secret;

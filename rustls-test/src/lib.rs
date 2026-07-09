@@ -12,6 +12,7 @@ use rustls::client::{
 };
 use rustls::crypto::cipher::{
     EncodedMessage, EncodingContext, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
+    VersionEncoding,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -1371,13 +1372,14 @@ impl RawTls {
         &mut self,
         msg: &EncodedMessage<Payload<'_>>,
         peer_input: &mut VecInput,
+        ve: VersionEncoding,
     ) {
         let data = self
             .encrypter
             .encrypt(
                 msg.borrow_outbound(),
                 self.enc_seq,
-                EncodingContext::default(),
+                EncodingContext::new(ve),
             )
             .unwrap()
             .encode();
@@ -1839,7 +1841,7 @@ mod plaintext {
 
             Ok(EncodedMessage {
                 typ: ContentType::ApplicationData,
-                version: ProtocolVersion::TLSv1_2,
+                version: msg.version,
                 payload,
             })
         }

@@ -10,7 +10,7 @@ use super::{
     Tls13ServerSessionValue,
 };
 use crate::conn::{Connection, Input, VecInput};
-use crate::crypto::cipher::{EncodingContext, FakeAead};
+use crate::crypto::cipher::{EncodingContext, FakeAead, VersionEncoding};
 use crate::crypto::kx::ffdhe::{FFDHE2048, FfdheGroup};
 use crate::crypto::kx::{
     ActiveKeyExchange, KeyExchangeAlgorithm, NamedGroup, SharedSecret, StartedKeyExchange,
@@ -171,7 +171,7 @@ fn select_cipher_suite(
     let mut input = VecInput::default();
     input.read(
         &mut ch
-            .into_wire_bytes(EncodingContext::default())
+            .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
             .as_slice(),
     )?;
     conn.process_new_packets(&mut input)?;
@@ -217,7 +217,7 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
     input
         .read(
             &mut ch
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -306,7 +306,7 @@ fn server_chooses_ffdhe_group_for_client_hello(
     input
         .read(
             &mut ch
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -357,7 +357,7 @@ fn test_server_requiring_rpk_client_rejects_x509_client() {
     input
         .read(
             &mut ch
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -388,7 +388,7 @@ fn test_rpk_only_server_rejects_x509_only_client() {
     input
         .read(
             &mut ch
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();

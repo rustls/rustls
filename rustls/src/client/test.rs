@@ -11,7 +11,9 @@ use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, Resumption, Tls12Resumption};
-use crate::crypto::cipher::{EncodedMessage, EncodingContext, MessageEncrypter, Payload};
+use crate::crypto::cipher::{
+    EncodedMessage, EncodingContext, MessageEncrypter, Payload, VersionEncoding,
+};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::FakeKeyExchangeGroup;
 use crate::crypto::tls13::OkmBlock;
@@ -205,7 +207,7 @@ fn test_client_rejects_hrr_with_varied_session_id() {
     input
         .read(
             &mut hrr
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -253,7 +255,7 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
     input
         .read(
             &mut sh
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -333,7 +335,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     input
         .read(
             &mut sh
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -349,7 +351,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     input
         .read(
             &mut cert
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -379,7 +381,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     input
         .read(
             &mut server_kx
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -395,7 +397,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     input
         .read(
             &mut server_done
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -561,7 +563,7 @@ fn client_requiring_rpk_receives_server_ee(
     input
         .read(
             &mut sh
-                .into_wire_bytes(EncodingContext::default())
+                .into_wire_bytes(EncodingContext::new(VersionEncoding::Compatible))
                 .as_slice(),
         )
         .unwrap();
@@ -580,7 +582,7 @@ fn client_requiring_rpk_receives_server_ee(
         .encrypt(
             EncodedMessage::<Payload<'_>>::from(ee).borrow_outbound(),
             0,
-            EncodingContext::default(),
+            EncodingContext::new(VersionEncoding::Compatible),
         )
         .unwrap();
     input
