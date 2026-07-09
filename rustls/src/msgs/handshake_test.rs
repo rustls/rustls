@@ -831,6 +831,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             key_share: Some(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
             preshared_key: Some(3),
             early_data_ack: Some(()),
+            ticket_request: None,
             encrypted_client_hello_ack: Some(ServerEncryptedClientHello {
                 retry_configs: vec![],
             }),

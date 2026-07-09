@@ -30,9 +30,10 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
-    ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, KeyShareEntry, ProtocolName, PskKeyExchangeModes, Random, ServerNamePayload,
-    SessionId, SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
+    ClientSessionTicket, ClientTicketRequest, EncryptedClientHello, HandshakeMessagePayload,
+    HandshakePayload, HelloRetryRequest, KeyShareEntry, ProtocolName, PskKeyExchangeModes, Random,
+    ServerNamePayload, SessionId, SupportedEcPointFormats, SupportedProtocolVersions,
+    TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -310,6 +311,13 @@ fn emit_client_hello_for_retry(
             psk: false,
             psk_dhe: true,
         });
+
+        if let Some(ticket_req) = &config.send_ticket_request {
+            exts.ticket_request = Some(ClientTicketRequest {
+                new_session_count: ticket_req.new_session_count,
+                resumption_count: ticket_req.resumption_count,
+            });
+        }
     }
 
     input.hello.offered_cert_compression =

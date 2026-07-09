@@ -287,6 +287,22 @@ pub struct ClientConfig {
 
     /// How to offer Encrypted Client Hello (ECH). The default is to not offer ECH.
     pub(super) ech_mode: Option<EchMode>,
+
+    /// Request a specific number of TLS 1.3 session tickets via [RFC 9149].
+    ///
+    /// Set to `None` to disable sending the extension (the default).
+    ///
+    /// [RFC 9149]: https://datatracker.ietf.org/doc/html/rfc9149
+    pub send_ticket_request: Option<TicketRequest>,
+}
+
+/// Desired session ticket counts for the RFC 9149 `ticket_request` extension.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TicketRequest {
+    /// Tickets desired when the server negotiates a new connection.
+    pub new_session_count: u8,
+    /// Tickets desired when the server resumes using a presented ticket.
+    pub resumption_count: u8,
 }
 
 impl ClientConfig {
