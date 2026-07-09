@@ -1806,7 +1806,7 @@ fn test_acceptor() {
             .accept(&mut acceptor_input)
             .err()
             .unwrap()
-            .0,
+            .error,
         ApiMisuse::AcceptorPolledAfterCompletion.into()
     );
 
@@ -1831,12 +1831,14 @@ fn test_acceptor() {
     acceptor_input
         .read(&mut [0x80, 0x00].as_ref())
         .unwrap(); // invalid message (len = 32k bytes)
-    let (err, mut alert) = acceptor
+    let mut ea = acceptor
         .accept(&mut acceptor_input)
         .unwrap_err();
-    assert_eq!(err, Error::InvalidMessage(InvalidMessage::MessageTooLarge));
-    let mut alert_content = Vec::new();
-    let _ = alert.write(&mut alert_content);
+    assert_eq!(
+        ea.error,
+        Error::InvalidMessage(InvalidMessage::MessageTooLarge)
+    );
+    let alert_content = ea.take_tls_data().unwrap();
     let expected = encoding::alert(AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 
@@ -1853,17 +1855,17 @@ fn test_acceptor() {
             .as_slice(),
         )
         .unwrap();
-    let (err, mut alert) = acceptor
+    let mut ea = acceptor
         .accept(&mut acceptor_input)
         .unwrap_err();
-    assert!(matches!(err, Error::InappropriateMessage { .. }));
-    let mut alert_content = Vec::new();
-    alert
-        .write_all(&mut alert_content)
-        .unwrap();
+    assert!(matches!(ea.error, Error::InappropriateMessage { .. }));
+    let alert_content = ea.take_tls_data().unwrap();
     let expected = encoding::alert(AlertDescription::UnexpectedMessage, &[]);
     assert_eq!(alert_content, expected);
-    assert_eq!(format!("{alert:?}"), "AcceptedAlert { .. }");
+    assert_eq!(
+        format!("{ea:?}"),
+        "ErrorWithAlert { error: InappropriateMessage { expect_types: [Handshake], got_type: ApplicationData }, data: 0, .. }"
+    );
 
     let mut acceptor = Acceptor::default();
     let mut acceptor_input = VecInput::default();
@@ -1878,17 +1880,14 @@ fn test_acceptor() {
             .as_slice(),
         )
         .unwrap();
-    let (err, mut alert) = acceptor
+    let mut ea = acceptor
         .accept(&mut acceptor_input)
         .unwrap_err();
     assert!(matches!(
-        err,
+        ea.error,
         Error::InvalidMessage(InvalidMessage::MissingData(_))
     ));
-    let mut alert_content = Vec::new();
-    alert
-        .write_all(&mut alert_content)
-        .unwrap();
+    let alert_content = ea.take_tls_data().unwrap();
     let expected = encoding::alert(AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
 }
@@ -1978,18 +1977,15 @@ fn test_acceptor_rejected_handshake() {
         Some(&DnsName::try_from("localhost").unwrap())
     );
 
-    let (err, mut alert) = accepted
+    let mut ea = accepted
         .into_connection(server_config.into())
         .unwrap_err();
     assert_eq!(
-        err,
+        ea.error,
         Error::PeerIncompatible(PeerIncompatible::Tls12NotOfferedOrEnabled)
     );
 
-    let mut alert_content = Vec::new();
-    alert
-        .write_all(&mut alert_content)
-        .unwrap();
+    let alert_content = ea.take_tls_data().unwrap();
     let expected = encoding::alert(AlertDescription::ProtocolVersion, &[]);
     assert_eq!(alert_content, expected);
 }

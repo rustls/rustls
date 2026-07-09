@@ -1911,17 +1911,15 @@ fn acceptor_with_illegal_max_fragment_size() {
         .accept(&mut input)
         .unwrap()
         .unwrap();
-    let (err, mut alert) = accepted
+    let mut error_with_alert = accepted
         .into_connection(Arc::new(server_config))
         .err()
         .unwrap();
 
-    assert_eq!(err, Error::BadMaxFragmentSize);
+    assert_eq!(error_with_alert.error, Error::BadMaxFragmentSize);
     assert_eq!(
-        alert
-            .write(&mut &mut [0u8; 128][..])
-            .ok(),
-        Some(0),
+        error_with_alert.take_tls_data(),
+        None,
         "illegal max fragment size should not send an alert, as it is a local configuration issue"
     );
 }
@@ -1938,14 +1936,14 @@ fn excess_client_hello_acceptor() {
     input
         .read(&mut io::Cursor::new(hello))
         .unwrap();
-    let (error, mut alert) = acceptor.accept(&mut input).unwrap_err();
-    assert_eq!(error, PeerMisbehaved::KeyEpochWithPendingFragment.into());
-
-    let mut alert_buf = vec![];
-    alert.write_all(&mut alert_buf).unwrap();
+    let mut error_with_alert = acceptor.accept(&mut input).unwrap_err();
     assert_eq!(
-        alert_buf,
-        encoding::alert(AlertDescription::UnexpectedMessage, &[])
+        error_with_alert.error,
+        PeerMisbehaved::KeyEpochWithPendingFragment.into()
+    );
+    assert_eq!(
+        error_with_alert.take_tls_data(),
+        Some(encoding::alert(AlertDescription::UnexpectedMessage, &[]))
     );
 }
 
