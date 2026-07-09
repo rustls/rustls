@@ -398,6 +398,18 @@ pub struct ServerConfig {
     /// do any resumption.
     pub send_tls13_tickets: usize,
 
+    /// Upper bound on the number of TLS 1.3 tickets sent in response to a
+    /// client [RFC 9149] `ticket_request` extension.
+    ///
+    /// A client requesting `n` tickets receives `min(n, max_tls13_tickets)`.
+    /// Set to 0 to ignore client requests entirely (clients get
+    /// `send_tls13_tickets` regardless).
+    ///
+    /// The default is 0 (extension is ignored, preserving current behavior).
+    ///
+    /// [RFC 9149]: https://datatracker.ietf.org/doc/html/rfc9149
+    pub max_tls13_tickets: usize,
+
     /// If set to `true`, requires the client to support the extended
     /// master secret extraction method defined in [RFC 7627].
     ///
