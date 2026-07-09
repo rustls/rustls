@@ -87,9 +87,11 @@ fn main() {
             match acceptor.accept(&mut input) {
                 Ok(Some(accepted)) => break accepted,
                 Ok(None) => continue,
-                Err((e, mut alert)) => {
-                    alert.write_all(&mut stream).unwrap();
-                    panic!("error accepting connection: {e}");
+                Err(mut error_with_alert) => {
+                    if let Some(alert) = error_with_alert.take_tls_data() {
+                        stream.write_all(&alert).unwrap();
+                    }
+                    panic!("error accepting connection: {}", error_with_alert.error);
                 }
             }
         };
@@ -99,9 +101,14 @@ fn main() {
         let config = test_pki.server_config(&args.crl_path, accepted.client_hello());
         let mut conn = match accepted.into_connection(config) {
             Ok(conn) => conn,
-            Err((e, mut alert)) => {
-                alert.write_all(&mut stream).unwrap();
-                panic!("error completing accepting connection: {e}");
+            Err(mut error_with_alert) => {
+                if let Some(alert) = error_with_alert.take_tls_data() {
+                    stream.write_all(&alert).unwrap();
+                }
+                panic!(
+                    "error completing accepting connection: {}",
+                    error_with_alert.error
+                );
             }
         };
 

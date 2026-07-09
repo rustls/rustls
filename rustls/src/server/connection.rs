@@ -12,8 +12,8 @@ use crate::common_state::{CommonState, ConnectionOutputs, EarlyDataEvent, Event,
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SendPath,
-    SideData, TlsInputBuffer, Writer,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, Reader, SideData,
+    TlsInputBuffer, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -235,6 +235,7 @@ impl Debug for ServerConnection {
 /// # ) -> std::sync::Arc<rustls::ServerConfig> {
 /// #     unimplemented!();
 /// # }
+/// # use std::io::Write;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use rustls::server::{Acceptor, ServerConfig};
 ///
@@ -249,9 +250,11 @@ impl Debug for ServerConnection {
 ///         match acceptor.accept(&mut input) {
 ///             Ok(Some(accepted)) => break accepted,
 ///             Ok(None) => continue,
-///             Err((err, mut alert)) => {
-///                 alert.write(&mut stream)?;
-///                 return Err(Box::new(err));
+///             Err(mut error_with_alert) => {
+///                 if let Some(alert) = error_with_alert.take_tls_data() {
+///                     stream.write_all(&alert)?;
+///                 }
+///                 return Err(Box::new(error_with_alert.error));
 ///             }
 ///         };
 ///     };
@@ -260,9 +263,11 @@ impl Debug for ServerConnection {
 ///     let config = choose_server_config(accepted.client_hello());
 ///     let conn = match accepted.into_connection(config) {
 ///         Ok(conn) => conn,
-///         Err((err, mut alert)) => {
-///             alert.write(&mut stream)?;
-///             return Err(Box::new(err));
+///         Err(mut error_with_alert) => {
+///             if let Some(alert) = error_with_alert.take_tls_data() {
+///                 stream.write_all(&alert)?;
+///             }
+///             return Err(Box::new(error_with_alert.error));
 ///         }
 ///     };
 ///
@@ -295,22 +300,22 @@ impl Acceptor {
     /// Returns `Ok(Some(accepted))` if the connection has been accepted. Call
     /// `accepted.into_connection()` to continue. Do not call this function again.
     ///
-    /// Returns `Err((err, alert))` if an error occurred. If an alert is returned, the
-    /// application should call `alert.write()` to send the alert to the client. It should
-    /// not call `accept()` again.
+    /// Returns `Err(_)` if an error occurred. The error type optionally carries a TLS alert;
+    /// the application should obtain and write these bytes to the client.
+    ///
+    /// Don't call `accept()` again after an error.
     pub fn accept(
         &mut self,
         buf: &mut dyn TlsInputBuffer,
-    ) -> Result<Option<Accepted>, (Error, AcceptedAlert)> {
+    ) -> Result<Option<Accepted>, ErrorWithAlert> {
         let Some(mut connection) = self.inner.take() else {
-            return Err((
-                ApiMisuse::AcceptorPolledAfterCompletion.into(),
-                AcceptedAlert::empty(),
-            ));
+            return Err(ErrorWithAlert::from(Error::ApiMisuse(
+                ApiMisuse::AcceptorPolledAfterCompletion,
+            )));
         };
 
         if let Err(e) = connection.process_new_packets(buf) {
-            return Err(AcceptedAlert::from_error(e, connection.core.common.send));
+            return Err(ErrorWithAlert::new(e, &mut connection.core.common.send));
         }
 
         const MISUSED: Error = Error::Unreachable("Accepted misused state");
@@ -324,53 +329,8 @@ impl Acceptor {
                 self.inner = Some(connection);
                 Ok(None)
             }
-            Err(e) => Err((
-                e.clone(),
-                AcceptedAlert::from_error(e, connection.core.common.send).1,
-            )),
+            Err(e) => Err(ErrorWithAlert::new(e, &mut connection.core.common.send)),
         }
-    }
-}
-
-/// Represents a TLS alert resulting from handling the client's `ClientHello` message.
-///
-/// When [`Acceptor::accept()`] returns an error, it yields an `AcceptedAlert` such that the
-/// application can communicate failure to the client via [`AcceptedAlert::write()`].
-pub struct AcceptedAlert(ChunkVecBuffer);
-
-impl AcceptedAlert {
-    pub(super) fn from_error(error: Error, mut send: SendPath) -> (Error, Self) {
-        let ErrorWithAlert { error, data } = ErrorWithAlert::new(error, &mut send);
-        let mut output = ChunkVecBuffer::new(None);
-        output.append(data);
-        (error, Self(output))
-    }
-
-    pub(super) fn empty() -> Self {
-        Self(ChunkVecBuffer::new(None))
-    }
-
-    /// Send the alert to the client.
-    ///
-    /// To account for short writes this function should be called repeatedly until it
-    /// returns `Ok(0)` or an error.
-    pub fn write(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.0.write_to(wr)
-    }
-
-    /// Send the alert to the client.
-    ///
-    /// This function will invoke the writer until the buffer is empty.
-    pub fn write_all(&mut self, wr: &mut dyn io::Write) -> Result<(), io::Error> {
-        while self.write(wr)? != 0 {}
-        Ok(())
-    }
-}
-
-impl Debug for AcceptedAlert {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("AcceptedAlert")
-            .finish_non_exhaustive()
     }
 }
 
@@ -447,7 +407,7 @@ impl Accepted {
     pub fn into_connection(
         mut self,
         config: Arc<ServerConfig>,
-    ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
+    ) -> Result<ServerConnection, ErrorWithAlert> {
         let result = self.connection.core.accepted(
             self.choose_config,
             ServerExtensionsInput::default(),
@@ -459,9 +419,9 @@ impl Accepted {
             Ok(()) => Ok(ServerConnection {
                 inner: self.connection,
             }),
-            Err(e) => Err((
-                e.clone(),
-                AcceptedAlert::from_error(e, self.connection.core.common.send).1,
+            Err(e) => Err(ErrorWithAlert::new(
+                e,
+                &mut self.connection.core.common.send,
             )),
         }
     }
