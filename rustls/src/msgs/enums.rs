@@ -140,6 +140,7 @@ enum_builder! {
         SignatureAlgorithmsCert => 0x0032,
         KeyShare => 0x0033,
         TransportParameters => 0x0039,
+        TicketRequest => 0x003a,
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
         RenegotiationInfo => 0xff01,

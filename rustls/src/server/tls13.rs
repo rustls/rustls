@@ -48,7 +48,8 @@ mod client_hello {
     use crate::msgs::handshake::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
         ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
-        ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
+        ServerExtensions, ServerExtensionsInput, ServerHelloPayload, ServerTicketRequestHint,
+        SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
@@ -327,7 +328,22 @@ mod client_hello {
                 chosen_psk_index = None;
                 resumedata = None;
             } else {
-                self.send_tickets = self.config.send_tls13_tickets;
+                // RFC 9149: if the client sent a ticket_request extension and the
+                // server has configured a max, honor the client's request.
+                self.send_tickets = if self.config.max_tls13_tickets > 0 {
+                    if let Some(req) = &client_hello.ticket_request {
+                        let requested = usize::from(if resumedata.is_some() {
+                            req.resumption_count
+                        } else {
+                            req.new_session_count
+                        });
+                        Ord::min(requested, self.config.max_tls13_tickets)
+                    } else {
+                        self.config.send_tls13_tickets
+                    }
+                } else {
+                    self.config.send_tls13_tickets
+                };
             }
 
             if let Some(resume) = &resumedata {
@@ -375,6 +391,7 @@ mod client_hello {
                 resumedata.as_ref(),
                 self.extra_exts,
                 &self.config,
+                self.send_tickets,
             )?;
 
             let doing_client_auth = if full_handshake {
@@ -674,9 +691,17 @@ mod client_hello {
         resumedata: Option<&persist::ServerSessionValue>,
         extra_exts: ServerExtensionsInput<'static>,
         config: &ServerConfig,
+        send_tickets: usize,
     ) -> Result<EarlyDataDecision, Error> {
         let mut ep = hs::ExtensionProcessing::new(extra_exts);
         ep.process_common(config, cx, ocsp_response, hello, resumedata)?;
+
+        // RFC 9149: echo the expected ticket count if the client sent the extension.
+        if hello.ticket_request.is_some() && config.max_tls13_tickets > 0 {
+            ep.extensions.ticket_request = Some(ServerTicketRequestHint {
+                expected_count: Ord::min(send_tickets, usize::from(u8::MAX)) as u8,
+            });
+        }
 
         let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
         if early_data == EarlyDataDecision::Accepted {
