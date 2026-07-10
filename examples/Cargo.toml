@@ -10,7 +10,6 @@ publish = false
 clap = { workspace = true }
 env_logger = { workspace = true }
 hickory-resolver = { workspace = true }
-log = { workspace = true }
 mio = { workspace = true }
 rcgen = { workspace = true }
 rustls = { path = "../rustls", features = ["log"] }
@@ -18,6 +17,7 @@ rustls-aws-lc-rs = { path = "../rustls-aws-lc-rs" }
 rustls-util = { path = "../rustls-util" }
 serde = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
 webpki-roots = { workspace = true }
 
 [lints]

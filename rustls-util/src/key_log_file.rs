@@ -6,9 +6,9 @@ use std::io;
 use std::io::Write;
 use std::sync::Mutex;
 
-#[cfg(feature = "log")]
-use log::warn;
 use rustls::KeyLog;
+#[cfg(feature = "log")]
+use tracing::warn;
 
 // Internal mutable state for KeyLogFile
 struct KeyLogFileInner {

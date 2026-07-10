@@ -26,7 +26,6 @@ use std::sync::Arc;
 use std::{fs, net};
 
 use clap::{Parser, Subcommand};
-use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
 use rustls::crypto::{CryptoProvider, Identity};
 use rustls::enums::{ApplicationProtocol, ProtocolVersion};
@@ -36,6 +35,7 @@ use rustls::server::{NoServerSessionStorage, WebPkiClientVerifier};
 use rustls::{Connection, RootCertStore, ServerConfig, ServerConnection, VecInput};
 use rustls_aws_lc_rs as provider;
 use rustls_util::KeyLogFile;
+use tracing::{debug, error};
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
