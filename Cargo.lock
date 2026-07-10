@@ -1860,6 +1860,7 @@ dependencies = [
  "rustls-webpki 0.104.0-alpha.7",
  "subtle",
  "time",
+ "tracing",
  "webpki-roots",
  "zeroize",
  "zlib-rs",
@@ -1930,7 +1931,6 @@ dependencies = [
  "clap",
  "env_logger",
  "hickory-resolver",
- "log",
  "mio",
  "rcgen",
  "rustls 0.24.0-dev.1",
@@ -1938,6 +1938,7 @@ dependencies = [
  "rustls-util",
  "serde",
  "tokio",
+ "tracing",
  "webpki-roots",
 ]
 
@@ -2043,8 +2044,8 @@ name = "rustls-util"
 version = "0.1.0-dev.1"
 dependencies = [
  "env_logger",
- "log",
  "rustls 0.24.0-dev.1",
+ "tracing",
 ]
 
 [[package]]
@@ -2427,6 +2428,7 @@ version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
 dependencies = [
+ "log",
  "pin-project-lite",
  "tracing-core",
 ]
