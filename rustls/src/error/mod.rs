@@ -122,7 +122,7 @@ pub enum Error {
     /// It may have returned new ECH configurations that could be used to retry negotiation
     /// with a fresh connection.
     ///
-    /// See [`RejectedEch::can_retry()`] and [`crate::client::EchConfig::for_retry()`].
+    /// See [`RejectedEch::can_retry()`] and [`crate::client::ClientConnectionBuilder::with_ech_for_retry()`].
     RejectedEch(RejectedEch),
 
     /// Errors of this variant should never be produced by the library.
@@ -1505,7 +1505,7 @@ pub enum EncryptedClientHelloError {
 /// The server rejected the request to enable Encrypted Client Hello (ECH)
 ///
 /// If [`RejectedEch::can_retry()`] is true, then you may use this with
-/// [`crate::client::EchConfig::for_retry()`] to build a new `EchConfig` for a fresh client
+/// [`crate::client::ClientConnectionBuilder::with_ech_for_retry()`] to build a new `EchConfig` for a fresh client
 /// connection that will use a compatible ECH configuration provided by the server for a retry.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
@@ -1516,7 +1516,7 @@ pub struct RejectedEch {
 impl RejectedEch {
     /// Returns true if the server provided new ECH configurations to use for a fresh retry connection
     ///
-    /// The `RejectedEch` error can be provided to [`crate::client::EchConfig::for_retry()`]
+    /// The `RejectedEch` error can be provided to [`crate::client::ClientConnectionBuilder::with_ech_for_retry()`]
     /// to build a new `EchConfig` for a fresh client connection that will use a compatible ECH
     /// configuration provided by the server for a retry.
     pub fn can_retry(&self) -> bool {
@@ -1628,6 +1628,24 @@ pub enum ApiMisuse {
 
     /// ECH attempted with a configuration that also supports TLS1.2.
     EchForbidsTls12Support,
+
+    /// [`ConfigBuilder::with_ech_hpke_suites`](crate::ConfigBuilder::with_ech_hpke_suites)
+    /// was called with an empty HPKE suites list
+    EmptyEchHpkeSuitesListFound,
+
+    /// ECH attempted without any provided HPKE suites to use when offering ECH
+    NoEchHpkeSuites,
+
+    /// ECH HPKE suites were provided, but the connection wasn't subsequently configured to use ECH.
+    /// You must use either use one of[`ClientConnectionBuilder::with_ech`][crate::client::ClientConnectionBuilder::with_ech],
+    /// [`ClientConnectionBuilder::with_ech_grease`][crate::client::ClientConnectionBuilder::with_ech_grease]
+    /// or [`ClientConnectionBuilder::with_ech_for_retry`][crate::client::ClientConnectionBuilder::with_ech_for_retry]
+    /// to configure ECH.
+    ///
+    /// If you don't intend to use ECH, don't call [`ConfigBuilder::with_ech_hpke_suites`](crate::ConfigBuilder::with_ech_hpke_suites).
+    ///
+    /// This error is a failsafe so that the user doesn't erronously think that ECH has been configured
+    EchNotConfigured,
 
     /// Secret extraction operation attempted without opting-in to secret extraction.
     ///
