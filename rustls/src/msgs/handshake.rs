@@ -17,7 +17,6 @@ use crate::enums::{
     ApplicationProtocol, CertificateCompressionAlgorithm, CertificateType, ProtocolVersion,
 };
 use crate::error::InvalidMessage;
-use crate::log::warn;
 use crate::msgs::codec::{
     CERTIFICATE_MAX_SIZE_LIMIT, Codec, LengthPrefixedBuffer, ListLength, MaybeEmpty, NonEmpty,
     Reader, SizedPayload, TlsListElement, TlsListIter, U24, hex,
@@ -27,6 +26,7 @@ use crate::msgs::enums::{
     ExtensionType,
 };
 use crate::sync::Arc;
+use crate::tracing::warn;
 use crate::verify::{DigitallySignedStruct, DistinguishedName};
 
 #[derive(Clone, Copy, Eq, PartialEq)]

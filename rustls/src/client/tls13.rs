@@ -29,7 +29,6 @@ use crate::error::{
     ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved, RejectedEch,
 };
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
-use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ChangeCipherSpecPayload, ClientExtensions,
     Codec, EchConfigPayload, EncryptedExtensions, ExtensionType, HandshakeMessagePayload,
@@ -48,6 +47,7 @@ use crate::tls13::{
     Tls13CipherSuite, Tls13ProtocolSuite, construct_client_verify_message,
     construct_server_verify_message,
 };
+use crate::tracing::{debug, trace, warn};
 use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, KeyLog, compress, crypto, quic};
 

@@ -9,13 +9,13 @@ use crate::crypto::cipher::Payload;
 use crate::crypto::{CipherSuite, CryptoProvider, Identity, SelectedCredential, SignatureScheme};
 use crate::enums::{ApplicationProtocol, CertificateType};
 use crate::error::{ApiMisuse, Error, InvalidMessage};
-use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateChain, Codec, ExtensionType, MaybeEmpty, NewSessionTicketPayloadTls13, Reader,
     SessionId, SizedPayload,
 };
 use crate::sync::Arc;
 use crate::tls13::Tls13ProtocolSuite;
+use crate::tracing::{debug, trace};
 use crate::verify::DistinguishedName;
 #[cfg(feature = "webpki")]
 pub use crate::webpki::{

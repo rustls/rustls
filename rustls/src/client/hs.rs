@@ -24,7 +24,6 @@ use crate::enums::{
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::kernel::KernelState;
-use crate::log::{debug, trace};
 use crate::msgs::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, ClientTicketRequest, Compression, EncryptedClientHello, ExtensionType,
@@ -38,6 +37,7 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{KeyScheduleEarlyClient, KeyScheduleTrafficSend};
+use crate::tracing::{debug, trace};
 use crate::{ClientConfig, bs_debug};
 
 #[expect(private_interfaces)]
