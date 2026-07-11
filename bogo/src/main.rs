@@ -6,6 +6,7 @@
 
 use core::any::Any;
 use core::fmt::Debug;
+use core::slice;
 use std::borrow::Cow;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
@@ -22,8 +23,8 @@ use rustls::crypto::{
 };
 use rustls::enums::ProtocolVersion;
 use rustls::error::{
-    AlertDescription, ApiMisuse, CertificateError, Error, InvalidMessage, PeerIncompatible,
-    PeerMisbehaved,
+    AlertDescription, ApiMisuse, CertificateError, EncryptedClientHelloError, Error,
+    InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
@@ -108,10 +109,23 @@ pub fn main() {
                     .unwrap()
                     .to_owned();
                 let mut output = Vec::new();
-                let sess = config
-                    .connect(server_name)
-                    .build(&mut output)
-                    .unwrap();
+                let conn_cfg = config.connect(server_name);
+
+                let conn_cfg = if let Some(ech_config_list) = &opts.ech_config_list {
+                    match conn_cfg.with_ech(slice::from_ref(ech_config_list)) {
+                        Ok(cfg) => cfg,
+                        Err(Error::InvalidEncryptedClientHello(
+                            EncryptedClientHelloError::NoCompatibleConfig,
+                        )) if opts.reject_unusable_ech_config => quit(":UNUSABLE_ECH_CONFIG_LIST:"),
+                        Err(_) => quit(":INVALID_ECH_CONFIG_LIST:"),
+                    }
+                } else if opts.enable_ech_grease {
+                    conn_cfg.with_ech_grease().unwrap()
+                } else {
+                    conn_cfg
+                };
+
+                let sess = conn_cfg.build(&mut output).unwrap();
                 exec(&opts, sess, output, &key_log, i);
             }
             SideConfig::Server(config) => {
@@ -1102,11 +1116,6 @@ enum Side {
 }
 
 static GREASE_HPKE_SUITE: &dyn Hpke = hpke::DH_KEM_X25519_HKDF_SHA256_AES_128;
-
-const GREASE_25519_PUBKEY: &[u8] = &[
-    0x67, 0x35, 0xCA, 0x50, 0x21, 0xFC, 0x4F, 0xE6, 0x29, 0x3B, 0x31, 0x2C, 0xB5, 0xE0, 0x97, 0xD8,
-    0xD0, 0x58, 0x97, 0xCF, 0x5C, 0x15, 0x12, 0x79, 0x4B, 0xEF, 0x1D, 0x98, 0x52, 0x74, 0xDC, 0x5E,
-];
 
 // nb. hpke::ALL_SUPPORTED_SUITES omits fips-incompatible options,
 // this includes them. bogo fips tests are activated by -fips-202205
