@@ -15,6 +15,7 @@ use crate::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeKem, HpkePublicKey, HpkeSealer, HpkeSuite,
     HpkeSymmetricCipherSuite,
 };
+use crate::crypto::rand::random_usize_range;
 use crate::crypto::{CipherSuite, SecureRandom};
 use crate::enums::ProtocolVersion;
 use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch};
@@ -33,6 +34,16 @@ use crate::tls13::key_schedule::{
 };
 
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
+///
+/// This enum also contains the HPKE suite that will be used during ECH and is
+/// meant to be passed to [`ClientConnectionBuilder`] through its [`with_ech_mode`] method.
+///
+/// If you have already specified which HPKE suites to be used for ECH through
+/// [`ConfigBuilder::with_ech_hpke_suites`], check [`EchParams`]
+///
+/// [`ClientConnectionBuilder`]: crate::client::connection::ClientConnectionBuilder
+/// [`with_ech_mode`]: crate::client::connection::ClientConnectionBuilder::with_ech_mode
+/// [`ConfigBuilder::with_ech_hpke_suites`]: crate::ConfigBuilder::with_ech_hpke_suites
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub enum EchMode {
@@ -55,6 +66,39 @@ impl EchMode {
             Self::Grease(grease_config) => grease_config.suite.fips(),
         }
     }
+
+    /// Create a new [`EchMode`] from an [`EchParams`] enum, a list of supported suites
+    /// and a source of cryptographically secure randomness.
+    ///
+    /// It is highly recommended to use this method if the `params` argument can also
+    /// be of variant [`Grease`](EchParams::Grease), since this method will securely
+    /// randomly choose a suite from the provided ones, per RFC 9849 §6.2.1
+    pub fn from_params(
+        params: EchParams<'_>,
+        suites: &[&'static dyn Hpke],
+        secure_random: &dyn SecureRandom,
+    ) -> Result<Self, Error> {
+        if suites.is_empty() {
+            return Err(Error::InvalidEncryptedClientHello(
+                EncryptedClientHelloError::NoCompatibleConfig,
+            ));
+        };
+
+        let ech_mode = match params {
+            EchParams::Enable(ech_config_list) => {
+                let ech_config = EchConfig::new(ech_config_list, suites)?;
+
+                Self::Enable(ech_config)
+            }
+            EchParams::Grease(key) => {
+                let random_index = random_usize_range(secure_random, 0..suites.len())?;
+
+                Self::Grease(EchGreaseConfig::new(suites[random_index], key))
+            }
+        };
+
+        Ok(ech_mode)
+    }
 }
 
 impl From<EchConfig> for EchMode {
@@ -67,6 +111,31 @@ impl From<EchGreaseConfig> for EchMode {
     fn from(config: EchGreaseConfig) -> Self {
         Self::Grease(config)
     }
+}
+
+/// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
+///
+/// This enum doesn't contains the HPKE suite that will be used during ECH and is
+/// meant to be passed to [`ClientConnectionBuilder`] through its [`with_ech_params`] method.
+///
+/// If you haven't specified which HPKE suites to be used for ECH through
+/// [`ConfigBuilder::with_ech_hpke_suites`], check [`EchMode`]
+///
+/// [`ClientConnectionBuilder`]: crate::client::connection::ClientConnectionBuilder
+/// [`with_ech_params`]: crate::client::connection::ClientConnectionBuilder::with_ech_params
+/// [`ConfigBuilder::with_ech_hpke_suites`]: crate::ConfigBuilder::with_ech_hpke_suites
+#[non_exhaustive]
+#[derive(Clone, Debug)]
+pub enum EchParams<'a> {
+    /// ECH is enabled and the ClientHello will be encrypted based on the provided
+    /// configuration.
+    Enable(EchConfigListBytes<'a>),
+
+    /// No ECH configuration is available but the client should act as though it were.
+    ///
+    /// This is an anti-ossification measure, sometimes referred to as "GREASE"[^0].
+    /// [^0]: <https://www.rfc-editor.org/rfc/rfc8701>
+    Grease(HpkePublicKey),
 }
 
 /// Configuration for performing encrypted client hello.
