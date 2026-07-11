@@ -1,14 +1,13 @@
 use alloc::vec::Vec;
 use core::any::Any;
-use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
+use core::{fmt, iter};
 
 #[cfg(feature = "webpki")]
 use pki_types::PrivateKeyDer;
 use pki_types::{FipsStatus, ServerName, UnixTime};
 
-use super::ech::EchMode;
 use super::handy::{ClientSessionMemoryCache, FailResolveClientCert, NoClientSessionStorage};
 use super::{Tls12Session, Tls13Session};
 use crate::builder::{ConfigBuilder, WantsVerifier};
@@ -16,6 +15,7 @@ use crate::client::connection::ClientConnectionBuilder;
 use crate::common_state::Protocol;
 #[cfg(doc)]
 use crate::crypto;
+use crate::crypto::hpke::Hpke;
 use crate::crypto::kx::NamedGroup;
 use crate::crypto::{CipherSuite, CryptoProvider, SelectedCredential, SignatureScheme, hash};
 #[cfg(feature = "webpki")]
@@ -40,12 +40,6 @@ use crate::{DistinguishedName, DynHasher, KeyLog, compress};
 ///
 /// These must be created via the [`ClientConfig::builder()`] or [`ClientConfig::builder_with_details()`]
 /// function.
-///
-/// Note that using [`ConfigBuilder<ClientConfig, WantsVersions>::with_ech()`] will produce a common
-/// configuration specific to the provided [`crate::client::EchConfig`] that may not be appropriate
-/// for all connections made by the program. In this case the configuration should only be shared
-/// by connections intended for domains that offer the provided [`crate::client::EchConfig`] in
-/// their DNS zone.
 ///
 /// # Defaults
 ///
@@ -180,8 +174,11 @@ pub struct ClientConfig {
     /// a cache that does no caching.
     pub cert_compression_cache: Arc<compress::CompressionCache>,
 
-    /// How to offer Encrypted Client Hello (ECH). The default is to not offer ECH.
-    pub(super) ech_mode: Option<EchMode>,
+    /// List of supported HPKE suites to use when offering Encrypted Client Hello (ECH).
+    ///
+    /// This is optional: If this is empty, attempting to configure ECH will result
+    /// in a [`ApiMisuse::NoEchHpkeSuites`] error.
+    pub(super) ech_hpke_suites: Arc<[&'static dyn Hpke]>,
 }
 
 impl ClientConfig {
@@ -209,7 +206,7 @@ impl ClientConfig {
     ) -> ConfigBuilder<Self, WantsVerifier> {
         ConfigBuilder {
             state: WantsVerifier {
-                client_ech_mode: None,
+                client_ech_hpke_suites: Arc::default(),
             },
             provider,
             time_provider,
@@ -226,6 +223,7 @@ impl ClientConfig {
             config: self.clone(),
             name: server_name,
             alpn_protocols: None,
+            ech_mode: None,
         }
     }
 
@@ -239,17 +237,21 @@ impl ClientConfig {
     ///
     /// This is different from [`CryptoProvider::fips()`]: [`CryptoProvider::fips()`]
     /// is concerned only with cryptography, whereas this _also_ covers TLS-level
-    /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+    /// configuration that NIST recommends.
+    ///
+    /// ECH HPKE suites' FIPS status will be taken into account: the minimum FIPS status
+    /// of both the [`CryptoProvider`] and of the ECH HPKE suites will be returned.
     pub fn fips(&self) -> FipsStatus {
         if !self.require_ems {
             return FipsStatus::Unvalidated;
         }
 
-        let status = self.domain.provider.fips();
-        match &self.ech_mode {
-            Some(ech) => Ord::min(status, ech.fips()),
-            None => status,
-        }
+        self.ech_hpke_suites
+            .iter()
+            .map(|suite| suite.fips())
+            .chain(iter::once(self.domain.provider.fips()))
+            .min()
+            .unwrap()
     }
 
     /// Return the crypto provider used to construct this client configuration.
@@ -672,7 +674,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
         ConfigBuilder {
             state: WantsClientCert {
                 verifier,
-                client_ech_mode: self.state.client_ech_mode,
+                client_ech_hpke_suites: self.state.client_ech_hpke_suites,
             },
             provider: self.provider,
             time_provider: self.time_provider,
@@ -680,18 +682,15 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
         }
     }
 
-    /// Enable Encrypted Client Hello (ECH) in the given mode.
+    /// Pass a slice of HPKE suites to use in case ECH is configured later on
+    /// with [`ClientConnectionBuilder::with_ech`] or [`ClientConnectionBuilder::with_ech_grease`].
     ///
     /// This requires TLS 1.3 as the only supported protocol version to meet the requirement
     /// to support ECH.  At the end, the config building process will return an error if either
     /// TLS1.3 _is not_ supported by the provider, or TLS1.2 _is_ supported.
-    ///
-    /// The `ClientConfig` that will be produced by this builder will be specific to the provided
-    /// [`crate::client::EchConfig`] and may not be appropriate for all connections made by the program.
-    /// In this case the configuration should only be shared by connections intended for domains
-    /// that offer the provided [`crate::client::EchConfig`] in their DNS zone.
-    pub fn with_ech(mut self, mode: EchMode) -> Self {
-        self.state.client_ech_mode = Some(mode);
+    pub fn with_ech_hpke_suites(mut self, hpke_suites: &[&'static dyn Hpke]) -> Self {
+        self.state.client_ech_hpke_suites = Arc::from(hpke_suites);
+
         self
     }
 
@@ -709,7 +708,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 #[derive(Clone)]
 pub struct WantsClientCert {
     verifier: Arc<dyn ServerVerifier>,
-    client_ech_mode: Option<EchMode>,
+    client_ech_hpke_suites: Arc<[&'static dyn Hpke]>,
 }
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
@@ -744,7 +743,11 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     ) -> Result<ClientConfig, Error> {
         self.provider.consistency_check()?;
 
-        if self.state.client_ech_mode.is_some() {
+        if !self
+            .state
+            .client_ech_hpke_suites
+            .is_empty()
+        {
             match (
                 self.provider
                     .tls12_cipher_suites
@@ -780,7 +783,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
-            ech_mode: self.state.client_ech_mode,
+            ech_hpke_suites: self.state.client_ech_hpke_suites,
         })
     }
 }
@@ -825,7 +828,7 @@ pub(super) mod danger {
             ConfigBuilder {
                 state: WantsClientCert {
                     verifier,
-                    client_ech_mode: self.cfg.state.client_ech_mode,
+                    client_ech_hpke_suites: self.cfg.state.client_ech_hpke_suites,
                 },
                 provider: self.cfg.provider,
                 time_provider: self.cfg.time_provider,

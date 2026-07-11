@@ -440,6 +440,7 @@ impl ClientHelloInput {
         protocol: Protocol,
         output: &mut dyn Output<'_>,
         config: Arc<ClientConfig>,
+        ech_mode: Option<EchMode>,
     ) -> Result<Self, Error> {
         let session_key = ClientSessionKey {
             config_hash: config.config_hash(),
@@ -485,6 +486,7 @@ impl ClientHelloInput {
                 .clone()
                 .unwrap_or_default(),
             rand::random_u16(config.provider().secure_random)?,
+            ech_mode,
         );
 
         let random = Random::new(config.provider().secure_random)?;
@@ -525,7 +527,7 @@ impl ClientHelloInput {
             None
         };
 
-        let ech_state = match self.config.ech_mode.as_ref() {
+        let ech_state = match self.hello.ech_mode.as_ref() {
             Some(EchMode::Enable(ech_config)) => {
                 Some(ech_config.state(self.session_key.server_name.clone(), &self.config)?)
             }
@@ -774,7 +776,8 @@ fn emit_client_hello_for_retry(
         extensions: exts,
     };
 
-    let ech_grease_ext = config
+    let ech_grease_ext = input
+        .hello
         .ech_mode
         .as_ref()
         .and_then(|mode| match mode {
