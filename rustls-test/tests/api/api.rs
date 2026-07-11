@@ -18,17 +18,14 @@ use rustls::crypto::{
 };
 use rustls::enums::{ApplicationProtocol, ContentType, HandshakeType, ProtocolVersion};
 use rustls::error::{AlertDescription, ApiMisuse, CertificateError, Error, PeerMisbehaved};
+#[cfg(feature = "aws-lc-rs")]
+use rustls::pki_types::EchConfigListBytes;
 use rustls::server::{
     ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver, ServerHandshake,
 };
 use rustls::{
     ClientConfig, ClientConnection, Connection as _, HandshakeKind, KeyingMaterialExporter,
     ServerConfig, ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
-};
-#[cfg(feature = "aws-lc-rs")]
-use rustls::{
-    client::{EchConfig, EchGreaseConfig, EchMode},
-    pki_types::EchConfigListBytes,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls_aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
@@ -1568,25 +1565,36 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
             suite_id.kem, suite_id.sym.kdf_id, suite_id.sym.aead_id
         );
 
-        let ech_config = EchConfig::new(
-            EchConfigListBytes::from(std::fs::read(&config_path).unwrap()),
-            &[*suite],
-        )
-        .unwrap();
+        let ech_suites = &[*suite];
 
         // A ECH client configuration should only be considered FIPS approved if the
         // ECH HPKE suite is itself FIPS approved.
         let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
-            .with_ech(EchMode::Enable(ech_config));
-        let config = config.finish(KeyType::default());
+            .with_ech_hpke_suites(ech_suites)
+            .finish(KeyType::default());
+        let config = Arc::new(config);
         assert_eq!(config.fips(), suite.fips());
 
-        // The same applies if an ECH GREASE client configuration is used.
-        let (public_key, _) = suite.generate_key_pair().unwrap();
-        let config = ClientConfig::builder(provider::DEFAULT_TLS13_PROVIDER.into())
-            .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)));
-        let config = Arc::new(config.finish(KeyType::default()));
-        assert_eq!(config.fips(), suite.fips());
+        // A connection with an ECH client configuration should only be considered
+        // FIPS approved if the ECH HPKE suite is itself FIPS approved.
+        let conn = config
+            .connect("example.com".try_into().unwrap())
+            .with_ech(&[EchConfigListBytes::from(
+                std::fs::read(&config_path).unwrap(),
+            )])
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(conn.fips(), suite.fips());
+
+        // The same applies if a connection with an ECH GREASE client configuration is used.
+        let conn = config
+            .connect("example.com".try_into().unwrap())
+            .with_ech_grease()
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(conn.fips(), suite.fips());
 
         // And a connection made from a client config should retain the fips status of the
         // config w.r.t the HPKE suite.
