@@ -19,7 +19,6 @@ use crate::crypto::{CipherSuite, SecureRandom};
 use crate::enums::ProtocolVersion;
 use crate::error::{EncryptedClientHelloError, Error, PeerMisbehaved, RejectedEch};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
-use crate::log::{debug, trace, warn};
 use crate::msgs::{
     ClientExtensions, ClientHelloPayload, Codec, EchConfigContents, EchConfigPayload, Encoding,
     EncryptedClientHello, EncryptedClientHelloOuter, ExtensionType, HandshakeAlignedProof,
@@ -31,6 +30,7 @@ use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::{
     KeyScheduleEarlyClient, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
+use crate::tracing::{debug, trace, warn};
 
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
 #[non_exhaustive]

@@ -18,7 +18,6 @@ use crate::enums::{ApplicationProtocol, CertificateType, HandshakeType, Protocol
 use crate::error::{ApiMisuse, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kernel::KernelState;
-use crate::log::{debug, trace};
 use crate::msgs::{
     ClientHelloPayload, Compression, HandshakeAlignedProof, HandshakePayload, Message,
     MessagePayload, Random, ServerExtensions, ServerExtensionsInput, ServerNamePayload, SessionId,
@@ -30,6 +29,7 @@ use crate::sync::Arc;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
+use crate::tracing::{debug, trace};
 
 pub(crate) enum ServerState {
     /// Reading an entire ClientHello

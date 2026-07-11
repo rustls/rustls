@@ -7,7 +7,7 @@ use std::io::Write;
 use std::sync::Mutex;
 
 use rustls::KeyLog;
-#[cfg(feature = "log")]
+#[cfg(feature = "tracing")]
 use tracing::warn;
 
 // Internal mutable state for KeyLogFile
@@ -25,16 +25,16 @@ impl KeyLogFileInner {
             };
         };
 
-        #[cfg_attr(not(feature = "log"), expect(clippy::manual_ok_err))]
+        #[cfg_attr(not(feature = "tracing"), expect(clippy::manual_ok_err))]
         let file = match OpenOptions::new()
             .append(true)
             .create(true)
             .open(path)
         {
             Ok(f) => Some(f),
-            #[cfg_attr(not(feature = "log"), expect(unused_variables))]
+            #[cfg_attr(not(feature = "tracing"), expect(unused_variables))]
             Err(e) => {
-                #[cfg(feature = "log")]
+                #[cfg(feature = "tracing")]
                 warn!("unable to create key log file {path:?}: {e}");
                 None
             }
@@ -102,9 +102,9 @@ impl KeyLog for KeyLogFile {
             .try_write(label, client_random, secret)
         {
             Ok(()) => {}
-            #[cfg_attr(not(feature = "log"), expect(unused_variables))]
+            #[cfg_attr(not(feature = "tracing"), expect(unused_variables))]
             Err(e) => {
-                #[cfg(feature = "log")]
+                #[cfg(feature = "tracing")]
                 warn!("error writing to key log file: {e}");
             }
         }

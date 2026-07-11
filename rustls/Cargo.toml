@@ -14,9 +14,9 @@ autotests = false
 exclude = ["src/testdata", "tests/**"]
 
 [features]
-default = ["log", "webpki"]
+default = ["tracing", "webpki"]
 brotli = ["dep:brotli", "dep:brotli-decompressor"]
-log = ["dep:tracing"]
+tracing = ["dep:tracing"]
 webpki = ["dep:webpki"]
 zlib = ["dep:zlib-rs"]
 
@@ -51,7 +51,7 @@ path = "examples/internal/test_ca.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["brotli", "hashbrown", "log", "std", "zlib"]
+features = ["brotli", "hashbrown", "std", "tracing", "zlib"]
 rustdoc-args = ["--cfg", "rustls_docsrs"]
 
 [package.metadata.cargo_check_external_types]

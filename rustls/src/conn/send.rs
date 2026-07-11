@@ -6,9 +6,9 @@ use crate::crypto::cipher::{
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
-use crate::log::{debug, error};
 use crate::msgs::{AlertLevel, Message, MessageFragmenter};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
+use crate::tracing::{debug, error};
 use crate::vecbuf::ChunkVecBuffer;
 
 /// The data path from us to the peer.

@@ -24,8 +24,8 @@ use crate::enums::{
     ProtocolVersion,
 };
 use crate::error::InvalidMessage;
-use crate::log::warn;
 use crate::msgs::enums::ServerNameType;
+use crate::tracing::warn;
 use crate::verify::DistinguishedName;
 
 #[derive(Clone, Debug)]

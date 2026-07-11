@@ -8,8 +8,8 @@ homepage = "https://github.com/rustls/rustls"
 repository = "https://github.com/rustls/rustls"
 
 [features]
-default = ["log"]
-log = ["dep:tracing", "rustls/log"]
+default = ["tracing"]
+tracing = ["dep:tracing", "rustls/tracing"]
 
 [dependencies]
 rustls = { path = "../rustls", version = "0.24.0-dev.0", default-features = false }

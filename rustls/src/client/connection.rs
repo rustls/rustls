@@ -20,11 +20,11 @@ use crate::conn::{
 use crate::crypto;
 use crate::enums::ApplicationProtocol;
 use crate::error::Error;
-use crate::log::trace;
 use crate::msgs::ClientExtensionsInput;
 use crate::quic::QuicOutput;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
+use crate::tracing::trace;
 
 /// This represents a single TLS client connection.
 pub struct ClientConnection {
