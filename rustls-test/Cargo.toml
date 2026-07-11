@@ -5,12 +5,12 @@ edition.workspace = true
 publish = false
 
 [features]
-default = ["aws-lc-rs", "brotli", "log", "ring", "zlib"]
+default = ["aws-lc-rs", "brotli", "ring", "tracing", "zlib"]
 aws-lc-rs = ["dep:rustls-aws-lc-rs"]
 brotli = ["rustls/brotli"]
 fips = ["rustls-aws-lc-rs/fips"]
-log = ["rustls/log", "rustls-util/log"]
 ring = ["dep:rustls-ring"]
+tracing = ["rustls/tracing", "rustls-util/tracing"]
 zlib = ["rustls/zlib"]
 
 [dependencies]

@@ -7,8 +7,8 @@ use crate::crypto::cipher::{
     encode_record_header,
 };
 use crate::error::Error;
-use crate::log::trace;
 use crate::msgs::{HEADER_SIZE, HandshakeAlignedProof};
+use crate::tracing::trace;
 
 /// Record layer that tracks encryption keys.
 pub(crate) struct EncryptionState {

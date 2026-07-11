@@ -21,7 +21,6 @@ use crate::crypto::{Identity, Signer};
 use crate::enums::{CertificateType, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
-use crate::log::{debug, trace, warn};
 use crate::msgs::{
     CertificateChain, ChangeCipherSpecPayload, ClientDhParams, ClientEcdhParams,
     ClientKeyExchangeParams, HandshakeAlignedProof, HandshakeMessagePayload, HandshakePayload,
@@ -32,6 +31,7 @@ use crate::suites::{PartiallyExtractedSecrets, Suite};
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
+use crate::tracing::{debug, trace, warn};
 use crate::verify::{self, DigitallySignedStruct, ServerIdentity, SignatureVerificationInput};
 
 #[expect(private_interfaces)]
