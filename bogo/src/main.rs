@@ -783,7 +783,8 @@ impl Options {
             }
             "-max-send-fragment" => {
                 let max_fragment = args.remove(0).parse::<usize>().unwrap();
-                self.max_fragment = Some(max_fragment + 5); // ours includes header
+                // ours includes header and overhead, OpenSSL includes neither.
+                self.max_fragment = Some(max_fragment + 5);
             }
             "-read-size" => {
                 let rdsz = args.remove(0).parse::<usize>().unwrap();

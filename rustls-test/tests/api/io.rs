@@ -1840,7 +1840,6 @@ fn test_server_mtu_reduction() {
     let mut server_input = VecInput::default();
 
     let big_data = [0u8; 2048];
-    let encryption_overhead = 20; // FIXME: see issue #991
 
     transfer(&mut client_output, &mut server_input);
     server
@@ -1854,7 +1853,7 @@ fn test_server_mtu_reduction() {
         .write_tls((&big_data).into(), &mut server_output)
         .unwrap();
     for length in message_lengths(&server_output) {
-        assert!(length <= 64 + encryption_overhead);
+        assert!(length <= 64);
     }
     transfer(&mut server_output, &mut client_input);
 
@@ -1868,7 +1867,7 @@ fn test_server_mtu_reduction() {
         .handle_all(&mut Vec::new())
         .unwrap();
     for length in message_lengths(&server_output) {
-        assert!(length <= 64 + encryption_overhead);
+        assert!(length <= 64);
     }
     transfer(&mut server_output, &mut client_input);
 
