@@ -590,16 +590,11 @@ fn test_tls13_valid_early_plaintext_alert() {
     //  * The message content type is Alert.
     //  * The payload size is indicative of a plaintext alert message.
     //  * The negotiated protocol version is TLS 1.3.
-    server_input
-        .read(&mut io::Cursor::new(&encoding::alert(
-            AlertDescription::UnknownCa,
-            &[],
-        )))
-        .unwrap();
+    let mut alert = encoding::alert(AlertDescription::UnknownCa, &[]);
 
     // The server should process the plaintext alert without error.
     assert_eq!(
-        server.process_new_packets(&mut server_input),
+        server.process_new_packets(&mut SliceInput::new(&mut alert)),
         Err(Error::AlertReceived(AlertDescription::UnknownCa)),
     );
 }
@@ -618,16 +613,11 @@ fn test_tls13_too_short_early_plaintext_alert() {
 
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message
     // because the payload length is too large to be considered an early plaintext alert.
-    server_input
-        .read(&mut io::Cursor::new(&encoding::alert(
-            AlertDescription::UnknownCa,
-            &[0xff],
-        )))
-        .unwrap();
+    let mut alert = encoding::alert(AlertDescription::UnknownCa, &[0xff]);
 
     // The server should produce a decrypt error trying to decrypt the plaintext alert.
     assert_eq!(
-        server.process_new_packets(&mut server_input),
+        server.process_new_packets(&mut SliceInput::new(&mut alert)),
         Err(Error::DecryptError),
     );
 }
@@ -648,16 +638,11 @@ fn test_tls13_late_plaintext_alert() {
     );
 
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message.
-    server_input
-        .read(&mut io::Cursor::new(&encoding::alert(
-            AlertDescription::UnknownCa,
-            &[],
-        )))
-        .unwrap();
+    let mut alert = encoding::alert(AlertDescription::UnknownCa, &[]);
 
     // The server should produce a decrypt error, trying to decrypt a plaintext alert.
     assert_eq!(
-        server.process_new_packets(&mut server_input),
+        server.process_new_packets(&mut SliceInput::new(&mut alert)),
         Err(Error::DecryptError)
     );
 }
