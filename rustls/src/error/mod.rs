@@ -717,44 +717,214 @@ impl fmt::Display for CertificateError {
 enum_builder! {
     /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
+    ///
+    /// The list of alerts is available at
+    /// <https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-6>.
     pub struct AlertDescription(pub u8);
 
     enum AlertDescriptionName {
+        /// Notifies the recipient that the sender will not send any more messages on this connection.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.1-2.2.1>
         CloseNotify => 0x00,
+
+        /// An inappropriate message was received.
+        ///
+        /// E.g., the wrong handshake message, premature Application Data, etc.
+        /// This alert should never be observed in communication between proper implementations.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.2.1>
         UnexpectedMessage => 0x0a,
+
+        /// This alert is returned if a record is received which cannot be deprotected.
+        ///
+        /// Because AEAD algorithms combine decryption and verification,
+        /// and also to avoid side-channel attacks,
+        /// this alert is used for all deprotection failures.
+        /// This alert should never be observed in communication between proper implementations,
+        /// except when messages were corrupted in the network.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.4.1>
         BadRecordMac => 0x14,
+
+        /// Reserved. Used in TLS versions prior to 1.3.
+        ///
+        /// According to TLS 1.2 specification at <https://www.rfc-editor.org/info/rfc5246/>
+        /// "This alert was used in some earlier versions of TLS, and may have
+        /// permitted certain attacks against the CBC mode.
+        /// It MUST NOT be sent by compliant implementations."
         DecryptionFailed => 0x15,
+
+        /// TLS record larger than the limit was received.
+        ///
+        /// A TLSCiphertext record was received that had a length more than 214 + 256 bytes,
+        /// or a record decrypted to a TLSPlaintext record with more than 214 bytes
+        /// (or some other negotiated limit).
+        /// This alert should never be observed in communication between proper implementations,
+        /// except when messages were corrupted in the network.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.6.1>
         RecordOverflow => 0x16,
+
+        /// Reserved. Used in TLS versions prior to 1.3.
+        ///
+        /// The decompression function received improper input
+        /// (e.g., data that would expand to excessive length).
+        /// This message is always fatal and should never be observed
+        /// in communication between proper implementations.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc5246/>
         DecompressionFailure => 0x1e,
+
+        /// The sender was unable to negotiate an acceptable set of security parameters.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.8.1>
         HandshakeFailure => 0x28,
+
+        /// Reserved. Used in SSLv3 but not in TLS.
         NoCertificate => 0x29,
+
+        /// A certificate was corrupt, contained signatures that did not verify correctly, etc.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.10.1>
         BadCertificate => 0x2a,
+
+        /// A certificate was of an unsupported type.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.12.1>
         UnsupportedCertificate => 0x2b,
+
+        /// A certificate was revoked by its signer.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.14.1>
         CertificateRevoked => 0x2c,
+
+        /// A certificate has expired or is not currently valid.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.16.1>
         CertificateExpired => 0x2d,
+
+        /// Unspecified issue arose in processing the certificate, rendering it unacceptable.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.18.1>
         CertificateUnknown => 0x2e,
+
+        /// A field in the handshake was incorrect or inconsistent with other fields.
+        ///
+        /// This alert is used for errors which conform to the formal protocol syntax
+        /// but are otherwise incorrect.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.20.1>
         IllegalParameter => 0x2f,
+
+        /// The CA certificate could not be located or could not be matched with a known trust anchor.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.22.1>
         UnknownCa => 0x30,
+
+        /// A valid certificate or PSK was received, but did not pass access control.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.24.1>
         AccessDenied => 0x31,
+
+        /// A message could not be decoded.
+        ///
+        /// Some field was out of the specified range
+        /// or the length of the message was incorrect.
+        /// This alert is used for errors where the message does not conform
+        /// to the formal protocol syntax.
+        /// This alert should never be observed in communication between proper implementations,
+        /// except when messages were corrupted in the network.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.26.1>
         DecodeError => 0x32,
+
+        /// A handshake (not record layer) cryptographic operation failed.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.28.1>
         DecryptError => 0x33,
+
+        /// Reserved. Used in TLS 1.0 but not TLS 1.1 or later.
         ExportRestriction => 0x3c,
+
+        /// Peer has attempted to negotiate a recognized but not supported protocol version.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.30.1>
         ProtocolVersion => 0x46,
+
+        /// The server requires parameters more secure than those supported by the client.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.32.1>
         InsufficientSecurity => 0x47,
+
+        /// An internal error unrelated to the peer or the correctness of the protocol.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.34.1>
         InternalError => 0x50,
+
+        /// Sent by a server in response to an invalid connection retry attempt from a client.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.36.1>
         InappropriateFallback => 0x56,
+
+        /// The sender is canceling the handshake for some reason unrelated to a protocol failure.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.1-2.4.1>
         UserCanceled => 0x5a,
+
+        /// Reserved. Used in TLS versions prior to 1.3.
+        ///
+        /// See TLS 1.2 specification at <https://www.rfc-editor.org/info/rfc5246/>
+        /// for the description.
         NoRenegotiation => 0x64,
+
+        /// A handshake message does not contain an extension that is mandatory to send.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.38.1>
         MissingExtension => 0x6d,
+
+        /// Received an extension not offered in ClientHello or CertificateRequest.
+        ///
+        /// <https://www.rfc-editor.org/info/rfc9846/#section-6.2-4.38.1>
         UnsupportedExtension => 0x6e,
+
+        /// The server is unable to obtain certificate sent as an URL by the client.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc6066>
         CertificateUnobtainable => 0x6f,
+
+        /// The server does not recognize SNI sent by the client.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc6066>
         UnrecognizedName => 0x70,
+
+        /// <https://datatracker.ietf.org/doc/html/rfc6066>
         BadCertificateStatusResponse => 0x71,
+
+        /// Reserved. Used in TLS versions prior to 1.3.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc6066>
         BadCertificateHashValue => 0x72,
+
+        /// The server does not recognize PSK identity.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc4279>
         UnknownPskIdentity => 0x73,
+
+        /// A client certificate is desired but none was provided by the client.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.48.1>
         CertificateRequired => 0x74,
+
+        /// A client ALPN extension advertises only protocols that the server does not support.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc9846#section-6.2-4.52.1>
         NoApplicationProtocol => 0x78,
-        EncryptedClientHelloRequired => 0x79, // https://datatracker.ietf.org/doc/html/rfc9849#section-11.2
+
+        /// Use of Encrypted Client Hello is required.
+        ///
+        /// <https://datatracker.ietf.org/doc/html/rfc9849#section-11.2>
+        EncryptedClientHelloRequired => 0x79,
     }
 }
 
