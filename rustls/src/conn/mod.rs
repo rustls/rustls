@@ -501,8 +501,10 @@ impl<Side: SideData> ConnectionCommon<Side> {
 
         loop {
             let mut iter = MessageIter::new(buf, None, &mut self.core);
-            let Some(payload) = iter.next()? else {
-                break;
+            let payload = match iter.next() {
+                Some(Ok(payload)) => payload,
+                Some(Err(err)) => return Err(err),
+                None => break,
             };
 
             let payload = payload.reborrow(&Delocator::new(buf.slice_mut()));
