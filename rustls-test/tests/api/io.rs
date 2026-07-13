@@ -16,7 +16,9 @@ use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
 use rustls::server::Acceptor;
-use rustls::{ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, VecInput};
+use rustls::{
+    ClientConfig, Connection, HandshakeKind, ServerConfig, ServerConnection, SliceInput, VecInput,
+};
 use rustls_test::{
     ClientConfigExt, KeyType, OtherSession, ServerConfigExt, TestNonBlockIo, check_fill_buf,
     check_fill_buf_err, check_read, check_read_and_close, check_read_err, do_handshake, encoding,
@@ -2435,14 +2437,12 @@ fn test_junk_after_close_notify_received() {
     // after the close_notify
     client_buffer.extend_from_slice(&[0x17, 0x03, 0x03, 0x01]);
 
-    server_input
-        .read(&mut io::Cursor::new(&client_buffer[..]))
+    let mut final_input = SliceInput::new(&mut client_buffer);
+    server
+        .process_new_packets(&mut final_input)
         .unwrap();
     server
-        .process_new_packets(&mut server_input)
-        .unwrap();
-    server
-        .process_new_packets(&mut server_input)
+        .process_new_packets(&mut final_input)
         .unwrap(); // check for desync
 
     // can read data received prior to close_notify
