@@ -183,14 +183,18 @@ impl<Side: SideData> ReceiveTraffic<Side> {
         };
 
         let mut iter = MessageIter::<Side>::receive(received_tls, &mut state, &mut recv, output);
-        let received_plain = iter.next().map_err(|error| {
-            ErrorWithAlert::new(
-                error,
-                send_adapter
-                    .as_locked(false)
-                    .deref_mut(),
-            )
-        })?;
+        let received_plain = match iter.next() {
+            Some(Ok(payload)) => Some(payload),
+            Some(Err(error)) => {
+                return Err(ErrorWithAlert::new(
+                    error,
+                    send_adapter
+                        .as_locked(false)
+                        .deref_mut(),
+                ));
+            }
+            None => None,
+        };
 
         // nb. state consumed only on error.
         let state = state.unwrap();
