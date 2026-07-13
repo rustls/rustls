@@ -65,15 +65,27 @@ impl SendPath {
         );
     }
 
+    fn max_plaintext_fragment(&self, encrypt: bool) -> usize {
+        if encrypt {
+            self.message_fragmenter.max_plaintext_for_encrypted(
+                self.encrypt_state.encrypted_record_overhead(),
+            )
+        } else {
+            self.message_fragmenter.max_plaintext()
+        }
+    }
+
     /// Like send_msg_encrypt, but operate on an appdata directly.
     pub(crate) fn send_appdata_encrypt(&mut self, payload: OutboundPlain<'_>) -> usize {
         let len = payload.len();
+        let max_plaintext = self.max_plaintext_fragment(true);
         self.send_messages(
             self.message_fragmenter
-                .fragment_payload(
+                .fragment_payload_with_max(
                     ContentType::ApplicationData,
                     ProtocolVersion::TLSv1_2,
                     payload,
+                    max_plaintext,
                 ),
         );
         len
@@ -252,9 +264,10 @@ impl SendOutput for SendPath {
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         let encoded = EncodedMessage::from(m);
         if must_encrypt {
+            let max_plaintext = self.max_plaintext_fragment(true);
             self.send_messages(
                 self.message_fragmenter
-                    .fragment_message(&encoded),
+                    .fragment_message_with_max(&encoded, max_plaintext),
             );
             return;
         }

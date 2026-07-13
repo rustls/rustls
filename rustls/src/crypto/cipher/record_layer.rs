@@ -77,6 +77,11 @@ impl EncryptionState {
             .unwrap_or_default()
     }
 
+    /// Number of bytes added to a plaintext fragment by record protection.
+    pub(crate) fn encrypted_record_overhead(&self) -> usize {
+        self.encrypted_len(0)
+    }
+
     pub(crate) fn is_encrypting(&self) -> bool {
         self.message_encrypter.is_some()
     }

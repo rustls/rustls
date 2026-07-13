@@ -1643,8 +1643,6 @@ fn test_server_mtu_reduction() {
         .write_all(&big_data)
         .unwrap();
 
-    let encryption_overhead = 20; // FIXME: see issue #991
-
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
@@ -1656,7 +1654,7 @@ fn test_server_mtu_reduction() {
         assert!(
             pipe.message_lengths()
                 .iter()
-                .all(|x| *x <= 64 + encryption_overhead)
+                .all(|x| *x <= 64)
         );
     }
 
@@ -1674,7 +1672,7 @@ fn test_server_mtu_reduction() {
         assert!(
             pipe.message_lengths()
                 .iter()
-                .all(|x| *x <= 64 + encryption_overhead)
+                .all(|x| *x <= 64)
         );
     }
 

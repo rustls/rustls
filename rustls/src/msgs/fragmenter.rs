@@ -40,23 +40,59 @@ impl MessageFragmenter {
     /// Return an iterator across those messages.
     ///
     /// Payloads are borrowed from `payload`.
+    pub(crate) fn max_plaintext(&self) -> usize {
+        self.max_frag
+    }
+
+    /// Maximum plaintext per fragment when records will be encrypted.
+    ///
+    /// `encrypted_overhead` is the number of bytes added to the plaintext by the
+    /// record protection layer (for example, the TLS 1.3 content-type byte and AEAD tag).
+    pub(crate) fn max_plaintext_for_encrypted(&self, encrypted_overhead: usize) -> usize {
+        self.max_frag.saturating_sub(encrypted_overhead)
+    }
+
     pub(crate) fn fragment_payload<'a>(
         &self,
         typ: ContentType,
         version: ProtocolVersion,
         payload: OutboundPlain<'a>,
     ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> {
-        Chunker::new(payload, self.max_frag).map(move |payload| EncodedMessage {
+        self.fragment_payload_with_max(typ, version, payload, self.max_frag)
+    }
+
+    pub(crate) fn fragment_payload_with_max<'a>(
+        &self,
+        typ: ContentType,
+        version: ProtocolVersion,
+        payload: OutboundPlain<'a>,
+        max_plaintext: usize,
+    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> {
+        Chunker::new(payload, max_plaintext).map(move |payload| EncodedMessage {
             typ,
             version,
             payload,
         })
     }
 
+    pub(crate) fn fragment_message_with_max<'a>(
+        &self,
+        msg: &'a EncodedMessage<Payload<'_>>,
+        max_plaintext: usize,
+    ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + 'a {
+        self.fragment_payload_with_max(
+            msg.typ,
+            msg.version,
+            msg.payload.bytes().into(),
+            max_plaintext,
+        )
+    }
+
     /// Set the maximum fragment size that will be produced.
     ///
-    /// This includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
-    /// up to 10 bytes long.
+    /// This is the maximum size of each TLS record on the wire, including the
+    /// five-byte record header. When records are encrypted, plaintext is fragmented
+    /// more aggressively so the protected record still fits in this limit.
     ///
     /// A `max_fragment_size` of `None` sets the highest allowable fragment size.
     ///
@@ -129,6 +165,14 @@ mod tests {
         let buf = m.to_unencrypted_opaque().encode();
 
         assert_eq!(total_len, buf.len());
+    }
+
+    #[test]
+    fn max_plaintext_for_encrypted() {
+        let mut frag = MessageFragmenter::default();
+        frag.set_max_fragment_size(Some(64)).unwrap();
+        assert_eq!(frag.max_plaintext(), 59);
+        assert_eq!(frag.max_plaintext_for_encrypted(17), 42);
     }
 
     #[test]
