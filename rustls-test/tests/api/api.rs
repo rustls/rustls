@@ -1783,22 +1783,17 @@ fn test_illegal_client_renegotiation_attempt_during_tls12_handshake() {
     let server_config = make_server_config(KeyType::Rsa2048, &provider);
     let client_config = make_client_config(KeyType::Rsa2048, &provider);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    let mut server_input = VecInput::default();
 
     let mut client_hello = vec![];
     client
         .write_tls(&mut io::Cursor::new(&mut client_hello))
         .unwrap();
 
-    server_input
-        .read(&mut io::Cursor::new(&client_hello))
-        .unwrap();
-    server_input
-        .read(&mut io::Cursor::new(&client_hello))
-        .unwrap();
+    // two copies of the same hello
+    let mut input = [&client_hello[..], &client_hello[..]].concat();
     assert_eq!(
         server
-            .process_new_packets(&mut server_input)
+            .process_new_packets(&mut SliceInput::new(&mut input))
             .unwrap_err(),
         Error::InappropriateHandshakeMessage {
             expect_types: vec![HandshakeType::ClientKeyExchange],
