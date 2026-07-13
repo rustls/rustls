@@ -23,7 +23,7 @@ use rustls::server::{
 };
 use rustls::{
     ClientConfig, ClientConnection, Connection as _, HandshakeKind, KeyingMaterialExporter,
-    ServerConfig, ServerConnection, SupportedCipherSuite, VecInput,
+    ServerConfig, ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
@@ -1929,14 +1929,13 @@ fn excess_client_hello_acceptor() {
     // this is a trivial ClientHello, followed by a fragment of a ClientHello
     let mut hello = encoding::basic_client_hello(vec![]);
     hello.extend(&hello[..10].to_vec());
-    let hello = encoding::message_framing(ContentType::Handshake, ProtocolVersion::TLSv1_2, hello);
+    let mut hello =
+        encoding::message_framing(ContentType::Handshake, ProtocolVersion::TLSv1_2, hello);
 
     let mut acceptor = Acceptor::default();
-    let mut input = VecInput::default();
-    input
-        .read(&mut io::Cursor::new(hello))
-        .unwrap();
-    let mut error_with_alert = acceptor.accept(&mut input).unwrap_err();
+    let mut error_with_alert = acceptor
+        .accept(&mut SliceInput::new(&mut hello))
+        .unwrap_err();
     assert_eq!(
         error_with_alert.error,
         PeerMisbehaved::KeyEpochWithPendingFragment.into()
