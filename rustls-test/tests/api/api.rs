@@ -1810,28 +1810,21 @@ fn tls13_packed_handshake() {
         .connect(server_name("localhost"))
         .build()
         .unwrap();
-    let mut client_input = VecInput::default();
 
     let mut hello = Vec::new();
     client
         .write_tls(&mut io::Cursor::new(&mut hello))
         .unwrap();
 
-    let first_flight = include_bytes!("../data/bug2040-message-1.bin");
-    client_input
-        .read(&mut io::Cursor::new(first_flight))
-        .unwrap();
+    let mut first_flight = include_bytes!("../data/bug2040-message-1.bin").to_vec();
     client
-        .process_new_packets(&mut client_input)
+        .process_new_packets(&mut SliceInput::new(&mut first_flight))
         .unwrap();
 
-    let second_flight = include_bytes!("../data/bug2040-message-2.bin");
-    client_input
-        .read(&mut io::Cursor::new(second_flight))
-        .unwrap();
+    let mut second_flight = include_bytes!("../data/bug2040-message-2.bin").to_vec();
     assert_eq!(
         client
-            .process_new_packets(&mut client_input)
+            .process_new_packets(&mut SliceInput::new(&mut second_flight))
             .unwrap_err(),
         Error::InvalidCertificate(CertificateError::UnknownIssuer),
     );
