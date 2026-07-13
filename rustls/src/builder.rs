@@ -88,7 +88,7 @@ use crate::{ClientConfig, ServerConfig};
 ///
 /// # Types
 ///
-/// ConfigBuilder uses the [typestate] pattern to ensure at compile time that each required
+/// ConfigBuilder uses the type state pattern to ensure at compile time that each required
 /// configuration item is provided exactly once. This is tracked in the `State` type parameter,
 /// which can have these values:
 ///
@@ -111,7 +111,6 @@ use crate::{ClientConfig, ServerConfig};
 /// is used.
 ///
 /// [builder]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
-/// [typestate]: http://cliffle.com/blog/rust-typestate/
 /// [`ServerConfig`]: crate::ServerConfig
 /// [`ServerConfig::builder`]: crate::ServerConfig::builder
 /// [`ClientConfig`]: crate::ClientConfig
