@@ -178,8 +178,13 @@ pub trait MessageEncrypter: Send + Sync {
         out: &'a mut [u8],
     ) -> Result<EncodedMessage<&'a [u8]>, Error>;
 
-    /// Return the length of the ciphertext that results from encrypting plaintext of
-    /// length `payload_len`
+    /// Return the length of the ciphertext that results from encrypting plaintext of length `payload_len`.
+    ///
+    /// For a zero `payload_len` this should return the _minimum_ overhead for any
+    /// message.  Then, to fragment a long message into chunks of length `F`,
+    /// Rustls will first set `A := encrypted_payload_len(0)` and then supply the
+    /// message to [`Self::encrypt()`] in chunks of length `F - A`.  Each `encrypt()`
+    /// is then free to pad or otherwise transform the length at its option.
     fn encrypted_payload_len(&self, payload_len: usize) -> usize;
 }
 

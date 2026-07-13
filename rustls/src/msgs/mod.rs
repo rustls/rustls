@@ -110,7 +110,7 @@ pub mod fuzzing {
         let mut frg = Fragmenter::default();
         frg.set_max_fragment_size(Some(32))
             .unwrap();
-        for msg in frg.fragment(msg.typ, msg.version, msg.payload.bytes().into()) {
+        for msg in frg.fragment(msg.typ, msg.version, msg.payload.bytes().into(), 0) {
             Message::try_from(&EncodedMessage {
                 typ: msg.typ,
                 version: msg.version,

@@ -77,6 +77,8 @@ impl SendPath {
                 ContentType::ApplicationData,
                 ProtocolVersion::TLSv1_2,
                 payload,
+                self.encrypt_state
+                    .encrypted_record_overhead(),
             ),
             tls,
         );
@@ -232,6 +234,8 @@ impl SendOutput for SendPath {
             encoded.typ,
             encoded.version,
             encoded.payload.bytes().into(),
+            self.encrypt_state
+                .encrypted_record_overhead(),
         );
 
         match must_encrypt {

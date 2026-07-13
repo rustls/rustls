@@ -15,7 +15,9 @@ pub(crate) struct Fragmenter {
 impl Fragmenter {
     /// Take `payload` and fragment it into new messages with given type and version.
     ///
-    /// Each returned message size is no more than `max_frag`.
+    /// Each returned message size is no more than the most recently configured
+    /// `set_max_fragment_size()`, less an allowance for `encryption_overhead` which
+    /// should be zero if no encryption will be performed.
     ///
     /// Return an iterator across those messages.
     ///
@@ -25,8 +27,15 @@ impl Fragmenter {
         typ: ContentType,
         version: ProtocolVersion,
         payload: OutboundPlain<'a>,
+        encryption_overhead: usize,
     ) -> impl ExactSizeIterator<Item = EncodedMessage<OutboundPlain<'a>>> + use<'a> {
-        Chunker::new(payload, self.max_frag).map(move |payload| EncodedMessage {
+        let max_plaintext = NonZeroUsize::new(
+            self.max_frag
+                .get()
+                .saturating_sub(encryption_overhead),
+        )
+        .unwrap_or(NonZeroUsize::MIN);
+        Chunker::new(payload, max_plaintext).map(move |payload| EncodedMessage {
             typ,
             version,
             payload,
@@ -35,8 +44,9 @@ impl Fragmenter {
 
     /// Set the maximum fragment size that will be produced.
     ///
-    /// This includes overhead. A `max_fragment_size` of 10 will produce TLS fragments
-    /// up to 10 bytes long.
+    /// This is the maximum size of each TLS record on the wire, including the
+    /// five-byte record header. When records are encrypted, plaintext is fragmented
+    /// more aggressively so the protected record still fits in this limit.
     ///
     /// A `max_fragment_size` of `None` sets the highest allowable fragment size.
     ///
@@ -136,7 +146,7 @@ mod tests {
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
-            .fragment(m.typ, m.version, m.payload.bytes().into())
+            .fragment(m.typ, m.version, m.payload.bytes().into(), 0)
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 3);
         msg_eq(
@@ -180,7 +190,7 @@ mod tests {
         frag.set_max_fragment_size(Some(32))
             .unwrap();
         let q = frag
-            .fragment(m.typ, m.version, m.payload.bytes().into())
+            .fragment(m.typ, m.version, m.payload.bytes().into(), 0)
             .collect::<Vec<_>>();
         assert_eq!(q.len(), 1);
         msg_eq(
@@ -203,7 +213,7 @@ mod tests {
             .unwrap();
 
         let fragments = frag
-            .fragment(typ, version, borrowed_payload)
+            .fragment(typ, version, borrowed_payload, 0)
             .collect::<Vec<_>>();
         assert_eq!(fragments.len(), 3);
         msg_eq(
@@ -221,5 +231,34 @@ mod tests {
             b"ccccccccccccccccccccdddddddddddd",
         );
         msg_eq(&fragments[2], 13, &typ, &version, b"dddddddd");
+    }
+
+    #[test]
+    fn fragment_respects_overhead() {
+        let mut frag = Fragmenter::default();
+        frag.set_max_fragment_size(Some(32))
+            .unwrap();
+
+        let p = Payload::new((0..128).collect::<Vec<u8>>());
+        let q = frag
+            .fragment(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                p.bytes().into(),
+                13,
+            )
+            .collect::<Vec<_>>();
+
+        let each_len = 32 - PACKET_OVERHEAD - 13;
+
+        let mut expect = vec![each_len; 128usize.div_euclid(each_len)];
+        expect.push(128usize.rem_euclid(each_len));
+
+        assert_eq!(
+            q.iter()
+                .map(|m| m.payload.len())
+                .collect::<Vec<usize>>(),
+            expect
+        );
     }
 }

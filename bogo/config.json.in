@@ -142,6 +142,7 @@
 
 #ifdef RING
     "*-ECDSA_P521_SHA512-*": "no p521 signatures/verification",
+    "MaxSendFragment-TLS13-TooLarge": "due to no ML-KEM, and thanks to an impedance mismatch between the OpenSSL API that bogo tests, this test can't pass",
 #endif
 
 #if defined(AWS_LC_RS) && defined(FIPS)
