@@ -90,13 +90,9 @@ impl Deframer {
     /// QUIC omits the outer frames and only uses TLS for handshake messages. Therefore,
     /// this exposes a simpler API for accepting handshake messages directly.
     ///
-    /// `buf` is the containing buffer, and `bounds` is the range of the received frame
-    /// within that buffer.
-    pub(crate) fn input_quic(
-        &mut self,
-        buf: &mut [u8],
-        bounds: Range<usize>,
-    ) -> Result<(), InvalidMessage> {
+    /// `buf` is a buffer containing a handshake message.
+    pub(crate) fn input_quic(&mut self, buf: &mut [u8]) -> Result<(), InvalidMessage> {
+        let bounds = self.processed..buf.len();
         self.processed += bounds.len();
         self.input_message(ProtocolVersion::TLSv1_3, bounds, buf);
         self.coalesce(buf)?;

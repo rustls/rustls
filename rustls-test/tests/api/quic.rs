@@ -4,13 +4,13 @@
 
 use std::sync::Arc;
 
-use rustls::HandshakeKind;
 use rustls::client::Resumption;
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
 use rustls::quic::{self, Connection, Side};
 use rustls::server::Tls13Tickets;
+use rustls::{HandshakeKind, SliceInput};
 use rustls_test::{
     ClientStorage, KeyType, encoding, make_client_config, make_server_config, server_name,
 };
@@ -33,7 +33,7 @@ fn step(
         }
     };
 
-    recv.read_hs(&buf)?;
+    recv.read_hs(&mut SliceInput::new(&mut buf))?;
     Ok(change)
 }
 
@@ -278,12 +278,12 @@ fn test_quic_acceptor() {
     assert!(client_initial.len() > 8);
 
     acceptor
-        .read_hs(&client_initial[..8])
+        .read_hs(&mut SliceInput::new(&mut client_initial[..8]))
         .unwrap();
     assert!(acceptor.accept().unwrap().is_none());
 
     acceptor
-        .read_hs(&client_initial[8..])
+        .read_hs(&mut SliceInput::new(&mut client_initial))
         .unwrap();
     let accepted = acceptor.accept().unwrap().unwrap();
     assert_eq!(
@@ -291,7 +291,9 @@ fn test_quic_acceptor() {
         Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
     );
     assert_eq!(
-        acceptor.read_hs(&[]).err(),
+        acceptor
+            .read_hs(&mut SliceInput::new(&mut []))
+            .err(),
         Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
     );
     {
@@ -372,7 +374,7 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
     );
 
     acceptor
-        .read_hs(&client_initial)
+        .read_hs(&mut SliceInput::new(&mut client_initial))
         .unwrap();
     let accepted = acceptor.accept().unwrap().unwrap();
 
@@ -450,7 +452,7 @@ fn test_quic_acceptor_invalid_early_data_size() {
     );
 
     acceptor
-        .read_hs(&client_initial)
+        .read_hs(&mut SliceInput::new(&mut client_initial))
         .unwrap();
     let accepted = acceptor.accept().unwrap().unwrap();
 
@@ -467,10 +469,10 @@ fn test_quic_acceptor_read_error_is_terminal() {
     let mut acceptor = quic::Acceptor::new(quic::Version::V1);
 
     let err = acceptor
-        .read_hs(&encoding::handshake_framing(
+        .read_hs(&mut SliceInput::new(&mut encoding::handshake_framing(
             rustls::enums::HandshakeType::ClientHello,
             vec![0x00; 32],
-        ))
+        )))
         .err()
         .unwrap();
     assert_eq!(err, InvalidMessage::MissingData("Random").into());
@@ -588,10 +590,10 @@ fn test_quic_read_deframer_failure() {
             .unwrap();
 
     let err = server
-        .read_hs(&encoding::handshake_framing(
+        .read_hs(&mut SliceInput::new(&mut encoding::handshake_framing(
             rustls::enums::HandshakeType::ClientHello,
             vec![0x00; 32],
-        ))
+        )))
         .err()
         .unwrap();
     assert_eq!(err, InvalidMessage::MissingData("Random").into());
@@ -611,9 +613,9 @@ fn test_quic_server_no_params_received() {
         quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec())
             .unwrap();
 
-    let buf = encoding::basic_client_hello(vec![]);
+    let mut buf = encoding::basic_client_hello(vec![]);
     let err = server
-        .read_hs(buf.as_slice())
+        .read_hs(&mut SliceInput::new(&mut buf))
         .err()
         .unwrap();
     assert_eq!(
@@ -637,13 +639,13 @@ fn test_quic_server_no_tls12() {
         quic::ServerConnection::new(server_config, quic::Version::V1, b"server params".to_vec())
             .unwrap();
 
-    let buf = encoding::client_hello_with_extensions(vec![
+    let mut buf = encoding::client_hello_with_extensions(vec![
         encoding::Extension::new_sig_algs(),
         encoding::Extension::new_dummy_key_share(),
         encoding::Extension::new_kx_groups(),
     ]);
     let err = server
-        .read_hs(buf.as_slice())
+        .read_hs(&mut SliceInput::new(&mut buf))
         .err()
         .unwrap();
     assert_eq!(
@@ -671,7 +673,9 @@ fn quic_transfer(sender: &mut impl Connection, receiver: &mut impl Connection) {
     }
 
     if !buf.is_empty() {
-        receiver.read_hs(&buf).unwrap();
+        receiver
+            .read_hs(&mut SliceInput::new(&mut buf))
+            .unwrap();
     }
 }
 
@@ -1075,7 +1079,9 @@ fn test_fragmented_append() {
 
     // Read the message - this will put us into a joining handshake message state, buffering
     // 4096 bytes into the deframer buffer.
-    client.read_hs(&out).unwrap();
+    client
+        .read_hs(&mut SliceInput::new(&mut out))
+        .unwrap();
 
     // Read the message again - once more it isn't a complete message, so we'll try to
     // append another 4096 bytes into the deframer buffer.
@@ -1083,7 +1089,9 @@ fn test_fragmented_append() {
     // If the deframer mishandles writing into the used buffer space this will panic with
     // an index out of range error:
     //   range end index 8192 out of range for slice of length 4096
-    client.read_hs(&out).unwrap();
+    client
+        .read_hs(&mut SliceInput::new(&mut out))
+        .unwrap();
 }
 
 #[test]
@@ -1106,7 +1114,9 @@ fn server_rejects_client_hello_with_trailing_fragment() {
     hello.extend(&hello[..10].to_vec());
 
     assert_eq!(
-        server.read_hs(&hello).unwrap_err(),
+        server
+            .read_hs(&mut SliceInput::new(&mut hello))
+            .unwrap_err(),
         PeerMisbehaved::KeyEpochWithPendingFragment.into()
     );
 }
