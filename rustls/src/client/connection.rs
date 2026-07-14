@@ -148,8 +148,8 @@ impl Connection for ClientConnection {
         self.inner.writer()
     }
 
-    fn process_new_packets(&mut self, buf: &mut dyn TlsInputBuffer) -> Result<IoState, Error> {
-        self.inner.process_new_packets(buf)
+    fn process_new_packets(&mut self, input: &mut dyn TlsInputBuffer) -> Result<IoState, Error> {
+        self.inner.process_new_packets(input)
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {

@@ -77,7 +77,7 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     ///
     /// Success from this function comes with some sundry state data
     /// about the connection.
-    fn process_new_packets(&mut self, buf: &mut dyn TlsInputBuffer) -> Result<IoState, Error>;
+    fn process_new_packets(&mut self, input: &mut dyn TlsInputBuffer) -> Result<IoState, Error>;
 
     /// Returns an object that can derive key material from the agreed connection secrets.
     ///
@@ -487,9 +487,9 @@ impl<Side: SideData> ConnectionCommon<Side> {
     #[inline]
     pub(crate) fn process_new_packets(
         &mut self,
-        buf: &mut dyn TlsInputBuffer,
+        input: &mut dyn TlsInputBuffer,
     ) -> Result<IoState, Error> {
-        if buf.has_seen_eof() {
+        if input.has_seen_eof() {
             self.buffers.has_seen_eof = true;
         } else if self
             .buffers
@@ -499,7 +499,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
             return Err(ApiMisuse::ReceivedPlaintextBufferFull.into());
         }
 
-        let mut iter = MessageIter::new(buf, None, &mut self.core);
+        let mut iter = MessageIter::new(input, None, &mut self.core);
         while let Some(result) = iter.next() {
             let payload = result?.reborrow(&Delocator::new(iter.input().slice_mut()));
             self.buffers
@@ -507,7 +507,7 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 .append(payload.into_vec());
         }
 
-        buf.discard(
+        input.discard(
             self.core
                 .common
                 .recv
