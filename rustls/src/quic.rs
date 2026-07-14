@@ -7,10 +7,11 @@ use core::ops::{Deref, DerefMut};
 
 use pki_types::{DnsName, FipsStatus, ServerName};
 
+use crate::TlsInputBuffer;
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
-use crate::conn::{ConnectionCore, KeyingMaterialExporter, MessageIter, SideData, VecInput};
+use crate::conn::{ConnectionCore, KeyingMaterialExporter, MessageIter, SideData};
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::ApplicationProtocol;
@@ -43,7 +44,10 @@ pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
     /// Consume unencrypted TLS handshake data.
     ///
     /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error>;
+    ///
+    /// How much of the `input` buffer is consumed is recorded by a call to
+    /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
+    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error>;
 
     /// Emit unencrypted TLS handshake data.
     ///
@@ -170,8 +174,8 @@ impl Connection for ClientConnection {
         self.inner.zero_rtt_keys()
     }
 
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        self.inner.read_hs(plaintext)
+    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
+        self.inner.read_hs(input)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
@@ -308,8 +312,8 @@ impl Connection for ServerConnection {
         self.inner.zero_rtt_keys()
     }
 
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        self.inner.read_hs(plaintext)
+    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
+        self.inner.read_hs(input)
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
@@ -360,12 +364,15 @@ impl Acceptor {
 
     /// Consume unencrypted TLS handshake data.
     ///
-    /// The plaintext should be ordered QUIC CRYPTO stream data for one encryption level.
+    /// The input should be ordered QUIC CRYPTO stream data for one encryption level.
     ///
     /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
-    pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+    ///
+    /// How much of the `input` buffer is consumed is recorded by a call to
+    /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
+    pub fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
         match &mut self.inner {
-            Some(conn) => conn.read_hs(plaintext),
+            Some(conn) => conn.read_hs(input),
             None => Err(ApiMisuse::AcceptorPolledAfterCompletion.into()),
         }
     }
@@ -475,17 +482,12 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
 /// A shared interface for QUIC connections.
 struct ConnectionCommon<Side: SideData> {
     core: ConnectionCore<Side>,
-    input: VecInput,
     quic: Quic,
 }
 
 impl<Side: SideData> ConnectionCommon<Side> {
     fn new(core: ConnectionCore<Side>, quic: Quic) -> Self {
-        Self {
-            core,
-            input: VecInput::default(),
-            quic,
-        }
+        Self { core, quic }
     }
 
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
@@ -513,21 +515,20 @@ impl<Side: SideData> ConnectionCommon<Side> {
         ))
     }
 
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        let range = self.input.extend(plaintext);
+    fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
         self.core
             .common
             .recv
             .deframer
-            .input_quic(self.input.filled_mut(), range)?;
+            .input_quic(input.slice_mut())?;
 
-        let mut iter = MessageIter::new(&mut self.input, Some(&mut self.quic), &mut self.core);
+        let mut iter = MessageIter::new(input, Some(&mut self.quic), &mut self.core);
         let result = match iter.next() {
             Some(Ok(_)) | None => Ok(()),
             Some(Err(e)) => Err(e),
         };
 
-        self.input.discard(
+        input.discard(
             self.core
                 .common
                 .recv

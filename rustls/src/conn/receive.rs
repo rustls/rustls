@@ -804,21 +804,6 @@ impl VecInput {
 
         Ok(())
     }
-
-    /// Append `bytes` to the end of this buffer.
-    ///
-    /// Return a `Range` saying where it went.
-    pub(crate) fn extend(&mut self, bytes: &[u8]) -> Range<usize> {
-        let len = bytes.len();
-        let start = self.used;
-        let end = start + len;
-        if self.buf.len() < end {
-            self.buf.resize(end, 0);
-        }
-        self.buf[start..end].copy_from_slice(bytes);
-        self.used += len;
-        Range { start, end }
-    }
 }
 
 impl TlsInputBuffer for VecInput {
