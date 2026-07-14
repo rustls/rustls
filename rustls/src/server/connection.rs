@@ -161,9 +161,9 @@ impl Connection for ServerConnection {
 
     fn process_new_packets(
         &mut self,
-        buf: &mut dyn TlsInputBuffer,
+        input: &mut dyn TlsInputBuffer,
     ) -> Result<crate::IoState, Error> {
-        self.inner.process_new_packets(buf)
+        self.inner.process_new_packets(input)
     }
 
     fn exporter(&mut self) -> Result<KeyingMaterialExporter, Error> {
@@ -306,7 +306,7 @@ impl Acceptor {
     /// Don't call `accept()` again after an error.
     pub fn accept(
         &mut self,
-        buf: &mut dyn TlsInputBuffer,
+        input: &mut dyn TlsInputBuffer,
     ) -> Result<Option<Accepted>, ErrorWithAlert> {
         let Some(mut connection) = self.inner.take() else {
             return Err(ErrorWithAlert::from(Error::ApiMisuse(
@@ -314,7 +314,7 @@ impl Acceptor {
             )));
         };
 
-        if let Err(e) = connection.process_new_packets(buf) {
+        if let Err(e) = connection.process_new_packets(input) {
             return Err(ErrorWithAlert::new(e, &mut connection.core.common.send));
         }
 

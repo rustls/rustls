@@ -164,7 +164,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
     /// closed by the application.
     pub fn read<'a>(
         self,
-        received_tls: &'a mut impl TlsInputBuffer,
+        input: &'a mut impl TlsInputBuffer,
     ) -> Result<ReceiveTrafficState<'a, Side>, ErrorWithAlert> {
         let Self {
             state,
@@ -182,7 +182,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             side: &mut Discard,
         };
 
-        let mut iter = MessageIter::<Side>::receive(received_tls, &mut state, &mut recv, output);
+        let mut iter = MessageIter::<Side>::receive(input, &mut state, &mut recv, output);
         let received_plain = match iter.next() {
             Some(Ok(payload)) => Some(payload),
             Some(Err(error)) => {
@@ -210,7 +210,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             drop(send_adapter);
             return Ok(ReceiveTrafficState::Available(ReceivedApplicationData {
                 range,
-                received_tls,
+                input,
                 pending_discard,
                 rt: Self {
                     state,
@@ -221,7 +221,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             }));
         }
 
-        received_tls.discard(recv.deframer.take_discard());
+        input.discard(recv.deframer.take_discard());
 
         // `SendAdapter` records whether a send-side action may be needed after the above
         // receive-side processing.  If the sender was not locked no change could be made to it.
@@ -342,7 +342,7 @@ impl<Side: SideData> fmt::Debug for ReceiveTrafficState<'_, Side> {
 /// Received application data.
 pub struct ReceivedApplicationData<'a, Side: SideData> {
     /// The source buffer for the data.
-    received_tls: &'a mut dyn TlsInputBuffer,
+    input: &'a mut dyn TlsInputBuffer,
 
     /// The span within the `received_tls` buffer holding the received data.
     range: Range<usize>,
@@ -360,7 +360,7 @@ pub struct ReceivedApplicationData<'a, Side: SideData> {
 impl<Side: SideData> ReceivedApplicationData<'_, Side> {
     /// Return the application data bytes.
     pub fn data(&mut self) -> &[u8] {
-        Delocator::new(self.received_tls.slice_mut()).slice_from_range(&self.range)
+        Delocator::new(self.input.slice_mut()).slice_from_range(&self.range)
     }
 
     /// Finish processing this received data.
@@ -370,8 +370,7 @@ impl<Side: SideData> ReceivedApplicationData<'_, Side> {
     ///
     /// Returns the next [`ReceiveTrafficState`] state.
     pub fn into_next(mut self) -> ReceiveTrafficState<'static, Side> {
-        self.received_tls
-            .discard(self.pending_discard);
+        self.input.discard(self.pending_discard);
 
         if core::mem::take(&mut self.rt.pending_flush_sender) {
             return ReceiveTrafficState::FlushSender(FlushSender { rt: self.rt });
