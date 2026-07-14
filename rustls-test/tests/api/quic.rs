@@ -8,7 +8,7 @@ use rustls::client::Resumption;
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::quic::{self, Connection, Side};
+use rustls::quic::{self, Connection, ServerHandshake, Side};
 use rustls::server::Tls13Tickets;
 use rustls::{HandshakeKind, SliceInput};
 use rustls_test::{
@@ -266,8 +266,7 @@ fn test_quic_acceptor() {
     .unwrap();
     assert_eq!(client.fips(), client_fips);
 
-    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
-    assert!(acceptor.accept().unwrap().is_none());
+    let needs_input = ServerHandshake::start(quic::Version::V1);
 
     let mut client_initial = Vec::new();
     assert!(
@@ -277,42 +276,35 @@ fn test_quic_acceptor() {
     );
     assert!(client_initial.len() > 8);
 
-    acceptor
-        .read_hs(&mut SliceInput::new(&mut client_initial[..8]))
-        .unwrap();
-    assert!(acceptor.accept().unwrap().is_none());
+    let ServerHandshake::NeedsInput(needs_input) = needs_input
+        .process(&mut SliceInput::new(&mut client_initial[..8]))
+        .unwrap()
+    else {
+        panic!("unexpected state after partial hello");
+    };
 
-    acceptor
-        .read_hs(&mut SliceInput::new(&mut client_initial))
-        .unwrap();
-    let accepted = acceptor.accept().unwrap().unwrap();
+    let ServerHandshake::Accepted(accepted) = needs_input
+        .process(&mut SliceInput::new(&mut client_initial))
+        .unwrap()
+    else {
+        panic!("unexpected state after full hello");
+    };
+
+    let client_hello = accepted.client_hello();
     assert_eq!(
-        acceptor.accept().err(),
-        Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
+        client_hello
+            .server_name()
+            .unwrap()
+            .as_ref(),
+        "localhost"
     );
     assert_eq!(
-        acceptor
-            .read_hs(&mut SliceInput::new(&mut []))
-            .err(),
-        Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
+        client_hello
+            .alpn()
+            .unwrap()
+            .collect::<Vec<_>>(),
+        vec![b"h3".as_slice()]
     );
-    {
-        let client_hello = accepted.client_hello();
-        assert_eq!(
-            client_hello
-                .server_name()
-                .unwrap()
-                .as_ref(),
-            "localhost"
-        );
-        assert_eq!(
-            client_hello
-                .alpn()
-                .unwrap()
-                .collect::<Vec<_>>(),
-            vec![b"h3".as_slice()]
-        );
-    }
 
     let mut server = accepted
         .into_connection(server_config, server_params.into())
@@ -365,7 +357,7 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
     )
     .unwrap();
 
-    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
+    let needs_input = ServerHandshake::start(quic::Version::V1);
     let mut client_initial = Vec::new();
     assert!(
         client
@@ -373,10 +365,12 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
             .is_none()
     );
 
-    acceptor
-        .read_hs(&mut SliceInput::new(&mut client_initial))
-        .unwrap();
-    let accepted = acceptor.accept().unwrap().unwrap();
+    let ServerHandshake::Accepted(accepted) = needs_input
+        .process(&mut SliceInput::new(&mut client_initial))
+        .unwrap()
+    else {
+        panic!("unexpected state after full hello");
+    };
 
     let selected_config = {
         let client_hello = accepted.client_hello();
@@ -443,7 +437,7 @@ fn test_quic_acceptor_invalid_early_data_size() {
     )
     .unwrap();
 
-    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
+    let needs_input = ServerHandshake::start(quic::Version::V1);
     let mut client_initial = Vec::new();
     assert!(
         client
@@ -451,10 +445,12 @@ fn test_quic_acceptor_invalid_early_data_size() {
             .is_none()
     );
 
-    acceptor
-        .read_hs(&mut SliceInput::new(&mut client_initial))
-        .unwrap();
-    let accepted = acceptor.accept().unwrap().unwrap();
+    let ServerHandshake::Accepted(accepted) = needs_input
+        .process(&mut SliceInput::new(&mut client_initial))
+        .unwrap()
+    else {
+        panic!("unexpected state after hello");
+    };
 
     assert_eq!(
         accepted
@@ -466,24 +462,19 @@ fn test_quic_acceptor_invalid_early_data_size() {
 
 #[test]
 fn test_quic_acceptor_read_error_is_terminal() {
-    let mut acceptor = quic::Acceptor::new(quic::Version::V1);
+    let needs_input = ServerHandshake::start(quic::Version::V1);
 
-    let err = acceptor
-        .read_hs(&mut SliceInput::new(&mut encoding::handshake_framing(
+    let err = needs_input
+        .process(&mut SliceInput::new(&mut encoding::handshake_framing(
             rustls::enums::HandshakeType::ClientHello,
             vec![0x00; 32],
         )))
         .err()
         .unwrap();
     assert_eq!(err, InvalidMessage::MissingData("Random").into());
-    assert_eq!(
-        acceptor.accept().err(),
-        Some(InvalidMessage::MissingData("Random").into())
-    );
-    assert_eq!(
-        acceptor.accept().err(),
-        Some(ApiMisuse::AcceptorPolledAfterCompletion.into())
-    );
+
+    // impossible:
+    // drop(needs_input);
 }
 
 #[test]

@@ -279,7 +279,7 @@ impl TryFrom<ConnectionCore<ServerSide>> for ServerHandshake {
 
 /// More data needs to be received to make progress.
 ///
-/// Provide this to [`Self::process()`].
+/// Provide the data to [`Self::process()`].
 pub struct NeedsInput {
     inner: ConnectionCore<ServerSide>,
 }

@@ -1,9 +1,8 @@
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use core::fmt::{self, Debug};
-use core::mem;
 use core::ops::{Deref, DerefMut};
+use core::{fmt, mem};
 
 use pki_types::{DnsName, FipsStatus, ServerName};
 
@@ -11,7 +10,7 @@ use crate::TlsInputBuffer;
 use crate::client::{ClientConfig, ClientSide};
 pub use crate::common_state::Side;
 use crate::common_state::{CommonState, ConnectionOutputs, Protocol};
-use crate::conn::{ConnectionCore, KeyingMaterialExporter, MessageIter, SideData};
+use crate::conn::{ConnectionCore, KeyingMaterialExporter, MessageIter, SideData, StateMachine};
 use crate::crypto::cipher::{AeadKey, Iv, Payload};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::ApplicationProtocol;
@@ -28,7 +27,7 @@ use crate::tls13::key_schedule::{
 };
 
 /// A QUIC client or server connection.
-pub trait Connection: Debug + Deref<Target = ConnectionOutputs> {
+pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// Return the TLS-encoded transport parameters for the session's peer.
     ///
     /// While the transport parameters are technically available prior to the
@@ -195,7 +194,7 @@ impl Deref for ClientConnection {
     }
 }
 
-impl Debug for ClientConnection {
+impl fmt::Debug for ClientConnection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("quic::ClientConnection")
             .finish_non_exhaustive()
@@ -333,36 +332,87 @@ impl Deref for ServerConnection {
     }
 }
 
-impl Debug for ServerConnection {
+impl fmt::Debug for ServerConnection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("quic::ServerConnection")
             .finish_non_exhaustive()
     }
 }
 
-/// A QUIC server-side acceptor.
-///
-/// `Acceptor` allows callers to choose a [`ServerConfig`] after reading the
-/// [`ClientHello`] of an incoming QUIC connection.
-pub struct Acceptor {
-    inner: Option<ConnectionCommon<ServerSide>>,
+/// An in-progress TLS server handshake.
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum ServerHandshake {
+    /// More data needs to be received to make progress.
+    NeedsInput(NeedsInput),
+
+    /// A complete `ClientHello` has been received.
+    ///
+    /// The handshake can be progressed by choosing a [`ServerConfig`] based on
+    /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
+    Accepted(Accepted),
+
+    /// The handshake is complete.
+    Complete(ServerConnection),
 }
 
-impl Acceptor {
-    /// Make a new QUIC acceptor.
-    pub fn new(version: Version) -> Self {
-        Self {
-            inner: Some(ConnectionCommon::new(
+impl ServerHandshake {
+    /// Creates a new QUIC [`ServerHandshake`] via the payload of the [`ServerHandshake::NeedsInput`] variant.
+    ///
+    /// It is a fundamental fact of server TLS connections that the server reads first; this is reflected
+    /// in the returned type.
+    ///
+    /// You may wrap this in the [`ServerHandshake::NeedsInput`] variant to generalise the type to a
+    /// [`ServerHandshake`].
+    ///
+    /// The returned object should be fed data from a single potential client.
+    pub fn start(version: Version) -> NeedsInput {
+        NeedsInput {
+            inner: ConnectionCommon::new(
                 ConnectionCore::for_acceptor(Protocol::Quic(version)),
                 Quic {
                     version,
                     ..Quic::default()
                 },
-            )),
+            ),
         }
     }
+}
 
-    /// Consume unencrypted TLS handshake data.
+impl TryFrom<ConnectionCommon<ServerSide>> for ServerHandshake {
+    type Error = Error;
+
+    fn try_from(mut inner: ConnectionCommon<ServerSide>) -> Result<Self, Error> {
+        const MISUSED: Error = Error::Unreachable("forgot to restore state");
+
+        Ok(match mem::replace(&mut inner.core.state, Err(MISUSED))? {
+            ServerState::ChooseConfig(choose_config) => Self::Accepted(Accepted {
+                inner,
+                choose_config,
+            }),
+
+            state if state.is_traffic() => {
+                inner.core.state = Ok(state);
+                Self::Complete(ServerConnection { inner })
+            }
+
+            state => {
+                inner.core.state = Ok(state);
+                Self::NeedsInput(NeedsInput { inner })
+            }
+        })
+    }
+}
+
+/// More data needs to be received to make progress.
+///
+/// Provide the data to [`Self::process()`].
+pub struct NeedsInput {
+    inner: ConnectionCommon<ServerSide>,
+}
+
+impl NeedsInput {
+    /// Progress the handshake by receiving further unencrypted TLS handshake data.
     ///
     /// The input should be ordered QUIC CRYPTO stream data for one encryption level.
     ///
@@ -370,49 +420,36 @@ impl Acceptor {
     ///
     /// How much of the `input` buffer is consumed is recorded by a call to
     /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
-    pub fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error> {
-        match &mut self.inner {
-            Some(conn) => conn.read_hs(input),
-            None => Err(ApiMisuse::AcceptorPolledAfterCompletion.into()),
-        }
-    }
-
-    /// Check if a `ClientHello` message has been received.
     ///
-    /// Returns `Ok(None)` if the complete `ClientHello` has not yet been received.
-    /// Supply more handshake data with [`Acceptor::read_hs()`] and call this function again.
+    /// An error from this function is fatal to the connection, as it consumes the [`NeedsInput`]
+    /// object.
     ///
-    /// Returns `Ok(Some(accepted))` if the connection has been accepted. Call
-    /// [`Accepted::into_connection()`] to continue. Do not call this function again.
-    pub fn accept(&mut self) -> Result<Option<Accepted>, Error> {
-        let Some(mut connection) = self.inner.take() else {
-            return Err(ApiMisuse::AcceptorPolledAfterCompletion.into());
-        };
-
-        const MISUSED: Error = Error::Unreachable("Accepted misused state");
-        let state = mem::replace(&mut connection.core.state, Err(MISUSED))?;
-
-        Ok(match state {
-            ServerState::ChooseConfig(choose_config) => Some(Accepted {
-                connection,
-                choose_config,
-            }),
-            state => {
-                connection.core.state = Ok(state);
-                self.inner = Some(connection);
-                None
-            }
-        })
+    /// On success, this returns:
+    ///
+    /// - a [`ServerHandshake::NeedsInput`] if more data is required.
+    /// - a [`ServerHandshake::Accepted`] if a whole `ClientHello` has been received,
+    ///   and a choice of [`ServerConfig`] is required to continue.
+    /// - a [`ServerHandshake::Complete`] if the handshake is complete.
+    pub fn process(mut self, input: &mut dyn TlsInputBuffer) -> Result<ServerHandshake, Error> {
+        self.inner.read_hs(input)?;
+        ServerHandshake::try_from(self.inner)
     }
 }
 
-/// Represents a `ClientHello` message received through the [`Acceptor`].
+impl fmt::Debug for NeedsInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("quic::NeedsInput")
+            .finish_non_exhaustive()
+    }
+}
+
+/// Represents that a `ClientHello` message has been received.
 ///
-/// Contains the state required to resume the connection through
-/// [`Accepted::into_connection()`].
+/// The handshake can be progressed by choosing a [`ServerConfig`] based on
+/// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
 pub struct Accepted {
-    // invariant: `connection.core.state` is `Err(_)` and requires restoring
-    connection: ConnectionCommon<ServerSide>,
+    // invariant: `inner.core.state` is `Err(_)` and requires restoring
+    inner: ConnectionCommon<ServerSide>,
     choose_config: Box<ChooseConfig>,
 }
 
@@ -422,12 +459,13 @@ impl Accepted {
         self.choose_config.client_hello()
     }
 
-    /// Convert the [`Accepted`] into a [`ServerConnection`].
+    /// Choose a [`ServerConfig`] to progress the handshake.
     ///
-    /// Takes the state returned from [`Acceptor::accept()`], the [`ServerConfig`]
-    /// that should be used for the session, and the TLS-encoded QUIC transport
-    /// parameters to send. Returns an error if configuration-dependent validation
-    /// of the received `ClientHello` message fails.
+    /// Resolves an [`Accepted`], providing the [`ServerConfig`] that should be used for
+    /// the session, and the TLS-encoded QUIC transport parameters to send.
+    ///
+    /// Returns an error if configuration-dependent validation of the received
+    /// `ClientHello` message fails.
     pub fn into_connection(
         mut self,
         config: Arc<ServerConfig>,
@@ -435,24 +473,22 @@ impl Accepted {
     ) -> Result<ServerConnection, Error> {
         check_server_config(&config)?;
 
-        self.connection.core.accepted(
+        self.inner.core.accepted(
             self.choose_config,
             ServerExtensionsInput {
-                transport_parameters: Some(match self.connection.quic.version {
+                transport_parameters: Some(match self.inner.quic.version {
                     Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
                 }),
             },
-            Some(&mut self.connection.quic),
+            Some(&mut self.inner.quic),
             config,
         )?;
 
-        Ok(ServerConnection {
-            inner: self.connection,
-        })
+        Ok(ServerConnection { inner: self.inner })
     }
 }
 
-impl Debug for Accepted {
+impl fmt::Debug for Accepted {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("quic::Accepted")
             .finish_non_exhaustive()
