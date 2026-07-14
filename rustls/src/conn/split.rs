@@ -256,7 +256,7 @@ impl<Side: SideData> ReceiveTraffic<Side> {
             side: &mut Discard,
         };
 
-        let mut iter = MessageIter::<Side>::receive(input, &mut state, &mut recv, output);
+        let mut iter = MessageIter::<Side, _>::receive(input, &mut state, &mut recv, output);
         let received_plain = match iter.next() {
             Some(Ok(payload)) => Some(payload),
             Some(Err(error)) => {
@@ -486,7 +486,7 @@ impl<Side: SideData> FlushSender<Side> {
 /// for the remainder of the processing. This means that, for example,
 /// a sequence of sent messages is not interleaved with others from another
 /// thread.
-enum SendAdapter<'a> {
+pub(super) enum SendAdapter<'a> {
     Unlocked(&'a Mutex<SendPath>),
     Locked {
         guard: MutexGuard<'a, SendPath>,
