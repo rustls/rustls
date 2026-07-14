@@ -528,7 +528,11 @@ impl<Side: SideData> ConnectionCommon<Side> {
                 .send_buffered_plaintext(&mut self.buffers.sendable_plaintext);
         }
 
-        Ok(self.current_io_state())
+        Ok(IoState::new(
+            &self.core.common.send,
+            &self.core.common.recv,
+            &self.buffers,
+        ))
     }
 
     pub(crate) fn wants_read(&self) -> bool {
@@ -573,17 +577,6 @@ impl<Side: SideData> ConnectionCommon<Side> {
             .common
             .send
             .refresh_traffic_keys()
-    }
-
-    pub(crate) fn current_io_state(&self) -> IoState {
-        let common_state = &self.core.common;
-        IoState {
-            tls_bytes_to_write: common_state.send.sendable_tls.len(),
-            plaintext_bytes_to_read: self.buffers.received_plaintext.len(),
-            peer_has_closed: common_state
-                .recv
-                .has_received_close_notify,
-        }
     }
 
     pub(crate) fn split(self) -> Result<SplitConnection<Side>, Error> {
@@ -670,6 +663,14 @@ pub struct IoState {
 }
 
 impl IoState {
+    pub(crate) fn new(send: &SendPath, recv: &ReceivePath, buffers: &Buffers) -> Self {
+        Self {
+            tls_bytes_to_write: send.sendable_tls.len(),
+            plaintext_bytes_to_read: buffers.received_plaintext.len(),
+            peer_has_closed: recv.has_received_close_notify,
+        }
+    }
+
     /// How many bytes could be written by [`Connection::write_tls()`] if called right now.
     ///
     /// A non-zero value implies [`CommonState::wants_write()`].
