@@ -2,8 +2,8 @@ use alloc::boxed::Box;
 use core::cmp::min;
 
 use crate::crypto::cipher::{
-    EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, OutboundOpaque,
-    OutboundPlain,
+    EncodedMessage, EncodingContext, InboundOpaque, MessageDecrypter, MessageEncrypter,
+    OutboundOpaque, OutboundPlain,
 };
 use crate::error::Error;
 use crate::log::trace;
@@ -40,7 +40,7 @@ impl EncryptionState {
         self.message_encrypter
             .as_mut()
             .unwrap()
-            .encrypt(plain, seq)
+            .encrypt(plain, seq, EncodingContext::default())
             .unwrap()
     }
 

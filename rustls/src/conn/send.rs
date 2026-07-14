@@ -2,7 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::crypto::cipher::{
-    EncodedMessage, EncryptionState, MessageEncrypter, OutboundPlain, Payload, PreEncryptAction,
+    EncodedMessage, EncodingContext, EncryptionState, MessageEncrypter, OutboundPlain, Payload,
+    PreEncryptAction,
 };
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{AlertDescription, Error};
@@ -264,8 +265,10 @@ impl SendOutput for SendPath {
             .fragment_message(&encoded);
         self.perhaps_write_key_update();
         for m in iter {
-            self.sendable_tls
-                .append(m.to_unencrypted_opaque().encode());
+            self.sendable_tls.append(
+                m.to_unencrypted_opaque(EncodingContext::default())
+                    .encode(),
+            );
         }
     }
 }

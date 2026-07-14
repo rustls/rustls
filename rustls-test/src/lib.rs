@@ -11,7 +11,7 @@ use rustls::client::{
     ClientSessionKey, ServerVerifierBuilder, Tls13Session, WantsClientCert, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{
-    EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
+    EncodedMessage, EncodingContext, InboundOpaque, MessageDecrypter, MessageEncrypter, Payload,
 };
 use rustls::crypto::kx::{NamedGroup, SupportedKxGroup};
 use rustls::crypto::{
@@ -1374,7 +1374,11 @@ impl RawTls {
     ) {
         let data = self
             .encrypter
-            .encrypt(msg.borrow_outbound(), self.enc_seq)
+            .encrypt(
+                msg.borrow_outbound(),
+                self.enc_seq,
+                EncodingContext::default(),
+            )
             .unwrap()
             .encode();
         self.enc_seq += 1;
@@ -1791,8 +1795,8 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, OutboundOpaque,
-        OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
+        AeadKey, EncodingContext, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
+        OutboundOpaque, OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
     };
 
     use super::*;
@@ -1828,8 +1832,9 @@ mod plaintext {
             &mut self,
             msg: EncodedMessage<OutboundPlain<'_>>,
             _seq: u64,
+            cx: EncodingContext,
         ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
-            let mut payload = OutboundOpaque::with_capacity(msg.payload.len());
+            let mut payload = OutboundOpaque::with_capacity(cx, msg.payload.len());
             payload.extend_from_chunks(&msg.payload);
 
             Ok(EncodedMessage {

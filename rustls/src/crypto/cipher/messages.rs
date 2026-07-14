@@ -50,11 +50,11 @@ impl<'a> EncodedMessage<Payload<'a>> {
     }
 
     /// Convert into an unencrypted [`EncodedMessage<OutboundOpaque>`] (without decrypting).
-    pub fn into_unencrypted_opaque(self) -> EncodedMessage<OutboundOpaque> {
+    pub fn into_unencrypted_opaque(self, cx: EncodingContext) -> EncodedMessage<OutboundOpaque> {
         EncodedMessage {
             typ: self.typ,
             version: self.version,
-            payload: OutboundOpaque::from_byte_slice(self.payload.bytes()),
+            payload: OutboundOpaque::from_byte_slice(cx, self.payload.bytes()),
         }
     }
 
@@ -144,8 +144,11 @@ impl<'a> EncodedMessage<InboundOpaque<'a>> {
 }
 
 impl EncodedMessage<OutboundPlain<'_>> {
-    pub(crate) fn to_unencrypted_opaque(&self) -> EncodedMessage<OutboundOpaque> {
-        let mut payload = OutboundOpaque::with_capacity(self.payload.len());
+    pub(crate) fn to_unencrypted_opaque(
+        &self,
+        cx: EncodingContext,
+    ) -> EncodedMessage<OutboundOpaque> {
+        let mut payload = OutboundOpaque::with_capacity(cx, self.payload.len());
         payload.extend_from_chunks(&self.payload);
         EncodedMessage {
             typ: self.typ,
@@ -302,22 +305,27 @@ impl<'a> From<&'a [u8]> for OutboundPlain<'a> {
 pub struct OutboundOpaque {
     /// Encoded payload of the record.
     payload: Vec<u8>,
+    /// Contextual information needed to encode the record.
+    _encoding_context: EncodingContext,
 }
 
 impl OutboundOpaque {
     /// Create a new value with the given payload capacity.
     ///
     /// (The actual capacity of the returned value will be at least `HEADER_SIZE + capacity`.)
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn with_capacity(cx: EncodingContext, capacity: usize) -> Self {
         let mut payload = Vec::with_capacity(HEADER_SIZE + capacity);
         payload.resize(HEADER_SIZE, 0);
-        Self { payload }
+        Self {
+            payload,
+            _encoding_context: cx,
+        }
     }
 
-    /// Create a new value containing the given bytes. The capacity will be
-    /// sufficient for `content` plus the record header.
-    pub(crate) fn from_byte_slice(content: &[u8]) -> Self {
-        let mut value = Self::with_capacity(content.len());
+    /// Create a new value containing the given bytes. The capacity will be sufficient for `content`
+    /// plus the record header.
+    pub(crate) fn from_byte_slice(cx: EncodingContext, content: &[u8]) -> Self {
+        let mut value = Self::with_capacity(cx, content.len());
         value.payload.extend(content);
         value
     }
@@ -466,6 +474,13 @@ impl DerefMut for InboundOpaque<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }
+}
+
+/// Contextual information for encoding messages.
+#[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
+pub struct EncodingContext {
+    // empty for now!
 }
 
 /// Decode a TLS1.3 `TLSInnerPlaintext` encoding.

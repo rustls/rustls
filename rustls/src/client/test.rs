@@ -11,7 +11,7 @@ use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, Resumption, Tls12Resumption};
-use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
+use crate::crypto::cipher::{EncodedMessage, EncodingContext, MessageEncrypter, Payload};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::FakeKeyExchangeGroup;
 use crate::crypto::tls13::OkmBlock;
@@ -203,7 +203,11 @@ fn test_client_rejects_hrr_with_varied_session_id() {
 
     let mut input = VecInput::default();
     input
-        .read(&mut hrr.into_wire_bytes().as_slice())
+        .read(
+            &mut hrr
+                .into_wire_bytes(EncodingContext::default())
+                .as_slice(),
+        )
         .unwrap();
     assert_eq!(
         conn.process_new_packets(&mut input)
@@ -247,7 +251,11 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
     };
     let mut input = VecInput::default();
     input
-        .read(&mut sh.into_wire_bytes().as_slice())
+        .read(
+            &mut sh
+                .into_wire_bytes(EncodingContext::default())
+                .as_slice(),
+        )
         .unwrap();
 
     assert_eq!(
@@ -323,7 +331,11 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     };
     let mut input = VecInput::default();
     input
-        .read(&mut sh.into_wire_bytes().as_slice())
+        .read(
+            &mut sh
+                .into_wire_bytes(EncodingContext::default())
+                .as_slice(),
+        )
         .unwrap();
     conn.process_new_packets(&mut input)
         .unwrap();
@@ -335,7 +347,11 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         ))),
     };
     input
-        .read(&mut cert.into_wire_bytes().as_slice())
+        .read(
+            &mut cert
+                .into_wire_bytes(EncodingContext::default())
+                .as_slice(),
+        )
         .unwrap();
     conn.process_new_packets(&mut input)
         .unwrap();
@@ -361,7 +377,11 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         )),
     };
     input
-        .read(&mut server_kx.into_wire_bytes().as_slice())
+        .read(
+            &mut server_kx
+                .into_wire_bytes(EncodingContext::default())
+                .as_slice(),
+        )
         .unwrap();
     conn.process_new_packets(&mut input)
         .unwrap();
@@ -373,7 +393,11 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         )),
     };
     input
-        .read(&mut server_done.into_wire_bytes().as_slice())
+        .read(
+            &mut server_done
+                .into_wire_bytes(EncodingContext::default())
+                .as_slice(),
+        )
         .unwrap();
     conn.process_new_packets(&mut input)
         .unwrap();
@@ -535,7 +559,11 @@ fn client_requiring_rpk_receives_server_ee(
     };
     let mut input = VecInput::default();
     input
-        .read(&mut sh.into_wire_bytes().as_slice())
+        .read(
+            &mut sh
+                .into_wire_bytes(EncodingContext::default())
+                .as_slice(),
+        )
         .unwrap();
     conn.process_new_packets(&mut input)
         .unwrap();
@@ -549,7 +577,11 @@ fn client_requiring_rpk_receives_server_ee(
 
     let mut encrypter = fake_server_crypto.server_handshake_encrypter();
     let enc_ee = encrypter
-        .encrypt(EncodedMessage::<Payload<'_>>::from(ee).borrow_outbound(), 0)
+        .encrypt(
+            EncodedMessage::<Payload<'_>>::from(ee).borrow_outbound(),
+            0,
+            EncodingContext::default(),
+        )
         .unwrap();
     input
         .read(&mut enc_ee.encode().as_slice())
