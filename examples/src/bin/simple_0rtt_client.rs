@@ -54,7 +54,8 @@ fn start_connection(config: &Arc<ClientConfig>, domain_name: &str, port: u16) {
     }
 
     let mut input = VecInput::default();
-    let mut stream = Stream::new(&mut input, &mut conn, &mut sock);
+    let mut received_plaintext = Vec::new();
+    let mut stream = Stream::new(&mut input, &mut received_plaintext, &mut conn, &mut sock);
 
     // Complete handshake.
     stream.flush().unwrap();

@@ -46,7 +46,10 @@ use rustls::server::{
     self, ClientHello, PreferClientOrder, PreferServerOrder, ServerConfig, ServerConnection,
     ServerSessionKey, Tls13Tickets, WebPkiClientVerifier,
 };
-use rustls::{Connection, DistinguishedName, HandshakeKind, RootCertStore, VecInput, compress};
+use rustls::{
+    Connection, DistinguishedName, HandshakeKind, IoState, RootCertStore, SideData, TlsInputBuffer,
+    VecInput, compress,
+};
 use rustls_aws_lc_rs::hpke;
 
 pub fn main() {
@@ -138,7 +141,12 @@ pub fn main() {
     }
 }
 
-fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMemo, count: usize) {
+fn exec<S: SideData>(
+    opts: &Options,
+    mut sess: impl Connection<S> + 'static,
+    key_log: &KeyLogMemo,
+    count: usize,
+) {
     let mut sent_message = false;
 
     let addrs = [
@@ -156,6 +164,8 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
 
     let mut input = VecInput::default();
     loop {
+        let mut buf = Vec::with_capacity(1024);
+        let mut state = None;
         if !sent_message && (opts.queue_data || (opts.queue_data_on_resume && count > 0)) {
             if !opts
                 .queue_early_data_after_received_messages
@@ -163,7 +173,8 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
             {
                 flush(&mut sess, &mut conn);
                 for message_size_estimate in &opts.queue_early_data_after_received_messages {
-                    read_n_bytes(
+                    state = read_n_bytes(
+                        &mut buf,
                         opts,
                         &mut input,
                         &mut sess,
@@ -195,7 +206,23 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
         }
 
         if sess.wants_read() {
-            read_all_bytes(opts, &mut input, &mut sess, &mut conn);
+            state = read_all_bytes(&mut buf, opts, &mut input, &mut sess, &mut conn);
+        }
+
+        if let Some(state) = state {
+            if state.peer_has_closed() {
+                if opts.check_close_notify {
+                    println!("close notify ok");
+                }
+                println!("EOF (tls)");
+                return;
+            } else if input.has_seen_eof() {
+                if opts.check_close_notify {
+                    quit_err(":CLOSE_WITHOUT_CLOSE_NOTIFY:");
+                }
+                println!("EOF (tcp)");
+                return;
+            }
         }
 
         if opts.side == Side::Server && opts.enable_early_data {
@@ -362,37 +389,13 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
             }
         }
 
-        let mut buf = [0u8; 1024];
-        let len = match sess
-            .reader()
-            .read(&mut buf[..opts.read_size])
-        {
-            Ok(0) => {
-                if opts.check_close_notify {
-                    println!("close notify ok");
-                }
-                println!("EOF (tls)");
-                return;
-            }
-            Ok(len) => len,
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => 0,
-            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
-                if opts.check_close_notify {
-                    quit_err(":CLOSE_WITHOUT_CLOSE_NOTIFY:");
-                }
-                println!("EOF (tcp)");
-                return;
-            }
-            Err(err) => panic!("unhandled read error {err:?}"),
-        };
-
         if opts.shut_down_after_handshake && !sent_shutdown && !sess.is_handshaking() {
             sess.send_close_notify();
             sent_shutdown = true;
         }
 
-        if quench_writes && len > 0 {
-            println!("unquenching writes after {len:?}");
+        if quench_writes && !buf.is_empty() {
+            println!("unquenching writes after {:?}", buf.len());
             quench_writes = false;
         }
 
@@ -400,9 +403,7 @@ fn exec(opts: &Options, mut sess: impl Connection + 'static, key_log: &KeyLogMem
             *b ^= 0xff;
         }
 
-        sess.writer()
-            .write_all(&buf[..len])
-            .unwrap();
+        sess.writer().write_all(&buf).unwrap();
     }
 }
 
@@ -421,13 +422,14 @@ fn server(conn: &mut dyn Any) -> &mut ServerConnection {
         .unwrap()
 }
 
-fn read_n_bytes(
+fn read_n_bytes<S: SideData>(
+    buf: &mut Vec<u8>,
     opts: &Options,
     input: &mut VecInput,
-    sess: &mut impl Connection,
+    sess: &mut impl Connection<S>,
     conn: &mut net::TcpStream,
     n: usize,
-) {
+) -> Option<IoState> {
     let mut bytes = [0u8; MAX_MESSAGE_SIZE];
     match conn.read(&mut bytes[..n]) {
         Ok(count) => {
@@ -440,53 +442,46 @@ fn read_n_bytes(
         Err(err) => panic!("invalid read: {err}"),
     };
 
-    after_read(opts, input, sess, conn);
+    after_read(buf, opts, input, sess, conn)
 }
 
-fn read_all_bytes(
+fn read_all_bytes<S: SideData>(
+    buf: &mut Vec<u8>,
     opts: &Options,
     input: &mut VecInput,
-    sess: &mut impl Connection,
+    sess: &mut impl Connection<S>,
     conn: &mut net::TcpStream,
-) {
+) -> Option<IoState> {
     match input.read(conn) {
         Ok(_) => {}
         Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
         Err(err) => panic!("invalid read: {err}"),
     };
 
-    after_read(opts, input, sess, conn);
+    after_read(buf, opts, input, sess, conn)
 }
 
-fn after_read(
+fn after_read<S: SideData>(
+    buf: &mut Vec<u8>,
     opts: &Options,
     input: &mut VecInput,
-    sess: &mut impl Connection,
+    sess: &mut impl Connection<S>,
     conn: &mut net::TcpStream,
-) {
-    //dbg!("process new packets", input.slice_mut().len());
-    if let Err(err) = sess.process_new_packets(input) {
-        //dbg!(&err);
-        flush(sess, conn); /* send any alerts before exiting */
-        orderly_close(conn);
-        handle_err(opts, err);
-    }
-    /*
-    let mut plaintext = [0u8; MAX_MESSAGE_SIZE];
-    let mut reader = sess.reader();
-    loop {
-        match reader.read(&mut plaintext) {
-            Ok(0) => break,
-            Ok(read) => {
-                dbg!(read);
-            }
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
-            Err(err) => panic!("invalid plaintext read: {err:?}"),
-        }
-    }*/
+) -> Option<IoState> {
+    let error = match sess
+        .process_new_packets(input)
+        .handle_all(buf)
+    {
+        Ok(state) => return Some(state),
+        Err(error) => error,
+    };
+
+    flush(sess, conn); /* send any alerts before exiting */
+    orderly_close(conn);
+    handle_err(opts, error);
 }
 
-fn flush(sess: &mut impl Connection, conn: &mut net::TcpStream) {
+fn flush<S: SideData>(sess: &mut impl Connection<S>, conn: &mut net::TcpStream) {
     while sess.wants_write() {
         if let Err(err) = sess.write_tls(conn) {
             println!("IO error: {err:?}");

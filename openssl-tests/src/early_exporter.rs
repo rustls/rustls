@@ -34,6 +34,7 @@ fn test_early_exporter() {
         config.max_early_data_size = 8192;
         let config = Arc::new(config);
 
+        let mut received_plaintext = Vec::new();
         for _ in 0..ITERS {
             let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
@@ -43,6 +44,7 @@ fn test_early_exporter() {
             input.read(&mut tcp_stream).unwrap();
             server
                 .process_new_packets(&mut input)
+                .handle_all(&mut Vec::new())
                 .unwrap();
 
             let message = if let Some(mut early) = server.early_data() {
@@ -69,7 +71,13 @@ fn test_early_exporter() {
                 .write_all(&message)
                 .unwrap();
 
-            complete_io(&mut tcp_stream, &mut input, &mut server).unwrap();
+            complete_io(
+                &mut tcp_stream,
+                &mut input,
+                &mut received_plaintext,
+                &mut server,
+            )
+            .unwrap();
 
             tcp_stream.flush().unwrap();
         }

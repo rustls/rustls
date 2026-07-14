@@ -114,12 +114,6 @@ impl ChunkVecBuffer {
 }
 
 impl ChunkVecBuffer {
-    pub(crate) fn is_full(&self) -> bool {
-        self.limit
-            .map(|limit| self.len() >= limit)
-            .unwrap_or_default()
-    }
-
     /// Append a copy of `bytes`, perhaps a prefix if
     /// we're near the limit.
     pub(crate) fn append_limited_copy(&mut self, payload: OutboundPlain<'_>) -> usize {
@@ -153,19 +147,6 @@ impl ChunkVecBuffer {
         }
 
         Ok(offs)
-    }
-
-    pub(crate) fn consume_first_chunk(&mut self, used: usize) {
-        // this backs (infallible) `BufRead::consume`, where `used` is
-        // user-supplied.
-        assert!(
-            used <= self
-                .chunk()
-                .map(|ch| ch.len())
-                .unwrap_or_default(),
-            "illegal `BufRead::consume` usage",
-        );
-        self.consume(used);
     }
 
     fn consume(&mut self, used: usize) {
@@ -218,13 +199,6 @@ impl ChunkVecBuffer {
         }
         self.consume(used);
         Ok(used)
-    }
-
-    /// Returns the first contiguous chunk of data, or None if empty.
-    pub(crate) fn chunk(&self) -> Option<&[u8]> {
-        self.chunks
-            .front()
-            .map(|chunk| &chunk[self.prefix_used..])
     }
 }
 

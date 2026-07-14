@@ -35,6 +35,7 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
 
     let server_thread = thread::spawn(move || {
         let config = Arc::new(server_config_with_ffdhe_kx(provider));
+        let mut received_plaintext = Vec::new();
         for _ in 0..iters {
             let mut server = ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
@@ -44,7 +45,14 @@ fn test_rustls_server_with_ffdhe_kx(provider: CryptoProvider, iters: usize) {
                 .write_all(message.as_bytes())
                 .unwrap();
 
-            complete_io(&mut tcp_stream, &mut input, &mut server).unwrap();
+            complete_io(
+                &mut tcp_stream,
+                &mut input,
+                &mut received_plaintext,
+                &mut server,
+            )
+            .unwrap();
+
             tcp_stream.flush().unwrap();
         }
     });
@@ -131,6 +139,7 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
         .unwrap(),
     );
     let server_name = ServerName::try_from("localhost").unwrap();
+    let mut received_plaintext = Vec::new();
     for _ in 0..iters {
         let mut tcp_stream = TcpStream::connect(("localhost", port)).unwrap();
         let mut client = config
@@ -144,7 +153,14 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
             .write_all(message.as_bytes())
             .unwrap();
 
-        complete_io(&mut tcp_stream, &mut input, &mut client).unwrap();
+        complete_io(
+            &mut tcp_stream,
+            &mut input,
+            &mut received_plaintext,
+            &mut client,
+        )
+        .unwrap();
+
         client.send_close_notify();
         client
             .write_tls(&mut tcp_stream)

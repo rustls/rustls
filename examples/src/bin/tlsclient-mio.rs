@@ -47,6 +47,7 @@ struct TlsClient {
     clean_closure: bool,
     tls_conn: ClientConnection,
     input: VecInput,
+    received_plaintext: Vec<u8>,
 }
 
 impl TlsClient {
@@ -60,6 +61,7 @@ impl TlsClient {
                 .build()
                 .unwrap(),
             input: VecInput::default(),
+            received_plaintext: Vec::new(),
         }
     }
 
@@ -119,36 +121,34 @@ impl TlsClient {
         // Reading some TLS data might have yielded new TLS
         // messages to process.  Errors from this indicate
         // TLS protocol problems and are fatal.
-        let io_state = match self
+        let mut iter = self
             .tls_conn
-            .process_new_packets(&mut self.input)
-        {
-            Ok(io_state) => io_state,
-            Err(err) => {
-                println!("TLS error: {err}");
-                self.closing = true;
-                return;
-            }
-        };
+            .process_new_packets(&mut self.input);
 
         // Having read some TLS data, and processed any new messages,
         // we might have new plaintext as a result.
         //
         // Read it and then write it to stdout.
-        if io_state.plaintext_bytes_to_read() > 0 {
-            let mut plaintext = vec![0u8; io_state.plaintext_bytes_to_read()];
-            self.tls_conn
-                .reader()
-                .read_exact(&mut plaintext)
-                .unwrap();
+        while let Some(result) = iter.next_payload() {
+            let chunk = match result {
+                Ok(chunk) => chunk,
+                Err(err) => {
+                    println!("TLS error: {err}");
+                    self.closing = true;
+                    return;
+                }
+            };
+
+            self.received_plaintext
+                .extend_from_slice(chunk.bytes());
             io::stdout()
-                .write_all(&plaintext)
+                .write_all(chunk.bytes())
                 .unwrap();
         }
 
         // If that fails, the peer might have started a clean TLS-level
         // session closure.
-        if io_state.peer_has_closed() {
+        if iter.state().peer_has_closed() {
             self.clean_closure = true;
             self.closing = true;
         }
@@ -195,6 +195,7 @@ impl TlsClient {
         self.closing
     }
 }
+
 impl Write for TlsClient {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         self.tls_conn.writer().write(bytes)
@@ -207,7 +208,17 @@ impl Write for TlsClient {
 
 impl Read for TlsClient {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.tls_conn.reader().read(bytes)
+        let len = Ord::min(bytes.len(), self.received_plaintext.len());
+        let Some(src) = self.received_plaintext.get(..len) else {
+            return Ok(0);
+        };
+
+        let Some(dst) = bytes.get_mut(..len) else {
+            return Ok(0);
+        };
+
+        dst.copy_from_slice(src);
+        Ok(len)
     }
 }
 

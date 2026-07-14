@@ -23,10 +23,10 @@ use crate::msgs::{
 use crate::quic::QuicOutput;
 
 pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
-    input: &'m mut dyn TlsInputBuffer,
-    recv: &'a mut ReceivePath,
-    state: &'a mut Result<Side::State, Error>,
-    output: JoinOutput<'a, Send>,
+    pub(super) input: &'m mut dyn TlsInputBuffer,
+    pub(super) recv: &'a mut ReceivePath,
+    pub(super) state: &'a mut Result<Side::State, Error>,
+    pub(super) output: JoinOutput<'a, Send>,
 }
 
 impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
@@ -168,10 +168,6 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
 
         *self.state = Ok(st);
         None
-    }
-
-    pub(super) fn input(&mut self) -> &mut dyn TlsInputBuffer {
-        self.input
     }
 
     pub(crate) fn state(&self) -> &Result<Side::State, Error> {

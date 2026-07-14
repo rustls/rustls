@@ -22,8 +22,9 @@ use rustls::server::{
     ClientHello, ParsedCertificate, PreferServerOrder, ServerCredentialResolver, ServerHandshake,
 };
 use rustls::{
-    ClientConfig, ClientConnection, Connection as _, HandshakeKind, KeyingMaterialExporter,
-    ServerConfig, ServerConnection, SliceInput, SupportedCipherSuite, VecInput,
+    ClientConfig, ClientConnection, Connection as _, HandshakeKind, IoState,
+    KeyingMaterialExporter, ServerConfig, ServerConnection, SliceInput, SupportedCipherSuite,
+    VecInput,
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::{
@@ -191,7 +192,7 @@ fn server_selects_unoffered_alpn_unchecked() {
     );
 }
 
-fn unoffered_alpn_test(check_selected_alpn: bool) -> Result<rustls::IoState, Error> {
+fn unoffered_alpn_test(check_selected_alpn: bool) -> Result<IoState, Error> {
     let mut config = make_client_config(KeyType::Rsa2048, &provider::DEFAULT_PROVIDER);
     config.check_selected_alpn = check_selected_alpn;
     let mut client = Arc::new(config)
@@ -221,7 +222,10 @@ fn unoffered_alpn_test(check_selected_alpn: bool) -> Result<rustls::IoState, Err
         )
         .unwrap();
 
-    client.process_new_packets(&mut input)
+    let state = client
+        .process_new_packets(&mut input)
+        .handle_all(&mut Vec::new())?;
+    Ok(state)
 }
 
 fn version_test(
@@ -583,6 +587,7 @@ fn test_tls13_valid_early_plaintext_alert() {
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     // Inject a plaintext alert from the client. The server should accept this since:
@@ -594,8 +599,11 @@ fn test_tls13_valid_early_plaintext_alert() {
 
     // The server should process the plaintext alert without error.
     assert_eq!(
-        server.process_new_packets(&mut SliceInput::new(&mut alert)),
-        Err(Error::AlertReceived(AlertDescription::UnknownCa)),
+        server
+            .process_new_packets(&mut SliceInput::new(&mut alert))
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::AlertReceived(AlertDescription::UnknownCa),
     );
 }
 
@@ -609,6 +617,7 @@ fn test_tls13_too_short_early_plaintext_alert() {
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message
@@ -617,8 +626,11 @@ fn test_tls13_too_short_early_plaintext_alert() {
 
     // The server should produce a decrypt error trying to decrypt the plaintext alert.
     assert_eq!(
-        server.process_new_packets(&mut SliceInput::new(&mut alert)),
-        Err(Error::DecryptError),
+        server
+            .process_new_packets(&mut SliceInput::new(&mut alert))
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::DecryptError,
     );
 }
 
@@ -642,8 +654,11 @@ fn test_tls13_late_plaintext_alert() {
 
     // The server should produce a decrypt error, trying to decrypt a plaintext alert.
     assert_eq!(
-        server.process_new_packets(&mut SliceInput::new(&mut alert)),
-        Err(Error::DecryptError)
+        server
+            .process_new_packets(&mut SliceInput::new(&mut alert))
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::DecryptError,
     );
 }
 
@@ -675,8 +690,11 @@ fn server_rejects_empty_post_handshake_alert_fragment() {
         &mut server_input,
     );
     assert_eq!(
-        server.process_new_packets(&mut server_input),
-        Err(PeerMisbehaved::EmptyFragment.into())
+        server
+            .process_new_packets(&mut server_input)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        PeerMisbehaved::EmptyFragment.into(),
     );
 
     // The server signals the misbehavior with a fatal unexpected_message alert.
@@ -695,9 +713,11 @@ fn client_error_is_sticky() {
         .unwrap();
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap_err();
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap_err();
 }
 
@@ -710,9 +730,11 @@ fn server_error_is_sticky() {
         .unwrap();
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap_err();
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap_err();
 }
 
@@ -1280,14 +1302,16 @@ fn test_client_rejects_illegal_tls13_ccs() {
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     transfer_altered(&mut server, corrupt_ccs, &mut client_input);
     assert_eq!(
-        client.process_new_packets(&mut client_input),
-        Err(Error::PeerMisbehaved(
-            PeerMisbehaved::IllegalMiddleboxChangeCipherSpec
-        ))
+        client
+            .process_new_packets(&mut client_input)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec),
     );
 }
 
@@ -1504,6 +1528,7 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     transfer_altered(
         &mut server,
@@ -1520,6 +1545,7 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
         Some(Error::DecryptError),
         client
             .process_new_packets(&mut client_input)
+            .handle_all(&mut Vec::new())
             .err()
     );
 
@@ -1669,6 +1695,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
     raw_server.encrypt_and_send(&msg, &mut client_input);
     let err = client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap_err();
     assert_eq!(
         err,
@@ -1711,6 +1738,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     raw_server.encrypt_and_send(&msg, &mut client_input);
     client
         .process_new_packets(&mut client_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     raw_server.receive_and_decrypt(&mut client, |m| {
         assert_eq!(m.version, ProtocolVersion::TLSv1_2);
@@ -1723,6 +1751,7 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     assert_eq!(
         client
             .process_new_packets(&mut client_input)
+            .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::PeerMisbehaved(PeerMisbehaved::TooManyRenegotiationRequests)
     );
@@ -1755,6 +1784,7 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
     raw_client.encrypt_and_send(&msg, &mut server_input);
     let err = server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap_err();
     assert_eq!(
         format!("{err:?}"),
@@ -1779,6 +1809,7 @@ fn test_illegal_client_renegotiation_attempt_during_tls12_handshake() {
     assert_eq!(
         server
             .process_new_packets(&mut SliceInput::new(&mut input))
+            .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::InappropriateHandshakeMessage {
             expect_types: vec![HandshakeType::ClientKeyExchange],
@@ -1819,12 +1850,14 @@ fn tls13_packed_handshake() {
     let mut first_flight = include_bytes!("../data/bug2040-message-1.bin").to_vec();
     client
         .process_new_packets(&mut SliceInput::new(&mut first_flight))
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     let mut second_flight = include_bytes!("../data/bug2040-message-2.bin").to_vec();
     assert_eq!(
         client
             .process_new_packets(&mut SliceInput::new(&mut second_flight))
+            .handle_all(&mut Vec::new())
             .unwrap_err(),
         Error::InvalidCertificate(CertificateError::UnknownIssuer),
     );
@@ -1842,6 +1875,7 @@ fn large_client_hello() {
         }
         server
             .process_new_packets(&mut server_input)
+            .handle_all(&mut Vec::new())
             .unwrap();
     }
 }
@@ -1973,10 +2007,8 @@ fn server_invalid_sni_policy() {
         (Policy::IgnoreIpAddresses, SERVER_NAME_BAD, Reject),
     ];
 
-    let accept_result = Err(Error::NoSuitableCertificate);
-    let reject_result = Err(Error::PeerMisbehaved(
-        PeerMisbehaved::ServerNameMustContainOneHostName,
-    ));
+    let accept_result = Error::NoSuitableCertificate;
+    let reject_result = Error::PeerMisbehaved(PeerMisbehaved::ServerNameMustContainOneHostName);
 
     for (policy, sni, expected_result) in test_cases {
         let provider = provider::DEFAULT_PROVIDER;
@@ -1997,7 +2029,10 @@ fn server_invalid_sni_policy() {
 
         transfer_altered(&mut client, replace_sni(sni), &mut server_input);
         assert_eq!(
-            &server.process_new_packets(&mut server_input),
+            &server
+                .process_new_packets(&mut server_input)
+                .handle_all(&mut Vec::new())
+                .unwrap_err(),
             match expected_result {
                 Accept | AcceptNoSni => &accept_result,
                 Reject => &reject_result,

@@ -224,8 +224,11 @@ fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
     );
     transfer(&mut client, &mut server_input);
     assert_eq!(
-        server.process_new_packets(&mut server_input),
-        Err(Error::AlertReceived(AlertDescription::BadCertificate))
+        server
+            .process_new_packets(&mut server_input)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::AlertReceived(AlertDescription::BadCertificate),
     );
 }
 
@@ -254,8 +257,11 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
     );
     transfer(&mut server, &mut client_input);
     assert_eq!(
-        client.process_new_packets(&mut client_input),
-        Err(Error::AlertReceived(AlertDescription::BadCertificate))
+        client
+            .process_new_packets(&mut client_input)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::AlertReceived(AlertDescription::BadCertificate),
     );
 }
 
@@ -284,8 +290,11 @@ fn test_cert_decompression_by_server_fails() {
     );
     transfer(&mut server, &mut client_input);
     assert_eq!(
-        client.process_new_packets(&mut client_input),
-        Err(Error::AlertReceived(AlertDescription::BadCertificate))
+        client
+            .process_new_packets(&mut client_input)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::AlertReceived(AlertDescription::BadCertificate),
     );
 }
 
@@ -325,8 +334,11 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
     );
     transfer(&mut server, &mut client_input);
     assert_eq!(
-        client.process_new_packets(&mut client_input),
-        Err(Error::AlertReceived(AlertDescription::BadCertificate))
+        client
+            .process_new_packets(&mut client_input)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::AlertReceived(AlertDescription::BadCertificate),
     );
 }
 

@@ -4,7 +4,7 @@
     clippy::std_instead_of_core
 )]
 
-use std::io::{Cursor, Write};
+use std::io::Cursor;
 
 use rustls::error::{AlertDescription, ApiMisuse, InvalidMessage};
 use rustls::split::{ReceiveTraffic, ReceiveTrafficState, SplitConnection};
@@ -162,31 +162,6 @@ fn split_fails_during_handshake() {
     assert_eq!(
         server.split().err(),
         Some(Error::ApiMisuse(ApiMisuse::SplitDuringHandshake))
-    );
-}
-
-#[test]
-fn split_fails_with_pending_plaintext() {
-    let (mut client, mut server) =
-        make_pair(KeyType::EcdsaP256, &super::provider::DEFAULT_PROVIDER);
-    assert_eq!(client.writer().write(b"huh").unwrap(), 3);
-    assert_eq!(server.writer().write(b"hmm").unwrap(), 3);
-
-    let (mut client_input, mut server_input) = (VecInput::default(), VecInput::default());
-    do_handshake(
-        &mut client_input,
-        &mut client,
-        &mut server_input,
-        &mut server,
-    );
-
-    assert_eq!(
-        server.split().err(),
-        Some(Error::ApiMisuse(ApiMisuse::SplitWithPendingBuffers))
-    );
-    assert_eq!(
-        client.split().err(),
-        Some(Error::ApiMisuse(ApiMisuse::SplitWithPendingBuffers))
     );
 }
 
@@ -354,6 +329,7 @@ fn read_invalid_data_and_send_alert() {
     assert_eq!(
         server
             .process_new_packets(&mut server_input)
+            .handle_all(&mut Vec::new())
             .err(),
         Some(Error::AlertReceived(AlertDescription::DecodeError))
     );

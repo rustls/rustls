@@ -6,7 +6,7 @@
 use core::num::NonZeroUsize;
 use core::time::Duration;
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::Write;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -18,7 +18,7 @@ use rustls::enums::ProtocolVersion;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, Connection, HandshakeKind, RootCertStore, ServerConfig,
-    ServerConnection, VecInput,
+    ServerConnection, SideData, VecInput,
 };
 use rustls_test::KeyType;
 
@@ -1023,11 +1023,11 @@ where
     r
 }
 
-fn transfer(
+fn transfer<LS: SideData, RS: SideData>(
     buffers: &mut TempBuffers,
-    left: &mut impl Connection,
+    left: &mut impl Connection<LS>,
     right_input: &mut VecInput,
-    right: &mut impl Connection,
+    right: &mut impl Connection<RS>,
     expect_data: Option<usize>,
 ) -> f64 {
     let mut read_time = 0f64;
@@ -1055,26 +1055,15 @@ fn transfer(
         loop {
             let start = Instant::now();
             match right_input.read(&mut buffers.tls[offs..sz].as_ref()) {
-                Ok(read) => {
-                    right
-                        .process_new_packets(right_input)
-                        .unwrap();
-                    offs += read;
-                }
-                Err(err) => {
-                    panic!("error on transfer {offs}..{sz}: {err}");
-                }
+                Ok(read) => offs += read,
+                Err(err) => panic!("error on transfer {offs}..{sz}: {err}"),
             }
 
-            if let Some(left) = &mut data_left {
-                loop {
-                    let sz = match right.reader().read(&mut [0u8; 16_384]) {
-                        Ok(sz) => sz,
-                        Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
-                        Err(err) => panic!("failed to read data: {err}"),
-                    };
-
-                    *left -= sz;
+            let mut iter = right.process_new_packets(right_input);
+            while let Some(result) = iter.next_payload() {
+                let chunk = result.unwrap();
+                if let Some(left) = &mut data_left {
+                    *left -= chunk.bytes().len();
                     if *left == 0 {
                         break;
                     }

@@ -1,5 +1,6 @@
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use std::{error, vec};
 
 use pki_types::UnixTime;
@@ -170,7 +171,7 @@ fn select_cipher_suite(
 
     let mut input = VecInput::default();
     input.read(&mut ch.into_wire_bytes().as_slice())?;
-    conn.process_new_packets(&mut input)?;
+    process(&mut input, &mut conn)?;
 
     let mut flight = vec![];
     conn.write_tls(&mut &mut flight)
@@ -215,10 +216,8 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
         .unwrap();
 
     assert_eq!(
-        conn.process_new_packets(&mut input),
-        Err(Error::PeerIncompatible(
-            PeerIncompatible::ExtendedMasterSecretExtensionRequired
-        ))
+        process(&mut input, &mut conn).unwrap_err(),
+        Error::PeerIncompatible(PeerIncompatible::ExtendedMasterSecretExtensionRequired)
     );
 }
 
@@ -298,8 +297,7 @@ fn server_chooses_ffdhe_group_for_client_hello(
     input
         .read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets(&mut input)
-        .unwrap();
+    process(&mut input, &mut conn).unwrap();
 
     let mut flight = vec![];
     conn.write_tls(&mut &mut flight)
@@ -346,8 +344,7 @@ fn test_server_requiring_rpk_client_rejects_x509_client() {
         .read(&mut ch.into_wire_bytes().as_slice())
         .unwrap();
     assert_eq!(
-        conn.process_new_packets(&mut input)
-            .unwrap_err(),
+        process(&mut input, &mut conn).unwrap_err(),
         PeerIncompatible::IncorrectCertificateTypeExtension.into(),
     );
 }
@@ -374,8 +371,7 @@ fn test_rpk_only_server_rejects_x509_only_client() {
         .unwrap();
 
     assert_eq!(
-        conn.process_new_packets(&mut input)
-            .unwrap_err(),
+        process(&mut input, &mut conn).unwrap_err(),
         PeerIncompatible::IncorrectCertificateTypeExtension.into(),
     );
 }
@@ -522,4 +518,10 @@ fn minimal_client_hello() -> ClientHelloPayload {
             ..ClientExtensions::default()
         }),
     }
+}
+
+fn process(input: &mut VecInput, conn: &mut ServerConnection) -> Result<(), Error> {
+    conn.process_new_packets(input)
+        .handle_all(&mut Vec::new())?;
+    Ok(())
 }

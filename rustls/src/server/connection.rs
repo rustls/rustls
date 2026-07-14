@@ -13,8 +13,8 @@ use crate::common_state::{
 use crate::conn::private::SideOutput;
 use crate::conn::split::SplitConnection;
 use crate::conn::{
-    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, MessageIter, Reader,
-    SideData, StateMachine, TlsInputBuffer, Writer,
+    Connection, ConnectionCommon, ConnectionCore, KeyingMaterialExporter, MessageHandler,
+    MessageIter, SideData, StateMachine, TlsInputBuffer, Writer,
 };
 #[cfg(doc)]
 use crate::crypto;
@@ -61,7 +61,6 @@ impl ServerConnection {
     /// This fails if:
     ///
     /// - the handshake is not complete. Check with [`Connection::is_handshaking()`].
-    /// - there is any buffered application data.  Check with [`Connection::reader()`].
     /// - there is any buffered TLS data to send.  Obtain it first with [`Connection::write_tls()`].
     pub fn split(self) -> Result<SplitConnection<ServerSide>, Error> {
         self.inner.split()
@@ -139,7 +138,7 @@ impl ServerConnection {
     }
 }
 
-impl Connection for ServerConnection {
+impl Connection<ServerSide> for ServerConnection {
     fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
         self.inner.write_tls(wr)
     }
@@ -152,18 +151,14 @@ impl Connection for ServerConnection {
         self.inner.wants_write()
     }
 
-    fn reader(&mut self) -> Reader<'_> {
-        self.inner.reader()
-    }
-
     fn writer(&mut self) -> Writer<'_> {
         self.inner.writer()
     }
 
-    fn process_new_packets(
-        &mut self,
-        input: &mut dyn TlsInputBuffer,
-    ) -> Result<crate::IoState, Error> {
+    fn process_new_packets<'a, 'm>(
+        &'a mut self,
+        input: &'m mut dyn TlsInputBuffer,
+    ) -> MessageHandler<'a, 'm, ServerSide> {
         self.inner.process_new_packets(input)
     }
 
@@ -177,11 +172,6 @@ impl Connection for ServerConnection {
 
     fn set_buffer_limit(&mut self, limit: Option<usize>) {
         self.inner.set_buffer_limit(limit)
-    }
-
-    fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
-        self.inner
-            .set_plaintext_buffer_limit(limit)
     }
 
     fn refresh_traffic_keys(&mut self) -> Result<(), Error> {

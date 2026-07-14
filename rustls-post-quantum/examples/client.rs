@@ -36,7 +36,8 @@ fn main() {
         .unwrap();
     let mut sock = TcpStream::connect("pq.cloudflareresearch.com:443").unwrap();
     let mut input = VecInput::default();
-    let mut tls = Stream::new(&mut input, &mut conn, &mut sock);
+    let mut received_plaintext = Vec::new();
+    let mut tls = Stream::new(&mut input, &mut received_plaintext, &mut conn, &mut sock);
     tls.write_all(
         concat!(
             "GET /cdn-cgi/trace HTTP/1.0\r\n",

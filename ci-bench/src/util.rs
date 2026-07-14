@@ -363,10 +363,10 @@ pub(crate) mod transport {
     //! but that doesn't matter (we are measuring performance differences, and overhead is automatically
     //! ignored as long as it remains constant).
 
-    use std::io::{Cursor, Read, Write};
+    use std::io::{Cursor, Write};
 
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-    use rustls::{ClientConnection, Connection, ServerConnection, VecInput};
+    use rustls::{ClientConnection, Connection, ServerConnection, SideData, VecInput};
 
     use super::async_io::{AsyncRead, AsyncWrite};
 
@@ -377,8 +377,8 @@ pub(crate) mod transport {
     /// length, followed by the message itself.
     ///
     /// The receiving end should use [`read_handshake_message`] to process the transmission.
-    pub(crate) async fn send_handshake_message(
-        conn: &mut impl Connection,
+    pub(crate) async fn send_handshake_message<S: SideData>(
+        conn: &mut impl Connection<S>,
         writer: &mut dyn AsyncWrite,
         buf: &mut [u8],
     ) -> anyhow::Result<()> {
@@ -415,9 +415,9 @@ pub(crate) mod transport {
     ///
     /// Used in combination with [`send_handshake_message`] (see that function's documentation for
     /// more details).
-    pub(crate) async fn read_handshake_message(
+    pub(crate) async fn read_handshake_message<S: SideData>(
         input: &mut VecInput,
-        conn: &mut impl Connection,
+        conn: &mut impl Connection<S>,
         reader: &mut dyn AsyncRead,
         buf: &mut [u8],
     ) -> anyhow::Result<usize> {
@@ -443,7 +443,10 @@ pub(crate) mod transport {
         // Feed the data to rustls
         let in_memory_reader = &mut &buf[..length];
         while input.read(in_memory_reader)? != 0 {
-            conn.process_new_packets(input)?;
+            let mut iter = conn.process_new_packets(input);
+            while let Some(result) = iter.next_payload() {
+                result?;
+            }
         }
 
         Ok(length)
@@ -488,13 +491,12 @@ pub(crate) mod transport {
                 chunk_buf_offset += read;
 
                 // Process packets to free space in the message buffer
-                let state = client.process_new_packets(input)?;
-                let available_plaintext_bytes = state.plaintext_bytes_to_read();
+                let mut iter = client.process_new_packets(input);
                 let mut plaintext_bytes_read = 0;
-                while plaintext_bytes_read < available_plaintext_bytes {
-                    plaintext_bytes_read += client
-                        .reader()
-                        .read(&mut plaintext_buf)?;
+                while let Some(result) = iter.next_payload() {
+                    let payload = result?;
+                    plaintext_bytes_read += payload.bytes().len();
+                    plaintext_buf[..payload.bytes().len()].copy_from_slice(payload.bytes());
                 }
 
                 total_plaintext_bytes_read += plaintext_bytes_read;

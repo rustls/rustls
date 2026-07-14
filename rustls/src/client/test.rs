@@ -10,7 +10,7 @@ use std::vec;
 use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
-use crate::client::{ClientConfig, Resumption, Tls12Resumption};
+use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
 use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::FakeKeyExchangeGroup;
@@ -206,8 +206,7 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         .read(&mut hrr.into_wire_bytes().as_slice())
         .unwrap();
     assert_eq!(
-        conn.process_new_packets(&mut input)
-            .unwrap_err(),
+        process(&mut input, &mut conn).unwrap_err(),
         PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into()
     );
 }
@@ -251,8 +250,8 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_f
         .unwrap();
 
     assert_eq!(
-        conn.process_new_packets(&mut input),
-        Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into())
+        process(&mut input, &mut conn).unwrap_err(),
+        PeerIncompatible::ExtendedMasterSecretExtensionRequired.into()
     );
 }
 
@@ -325,8 +324,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     input
         .read(&mut sh.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets(&mut input)
-        .unwrap();
+    process(&mut input, &mut conn).unwrap();
 
     let cert = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -337,8 +335,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     input
         .read(&mut cert.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets(&mut input)
-        .unwrap();
+    process(&mut input, &mut conn).unwrap();
 
     let server_kx = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -363,8 +360,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     input
         .read(&mut server_kx.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets(&mut input)
-        .unwrap();
+    process(&mut input, &mut conn).unwrap();
 
     let server_done = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -375,8 +371,7 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     input
         .read(&mut server_done.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets(&mut input)
-        .unwrap();
+    process(&mut input, &mut conn).unwrap();
 
     assert!(
         verifier
@@ -537,8 +532,7 @@ fn client_requiring_rpk_receives_server_ee(
     input
         .read(&mut sh.into_wire_bytes().as_slice())
         .unwrap();
-    conn.process_new_packets(&mut input)
-        .unwrap();
+    process(&mut input, &mut conn).unwrap();
 
     let ee = Message {
         version: ProtocolVersion::TLSv1_3,
@@ -555,11 +549,7 @@ fn client_requiring_rpk_receives_server_ee(
         .read(&mut enc_ee.encode().as_slice())
         .unwrap();
 
-    assert_eq!(
-        conn.process_new_packets(&mut input)
-            .map(|_| ()),
-        expected
-    );
+    assert_eq!(process(&mut input, &mut conn), expected);
 }
 
 fn client_credentials(provider: &CryptoProvider) -> Credentials {
@@ -858,4 +848,10 @@ fn roots() -> RootCertStore {
     )))
     .unwrap();
     r
+}
+
+fn process(input: &mut VecInput, conn: &mut ClientConnection) -> Result<(), Error> {
+    conn.process_new_packets(input)
+        .handle_all(&mut Vec::new())?;
+    Ok(())
 }

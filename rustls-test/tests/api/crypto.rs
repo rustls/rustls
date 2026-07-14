@@ -3,7 +3,7 @@
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::borrow::Cow;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use rustls::crypto::{Credentials, CryptoProvider};
@@ -457,21 +457,22 @@ fn test_refresh_traffic_keys() {
             .write_all(b"to-client-1")
             .unwrap();
         transfer(client, server_input);
-        server
-            .process_new_packets(server_input)
+        let server_iter = server.process_new_packets(server_input);
+
+        let mut buf = Vec::with_capacity(16);
+        server_iter
+            .handle_all(&mut buf)
             .unwrap();
+        assert_eq!(&buf, b"to-server-1");
 
         transfer(server, client_input);
-        client
-            .process_new_packets(client_input)
+        let client_iter = client.process_new_packets(client_input);
+
+        let mut buf = Vec::with_capacity(16);
+        client_iter
+            .handle_all(&mut buf)
             .unwrap();
-
-        let mut buf = [0u8; 16];
-        let len = server.reader().read(&mut buf).unwrap();
-        assert_eq!(&buf[..len], b"to-server-1");
-
-        let len = client.reader().read(&mut buf).unwrap();
-        assert_eq!(&buf[..len], b"to-client-1");
+        assert_eq!(&buf, b"to-client-1");
     }
 
     check_both_directions(
@@ -528,14 +529,10 @@ fn test_automatic_refresh_traffic_keys() {
             .write_all(message.as_bytes())
             .unwrap();
         let transferred = transfer(&mut client, &mut server_input);
-        println!(
-            "{}: {} -> {:?}",
-            i,
-            transferred,
-            server
-                .process_new_packets(&mut server_input)
-                .unwrap()
-        );
+        let iter = server.process_new_packets(&mut server_input);
+        let mut buf = Vec::with_capacity(32);
+        let state = iter.handle_all(&mut buf).unwrap();
+        println!("{}: {} -> {:?}", i, transferred, state);
 
         // at CONFIDENTIALITY_LIMIT messages, we also have a key_update message sent
         assert_eq!(
@@ -546,9 +543,7 @@ fn test_automatic_refresh_traffic_keys() {
             }
         );
 
-        let mut buf = [0u8; 32];
-        let recvd = server.reader().read(&mut buf).unwrap();
-        assert_eq!(&buf[..recvd], message.as_bytes());
+        assert_eq!(&buf, message.as_bytes());
     }
 
     // finally, server writes and pumps its key_update response
@@ -562,9 +557,7 @@ fn test_automatic_refresh_traffic_keys() {
     println!(
         "F: {} -> {:?}",
         transferred,
-        client
-            .process_new_packets(&mut client_input)
-            .unwrap()
+        client.process_new_packets(&mut client_input)
     );
     assert_eq!(transferred, KEY_UPDATE_SIZE + encrypted_size(message.len()));
 }
@@ -598,21 +591,17 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
             .write_all(message.as_bytes())
             .unwrap();
         let transferred = transfer(&mut client, &mut server_input);
-        println!(
-            "{}: {} -> {:?}",
-            i,
-            transferred,
-            server
-                .process_new_packets(&mut server_input)
-                .unwrap()
-        );
 
-        let mut buf = [0u8; 32];
-        let recvd = server.reader().read(&mut buf).unwrap();
+        let mut buf = Vec::new();
+        let state = server
+            .process_new_packets(&mut server_input)
+            .handle_all(&mut buf)
+            .unwrap();
+        println!("{}: {} -> {:?}", i, transferred, state);
 
         match i {
-            1023 => assert_eq!(recvd, 0),
-            _ => assert_eq!(&buf[..recvd], message.as_bytes()),
+            1023 => assert_eq!(buf.len(), 0),
+            _ => assert_eq!(&buf, message.as_bytes()),
         }
     }
 }

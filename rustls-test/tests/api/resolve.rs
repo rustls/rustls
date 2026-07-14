@@ -500,8 +500,11 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
         assert_eq!(None, server.server_name());
         transfer(&mut client, &mut server_input);
         assert_eq!(
-            server.process_new_packets(&mut server_input),
-            Err(Error::NoSuitableCertificate)
+            server
+                .process_new_packets(&mut server_input)
+                .handle_all(&mut Vec::new())
+                .unwrap_err(),
+            Error::NoSuitableCertificate,
         );
         assert_eq!(
             Some(&DnsName::try_from("thisdoesnotexist.com").unwrap()),
