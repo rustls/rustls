@@ -4,7 +4,8 @@ use core::mem;
 use core::ops::Range;
 use std::io::{self, Read};
 
-use super::SendOutput;
+use super::send::{SendOutput, SendPath};
+use super::split::SendAdapter;
 use crate::SideData;
 use crate::common_state::{
     ConnectionOutput, Event, Output, OutputEvent, Side, UnborrowedPayload, maybe_send_fatal_alert,
@@ -21,14 +22,14 @@ use crate::msgs::{
 };
 use crate::quic::QuicOutput;
 
-pub(crate) struct MessageIter<'a, 'm, Side: SideData> {
+pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
     input: &'m mut dyn TlsInputBuffer,
     recv: &'a mut ReceivePath,
     state: &'a mut Result<Side::State, Error>,
-    output: JoinOutput<'a>,
+    output: JoinOutput<'a, Send>,
 }
 
-impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
+impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
     pub(crate) fn new(
         input: &'m mut dyn TlsInputBuffer,
         quic: Option<&'a mut dyn QuicOutput>,
@@ -46,12 +47,14 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             },
         }
     }
+}
 
+impl<'a, 'm, 's, Side: SideData> MessageIter<'a, 'm, Side, SendAdapter<'s>> {
     pub(super) fn receive(
         input: &'m mut dyn TlsInputBuffer,
         state: &'a mut Result<Side::State, Error>,
         recv: &'a mut ReceivePath,
-        output: JoinOutput<'a>,
+        output: JoinOutput<'a, SendAdapter<'s>>,
     ) -> Self {
         Self {
             recv,
@@ -60,7 +63,9 @@ impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side> {
             output,
         }
     }
+}
 
+impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Send> {
     pub(crate) fn next(&mut self) -> Option<Result<UnborrowedPayload, Error>> {
         let mut st = match mem::replace(self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
@@ -481,9 +486,9 @@ enum DeframeResult<'b> {
     None,
 }
 
-struct CaptureAppData<'a, 'j, 'm> {
+struct CaptureAppData<'a, 'j, 'm, Send: SendOutput + 'a> {
     recv: &'a mut ReceivePath,
-    other: &'a mut JoinOutput<'j>,
+    other: &'a mut JoinOutput<'j, Send>,
     /// Store a [`Locator`] initialized from the current receive buffer
     ///
     /// Allows received plaintext data to be unborrowed and stored in
@@ -499,7 +504,7 @@ struct CaptureAppData<'a, 'j, 'm> {
     _message_lifetime: PhantomData<&'m ()>,
 }
 
-impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
+impl<'a, 'm, Send: SendOutput + 'a> Output<'m> for CaptureAppData<'a, '_, 'm, Send> {
     fn emit(&mut self, ev: Event<'_>) {
         self.other.side.emit(ev)
     }
@@ -556,10 +561,10 @@ impl<'m> Output<'m> for CaptureAppData<'_, '_, 'm> {
     }
 }
 
-pub(super) struct JoinOutput<'a> {
+pub(super) struct JoinOutput<'a, Send: SendOutput + 'a> {
     pub(super) outputs: &'a mut dyn ConnectionOutput,
     pub(super) quic: Option<&'a mut dyn QuicOutput>,
-    pub(super) send: &'a mut dyn SendOutput,
+    pub(super) send: &'a mut Send,
     pub(super) side: &'a mut dyn SideOutput,
 }
 
