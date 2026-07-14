@@ -195,16 +195,19 @@
 //! when the underlying connection is able to send data.  You should continue doing this
 //! as long as the connection is valid.
 //!
-//! Any error returned from `process_new_packets()` is fatal to the connection, and will tell you
-//! why.  For example, if the server's certificate is expired `process_new_packets()` will
-//! return `Err(InvalidCertificate(Expired))`.  From this point on,
-//! `process_new_packets()` will not do any new work and will return that error continually.
+//! `process_new_packets()` will yield a [`MessageHandler`], which can be used to read all
+//! buffered messages at once (via [`MessageHandler::handle_all()`]) or one at a time (via
+//! [`MessageHandler::next_payload()`]). Any error returned from either of these methods is fatal
+//! to the connection, and will tell you why. For example, if the server's certificate is expired
+//! `process_new_packets()` will return `Err(InvalidCertificate(Expired))`. From this point on,
+//! future calls to `MessageHandler` methods will do nothing and yield the same error.
 //!
-//! You can extract newly received data by calling `client.reader()` (which implements the
-//! `io::Read` trait).  You can send data to the peer by calling `client.writer()` (which
-//! implements `io::Write` trait).  Note that `client.writer().write()` buffers data you
-//! send if the TLS connection is not yet established: this is useful for writing (say) a
-//! HTTP request, but this is buffered so avoid large amounts of data.
+//! Newly received data is available by copying from the `Payload` data returned by
+//! `next_payload()` or written into the given buffer by `handle_all()`.  You can send data to the
+//! peer by calling `client.writer()` (which implements `io::Write` trait).  Note that
+//! `client.writer().write()` buffers data you send if the TLS connection is not yet established:
+//! this is useful for writing (say) a HTTP request, but this is buffered so avoid large amounts
+//! of data.
 //!
 //! The following code uses a fictional socket IO API for illustration, and does not handle
 //! errors.
@@ -239,10 +242,11 @@
 //! loop {
 //!   if client.wants_read() && socket.ready_for_read() {
 //!     input.read(&mut socket).unwrap();
-//!     client.process_new_packets(&mut input).unwrap();
-//!
 //!     let mut plaintext = Vec::new();
-//!     client.reader().read_to_end(&mut plaintext).unwrap();
+//!     client
+//!       .process_new_packets(&mut input)
+//!       .handle_all(&mut plaintext)
+//!       .unwrap();
 //!     io::stdout().write(&plaintext).unwrap();
 //!   }
 //!
@@ -380,8 +384,8 @@ pub mod internal {
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier};
 pub use crate::common_state::{CommonState, ConnectionOutputs, HandshakeKind};
 pub use crate::conn::{
-    Connection, IoState, KeyingMaterialExporter, Reader, SideData, SliceInput, TlsInputBuffer,
-    VecInput, Writer, kernel,
+    Connection, IoState, KeyingMaterialExporter, MessageHandler, SideData, SliceInput,
+    TlsInputBuffer, VecInput, Writer, kernel,
 };
 /// Types related to "split" mode.
 ///

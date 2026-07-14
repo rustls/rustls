@@ -82,6 +82,7 @@ fn service_connection(
         let rd = input.read(stream);
         if server
             .process_new_packets(input)
+            .handle_all(&mut Vec::new())
             .is_err()
         {
             break;

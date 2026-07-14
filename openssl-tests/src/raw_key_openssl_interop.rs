@@ -69,7 +69,8 @@ mod client {
             .unwrap();
         let mut sock = TcpStream::connect(format!("[::]:{port}")).unwrap();
         let mut input = VecInput::default();
-        let mut tls = Stream::new(&mut input, &mut conn, &mut sock);
+        let mut received_plaintext = Vec::new();
+        let mut tls = Stream::new(&mut input, &mut received_plaintext, &mut conn, &mut sock);
 
         let mut buf = vec![0; 128];
         let len = tls.read(&mut buf).unwrap();
@@ -146,8 +147,7 @@ mod client {
 }
 
 mod server {
-    #![allow(clippy::std_instead_of_core)] // awaits core::io::ErrorKind in stable (1.97)
-    use std::io::{self, ErrorKind, Read, Write};
+    use std::io::{self, Write};
     use std::net::TcpListener;
     use std::sync::Arc;
 
@@ -211,30 +211,24 @@ mod server {
 
         let mut conn = ServerConnection::new(Arc::new(config)).unwrap();
         let mut input = VecInput::default();
-        complete_io(&mut stream, &mut input, &mut conn)?;
+        let mut received_plaintext = Vec::new();
+        complete_io(&mut stream, &mut input, &mut received_plaintext, &mut conn)?;
 
         conn.writer()
             .write_all(b"Hello from the server")?;
-        complete_io(&mut stream, &mut input, &mut conn)?;
-
-        let mut buf = [0; 128];
+        complete_io(&mut stream, &mut input, &mut received_plaintext, &mut conn)?;
 
         loop {
-            match conn.reader().read(&mut buf) {
-                Ok(len) => {
-                    conn.send_close_notify();
-                    complete_io(&mut stream, &mut input, &mut conn)?;
-                    return Ok(String::from_utf8_lossy(&buf[..len]).to_string());
-                }
-                Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                    input.read(&mut stream)?;
-                    conn.process_new_packets(&mut input)
-                        .unwrap();
-                }
-                Err(err) => {
-                    return Err(err);
-                }
-            };
+            if !received_plaintext.is_empty() {
+                conn.send_close_notify();
+                complete_io(&mut stream, &mut input, &mut received_plaintext, &mut conn)?;
+                return Ok(String::from_utf8_lossy(&received_plaintext).to_string());
+            }
+
+            input.read(&mut stream)?;
+            conn.process_new_packets(&mut input)
+                .handle_all(&mut received_plaintext)
+                .unwrap();
         }
     }
 

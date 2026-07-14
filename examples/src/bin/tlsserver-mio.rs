@@ -241,6 +241,7 @@ impl OpenConnection {
         if let Err(err) = self
             .tls_conn
             .process_new_packets(&mut self.input)
+            .handle_all(&mut Vec::new())
         {
             error!("cannot process packet: {err:?}");
 
@@ -253,34 +254,33 @@ impl OpenConnection {
 
     fn try_plain_read(&mut self) {
         // Read and process all available plaintext.
-        if let Ok(io_state) = self
+        let mut received_plaintext = Vec::new();
+        let iter = self
             .tls_conn
-            .process_new_packets(&mut self.input)
-        {
-            if let Some(mut early_data) = self.tls_conn.early_data() {
-                let mut buf = Vec::new();
-                early_data
-                    .read_to_end(&mut buf)
-                    .unwrap();
-
-                if !buf.is_empty() {
-                    debug!("early data read {:?}", buf.len());
-                    self.incoming_plaintext(&buf);
-                    return;
-                }
+            .process_new_packets(&mut self.input);
+        match iter.handle_all(&mut received_plaintext) {
+            Ok(_) => {}
+            Err(error) => {
+                error!("cannot read plaintext: {error:?}");
+                self.closing = true;
+                return;
             }
+        }
 
-            if io_state.plaintext_bytes_to_read() > 0 {
-                let mut buf = vec![0u8; io_state.plaintext_bytes_to_read()];
+        if let Some(mut early_data) = self.tls_conn.early_data() {
+            let mut buf = Vec::new();
+            early_data
+                .read_to_end(&mut buf)
+                .unwrap();
 
-                self.tls_conn
-                    .reader()
-                    .read_exact(&mut buf)
-                    .unwrap();
-
-                debug!("plaintext read {:?}", buf.len());
+            if !buf.is_empty() {
+                debug!("early data read {:?}", buf.len());
                 self.incoming_plaintext(&buf);
             }
+        }
+
+        if !received_plaintext.is_empty() {
+            self.incoming_plaintext(&received_plaintext);
         }
     }
 

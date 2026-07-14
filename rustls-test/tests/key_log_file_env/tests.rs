@@ -59,6 +59,7 @@ fn exercise_key_log_file_for_client() {
             transfer(&mut client, &mut server_input);
             server
                 .process_new_packets(&mut server_input)
+                .handle_all(&mut Vec::new())
                 .unwrap();
         }
     })
@@ -90,6 +91,7 @@ fn exercise_key_log_file_for_server() {
             transfer(&mut client, &mut server_input);
             server
                 .process_new_packets(&mut server_input)
+                .handle_all(&mut Vec::new())
                 .unwrap();
         }
     })
