@@ -325,6 +325,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
         transfer(&mut client, &mut server_input);
         server
             .process_new_packets(&mut server_input)
+            .handle_all(&mut Vec::new())
             .unwrap();
 
         let ops = shared_storage.ops_and_reset();
@@ -336,6 +337,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     let ops = shared_storage.ops_and_reset();
@@ -806,6 +808,7 @@ fn server_detects_excess_streamed_early_data() {
     transfer(&mut client, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
 
     let mut received_early_data = [0u8; 1024];
@@ -829,10 +832,11 @@ fn server_detects_excess_streamed_early_data() {
     );
     transfer(&mut client, &mut server_input);
     assert_eq!(
-        server.process_new_packets(&mut server_input),
-        Err(Error::PeerMisbehaved(
-            PeerMisbehaved::TooMuchEarlyDataReceived
-        ))
+        server
+            .process_new_packets(&mut server_input)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived)
     );
 }
 

@@ -404,11 +404,13 @@ fn test_server_rejects_clients_without_any_kx_groups() {
             .as_slice(),
         )
         .unwrap();
+
     assert_eq!(
-        server.process_new_packets(&mut server_input),
-        Err(Error::InvalidMessage(InvalidMessage::IllegalEmptyList(
-            "NamedGroups"
-        )))
+        server
+            .process_new_packets(&mut server_input)
+            .handle_all(&mut Vec::new())
+            .unwrap_err(),
+        Error::InvalidMessage(InvalidMessage::IllegalEmptyList("NamedGroups"))
     );
 }
 
@@ -436,16 +438,20 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
         let mut server_input = VecInput::default();
         transfer(&mut client, &mut server_input);
         assert_eq!(
-            server.process_new_packets(&mut server_input),
-            Err(Error::PeerIncompatible(
-                PeerIncompatible::NoKxGroupsInCommon
-            ))
+            server
+                .process_new_packets(&mut server_input)
+                .handle_all(&mut Vec::new())
+                .unwrap_err(),
+            Error::PeerIncompatible(PeerIncompatible::NoKxGroupsInCommon),
         );
 
         transfer(&mut server, &mut client_input);
         assert_eq!(
-            client.process_new_packets(&mut client_input),
-            Err(Error::AlertReceived(AlertDescription::HandshakeFailure))
+            client
+                .process_new_packets(&mut client_input)
+                .handle_all(&mut Vec::new())
+                .unwrap_err(),
+            Error::AlertReceived(AlertDescription::HandshakeFailure),
         );
     }
 }
@@ -473,11 +479,13 @@ fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
     transfer(&mut client_2, &mut server_input);
     server
         .process_new_packets(&mut server_input)
+        .handle_all(&mut Vec::new())
         .unwrap();
     transfer(&mut server, &mut client_1_input);
     assert_eq!(
         client_1
             .process_new_packets(&mut client_1_input)
+            .handle_all(&mut Vec::new())
             .unwrap_err(),
         PeerMisbehaved::WrongGroupForKeyShare.into()
     );

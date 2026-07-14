@@ -45,13 +45,12 @@ closing the write side of the connection. However, some implementations don't se
 So long as the application layer protocol (for instance HTTP/2) has message length framing
 and can reject truncated messages, this is not a security problem.
 
-Rustls treats an EOF without `close_notify` as an error of type `std::io::Error` with
-`ErrorKind::UnexpectedEof`. In some situations it's appropriate for the application to handle
-this error the same way it would handle a normal EOF (a read returning `Ok(0)`). In particular
-if `UnexpectedEof` occurs on an idle connection it is appropriate to treat it the same way as a
-clean shutdown. And if an application always uses messages with length framing (in other words,
-messages are never delimited by the close of the TCP connection), it can unconditionally
-ignore `UnexpectedEof` errors from rustls.
+When an EOF is received from the network using `TlsInputBuffer::read()`, rustls sets an
+`has_seen_eof()` flag on that input buffer. If the `MessageHandler::state()` does not have
+`peer_has_closed()` yielding `true` and the read side of the connection has seen an EOF, an
+`UnexpectedEof` error should be raised unless the application layer protocol knows for sure
+that no message is in flight. This could be the case if the connection has been idle or
+if application messages are framed with their length.
 
 [^2]: <https://datatracker.ietf.org/doc/html/rfc9846#section-6.1>
 

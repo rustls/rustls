@@ -23,10 +23,10 @@ use crate::msgs::{
 use crate::quic::QuicOutput;
 
 pub(crate) struct MessageIter<'a, 'm, Side: SideData, Send: SendOutput + 'a> {
-    input: &'m mut dyn TlsInputBuffer,
-    recv: &'a mut ReceivePath,
-    state: &'a mut Result<Side::State, Error>,
-    output: JoinOutput<'a, Send>,
+    pub(super) input: &'m mut dyn TlsInputBuffer,
+    pub(super) recv: &'a mut ReceivePath,
+    pub(super) state: &'a mut Result<Side::State, Error>,
+    pub(super) output: JoinOutput<'a, Send>,
 }
 
 impl<'a, 'm, Side: SideData> MessageIter<'a, 'm, Side, SendPath> {
@@ -170,10 +170,6 @@ impl<'a, 'm, Side: SideData, Send: SendOutput + 'a> MessageIter<'a, 'm, Side, Se
 
         *self.state = Ok(st);
         None
-    }
-
-    pub(super) fn input(&mut self) -> &mut dyn TlsInputBuffer {
-        self.input
     }
 
     pub(crate) fn state(&self) -> &Result<Side::State, Error> {
@@ -762,6 +758,10 @@ impl VecInput {
     }
 
     /// Read some bytes from `rd`, and add them to the buffer.
+    ///
+    /// Once the buffer contains 64 kB of data, we will not read any more bytes until some
+    /// are consumed by reading from the buffer via
+    /// [`Connection::process_new_packets()`][super::Connection::process_new_packets()].
     pub fn read(&mut self, rd: &mut dyn Read) -> io::Result<usize> {
         if self.received_close_notify {
             return Ok(0);
