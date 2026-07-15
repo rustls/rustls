@@ -238,14 +238,14 @@ fn test_quic_acceptor() {
     println!("client_initial: {client_initial:x?}");
 
     let ServerHandshake::NeedsInput(needs_input) = needs_input
-        .process(&mut SliceInput::new(&mut client_initial[..8]))
+        .process(&mut SliceInput::new(&mut client_initial[..8]), &mut vec![])
         .unwrap()
     else {
         panic!("unexpected state after partial hello");
     };
 
     let ServerHandshake::Accepted(accepted) = needs_input
-        .process(&mut SliceInput::new(&mut client_initial))
+        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
         .unwrap()
     else {
         panic!("unexpected state after full hello");
@@ -267,14 +267,28 @@ fn test_quic_acceptor() {
         vec![b"h3".as_slice()]
     );
 
-    let mut server = accepted
-        .into_connection(server_config, server_params.into())
-        .unwrap();
+    let mut server_flight = vec![];
+    let Ok(ServerHandshake::NeedsInput(server)) =
+        accepted.choose_config(server_config, server_params.into(), &mut server_flight)
+    else {
+        panic!("unexpected state");
+    };
+    quic_insert(server_flight, &mut client).unwrap();
+
+    let mut server_flight = vec![];
+    let ServerHandshake::Complete(mut server) = server
+        .process(
+            &mut SliceInput::new(&mut flatten_events(&mut client)),
+            &mut server_flight,
+        )
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
+
     assert_eq!(server.fips(), server_fips);
     assert_eq!(server.quic_transport_parameters(), Some(client_params));
 
-    quic_transfer(&mut server, &mut client).unwrap();
-    quic_transfer(&mut client, &mut server).unwrap();
     quic_transfer(&mut server, &mut client).unwrap();
     quic_transfer(&mut client, &mut server).unwrap();
 
@@ -314,7 +328,7 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
     let mut client_initial = flatten_events(&mut client);
 
     let ServerHandshake::Accepted(accepted) = needs_input
-        .process(&mut SliceInput::new(&mut client_initial))
+        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
         .unwrap()
     else {
         panic!("unexpected state after full hello");
@@ -345,9 +359,24 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
         }
     };
 
-    let mut server = accepted
-        .into_connection(selected_config, server_params.into())
-        .unwrap();
+    let mut server_flight = vec![];
+    let Ok(ServerHandshake::NeedsInput(server)) =
+        accepted.choose_config(selected_config, server_params.into(), &mut server_flight)
+    else {
+        panic!("unexpected state");
+    };
+    quic_insert(server_flight, &mut client).unwrap();
+
+    let mut server_flight = vec![];
+    let ServerHandshake::Complete(mut server) = server
+        .process(
+            &mut SliceInput::new(&mut flatten_events(&mut client)),
+            &mut server_flight,
+        )
+        .unwrap()
+    else {
+        panic!("unexpected state");
+    };
 
     quic_transfer(&mut server, &mut client).unwrap();
     quic_transfer(&mut client, &mut server).unwrap();
@@ -381,7 +410,7 @@ fn test_quic_acceptor_invalid_early_data_size() {
     let mut client_initial = flatten_events(&mut client);
 
     let ServerHandshake::Accepted(accepted) = needs_input
-        .process(&mut SliceInput::new(&mut client_initial))
+        .process(&mut SliceInput::new(&mut client_initial), &mut vec![])
         .unwrap()
     else {
         panic!("unexpected state after hello");
@@ -389,7 +418,11 @@ fn test_quic_acceptor_invalid_early_data_size() {
 
     assert_eq!(
         accepted
-            .into_connection(Arc::new(server_config), b"server params".to_vec())
+            .choose_config(
+                Arc::new(server_config),
+                b"server params".to_vec(),
+                &mut vec![]
+            )
             .err(),
         Some(ApiMisuse::QuicRestrictsMaxEarlyDataSize.into())
     );
@@ -400,10 +433,13 @@ fn test_quic_acceptor_read_error_is_terminal() {
     let needs_input = ServerHandshake::start(quic::Version::V1);
 
     let err = needs_input
-        .process(&mut SliceInput::new(&mut encoding::handshake_framing(
-            rustls::enums::HandshakeType::ClientHello,
-            vec![0x00; 32],
-        )))
+        .process(
+            &mut SliceInput::new(&mut encoding::handshake_framing(
+                rustls::enums::HandshakeType::ClientHello,
+                vec![0x00; 32],
+            )),
+            &mut vec![],
+        )
         .err()
         .unwrap();
     assert_eq!(err, InvalidMessage::MissingData("Random").into());
@@ -598,7 +634,13 @@ fn quic_transfer(
     let mut events = Vec::new();
     sender.take_events(&mut events);
     println!("{sender:?}: events {events:?}");
+    quic_insert(events, receiver)
+}
 
+fn quic_insert(
+    events: Vec<QuicEvent>,
+    receiver: &mut impl Connection,
+) -> Result<KeyChanges, Error> {
     let mut changes = KeyChanges::default();
 
     for e in events {
@@ -634,6 +676,7 @@ fn flatten_events(send: &mut impl Connection) -> Vec<u8> {
     for e in events {
         match e {
             QuicEvent::Message(m) => out.extend(m),
+            QuicEvent::KeyChange(..) => {}
             _ => todo!("{e:?}"),
         }
     }
