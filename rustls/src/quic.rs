@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, mem};
@@ -623,16 +622,12 @@ pub(crate) struct Quic {
     pub(crate) version: Version,
     /// QUIC transport parameters received from the peer during the handshake
     pub(crate) params: Option<Vec<u8>>,
-    pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
+    pub(crate) events: Vec<QuicEvent>,
     pub(crate) early_secret: Option<OkmBlock>,
-    pub(crate) hs_secrets: Option<Secrets>,
-    pub(crate) traffic_secrets: Option<Secrets>,
-    /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
-    pub(crate) returned_traffic_keys: bool,
 }
 
 impl Quic {
-    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
+    pub(crate) fn send_msg(&mut self, m: Message<'_>, _must_encrypt: bool) {
         if let MessagePayload::Alert(_) = m.payload {
             // alerts are sent out-of-band in QUIC mode
             return;
@@ -647,42 +642,12 @@ impl Quic {
         );
         let mut bytes = Vec::new();
         m.payload.encode(&mut bytes);
-        self.hs_queue
-            .push_back((must_encrypt, bytes));
+        self.events
+            .push(QuicEvent::Message(bytes));
     }
 
     pub(crate) fn take_events(&mut self, output: &mut Vec<QuicEvent>) {
-        while let Some((_, msg)) = self.hs_queue.pop_front() {
-            output.push(QuicEvent::Message(msg));
-            if let Some(&(true, _)) = self.hs_queue.front() {
-                if self.hs_secrets.is_some() {
-                    // Allow the caller to switch keys before proceeding.
-                    break;
-                }
-            }
-        }
-
-        if let Some(secrets) = self.hs_secrets.take() {
-            output.push(QuicEvent::KeyChange(KeyChange::Handshake {
-                keys: Keys::new(&secrets),
-            }));
-        }
-
-        while let Some((_, msg)) = self.hs_queue.pop_front() {
-            output.push(QuicEvent::Message(msg));
-        }
-
-        if let Some(mut secrets) = self.traffic_secrets.take() {
-            if !self.returned_traffic_keys {
-                self.returned_traffic_keys = true;
-                let keys = Keys::new(&secrets);
-                secrets.update();
-                output.push(QuicEvent::KeyChange(KeyChange::OneRtt {
-                    keys,
-                    next: secrets,
-                }));
-            }
-        }
+        output.append(&mut self.events);
     }
 }
 
@@ -703,14 +668,17 @@ impl QuicOutput for Quic {
         quic: &'static dyn Algorithm,
         side: Side,
     ) {
-        self.hs_secrets = Some(Secrets::new(
-            client_secret,
-            server_secret,
-            suite,
-            quic,
-            side,
-            self.version,
-        ));
+        self.events
+            .push(QuicEvent::KeyChange(KeyChange::Handshake {
+                keys: Keys::new(&Secrets::new(
+                    client_secret,
+                    server_secret,
+                    suite,
+                    quic,
+                    side,
+                    self.version,
+                )),
+            }));
     }
 
     fn traffic_secrets(
@@ -721,14 +689,21 @@ impl QuicOutput for Quic {
         quic: &'static dyn Algorithm,
         side: Side,
     ) {
-        self.traffic_secrets = Some(Secrets::new(
+        let mut secrets = Secrets::new(
             client_secret,
             server_secret,
             suite,
             quic,
             side,
             self.version,
-        ));
+        );
+        let keys = Keys::new(&secrets);
+        secrets.update();
+        self.events
+            .push(QuicEvent::KeyChange(KeyChange::OneRtt {
+                keys,
+                next: secrets,
+            }));
     }
 
     fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
