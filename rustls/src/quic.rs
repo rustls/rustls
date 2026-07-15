@@ -349,7 +349,7 @@ pub enum ServerHandshake {
     /// A complete `ClientHello` has been received.
     ///
     /// The handshake can be progressed by choosing a [`ServerConfig`] based on
-    /// [`Accepted::client_hello()`] and providing it to [`Accepted::into_connection()`].
+    /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
     Accepted(Accepted),
 
     /// The handshake is complete.
@@ -430,8 +430,15 @@ impl NeedsInput {
     /// - a [`ServerHandshake::Accepted`] if a whole `ClientHello` has been received,
     ///   and a choice of [`ServerConfig`] is required to continue.
     /// - a [`ServerHandshake::Complete`] if the handshake is complete.
-    pub fn process(mut self, input: &mut dyn TlsInputBuffer) -> Result<ServerHandshake, Error> {
+    ///
+    /// `output` has any resulting handshake messages or key changes appended to it.
+    pub fn process(
+        mut self,
+        input: &mut dyn TlsInputBuffer,
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<ServerHandshake, Error> {
         self.inner.read_hs(input)?;
+        self.inner.take_events(output);
         ServerHandshake::try_from(self.inner)
     }
 }
@@ -446,7 +453,7 @@ impl fmt::Debug for NeedsInput {
 /// Represents that a `ClientHello` message has been received.
 ///
 /// The handshake can be progressed by choosing a [`ServerConfig`] based on
-/// [`Accepted::client_hello()`] and providing it to [`Accepted::into_connection()`].
+/// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
 pub struct Accepted {
     // invariant: `inner.core.state` is `Err(_)` and requires restoring
     inner: ConnectionCommon<ServerSide>,
@@ -466,11 +473,14 @@ impl Accepted {
     ///
     /// Returns an error if configuration-dependent validation of the received
     /// `ClientHello` message fails.
-    pub fn into_connection(
+    ///
+    /// Events are appended to `output`.
+    pub fn choose_config(
         mut self,
         config: Arc<ServerConfig>,
         params: Vec<u8>,
-    ) -> Result<ServerConnection, Error> {
+        output: &mut Vec<QuicEvent>,
+    ) -> Result<ServerHandshake, Error> {
         check_server_config(&config)?;
 
         self.inner.core.accepted(
@@ -484,7 +494,9 @@ impl Accepted {
             config,
         )?;
 
-        Ok(ServerConnection { inner: self.inner })
+        self.inner.take_events(output);
+
+        ServerHandshake::try_from(self.inner)
     }
 }
 
