@@ -35,6 +35,16 @@ Some ideas and guidelines for contributions:
 - I run `cargo outdated` prior to major releases; but PRs to update specific
   dependencies are welcome.
 
+## Crate features
+
+Enabling a Cargo feature must not change rustls' default behavior. Cargo unifies enabled features
+across the entire dependency graph, so a library using rustls cannot control whether another
+library or the application enabled a feature.
+
+A feature may expose additional APIs for opt-in functionality, but that functionality must be
+enabled through those APIs by the application. For example, a feature must not automatically
+enable key logging or select a set of trust anchors.
+
 ## Commit history
 
 We prefer to keep the commit history clean and easy to follow. As such, we prefer small commits
