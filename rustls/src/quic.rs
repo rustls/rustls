@@ -48,10 +48,10 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
     /// [`TlsInputBuffer::discard()`].  Unconsumed data should be presented again on the next call.
     fn read_hs(&mut self, input: &mut dyn TlsInputBuffer) -> Result<(), Error>;
 
-    /// Emit unencrypted TLS handshake data.
+    /// Obtain pending events that the caller should process.
     ///
-    /// When this returns `Some(_)`, the new keys must be used for future handshake data.
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange>;
+    /// All pending events are appended to `output`.
+    fn take_events(&mut self, output: &mut Vec<QuicEvent>);
 
     /// Returns true if the connection is currently performing the TLS handshake.
     fn is_handshaking(&self) -> bool;
@@ -177,8 +177,8 @@ impl Connection for ClientConnection {
         self.inner.read_hs(input)
     }
 
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
-        self.inner.write_hs(buf)
+    fn take_events(&mut self, output: &mut Vec<QuicEvent>) {
+        self.inner.take_events(output)
     }
 
     fn is_handshaking(&self) -> bool {
@@ -315,8 +315,8 @@ impl Connection for ServerConnection {
         self.inner.read_hs(input)
     }
 
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
-        self.inner.write_hs(buf)
+    fn take_events(&mut self, output: &mut Vec<QuicEvent>) {
+        self.inner.take_events(output)
     }
 
     fn is_handshaking(&self) -> bool {
@@ -349,7 +349,7 @@ pub enum ServerHandshake {
     /// A complete `ClientHello` has been received.
     ///
     /// The handshake can be progressed by choosing a [`ServerConfig`] based on
-    /// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
+    /// [`Accepted::client_hello()`] and providing it to [`Accepted::into_connection()`].
     Accepted(Accepted),
 
     /// The handshake is complete.
@@ -446,7 +446,7 @@ impl fmt::Debug for NeedsInput {
 /// Represents that a `ClientHello` message has been received.
 ///
 /// The handshake can be progressed by choosing a [`ServerConfig`] based on
-/// [`Accepted::client_hello()`] and providing it to [`Accepted::choose_config()`].
+/// [`Accepted::client_hello()`] and providing it to [`Accepted::into_connection()`].
 pub struct Accepted {
     // invariant: `inner.core.state` is `Err(_)` and requires restoring
     inner: ConnectionCommon<ServerSide>,
@@ -515,6 +515,18 @@ fn check_server_config(config: &ServerConfig) -> Result<(), Error> {
     Ok(())
 }
 
+/// QUIC events that should be handled by the caller.
+#[expect(clippy::large_enum_variant)]
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum QuicEvent {
+    /// These bytes should be handled as an unencrypted TLS handshake message.
+    Message(Vec<u8>),
+
+    /// The key material should be changed.
+    KeyChange(KeyChange),
+}
+
 /// A shared interface for QUIC connections.
 struct ConnectionCommon<Side: SideData> {
     core: ConnectionCore<Side>,
@@ -575,8 +587,8 @@ impl<Side: SideData> ConnectionCommon<Side> {
         result
     }
 
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
-        self.quic.write_hs(buf)
+    fn take_events(&mut self, output: &mut Vec<QuicEvent>) {
+        self.quic.take_events(output)
     }
 }
 
@@ -627,9 +639,9 @@ impl Quic {
             .push_back((must_encrypt, bytes));
     }
 
-    pub(crate) fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
+    pub(crate) fn take_events(&mut self, output: &mut Vec<QuicEvent>) {
         while let Some((_, msg)) = self.hs_queue.pop_front() {
-            buf.extend_from_slice(&msg);
+            output.push(QuicEvent::Message(msg));
             if let Some(&(true, _)) = self.hs_queue.front() {
                 if self.hs_secrets.is_some() {
                     // Allow the caller to switch keys before proceeding.
@@ -639,9 +651,13 @@ impl Quic {
         }
 
         if let Some(secrets) = self.hs_secrets.take() {
-            return Some(KeyChange::Handshake {
+            output.push(QuicEvent::KeyChange(KeyChange::Handshake {
                 keys: Keys::new(&secrets),
-            });
+            }));
+        }
+
+        while let Some((_, msg)) = self.hs_queue.pop_front() {
+            output.push(QuicEvent::Message(msg));
         }
 
         if let Some(mut secrets) = self.traffic_secrets.take() {
@@ -649,14 +665,12 @@ impl Quic {
                 self.returned_traffic_keys = true;
                 let keys = Keys::new(&secrets);
                 secrets.update();
-                return Some(KeyChange::OneRtt {
+                output.push(QuicEvent::KeyChange(KeyChange::OneRtt {
                     keys,
                     next: secrets,
-                });
+                }));
             }
         }
-
-        None
     }
 }
 
@@ -1141,9 +1155,9 @@ impl Keys {
 ///
 /// * Initial: these can be created from [`Keys::initial()`]
 /// * 0-RTT keys: can be retrieved from [`Connection::zero_rtt_keys()`]
-/// * Handshake: these are returned from [`Connection::write_hs()`] after `ClientHello` and
+/// * Handshake: these are returned from [`Connection::take_events()`] after `ClientHello` and
 ///   `ServerHello` messages have been exchanged
-/// * 1-RTT keys: these are returned from [`Connection::write_hs()`] after the handshake is done
+/// * 1-RTT keys: these are returned from [`Connection::take_events()`] after the handshake is done
 ///
 /// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
 /// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that
@@ -1162,6 +1176,19 @@ pub enum KeyChange {
         /// Secrets to derive updated keys from
         next: Secrets,
     },
+}
+
+impl fmt::Debug for KeyChange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Handshake { .. } => f
+                .debug_struct("Handshake")
+                .finish_non_exhaustive(),
+            Self::OneRtt { .. } => f
+                .debug_struct("OneRtt")
+                .finish_non_exhaustive(),
+        }
+    }
 }
 
 /// QUIC protocol version

@@ -8,7 +8,7 @@ use rustls::client::Resumption;
 use rustls::error::{
     AlertDescription, ApiMisuse, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved,
 };
-use rustls::quic::{self, Connection, ServerHandshake, Side};
+use rustls::quic::{self, Connection, QuicEvent, ServerHandshake, Side};
 use rustls::server::Tls13Tickets;
 use rustls::{HandshakeKind, SliceInput};
 use rustls_test::{
@@ -16,26 +16,6 @@ use rustls_test::{
 };
 
 use super::provider;
-
-// Returns the sender's next secrets to use, or the receiver's error.
-fn step(
-    send: &mut impl Connection,
-    recv: &mut impl Connection,
-) -> Result<Option<quic::KeyChange>, Error> {
-    let mut buf = Vec::new();
-    let change = loop {
-        let prev = buf.len();
-        if let Some(x) = send.write_hs(&mut buf) {
-            break Some(x);
-        }
-        if prev == buf.len() {
-            break None;
-        }
-    };
-
-    recv.read_hs(&mut SliceInput::new(&mut buf))?;
-    Ok(change)
-}
 
 #[test]
 fn test_quic_handshake() {
@@ -98,42 +78,36 @@ fn test_quic_handshake() {
     .unwrap();
     assert_eq!(server.fips(), server_config.fips());
 
-    let client_initial = step(&mut client, &mut server).unwrap();
-    assert!(client_initial.is_none());
+    let client_keys = quic_transfer(&mut client, &mut server).unwrap();
+    assert!(client_keys.handshake.is_none() && client_keys.one_rtt.is_none());
     assert!(client.zero_rtt_keys().is_none());
+
     assert_eq!(server.quic_transport_parameters(), Some(client_params));
-    let server_hs = step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
+    let server_keys = quic_transfer(&mut server, &mut client).unwrap();
+    assert!(server_keys.handshake.is_some());
     assert!(server.zero_rtt_keys().is_none());
-    let client_hs = step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    assert!(compatible_keys(&server_hs, &client_hs));
-    assert!(client.is_handshaking());
-    let server_1rtt = step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
+
+    let client_keys = quic_transfer(&mut client, &mut server).unwrap();
+    assert!(compatible_keys(
+        server_keys.handshake.as_ref().unwrap(),
+        client_keys.handshake.as_ref().unwrap()
+    ));
+
     assert!(!client.is_handshaking());
     assert_eq!(client.quic_transport_parameters(), Some(server_params));
-    assert!(server.is_handshaking());
-    let client_1rtt = step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    assert!(!server.is_handshaking());
-    assert!(compatible_keys(&server_1rtt, &client_1rtt));
-    assert!(!compatible_keys(&server_hs, &server_1rtt));
 
-    assert!(
-        step(&mut client, &mut server)
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        step(&mut server, &mut client)
-            .unwrap()
-            .is_none()
-    );
+    assert!(!server.is_handshaking());
+    assert!(compatible_keys(
+        server_keys.one_rtt.as_ref().unwrap(),
+        client_keys.one_rtt.as_ref().unwrap()
+    ));
+    assert!(!compatible_keys(
+        server_keys.handshake.as_ref().unwrap(),
+        server_keys.one_rtt.as_ref().unwrap()
+    ));
+
+    quic_transfer(&mut client, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
     assert_eq!(client.tls13_tickets_received(), 2);
 
     // 0-RTT handshake
@@ -157,7 +131,7 @@ fn test_quic_handshake() {
     )
     .unwrap();
 
-    step(&mut client, &mut server).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
     assert_eq!(client.quic_transport_parameters(), Some(server_params));
     {
         let client_early = client.zero_rtt_keys().unwrap();
@@ -167,15 +141,9 @@ fn test_quic_handshake() {
             server_early.packet.as_ref()
         ));
     }
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
     assert!(client.is_early_data_accepted());
 
     // failed handshake
@@ -191,11 +159,8 @@ fn test_quic_handshake() {
         quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
             .unwrap();
 
-    step(&mut client, &mut server).unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    let err = step(&mut server, &mut client)
+    quic_transfer(&mut client, &mut server).unwrap();
+    let err = quic_transfer(&mut server, &mut client)
         .err()
         .unwrap();
     assert_eq!(
@@ -206,15 +171,15 @@ fn test_quic_handshake() {
     // Key updates
 
     let (
-        quic::KeyChange::OneRtt {
+        Some(quic::KeyChange::OneRtt {
             next: mut client_secrets,
             ..
-        },
-        quic::KeyChange::OneRtt {
+        }),
+        Some(quic::KeyChange::OneRtt {
             next: mut server_secrets,
             ..
-        },
-    ) = (client_1rtt, server_1rtt)
+        }),
+    ) = (client_keys.one_rtt, server_keys.one_rtt)
     else {
         unreachable!();
     };
@@ -268,13 +233,9 @@ fn test_quic_acceptor() {
 
     let needs_input = ServerHandshake::start(quic::Version::V1);
 
-    let mut client_initial = Vec::new();
-    assert!(
-        client
-            .write_hs(&mut client_initial)
-            .is_none()
-    );
+    let mut client_initial = flatten_events(&mut client);
     assert!(client_initial.len() > 8);
+    println!("client_initial: {client_initial:x?}");
 
     let ServerHandshake::NeedsInput(needs_input) = needs_input
         .process(&mut SliceInput::new(&mut client_initial[..8]))
@@ -312,18 +273,10 @@ fn test_quic_acceptor() {
     assert_eq!(server.fips(), server_fips);
     assert_eq!(server.quic_transport_parameters(), Some(client_params));
 
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
 
     assert!(!client.is_handshaking());
     assert!(!server.is_handshaking());
@@ -358,12 +311,7 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
     .unwrap();
 
     let needs_input = ServerHandshake::start(quic::Version::V1);
-    let mut client_initial = Vec::new();
-    assert!(
-        client
-            .write_hs(&mut client_initial)
-            .is_none()
-    );
+    let mut client_initial = flatten_events(&mut client);
 
     let ServerHandshake::Accepted(accepted) = needs_input
         .process(&mut SliceInput::new(&mut client_initial))
@@ -401,18 +349,10 @@ fn test_quic_acceptor_continues_with_server_config_chosen_from_client_hello() {
         .into_connection(selected_config, server_params.into())
         .unwrap();
 
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
-    step(&mut server, &mut client)
-        .unwrap()
-        .unwrap();
-    step(&mut client, &mut server)
-        .unwrap()
-        .unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
+    quic_transfer(&mut server, &mut client).unwrap();
+    quic_transfer(&mut client, &mut server).unwrap();
 
     assert!(!client.is_handshaking());
     assert!(!server.is_handshaking());
@@ -438,12 +378,7 @@ fn test_quic_acceptor_invalid_early_data_size() {
     .unwrap();
 
     let needs_input = ServerHandshake::start(quic::Version::V1);
-    let mut client_initial = Vec::new();
-    assert!(
-        client
-            .write_hs(&mut client_initial)
-            .is_none()
-    );
+    let mut client_initial = flatten_events(&mut client);
 
     let ServerHandshake::Accepted(accepted) = needs_input
         .process(&mut SliceInput::new(&mut client_initial))
@@ -502,7 +437,7 @@ fn test_quic_rejects_missing_alpn() {
             quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
                 .unwrap();
 
-        let err = step(&mut client, &mut server)
+        let err = quic_transfer(&mut client, &mut server)
             .err()
             .unwrap();
         assert_eq!(err, Error::NoApplicationProtocol);
@@ -651,23 +586,58 @@ fn test_quic_server_no_tls12() {
 
 fn do_quic_handshake(client: &mut impl Connection, server: &mut impl Connection) {
     while client.is_handshaking() || server.is_handshaking() {
-        quic_transfer(client, server);
-        quic_transfer(server, client);
+        quic_transfer(client, server).unwrap();
+        quic_transfer(server, client).unwrap();
     }
 }
 
-fn quic_transfer(sender: &mut impl Connection, receiver: &mut impl Connection) {
-    let mut buf = Vec::new();
-    while let Some(_change) = sender.write_hs(&mut buf) {
-        // In a real QUIC implementation, we would handle key changes here
-        // For testing, we just continue
+fn quic_transfer(
+    sender: &mut impl Connection,
+    receiver: &mut impl Connection,
+) -> Result<KeyChanges, Error> {
+    let mut events = Vec::new();
+    sender.take_events(&mut events);
+    println!("{sender:?}: events {events:?}");
+
+    let mut changes = KeyChanges::default();
+
+    for e in events {
+        match e {
+            QuicEvent::Message(mut m) => receiver.read_hs(&mut SliceInput::new(&mut m))?,
+
+            // In a real QUIC implementation, we would handle key changes here
+            QuicEvent::KeyChange(kc @ quic::KeyChange::Handshake { .. }) => {
+                changes.handshake = Some(kc)
+            }
+
+            QuicEvent::KeyChange(kc @ quic::KeyChange::OneRtt { .. }) => changes.one_rtt = Some(kc),
+
+            _ => todo!("{e:?}"),
+        }
     }
 
-    if !buf.is_empty() {
-        receiver
-            .read_hs(&mut SliceInput::new(&mut buf))
-            .unwrap();
+    Ok(changes)
+}
+
+#[derive(Default)]
+struct KeyChanges {
+    handshake: Option<quic::KeyChange>,
+    one_rtt: Option<quic::KeyChange>,
+}
+
+// Obtains and concatenates all messages from `send`
+fn flatten_events(send: &mut impl Connection) -> Vec<u8> {
+    let mut events = vec![];
+    send.take_events(&mut events);
+
+    let mut out = vec![];
+    for e in events {
+        match e {
+            QuicEvent::Message(m) => out.extend(m),
+            _ => todo!("{e:?}"),
+        }
     }
+    out
 }
 
 #[test]
@@ -793,7 +763,7 @@ fn test_quic_resumption_data_0rtt() {
     );
 
     // Start handshake and check transport parameters early
-    quic_transfer(&mut client2, &mut server2);
+    quic_transfer(&mut client2, &mut server2).unwrap();
     assert_eq!(
         client2.quic_transport_parameters(),
         Some(server_params.as_slice())
