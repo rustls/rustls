@@ -1,13 +1,15 @@
 use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;
 use core::cmp::min;
 
 use crate::crypto::cipher::{
-    EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, OutboundOpaque,
-    OutboundPlain,
+    EncodedMessage, InboundOpaque, MessageDecrypter, MessageEncrypter, OutboundPlain,
+    encode_record_header,
 };
 use crate::error::Error;
 use crate::log::trace;
-use crate::msgs::HandshakeAlignedProof;
+use crate::msgs::{HEADER_SIZE, HandshakeAlignedProof};
 
 /// Record layer that tracks encryption keys.
 pub(crate) struct EncryptionState {
@@ -26,22 +28,39 @@ impl EncryptionState {
         }
     }
 
-    /// Encrypt a TLS message.
+    /// Encrypt a TLS message, returning the fully-encoded record.
     ///
     /// `plain` is a TLS message we'd like to send.  This function
     /// panics if the requisite keying material hasn't been established yet.
-    pub(crate) fn encrypt_outgoing(
-        &mut self,
-        plain: EncodedMessage<OutboundPlain<'_>>,
-    ) -> EncodedMessage<OutboundOpaque> {
+    pub(crate) fn encrypt_outgoing(&mut self, plain: EncodedMessage<OutboundPlain<'_>>) -> Vec<u8> {
         assert!(self.pre_encrypt_action(0) != Some(PreEncryptAction::Refuse));
+        let encrypter = self.message_encrypter.as_mut().unwrap();
+
         let seq = self.write_seq;
         self.write_seq += 1;
-        self.message_encrypter
-            .as_mut()
-            .unwrap()
-            .encrypt(plain, seq)
-            .unwrap()
+
+        let needed = HEADER_SIZE + encrypter.encrypted_payload_len(plain.payload.len());
+        let mut record = vec![0u8; needed];
+        let out_ptr = record.as_ptr();
+        let encrypted = encrypter
+            .encrypt(plain, seq, &mut record[HEADER_SIZE..])
+            .unwrap();
+
+        // `MessageEncrypter::encrypt()` requires the returned payload to be
+        // the written prefix of the passed-in buffer. Try to catch misbehaving
+        // implementations in debug mode. In release builds a violation would corrupt
+        // the sent stream.
+        debug_assert_eq!(
+            encrypted.payload.as_ptr(),
+            out_ptr.wrapping_add(HEADER_SIZE)
+        );
+        debug_assert!(encrypted.payload.len() <= needed - HEADER_SIZE);
+
+        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
+        record.truncate(HEADER_SIZE + len);
+        debug_assert!(len <= usize::from(u16::MAX));
+        record[..HEADER_SIZE].copy_from_slice(&encode_record_header(typ, version, len as u16));
+        record
     }
 
     /// Set and start using the given `MessageEncrypter` for future outgoing

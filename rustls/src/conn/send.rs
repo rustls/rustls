@@ -91,11 +91,8 @@ impl SendPath {
             }
 
             self.perhaps_write_key_update();
-            self.sendable_tls.append(
-                self.encrypt_state
-                    .encrypt_outgoing(m)
-                    .encode(),
-            );
+            self.sendable_tls
+                .append(self.encrypt_state.encrypt_outgoing(m));
         }
     }
 
@@ -190,8 +187,7 @@ impl SendPath {
         let message = EncodedMessage::<Payload<'static>>::from(Message::build_key_update_notify());
         self.queued_key_update_message = Some(
             self.encrypt_state
-                .encrypt_outgoing(message.borrow_outbound())
-                .encode(),
+                .encrypt_outgoing(message.borrow_outbound()),
         );
 
         if let Some(mut ks) = self.tls13_key_schedule.take() {
