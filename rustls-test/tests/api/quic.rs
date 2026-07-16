@@ -631,8 +631,7 @@ fn quic_transfer(
     sender: &mut impl Connection,
     receiver: &mut impl Connection,
 ) -> Result<KeyChanges, Error> {
-    let mut events = Vec::new();
-    sender.take_events(&mut events);
+    let events = sender.events().collect();
     println!("{sender:?}: events {events:?}");
     quic_insert(events, receiver)
 }
@@ -669,11 +668,8 @@ struct KeyChanges {
 
 // Obtains and concatenates all messages from `send`
 fn flatten_events(send: &mut impl Connection) -> Vec<u8> {
-    let mut events = vec![];
-    send.take_events(&mut events);
-
     let mut out = vec![];
-    for e in events {
+    for e in send.events() {
         match e {
             QuicEvent::Message(m) => out.extend(m),
             QuicEvent::KeyChange(..) => {}
