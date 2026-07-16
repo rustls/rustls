@@ -49,8 +49,8 @@ pub trait Connection: fmt::Debug + Deref<Target = ConnectionOutputs> {
 
     /// Obtain pending events that the caller should process.
     ///
-    /// All pending events are appended to `output`.
-    fn take_events(&mut self, output: &mut Vec<QuicEvent>);
+    /// All pending events are returned as an iterator.
+    fn events(&mut self) -> impl Iterator<Item = QuicEvent>;
 
     /// Returns true if the connection is currently performing the TLS handshake.
     fn is_handshaking(&self) -> bool;
@@ -176,8 +176,8 @@ impl Connection for ClientConnection {
         self.inner.read_hs(input)
     }
 
-    fn take_events(&mut self, output: &mut Vec<QuicEvent>) {
-        self.inner.take_events(output)
+    fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
+        self.inner.events()
     }
 
     fn is_handshaking(&self) -> bool {
@@ -314,8 +314,8 @@ impl Connection for ServerConnection {
         self.inner.read_hs(input)
     }
 
-    fn take_events(&mut self, output: &mut Vec<QuicEvent>) {
-        self.inner.take_events(output)
+    fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
+        self.inner.events()
     }
 
     fn is_handshaking(&self) -> bool {
@@ -437,7 +437,7 @@ impl NeedsInput {
         output: &mut Vec<QuicEvent>,
     ) -> Result<ServerHandshake, Error> {
         self.inner.read_hs(input)?;
-        self.inner.take_events(output);
+        output.extend(self.inner.events());
         ServerHandshake::try_from(self.inner)
     }
 }
@@ -493,7 +493,7 @@ impl Accepted {
             config,
         )?;
 
-        self.inner.take_events(output);
+        output.extend(self.inner.events());
 
         ServerHandshake::try_from(self.inner)
     }
@@ -598,8 +598,8 @@ impl<Side: SideData> ConnectionCommon<Side> {
         result
     }
 
-    fn take_events(&mut self, output: &mut Vec<QuicEvent>) {
-        self.quic.take_events(output)
+    fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
+        self.quic.events()
     }
 }
 
@@ -646,8 +646,8 @@ impl Quic {
             .push(QuicEvent::Message(bytes));
     }
 
-    pub(crate) fn take_events(&mut self, output: &mut Vec<QuicEvent>) {
-        output.append(&mut self.events);
+    pub(crate) fn events(&mut self) -> impl Iterator<Item = QuicEvent> {
+        mem::take(&mut self.events).into_iter()
     }
 }
 
@@ -1142,9 +1142,9 @@ impl Keys {
 ///
 /// * Initial: these can be created from [`Keys::initial()`]
 /// * 0-RTT keys: can be retrieved from [`Connection::zero_rtt_keys()`]
-/// * Handshake: these are returned from [`Connection::take_events()`] after `ClientHello` and
+/// * Handshake: these are returned from [`Connection::events()`] after `ClientHello` and
 ///   `ServerHello` messages have been exchanged
-/// * 1-RTT keys: these are returned from [`Connection::take_events()`] after the handshake is done
+/// * 1-RTT keys: these are returned from [`Connection::events()`] after the handshake is done
 ///
 /// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
 /// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that
