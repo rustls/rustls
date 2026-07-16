@@ -164,11 +164,12 @@ impl EncodedMessage<OutboundOpaque> {
     /// Encode this message to a vector of bytes.
     pub fn encode(self) -> Vec<u8> {
         let length = self.payload.len();
+        debug_assert!(length <= usize::from(u16::MAX));
         let mut encoded_payload = self.payload.payload;
         encoded_payload[..HEADER_SIZE].copy_from_slice(&encode_record_header(
             self.typ,
             self.version,
-            length,
+            length as u16,
         ));
         encoded_payload
     }
@@ -176,17 +177,14 @@ impl EncodedMessage<OutboundOpaque> {
 
 /// Encode a TLS record header.
 ///
-/// `typ`, `version` and `len` describe the record's payload.  `len` is
-/// debug-asserted to fit the header's 16-bit length field, and truncated to
-/// 16 bits in release builds.
+/// `typ`, `version` and `len` describe the record's payload.
 pub(crate) fn encode_record_header(
     typ: ContentType,
     version: ProtocolVersion,
-    len: usize,
+    len: u16,
 ) -> [u8; HEADER_SIZE] {
-    debug_assert!(len <= usize::from(u16::MAX));
     let [version_hi, version_lo] = version.to_array();
-    let [len_hi, len_lo] = (len as u16).to_be_bytes();
+    let [len_hi, len_lo] = len.to_be_bytes();
     [typ.into(), version_hi, version_lo, len_hi, len_lo]
 }
 
