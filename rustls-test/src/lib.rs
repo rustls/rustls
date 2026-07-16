@@ -1372,14 +1372,32 @@ impl RawTls {
         msg: &EncodedMessage<Payload<'_>>,
         peer_input: &mut VecInput,
     ) {
-        let data = self
+        /// The length of a TLS record header: 1 byte type, 2 bytes version, 2 bytes length.
+        const HEADER_SIZE: usize = 5;
+
+        let msg = msg.borrow_outbound();
+        let mut record = vec![
+            0u8;
+            HEADER_SIZE
+                + self
+                    .encrypter
+                    .encrypted_payload_len(msg.payload.len())
+        ];
+        let encrypted = self
             .encrypter
-            .encrypt(msg.borrow_outbound(), self.enc_seq)
-            .unwrap()
-            .encode();
+            .encrypt(msg, self.enc_seq, &mut record[HEADER_SIZE..])
+            .unwrap();
+
+        // Encode the TLS record header: 1 byte type, 2 bytes version, 2 bytes length
+        let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
+        record.truncate(HEADER_SIZE + len);
+        record[0] = typ.into();
+        record[1..3].copy_from_slice(&version.to_array());
+        record[3..5].copy_from_slice(&(len as u16).to_be_bytes());
+
         self.enc_seq += 1;
         peer_input
-            .read(&mut io::Cursor::new(data))
+            .read(&mut io::Cursor::new(record))
             .unwrap();
     }
 
@@ -1791,7 +1809,7 @@ pub fn certificate_error_expecting_name(expected: &str) -> CertificateError {
 mod plaintext {
     use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
-        AeadKey, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter, OutboundOpaque,
+        AeadKey, EncryptBuffer, InboundOpaque, Iv, MessageDecrypter, MessageEncrypter,
         OutboundPlain, Tls13AeadAlgorithm, UnsupportedOperationError,
     };
 
@@ -1824,18 +1842,19 @@ mod plaintext {
     struct Encrypter;
 
     impl MessageEncrypter for Encrypter {
-        fn encrypt(
+        fn encrypt<'a>(
             &mut self,
             msg: EncodedMessage<OutboundPlain<'_>>,
             _seq: u64,
-        ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
-            let mut payload = OutboundOpaque::with_capacity(msg.payload.len());
+            out: &'a mut [u8],
+        ) -> Result<EncodedMessage<&'a [u8]>, Error> {
+            let mut payload = EncryptBuffer::new(out, msg.payload.len())?;
             payload.extend_from_chunks(&msg.payload);
 
             Ok(EncodedMessage {
                 typ: ContentType::ApplicationData,
                 version: ProtocolVersion::TLSv1_2,
-                payload,
+                payload: payload.into_written(),
             })
         }
 

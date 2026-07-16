@@ -11,8 +11,10 @@ use crate::msgs::{put_u16, put_u64};
 use crate::suites::ConnectionTrafficSecrets;
 
 mod messages;
+pub(crate) use messages::encode_record_header;
 pub use messages::{
-    EncodedMessage, InboundOpaque, MessageError, OutboundOpaque, OutboundPlain, Payload,
+    EncodedMessage, EncryptBuffer, InboundOpaque, MessageError, OutboundOpaque, OutboundPlain,
+    Payload,
 };
 
 mod record_layer;
@@ -157,13 +159,25 @@ pub trait MessageDecrypter: Send + Sync {
 
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter: Send + Sync {
-    /// Encrypt the given TLS message `msg`, using the sequence number
+    /// Encrypt the given TLS message `msg` into `out`, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
-    fn encrypt(
+    ///
+    /// The encrypted payload including all framing the ciphersuite requires, such
+    /// as any explicit nonce, padding and/or authentication tag, is written to the
+    /// front of `out`. `out` must be at least [`Self::encrypted_payload_len()`] bytes
+    /// long. See [`EncryptBuffer`] for a convenient wrapper.
+    ///
+    /// The returned message describes the resulting record: its payload borrows the
+    /// written prefix of `out`, and its `typ` and `version` are what the record
+    /// header should carry on the wire. Encoding the record header is the caller's
+    /// responsibility and implementations of the `MessageEncrypter` trait must not
+    /// write it to `out` themselves.
+    fn encrypt<'a>(
         &mut self,
         msg: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
-    ) -> Result<EncodedMessage<OutboundOpaque>, Error>;
+        out: &'a mut [u8],
+    ) -> Result<EncodedMessage<&'a [u8]>, Error>;
 
     /// Return the length of the ciphertext that results from encrypting plaintext of
     /// length `payload_len`

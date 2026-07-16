@@ -11,7 +11,7 @@ use pki_types::{CertificateDer, FipsStatus, ServerName, UnixTime};
 
 use super::{Tls12Session, Tls13ClientSessionInput, Tls13Session};
 use crate::client::{ClientConfig, Resumption, Tls12Resumption};
-use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload};
+use crate::crypto::cipher::{EncodedMessage, MessageEncrypter, Payload, encode_record_header};
 use crate::crypto::kx::{self, NamedGroup, SharedSecret, StartedKeyExchange, SupportedKxGroup};
 use crate::crypto::test_provider::FakeKeyExchangeGroup;
 use crate::crypto::tls13::OkmBlock;
@@ -23,11 +23,11 @@ use crate::enums::{CertificateType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::msgs::{
     CertificateChain, ClientHelloPayload, Codec, Compression, ECCurveType, EcParameters,
-    HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, HelloRetryRequestExtensions,
-    KeyShareEntry, MaybeEmpty, Message, MessagePayload, NewSessionTicketExtensions,
-    NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams, ServerExtensions,
-    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
-    SessionId, SizedPayload,
+    HEADER_SIZE, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
+    HelloRetryRequestExtensions, KeyShareEntry, MaybeEmpty, Message, MessagePayload,
+    NewSessionTicketExtensions, NewSessionTicketPayloadTls13, Random, Reader, ServerEcdhParams,
+    ServerExtensions, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
+    ServerKeyExchangePayload, SessionId, SizedPayload,
 };
 use crate::pki_types::PrivateKeyDer;
 use crate::pki_types::pem::PemObject;
@@ -548,11 +548,23 @@ fn client_requiring_rpk_receives_server_ee(
     };
 
     let mut encrypter = fake_server_crypto.server_handshake_encrypter();
-    let enc_ee = encrypter
-        .encrypt(EncodedMessage::<Payload<'_>>::from(ee).borrow_outbound(), 0)
+    let ee = EncodedMessage::<Payload<'_>>::from(ee);
+    let ee = ee.borrow_outbound();
+    let mut enc_ee = vec![0u8; HEADER_SIZE + encrypter.encrypted_payload_len(ee.payload.len())];
+    let encrypted = encrypter
+        .encrypt(ee, 0, &mut enc_ee[HEADER_SIZE..])
         .unwrap();
+
+    let (typ, version, len) = (encrypted.typ, encrypted.version, encrypted.payload.len());
+    enc_ee.truncate(HEADER_SIZE + len);
+    enc_ee[..HEADER_SIZE].copy_from_slice(&encode_record_header(
+        typ,
+        version,
+        u16::try_from(len).unwrap(),
+    ));
+
     input
-        .read(&mut enc_ee.encode().as_slice())
+        .read(&mut enc_ee.as_slice())
         .unwrap();
 
     assert_eq!(

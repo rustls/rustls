@@ -5,8 +5,8 @@ use core::time::Duration;
 use std::borrow::Cow;
 
 use crate::crypto::cipher::{
-    AeadKey, EncodedMessage, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter,
-    OutboundOpaque, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
+    AeadKey, EncodedMessage, EncryptBuffer, InboundOpaque, Iv, KeyBlockShape, MessageDecrypter,
+    MessageEncrypter, OutboundPlain, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
     UnsupportedOperationError,
 };
 use crate::crypto::kx::{
@@ -366,13 +366,14 @@ impl Tls12AeadAlgorithm for Aead {
 pub(crate) struct Tls13Cipher;
 
 impl MessageEncrypter for Tls13Cipher {
-    fn encrypt(
+    fn encrypt<'a>(
         &mut self,
         m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
-    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
+        out: &'a mut [u8],
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        let mut payload = EncryptBuffer::new(out, total_len)?;
 
         payload.extend_from_chunks(&m.payload);
         payload.extend_from_slice(&m.typ.to_array());
@@ -391,7 +392,7 @@ impl MessageEncrypter for Tls13Cipher {
         Ok(EncodedMessage {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_2,
-            payload,
+            payload: payload.into_written(),
         })
     }
 
@@ -435,13 +436,14 @@ impl MessageDecrypter for Tls13Cipher {
 struct Tls12Cipher;
 
 impl MessageEncrypter for Tls12Cipher {
-    fn encrypt(
+    fn encrypt<'a>(
         &mut self,
         m: EncodedMessage<OutboundPlain<'_>>,
         seq: u64,
-    ) -> Result<EncodedMessage<OutboundOpaque>, Error> {
+        out: &'a mut [u8],
+    ) -> Result<EncodedMessage<&'a [u8]>, Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
-        let mut payload = OutboundOpaque::with_capacity(total_len);
+        let mut payload = EncryptBuffer::new(out, total_len)?;
         payload.extend_from_chunks(&m.payload);
 
         for (p, mask) in payload
@@ -458,7 +460,7 @@ impl MessageEncrypter for Tls12Cipher {
         Ok(EncodedMessage {
             typ: m.typ,
             version: m.version,
-            payload,
+            payload: payload.into_written(),
         })
     }
 
