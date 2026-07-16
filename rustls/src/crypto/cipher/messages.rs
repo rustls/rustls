@@ -163,13 +163,31 @@ impl EncodedMessage<OutboundPlain<'_>> {
 impl EncodedMessage<OutboundOpaque> {
     /// Encode this message to a vector of bytes.
     pub fn encode(self) -> Vec<u8> {
-        let length = self.payload.len() as u16;
+        let length = self.payload.len();
         let mut encoded_payload = self.payload.payload;
-        encoded_payload[0] = self.typ.into();
-        encoded_payload[1..3].copy_from_slice(&self.version.to_array());
-        encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
+        encoded_payload[..HEADER_SIZE].copy_from_slice(&encode_record_header(
+            self.typ,
+            self.version,
+            length,
+        ));
         encoded_payload
     }
+}
+
+/// Encode a TLS record header.
+///
+/// `typ`, `version` and `len` describe the record's payload.  `len` is
+/// debug-asserted to fit the header's 16-bit length field, and truncated to
+/// 16 bits in release builds.
+pub(crate) fn encode_record_header(
+    typ: ContentType,
+    version: ProtocolVersion,
+    len: usize,
+) -> [u8; HEADER_SIZE] {
+    debug_assert!(len <= usize::from(u16::MAX));
+    let [version_hi, version_lo] = version.to_array();
+    let [len_hi, len_lo] = (len as u16).to_be_bytes();
+    [typ.into(), version_hi, version_lo, len_hi, len_lo]
 }
 
 /// A collection of borrowed plaintext slices.
