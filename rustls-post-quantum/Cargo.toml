@@ -1,7 +1,7 @@
 [package]
 name = "rustls-post-quantum"
 version = "0.3.0-alpha.0"
-edition = "2021"
+edition.workspace = true
 rust-version = "1.85"
 license = "Apache-2.0 OR ISC OR MIT"
 readme = "README.md"

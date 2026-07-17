@@ -46,6 +46,9 @@ default-members = [
 ]
 resolver = "2"
 
+[workspace.package]
+edition = "2021"
+
 [workspace.dependencies]
 anyhow = "1.0.73"
 asn1 = "0.24"
