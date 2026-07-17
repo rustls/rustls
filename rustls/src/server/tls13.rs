@@ -1071,21 +1071,12 @@ impl ExpectCertificate {
             return Err(PeerMisbehaved::NoCertificatesPresented.into());
         };
 
-        let peer_identity = self
-            .hs
-            .config
-            .verifier
-            .verify_identity(&ClientIdentity {
-                identity: &peer_identity,
-                now: self.hs.config.current_time()?,
-            })?;
-
-        Ok(Box::new(ExpectCertificateVerify {
+        AwaitClientIdentityVerification {
             hs: self.hs,
             key_schedule: self.key_schedule,
             peer_identity: peer_identity.into_owned(),
-        })
-        .into())
+        }
+        .with_config()
     }
 }
 
@@ -1102,6 +1093,33 @@ impl ExpectCertificate {
 impl From<Box<ExpectCertificate>> for ServerState {
     fn from(value: Box<ExpectCertificate>) -> Self {
         Self::Tls13(Tls13State::Certificate(value))
+    }
+}
+
+// --- Verify the client's identity
+struct AwaitClientIdentityVerification {
+    hs: HandshakeState,
+    key_schedule: KeyScheduleTrafficWithClientFinishedPending,
+    peer_identity: Identity<'static>,
+}
+
+impl AwaitClientIdentityVerification {
+    fn with_config(self) -> Result<ServerState, Error> {
+        let peer_identity = self
+            .hs
+            .config
+            .verifier
+            .verify_identity(&ClientIdentity {
+                identity: &self.peer_identity,
+                now: self.hs.config.current_time()?,
+            })?;
+
+        Ok(Box::new(ExpectCertificateVerify {
+            hs: self.hs,
+            key_schedule: self.key_schedule,
+            peer_identity,
+        })
+        .into())
     }
 }
 
