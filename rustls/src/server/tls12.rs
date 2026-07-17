@@ -32,7 +32,7 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::tls13::key_schedule::KeyScheduleTrafficSend;
-use crate::verify::{ClientIdentity, SignatureVerificationInput};
+use crate::verify::{ClientIdentity, PeerVerified, SignatureVerificationInput};
 use crate::{ConnectionTrafficSecrets, verify};
 
 #[expect(private_interfaces)]
@@ -559,14 +559,15 @@ impl ExpectCertificate {
                 None
             }
             Some(identity) => {
-                self.hs
+                let verified = self
+                    .hs
                     .config
                     .verifier
                     .verify_identity(&ClientIdentity {
                         identity: &identity,
                         now: self.hs.config.current_time()?,
                     })?;
-                Some(identity.into_owned())
+                Some((identity.into_owned(), verified))
             }
         };
 
@@ -593,7 +594,7 @@ struct ExpectClientKx {
     randoms: ConnectionRandoms,
     suite: &'static Tls12CipherSuite,
     server_kx: GroupAndKeyExchange,
-    peer_identity: Option<Identity<'static>>,
+    peer_identity: Option<(Identity<'static>, PeerVerified)>,
 }
 
 impl ExpectClientKx {
@@ -634,13 +635,14 @@ impl ExpectClientKx {
         );
 
         match self.peer_identity {
-            Some(peer_identity) => Ok(Box::new(ExpectCertificateVerify {
+            Some((peer_identity, peer_verified)) => Ok(Box::new(ExpectCertificateVerify {
                 hs: self.hs,
                 secrets,
                 peer_identity,
+                _peer_verified: peer_verified,
             })
             .into()),
-            _ => Ok(Box::new(ExpectCcs {
+            None => Ok(Box::new(ExpectCcs {
                 hs: self.hs,
                 secrets,
                 peer_identity: None,
@@ -662,6 +664,7 @@ struct ExpectCertificateVerify {
     hs: HandshakeState,
     secrets: ConnectionSecrets,
     peer_identity: Identity<'static>,
+    _peer_verified: PeerVerified,
 }
 
 impl ExpectCertificateVerify {
