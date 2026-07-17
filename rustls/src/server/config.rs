@@ -505,7 +505,7 @@ impl<'a> ClientHello<'a> {
     ///
     /// The server can specify supported ALPN protocols by setting [`ServerConfig::alpn_protocols`].
     /// During the handshake, the server will select the first protocol configured that the client supports.
-    pub fn alpn(&self) -> Option<impl Iterator<Item = &'a [u8]>> {
+    pub fn alpn(&self) -> Option<impl Iterator<Item = &'a [u8]> + use<'a>> {
         self.alpn.map(|protocols| {
             protocols
                 .iter()
